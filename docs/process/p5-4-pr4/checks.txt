@@ -1,0 +1,16 @@
+Source: 592515e6f; base: 2fed5714f; dates: 25–26 October 2026.
+PASS: npm ci; requested NATS and Lychee symlinks.
+PASS: failing-first proof, five expected failures; test commit 4503890f0.
+FAIL: initial broad package run, 281/282; ownership error contract corrected.
+PASS: unchanged CNPG installer file after correction, 126/126.
+PASS: changed-file run 1, 69/69.
+FAIL: overlapping changed-file run 2, 65/69; four shared-lock fixture collisions.
+PASS: isolated claim repeat, 38/38; chart 12/12 and routes 19/19 passed twice.
+PASS: final ownership and forwarding selection, 31/31.
+PASS: real NATS cluster and event security rules, 454/454.
+PASS: full lint, full typecheck, final dev-stack typecheck, event catalogue,
+      Knip and changelog. Existing lint warnings only.
+PASS: disposable PostgreSQL container and volume removed.
+PARTIAL: checked target wiring only; complete R3 installation remains refused.
+NOT RUN: live placement, rotation, node failure, complete R3 bootstrap,
+         runtime image promotion, full root suite and post-push CI.

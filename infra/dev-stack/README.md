@@ -21,7 +21,7 @@ flowchart LR
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
   stack -->|starts apps; keeps keys private; checks journeys, times Memory body reads and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
-  stack -->|checks database inputs before installation| package["infra/package<br/>Helm install"]
+  stack -->|checks the recorded cluster and database inputs| package["infra/package<br/>Helm install"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
 ```
 
@@ -65,6 +65,8 @@ available for diagnosis.
 - Lets a spare slot own a three-node Kubernetes test cluster. Saved ownership
   keeps the slot reserved until the cluster and its data are removed.
 - Removes the nodes it created before reporting a failed start.
+- Keeps package commands on their recorded cluster. A missing target stops the command
+  before it can connect to the shared cluster.
 - Provides demo preparation and screen measurements, while refusing automated coding
   jobs that try to run the owner's commands.
 - Checks the demo tool server through local TLS. Requires saved tool definitions and

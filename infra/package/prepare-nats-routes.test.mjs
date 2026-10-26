@@ -29,6 +29,9 @@ if (args.includes('nodes')) {
   process.stdout.write(fs.readFileSync(home + '/nodes.json'));
 } else if (args.includes('namespace')) {
   process.stdout.write(fs.readFileSync(home + '/namespace.json'));
+  if (fs.existsSync(home + '/lose-target')) {
+    fs.rmSync(slot + '/target-owner.json', { force: true });
+  }
 } else if (args.includes('get')) {
   const name = args[args.indexOf('secret') + 1];
   const path = home + '/objects/' + name;
@@ -341,3 +344,19 @@ for (const reason of refusals) {
   }
   test(`refuses safely: ${reason}`, refusesSafely);
 }
+
+async function refusesTargetLostBetweenChecks() {
+  const prepared = await fixture();
+  try {
+    await writeFile(`${prepared.home}/lose-target`, '1');
+    await run(prepared, true);
+    const argv = await readFile(`${prepared.home}/argv`, 'utf8');
+    assert(!argv.includes('--context=k3d-ocn'));
+    assert(!argv.includes('"secret"'));
+    assert(!argv.includes('req -x509'));
+  } finally {
+    await rm(prepared.home, { recursive: true, force: true });
+  }
+}
+test('route preparation refuses a target lost after the namespace check',
+  refusesTargetLostBetweenChecks);

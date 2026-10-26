@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const exec = promisify(execFile);
 
@@ -586,9 +587,28 @@ if (program === 'k3d' && args[1] === 'create') {
   if (state.partial) { state.containers.pop(); save(); process.exit(1); }
 }
 if (program === 'k3d' && args[0] === 'kubeconfig') process.stdout.write('PRIVATE-KUBECONFIG');
-if (program === 'helm' && args.includes('list')) output([]);
+if (program === 'kubectl' && args.includes('port-forward') && state.holdForward) {
+  fs.writeFileSync(home + '/forward-started', String(process.pid));
+  function stayRunning() {}
+  function stopped() {
+    fs.writeFileSync(home + '/forward-stopped', 'stopped');
+    process.exit(0);
+  }
+  setInterval(stayRunning, 1000);
+  process.on('SIGTERM', stopped);
+}
+if (program === 'helm' && args.includes('list')) {
+  output([]);
+  if (state.loseAfterHelm) {
+    fs.rmSync(ownerFile, { force: true });
+    fs.rmSync(home + '/.config/opencrane/dev-stack-1/package-owner.json');
+  }
+}
 if (program === 'kubectl' && args.includes('nodes')) output({ items: state.nodes });
-if (program === 'kubectl' && args.includes('namespace') && state.namespace) output(state.namespace);
+if (program === 'kubectl' && args.includes('namespace') && state.namespace) {
+  output(state.namespace);
+  if (state.loseTarget) fs.rmSync(ownerFile, { force: true });
+}
 save();
 `;
 
@@ -601,6 +621,9 @@ type TargetState = {
   namespace?: { metadata: { uid: string; annotations: Record<string, string> } };
   fail?: string;
   partial?: boolean;
+  loseTarget?: boolean;
+  holdForward?: boolean;
+  loseAfterHelm?: boolean;
   retain?: boolean;
   recordBeforeCreate?: { id: string };
 };
@@ -795,16 +818,19 @@ async function privateTargetFailure() {
 test('target dependency output stays private after failed creation is cleaned up',
   privateTargetFailure);
 
-async function packageUsesCheckedTarget() {
+async function packageConnectionLifecycle(isolated: boolean) {
   const fixture = await targetFixture();
   try {
-    await fixture.run('target-up');
+    if (isolated) {
+      await fixture.run('target-up');
+    }
     await fixture.loadState();
     const annotations = { 'opencrane.dev/worktree': process.cwd(), 'opencrane.dev/slot': '1' };
     fixture.state.namespace = { metadata: { uid: 'package-uid', annotations } };
     fixture.state.calls = [];
     await fixture.saveState();
-    const owner = { worktree: process.cwd(), slot: '1', context: 'k3d-opencrane-target-1',
+    const context = isolated ? 'k3d-opencrane-target-1' : 'k3d-ocn';
+    const owner = { worktree: process.cwd(), slot: '1', context,
       namespace: 'opencrane-package-1', namespaceUid: 'package-uid',
       release: 'opencrane-package-1' };
     await writeFile(`${fixture.slotDirectory}/package-owner.json`, JSON.stringify(owner));
@@ -812,18 +838,95 @@ async function packageUsesCheckedTarget() {
     await mkdir(otherSlot);
     await writeFile(`${otherSlot}/sentinel`, 'other slot');
     await fixture.run('package-check');
+    const env = { ...fixture.env, DEV_STACK_ID: '1' };
+    fixture.state.holdForward = true;
+    await fixture.saveState();
+    const forward = spawn('infra/package/forward.sh', [], { env, stdio: 'ignore' });
+    const closed = once(forward, 'close');
+    try {
+      await waitForFixtureFile(`${fixture.home}/forward-started`);
+    } finally {
+      forward.kill('SIGTERM');
+      await closed;
+    }
+    assert.equal(await readFile(`${fixture.home}/forward-stopped`, 'utf8'), 'stopped');
     await fixture.run('package-down');
     await fixture.loadState();
     for (const call of fixture.state.calls) {
       if (call[0] !== 'kubectl' && call[0] !== 'helm') continue;
-      assert.ok(call.includes('--kubeconfig'));
-      assert.ok(call.includes('k3d-opencrane-target-1') ||
-        call.includes('--context=k3d-opencrane-target-1'));
+      assert.equal(call.includes('--kubeconfig'), isolated);
+      assert.ok(call.includes(context) || call.includes(`--context=${context}`));
+      if (call.includes('port-forward')) {
+        assert.ok(call.includes('127.0.0.1'));
+        assert.ok(call.includes('25106:80'));
+      }
     }
-    assert.ok((await stat(`${fixture.slotDirectory}/target-owner.json`)).isFile());
+    if (isolated) {
+      assert.ok((await stat(`${fixture.slotDirectory}/target-owner.json`)).isFile());
+    }
     assert.equal(await readFile(`${otherSlot}/sentinel`, 'utf8'), 'other slot');
   } finally {
     await fixture.close();
   }
 }
-test('package ownership and cleanup use only the checked target context', packageUsesCheckedTarget);
+async function waitForFixtureFile(path: string) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    try {
+      await stat(path);
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
+    }
+    await delay(25);
+  }
+  throw new Error('Fixture forward did not start');
+}
+async function packageUsesCheckedTarget() {
+  await packageConnectionLifecycle(true);
+}
+async function packageUsesOriginalCluster() {
+  await packageConnectionLifecycle(false);
+}
+test('package ownership, forwarding and cleanup use the checked target', packageUsesCheckedTarget);
+test('original R1 forwarding and cleanup still work', packageUsesOriginalCluster);
+
+async function missingTargetNeverFallsBack(afterHelm: boolean) {
+  const fixture = await targetFixture();
+  try {
+    await fixture.run('target-up');
+    await fixture.loadState();
+    const annotations = { 'opencrane.dev/worktree': process.cwd(), 'opencrane.dev/slot': '1' };
+    fixture.state.namespace = { metadata: { uid: 'package-uid', annotations } };
+    const owner = { worktree: process.cwd(), slot: '1', context: 'k3d-opencrane-target-1',
+      namespace: 'opencrane-package-1', namespaceUid: 'package-uid',
+      release: 'opencrane-package-1' };
+    const record = `${fixture.slotDirectory}/package-owner.json`;
+    await writeFile(record, JSON.stringify(owner));
+    fixture.state.calls = [];
+    fixture.state.loseTarget = !afterHelm;
+    fixture.state.loseAfterHelm = afterHelm;
+    await fixture.saveState();
+    await assert.rejects(fixture.run('package-down'));
+    await fixture.loadState();
+    for (const call of fixture.state.calls) {
+      assert.ok(!call.includes('--context=k3d-ocn'));
+      assert.ok(!call.includes('uninstall') && !call.includes('delete'));
+    }
+    if (!afterHelm) {
+      assert.equal(await readFile(record, 'utf8'), JSON.stringify(owner));
+    }
+  } finally {
+    await fixture.close();
+  }
+}
+async function losesTargetAfterNamespace() {
+  await missingTargetNeverFallsBack(false);
+}
+async function losesRecordsAfterHelm() {
+  await missingTargetNeverFallsBack(true);
+}
+test('cleanup never falls back after the recorded target disappears', losesTargetAfterNamespace);
+test('cleanup retains its checked context when both owner records disappear', losesRecordsAfterHelm);

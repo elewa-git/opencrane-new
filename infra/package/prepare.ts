@@ -8,18 +8,18 @@ import { tokenIssuer } from '@opencrane/auth';
 import {
   authEnv, directory, generate, readEnv, readOwnerEmail, root, writeEnv,
 } from '../dev-stack/config.ts';
-import { localOrigin, secondary, stackId } from '../dev-stack/identity.ts';
-import { verifyPackageOwner } from '../dev-stack/packaged.ts';
+import { localOrigin, secondary } from '../dev-stack/identity.ts';
+import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
 
 const execute = promisify(execFile);
-const namespace = `opencrane-package-${stackId}`;
+type PackageOwner = Awaited<ReturnType<typeof verifyPackageOwner>>;
 let stage = 'preflight';
 
 async function command(program: string, args: string[]) {
   await execute(program, args, { cwd: root, timeout: 120_000 });
 }
 
-async function createSecret(name: string, environment?: string,
+async function createSecret(owner: PackageOwner, name: string, environment?: string,
     files: Record<string, string> = {}) {
   const source = await mkdtemp(`${directory}/package-secret-`);
   try {
@@ -31,7 +31,8 @@ async function createSecret(name: string, environment?: string,
       await copyFile(path, `${source}/${key}`);
       await chmod(`${source}/${key}`, 0o600);
     }
-    await command('kubectl', ['--context=k3d-ocn', '-n', namespace,
+    const connection = await packageConnectionArgs(owner);
+    await command('kubectl', [...connection, '-n', owner.namespace,
       'create', 'secret', 'generic', name, `--from-file=${source}`]);
   } finally {
     await rm(source, { recursive: true, force: true });
@@ -113,17 +114,17 @@ async function prepareSettings() {
   });
 }
 
-async function provisionSecrets(names: Record<string, string>) {
-  await createSecret(names['postgres']!, 'postgres');
-  await createSecret(names['nats']!, 'package-nats', {
+async function provisionSecrets(names: Record<string, string>, owner: PackageOwner) {
+  await createSecret(owner, names['postgres']!, 'postgres');
+  await createSecret(owner, names['nats']!, 'package-nats', {
     'nats.conf': `${root}/infra/nats/nats.conf`,
     'ca.crt': `${directory}/ca.crt`, 'server.crt': `${directory}/server.crt`,
     'server.key': `${directory}/server.key`,
   });
-  await createSecret(names['openfga']!, 'package-openfga');
-  await createSecret(names['bootstrap']!, 'package-bootstrap');
-  await createSecret(names['runtime']!, 'package-runtime');
-  await createSecret(names['runtimeFiles']!, undefined, {
+  await createSecret(owner, names['openfga']!, 'package-openfga');
+  await createSecret(owner, names['bootstrap']!, 'package-bootstrap');
+  await createSecret(owner, names['runtime']!, 'package-runtime');
+  await createSecret(owner, names['runtimeFiles']!, undefined, {
     'ca.crt': `${directory}/ca.crt`,
     'command.crt': `${directory}/command.crt`,
     'command.key': `${directory}/command.key`,
@@ -149,7 +150,7 @@ async function main() {
   await command('node', ['infra/package/preflight.mjs', valuesFile,
     'infra/package/reviewed-images.json']);
   stage = 'claim';
-  await verifyPackageOwner();
+  const owner = await verifyPackageOwner();
   const values = JSON.parse(await readFile(valuesFile, 'utf8')) as {
     secrets: Record<string, string>;
   };
@@ -164,7 +165,7 @@ async function main() {
   stage = 'private settings';
   await prepareSettings();
   stage = 'Kubernetes secrets';
-  await provisionSecrets(values.secrets);
+  await provisionSecrets(values.secrets, owner);
   console.log('PASS private package secrets created from files in the claimed slot');
 }
 

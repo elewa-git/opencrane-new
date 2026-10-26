@@ -1,0 +1,1 @@
+- Package preparation and browser forwarding use the recorded cluster connection. A lost or changed target stops package commands instead of sending them to the shared cluster. Three-peer installation remains blocked pending bootstrap wiring and runtime image promotion.

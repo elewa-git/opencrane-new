@@ -2023,3 +2023,17 @@ define the accepted version, passwords and unchanged database roles. The helper
 requires bootstrap-compatible generated passwords and checks connection values
 after the bootstrap Secret overrides runtime settings. The shipped
 image review still refuses CNPG; this check does not enable a live installation.
+
+## Recorded package connections
+
+`packaged.ts` carries the context checked at the start into every later
+Kubernetes operation. Each operation compares that context with the current target. Helm also compares its explicit context with the checked
+target before starting. A missing target cannot redirect an existing target's
+package to the shared cluster. Ordinary R1 packages recorded on the shared
+cluster retain their existing behaviour.
+
+`packageConnectionArgs` rechecks package ownership and the captured namespace UID
+for private preparation and browser forwarding. It supplies the recorded context
+and private kubeconfig path without reading or printing credential contents.
+The [package notes](../package/README.robot.md#recorded-connection-during-package-operations)
+describe the split scope and remaining R3 installation work.

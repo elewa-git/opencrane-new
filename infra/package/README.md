@@ -21,7 +21,7 @@ flowchart LR
   infra["infra<br/>infrastructure"] --> package["infra/package<br/>installs and recovery checks"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
-  stack -->|checks test space, cluster access and bootstrap connections| package
+  stack -->|checks ownership, cluster access and bootstrap connections| package
   package -->|uses local cluster| devbox
   package -->|starts services and replays memory| apps["apps<br/>product services and replay"]
   package -->|runs| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
@@ -66,7 +66,9 @@ running install still need work.
 2. **The package starts.** Helm starts the apps and services. A short setup job
    prepares the databases and first owner; workers start the assistant's computer as needed.
 3. **A developer opens the website.** A local port forward connects the private
-   website to a browser on this machine.
+   website to a browser on this machine. Preparation and forwarding use the same
+   recorded cluster and private connection file as installation and cleanup.
+   A missing or changed target stops the operation.
 4. **A developer stops the package.** Cleanup checks ownership and removes only
    this developer's install, even after a crash.
 5. **A developer checks fresh installs.** A check installs the package twice from
