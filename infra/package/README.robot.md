@@ -159,6 +159,23 @@ image pin before installation.
 `nice -n 10 docker build --build-arg SOURCE_REVISION=<commit> -f infra/package/Dockerfile .`.
 The build runs npm at nice priority too. An absent or wrong label refuses promotion.
 
+The final stage starts from `scratch` and copies the cleaned runtime filesystem.
+The Node base and application copy remain build stages only. Their deleted files
+are absent from every shipped layer. The final stage restores Node's entry point,
+version environment variables, working directory, user and default command.
+`image-layers.test.py` reads each layer from a real Docker save archive. It checks
+removed paths, one layer with filesystem contents, runtime settings and required
+executable files. Docker may also add an empty layer for `WORKDIR`:
+
+```sh
+nice -n 10 docker image save -o /tmp/package-image.tar <local-image>
+PACKAGE_IMAGE_ARCHIVE=/tmp/package-image.tar PACKAGE_IMAGE_REVISION=<commit> \
+  nice -n 10 python3 infra/package/image-layers.test.py
+```
+
+Both environment variables are required; a missing archive fails the test.
+This check does not replace the complete Syft scan or the licence review.
+
 The existing `natsCluster` review binds `replicas: 3`, both role pins and
 `sourceRevision` to `imageId`, Syft's image configuration digest, and `scanSha256`
 from the Syft JSON bytes. Docker inspection may identify that configuration or the
@@ -188,7 +205,9 @@ The preflight test suite also runs the Python licence and promotion refusal test
 The shipped image and inventory remain unchanged. The private registry is unavailable;
 R3 approval and release qualification remain blocked. Unknown licences or open
 Critical/High findings also block qualification. The
-[image receipt](../../docs/process/p5-4-images1/receipt.md) records the local build and checks.
+[first image receipt](../../docs/process/p5-4-images1/receipt.md) records the original refusals.
+The [layer receipt](../../docs/process/p5-4-images2/receipt.md) records the flattened local
+build. Bootstrap imports and the complete licence inventory remain separate follow-ups.
 
 ## Private owner email
 

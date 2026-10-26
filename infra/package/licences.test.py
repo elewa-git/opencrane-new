@@ -60,6 +60,19 @@ class LicenceTests(unittest.TestCase):
             inspection[0]["Id"] = reviewed["images"]["server"].split("@")[1]
             checker.check_package_promotion(*fixture)
 
+    def test_promotion_refuses_a_package_deleted_only_from_the_final_filesystem(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reviewed, inventory, inspection, path, revision = self.promotion_fixture(directory)
+            scan = checker.read_json(path)
+            # Include the older layer's package just as an all-layer scan would.
+            removed_package = {"type": "npm", "name": "npm", "version": "10.9.4",
+                               "licenses": [{"spdxExpression": "Artistic-2.0"}]}
+            scan["artifacts"].append(removed_package)
+            path.write_text(json.dumps(scan), encoding="utf-8")
+            reviewed["natsCluster"]["scanSha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+            with self.assertRaisesRegex(ValueError, "scan differs from the reviewed inventory"):
+                checker.check_package_promotion(reviewed, inventory, inspection, path, revision)
+
     def test_promotion_refuses_incomplete_or_mismatched_evidence(self):
         cases = ("missing label", "wrong label", "invalid revision", "wrong server",
                  "wrong web", "missing R3", "wrong replicas", "wrong inventory source",
