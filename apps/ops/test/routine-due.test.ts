@@ -75,7 +75,8 @@ async function rows() {
 async function savesOneOccurrence() {
   const fetch = globalThis.fetch;
   function permissionFetch(url: Parameters<typeof fetch>[0], options?: RequestInit) {
-    if (!String(url).startsWith(binding.apiUrl + '/')) {
+    const address = url instanceof Request ? url.url : url.toString();
+    if (!address.startsWith(binding.apiUrl + '/')) {
       return forbiddenEffect();
     }
     return fetch(url, options);
@@ -125,6 +126,7 @@ async function finish() {
   const event = { ...row.event, id: `finished-${run.occurrenceId}`,
     commandId: `finished-${run.occurrenceId}`, type: 'routine.run_finished', data };
   await nats.seed([event]);
+  return event;
 }
 async function recoversOriginal() {
   const append = nats.store.append.bind(nats.store);
@@ -401,8 +403,7 @@ it.each(['worker', 'removed'])(
 
 async function twoCompletedOccurrences() {
   const first = await claim();
-  await finish();
-  const firstFinish = (await rows()).at(-1)!.event;
+  const firstFinish = await finish();
   const created = creation();
   const next = { ...created.data.next, localDate: '2026-11-01',
     at: '2026-11-01T01:30:00.000Z', offsetMinutes: 60 };
@@ -416,7 +417,7 @@ async function twoCompletedOccurrences() {
 }
 async function repeatsOlderCompletion(kind: string) {
   const { first, second, request, firstFinish } = await twoCompletedOccurrences();
-  const data = { ...firstFinish.data as object, outcome: 'failed', reason: 'root_failed' };
+  const data = { ...firstFinish.data, outcome: 'failed', reason: 'root_failed' };
   const repeated = { ...firstFinish, id: 'late-finish', commandId: 'late-finish', data };
   await nats.seed([repeated]);
   if (kind === 'recovery') {
@@ -451,7 +452,7 @@ async function refusesChangedOlderCompletion(field: string) {
   if (field.endsWith('Revision')) {
     value = 99;
   }
-  const data = { ...firstFinish.data as object, [field]: value };
+  const data = { ...firstFinish.data, [field]: value };
   await nats.seed([{ ...firstFinish, id: 'bad-finish', commandId: 'bad-finish', data }]);
   const before = await nats.store.head();
   await expect(claim()).rejects.toThrow(/^Routine due (refused|unavailable)$/u);
@@ -460,3 +461,28 @@ async function refusesChangedOlderCompletion(field: string) {
 it.each(['conversationId', 'messageId', 'turnId', 'rootId', 'definitionRevision',
   'scheduleRevision', 'controlRevision'])(
   'refuses a repeated older completion with changed %s', refusesChangedOlderCompletion);
+
+async function refusesAccessLostBeforeReceipt(kind: string) {
+  const append = nats.store.append.bind(nats.store);
+  async function revokeAfterAppend(change: AppendCommand) {
+    const result = await append(change);
+    expect(result.status).toBe('appended');
+    if (kind === 'member') {
+      await nats.seed([event('removed', 'member-alice', 'member.removed')]);
+    } else if (kind === 'permission') {
+      const client = new TupleClient(binding);
+      const owner = { user: objectId('person', 'test', 'alice'), relation: 'owner',
+        object: objectId('routine', 'test', 'orders') };
+      await client.write([], [owner]);
+    } else {
+      owned = false;
+    }
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementationOnce(revokeAfterAppend);
+  await expect(claim()).rejects.toThrow(/^Routine due refused$/u);
+  expect(await rows()).toHaveLength(2);
+  await expect(claim()).rejects.toThrow(/^Routine due refused$/u);
+}
+it.each(['member', 'permission', 'worker'])(
+  'withholds a saved receipt after losing %s access', refusesAccessLostBeforeReceipt);
