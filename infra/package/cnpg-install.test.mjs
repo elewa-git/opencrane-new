@@ -43,17 +43,11 @@ function validFixture() {
   for (const key of fields.split(/\s+/u)) runtime[key] = canary;
   secrets.runtime = secret(runtime);
   const files = {};
-  const fileNames = `conversation-wrap-key ca.crt command.crt command.key command.seed
-    projection.crt projection.key projection.seed dispatcher.crt dispatcher.key dispatcher.seed
-    token-signing-key.pem zitadel-client-secret model-jwks.json model-stub-key`;
+  const fileNames = `conversation-wrap-key token-signing-key.pem zitadel-client-secret
+    model-jwks.json model-stub-key`;
   for (const key of fileNames.split(/\s+/u)) files[key] = canary;
   secrets.runtimefiles = secret(files);
-  const nats = {};
-  const natsFields = `nats.conf ca.crt server.crt server.key NATS_LISTEN NATS_STORE_DIR
-    NATS_CA_FILE NATS_CERT_FILE NATS_KEY_FILE NATS_COMMAND_NKEY NATS_PROJECTION_NKEY
-    NATS_DISPATCHER_NKEY NATS_COMPUTER_NKEY NATS_GATEWAY_NKEY`;
-  for (const key of natsFields.split(/\s+/u)) nats[key] = canary;
-  secrets.nats = secret(nats);
+  secrets.nats = secret({});
   secrets.postgres = secret({ POSTGRES_PASSWORD: canary });
   secrets.openfga = secret({ OPENFGA_DATASTORE_ENGINE: 'postgres',
     OPENFGA_DATASTORE_URI: database('openfga', 'openfga') });
@@ -134,6 +128,9 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
       for (const argument of call.args) {
         assert.ok(!argument.includes(privateDirectory),
           `${call.program} arguments must not include the private values directory`);
+      }
+      if (call.program === 'openssl') {
+        for (const argument of call.args) assert.ok(!argument.includes(directory));
       }
       if (call.program === 'helm') {
         assert.equal(renders, true, 'Helm must not run with incomplete inputs');

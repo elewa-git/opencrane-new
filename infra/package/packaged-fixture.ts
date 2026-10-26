@@ -5,6 +5,7 @@ import { preProcessFile } from 'typescript';
 
 const files = [
   'infra/package/prepare-nats-routes.ts',
+  'infra/package/check-nats-inputs.ts',
   'infra/dev-stack/bounded-input.ts',
   'infra/dev-stack/cnpg.ts',
   'infra/dev-stack/config.ts',
@@ -30,6 +31,8 @@ async function checkImports(file: string) {
 }
 
 export async function copyPackagedFixture(worktree: string) {
+  await mkdir(join(worktree, 'infra/nats'), { recursive: true });
+  await cp('infra/nats/nats.conf', join(worktree, 'infra/nats/nats.conf'));
   // Check every copied module so a new import names the missing fixture file immediately.
   for (const file of files) {
     await checkImports(file);

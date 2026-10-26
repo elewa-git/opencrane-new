@@ -854,3 +854,34 @@ Exit zero means submitted records cover the checklist, including synthetic test
 records. The output still says PARTIAL; it does not establish live qualification.
 Exit one lists missing/refused evidence. The [source receipt](../../docs/process/p5-13-pr1/receipt.md)
 records checks and outstanding native-memory, company-credential and routine proof.
+
+## Mounted NATS inputs before installation
+
+`check-nats-inputs.ts` checks the actual NATS and runtime-files Secrets collected
+by the installer, for both R1 and R3, before Helm rendering or installation.
+The server certificate must have subject `CN=nats`, exactly the DNS names `nats`
+and `localhost` and IP address `127.0.0.1`, and only the server TLS usage.
+Command, projection and dispatcher certificates must have their exact role as
+common name, no extra alternative names and only the client TLS usage.
+All four certificates must be current, must match their private key and must be
+issued by the mounted client CA. The CA must be current and self-signed; runtime
+and server trust bytes must agree. OpenSSL also checks each certificate's purpose.
+R3 retains the comparison with the locally prepared client CA and separate route trust.
+
+The mounted `nats.conf` must match `infra/nats/nats.conf` byte for byte. This is a
+fixed package policy, including comments and whitespace; custom configuration is
+refused. It protects the store directory variable, verified client TLS, accounts,
+imports, exports and permissions, including against extra includes or duplicate
+settings. The server must listen on `0.0.0.0:4222`, store data in `/data` and use
+`/tls/ca.crt`, `/tls/server.crt` and `/tls/server.key`.
+Runtime and dispatcher command connections must use `tls://nats:4222`, the command
+certificate, key and seed under `/run/opencrane/files`, and `_INBOX.command`.
+Optional bootstrap overrides must agree. All five public NKeys must be valid,
+distinct user keys. Each mounted role seed must match its public key.
+
+Only fixed public certificate filenames enter OpenSSL arguments. Temporary files
+are private and removed afterwards. Credential values, errors and private host
+paths are withheld from output. The installer tests use generated certificates,
+real NKeys and the shipped configuration. Separate cases change each mounted
+identity's key, dates, names, usages, CA status and issuer, then check refusal
+before any Helm command. Expired and future fixtures use explicit ordered dates.

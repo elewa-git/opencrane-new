@@ -21,7 +21,7 @@ flowchart LR
   infra["infra<br/>infrastructure"] --> package["infra/package<br/>installs and recovery checks"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
-  stack -->|checks ownership and private values| package
+  stack -->|checks ownership, nodes, certificates and private values| package
   package -->|uses local cluster| devbox
   package -->|starts services, copies and restores files and replays memory| apps["apps<br/>product services and replay"]
   package -->|checks NATS placement, setup time and recovery| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
@@ -54,6 +54,7 @@ running install still need work.
 - Refuses missing private settings and public network access.
 - Renders an optional three-peer event log and prepares its separate private certificates.
 - Checks the three peers' nodes, certificates and image compatibility before installation.
+- Checks event-log certificates, private keys and connection settings before installation.
 - Waits for the event-log peers to be ready before creating the event stream.
 - Gives computers the private gateway address and short-lived access passes.
 - Saves a bounded private copy of the event log and its referenced files for an operator.
@@ -80,6 +81,8 @@ running install still need work.
    for that mode. The shipped image still refuses it. The private values file's
    folder stays out of preflight and Helm command arguments, including during fresh
    browser journeys.
+   It also checks the mounted certificates and requires the shipped storage,
+   encrypted connection and account rules.
    Workers start the assistant's computer as needed.
 3. **A developer opens the website.** A local port forward connects the private
    website to a browser on this machine. Preparation and forwarding use the same

@@ -10,6 +10,7 @@ import { readBoundedJson, readBoundedText } from './bounded-input.ts';
 import { secondary, stackId } from './identity.ts';
 import { targetConnection, targetRecorded } from './target.ts';
 import { checkCnpgInstallation } from './cnpg.ts';
+import { checkNatsInputs } from '../package/check-nats-inputs.ts';
 
 const execute = promisify(execFile);
 const namespace = `opencrane-package-${stackId}`;
@@ -327,6 +328,7 @@ async function checkClusterNodes(owner: PackageOwner) {
 }
 
 async function checkNamedSecrets(values: PackageValues, review: PackageReview, owner: PackageOwner) {
+  const secrets: Record<string, SecretData> = {};
   for (const name of review.requiredSecrets) {
     const secret = values.secrets[name]!;
     const found = await ownedKubectl(owner, ['-n', namespace, 'get', 'secret', secret,
@@ -335,7 +337,9 @@ async function checkNamedSecrets(values: PackageValues, review: PackageReview, o
     const stored = JSON.parse(found) as SecretData;
     checkReplicaSettings(name, stored, values);
     checkSecretFields(name, stored);
+    secrets[name] = stored;
   }
+  return secrets;
 }
 
 async function checkRenderedPackage(valuesFile: string, review: PackageReview) {
@@ -448,12 +452,13 @@ export async function installPackage(valuesFile: string) {
     return ownedKubectl(owner, args, timeoutMs);
   }
   await checkCnpgInstallation(values, namespace, checkedKubectl);
-  await checkNamedSecrets(values, review, owner);
+  const secrets = await checkNamedSecrets(values, review, owner);
   if (values.natsCluster?.enabled) {
     await checkClusterNodes(owner);
     const { checkPreparedNatsRoutes } = await import('../package/prepare-nats-routes.ts');
     await checkPreparedNatsRoutes(valuesFile, owner);
   }
+  await checkNatsInputs(secrets);
   await checkRenderedPackage(valuesFile, review);
   if (await releaseSecret(owner)) throw new Error('A Helm release already uses this namespace');
   // Save the identity before Helm runs so interrupted cleanup can recognise this install.

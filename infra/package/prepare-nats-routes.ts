@@ -27,20 +27,15 @@ type Secret = {
   data: Record<string, string>;
 };
 
-async function command(program: string, args: string[], cwd = root) {
-  const env = { ...process.env };
-  const configIndex = args.indexOf('--kubeconfig');
-  if (configIndex !== -1) {
-    env['KUBECONFIG'] = args[configIndex + 1];
-    args = [...args.slice(0, configIndex), ...args.slice(configIndex + 2)];
-  }
+async function command(program: string, args: string[], cwd = root, env = { ...process.env }) {
   const result = await execute(program, args, { cwd, env, timeout: 30_000, maxBuffer: 2_000_000 });
   return result.stdout.trim();
 }
 
 async function kubectl(owner: Owner, args: string[]) {
   const options = await packageConnectionArgs(owner);
-  return command('kubectl', [...options, '-n', owner.namespace, ...args], directory);
+  return command('kubectl', [...options.args, '-n', owner.namespace, ...args],
+    directory, options.environment);
 }
 
 async function privateDirectory(path: string) {

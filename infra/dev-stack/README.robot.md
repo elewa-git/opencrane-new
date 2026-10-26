@@ -2079,3 +2079,13 @@ package ownership and cleanup. Neither test requires a running development stack
 
 The [local operator guide and index](../../docs/process/p5-14-pr1/operator.md)
 link existing commands and distinguish source checks from live qualification.
+
+## Mounted event-log credentials
+
+Before any Helm command, `packaged.ts` passes the collected Secrets to the
+[package NATS checker](../package/README.robot.md#mounted-nats-inputs-before-installation).
+It validates the mounted server, command, projection and dispatcher certificates,
+keys, role seeds and connection settings. The NATS configuration must match the
+shipped storage, TLS and account policy. These checks apply to one and three peers.
+Route preparation uses the connection helper's separate arguments and environment,
+so the private kubeconfig filename remains outside child command arguments.
