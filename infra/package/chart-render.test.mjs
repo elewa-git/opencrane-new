@@ -436,3 +436,54 @@ async function refusesClusterInstallation() {
 }
 test('ordinary installer refuses preview-only cluster settings',
   refusesClusterInstallation);
+
+function backupValues() {
+  const values = cnpgValues();
+  values.postgres.backup = {
+    enabled: true,
+    renderOnly: true,
+    method: 'barmanObjectStore',
+    destinationPath: 's3://database-backups/local-check',
+    endpointURL: 'https://backup-store.cluster-test.svc:9000',
+    endpointCA: { name: 'backup-trust', key: 'ca.crt' },
+    s3Credentials: {
+      accessKeyId: { name: 'backup-identity', key: 'ACCESS_KEY_ID' },
+      secretAccessKey: { name: 'backup-identity', key: 'ACCESS_SECRET_KEY' },
+    },
+  };
+  return values;
+}
+
+function rendersSuspendedBackup() {
+  const resources = renderedResources(backupValues());
+  const cluster = resources.get('Cluster/postgres');
+  assert.deepEqual(cluster.spec.backup, {
+    barmanObjectStore: {
+      destinationPath: 's3://database-backups/local-check',
+      endpointURL: 'https://backup-store.cluster-test.svc:9000',
+      endpointCA: { name: 'backup-trust', key: 'ca.crt' },
+      s3Credentials: {
+        accessKeyId: { name: 'backup-identity', key: 'ACCESS_KEY_ID' },
+        secretAccessKey: { name: 'backup-identity', key: 'ACCESS_SECRET_KEY' },
+      },
+      data: { encryption: 'AES256' },
+      wal: { encryption: 'AES256' },
+    },
+  });
+  const schedules = [];
+  for (const resource of resources.values()) {
+    if (resource.kind === 'ScheduledBackup') schedules.push(resource);
+    if (resource.kind === 'Service') assert.equal(resource.spec.type, 'ClusterIP');
+    for (const forbidden of ['Secret', 'Ingress', 'Gateway', 'Backup', 'CronJob']) {
+      assert.notEqual(resource.kind, forbidden);
+    }
+  }
+  assert.equal(schedules.length, 1);
+  assert.equal(schedules[0].apiVersion, 'postgresql.cnpg.io/v1');
+  assert.deepEqual(schedules[0].spec, {
+    cluster: { name: 'postgres' }, method: 'barmanObjectStore',
+    schedule: '0 0 0 * * *', suspend: true, immediate: false,
+  });
+}
+test('CNPG renders encrypted local backup and WAL with one suspended schedule',
+  rendersSuspendedBackup);
