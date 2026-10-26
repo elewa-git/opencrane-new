@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { test } from 'node:test';
 import { parseAllDocuments } from 'yaml';
 import { certificates, issueCertificate } from '../../libs/event-store/test/certificates.ts';
@@ -130,7 +130,9 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
           `${call.program} arguments must not include the private values directory`);
       }
       if (call.program === 'openssl') {
-        for (const argument of call.args) assert.ok(!argument.includes(directory));
+        for (const argument of call.args) {
+          assert.ok(!isAbsolute(argument), 'OpenSSL arguments must use relative filenames');
+        }
       }
       if (call.program === 'helm') {
         assert.equal(renders, true, 'Helm must not run with incomplete inputs');

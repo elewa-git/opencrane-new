@@ -88,7 +88,13 @@ export async function prepareNatsFixture(fixture, directory) {
     const [role, fault] = fixture.nkeyFault;
     const name = `NATS_${role.toUpperCase()}_NKEY`;
     if (fault === 'invalid') server[name] = encoded('invalid');
-    if (fault === 'duplicate') server[name] = server.NATS_GATEWAY_NKEY;
+    if (fault === 'duplicate') {
+      server[name] = server.NATS_GATEWAY_NKEY;
+      if (role !== 'computer' && role !== 'gateway') {
+        const seed = await readFile(`${directory}/gateway.seed`);
+        files[`${role}.seed`] = encoded(seed);
+      }
+    }
     if (fault === 'seed') files[`${role}.seed`] = encoded(await readFile(`${directory}/unknown.seed`));
   }
   if (fixture.caFault === 'runtime') files['ca.crt'] = files['command.crt'];
