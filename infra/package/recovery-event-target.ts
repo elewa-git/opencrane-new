@@ -23,8 +23,9 @@ export async function provisionRecoveryEventTarget(silo: string) {
     jetstream: { store_dir: directory } };
   const configPath = join(directory, 'server.conf');
   await writeFile(configPath, JSON.stringify(configuration), { mode: 0o600 });
-  const child = spawn(resolve('.tools/nats-server'), ['-c', configPath],
-    { stdio: ['ignore', 'ignore', 'pipe'] });
+  // Keep the private directory out of process arguments, which local observers can read.
+  const child = spawn(resolve('.tools/nats-server'), ['-c', 'server.conf'],
+    { cwd: directory, stdio: ['ignore', 'ignore', 'pipe'] });
   const exited = once(child, 'close');
   void exited.catch(ignoreFailure);
   let connection: NatsConnection | undefined;
