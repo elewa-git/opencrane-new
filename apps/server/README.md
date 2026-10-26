@@ -90,7 +90,7 @@ flowchart LR
   server -->|chat work, connections, checked reports and unavailable replies| computer["apps/computer<br/>assistant computers"]
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime
-  runtime -->|prepares memory calls and loaded access receipts, then checks permission| server
+  runtime -->|checks the recall definition, prepares memory calls and loaded access receipts, then checks permission| server
 ```
 
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) handles sign-in.
@@ -102,6 +102,9 @@ Agent correction and forget requests need a signed proof of a loaded, current pe
 A correction names every other loaded fact as a dependency, with no revision of its own target.
 Both operations remain disabled after these checks and create no fact, key or command file.
 Discovery still lists recall alone.
+A separate tool-list builder accepts only that exact reviewed recall definition for
+the requester’s personal scope. It refuses Ask and Block choices. Private tool
+delivery remains disabled; the builder is exercised by local tests.
 Memory tests finish their setup reads before signing short-lived requests. Separate tests
 delay history and permission reads inside the server and record only elapsed times.
 These check that slow preparation leaves the original two-second pass available

@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
 import { createLogger } from '@opencrane/observability';
+import { losslessJson } from '@opencrane/events/lossless-json';
+import { memoryScopeId } from '@opencrane/projections';
+import { recallTool, serverInfo as memoryServerInfo } from '../memory/mcp.ts';
 
 const maximumToolBytes = 48 * 1024;
 const maximumTurnBytes = 120 * 1024;
@@ -56,6 +59,22 @@ export interface TurnDelivery {
 const logger = createLogger('bridge');
 
 export async function buildTurnTools(input: TurnToolInput): Promise<TurnToolServer[]> {
+  return assembleTurnTools(input, false);
+}
+
+type PersonalRecallInput = Omit<TurnToolInput, 'rows' | 'approvalWaiting'> & {
+  silo: string;
+  scopeId: string;
+};
+
+export async function buildPersonalRecallTools(input: PersonalRecallInput) {
+  const scopeId = memoryScopeId(input.silo, 'person', input.requesterId);
+  if (input.scopeId !== scopeId) return [];
+  const restricted = { ...input, rows: [{ serverId: 'memory' }], approvalWaiting: false };
+  return assembleTurnTools(restricted, true);
+}
+
+async function assembleTurnTools(input: TurnToolInput, personalRecall: boolean) {
   const availableBytes = Math.min(maximumToolBytes,
     maximumTurnBytes - input.baseMessageBytes - rootFieldBytes);
   if (availableBytes <= 0) {
@@ -67,9 +86,10 @@ export async function buildTurnTools(input: TurnToolInput): Promise<TurnToolServ
   const keys = new Set<string>();
   let omittedServers = 0;
   for (const row of input.rows) {
-    // Keep memory tools out of native turns until their private execution is supported.
-    if (row.serverId === 'memory') continue;
-    const state = await input.readServer(row.serverId);
+    // Keep ordinary turns separate from the restricted recall catalogue.
+    if (row.serverId === 'memory' && !personalRecall) continue;
+    let state = await input.readServer(row.serverId);
+    if (state && personalRecall) state = recallOnly(state);
     if (!state || !isAvailableServer(state)) continue;
     if (!hasComputerCompatibleFields(state)) {
       omittedServers += 1;
@@ -90,6 +110,32 @@ export async function buildTurnTools(input: TurnToolInput): Promise<TurnToolServ
 
   logOmittedServers(omittedServers);
   return tools;
+}
+
+function recallOnly(state: TurnToolServerState): TurnToolServerState | undefined {
+  if (state.serverId !== 'memory' || state.connectionId !== 'server' ||
+      state.serverInfo?.name !== memoryServerInfo.name ||
+      state.serverInfo.version !== memoryServerInfo.version) return undefined;
+  const discovered = state.discoveryTools.filter(isRecall);
+  const policies = state.policyTools.filter(isRecall);
+  if (discovered.length !== 1 || policies.length !== 1) return undefined;
+  const tool = discovered[0]!;
+  const policy = policies[0]!;
+  if (!tool.definition || policy.mode !== 'allow') return undefined;
+  const expected = losslessJson(JSON.stringify(recallTool));
+  if (tool.revision !== expected.digest || policy.revision !== expected.digest) return undefined;
+  try {
+    // Reject changed instructions or schemas, even if a saved review names recall.
+    const actual = losslessJson(tool.definition);
+    if (actual.canonical !== expected.canonical) return undefined;
+  } catch {
+    return undefined;
+  }
+  return { ...state, discoveryTools: discovered, policyTools: policies };
+}
+
+function isRecall(tool: { name: string }) {
+  return tool.name === 'recall';
 }
 
 export async function toolsForMessage(

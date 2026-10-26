@@ -1,0 +1,1 @@
+Private recall tool-list preparation now checks the requester's personal scope and accepts only the exact reviewed built-in recall definition with zero-cost Allow and both use grants. Production delivery stays disabled while native process wiring and qualification remain pending.

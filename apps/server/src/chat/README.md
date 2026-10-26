@@ -15,6 +15,8 @@ This folder handles conversations between people and with assistants. It saves m
 Public chat routes reserve routine session identifiers for internal preparation. People
 cannot create, change or read those sessions through these routes.
 
+The private recall tool-list builder checks the exact reviewed built-in definition and the requester’s personal scope. Live private tool delivery remains disabled.
+
 **Messages and access.** Two members can exchange private messages without starting assistant work. Members can start group chats with reviewed people. Offered groups are limited to those they belong to. Creators can add or remove participants; others can leave. Changes reject stale choices, and saved retries cannot add someone again. New chats can report that permissions are still applying so the website keeps the draft. A saved removal stops reads and live connections before the permissions service catches up. Later joiners see only messages from their latest join onwards. Lists reuse permission facts within a request and check for changes after each answer from the permissions service.
 
 History loads before the final current-access check and before private text is opened. A removal during loading refuses the reply. Reads check access at that moment; they do not use the short write check. Commands load history first, then watch only the small records deciding access. A busy conversation cannot itself refuse a reader. Saved close checks remember the last position and read only new changes.

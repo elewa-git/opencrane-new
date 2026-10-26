@@ -2458,6 +2458,36 @@ desktop grant. A late participant can list and download screenshots saved after 
 latest join. Older previews and downloads are refused, including after projection replay.
 Private team sessions still refuse participant capture.
 
+## Restricted recall assembly — P4-15 PR 4b, first part
+
+`buildPersonalRecallTools` accepts a silo, a person scope and the recorded requester
+and assistant ids. It derives the requester's person scope before reading the
+catalogue. Another person, group, notes scope or silo gets no offer. The helper does
+not establish those identities itself; its future bridge caller must supply them
+from the saved turn binding.
+
+It reads only `memory`, requires connection `server` and the built-in server name
+and version, and selects only one recall definition and policy. Both saved revisions
+must match the exact definition served by `memory/mcp.ts`. The existing lossless JSON
+parser accepts reordered object keys but refuses changed instructions, schema or
+additional fields. Duplicate recall entries are refused. Other tools are omitted.
+Published, credential-free, reviewed, zero-cent Allow policy and both MCP use grants
+are still required. Ask is refused even with a saved approval review.
+
+The helper reuses the existing 48 KiB tool and 120 KiB combined-frame limits and
+ordinary entry construction. It does not load facts or grant permission to invoke
+a tool. Gateway and backend checks remain necessary on every call. An unavailable
+catalogue or access service still rejects the build. No new API or event field,
+dependency, access stream or deadline is introduced.
+
+`test/personal-recall-tools.test.ts` exercises this helper directly without an
+environment switch. `buildTurnTools`, the live bridge and `mayOfferTurnTools` keep
+memory excluded. Native launch/loading, proxy binding, person-only call enforcement,
+volatile delivery and image qualification remain pending. This first part does not
+prove a native recall reaches the governed backend. Memory admission stays disabled.
+Own checks and the remaining wire tests are recorded in the
+[receipt](../../docs/process/p4-15-pr4b/receipt.md).
+
 ## Governed memory recall
 
 `POST /mcp/memory/server` serves stateless 2026-07-28 discovery, listing and scoped recall.
