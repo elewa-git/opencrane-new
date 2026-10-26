@@ -8,6 +8,9 @@ projections or the `openfga` authorisation projection from the silo's complete
 `EVENTS` stream. The replay entrypoint never publishes events or runs reactions. Run it from the
 repository root on Node 22.
 
+The package backup inventory also reuses the Kubernetes client’s existing label,
+home-owner and suspension checks. These exported checks perform no writes.
+
 ## Test dependencies
 
 The test helper exposes the Kubernetes client, lifecycle functions and memory cleanup

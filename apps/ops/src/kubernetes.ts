@@ -228,7 +228,7 @@ export class SandboxClient {
   }
 }
 
-function assertComputerLabels(sandbox: unknown, name: string, assistantId: string): void {
+export function assertComputerLabels(sandbox: unknown, name: string, assistantId: string): void {
   const labels = value(sandbox, 'spec', 'podTemplate', 'metadata', 'labels');
   if (value(labels, 'sandbox.users.io/assistant') !== assistantId
     || value(labels, 'sandbox.users.io/computer') !== name) {
@@ -236,7 +236,7 @@ function assertComputerLabels(sandbox: unknown, name: string, assistantId: strin
   }
 }
 
-function isFullySuspended(sandbox: unknown): boolean {
+export function isFullySuspended(sandbox: unknown): boolean {
   if (value(sandbox, 'spec', 'operatingMode') !== 'Suspended') return false;
   const conditions = value(sandbox, 'status', 'conditions');
   if (!Array.isArray(conditions)) return false;
@@ -248,7 +248,7 @@ function isFullySuspended(sandbox: unknown): boolean {
   return conditions.some(confirmsNoPod);
 }
 
-function assertHomeOwnership(pvc: unknown, sandbox: unknown, name: string): void {
+export function assertHomeOwnership(pvc: unknown, sandbox: unknown, name: string): void {
   if (!pvc || value(pvc, 'metadata', 'labels', 'sandbox.users.io/computer') !== name) {
     throw new Error('Retained computer has no matching home volume');
   }
