@@ -14,8 +14,8 @@ export async function prepareRoutineInput(...args: Parameters<typeof loadRoutine
   }
 }
 
-async function saveRoutineInput(...args: Parameters<typeof loadRoutinePreparation>) {
-  const [store, keys, worker] = args;
+export async function loadRoutineInput(...args: Parameters<typeof loadRoutinePreparation>) {
+  const [, keys, worker] = args;
   const preparation = await loadRoutinePreparation(...args);
   const run = preparation.run;
   const conversationId = run.conversationId;
@@ -60,15 +60,27 @@ async function saveRoutineInput(...args: Parameters<typeof loadRoutinePreparatio
       previous = row;
     }
   }
+  function encrypt() {
+    const encrypted = keys.encrypt(worker.silo, conversationId, text);
+    const data = { ...metadata, ...encrypted };
+    return messagePostedDataSchema.parse(data);
+  }
+  return { preparation, rows, previous, verify, checkCustody, encrypt };
+}
+
+async function saveRoutineInput(...args: Parameters<typeof loadRoutinePreparation>) {
+  const [store, , worker] = args;
+  const { preparation, rows, previous, verify, checkCustody, encrypt } =
+    await loadRoutineInput(...args);
+  const run = preparation.run;
+  const conversationId = run.conversationId;
   let position: number;
   if (previous) {
     await preparation.checkAccess();
     verify(previous);
     position = previous.sequence;
   } else {
-    const encrypted = keys.encrypt(worker.silo, conversationId, text);
-    const inputData = { ...metadata, ...encrypted };
-    const data = messagePostedDataSchema.parse(inputData);
+    const data = encrypt();
     const event = { id: run.messageId, commandId: run.messageId, type: 'message.posted',
       subject: `conversation-${conversationId}`, silo: worker.silo,
       source: 'opencrane-server', time: new Date().toISOString(),

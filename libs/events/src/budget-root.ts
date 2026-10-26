@@ -5,6 +5,7 @@ export const budgetRootAllowanceSetDataSchema = z.object({
   rootId: id, requesterId: id, conversationId: id, turnId: id, threadId: id,
   assistantId: id, computerId: id, generation: z.int().nonnegative(), payingGroupId: id,
   allowanceCents: z.int().min(1).max(1000),
+  preparationDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
 }).strict();
 const sourceStopSchema = z.object({
   rootId: id, reason: z.enum(['requester_stop', 'turn_ended', 'access_revoked']),

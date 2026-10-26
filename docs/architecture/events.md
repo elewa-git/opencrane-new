@@ -428,6 +428,9 @@ counts process starts for that fixed identity.
 A root is one turn's fixed allowance. `budget.root_allowance_set` binds rootId,
 requesterId, conversationId, turnId, threadId, assistantId, computerId, generation,
 payingGroupId and allowanceCents (1–1,000). Allocation holds no money.
+Optional preparationDigest binds routine preparation to its frozen occurrence, exact saved
+creation/input and provider/model/tariff choice. It is an immutable SHA-256 fingerprint;
+older roots and child roots omit it. Allocation starts no execution.
 `budget.reserved.rootId` optionally links the call's sole hold to that root.
 Rooted model holds also save optional `retryDigest` and `bodyDigest` SHA-256 values.
 Internal native holds hash `[silo, "native", callId]`, using the verified internal call id.

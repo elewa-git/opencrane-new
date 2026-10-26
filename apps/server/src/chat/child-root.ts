@@ -16,7 +16,8 @@ const readyComputer = z.object({
   assistantId: chatIdSchema, computerId: z.string().min(1), generation: z.int().positive(),
 });
 
-async function loadPreparation(options: Options, value: unknown, selected: Selection) {
+export async function loadRootPreparation(options: Pick<Options, 'store' | 'silo'>,
+  value: unknown, selected: Selection) {
   const parsed = assistantInput.safeParse(value);
   if (!parsed.success) {
     throw new ChildRequestChanged('Child request unavailable');
@@ -34,7 +35,7 @@ async function loadPreparation(options: Options, value: unknown, selected: Selec
   return { assistantId, admission, computer };
 }
 
-function selectedModel(admission: Admission) {
+export function rootPreparationModel(admission: Admission) {
   if (admission.draining) {
     throw new ChildRequestChanged('Child provider unavailable');
   }
@@ -48,8 +49,9 @@ function selectedModel(admission: Admission) {
   return admission.choice.model;
 }
 
-function requireComputer(prepared: Awaited<ReturnType<typeof loadPreparation>>,
-  saved: ChildRequest, selected: Selection) {
+export function requireRootComputer(prepared: Awaited<ReturnType<typeof loadRootPreparation>>,
+  saved: Pick<ChildRequest, 'assistantId' | 'createdBy' | 'childConversationId' | 'firstInputId'>,
+  selected: Selection) {
   const { computer, assistantId } = prepared;
   const ready = readyComputer.safeParse(computer.lifecycle?.event.data);
   if (assistantId !== saved.assistantId || computer.control ||
@@ -81,10 +83,10 @@ export async function allocateChildRoot(options: Options, actor: BudgetActor, me
     throw new ChildRequestChanged('Child allocation unavailable');
   }
   const selected = { ...selection };
-  let prepared: Awaited<ReturnType<typeof loadPreparation>> | undefined;
+  let prepared: Awaited<ReturnType<typeof loadRootPreparation>> | undefined;
   let preparationError: unknown;
   try {
-    prepared = await loadPreparation(options, value, selected);
+    prepared = await loadRootPreparation(options, value, selected);
   } catch (error) {
     preparationError = error;
   }
@@ -98,10 +100,10 @@ export async function allocateChildRoot(options: Options, actor: BudgetActor, me
   }
   const { intent, fresh, rows, confirmAccess } = checked;
   const saved = intent.data;
-  requireComputer(prepared, saved, selected);
+  requireRootComputer(prepared, saved, selected);
   const admission = prepared.admission;
   const computerSequence = prepared.computer.sequence;
-  const model = selectedModel(admission);
+  const model = rootPreparationModel(admission);
   await currentAuthority(options.store, options.binding, saved.createdBy, saved.assistantId,
     saved.childConversationId, 'model', model, fresh, rows);
   async function confirmPreparation() {

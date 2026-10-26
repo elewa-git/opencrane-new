@@ -1090,11 +1090,18 @@ function routineRootTests() {
 
   async function lateChange(kind: string) {
     async function change() {
-      if (kind === 'custody') vi.spyOn(keys, 'decrypt').mockImplementation(forbiddenEffect);
-      else if (kind === 'provider') await provider();
-      else await control('routine.run_stop_requested');
+      if (kind === 'custody') {
+        vi.spyOn(keys, 'decrypt').mockImplementation(forbiddenEffect);
+      } else if (kind === 'provider') {
+        await provider();
+      } else {
+        await control('routine.run_stop_requested');
+      }
     }
-    async function arm() { duringCheck = change; }
+    async function arm() {
+      await Promise.resolve();
+      duringCheck = change;
+    }
     const original = actor.setRootAllowance.bind(actor);
     async function afterAllocation(...args: Parameters<typeof original>) {
       const root = await original(...args);

@@ -92,7 +92,7 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks private callers, reads original tool reviews, checks access before history errors, prepares and allocates child allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
+  server -.->|checks private callers, reads original tool reviews, checks access before history errors, prepares and allocates child and routine allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; records personal account revocations, choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions and encrypted inputs, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
@@ -143,6 +143,10 @@ Older and retired routines still mean that complete dependency information is un
 - Returns a person’s own saved tool profile without reading its credentials.
 - Returns saved routine metadata and small run pages to its owner and silo owners and admins.
 - Runs the separate models process that checks AI calls, records costs and starts the gateway.
+
+An internal routine operation can record one spending allowance after checking its
+saved encrypted input, owner, model and prepared computer. Retries keep the same
+allowance. The operation does not start work or make instructions publicly readable.
 
 An internal operation checks a child's saved activation and asks the budget actor
 to record its reviewed spending allowance. It prices the first call using the saved

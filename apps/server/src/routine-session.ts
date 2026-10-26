@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { foldRoutineHistory, memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { AppendCommand, EventStore, StoredEvent } from '@opencrane/event-store';
 import { parseEventByType, type RoutineState } from '@opencrane/events';
-import { currentMembership, history, ownershipWriteAccess } from '@opencrane/models';
+import { currentAuthority, currentMembership, history, ownershipWriteAccess } from '@opencrane/models';
 import { chatCommand } from './chat/commands.ts';
 import type { conversationKeys } from './chat/keys.ts';
 import { sharedAssistantAuthority } from './chat/private-session.ts';
@@ -197,6 +197,11 @@ export async function loadRoutinePreparation(store: EventStore,
       await checkOwner();
       return fresh.deadline;
     }
+    async function checkModel(model: string, rows: StoredEvent[]) {
+      if (!fresh) throw new Error('Routine session refused');
+      await currentAuthority(store, worker.binding, ownerId, run.definition.assistantId,
+        run.conversationId, 'model', model, fresh, rows);
+    }
     async function checkFresh(operation: 'retry' | 'append') {
       const deadline = await checkAccess();
       if (operation === 'append') {
@@ -227,7 +232,7 @@ export async function loadRoutinePreparation(store: EventStore,
       }
     }
     return { run, readStream, context, command, expectedCreation,
-      checkAccess, checkFresh, checkOwner, checkCurrent };
+      checkAccess, checkFresh, checkOwner, checkCurrent, checkModel };
   } catch {
     // Keep missing access and private history or custody failures indistinguishable.
     throw new Error('Routine session refused');

@@ -5242,7 +5242,7 @@ supplies a stable id across retries; its callback still proves current ownership
 fixed refusal. No event type or public preparation API is added.
 `test/routine-session.test.ts` covers recovery, refusals, timing and guarded replay.
 There is no production caller. Execution stays unavailable. Scheduling, company
-profile checks, wake, root allowance, budgets, Ask and activation remain later work.
+profile checks, wake, Ask and activation remain later work. Root allocation is described below.
 Fresh-install qualification is NOT RUN. Own checks: [receipt](../../docs/process/p4-24-pr9a/receipt.md).
 
 ### Encrypted routine input preparation
@@ -5279,6 +5279,37 @@ owner's underlying permissions permit reading, and exercises a real public socke
 starting after creation. It also checks HTTP history, paged history and list titles
 with decryption spies. `test/chat-display.test.ts` checks direct display refusals.
 Part of #106, P4-24 row 9. Fresh-install execution qualification: NOT RUN.
+
+### Checked routine root allocation
+
+`routine-root.ts` supplies internal `allocateRoutineRoot(store, keys, worker, input, actor,
+selection)`. It has no production caller. Input still accepts only routineId and occurrenceId.
+The trusted caller supplies the prepared thread, computer and generation separately.
+Shared input validation requires the exact encrypted saved message and worker-bound creation.
+Shared child preparation checks the ready computer and provider choice. History precedes the
+original two-second access check. Only small access streams are watched; later routine controls,
+input changes, computer changes and closure are read incrementally. Activity in another
+computer thread remains allowed; changes to the selected thread refuse.
+Owner admission, manage, acts_for, payer and model grants are checked before the actor append
+and before returning the receipt. Stop, control changes and startBy still refuse recovery.
+
+The existing budget actor derives root identity from silo, conversation and turn. The due
+record's routine root reference is retained inside the checked fingerprint; it does not replace
+the budget actor's identity. The receipt returns the actual budget rootId with occurrenceId.
+The optional preparationDigest binds the frozen run, exact creation and encrypted input records,
+provider mode/choice, model, tariff and first-call bound. No plaintext is saved or returned.
+The actor caps the allowance at remaining applicable ceilings and 1,000 cents. A smaller
+allowance is retried only after the actor reports available capacity; all checks use the same
+deadline. Recovery uses the actor's saved amount and refuses changed bindings. It cannot
+increase an allowance, release a hold, reopen a stopped root or start a call.
+
+`executionAvailable` remains false. The bridge exclusion and public reader exclusions stay in
+place. Wake, grants, activation, dispatch and company Ask decision/use remain later work.
+Ask has no approval or bypass in this operation. Fresh-install qualification: NOT RUN.
+Prerequisite #747 merged at `54cb4ff7535c0bd16a6bcab16403eac66848548c`, including its
+WebSocket/history fix. Part of #106, P4-24 row 10 allocation only.
+`test/routine-session.test.ts` reuses preparation refusal cases for root allocation and covers
+concurrency, lost replies, broker/actor restart, capped immutable allowances and changed choices.
 
 ## Routine metadata reads
 
