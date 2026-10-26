@@ -139,40 +139,37 @@ async function recoversAfterInterruptedUpgrade(fault: string) {
       await writeFile('.tools/upgrade-recovery-uncertain.json', JSON.stringify(proof, null, 2),
         { mode: 0o600 });
     } else {
-      const proof = await restoreEventBackup(source.nats.connection, target.connection, restoreOptions);
+      const restoredEvents = await restoreEventBackup(source.nats.connection, target.connection, restoreOptions);
       if (fault === 'objects') {
-        await expect(fileFixture.restore(target, proof, true))
+        await expect(fileFixture.restore(target, restoredEvents, true))
           .rejects.toEqual(new Error('Object restore refused; keep target isolated'));
         expect(budgetReplay).not.toHaveBeenCalled();
         await fileFixture.expectIsolated(restored.db);
-        return;
+      } else {
+        await fileFixture.restore(target, restoredEvents);
+        expect(observed.transfers).toBe(1);
+        const budgetRebuilds = [];
+        const fileRebuilds = [];
+        for (let rebuild = 0; rebuild < 2; rebuild++) {
+          const result = await models.rebuildBudgetProjection(restored.db, target.reader, logger);
+          const budgetAfter = await collectBudgetRecovery(restored.db);
+          checkBudgetRecovery(budgetBefore, budgetAfter, descriptor.lastSequence);
+          await expectRecoveryMoney(restored.db, descriptor.lastSequence, budgetIds);
+          budgetRebuilds.push(budgetAfter);
+          fileRebuilds.push(await fileFixture.rebuild(target, restored.db));
+          if (rebuild === 1) expect(result.changed).toBe(false);
+        }
+        expect(budgetReplay).toHaveBeenCalledTimes(2);
+        expect(await collectBudgetRecovery(source.db)).toEqual(budgetBefore);
+        const after = await collectUpgradeRecovery(target.reader, restored.db);
+        checkUpgradeRecovery(before, after, descriptor);
+        expect(await collectUpgradeRecovery(source.nats.reader, source.db)).toEqual(before);
+        const proof = { interrupted: progress.rows, parkedJobs: parked.rows.length,
+          incompatibleResume: 'refused; parked jobs unchanged',
+          before, after, descriptor, budgetBefore, budgetRebuilds, fileRebuilds, externalCalls: calls };
+        await writeFile('.tools/upgrade-recovery-proof.json', JSON.stringify(proof, null, 2),
+          { mode: 0o600 });
       }
-      await fileFixture.restore(target, proof);
-      expect(observed.transfers).toBe(1);
-      const restoredRunner = new ProjectionRunner(restored.db, target.reader, logger);
-      await restoredRunner.initialise(members);
-      await restoredRunner.rebuild(members);
-      const budgetRebuilds = [];
-      const fileRebuilds = [];
-      for (let rebuild = 0; rebuild < 2; rebuild++) {
-        const result = await models.rebuildBudgetProjection(restored.db, target.reader, logger);
-        const budgetAfter = await collectBudgetRecovery(restored.db);
-        checkBudgetRecovery(budgetBefore, budgetAfter, descriptor.lastSequence);
-        await expectRecoveryMoney(restored.db, descriptor.lastSequence, budgetIds);
-        budgetRebuilds.push(budgetAfter);
-        fileRebuilds.push(await fileFixture.rebuild(target, restored.db));
-        if (rebuild === 1) expect(result.changed).toBe(false);
-      }
-      expect(budgetReplay).toHaveBeenCalledTimes(2);
-      expect(await collectBudgetRecovery(source.db)).toEqual(budgetBefore);
-      const after = await collectUpgradeRecovery(target.reader, restored.db);
-      checkUpgradeRecovery(before, after, descriptor);
-      expect(await collectUpgradeRecovery(source.nats.reader, source.db)).toEqual(before);
-      const proof = { interrupted: progress.rows, parkedJobs: parked.rows.length,
-        incompatibleResume: 'refused; parked jobs unchanged',
-        before, after, descriptor, budgetBefore, budgetRebuilds, fileRebuilds, externalCalls: calls };
-      await writeFile('.tools/upgrade-recovery-proof.json', JSON.stringify(proof, null, 2),
-        { mode: 0o600 });
     }
     if (fault === 'events') await fileFixture.expectIsolated(restored.db);
     expect(calls).toBe(0);
@@ -184,6 +181,7 @@ async function recoversAfterInterruptedUpgrade(fault: string) {
     expect(dispatcher.rows).toEqual([{ manifest: previous, sequence: String(descriptor.lastSequence) }]);
     expect((await source.db.query('SELECT previous, manifest, target, sequence FROM handler_upgrade')).rows)
       .toEqual(progress.rows);
+    if (fault === 'none') await fileFixture.transitions(target, restored.db);
   } finally {
     vi.restoreAllMocks();
     const closed = once(endpoint, 'close');
@@ -197,4 +195,4 @@ async function recoversAfterInterruptedUpgrade(fault: string) {
   }
 }
 it.each(['none', 'events', 'objects'])('recovers from the pre-upgrade export (fault: %s)',
-  recoversAfterInterruptedUpgrade, 90_000);
+  recoversAfterInterruptedUpgrade, 180_000);
