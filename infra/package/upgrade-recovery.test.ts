@@ -14,6 +14,7 @@ import { restoreEventBackup } from './event-restore.ts';
 import { collectUpgradeRecovery } from './upgrade-recovery.ts';
 import { checkUpgradeRecovery } from './upgrade-recovery-check.ts';
 import * as models from '@opencrane/models';
+import { recoveryFiles } from './upgrade-recovery-files-fixture.ts';
 import { interruptAndRefuse } from './upgrade-recovery-fixture.ts';
 import { seedRecoveryBudgets, expectRecoveryMoney } from './upgrade-recovery-budget-fixture.ts';
 import { collectBudgetRecovery, checkBudgetRecovery } from './upgrade-recovery-budget.ts';
@@ -74,7 +75,7 @@ function observeRestore(target: Awaited<ReturnType<typeof natsFixture>>, lostCom
   };
 }
 
-async function recoversAfterInterruptedUpgrade(lostCompletion: boolean) {
+async function recoversAfterInterruptedUpgrade(fault: string) {
   const source = await fixture();
   const target = await natsFixture({ provision: false });
   const restored = await database('pg');
@@ -101,7 +102,9 @@ async function recoversAfterInterruptedUpgrade(lostCompletion: boolean) {
     await externalEffect();
     expect(calls).toBe(1);
     calls = 0;
+    const fileFixture = await recoveryFiles(source, directory);
     const captured = await captureBeforeUpgrade(source, directory);
+    await fileFixture.capture(captured.destination);
     const { before, destination, descriptor, previous, budgetBefore, budgetIds } = captured;
     const actorStart = vi.spyOn(models.BudgetActor.prototype, 'start');
     const targetAppend = vi.spyOn(target.store, 'append');
@@ -109,7 +112,7 @@ async function recoversAfterInterruptedUpgrade(lostCompletion: boolean) {
     const { progress, parked } = await interruptAndRefuse(source, runtime, effectUrl, previous,
       descriptor.lastSequence);
     const restoreOptions = { silo: 'test', directory: destination, disposable: true };
-    const observed = observeRestore(target, lostCompletion);
+    const observed = observeRestore(target, fault === 'events');
     const archivePath = join(destination, 'events.snapshot');
     const archive = await readFile(archivePath);
     await writeFile(archivePath, archive.subarray(0, -1));
@@ -117,7 +120,7 @@ async function recoversAfterInterruptedUpgrade(lostCompletion: boolean) {
       .rejects.toEqual(new Error('Event restore refused; keep target isolated'));
     expect(observed.transfers).toBe(0);
     await writeFile(archivePath, archive);
-    if (lostCompletion) {
+    if (fault === 'events') {
       await expect(restoreEventBackup(source.nats.connection, target.connection, restoreOptions))
         .rejects.toEqual(new Error('Event restore refused; keep target isolated'));
       expect(observed.transfers).toBe(1);
@@ -136,18 +139,28 @@ async function recoversAfterInterruptedUpgrade(lostCompletion: boolean) {
       await writeFile('.tools/upgrade-recovery-uncertain.json', JSON.stringify(proof, null, 2),
         { mode: 0o600 });
     } else {
-      await restoreEventBackup(source.nats.connection, target.connection, restoreOptions);
+      const proof = await restoreEventBackup(source.nats.connection, target.connection, restoreOptions);
+      if (fault === 'objects') {
+        await expect(fileFixture.restore(target, proof, true))
+          .rejects.toEqual(new Error('Object restore refused; keep target isolated'));
+        expect(budgetReplay).not.toHaveBeenCalled();
+        await fileFixture.expectIsolated(restored.db);
+        return;
+      }
+      await fileFixture.restore(target, proof);
       expect(observed.transfers).toBe(1);
       const restoredRunner = new ProjectionRunner(restored.db, target.reader, logger);
       await restoredRunner.initialise(members);
       await restoredRunner.rebuild(members);
       const budgetRebuilds = [];
+      const fileRebuilds = [];
       for (let rebuild = 0; rebuild < 2; rebuild++) {
         const result = await models.rebuildBudgetProjection(restored.db, target.reader, logger);
         const budgetAfter = await collectBudgetRecovery(restored.db);
         checkBudgetRecovery(budgetBefore, budgetAfter, descriptor.lastSequence);
         await expectRecoveryMoney(restored.db, descriptor.lastSequence, budgetIds);
         budgetRebuilds.push(budgetAfter);
+        fileRebuilds.push(await fileFixture.rebuild(target, restored.db));
         if (rebuild === 1) expect(result.changed).toBe(false);
       }
       expect(budgetReplay).toHaveBeenCalledTimes(2);
@@ -157,10 +170,11 @@ async function recoversAfterInterruptedUpgrade(lostCompletion: boolean) {
       expect(await collectUpgradeRecovery(source.nats.reader, source.db)).toEqual(before);
       const proof = { interrupted: progress.rows, parkedJobs: parked.rows.length,
         incompatibleResume: 'refused; parked jobs unchanged',
-        before, after, descriptor, budgetBefore, budgetRebuilds, externalCalls: calls };
+        before, after, descriptor, budgetBefore, budgetRebuilds, fileRebuilds, externalCalls: calls };
       await writeFile('.tools/upgrade-recovery-proof.json', JSON.stringify(proof, null, 2),
         { mode: 0o600 });
     }
+    if (fault === 'events') await fileFixture.expectIsolated(restored.db);
     expect(calls).toBe(0);
     expect(actorStart).not.toHaveBeenCalled();
     expect(targetAppend).not.toHaveBeenCalled();
@@ -182,5 +196,5 @@ async function recoversAfterInterruptedUpgrade(lostCompletion: boolean) {
     await rm(directory, { recursive: true, force: true });
   }
 }
-it.each([false, true])('recovers from the pre-upgrade export (lost completion: %s)',
+it.each(['none', 'events', 'objects'])('recovers from the pre-upgrade export (fault: %s)',
   recoversAfterInterruptedUpgrade, 90_000);
