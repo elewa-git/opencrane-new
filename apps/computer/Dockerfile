@@ -35,10 +35,11 @@ COPY runtime-package-lock.json package-lock.json
 RUN --mount=from=npm-tools,source=/usr/local/lib/node_modules/npm,target=/tmp/npm \
     node /tmp/npm/bin/npm-cli.js ci --omit=dev --ignore-scripts && rm -rf /root/.npm
 COPY --from=project LICENSE /app/LICENSE
-# Copy only our dependency-free routing entrypoint; no server dependencies enter the image.
+# Copy shared routing and caller checks without adding server dependencies to the image.
 COPY --from=project libs/models/package.json /app/libs/models/package.json
 COPY --from=project LICENSE /app/libs/models/LICENSE
 COPY --from=project libs/models/src/routing.ts /app/libs/models/src/routing.ts
+COPY --from=project libs/models/src/private-callers.ts /app/libs/models/src/private-callers.ts
 # Share the report text check without adding schema libraries to the computer.
 COPY --from=project libs/events/package.json /app/libs/events/package.json
 COPY --from=project LICENSE /app/libs/events/LICENSE

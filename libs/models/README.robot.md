@@ -40,6 +40,9 @@ Own check results and remaining qualification are in the [receipt](../../docs/pr
 
 `privateCallers` is the unchanged registry formerly in `apps/computer/src`.
 The computer proxy and disabled server recall assembly use this one implementation.
+The computer imports the `@opencrane/models/private-callers` entry point. Its image
+copies that file and the package metadata; it does not load the main entry point
+or install the library's server dependencies. The registry uses only `node:crypto`.
 Registration records the conversation, turn, computer generation, input generation
 and expiry. `identify` finds a live caller; `permits` checks its turn and bound thread;
 `check` also matches the conversation and both generations against the registration.

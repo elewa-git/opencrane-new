@@ -45,6 +45,8 @@ to handle AI calls.
 The server and computer also share the private caller checks. These keep a short-lived
 caller tied to one turn and thread. The server uses them while preparing a private
 recall tool list; live private tool delivery remains disabled.
+The computer image includes the caller checks as a separate file that uses only Node's
+built-in functions.
 
 ```mermaid
 flowchart LR

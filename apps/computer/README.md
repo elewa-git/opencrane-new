@@ -43,6 +43,7 @@ flowchart LR
   Each tool call checks the caller against the pass it will send, including after
   approval. Ordinary and private turns cannot share a bound thread.
   The server and computer use the same private caller checks from the models library.
+  The image includes this small shared file, which uses only Node's built-in functions.
 - Checks fixed package and Git requests against the supervisor's record of the tool call.
   Each request must match its executor, silo, person, computer and process.
   Each valid registration can produce only one plan.

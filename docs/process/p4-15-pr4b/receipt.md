@@ -1,5 +1,9 @@
 # Restricted personal recall tool list
 
+This records the earlier assembly and binding work. The later
+[computer image repair](image-repair.md) records the startup failure, packaging fix
+and repeated supervisor and proxy checks on the newer base.
+
 Date: 26 October 2026. Part of #97. Rebased base: `9e470b61e`.
 Binding test commits: `a821d8f4c`, `0606923c1`, `ec4aaddf2`.
 
@@ -109,5 +113,6 @@ zero-result/four-call/64 KiB/32-reference limits, lost native replies, correctio
 or forgetting during native calls, late native output and filesystem isolation.
 Local handler and proxy fixtures do not qualify these native conditions.
 
-NOT RUN: computer image build, check or promotion, fresh installation, gVisor and
-disk inspection. CI is left to run after the push; it is not awaited here.
+At this earlier stage, computer image build and checks were NOT RUN; the later
+image repair above supplies those results. Image promotion, fresh installation,
+gVisor and disk inspection remain NOT RUN. CI is not awaited after pushing.

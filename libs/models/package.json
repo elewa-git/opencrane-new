@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./routing": "./src/routing.ts",
+    "./private-callers": "./src/private-callers.ts",
     "./testing": "./test/fixture.ts",
     "./testing/remote-mcp": "./test/support/remote-mcp.ts"
   },
