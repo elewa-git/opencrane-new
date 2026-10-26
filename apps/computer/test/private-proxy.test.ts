@@ -11,16 +11,26 @@ const tools = [{ key: 'oc_0123456789', serverId: 'fixture', connectionId: 'fixtu
   modes: { read: 'allow' } }];
 const first = { turnId: 'turn-A', conversation: 'same-chat', generation: 1,
   inputGeneration: 1, expires: Date.now() + 120_000 };
+const privateResult = 'fixture-private-result';
+const approvalId = 'c'.repeat(64);
 
-async function fixture() {
+async function fixture(approvalDriver?: Parameters<typeof proxy>[3]) {
   const directory = mkdtempSync(`${tmpdir()}/private-proxy-`);
   const received: string[] = [];
   let held = false;
+  let approvalRequired = false;
   function hold() { held = true; }
+  function requireApproval() { approvalRequired = true; }
   function upstream(incoming: IncomingMessage, response: ServerResponse) {
     received.push(incoming.url ?? '');
     incoming.resume();
-    if (!held) response.end('{"result":{"content":[]}}');
+    if (approvalRequired && !incoming.headers['x-opencrane-approval-id']) {
+      response.writeHead(403, { 'x-opencrane-decision': 'refused' });
+      response.end(JSON.stringify({ reason: 'approval_requested', approvalId }));
+      return;
+    }
+    const reply = { result: { content: [{ type: 'text', text: privateResult }] } };
+    if (!held) response.end(JSON.stringify(reply));
   }
   const gateway = createServer(upstream);
   gateway.listen(0, '127.0.0.1');
@@ -29,7 +39,8 @@ async function fixture() {
   if (!address || typeof address === 'string') throw new Error('Missing fixture address');
   const controlSocket = `${directory}/control.sock`;
   const options = { callerPath: `${directory}/caller`, controlSocket, port: 0 };
-  const local = await proxy(`http://127.0.0.1:${address.port}`, options);
+  const local = await proxy(`http://127.0.0.1:${address.port}`, options,
+    undefined, approvalDriver);
   function control(path: string, input: unknown) {
     return proxyControl(path, input, controlSocket);
   }
@@ -63,8 +74,67 @@ async function fixture() {
     await new Promise<void>(stopGateway);
     rmSync(directory, { recursive: true, force: true });
   }
-  return { local, control, grant, catalogue, send, received, hold, close, callerPath: options.callerPath };
+  return { local, control, grant, catalogue, send, received, hold, requireApproval,
+    close, callerPath: options.callerPath };
 }
+
+async function refusesBorrowedPrivateGrant() {
+  const test = await fixture();
+  try {
+    const ordinary = { ...first, turnId: 'ordinary-turn', expires: Date.now() + 60_000 };
+    const key = await test.catalogue(ordinary);
+    const binding = { ...first, expires: Date.now() + 60_000 };
+    const session = test.local.privateCaller(binding);
+    // Allow an early binding refusal, but always check the ordinary caller's reply.
+    try {
+      session.bind('thread-A');
+      await test.grant(binding);
+    } catch (error) {
+      expect(error).toEqual(new Error('Private caller refused'));
+    }
+    const reply = await test.send(test.local.caller, 'thread-A', 'tools/call', key);
+    expect.soft(test.received).toEqual([]);
+    expect.soft(reply.text).not.toContain(privateResult);
+    expect(reply.text).toContain('"isError":true');
+    expect(reply.text).toContain('Nothing was sent');
+  } finally { await test.close(); }
+}
+it('refuses an ordinary catalogue borrowing a private grant before any upstream call',
+  refusesBorrowedPrivateGrant);
+
+async function refusesBorrowedPrivateGrantOnApproval() {
+  const binding = { ...first, expires: Date.now() + 60_000 };
+  function waiting() { return true; }
+  async function renew(thread: string) {
+    const session = test.local.privateCaller(binding);
+    session.bind(thread);
+    await test.grant(binding, thread);
+  }
+  const driver = { waiting, renew };
+  const test = await fixture(driver);
+  try {
+    const ordinary = { ...binding, turnId: 'ordinary-turn' };
+    const askTools = [{ ...tools[0]!, modes: { read: 'ask' } }];
+    const key = 'b'.repeat(32);
+    const catalogue = { ...ordinary, thread: 'thread-A', loadKey: key, tools: askTools };
+    await test.control('/catalogue', catalogue);
+    await test.grant(ordinary);
+    test.local.approvals.resume(true);
+    test.requireApproval();
+    const pending = test.send(test.local.caller, 'thread-A', 'tools/call', key);
+    function held() { expect(test.local.approvals.size).toBe(1); }
+    await vi.waitFor(held);
+    expect(test.received).toEqual(['/mcp/fixture/fixture']);
+    await test.local.approvals.settle(approvalId, 'approved');
+    const reply = await pending;
+    expect.soft(test.received).toEqual(['/mcp/fixture/fixture']);
+    expect.soft(reply.text).not.toContain(privateResult);
+    expect(reply.text).toContain('"isError":true');
+    expect(reply.text).toContain('Nothing was sent');
+  } finally { await test.close(); }
+}
+it('refuses an approval retry borrowing a private grant without another upstream call',
+  refusesBorrowedPrivateGrantOnApproval);
 
 async function isolatesCallers(method: string) {
   const test = await fixture();
