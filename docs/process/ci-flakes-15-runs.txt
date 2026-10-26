@@ -1,0 +1,417 @@
+Packaged bootstrap stress runs: 26 October 2026
+Source: a0cb1407b446bdae07cd3116faa24bfb46868f50
+All runs used nice -n 10, CPUs 0 and 1, --maxWorkers=2 and --fileParallelism.
+PG_TEST_URL was supplied. Bootstrap includes cluster-stream.test.ts (26 tests total).
+A single companion process repeated security, provision and cluster-failover tests (38 total).
+Original reproduction: 01 PASS; 02 PASS; 03 PASS; 04 PASS; 05 FAIL (R3 peer offline).
+No failed invocation is replaced by a passing repeat.
+
+bootstrap-01 FAIL 25/26 wall=53.10s exit=1
+  FAIL  infra/package/bootstrap.test.ts > bootstrap provisions R3 and lets the dispatcher inherit it
+  JetStreamApiError: no suitable peers for placement, peer offline
+bootstrap-02 PASS 26/26 wall=51.45s exit=0
+bootstrap-03 PASS 26/26 wall=51.51s exit=0
+bootstrap-04 PASS 26/26 wall=61.82s exit=0
+bootstrap-05 PASS 26/26 wall=49.85s exit=0
+bootstrap-06 PASS 26/26 wall=45.92s exit=0
+bootstrap-07 PASS 26/26 wall=44.24s exit=0
+bootstrap-08 PASS 26/26 wall=44.03s exit=0
+bootstrap-09 PASS 26/26 wall=39.15s exit=0
+bootstrap-10 PASS 26/26 wall=41.76s exit=0
+bootstrap-11 PASS 26/26 wall=61.56s exit=0
+bootstrap-12 PASS 26/26 wall=44.20s exit=0
+bootstrap-13 PASS 26/26 wall=45.95s exit=0
+bootstrap-14 PASS 26/26 wall=48.22s exit=0
+bootstrap-15 PASS 26/26 wall=47.04s exit=0
+bootstrap-16 PASS 26/26 wall=45.49s exit=0
+bootstrap-17 PASS 26/26 wall=41.96s exit=0
+bootstrap-18 PASS 26/26 wall=48.94s exit=0
+bootstrap-19 PASS 26/26 wall=64.14s exit=0
+bootstrap-20 PASS 26/26 wall=58.48s exit=0
+bootstrap-21 PASS 26/26 wall=57.69s exit=0
+bootstrap-22 PASS 26/26 wall=60.22s exit=0
+bootstrap-23 PASS 26/26 wall=47.88s exit=0
+bootstrap-24 PASS 26/26 wall=50.12s exit=0
+bootstrap-25 PASS 26/26 wall=58.03s exit=0
+bootstrap-26 FAIL 25/26 wall=47.27s exit=1
+  FAIL  infra/package/bootstrap.test.ts > bootstrap waits for the metadata leader to report enough current online peers
+  JetStreamApiError: no suitable peers for placement, peer offline
+bootstrap-27 PASS 26/26 wall=49.79s exit=0
+bootstrap-28 PASS 26/26 wall=49.05s exit=0
+bootstrap-29 PASS 26/26 wall=52.33s exit=0
+bootstrap-30 PASS 26/26 wall=58.26s exit=0
+bootstrap gate: FAIL; 28/30 invocations passed; failed runs: 1, 26.
+
+companion-01 PASS 38/38 wall=22.04s exit=0
+companion-02 PASS 38/38 wall=22.02s exit=0
+companion-03 PASS 38/38 wall=21.04s exit=0
+companion-04 PASS 38/38 wall=23.05s exit=0
+companion-05 PASS 38/38 wall=24.38s exit=0
+companion-06 PASS 38/38 wall=19.02s exit=0
+companion-07 PASS 38/38 wall=24.51s exit=0
+companion-08 FAIL 37/38 wall=19.02s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-09 PASS 38/38 wall=24.07s exit=0
+companion-10 PASS 38/38 wall=23.73s exit=0
+companion-11 PASS 38/38 wall=22.02s exit=0
+companion-12 PASS 38/38 wall=22.03s exit=0
+companion-13 PASS 38/38 wall=23.80s exit=0
+companion-14 PASS 38/38 wall=24.91s exit=0
+companion-15 PASS 38/38 wall=24.01s exit=0
+companion-16 PASS 38/38 wall=22.23s exit=0
+companion-17 FAIL 37/38 wall=17.01s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-18 PASS 38/38 wall=24.02s exit=0
+companion-19 PASS 38/38 wall=20.01s exit=0
+companion-20 PASS 38/38 wall=20.14s exit=0
+companion-21 PASS 38/38 wall=18.01s exit=0
+companion-22 PASS 38/38 wall=18.01s exit=0
+companion-23 PASS 38/38 wall=27.76s exit=0
+companion-24 PASS 38/38 wall=22.04s exit=0
+companion-25 PASS 38/38 wall=18.50s exit=0
+companion-26 PASS 38/38 wall=27.02s exit=0
+companion-27 PASS 38/38 wall=21.18s exit=0
+companion-28 PASS 38/38 wall=22.01s exit=0
+companion-29 PASS 38/38 wall=21.94s exit=0
+companion-30 FAIL 37/38 wall=17.01s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-31 PASS 38/38 wall=18.01s exit=0
+companion-32 FAIL 37/38 wall=19.21s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-33 PASS 38/38 wall=24.01s exit=0
+companion-34 PASS 38/38 wall=16.02s exit=0
+companion-35 PASS 38/38 wall=17.00s exit=0
+companion-36 PASS 38/38 wall=22.01s exit=0
+companion-37 PASS 38/38 wall=21.48s exit=0
+companion-38 PASS 38/38 wall=23.96s exit=0
+companion-39 PASS 38/38 wall=21.02s exit=0
+companion-40 PASS 38/38 wall=24.02s exit=0
+companion-41 FAIL 37/38 wall=20.90s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-42 PASS 38/38 wall=21.04s exit=0
+companion-43 PASS 38/38 wall=21.01s exit=0
+companion-44 FAIL 37/38 wall=23.09s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-45 PASS 38/38 wall=20.02s exit=0
+companion-46 PASS 38/38 wall=21.44s exit=0
+companion-47 PASS 38/38 wall=26.03s exit=0
+companion-48 PASS 38/38 wall=25.03s exit=0
+companion-49 FAIL 37/38 wall=19.64s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-50 FAIL 37/38 wall=23.01s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  TypeError: .toMatch() expects to receive a string, but got undefined
+companion-51 PASS 38/38 wall=26.21s exit=0
+companion-52 PASS 38/38 wall=32.03s exit=0
+companion-53 PASS 38/38 wall=24.85s exit=0
+companion-54 PASS 38/38 wall=32.02s exit=0
+companion-55 PASS 38/38 wall=20.09s exit=0
+companion-56 PASS 38/38 wall=24.02s exit=0
+companion-57 PASS 38/38 wall=22.00s exit=0
+companion-58 PASS 38/38 wall=25.03s exit=0
+companion-59 PASS 38/38 wall=24.24s exit=0
+companion-60 FAIL 37/38 wall=17.01s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-61 PASS 38/38 wall=25.02s exit=0
+companion-62 FAIL 37/38 wall=19.74s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-63 PASS 38/38 wall=23.04s exit=0
+companion-64 FAIL 37/38 wall=23.02s exit=1
+  FAIL  libs/event-store/test/cluster-failover.test.ts > keeps acknowledged events through stream leader loss and the same peer rejoining
+  Error: Cluster peer listening port is already in use
+companion-65 PASS 38/38 wall=22.02s exit=0
+companion-66 PASS 38/38 wall=19.28s exit=0
+companion-67 PASS 38/38 wall=22.02s exit=0
+companion-68 PASS 38/38 wall=21.02s exit=0
+companion-69 PASS 38/38 wall=20.45s exit=0
+companion gate: FAIL; 58/69 invocations passed; failed runs: 8, 17, 30, 32, 41, 44, 49, 50, 60, 62, 64.
+
+Placement retry batch before the clock-fixture fix: 26 October 2026
+Behaviour source: 708c6cf1a; SDK declaration: e58303d4c.
+Stopped after active fixtures completed: bootstrap 13 and companion 28.
+Both processes used nice -n 10, CPUs 0 and 1, two workers and file parallelism.
+One bootstrap invocation also ran cluster-stream; the companion ran security, provision and append.
+Results below come from each saved JSON report and its Vitest duration.
+
+bootstrap-01 PASS 35/35 vitest_duration=119.26s
+bootstrap-02 PASS 35/35 vitest_duration=113.03s
+bootstrap-03 PASS 35/35 vitest_duration=125.23s
+bootstrap-04 PASS 35/35 vitest_duration=109.10s
+bootstrap-05 PASS 35/35 vitest_duration=96.16s
+bootstrap-06 PASS 35/35 vitest_duration=96.27s
+bootstrap-07 PASS 35/35 vitest_duration=90.26s
+bootstrap-08 PASS 35/35 vitest_duration=93.30s
+bootstrap-09 PASS 35/35 vitest_duration=85.29s
+bootstrap-10 PASS 35/35 vitest_duration=87.94s
+bootstrap-11 PASS 35/35 vitest_duration=96.76s
+bootstrap-12 FAIL 34/35 vitest_duration=91.82s
+  FAIL bootstrap creates R3 when a placement refusal clears before the deadline
+bootstrap-13 PASS 35/35 vitest_duration=88.89s
+bootstrap result: 12/13 PASS; batch stopped after a bootstrap failure.
+
+companion-01 PASS 58/58 vitest_duration=46.18s
+companion-02 PASS 58/58 vitest_duration=54.38s
+companion-03 PASS 58/58 vitest_duration=51.11s
+companion-04 PASS 58/58 vitest_duration=48.89s
+companion-05 PASS 58/58 vitest_duration=46.40s
+companion-06 PASS 58/58 vitest_duration=51.55s
+companion-07 PASS 58/58 vitest_duration=47.26s
+companion-08 PASS 58/58 vitest_duration=47.95s
+companion-09 PASS 58/58 vitest_duration=44.54s
+companion-10 PASS 58/58 vitest_duration=47.99s
+companion-11 PASS 58/58 vitest_duration=43.79s
+companion-12 PASS 58/58 vitest_duration=40.52s
+companion-13 PASS 58/58 vitest_duration=42.51s
+companion-14 PASS 58/58 vitest_duration=43.16s
+companion-15 PASS 58/58 vitest_duration=43.63s
+companion-16 PASS 58/58 vitest_duration=44.02s
+companion-17 PASS 58/58 vitest_duration=44.72s
+companion-18 PASS 58/58 vitest_duration=42.92s
+companion-19 PASS 58/58 vitest_duration=42.87s
+companion-20 PASS 58/58 vitest_duration=42.63s
+companion-21 PASS 58/58 vitest_duration=43.40s
+companion-22 PASS 58/58 vitest_duration=43.67s
+companion-23 PASS 58/58 vitest_duration=44.85s
+companion-24 PASS 58/58 vitest_duration=43.15s
+companion-25 PASS 58/58 vitest_duration=42.12s
+companion-26 PASS 58/58 vitest_duration=42.06s
+companion-27 PASS 58/58 vitest_duration=42.76s
+companion-28 PASS 58/58 vitest_duration=41.77s
+companion result: 28/28 PASS; batch stopped after a bootstrap failure.
+
+Run 12 exhausted its injected clock before real NATS storage statistics arrived.
+The fixture fix prepares placement statistics, deletes its setup stream, and verifies an empty account.
+The exact retry-count, elapsed-time and replica assertions remain unchanged.
+
+Final placement retry batch after the clock-fixture fix
+Paused between bootstrap runs 02 and 03 to rebase onto f19d0db40.
+Both active fixtures finished before rebasing. The bootstrap source, tests and NATS helpers were byte-for-byte unchanged.
+The source label c89b624cf corresponds to the same tested files at 158bca94a after rebasing.
+The pause is included in parent-process wall times for bootstrap-02 and companion-03.
+
+Placement retry stress runs: 26 October 2026
+Source: c89b624cff2103b7eb9014683ac339cbce8e1f7a
+All runs used nice -n 10, CPUs 0 and 1, --maxWorkers=2 and --fileParallelism.
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres
+Bootstrap ran with cluster-stream.test.ts in the same invocation.
+One companion process continuously ran security, provision and append tests.
+Every invocation is recorded; no failed result is replaced.
+
+bootstrap-01 PASS 35/35 wall=113.63s exit=0
+bootstrap-02 PASS 35/35 wall=144.53s exit=0
+bootstrap-03 PASS 35/35 wall=91.50s exit=0
+bootstrap-04 PASS 35/35 wall=100.15s exit=0
+bootstrap-05 PASS 35/35 wall=88.77s exit=0
+bootstrap-06 PASS 35/35 wall=97.43s exit=0
+bootstrap-07 PASS 35/35 wall=96.14s exit=0
+bootstrap-08 PASS 35/35 wall=114.71s exit=0
+bootstrap-09 PASS 35/35 wall=94.85s exit=0
+bootstrap-10 PASS 35/35 wall=90.83s exit=0
+bootstrap-11 PASS 35/35 wall=85.86s exit=0
+bootstrap-12 PASS 35/35 wall=91.21s exit=0
+bootstrap-13 PASS 35/35 wall=98.31s exit=0
+bootstrap-14 PASS 35/35 wall=81.86s exit=0
+bootstrap-15 PASS 35/35 wall=80.67s exit=0
+bootstrap-16 PASS 35/35 wall=91.34s exit=0
+bootstrap-17 PASS 35/35 wall=87.29s exit=0
+bootstrap-18 PASS 35/35 wall=91.38s exit=0
+bootstrap-19 PASS 35/35 wall=87.50s exit=0
+bootstrap-20 PASS 35/35 wall=90.66s exit=0
+bootstrap-21 PASS 35/35 wall=88.37s exit=0
+bootstrap-22 PASS 35/35 wall=81.75s exit=0
+bootstrap-23 PASS 35/35 wall=104.66s exit=0
+bootstrap-24 PASS 35/35 wall=95.35s exit=0
+bootstrap-25 PASS 35/35 wall=93.80s exit=0
+bootstrap-26 PASS 35/35 wall=103.80s exit=0
+bootstrap-27 PASS 35/35 wall=88.06s exit=0
+bootstrap-28 PASS 35/35 wall=107.75s exit=0
+bootstrap-29 PASS 35/35 wall=82.22s exit=0
+bootstrap-30 PASS 35/35 wall=93.59s exit=0
+bootstrap gate: PASS; 30/30 invocations passed.
+
+companion-01 PASS 58/58 wall=49.36s exit=0
+companion-02 PASS 58/58 wall=43.39s exit=0
+companion-03 PASS 58/58 wall=165.40s exit=0
+companion-04 PASS 58/58 wall=45.93s exit=0
+companion-05 PASS 58/58 wall=48.82s exit=0
+companion-06 PASS 58/58 wall=46.80s exit=0
+companion-07 PASS 58/58 wall=44.01s exit=0
+companion-08 PASS 58/58 wall=46.23s exit=0
+companion-09 PASS 58/58 wall=46.44s exit=0
+companion-10 PASS 58/58 wall=48.72s exit=0
+companion-11 PASS 58/58 wall=50.38s exit=0
+companion-12 PASS 58/58 wall=48.45s exit=0
+companion-13 PASS 58/58 wall=46.63s exit=0
+companion-14 PASS 58/58 wall=47.50s exit=0
+companion-15 PASS 58/58 wall=47.46s exit=0
+companion-16 PASS 58/58 wall=51.36s exit=0
+companion-17 PASS 58/58 wall=43.30s exit=0
+companion-18 PASS 58/58 wall=48.25s exit=0
+companion-19 PASS 58/58 wall=44.43s exit=0
+companion-20 PASS 58/58 wall=42.13s exit=0
+companion-21 PASS 58/58 wall=42.01s exit=0
+companion-22 PASS 58/58 wall=43.19s exit=0
+companion-23 PASS 58/58 wall=46.23s exit=0
+companion-24 PASS 58/58 wall=44.72s exit=0
+companion-25 PASS 58/58 wall=45.16s exit=0
+companion-26 PASS 58/58 wall=44.66s exit=0
+companion-27 PASS 58/58 wall=44.02s exit=0
+companion-28 PASS 58/58 wall=44.02s exit=0
+companion-29 PASS 58/58 wall=43.21s exit=0
+companion-30 PASS 58/58 wall=43.40s exit=0
+companion-31 PASS 58/58 wall=44.10s exit=0
+companion-32 PASS 58/58 wall=43.63s exit=0
+companion-33 PASS 58/58 wall=42.87s exit=0
+companion-34 PASS 58/58 wall=45.06s exit=0
+companion-35 PASS 58/58 wall=43.23s exit=0
+companion-36 PASS 58/58 wall=43.45s exit=0
+companion-37 PASS 58/58 wall=45.19s exit=0
+companion-38 PASS 58/58 wall=45.79s exit=0
+companion-39 PASS 58/58 wall=43.96s exit=0
+companion-40 PASS 58/58 wall=44.61s exit=0
+companion-41 PASS 58/58 wall=45.62s exit=0
+companion-42 PASS 58/58 wall=44.60s exit=0
+companion-43 PASS 58/58 wall=42.86s exit=0
+companion-44 PASS 58/58 wall=46.50s exit=0
+companion-45 PASS 58/58 wall=49.79s exit=0
+companion-46 PASS 58/58 wall=45.70s exit=0
+companion-47 PASS 58/58 wall=45.29s exit=0
+companion-48 PASS 58/58 wall=43.10s exit=0
+companion-49 PASS 58/58 wall=45.44s exit=0
+companion-50 PASS 58/58 wall=44.70s exit=0
+companion-51 PASS 58/58 wall=45.82s exit=0
+companion-52 PASS 58/58 wall=45.88s exit=0
+companion-53 PASS 58/58 wall=45.85s exit=0
+companion-54 PASS 58/58 wall=45.02s exit=0
+companion-55 PASS 58/58 wall=44.55s exit=0
+companion-56 PASS 58/58 wall=43.64s exit=0
+companion-57 PASS 58/58 wall=43.04s exit=0
+companion-58 PASS 58/58 wall=45.02s exit=0
+companion-59 PASS 58/58 wall=43.79s exit=0
+companion-60 PASS 58/58 wall=42.90s exit=0
+companion-61 PASS 58/58 wall=42.74s exit=0
+companion gate: PASS; 61/61 invocations passed.
+
+
+Bootstrap request deadline correction: 26 October 2026
+Source: 134ac8dd6; test commits: 0ecdab27c and d8e34b161.
+All tests used nice -n 10 and the requested PG_TEST_URL.
+These diagnostic and confirmation runs precede the loaded batch:
+
+deadline-red-01 FAIL (expected) 0/7 selected passed; 28 skipped; duration=59.48s exit=1
+deadline-first-full FAIL 34/35 duration=131.62s exit=1
+  FAIL late consumer creation reply: real 200 ms request timeout interrupted the injected-clock case.
+deadline-red-clock FAIL (expected) 0/7 selected passed; 28 skipped; duration=58.40s exit=1
+deadline-changed-01 PASS 68/68 duration=127.17s exit=0
+deadline-changed-02 PASS 68/68 duration=138.85s exit=0
+
+Bootstrap deadline stress runs: 26 October 2026
+Source: 134ac8dd607e95cae9090fee56d1635f2d42ea0c
+Two independent invocations run at once, both pinned to CPUs 0 and 1.
+Each runs bootstrap with cluster-stream using two workers and file parallelism.
+Every invocation uses nice -n 10 and the requested PG_TEST_URL.
+All 30 invocations and any failed result are retained.
+
+bootstrap-01 PASS 42/42 wall=141.27s exit=0
+bootstrap-02 PASS 42/42 wall=150.63s exit=0
+bootstrap-03 PASS 42/42 wall=163.45s exit=0
+bootstrap-04 PASS 42/42 wall=168.84s exit=0
+bootstrap-05 PASS 42/42 wall=145.37s exit=0
+bootstrap-06 PASS 42/42 wall=146.76s exit=0
+bootstrap-07 PASS 42/42 wall=160.42s exit=0
+bootstrap-08 PASS 42/42 wall=160.89s exit=0
+bootstrap-09 PASS 42/42 wall=135.12s exit=0
+bootstrap-10 PASS 42/42 wall=169.53s exit=0
+bootstrap-11 PASS 42/42 wall=168.53s exit=0
+bootstrap-12 PASS 42/42 wall=179.68s exit=0
+bootstrap-13 PASS 42/42 wall=163.11s exit=0
+bootstrap-14 PASS 42/42 wall=163.31s exit=0
+bootstrap-15 PASS 42/42 wall=152.72s exit=0
+bootstrap-16 PASS 42/42 wall=152.34s exit=0
+bootstrap-17 PASS 42/42 wall=158.69s exit=0
+bootstrap-18 PASS 42/42 wall=151.22s exit=0
+bootstrap-19 PASS 42/42 wall=164.38s exit=0
+bootstrap-20 PASS 42/42 wall=150.95s exit=0
+bootstrap-21 PASS 42/42 wall=152.13s exit=0
+bootstrap-22 PASS 42/42 wall=143.61s exit=0
+bootstrap-23 PASS 42/42 wall=156.26s exit=0
+bootstrap-24 PASS 42/42 wall=131.46s exit=0
+bootstrap-25 PASS 42/42 wall=173.53s exit=0
+bootstrap-26 PASS 42/42 wall=152.88s exit=0
+bootstrap-27 PASS 42/42 wall=143.65s exit=0
+bootstrap-28 PASS 42/42 wall=157.44s exit=0
+bootstrap-29 PASS 42/42 wall=151.14s exit=0
+bootstrap-30 PASS 42/42 wall=161.95s exit=0
+bootstrap gate: PASS; 30/30 invocations passed.
+
+A third process repeatedly ran security, provisioning and append tests on CPUs 0 and 1.
+It started while bootstrap runs 01 and 02 were active; full lint also ran during their start.
+Each companion used nice -n 10, two workers and file parallelism.
+The last companion finished before the final results were counted.
+Every companion invocation follows:
+
+companion-01 PASS 58/58 wall=46.82s exit=0
+companion-02 PASS 58/58 wall=52.28s exit=0
+companion-03 PASS 58/58 wall=50.14s exit=0
+companion-04 PASS 58/58 wall=47.10s exit=0
+companion-05 PASS 58/58 wall=48.51s exit=0
+companion-06 PASS 58/58 wall=48.44s exit=0
+companion-07 PASS 58/58 wall=48.18s exit=0
+companion-08 PASS 58/58 wall=48.44s exit=0
+companion-09 PASS 58/58 wall=51.86s exit=0
+companion-10 PASS 58/58 wall=50.90s exit=0
+companion-11 PASS 58/58 wall=48.83s exit=0
+companion-12 PASS 58/58 wall=48.55s exit=0
+companion-13 PASS 58/58 wall=50.45s exit=0
+companion-14 PASS 58/58 wall=55.32s exit=0
+companion-15 PASS 58/58 wall=59.96s exit=0
+companion-16 PASS 58/58 wall=51.83s exit=0
+companion-17 PASS 58/58 wall=50.14s exit=0
+companion-18 PASS 58/58 wall=50.32s exit=0
+companion-19 PASS 58/58 wall=48.92s exit=0
+companion-20 PASS 58/58 wall=48.18s exit=0
+companion-21 PASS 58/58 wall=52.69s exit=0
+companion-22 PASS 58/58 wall=49.46s exit=0
+companion-23 PASS 58/58 wall=48.10s exit=0
+companion-24 PASS 58/58 wall=51.05s exit=0
+companion-25 PASS 58/58 wall=47.06s exit=0
+companion-26 PASS 58/58 wall=48.62s exit=0
+companion-27 PASS 58/58 wall=52.06s exit=0
+companion-28 PASS 58/58 wall=49.83s exit=0
+companion-29 PASS 58/58 wall=47.54s exit=0
+companion-30 PASS 58/58 wall=50.29s exit=0
+companion-31 PASS 58/58 wall=49.37s exit=0
+companion-32 PASS 58/58 wall=46.82s exit=0
+companion-33 PASS 58/58 wall=49.18s exit=0
+companion-34 PASS 58/58 wall=49.22s exit=0
+companion-35 PASS 58/58 wall=48.36s exit=0
+companion-36 PASS 58/58 wall=47.51s exit=0
+companion-37 PASS 58/58 wall=45.74s exit=0
+companion-38 PASS 58/58 wall=46.55s exit=0
+companion-39 PASS 58/58 wall=55.48s exit=0
+companion-40 PASS 58/58 wall=54.14s exit=0
+companion-41 PASS 58/58 wall=46.40s exit=0
+companion-42 PASS 58/58 wall=48.13s exit=0
+companion-43 PASS 58/58 wall=48.02s exit=0
+companion-44 PASS 58/58 wall=47.33s exit=0
+companion-45 PASS 58/58 wall=51.60s exit=0
+companion-46 PASS 58/58 wall=45.64s exit=0
+companion gate: PASS; 46/46 invocations passed.
+
+Final fetch and completed rebase: origin/main c3e7ae2e2; source 536dd7e93.
+Bootstrap source/tests, NATS settings, event-store/handlers, root dependencies,
+compiler settings and test settings are byte-for-byte unchanged from batch source 134ac8dd6.
+Full lint, typecheck and catalogue checks were repeated after the rebase.
+The two changed-file confirmations after the rebase follow:
+
+deadline-rebased-changed-01 PASS 68/68 duration=152.72s exit=0
+deadline-rebased-changed-02 PASS 68/68 duration=142.79s exit=0

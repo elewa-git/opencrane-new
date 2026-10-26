@@ -1,0 +1,2 @@
+- Packaged bootstrap waits for ready NATS metadata peers and retries only an explicit three-copy placement refusal within the same two-minute limit, with a clear error if readiness or placement stays unavailable.
+- Packaged event-log setup gives every pending request only the time left in its two-minute limit and refuses late replies before starting another step.

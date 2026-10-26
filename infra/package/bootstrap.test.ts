@@ -4,10 +4,13 @@ import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import ts from 'typescript';
-import { expect, it } from 'vitest';
-import { connectNats, createEventStore } from '@opencrane/event-store';
+import { JetStreamApiError, jetstreamManager } from '@nats-io/jetstream';
+import { expect, it, vi } from 'vitest';
+import { connectNats, createEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { provisionDispatcher } from '@opencrane/handlers';
+import { natsFixture } from '../../libs/event-store/test/testing.ts';
 import { clusterFixture } from '../../libs/event-store/test/cluster-fixture.ts';
+import { waitForClusterStream } from '../../libs/event-store/test/cluster-stream.ts';
 
 type Bootstrap = {
   provisionEvents(): Promise<void>;
@@ -34,9 +37,35 @@ async function streamInfo(connection: Awaited<ReturnType<typeof connectNats>>) {
     state: { consumer_count: number } }>();
 }
 
-async function bootstrapFixture(env: NodeJS.ProcessEnv) {
+type DelayedReply = { subject: string; occurrence: number; milliseconds: number };
+type ReadinessFixture = {
+  replies: unknown[];
+  elapsed: number;
+  failure?: Error;
+  delayedReply?: DelayedReply;
+  requestMilliseconds?: number;
+};
+type PlacementFixture = { failure: Error; refusals: number; attempts: number };
+
+async function bootstrapFixture(env: NodeJS.ProcessEnv, readiness?: ReadinessFixture,
+  placement?: PlacementFixture) {
   const files = new Map<string, string>();
   const actions: string[] = [];
+  const requests: { subject: string; timeout: number | undefined; elapsed: number }[] = [];
+  let matchingReplies = 0;
+  function finishReply(subject: string) {
+    if (!readiness) {
+      return;
+    }
+    readiness.elapsed += readiness.requestMilliseconds ?? 0;
+    const delayed = readiness.delayedReply;
+    if (delayed && subject === delayed.subject) {
+      matchingReplies += 1;
+      if (matchingReplies === delayed.occurrence) {
+        readiness.elapsed += delayed.milliseconds;
+      }
+    }
+  }
   async function mkdirFixture(path: string, options: { mode: number }) {
     assert.equal(options.mode, 0o700);
     actions.push(path);
@@ -58,7 +87,33 @@ async function bootstrapFixture(env: NodeJS.ProcessEnv) {
   }
   async function connection() {
     actions.push('NATS connection');
-    return connectNats(env);
+    const connected = await connectNats(env);
+    if (readiness) {
+      const request = connected.request.bind(connected);
+      async function requestFixture(...args: Parameters<typeof connected.request>) {
+        if (args[0] === 'bootstrap.meta') {
+          if (readiness!.failure) {
+            throw readiness!.failure;
+          }
+          const reply = readiness!.replies.shift();
+          return { json: () => reply } as Awaited<ReturnType<typeof connected.request>>;
+        }
+        requests.push({ subject: args[0], timeout: args[2]?.timeout,
+          elapsed: readiness!.elapsed });
+        if (args[0] === '$JS.API.STREAM.CREATE.EVENTS' && placement) {
+          placement.attempts += 1;
+          if (placement.attempts <= placement.refusals) {
+            finishReply(args[0]);
+            throw placement.failure;
+          }
+        }
+        const reply = await request(...args);
+        finishReply(args[0]);
+        return reply;
+      }
+      vi.spyOn(connected, 'request').mockImplementation(requestFixture);
+    }
+    return connected;
   }
   class Pool {
     constructor() {
@@ -66,12 +121,21 @@ async function bootstrapFixture(env: NodeJS.ProcessEnv) {
       throw new Error('Unexpected database access');
     }
   }
+  class Clock extends Date {
+    static override now() {
+      return readiness?.elapsed ?? Date.now();
+    }
+  }
+  async function advanceClock(milliseconds: number) {
+    readiness!.elapsed += milliseconds;
+  }
   const replacements: Record<string, unknown> = {
     'node:fs/promises': { mkdir: mkdirFixture, writeFile: writeFixture },
     'node:child_process': { execFile: executeFixture },
-    '@opencrane/event-store': { connectNats: connection, createEventStore },
+    '@opencrane/event-store': { connectNats: connection, createEventStore, isEventStoreUnavailable },
     '@opencrane/handlers': { provisionDispatcher },
     '@opencrane/authz': {}, pg: { Pool },
+    ...(readiness ? { 'node:timers/promises': { setTimeout: advanceClock } } : {}),
   };
   const file = 'infra/package/bootstrap.ts';
   const source = await readFile(file, 'utf8');
@@ -85,8 +149,8 @@ async function bootstrapFixture(env: NodeJS.ProcessEnv) {
     return replacements[specifier] ?? nativeRequire(specifier);
   }
   runInNewContext(compiled.outputText, { exports, require: fixtureRequire,
-    process: { env, execPath: process.execPath }, Buffer, console });
-  return { ...exports, files, actions };
+    process: { env, execPath: process.execPath }, Buffer, console, Date: Clock, setTimeout });
+  return { ...exports, files, actions, requests };
 }
 
 for (const replicas of ['1', '3']) {
@@ -169,3 +233,308 @@ async function preservesExistingStream() {
 }
 it('bootstrap refuses an existing R1 stream without changing it or adding a consumer',
   preservesExistingStream);
+
+async function refusesWhenMetadataNeverBecomesReady() {
+  const cluster = await clusterFixture();
+  try {
+    const readiness = { replies: [], elapsed: 0 };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness);
+    await expect(bootstrap.provisionEvents()).rejects.toThrow(
+      'JetStream did not become ready for R3 within 120000 ms');
+    const connection = await cluster.client(cluster.peers[0]!);
+    const reply = await connection.request('$JS.API.INFO');
+    expect(reply.json<{ streams: number }>().streams).toBe(0);
+    expect(bootstrap.files.size).toBe(0);
+  } finally {
+    await cluster.close();
+  }
+}
+it('bootstrap refuses before creating a stream when metadata readiness expires',
+  refusesWhenMetadataNeverBecomesReady);
+
+function metadataReport(leader: string, current: boolean, offline = false) {
+  const followers = [
+    { name: 'peer-2', current, offline }, { name: 'peer-3', current, offline },
+  ];
+  return { server: { name: 'peer-1', cluster: 'route-tests' },
+    data: { meta_cluster: { leader, replicas: followers } } };
+}
+
+async function preparePlacementStatistics(cluster: Awaited<ReturnType<typeof clusterFixture>>) {
+  // Prepare real storage statistics before testing readiness with an injected clock.
+  const connection = await cluster.client(cluster.peers[0]!);
+  const store = await createEventStore(connection);
+  await waitForClusterStream(store);
+  const manager = await jetstreamManager(connection);
+  await manager.streams.delete('EVENTS');
+  const reply = await connection.request('$JS.API.INFO');
+  expect(reply.json<{ streams: number }>().streams).toBe(0);
+}
+
+async function waitsUntilMetadataLeaderHasEnoughCurrentPeers() {
+  const cluster = await clusterFixture();
+  try {
+    await preparePlacementStatistics(cluster);
+    const noLeader = metadataReport('', true);
+    const missingPeer = metadataReport('peer-1', true);
+    missingPeer.data.meta_cluster.replicas.pop();
+    const behind = metadataReport('peer-1', false);
+    const offline = metadataReport('peer-1', true, true);
+    const duplicate = metadataReport('peer-1', true);
+    duplicate.data.meta_cluster.replicas[1] = duplicate.data.meta_cluster.replicas[0]!;
+    const follower = metadataReport('peer-2', true);
+    const ready = metadataReport('peer-1', true);
+    const replies = [null, noLeader, missingPeer, behind, offline, duplicate, follower, ready];
+    const readiness = { replies, elapsed: 0 };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness);
+    await bootstrap.provisionEvents();
+    const connection = await cluster.client(cluster.peers[0]!);
+    const stream = await streamInfo(connection);
+    expect(stream.config.num_replicas).toBe(3);
+    expect(stream.state.consumer_count).toBe(1);
+    expect(readiness.replies).toEqual([]);
+    expect(readiness.elapsed).toBe(1400);
+  } finally {
+    await cluster.close();
+  }
+}
+it('bootstrap waits for the metadata leader to report enough current online peers',
+  waitsUntilMetadataLeaderHasEnoughCurrentPeers);
+
+async function provisionsStandalone() {
+  const fixture = await natsFixture();
+  try {
+    const bootstrap = await bootstrapFixture({ ...fixture.env(),
+      NATS_REPLICAS: '1', COMMAND_NATS_REPLICAS: '1' });
+    await bootstrap.provisionEvents();
+    const stream = await streamInfo(fixture.connection);
+    expect(stream.config.num_replicas).toBe(1);
+    expect(stream.state.consumer_count).toBe(1);
+  } finally {
+    await fixture.close();
+  }
+}
+it('bootstrap provisions a standalone R1 server without a metadata group', provisionsStandalone);
+
+async function preservesReadinessRefusals() {
+  const cluster = await clusterFixture();
+  try {
+    const failure = new Error('Monitoring access refused');
+    const readiness = { replies: [], elapsed: 0, failure };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness);
+    await expect(bootstrap.provisionEvents()).rejects.toBe(failure);
+    const connection = await cluster.client(cluster.peers[0]!);
+    const reply = await connection.request('$JS.API.INFO');
+    expect(reply.json<{ streams: number }>().streams).toBe(0);
+    expect(readiness.elapsed).toBe(0);
+  } finally {
+    await cluster.close();
+  }
+}
+it('bootstrap preserves a readiness refusal without retrying or creating a stream',
+  preservesReadinessRefusals);
+
+const peerOffline = 'no suitable peers for placement, peer offline';
+
+function placementRefusal() {
+  return new JetStreamApiError({ code: 400, err_code: 10005, description: peerOffline });
+}
+
+async function provisionsAfterPlacementStatisticsArrive() {
+  const cluster = await clusterFixture();
+  try {
+    await preparePlacementStatistics(cluster);
+    const readiness = { replies: [metadataReport('peer-1', true)], elapsed: 0 };
+    const placement = { failure: placementRefusal(), refusals: 2, attempts: 0 };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness, placement);
+    await bootstrap.provisionEvents();
+    const connection = await cluster.client(cluster.peers[0]!);
+    const stream = await streamInfo(connection);
+    expect(stream.config.num_replicas).toBe(3);
+    expect(stream.state.consumer_count).toBe(1);
+    expect(placement.attempts).toBe(3);
+    expect(readiness.elapsed).toBe(400);
+  } finally {
+    await cluster.close();
+  }
+}
+it('bootstrap creates R3 when a placement refusal clears before the deadline',
+  provisionsAfterPlacementStatisticsArrive);
+
+async function refusesPlacementAtTheOriginalDeadline() {
+  const cluster = await clusterFixture();
+  try {
+    const replies: unknown[] = Array<null>(599).fill(null);
+    replies.push(metadataReport('peer-1', true));
+    const readiness = { replies, elapsed: 0 };
+    const placement = { failure: placementRefusal(), refusals: Infinity, attempts: 0 };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness, placement);
+    await expect(bootstrap.provisionEvents()).rejects.toThrow(
+      'JetStream R3 stream placement refused within 120000 ms bootstrap deadline');
+    expect(readiness.elapsed).toBe(120000);
+    expect(placement.attempts).toBe(1);
+    const connection = await cluster.client(cluster.peers[0]!);
+    const reply = await connection.request('$JS.API.INFO');
+    expect(reply.json<{ streams: number }>().streams).toBe(0);
+    expect(bootstrap.files.size).toBe(0);
+  } finally {
+    await cluster.close();
+  }
+}
+it('bootstrap refuses persistent placement failures at the original readiness deadline',
+  refusesPlacementAtTheOriginalDeadline);
+
+const creationFailures = [
+  new Error(peerOffline),
+  new Error('timeout'),
+  new JetStreamApiError({ code: 403, err_code: 10005, description: peerOffline }),
+  new JetStreamApiError({ code: 400, err_code: 10023, description: peerOffline }),
+  new JetStreamApiError({ code: 503, err_code: 10008, description: 'JetStream unavailable' }),
+  new JetStreamApiError({ code: 400, err_code: 10005,
+    description: 'no suitable peers for placement, insufficient storage' }),
+];
+
+async function preservesOtherCreationFailures(failure: Error) {
+  const cluster = await clusterFixture();
+  try {
+    const readiness = { replies: [metadataReport('peer-1', true)], elapsed: 0 };
+    const placement = { failure, refusals: 1, attempts: 0 };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness, placement);
+    await expect(bootstrap.provisionEvents()).rejects.toBe(failure);
+    expect(placement.attempts).toBe(1);
+    expect(readiness.elapsed).toBe(0);
+    const connection = await cluster.client(cluster.peers[0]!);
+    const reply = await connection.request('$JS.API.INFO');
+    expect(reply.json<{ streams: number }>().streams).toBe(0);
+  } finally {
+    await cluster.close();
+  }
+}
+it.each(creationFailures)('bootstrap preserves other creation failures without retry: %s',
+  preservesOtherCreationFailures);
+
+async function refusesR1PlacementWithoutRetry() {
+  const fixture = await natsFixture({ provision: false });
+  try {
+    const readiness = { replies: [metadataReport('peer-1', true)], elapsed: 0 };
+    const placement = { failure: placementRefusal(), refusals: 1, attempts: 0 };
+    const bootstrap = await bootstrapFixture({ ...fixture.env(),
+      NATS_REPLICAS: '1', COMMAND_NATS_REPLICAS: '1' }, readiness, placement);
+    await expect(bootstrap.provisionEvents()).rejects.toBe(placement.failure);
+    expect(placement.attempts).toBe(1);
+    expect(readiness.elapsed).toBe(0);
+    const reply = await fixture.connection.request('$JS.API.INFO');
+    expect(reply.json<{ streams: number }>().streams).toBe(0);
+  } finally {
+    await fixture.close();
+  }
+}
+it('bootstrap preserves an R1 placement refusal without retry', refusesR1PlacementWithoutRetry);
+
+const setupDeadlineError = 'JetStream setup exceeded 120000 ms bootstrap deadline';
+const consumerSubject = '$JS.API.CONSUMER.CREATE.EVENTS.handler-dispatcher.ev.>';
+const lateSetupReplies = [
+  { subject: '$JS.API.INFO', occurrence: 1, streams: 0, consumers: 0 },
+  { subject: '$JS.API.STREAM.INFO.EVENTS', occurrence: 1, streams: 0, consumers: 0 },
+  { subject: '$JS.API.STREAM.CREATE.EVENTS', occurrence: 1, streams: 1, consumers: 0 },
+  { subject: '$JS.API.INFO', occurrence: 2, streams: 1, consumers: 0 },
+  { subject: consumerSubject, occurrence: 1, streams: 1, consumers: 1 },
+];
+
+async function refusesLateSetupReply(testCase: typeof lateSetupReplies[number]) {
+  const cluster = await clusterFixture();
+  try {
+    await preparePlacementStatistics(cluster);
+    // Keep real NATS replies independent of the injected bootstrap clock.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const replies: unknown[] = Array<null>(599).fill(null);
+    replies.push(metadataReport('peer-1', true));
+    const delayedReply = { subject: testCase.subject, occurrence: testCase.occurrence,
+      milliseconds: 1000 };
+    const readiness = { replies, elapsed: 0, delayedReply };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness);
+    await expect(bootstrap.provisionEvents()).rejects.toThrow(setupDeadlineError);
+    expect(readiness.elapsed).toBe(120800);
+    expect(bootstrap.requests.at(-1)?.subject).toBe(testCase.subject);
+    const connection = await cluster.client(cluster.peers[0]!);
+    const reply = await connection.request('$JS.API.INFO');
+    expect(reply.json<{ streams: number }>().streams).toBe(testCase.streams);
+    if (testCase.streams > 0) {
+      const stream = await streamInfo(connection);
+      expect(stream.state.consumer_count).toBe(testCase.consumers);
+    }
+    expect(bootstrap.files.size).toBe(0);
+  } finally {
+    vi.useRealTimers();
+    await cluster.close();
+  }
+}
+it.each(lateSetupReplies)('bootstrap refuses a late setup reply: %j', refusesLateSetupReply);
+
+async function boundsEverySetupRequestByRemainingTime() {
+  const cluster = await clusterFixture();
+  try {
+    await preparePlacementStatistics(cluster);
+    // Keep real NATS replies independent of the injected bootstrap clock.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const replies: unknown[] = Array<null>(599).fill(null);
+    replies.push(metadataReport('peer-1', true));
+    const readiness = { replies, elapsed: 0, requestMilliseconds: 20 };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness);
+    await bootstrap.provisionEvents();
+    expect(bootstrap.requests).toEqual([
+      { subject: '$JS.API.INFO', timeout: 200, elapsed: 119800 },
+      { subject: '$JS.API.STREAM.INFO.EVENTS', timeout: 180, elapsed: 119820 },
+      { subject: '$JS.API.STREAM.CREATE.EVENTS', timeout: 160, elapsed: 119840 },
+      { subject: '$JS.API.INFO', timeout: 140, elapsed: 119860 },
+      { subject: consumerSubject, timeout: 120, elapsed: 119880 },
+    ]);
+    expect(readiness.elapsed).toBe(119900);
+    const connection = await cluster.client(cluster.peers[0]!);
+    const stream = await streamInfo(connection);
+    expect(stream.config.num_replicas).toBe(3);
+    expect(stream.state.consumer_count).toBe(1);
+  } finally {
+    vi.useRealTimers();
+    await cluster.close();
+  }
+}
+it('bootstrap gives every setup request only the remaining time',
+  boundsEverySetupRequestByRemainingTime);
+
+async function refusesLatePlacementWithoutBackoff() {
+  const cluster = await clusterFixture();
+  try {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const replies: unknown[] = Array<null>(599).fill(null);
+    replies.push(metadataReport('peer-1', true));
+    const delayedReply = { subject: '$JS.API.STREAM.CREATE.EVENTS', occurrence: 1,
+      milliseconds: 1000 };
+    const readiness = { replies, elapsed: 0, delayedReply };
+    const placement = { failure: placementRefusal(), refusals: Infinity, attempts: 0 };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness, placement);
+    await expect(bootstrap.provisionEvents()).rejects.toThrow(
+      'JetStream R3 stream placement refused within 120000 ms bootstrap deadline');
+    expect(readiness.elapsed).toBe(120800);
+    expect(placement.attempts).toBe(1);
+    expect(bootstrap.requests.at(-1)?.timeout).toBe(200);
+    const connection = await cluster.client(cluster.peers[0]!);
+    const reply = await connection.request('$JS.API.INFO');
+    expect(reply.json<{ streams: number; consumers: number }>()).toMatchObject(
+      { streams: 0, consumers: 0 });
+  } finally {
+    vi.useRealTimers();
+    await cluster.close();
+  }
+}
+it('bootstrap refuses a late placement refusal without another wait or request',
+  refusesLatePlacementWithoutBackoff);

@@ -20,7 +20,7 @@ flowchart LR
   stack -->|loads settings| settings
   settings -->|configures| nats["NATS JetStream<br/>event log"]
   nats <-->|copies events over TLS| peers["NATS peers<br/>other event copies"]
-  server["apps/server<br/>back end"] -->|saves events| nats
+  server["apps/server<br/>back end and setup"] -->|saves events and checks peer readiness| nats
   ops["apps/ops<br/>background workers"] -->|reads and saves| nats
 ```
 
@@ -34,12 +34,14 @@ flowchart LR
 - Keeps assistant computers and the AI gateway out of the event log.
 - Checks certificates and names when NATS servers connect to copy events.
   These connections use a separate certificate issuer from ordinary clients.
+- Lets setup check peer readiness with the command key through one read service.
 - Loads public keys when NATS starts. The settings file holds no private keys.
 
 ## Processes it handles
 
 1. **The server saves a change.** It connects with the command key and adds an event
    to the log. This identity can also read events and manage the log's readers.
+   The setup job uses it to check that enough peers are ready before creating the log.
 2. **Workers update data or run jobs.** Table-building workers read events to update
    PostgreSQL. The dispatcher confirms delivery as it hands events to background jobs.
 3. **A computer tries to connect.** Its identity has no event log access, so it

@@ -363,6 +363,38 @@ private `command.env`. The dispatcher consumer inherits the stream's count.
 An existing incompatible stream refuses without changing its configuration or data.
 There is no extra stream or automatic conversion from R1 to R3.
 
+Before provisioning, bootstrap polls the authenticated `bootstrap.meta` service.
+For R3, the JetStream metadata leader must report at least three distinct current,
+online metadata peers, including itself. Replies from followers cannot grant readiness.
+For R1, the leader alone suffices; a standalone server has no metadata group.
+A metadata group stores the shared stream and consumer settings, separately from events.
+Each request waits at most one second. Failed readiness checks run again after at
+most 200 ms, within one 120-second deadline. Expiry names the replica count and
+limit, closes the connection and leaves the stream and consumer untouched.
+Only unavailable readiness reads are retried. Incompatible-stream refusals fail
+immediately. The bootstrap failure stage names the replica count and time limit.
+The NATS settings expose this one read service only to the command key; no HTTP
+monitoring port or system-account credentials are added.
+
+The leader's report does not show whether it has received each peer's storage
+statistics. For R3 only, bootstrap retries the explicit peer-offline placement
+refusal: `JetStreamApiError`, status 400, code 10005 and description
+`no suitable peers for placement, peer offline`. The fixed backoff is 200 ms,
+shortened only to stop at the deadline. Metadata readiness and placement share the
+same 120-second deadline; placement gets no new time allowance. Expiry reports a
+fixed placement error and closes the connection without adding a consumer.
+Every later setup request on bootstrap's dedicated connection also uses only the
+remaining time, capped by the SDK's own request timeout. This covers both API
+checks, stream lookup or creation, and dispatcher consumer creation. Bootstrap
+checks the deadline after each reply and each setup step. A late successful reply
+refuses before the SDK can start another request; a late placement refusal gets
+no extra wait or retry. The connection closes on refusal. A request already sent
+may have reached NATS, so refusal does not undo a stream or consumer that
+NATS has already created.
+Every other creation error, including timeouts, lost replies and other JetStream
+codes or refusal descriptions, fails immediately. R1 creation is never retried.
+The [readiness evidence](../../docs/process/ci-flakes-15.md) records the checks.
+
 The Helm preview includes the same Job, service account and private mounts as the
 default render. The shipped image pin is unchanged and has not been qualified for
 this source. Controller and storage prerequisites and a compatible image must
@@ -371,8 +403,18 @@ be checked before the ordinary installer can accept R3.
 The chart tests inspect real Helm output and the existing preparation fixture's
 written settings. `bootstrap.test.ts` executes the bootstrap functions with disposable
 TLS NATS peers and captures the private settings passed to the owner command.
-It checks R1, R3, consumer inheritance, invalid settings and an unchanged incompatible
-stream. These are source checks. Images, controller and storage prerequisites, and
+It checks standalone and clustered R1, R3, consumer inheritance, invalid settings,
+an unchanged incompatible stream, delayed metadata readiness, placement recovery,
+shared-deadline refusal and immediate refusal of other creation errors.
+Late-reply tests make metadata ready at 119,800 ms and receive a setup reply at
+120,800 ms. They check refusal at each request, no later setup requests and no
+consumer after late stream creation. Another test checks that all five SDK
+requests receive the decreasing time left. A late placement refusal checks that
+bootstrap neither waits again nor creates a stream or consumer.
+Tests that create streams with injected clocks prepare real NATS placement
+statistics and remove the setup stream before checking their exact timing. The ordinary
+R3 test uses real time and starts without this extra preparation.
+These are source checks. Images, controller and storage prerequisites, and
 live Kubernetes placement are NOT RUN. The
 [receipt](../../docs/process/p5-4-pr5a/receipt.md) records the checks.
 

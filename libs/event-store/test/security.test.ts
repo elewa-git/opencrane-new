@@ -265,3 +265,18 @@ it.each(["projection", "dispatcher"])("%s cannot route API replies or pulled eve
     .rejects.toThrow(/timeout/i);
   expect(await fixture.store.head()).toBe(head);
 });
+
+async function refusesMetadataMonitoring(role: string) {
+  const connection = await fixture.client(role);
+  await refused(connection, 'bootstrap.meta');
+  await refused(connection, '$SYS.REQ.SERVER.PING.JSZ');
+}
+it.each(['projection', 'dispatcher', 'computer', 'gateway'])(
+  '%s cannot request bootstrap metadata reports', refusesMetadataMonitoring);
+
+async function refusesOtherSystemRequests() {
+  await refused(fixture.connection, '$SYS.REQ.SERVER.PING.JSZ');
+  await refused(fixture.connection, '$SYS.REQ.SERVER.PING.VARZ');
+  await refused(fixture.connection, '$SYS.REQ.SERVER.PING.STATSZ');
+}
+it('the command key cannot send other system requests', refusesOtherSystemRequests);

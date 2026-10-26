@@ -4,7 +4,7 @@ For people, read [README.md](README.md) first.
 
 ## Cluster configuration
 
-`cluster.conf` includes `nats.conf` without changing its client TLS or NKey account
+`cluster.conf` includes `nats.conf` with the same client TLS and NKey account
 policy. The existing single-server entrypoint stays unchanged. Start each peer with
 `nats-server -c infra/nats/cluster.conf`. All three peers share the cluster name,
 client trust and public role keys. Each has its own server name, store directory,
@@ -67,3 +67,16 @@ The fixture removes processes and private files after setup errors and test exit
 This is P5-4 PR 1 source coverage, not P5-4 qualification. Helm wiring, three-node
 placement, persistent volumes, rotation and P5-5 failure/rejoin drills remain NOT RUN.
 No Kubernetes operation or image pin changes are part of this work.
+
+## Bootstrap readiness reports
+
+The explicit `$SYS` system account has no client credentials. It exports only
+`$SYS.REQ.SERVER.PING.JSZ` to `EVENT_CORE`, with streamed replies from the peers.
+`EVENT_CORE` imports it as `bootstrap.meta`. Only the command key may publish to
+that subject. Projection, dispatcher, computer and gateway keys cannot request it.
+The command key still cannot publish to raw system subjects or call other system APIs.
+No HTTP listener is added. Bootstrap uses the reports to wait for enough current
+metadata peers that agree on their leader before creating the event stream.
+The [bootstrap contract](../package/README.robot.md#packaged-bootstrap) owns the
+polling limits and refusal behaviour. Real standalone and cluster tests exercise
+the service, and the event-store security tests check the refused identities.

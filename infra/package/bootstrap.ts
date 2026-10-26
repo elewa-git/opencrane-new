@@ -3,9 +3,11 @@ import { execFile } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { request } from 'node:https';
 import { promisify } from 'node:util';
+import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
+import { JetStreamApiError } from '@nats-io/jetstream';
 import { createStore } from '@opencrane/authz';
-import { connectNats, createEventStore } from '@opencrane/event-store';
+import { connectNats, createEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { provisionDispatcher } from '@opencrane/handlers';
 
 const execute = promisify(execFile);
@@ -102,13 +104,139 @@ async function openFgaReady() {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function metadataIsReady(value: unknown, replicas: number) {
+  if (!isRecord(value) || !isRecord(value['server']) || !isRecord(value['data'])) {
+    return false;
+  }
+  const server = value['server'];
+  const data = value['data'];
+  if (typeof server['name'] !== 'string' || data['disabled'] === true) {
+    return false;
+  }
+  const name = server['name'];
+  const metadata = data['meta_cluster'];
+  if (!metadata && !server['cluster'] && replicas === 1) {
+    return true;
+  }
+  if (!isRecord(metadata) || metadata['leader'] !== name || !name) {
+    return false;
+  }
+  const peers = new Set([name]);
+  const followers = metadata['replicas'];
+  if (Array.isArray(followers)) {
+    for (const peer of followers) {
+      if (isRecord(peer) && peer['current'] === true && peer['offline'] !== true &&
+        typeof peer['name'] === 'string') {
+        peers.add(peer['name']);
+      }
+    }
+  }
+  return peers.size >= replicas;
+}
+
+async function metadataReady(connection: Awaited<ReturnType<typeof connectNats>>,
+  replicas: number, maxWait: number) {
+  const options = { timeout: maxWait };
+  const reply = await connection.request('bootstrap.meta', '{"leader_only":true}', options);
+  return metadataIsReady(reply.json<unknown>(), replicas);
+}
+
+async function waitForMetadata(connection: Awaited<ReturnType<typeof connectNats>>,
+  replicas: number, deadline: number) {
+  while (Date.now() < deadline) {
+    try {
+      const ready = await metadataReady(connection, replicas, Math.min(1000, deadline - Date.now()));
+      if (ready && Date.now() < deadline) {
+        return;
+      }
+    } catch (error) {
+      if (!isEventStoreUnavailable(error)) {
+        throw error;
+      }
+    }
+    // Check the leader again within the time left for bootstrap.
+    const remaining = deadline - Date.now();
+    if (remaining > 0) {
+      await delay(Math.min(200, remaining));
+    }
+  }
+  throw new Error(`JetStream did not become ready for R${replicas} within 120000 ms`);
+}
+
+function isPlacementRefusal(error: unknown) {
+  return error instanceof JetStreamApiError && error.status === 400 && error.code === 10005 &&
+    error.apiError().description === 'no suitable peers for placement, peer offline';
+}
+
+function remainingSetupTime(deadline: number) {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    throw new Error('JetStream setup exceeded 120000 ms bootstrap deadline');
+  }
+  return remaining;
+}
+
+function boundSetupRequests(connection: Awaited<ReturnType<typeof connectNats>>, deadline: number) {
+  const request = connection.request.bind(connection);
+  async function requestBeforeDeadline(...args: Parameters<typeof connection.request>) {
+    const [subject, data, options] = args;
+    const remaining = remainingSetupTime(deadline);
+    const timeout = Math.min(options?.timeout ?? 1000, remaining);
+    const reply = await request(subject, data, { ...options, timeout });
+    remainingSetupTime(deadline);
+    return reply;
+  }
+  // Bound requests on this dedicated connection because SDK setup methods share no deadline.
+  // Reject late replies before the SDK can start another request.
+  connection.request = requestBeforeDeadline;
+}
+
+async function provisionStream(store: Awaited<ReturnType<typeof createEventStore>>,
+  replicas: number, deadline: number) {
+  while (true) {
+    remainingSetupTime(deadline);
+    try {
+      await store.ensureStream({ replicas });
+      remainingSetupTime(deadline);
+      return;
+    } catch (error) {
+      if (replicas !== 3 || !isPlacementRefusal(error)) {
+        throw error;
+      }
+      // Retry only an explicit refusal: NATS has confirmed that it did not place the stream.
+      const remaining = deadline - Date.now();
+      if (remaining > 0) {
+        await delay(Math.min(200, remaining));
+      }
+      if (Date.now() >= deadline) {
+        stage = 'R3 stream placement refusal (120000 ms bootstrap deadline expired)';
+        throw new Error('JetStream R3 stream placement refused within 120000 ms bootstrap deadline',
+          { cause: error });
+      }
+    }
+  }
+}
+
 async function provisionEvents() {
   const replicas = replicaSettings();
   const connection = await connectNats();
   try {
+    const deadline = Date.now() + 120_000;
+    stage = `JetStream readiness for R${replicas} (120000 ms deadline)`;
+    await waitForMetadata(connection, replicas, deadline);
+    stage = `event stream setup for R${replicas} (120000 ms bootstrap deadline)`;
+    remainingSetupTime(deadline);
+    boundSetupRequests(connection, deadline);
     const store = await createEventStore(connection);
-    await store.ensureStream({ replicas });
+    remainingSetupTime(deadline);
+    await provisionStream(store, replicas, deadline);
+    remainingSetupTime(deadline);
     await provisionDispatcher(connection);
+    remainingSetupTime(deadline);
   } finally {
     await connection.close();
   }
