@@ -5724,7 +5724,6 @@ There is no browser proof, result cache or TCP fallback. Direct daemon tests kee
 their adapter under test support; they do not qualify the authenticated deployment.
 P5-6b PR 1 leaves image consumers, deployed entry/rotation and live checks for later.
 
-
 ## Bounded storage requests for object capture
 
 `files/storage.ts` keeps request limits in an `AsyncLocalStorage` context per client.
