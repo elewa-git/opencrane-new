@@ -82,7 +82,7 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, updates and tool choices| server["apps/server<br/>the back end"]
-  server -.->|reads original tool reviews, checks access before history errors, prepares and allocates child allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
+  server -.->|checks private callers, reads original tool reviews, checks access before history errors, prepares and allocates child allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; records personal account revocations, choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions with their claim and worker, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
@@ -102,8 +102,9 @@ Agent correction and forget requests need a signed proof of a loaded, current pe
 A correction names every other loaded fact as a dependency, with no revision of its own target.
 Both operations remain disabled after these checks and create no fact, key or command file.
 Discovery still lists recall alone.
-A separate tool-list builder accepts only that exact reviewed recall definition for
-the requester’s personal scope. It refuses Ask and Block choices. Private tool
+A separate tool-list builder requires a saved private turn, its matching requester
+and grant, and a live registered caller. It accepts only that exact reviewed recall
+definition for the requester's personal scope. It refuses Ask and Block choices. Private tool
 delivery remains disabled; the builder is exercised by local tests.
 Memory tests finish their setup reads before signing short-lived requests. Separate tests
 delay history and permission reads inside the server and record only elapsed times.

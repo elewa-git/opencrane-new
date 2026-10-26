@@ -2460,11 +2460,24 @@ Private team sessions still refuse participant capture.
 
 ## Restricted recall assembly — P4-15 PR 4b, first part
 
-`buildPersonalRecallTools` accepts a silo, a person scope and the recorded requester
-and assistant ids. It derives the requester's person scope before reading the
-catalogue. Another person, group, notes scope or silo gets no offer. The helper does
-not establish those identities itself; its future bridge caller must supply them
-from the saved turn binding.
+`buildPrivateTurnRecallTools` is an internal assembly path with no live bridge caller.
+It accepts the saved `TurnSummary`, a trusted turn grant and a private caller registry.
+It requires an open, server-recorded restricted chat turn, without shared context.
+The supplied requester, assistant and silo must match that record. The grant must
+also match its requester, assistant, computer, conversation, turn and thread.
+An absent or expired grant gets no offer.
+
+The path reuses `privateCallers`, moved unchanged from the computer to `libs/models`.
+Its `identify`, `permits` and `check` methods require a live registered caller for
+the grant's turn, bound thread, computer generation and input generation. These
+checks run before catalogue access and again after asynchronous assembly.
+The caller registry and grant must come from trusted internal code, never a request
+body. This prepares the assembly contract; it does not register a live private process.
+
+Only this checked path calls the now-private `buildPersonalRecallTools`. It derives
+the requester's person scope before reading the catalogue. Another person, group,
+notes scope or silo gets no offer. Changing the requester and scope together cannot
+replace the requester saved on the turn, even with a changed grant.
 
 It reads only `memory`, requires connection `server` and the built-in server name
 and version, and selects only one recall definition and policy. Both saved revisions
@@ -2480,9 +2493,9 @@ a tool. Gateway and backend checks remain necessary on every call. An unavailabl
 catalogue or access service still rejects the build. No new API or event field,
 dependency, access stream or deadline is introduced.
 
-`test/personal-recall-tools.test.ts` exercises this helper directly without an
+`test/personal-recall-tools.test.ts` exercises this checked path without an
 environment switch. `buildTurnTools`, the live bridge and `mayOfferTurnTools` keep
-memory excluded. Native launch/loading, proxy binding, person-only call enforcement,
+memory excluded. Native launch/loading, live proxy registration, person-only call enforcement,
 volatile delivery and image qualification remain pending. This first part does not
 prove a native recall reaches the governed backend. Memory admission stays disabled.
 Own checks and the remaining wire tests are recorded in the

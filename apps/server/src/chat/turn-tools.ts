@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
+import type { TurnSummary } from '@opencrane/auth';
+import { computerTurnStartedDataSchema } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { losslessJson } from '@opencrane/events/lossless-json';
+import type { privateCallers } from '@opencrane/models';
 import { memoryScopeId } from '@opencrane/projections';
 import { recallTool, serverInfo as memoryServerInfo } from '../memory/mcp.ts';
 
@@ -67,7 +70,84 @@ type PersonalRecallInput = Omit<TurnToolInput, 'rows' | 'approvalWaiting'> & {
   scopeId: string;
 };
 
-export async function buildPersonalRecallTools(input: PersonalRecallInput) {
+type PrivateCallers = ReturnType<typeof privateCallers>;
+type PrivateRecallGrant = Parameters<PrivateCallers['register']>[0] & {
+  silo: string;
+  requesterId: string;
+  assistantId: string;
+  computerId: string;
+  thread: string;
+};
+type PrivateRecallInput = PersonalRecallInput & {
+  turn: TurnSummary | undefined;
+  grant: PrivateRecallGrant | undefined;
+  caller: string | undefined;
+  callers: Pick<PrivateCallers, 'identify' | 'permits' | 'check'>;
+};
+
+export async function buildPrivateTurnRecallTools(input: PrivateRecallInput) {
+  if (!hasPrivateRecallBinding(input)) {
+    return [];
+  }
+  const tools = await buildPersonalRecallTools(input);
+  // Refuse a caller that ended while the catalogue or access checks were waiting.
+  if (!hasPrivateRecallBinding(input)) {
+    return [];
+  }
+  return tools;
+}
+
+function recordedPrivateTurn(input: PrivateRecallInput) {
+  const row = input.turn?.firstStart;
+  if (!row || input.turn?.firstClose || row.event.source !== 'opencrane-server'
+    || row.event.type !== 'computer.turn_started' || row.event.silo !== input.silo
+    || row.event.subject !== `computer-${input.assistantId}`) {
+    return undefined;
+  }
+  const parsed = computerTurnStartedDataSchema.safeParse(row.event.data);
+  if (!parsed.success || parsed.data.task !== 'chat_turn') {
+    return undefined;
+  }
+  const turn = parsed.data;
+  if (turn.executionMode !== 'restricted' || turn.sharingClass !== undefined
+    || turn.requesterId !== input.requesterId || turn.assistantId !== input.assistantId) {
+    return undefined;
+  }
+  return turn;
+}
+
+function hasPrivateRecallBinding(input: PrivateRecallInput) {
+  const turn = recordedPrivateTurn(input);
+  const grant = input.grant;
+  if (!turn || !grant || !input.caller || !Number.isSafeInteger(grant.expires)
+    || grant.expires <= Date.now()) {
+    return false;
+  }
+  if (!matchesRecordedGrant(input, turn, grant)) {
+    return false;
+  }
+  const callerTurn = input.callers.identify(`Bearer ${input.caller}`);
+  if (!callerTurn || !input.callers.permits(callerTurn, grant.turnId, grant.thread)) {
+    return false;
+  }
+  try {
+    // Reuse the proxy's checks for a live registration, generations and bound thread.
+    const grantFields = { ...grant };
+    return input.callers.check(grantFields);
+  } catch {
+    return false;
+  }
+}
+
+function matchesRecordedGrant(input: PersonalRecallInput,
+  turn: NonNullable<ReturnType<typeof recordedPrivateTurn>>, grant: PrivateRecallGrant) {
+  return grant.silo === input.silo && grant.requesterId === turn.requesterId
+    && grant.assistantId === turn.assistantId && grant.computerId === turn.computerId
+    && grant.turnId === turn.turnId && grant.conversation === turn.conversationId
+    && grant.thread === turn.threadId;
+}
+
+async function buildPersonalRecallTools(input: PersonalRecallInput) {
   const scopeId = memoryScopeId(input.silo, 'person', input.requesterId);
   if (input.scopeId !== scopeId) return [];
   const restricted = { ...input, rows: [{ serverId: 'memory' }], approvalWaiting: false };

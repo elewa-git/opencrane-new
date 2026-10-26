@@ -1,5 +1,6 @@
 export { budgets, readSpendingCalls, readSpendingEffects, readCurrentEffects,
   type SpendingCall } from './accounting.ts';
+export { privateCallers } from './private-callers.ts';
 export { readBudgetResource } from './budget-resource.ts';
 export { budgetChange } from './budget-change.ts';
 export { budgetStopHandler, queuedPayer } from './budget-stop-handler.ts';

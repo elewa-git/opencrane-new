@@ -1512,6 +1512,10 @@ CONNECT and fresh gVisor qualification remain unbuilt or NOT RUN in this slice.
 
 ## Private proxy callers — P4-15 PR 4a, first part
 
+The caller registry now comes from `@opencrane/models`. Its implementation is unchanged.
+The disabled server recall assembler uses the same checks before preparing a tool list.
+This shared code does not connect private launches to the proxy.
+
 The proxy has an in-process `privateCaller` method. It returns a fresh random caller,
 `bind(thread)` and `close()`. No HTTP or control-socket route can register a caller.
 The future trusted bridge launch path must keep this returned value in RAM and pass

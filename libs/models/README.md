@@ -42,12 +42,16 @@ It can also prepare private sign-in attempts. Starting consent is not built yet.
 It checks passes with `libs/auth`, permissions with `libs/authz`, and starts agentgateway
 to handle AI calls.
 
+The server and computer also share the private caller checks. These keep a short-lived
+caller tied to one turn and thread. The server uses them while preparing a private
+recall tool list; live private tool delivery remains disabled.
+
 ```mermaid
 flowchart LR
   models -.->|replay tests use the database helper| store
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal account choices and owner revocation from HTTP, admin company opt-in, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
   models -->|checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server<br/>checks revision before execution"]
-  computer["apps/computer<br/>personal computers"] -.->|chooses chat models; native child calls refused| models
+  computer["apps/computer<br/>personal computers"] -.->|chooses chat models and checks private callers; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|stages credentials and private sign-in attempts, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
