@@ -22,7 +22,8 @@ interface Options {
   signal?: AbortSignal;
 }
 type Request = Pick<Options, 'namespace' | 'kubeconfig' | 'context'> & {
-  resource: 'namespace' | 'sandboxes' | 'persistentvolumeclaims' | 'pods';
+  resource: 'namespace' | 'sandboxes' | 'persistentvolumeclaims' | 'persistentvolumes' | 'pods';
+  name?: string;
   signal: AbortSignal;
 };
 const execute = promisify(execFile);
@@ -37,10 +38,12 @@ const resourceSchema = z.object({ kind: z.string(), metadata: referenceSchema.ex
   ownerReferences: z.array(z.object({ uid: identifier, kind: z.string().optional(),
     name: identifier.optional(), controller: z.boolean().optional() })).optional(),
 }), spec: z.object({ operatingMode: z.string().optional(),
+  volumeName: identifier.optional(),
+  claimRef: z.object({ namespace: identifier, name: identifier, uid: identifier }).optional(),
   podTemplate: z.object({ metadata: z.object({ labels }) }).optional(),
   volumes: z.array(z.object({ persistentVolumeClaim: z.object({ claimName: identifier })
     .optional() })).optional(),
-}).optional(), status: z.object({ conditions: z.array(z.object({
+}).optional(), status: z.object({ phase: z.string().optional(), conditions: z.array(z.object({
   type: z.string(), status: z.string(), reason: z.string().optional(),
   observedGeneration: z.number().int().optional(),
 })).optional() }).optional() });
@@ -108,6 +111,7 @@ async function readKubernetes(request: Request) {
   const args = ['--context', request.context, '--namespace', request.namespace,
     '--request-timeout=8s', 'get', request.resource];
   if (request.resource === 'namespace') args.push(request.namespace);
+  if (request.name) args.push(request.name);
   args.push('-o', 'json');
   const env = { ...process.env, KUBECONFIG: request.kubeconfig };
   const options = { env, signal: request.signal, timeout: 10_000,
@@ -168,9 +172,22 @@ function matchHome(computer: Computer, sandboxes: Resource[], claims: Resource[]
   assertComputerLabels(sandbox, computer.computerId, computer.assistantId);
   assertHomeOwnership(home, sandbox, computer.computerId);
   checkNoPod(pods, computer);
+  if (home.status?.phase !== 'Bound' || !home.spec?.volumeName) throw refusal();
   return { assistantId: computer.assistantId, computerId: computer.computerId,
     generation: computer.generation, sandbox: referenceSchema.parse(sandbox.metadata),
-    home: referenceSchema.parse(home.metadata) };
+    home: referenceSchema.parse(home.metadata), volumeName: home.spec.volumeName };
+}
+
+function checkVolumeBinding(input: unknown, volumeName: string,
+  home: z.infer<typeof referenceSchema>, namespace: string) {
+  const volume = resourceSchema.parse(input);
+  const claim = volume.spec?.claimRef;
+  if (volume.kind !== 'PersistentVolume' || volume.metadata.name !== volumeName ||
+      volume.metadata.namespace !== undefined || volume.status?.phase !== 'Bound' ||
+      claim?.namespace !== namespace || claim.name !== home.name || claim.uid !== home.uid) {
+    throw refusal();
+  }
+  return referenceSchema.parse(volume.metadata);
 }
 
 /** Return private metadata only; keep writers stopped until later byte capture has finished. */
@@ -196,10 +213,11 @@ export async function collectComputerVolumeInventory(source: Connection, target:
     const required = requiredComputers();
     await checkHistory(targetBounds, targetDescriptor, maximumBytes, required.visit);
     const bounds = sourceBounds;
-    async function request(resource: Request['resource']) {
+    async function request(resource: Request['resource'], name?: string) {
       bounds.check();
-      const input = { resource, namespace: options.namespace, kubeconfig: options.kubeconfig,
+      const input: Request = { resource, namespace: options.namespace, kubeconfig: options.kubeconfig,
         context: options.context, signal };
+      if (name !== undefined) input.name = name;
       const text = await bounds.bounded(read(input));
       if (Buffer.byteLength(text) > replyBytes) throw refusal();
       return JSON.parse(text) as unknown;
@@ -214,13 +232,18 @@ export async function collectComputerVolumeInventory(source: Connection, target:
       const pods = checkedList(await request('pods'), options.namespace, 'Pod');
       const volumes = [];
       for (const computer of required.computers.values()) {
-        volumes.push(matchHome(computer, sandboxes, claims, pods));
+        const { volumeName, ...ownership } = matchHome(computer, sandboxes, claims, pods);
+        const input = await request('persistentvolumes', volumeName);
+        const volume = checkVolumeBinding(input, volumeName, ownership.home, options.namespace);
+        const inventory = { ...ownership, volume };
+        volumes.push(inventory);
       }
       return { namespace: referenceSchema.parse(namespace.metadata), volumes };
     }
     const before = await observe();
     await checkHistory(sourceBounds, descriptor, maximumBytes);
     await checkHistory(targetBounds, targetDescriptor, maximumBytes);
+    // Recheck both sides of each binding and compare volume identity and version too.
     const after = await observe();
     if (!isDeepStrictEqual(before, after)) throw refusal();
     // Refuse changed files as well as changed resources before returning any inventory.

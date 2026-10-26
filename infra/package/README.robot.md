@@ -591,7 +591,14 @@ a computer cannot change assistant or name. Empty inventory requires no archived
 
 The helper reuses the lifecycle client's label, home owner and suspension checks.
 It requires exactly one matching Sandbox and `home-<computerId>` PVC, with one
-controller owner reference to that exact Sandbox UID. The suspension report must
+controller owner reference to that exact Sandbox UID. The PVC must have phase
+`Bound` and a `spec.volumeName`. The helper reads that named PersistentVolume
+and requires phase `Bound` and a `spec.claimRef` with the exact PVC namespace,
+name and UID. Missing volumes, old claim UIDs and foreign claims refuse. The
+second observation repeats these checks and compares the PV name, UID and resource
+version as well as the PVC and Sandbox records. Kubernetes credentials need read
+access to those cluster-wide PersistentVolumes. The kubeconfig path stays in
+`KUBECONFIG`, outside command arguments. The suspension report must
 say `Suspended=True`, `reason=PodTerminated`, and name the current Kubernetes
 resource generation. That generation is separate from the archived computer generation.
 All Pods in the namespace are checked, including unrelated Pods mounting the home.
@@ -603,7 +610,8 @@ a ten-second process limit, with cancellation and bounded output. Existing event
 archive limits apply. Source/target history and private archive files are rechecked.
 The returned private record contains only silo, attempt, archive/descriptor hashes,
 namespace name/UID/version and each assistant/computer generation with Sandbox and
-PVC names/UIDs/versions. It saves no file and emits no event or public API response.
+PVC and backing PersistentVolume names/UIDs/versions. It saves no file and emits
+no event or public API response.
 Every failure returns only `Computer volume inventory refused`, without a cause.
 
 `libs/event-store/test/computer-volume-inventory.test.ts` uses real disposable NATS

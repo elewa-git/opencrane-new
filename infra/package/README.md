@@ -23,7 +23,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
   package -->|uses local cluster| devbox
-  package -->|starts services, checks computer homes, restores files and replays memory| apps["apps<br/>product services and replay"]
+  package -->|starts services, checks computer volume bindings, copies and restores files and replays memory| apps["apps<br/>product services and replay"]
   package -->|waits for NATS, checks placement, setup time, recovery and fresh browser journeys| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
@@ -168,7 +168,9 @@ The [file restore notes](README.robot.md#file-object-restore) describe the requi
 
 The computer inventory helper reads the checked event copy to find every required
 retained home. It checks the exact computer and assistant, Sandbox identity and
-home volume owner in the already owned namespace. Each Sandbox must report that
+home volume owner in the already owned namespace. The home claim and its backing
+volume must both be bound. The volume must point back to that exact claim, including
+its namespace and unique identity. Each Sandbox must report that
 its current version is suspended and its Pod has stopped. Any remaining Pod using
 that home causes refusal. A second read refuses changed resources before returning
 private metadata. This does not copy volume contents or prove a whole backup is safe.
