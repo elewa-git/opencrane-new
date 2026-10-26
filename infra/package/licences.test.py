@@ -31,7 +31,8 @@ class LicenceTests(unittest.TestCase):
         entries = inventory["images"]["server"]["artifacts"]
         artifacts = []
         for entry in entries:
-            artifacts.append({"type": entry[0], "name": entry[1], "version": entry[2]})
+            artifact = {"type": entry[0], "name": entry[1], "version": entry[2]}
+            artifacts.append(artifact)
         scan = {"source": {"type": "image", "metadata": {
                     "imageID": image_id, "repoDigests": [pin]}},
                 "descriptor": {"configuration": {"search": {"scope": "all-layers"}}},

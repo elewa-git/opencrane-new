@@ -18,7 +18,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>installs and recovery checks"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>image checks and installs"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
@@ -50,6 +50,7 @@ running install still need work.
 
 - Installs the website, server, workers and core services together with [Helm](../../GLOSSARY.md#helm).
 - Uses fixed, reviewed images and checks their licences before installation.
+- Checks that a proposed server and website image matches its source and all shipped layers.
 - Keeps the install in the test space [claimed](../../GLOSSARY.md#claim) by this worktree.
 - Refuses missing private settings and public network access.
 - Renders an optional three-peer event log and prepares its separate private certificates.
@@ -69,6 +70,11 @@ The recovery fixture compares restored files and spending, then checks who can r
 those files. It uses disposable services and does not reopen a running installation.
 
 ## Processes it handles
+
+Before a new server and website image is approved, its source label, fixed image
+digest and licence inventory must agree with the recorded review. The scan includes
+files hidden by later image layers. Three-peer installation also needs an exact
+source revision in its compatibility review. The current image has no such approval.
 
 1. **A developer claims a spare stack.** Preparation checks that its Docker Compose
    stack is stopped, then creates a separate space in Kubernetes for the package.
@@ -127,8 +133,8 @@ infra/dev-stack/down.sh --id "$DEV_STACK_ID"
 The optional event-log render describes three private NATS peers on separate Kubernetes
 nodes. A separate preparation command creates their private certificates and public trust.
 It checks ownership and uses the claimed cluster's private connection settings.
-It preserves the same identities on retry. Installation still uses
-one peer; the ordinary installer refuses three-peer mode. The preview includes the
+It preserves the same identities on retry. The shipped image review still refuses
+three-peer installation. The preview includes the
 complete setup job and its private file mounts. Source tests check that setup can
 request three copies and keep that choice when creating the first owner. A compatible
 image review, controller and storage prerequisites, and live checks remain outstanding.

@@ -152,6 +152,44 @@ The computer image uses its existing full licence inventory in
 `apps/computer/licences.json`; this package checks that file's digest and its
 image pin before installation.
 
+## Package image promotion
+
+`Dockerfile` accepts `SOURCE_REVISION`, the full Git commit hash, and records it as
+`org.opencontainers.image.revision`. Build from that committed source with
+`nice -n 10 docker build --build-arg SOURCE_REVISION=<commit> -f infra/package/Dockerfile .`.
+The build runs npm at nice priority too. An absent or wrong label refuses promotion.
+
+The existing `natsCluster` review binds `replicas: 3`, both role pins and
+`sourceRevision` to `imageId`, Syft's image configuration digest, and `scanSha256`
+from the Syft JSON bytes. Docker inspection may identify that configuration or the
+image index; both reports must name the same reviewed repository digest.
+The server inventory records the same `sourceRevision`; the website
+shares that inventory. These fields are reviewed evidence, not an automatic claim
+that bootstrap or a live installation passed. Preflight requires the source revision
+alongside the existing R3 role bindings. Synthetic records prove source checks only.
+
+After inspecting bootstrap in the actual image, scan it with Syft's `--scope all-layers`.
+Save `docker image inspect <immutable-pin>` as JSON. Run the existing checker with
+the expected commit, that inspection and the scans:
+
+```sh
+nice -n 10 python3 infra/package/check-licences.py \
+  --promotion <commit> <inspection.json> server <scan.json> web <scan.json>
+```
+
+This checks image identity, the exact scan checksum, every inventoried component,
+application licences and the existing signed-index package lists. It still requires
+a new Debian-main review when the image changes. It does not fetch or authenticate
+a new index itself. An operator must verify the signed index and record its hashes
+before changing the inventory and index pin together. Never change only the expected pin.
+The command writes nothing and withholds input paths and dependency errors on failure.
+The preflight test suite also runs the Python licence and promotion refusal tests.
+
+The shipped image and inventory remain unchanged. The private registry is unavailable;
+R3 approval and release qualification remain blocked. Unknown licences or open
+Critical/High findings also block qualification. The
+[image receipt](../../docs/process/p5-4-images1/receipt.md) records the local build and checks.
+
 ## Private owner email
 
 The development owner email uses the [private host file](../dev-stack/README.robot.md#private-owner-email)

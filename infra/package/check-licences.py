@@ -379,6 +379,10 @@ def check_package_review(reviewed, inventory):
         raise ValueError("Package review needs an exact source revision")
     if proof.get("replicas") != 3:
         raise ValueError("Package review needs R3 compatibility proof")
+    if not re.fullmatch(r"sha256:[a-f0-9]{64}", proof.get("imageId", "")):
+        raise ValueError("Package review needs a scanned configuration digest")
+    if not re.fullmatch(r"[a-f0-9]{64}", proof.get("scanSha256", "")):
+        raise ValueError("Package review needs the scan checksum")
     pin = reviewed["images"]["server"]
     if not re.fullmatch(r"[^\s]+@sha256:[a-f0-9]{64}", pin):
         raise ValueError("Package review needs an immutable image digest")
@@ -403,16 +407,20 @@ def check_package_promotion(reviewed, inventory, inspection, scan_path, revision
         raise ValueError("Package image has a missing or wrong source revision")
     if proof["server"] not in image.get("RepoDigests", []):
         raise ValueError("Package inspection covers a different digest")
-    image_id = image.get("Id", "")
-    if not re.fullmatch(r"sha256:[a-f0-9]{64}", image_id) or proof.get("imageId") != image_id:
+    image_id = proof.get("imageId", "")
+    # Accept Docker's configuration ID or its newer image-index ID, bound to the same pin.
+    index_digest = proof["server"].split("@")[1]
+    if image.get("Id") not in (image_id, index_digest):
         raise ValueError("Package inspection covers a different image")
     scan = read_json(scan_path)
     if (scan["source"]["type"] != "image" or
-            scan["source"]["metadata"]["imageID"] != image_id):
+            scan["source"]["metadata"]["imageID"] != image_id or
+            proof["server"] not in scan["source"]["metadata"].get("repoDigests", [])):
         raise ValueError("Package scan covers a different image")
     if scan["descriptor"]["configuration"]["search"]["scope"] != "all-layers":
         raise ValueError("Package scan must include all shipped layers")
-    checksum = hashlib.sha256(Path(scan_path).read_bytes()).hexdigest()
+    scan_bytes = Path(scan_path).read_bytes()
+    checksum = hashlib.sha256(scan_bytes).hexdigest()
     if proof.get("scanSha256") != checksum:
         raise ValueError("Package scan differs from its reviewed checksum")
     osi_ids = set(read_json(PACKAGE / "osi-licences.json"))
@@ -499,7 +507,7 @@ if __name__ == "__main__":
         if set(scans) - set(ROLES):
             raise ValueError("Unknown image role")
         main(scans, promotion)
-    except (KeyError, ValueError, OSError, TypeError) as error:
+    except (KeyError, ValueError, OSError, TypeError, AttributeError) as error:
         if promotion is not None:
             print("FAIL package promotion: evidence is missing or does not match", file=sys.stderr)
         else:
