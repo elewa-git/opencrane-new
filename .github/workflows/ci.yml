@@ -162,6 +162,7 @@ jobs:
           infra/dev-stack/stage-b-local.test.ts infra/dev-stack/stage-b-model.test.ts
           infra/dev-stack/zitadel-setup.test.ts infra/package/fresh-twice.test.ts
           infra/package/browser-capture.test.ts infra/package/journey-*.test.ts
+          infra/package/company-qualification.test.ts
           infra/package/nats-placement.test.ts
           infra/package/nats-placement-collect.test.ts
           infra/package/chart-render.test.mjs
