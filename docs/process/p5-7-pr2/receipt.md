@@ -81,3 +81,48 @@ Coordinated backup is PARTIAL. CNPG/WAL, computer volumes, restoration into the
 object service, admission reopening, fresh-install recovery and full coordinated
 recovery proof are NOT RUN. No development stack, model call or host-network
 change was made. CI is left to the orchestrator after the push.
+
+## Stronger refusal tests
+
+Own checks on 26 October 2026 cover test-only commit `e4cf92df9`, based on
+`d45dd860c`. Fetch and rebase completed; main is an ancestor and no rebase remains
+in progress. Production code is unchanged.
+
+Unfinished HTTP bodies now send 128 bytes every 100 ms. They stay below 64 KiB
+through the one-second capture deadline. Tests require socket closure within a
+further 500 ms, bound the total elapsed time and require the output directory to
+be absent. Oversized-body fixtures keep their original rate.
+
+The format test decrypts captured bytes directly with Node's AES-256-GCM. It
+requires JSON `[identity, sha256]` as associated data and rejects decryption with
+no associated data or just the identity. A separate fixture has a valid tag and
+the expected plaintext length, but its plaintext has the wrong checksum. Direct
+decryption succeeds; the restore helper must still refuse it.
+
+- PASS: the five object-backup, backup, restore and storage files listed above
+  twice, with 97 tests each, in 119.35 and 100.74 seconds.
+- PASS: the initial object-backup run, with 47 tests.
+- PASS: full typecheck and event catalogue validation (154 event types).
+- Expected FAIL: removing the content hash from associated data in both writer
+  and reader fails the independent format test at tag authentication.
+- Expected FAIL: removing the restored length/checksum guard fails the
+  authenticated wrong-checksum test because restore returns without throwing.
+
+All commands used `nice -n 10`. Tests used one worker and the supplied
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+The complete test logs are `/tmp/p733-fix-tests-1.log` and
+`/tmp/p733-fix-tests-2.log`. Crypto mutation logs are
+`/tmp/p733-verify-fix-no-hash-aad.log` and
+`/tmp/p733-verify-fix-no-restored-count-or-hash.log`.
+The full root suite and fresh-install recovery remain NOT RUN.
+
+- Expected FAIL: removing the native request signal and socket timeout fails both
+  unfinished-body tests because the error and region sockets remain open.
+  Log: `/tmp/p733-verify-fix-no-transport-cancellation.log`.
+- PASS: full lint, including Knip and changelog validation. Code lint reports
+  zero errors and 26 existing warnings.
+- PASS: all temporary production mutations were restored; the production diff
+  is empty against `e4cf92df9`.
+
+Static check logs are `/tmp/p733-fix-lint.log`,
+`/tmp/p733-fix-typecheck.log` and `/tmp/p733-fix-events.log`.
