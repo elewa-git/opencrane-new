@@ -242,3 +242,23 @@ for (const mode of ['cnpg', 'standalone']) {
       backupInstallStaysClosed);
   }
 }
+
+for (const mode of ['cnpg', 'standalone']) {
+  for (const recovery of [{ enabled: true, renderOnly: true }, { enabled: false }, null]) {
+    function recoveryInstallStaysClosed() {
+      const { directory, values, review } = cnpgFixture();
+      try {
+        values.postgres.mode = mode;
+        values.postgres.recovery = recovery;
+        const result = check(values, review, directory);
+        assert.notEqual(result.status, 0);
+        assert.equal(result.stderr.trim(), 'CNPG recovery installation is not enabled');
+        assert.equal(result.stdout, '');
+      } finally {
+        rmSync(directory, { recursive: true });
+      }
+    }
+    test(`preflight refuses ${mode} recovery settings ${JSON.stringify(recovery)}`,
+      recoveryInstallStaysClosed);
+  }
+}
