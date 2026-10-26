@@ -136,6 +136,73 @@ async function refusesBorrowedPrivateGrantOnApproval() {
 it('refuses an approval retry borrowing a private grant without another upstream call',
   refusesBorrowedPrivateGrantOnApproval);
 
+async function refusesPrivateBindingToOrdinaryWork(source: string) {
+  const test = await fixture();
+  try {
+    const binding = { ...first, expires: Date.now() + 60_000 };
+    const ordinary = { ...binding, turnId: 'ordinary-turn' };
+    if (source === 'catalogue') await test.catalogue(ordinary);
+    else await test.grant(ordinary);
+    const session = test.local.privateCaller(binding);
+    function bindConflictingThread() { session.bind('thread-A'); }
+    expect(bindConflictingThread).toThrow('Private caller refused');
+    await expect(test.grant(binding)).rejects.toThrow('refused');
+    expect(test.received).toEqual([]);
+    session.bind('thread-B');
+    const key = await test.catalogue(binding, 'thread-B');
+    await test.grant(binding, 'thread-B');
+    const reply = await test.send(session.caller, 'thread-B', 'tools/call', key);
+    expect(reply.text).toContain(privateResult);
+    expect(test.received).toEqual(['/mcp/fixture/fixture']);
+  } finally { await test.close(); }
+}
+it.each(['catalogue', 'grant'])(
+  'refuses a private thread binding already used by an ordinary %s',
+  refusesPrivateBindingToOrdinaryWork);
+
+async function refusesOrdinaryBindingToPrivateThread(source: string) {
+  const test = await fixture();
+  try {
+    const binding = { ...first, expires: Date.now() + 60_000 };
+    const session = test.local.privateCaller(binding);
+    session.bind('thread-A');
+    await test.catalogue(binding);
+    await test.grant(binding);
+    const ordinary = { ...binding, turnId: 'ordinary-turn' };
+    if (source === 'catalogue') {
+      await expect(test.catalogue(ordinary)).rejects.toThrow('refused');
+    } else {
+      await expect(test.grant(ordinary)).rejects.toThrow('refused');
+    }
+    const refused = await test.send(test.local.caller, 'thread-A', 'tools/call');
+    expect(refused.text).toContain('Unknown tool list');
+    expect(refused.text).not.toContain(privateResult);
+    expect(test.received).toEqual([]);
+    const reply = await test.send(session.caller, 'thread-A', 'tools/call');
+    expect(reply.text).toContain(privateResult);
+    expect(test.received).toEqual(['/mcp/fixture/fixture']);
+  } finally { await test.close(); }
+}
+it.each(['catalogue', 'grant'])(
+  'refuses an ordinary %s on a bound private thread and keeps the private call working',
+  refusesOrdinaryBindingToPrivateThread);
+
+async function keepsOrdinaryThreadReuse() {
+  const test = await fixture();
+  try {
+    const ordinary = { ...first, turnId: 'ordinary-turn', expires: Date.now() + 60_000 };
+    const key = await test.catalogue(ordinary);
+    await test.grant(ordinary);
+    const next = { ...ordinary, turnId: 'next-ordinary-turn' };
+    await test.grant(next);
+    const reply = await test.send(test.local.caller, 'thread-A', 'tools/call', key);
+    expect(reply.text).toContain(privateResult);
+    expect(test.received).toEqual(['/mcp/fixture/fixture']);
+  } finally { await test.close(); }
+}
+it('keeps an ordinary catalogue usable with the next ordinary turn on its thread',
+  keepsOrdinaryThreadReuse);
+
 async function isolatesCallers(method: string) {
   const test = await fixture();
   try {
