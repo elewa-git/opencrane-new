@@ -75,7 +75,16 @@ async function fixtureFetch() {
 globalThis.fetch = fixtureFetch;
 try {
   const first = await runOnce(1, process.env.HOME + '/values.json', undefined, true);
-  await runOnce(2, process.env.HOME + '/values.json', first, true);
+  const second = await runOnce(2, process.env.HOME + '/values.json', first, true);
+  for (const run of [first, second]) {
+    const binding = run.journey?.binding;
+    if (!binding?.namespaceUid || !binding.installedAt ||
+        binding.pvUids.length !== 1) throw Error('Missing fresh target identity');
+  }
+  if (first.journey.binding.namespaceUid === second.journey.binding.namespaceUid ||
+      first.journey.binding.pvUids[0] === second.journey.binding.pvUids[0]) {
+    throw Error('Fresh target identity was reused');
+  }
   console.log('RESULT PARTIAL');
 } catch (error) {
   console.log('RESULT ' + error.message);
@@ -147,6 +156,9 @@ const owner = { worktree: process.cwd(), slot: '1', context: 'k3d-ocn',
   release: 'opencrane-package-1', releaseSecretUid: id('release'), installId: id('install') };
 if (scenario === 'foreign context') owner.context = 'foreign';
 if (program === 'run.sh') {
+  if (args.includes('/values.json')) throw Error('Private values path reached child argv');
+  if (process.env.PACKAGE_VALUES_FILE !== home + '/values.json' &&
+      args.startsWith('package-up')) throw Error('Private values path missing from child environment');
   if (args.startsWith('package-prepare')) {
     index++;
     fs.writeFileSync(counter, String(index));
@@ -174,7 +186,12 @@ if (program === 'run.sh') {
   if (args.includes('rev-parse')) console.log('a'.repeat(40));
   else if (scenario === 'dirty source') console.log(' M infra/package/capture.mjs');
 }
-else if (program === 'node' && args.includes('capture.mjs')) {
+else if (program === 'node' && args.includes('prepare.ts')) {
+  if (args.includes('/values.json')) throw Error('Private values path reached child argv');
+  if (process.env.PACKAGE_VALUES_FILE !== home + '/values.json') {
+    throw Error('Private values path missing from child environment');
+  }
+} else if (program === 'node' && args.includes('capture.mjs')) {
   if (!fs.existsSync(slot + '/package-owner.json')) throw Error('Collector after teardown');
   log('collect');
   if (scenario === 'collector failure' || scenario === 'collector and cleanup failure') { console.error('planted-secret private page'); process.exit(1); }
@@ -193,7 +210,11 @@ else if (program === 'node' && args.includes('capture.mjs')) {
       uid: id('namespace'), annotations: { 'opencrane.dev/worktree': process.cwd(),
         'opencrane.dev/slot': '1' } } });
   } else if (args.includes('get secret')) output({ metadata: { uid: id('release'),
+    creationTimestamp: new Date().toISOString(),
     labels: { 'opencrane.dev/install-id': id('install') } } });
+  else if (args.includes('get pv')) output({ items: fs.existsSync(slot + '/package-owner.json')
+    ? [{ metadata: { uid: id('PV'), creationTimestamp: new Date().toISOString() },
+      spec: { claimRef: { namespace: 'opencrane-package-1' } } }] : [] });
   else if (args.includes('get pvc')) output({ items: [{ metadata: {
     uid: id('PVC'), creationTimestamp: new Date().toISOString() } }] });
   else if (args.includes('get deployment')) output({ spec: { template: { spec: {
