@@ -372,9 +372,66 @@ def check_scan(role, entries, path, osi_ids):
         raise ValueError(f"{role} scan differs from the reviewed inventory")
 
 
-def main(arguments):
+def check_package_review(reviewed, inventory):
+    proof = reviewed.get("natsCluster", {})
+    revision = proof.get("sourceRevision", "")
+    if not isinstance(revision, str) or not re.fullmatch(r"[a-f0-9]{40}", revision):
+        raise ValueError("Package review needs an exact source revision")
+    if proof.get("replicas") != 3:
+        raise ValueError("Package review needs R3 compatibility proof")
+    pin = reviewed["images"]["server"]
+    if not re.fullmatch(r"[^\s]+@sha256:[a-f0-9]{64}", pin):
+        raise ValueError("Package review needs an immutable image digest")
+    for role in ("server", "web"):
+        if (reviewed["images"][role] != pin or proof.get(role) != pin or
+                inventory["images"][role]["pin"] != pin):
+            raise ValueError("Package review covers a different role digest")
+    if inventory["images"]["server"].get("sourceRevision") != revision:
+        raise ValueError("Package inventory covers a different source revision")
+    return proof
+
+
+def check_package_promotion(reviewed, inventory, inspection, scan_path, revision):
+    proof = check_package_review(reviewed, inventory)
+    if revision != proof["sourceRevision"]:
+        raise ValueError("Package promotion covers a different source revision")
+    if not isinstance(inspection, list) or len(inspection) != 1:
+        raise ValueError("Package promotion needs one inspected image")
+    image = inspection[0]
+    labels = image.get("Config", {}).get("Labels") or {}
+    if labels.get("org.opencontainers.image.revision") != revision:
+        raise ValueError("Package image has a missing or wrong source revision")
+    if proof["server"] not in image.get("RepoDigests", []):
+        raise ValueError("Package inspection covers a different digest")
+    image_id = image.get("Id", "")
+    if not re.fullmatch(r"sha256:[a-f0-9]{64}", image_id) or proof.get("imageId") != image_id:
+        raise ValueError("Package inspection covers a different image")
+    scan = read_json(scan_path)
+    if (scan["source"]["type"] != "image" or
+            scan["source"]["metadata"]["imageID"] != image_id):
+        raise ValueError("Package scan covers a different image")
+    if scan["descriptor"]["configuration"]["search"]["scope"] != "all-layers":
+        raise ValueError("Package scan must include all shipped layers")
+    checksum = hashlib.sha256(Path(scan_path).read_bytes()).hexdigest()
+    if proof.get("scanSha256") != checksum:
+        raise ValueError("Package scan differs from its reviewed checksum")
+    osi_ids = set(read_json(PACKAGE / "osi-licences.json"))
+    entries = inventory["images"]["server"]["artifacts"]
+    check_scan("server", entries, scan_path, osi_ids)
+
+
+def main(arguments, promotion=None):
     reviewed = read_json(PACKAGE / "reviewed-images.json")
     inventory = read_json(PACKAGE / "licence-inventory.json")
+    if "natsCluster" in reviewed:
+        check_package_review(reviewed, inventory)
+    if promotion is not None:
+        revision, inspection_path = promotion
+        if "server" not in arguments or "web" not in arguments:
+            raise ValueError("Package promotion needs server and web scans")
+        inspection = read_json(inspection_path)
+        for role in ("server", "web"):
+            check_package_promotion(reviewed, inventory, inspection, arguments[role], revision)
     osi_ids = set(read_json(PACKAGE / "osi-licences.json"))
     pgdg_extract = read_json(PACKAGE / "pgdg-trixie-main.json")
     if pgdg_extract["imagePin"] != INDEX_IMAGE_PINS["postgres"]:
@@ -429,12 +486,22 @@ def main(arguments):
 
 if __name__ == "__main__":
     try:
-        if (len(sys.argv) - 1) % 2:
+        arguments = sys.argv[1:]
+        promotion = None
+        if arguments and arguments[0] == "--promotion":
+            if len(arguments) < 3:
+                raise ValueError("Pass source revision and image inspection before ROLE PATH pairs")
+            promotion = arguments[1:3]
+            arguments = arguments[3:]
+        if len(arguments) % 2:
             raise ValueError("Pass scan files as ROLE PATH pairs")
-        scans = dict(zip(sys.argv[1::2], sys.argv[2::2]))
+        scans = dict(zip(arguments[::2], arguments[1::2]))
         if set(scans) - set(ROLES):
             raise ValueError("Unknown image role")
-        main(scans)
-    except (KeyError, ValueError, OSError) as error:
-        print(f"FAIL package licence review: {error}", file=sys.stderr)
+        main(scans, promotion)
+    except (KeyError, ValueError, OSError, TypeError) as error:
+        if promotion is not None:
+            print("FAIL package promotion: evidence is missing or does not match", file=sys.stderr)
+        else:
+            print(f"FAIL package licence review: {error}", file=sys.stderr)
         sys.exit(1)
