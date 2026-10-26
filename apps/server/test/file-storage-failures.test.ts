@@ -54,3 +54,36 @@ async function refusesOversizedBody(fault: string) {
   }
 }
 it.each(oversizedBodies)('bounds SDK buffering for %s', refusesOversizedBody);
+
+const createdPutFaults = [
+  ['bucket', 'put-created-large'],
+  ['object', 'put-created-large'],
+  ['bucket', 'put-created-unfinished'],
+  ['object', 'put-created-unfinished'],
+];
+async function boundsUnexpectedPut(operation: string, fault: string) {
+  const storage = await stalledStorage(fault);
+  let completed = false;
+  async function write() {
+    if (operation === 'bucket') {
+      await storage.client.makeBucket('files');
+    } else {
+      await storage.client.putObject('files', 'notes.txt', Buffer.from('private-canary'));
+    }
+    completed = true;
+  }
+  const timeoutMs = 2_000;
+  const signal = AbortSignal.timeout(timeoutMs);
+  try {
+    const pending = storage.client.withBounds({ signal, timeoutMs }, write);
+    const refused = expect(pending).rejects.toBeInstanceOf(Error);
+    let closeWithinMs = 3_000;
+    if (fault.endsWith('large')) closeWithinMs = 1_000;
+    const closed = expect.poll(storage.closed, { timeout: closeWithinMs }).toBe(true);
+    await Promise.all([refused, closed]);
+    expect(completed).toBe(false);
+  } finally {
+    await storage.close();
+  }
+}
+it.each(createdPutFaults)('bounds an unexpected 201 %s PUT with %s', boundsUnexpectedPut);
