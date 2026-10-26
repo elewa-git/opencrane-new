@@ -4,7 +4,7 @@ import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import ts from 'typescript';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { connectNats, createEventStore } from '@opencrane/event-store';
 import { provisionDispatcher } from '@opencrane/handlers';
 import { clusterFixture } from '../../libs/event-store/test/cluster-fixture.ts';
@@ -34,7 +34,9 @@ async function streamInfo(connection: Awaited<ReturnType<typeof connectNats>>) {
     state: { consumer_count: number } }>();
 }
 
-async function bootstrapFixture(env: NodeJS.ProcessEnv) {
+type ReadinessFixture = { replies: unknown[]; elapsed: number };
+
+async function bootstrapFixture(env: NodeJS.ProcessEnv, readiness?: ReadinessFixture) {
   const files = new Map<string, string>();
   const actions: string[] = [];
   async function mkdirFixture(path: string, options: { mode: number }) {
@@ -58,7 +60,19 @@ async function bootstrapFixture(env: NodeJS.ProcessEnv) {
   }
   async function connection() {
     actions.push('NATS connection');
-    return connectNats(env);
+    const connected = await connectNats(env);
+    if (readiness) {
+      const request = connected.request.bind(connected);
+      async function requestFixture(...args: Parameters<typeof connected.request>) {
+        if (args[0] === 'bootstrap.meta') {
+          const reply = readiness!.replies.shift();
+          return { json: () => reply } as Awaited<ReturnType<typeof connected.request>>;
+        }
+        return request(...args);
+      }
+      vi.spyOn(connected, 'request').mockImplementation(requestFixture);
+    }
+    return connected;
   }
   class Pool {
     constructor() {
@@ -66,12 +80,21 @@ async function bootstrapFixture(env: NodeJS.ProcessEnv) {
       throw new Error('Unexpected database access');
     }
   }
+  class Clock extends Date {
+    static override now() {
+      return readiness?.elapsed ?? Date.now();
+    }
+  }
+  async function advanceClock(milliseconds: number) {
+    readiness!.elapsed += milliseconds;
+  }
   const replacements: Record<string, unknown> = {
     'node:fs/promises': { mkdir: mkdirFixture, writeFile: writeFixture },
     'node:child_process': { execFile: executeFixture },
     '@opencrane/event-store': { connectNats: connection, createEventStore },
     '@opencrane/handlers': { provisionDispatcher },
     '@opencrane/authz': {}, pg: { Pool },
+    ...(readiness ? { 'node:timers/promises': { setTimeout: advanceClock } } : {}),
   };
   const file = 'infra/package/bootstrap.ts';
   const source = await readFile(file, 'utf8');
@@ -85,7 +108,7 @@ async function bootstrapFixture(env: NodeJS.ProcessEnv) {
     return replacements[specifier] ?? nativeRequire(specifier);
   }
   runInNewContext(compiled.outputText, { exports, require: fixtureRequire,
-    process: { env, execPath: process.execPath }, Buffer, console });
+    process: { env, execPath: process.execPath }, Buffer, console, Date: Clock, setTimeout });
   return { ...exports, files, actions };
 }
 
@@ -169,3 +192,22 @@ async function preservesExistingStream() {
 }
 it('bootstrap refuses an existing R1 stream without changing it or adding a consumer',
   preservesExistingStream);
+
+async function refusesWhenMetadataNeverBecomesReady() {
+  const cluster = await clusterFixture();
+  try {
+    const readiness = { replies: [], elapsed: 0 };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness);
+    await expect(bootstrap.provisionEvents()).rejects.toThrow(
+      'JetStream did not become ready for R3 within 120000 ms');
+    const connection = await cluster.client(cluster.peers[0]!);
+    const reply = await connection.request('$JS.API.INFO');
+    expect(reply.json<{ streams: number }>().streams).toBe(0);
+    expect(bootstrap.files.size).toBe(0);
+  } finally {
+    await cluster.close();
+  }
+}
+it('bootstrap refuses before creating a stream when metadata readiness expires',
+  refusesWhenMetadataNeverBecomesReady);
