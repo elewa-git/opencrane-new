@@ -270,6 +270,11 @@ export function hasDirectParticipants(data: { createdBy: string; participantIds:
   return first !== second && data.participantIds.includes(data.createdBy);
 }
 
+const routinePreparationSchema = z.strictObject({
+  routineId: id, occurrenceId: id, claimId: id,
+  claimPosition: z.int().positive(), workerId: id,
+});
+
 // Missing mode belongs only to legacy assistant sessions. New human records are explicit.
 export const conversationCreatedDataSchema = z.union([
   groupConversationSchema,
@@ -277,6 +282,7 @@ export const conversationCreatedDataSchema = z.union([
   z.object({
     conversationId: id, assistantId: id, createdBy: id,
     mode: z.literal('agent_session').default('agent_session'), payingGroupId: id.optional(),
+    routinePreparation: routinePreparationSchema.optional(),
   }).strict(),
   z.object({
     conversationId: id, createdBy: id, mode: z.literal('direct'),

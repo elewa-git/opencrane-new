@@ -14,7 +14,7 @@ import { database } from '../../../libs/projections/test/database.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { calculateRoutineOccurrence } from '@opencrane/events/routine-schedule';
-import { claimRoutineDue } from '../../ops/src/routine-due.ts';
+import { claimScheduledRoutine } from '../../ops/test/support/routine-claim.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { prepareRoutineSession } from '../src/routine-session.ts';
 
@@ -201,7 +201,7 @@ async function refusesOrdinaryChatBeforeClaim() {
   const worker = { silo: 'test', binding, checkCurrent, now: clock };
   const request = { routineId, expectedPosition, localDate: saved.next!.localDate,
     definitionRevision: 1, scheduleRevision: 1, controlRevision: 1 };
-  const claim = await claimRoutineDue(nats.store, worker, request);
+  const claim = await claimScheduledRoutine(nats.store, worker, request);
   expect(claim.status).toBe('confirmed');
   const before = await nats.store.head();
   const preparation = { routineId, occurrenceId: claim.occurrenceId };

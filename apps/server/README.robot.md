@@ -5178,7 +5178,7 @@ Full root suite and fresh-install qualification: NOT RUN. The PR remains draft.
 
 `src/routine-session.ts` exports `prepareRoutineSession(store, keys, worker, input)`.
 Input accepts only `routineId` and `occurrenceId`. The trusted worker supplies the silo,
-OpenFGA binding, current ownership check and optional clock. Saved due and current routine
+OpenFGA binding, workerId, current ownership check and optional clock. Saved due and current routine
 history supply every binding. Removal and rejoining cannot reuse the original admission.
 The occurrence determines the conversation and creation command ids. `chatCommand` and
 conversation custody prepare one private team session with the recorded owner and payer.
@@ -5186,7 +5186,13 @@ Small member, assistant, team, payer and ownership streams guard its conditional
 Routine and chat history finish first; later routine controls use incremental reads.
 Access, Stop, unchanged bindings, worker ownership and the original `startBy` apply to
 retries too. Append replies receive another current access check before identifiers return.
-Errors contain only a fixed refusal. No event or public API contract changes.
+Creation carries a strict `routinePreparation` binding: routineId, occurrenceId, claimId,
+claimPosition and workerId. Only the preparation append adds it; public chat input cannot
+supply it. Recovery requires that exact binding and a creation after the saved claim.
+An ordinary chat with matching identifiers is refused, including one with earlier human
+messages. A retry from another worker id is refused. The trusted worker supplies a stable
+id across retries; its callback still proves current ownership. Errors contain only a
+fixed refusal. No event type or public preparation API is added.
 `test/routine-session.test.ts` covers recovery, refusals, timing and guarded replay.
 There is no production caller. Execution stays unavailable. Input, scheduling, company
 profile checks, wake, root allowance, budgets, Ask and activation remain later work.

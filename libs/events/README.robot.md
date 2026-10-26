@@ -794,3 +794,12 @@ registrationRevision, enabled, changedBy and expectedSequence. The envelope reco
 human actor, silo and original change reference. The command derives changedBy from
 current admin membership. The models fold checks identity, stream position and the exact
 installation. No reaction subscribes; replay grants nothing and releases no credential.
+
+## Private routine session creation
+
+The assistant variant of `conversation.created` accepts optional strict `routinePreparation`
+with routineId, occurrenceId, claimId, positive integer claimPosition and workerId.
+Old conversations remain readable but cannot be recovered as worker preparations.
+Only the server preparation append supplies the binding after checking the saved claim
+and current worker ownership. Public chat input cannot supply it. The binding grants no
+execution permission and adds no reaction or event type.

@@ -24,7 +24,7 @@ Allow, Ask or Block choice for a tool.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions"]
-  server["apps/server<br/>back end"] -.->|checks routine pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
+  server["apps/server<br/>back end"] -.->|checks routine session creation, pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
@@ -49,6 +49,9 @@ flowchart LR
   Share the same pause record checks with the server's internal owner operation.
 
 ## Processes it handles
+
+Routine session creation can name its saved claim, occurrence and worker. These details
+keep retries apart from ordinary human chats and grant no permission to start work.
 
 Company opt-in records an admin’s explicit choice for one server installation.
 It grants no access and starts no background work.

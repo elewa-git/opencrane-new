@@ -563,6 +563,12 @@ before validating the old choice again. These checks add no event types or field
 the `budget.ceiling_set` registry entry and replay contract remain unchanged.
 
 `conversation.created` may hold an explicitly selected shared `payingGroupId`.
+Its assistant-session variant may carry strict `routinePreparation`: `routineId`,
+`occurrenceId`, `claimId`, positive integer `claimPosition` and `workerId`.
+Only the internal routine preparation append supplies this binding, after checking the
+claim and current worker ownership. Recovery requires an exact match and creation after
+that claim. Ordinary chats remain readable but cannot become routine preparations.
+The field starts no work and changes no subscriptions.
 At work admission, the server binds that group, or the installation's configured
 default for personal work, into `computer.turn_started.payingGroupId`. Retries
 keep the admitted value; descendants must carry the inherited value. Missing

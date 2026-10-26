@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { foldRoutineHistory, memberAuthorisation, type Binding } from '@opencrane/authz';
-import type { AppendCommand, EventStore } from '@opencrane/event-store';
+import type { AppendCommand, EventStore, StoredEvent } from '@opencrane/event-store';
 import { type RoutineState } from '@opencrane/events';
 import { currentMembership, history, ownershipWriteAccess } from '@opencrane/models';
 import { chatCommand } from './chat/commands.ts';
@@ -12,6 +12,7 @@ type Run = NonNullable<RoutineState['activeRun']>;
 interface Worker {
   silo: string;
   binding: Binding;
+  workerId: string;
   // Supply current ownership from the trusted worker, never from saved records or a request.
   checkCurrent: (deadline: number) => Promise<boolean>;
   now?: () => number;
@@ -48,11 +49,18 @@ async function loadPreparation(store: EventStore, worker: Worker,
     throw new Error('Routine session refused');
   }
   let state: RoutineState | undefined;
+  let claim: StoredEvent | undefined;
   const completed = new Map<string, Run>();
   for (const row of rows) {
     state = foldRoutineHistory(state, row.event, completed);
+    if (row.event.type === 'routine.due' && state?.activeRun?.occurrenceId === input.occurrenceId) {
+      claim = row;
+    }
   }
   const run = requireRun(state, input.occurrenceId);
+  if (!claim || !isDeepStrictEqual(claim.event.data, run)) {
+    throw new Error('Routine session refused');
+  }
   const ownerId = run.definition.ownerId;
   const auth = memberAuthorisation(worker.binding, store);
   const access = await auth.loadRoutineAccess(ownerId, input.routineId);
@@ -69,7 +77,7 @@ async function loadPreparation(store: EventStore, worker: Worker,
       throw new Error('Routine session refused');
     }
   }
-  return { run, state, completed, access, positions, position: rows.at(-1)!.sequence };
+  return { run, claim, state, completed, access, positions, position: rows.at(-1)!.sequence };
 }
 
 async function loadOwnerMembership(store: EventStore, worker: Worker, run: Run) {
@@ -113,6 +121,7 @@ export async function prepareRoutineSession(store: EventStore,
   keys: ReturnType<typeof conversationKeys>, worker: Worker, raw: unknown) {
   try {
     const input = inputSchema.parse(raw);
+    const workerId = z.string().regex(/^[\w-]{1,200}$/u).parse(worker.workerId);
     const saved = await loadPreparation(store, worker, input);
     const run = saved.run;
     const ownerId = run.definition.ownerId;
@@ -159,7 +168,9 @@ export async function prepareRoutineSession(store: EventStore,
     }
     async function append(change: AppendCommand) {
       attemptedAppend = true;
-      const checked = { ...change, checkAccess: checkCurrent };
+      // Add this binding only after the trusted worker and current claim have been checked.
+      const event = { ...change.event, data: expectedCreation };
+      const checked = { ...change, event, checkAccess: checkCurrent };
       return store.append(checked);
     }
     const context = { silo: worker.silo, memberId: ownerId };
@@ -167,11 +178,13 @@ export async function prepareRoutineSession(store: EventStore,
       conversationId: run.conversationId, assistantId: run.definition.assistantId,
       mode: 'agent_session', payingGroupId: run.definition.payingGroupId };
     const { id: _id, ...creation } = command;
-    const expectedCreation = { ...creation, createdBy: ownerId };
+    const routinePreparation = { routineId: input.routineId, occurrenceId: run.occurrenceId,
+      claimId: saved.claim.event.id, claimPosition: saved.claim.sequence, workerId };
+    const expectedCreation = { ...creation, createdBy: ownerId, routinePreparation };
     async function* readStream(subject: string, from?: number, deadline?: number) {
       for await (const row of store.readStream(subject, from, deadline)) {
         if (row.event.type === 'conversation.created' &&
-            (row.event.commandId !== command.id ||
+            (row.sequence <= saved.claim.sequence || row.event.commandId !== command.id ||
               !isDeepStrictEqual(row.event.data, expectedCreation))) {
           throw new Error('Routine session refused');
         }
