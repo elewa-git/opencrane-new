@@ -181,6 +181,10 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
     computerStartHead, controlPending };
 }
 
+function isRoutinePreparation(created: ReturnType<typeof agentSession>) {
+  return 'routinePreparation' in created && created.routinePreparation !== undefined;
+}
+
 export async function processConversation(options: WatchOptions, tokens: Tokens,
   conversation: AgentSession, assistant: ReturnType<typeof assistantSnapshot>,
   refused: Set<string>, connection: Connection,
@@ -204,6 +208,10 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
     return control;
   }
   const created = agentSession(rows);
+  // Keep prepared routine sessions inert until root admission, Stop and Ask are connected.
+  if (isRoutinePreparation(created)) {
+    return { pending: false, retry: false };
+  }
   function isConversationClosed(row: ChatRows[number]) {
     return row.event.type === 'conversation.closed';
   }

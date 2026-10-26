@@ -640,7 +640,8 @@ describe('routine input', () => {
     }
     const saved = await rows();
     const creation = agentSession(saved);
-    const conversation = { ...creation, createdAt: saved[0]!.event.time, assistantKind: 'team' };
+    const conversation: Parameters<typeof processConversation>[2] = {
+      ...creation, createdAt: saved[0]!.event.time, assistantKind: 'team' };
     const example = z.record(z.string(), z.unknown()).parse(getEventDefinition(state)!.example);
     const lifecycle = record('computer-state', 'computer-sales-assistant', state,
       { ...example, assistantId: 'sales-assistant', computerId: 'computer' });

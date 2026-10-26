@@ -125,6 +125,36 @@ async function loadAssistantPosition(store: EventStore, worker: Worker, run: Run
 export async function prepareRoutineSession(store: EventStore,
   keys: ReturnType<typeof conversationKeys>, worker: Worker, raw: unknown) {
   try {
+    const saved = await loadRoutinePreparation(store, keys, worker, raw);
+    let attemptedAppend = false;
+    async function append(change: AppendCommand) {
+      attemptedAppend = true;
+      const parsed = parseEventByType(change.event);
+      if (!parsed.success) throw new Error('Routine session refused');
+      // Add the binding only after the trusted worker and current claim have been checked.
+      const event = { ...parsed.event, data: saved.expectedCreation };
+      const checked = { ...change, event, checkAccess: saved.checkCurrent };
+      return store.append(checked);
+    }
+    const guarded = { readStream: saved.readStream, append };
+    const result = await chatCommand(guarded, keys, saved.context,
+      saved.command, saved.checkFresh);
+    if (result.status !== 'appended') {
+      throw new Error('Routine session refused');
+    }
+    // Withhold identifiers if authority changed while the append reply was in flight.
+    if (attemptedAppend) await saved.checkOwner();
+    return { status: 'confirmed' as const, occurrenceId: saved.run.occurrenceId,
+      conversationId: saved.run.conversationId, eventId: saved.command.id, position: result.sequence,
+      startBy: saved.run.startBy, executionAvailable: false as const };
+  } catch {
+    throw new Error('Routine session refused');
+  }
+}
+
+export async function loadRoutinePreparation(store: EventStore,
+  keys: ReturnType<typeof conversationKeys>, worker: Worker, raw: unknown) {
+  try {
     const input = inputSchema.parse(raw);
     const workerId = z.string().regex(/^[\w-]{1,200}$/u).parse(worker.workerId);
     const saved = await loadPreparation(store, worker, input);
@@ -133,7 +163,6 @@ export async function prepareRoutineSession(store: EventStore,
     const options = { silo: worker.silo, binding: worker.binding, store };
     const now = worker.now ?? Date.now;
     let fresh: Awaited<ReturnType<typeof ownershipWriteAccess>> | undefined;
-    let attemptedAppend = false;
     async function checkCurrent() {
       if (!fresh) {
         throw new Error('Routine session refused');
@@ -162,25 +191,18 @@ export async function prepareRoutineSession(store: EventStore,
         run.definition.payingGroupId, fresh);
       await checkCurrent();
     }
-    async function checkFresh(operation: 'retry' | 'append') {
-      // Let chatCommand finish its history before starting the two-second write check.
+    async function checkAccess() {
+      // Finish history before starting the two-second write check.
       fresh = await ownershipWriteAccess(store, saved.positions);
       await checkOwner();
+      return fresh.deadline;
+    }
+    async function checkFresh(operation: 'retry' | 'append') {
+      const deadline = await checkAccess();
       if (operation === 'append') {
         keys.provision(worker.silo, run.conversationId);
       }
-      return fresh.deadline;
-    }
-    async function append(change: AppendCommand) {
-      attemptedAppend = true;
-      // Add this binding only after the trusted worker and current claim have been checked.
-      const parsed = parseEventByType(change.event);
-      if (!parsed.success) {
-        throw new Error('Routine session refused');
-      }
-      const event = { ...parsed.event, data: expectedCreation };
-      const checked = { ...change, event, checkAccess: checkCurrent };
-      return store.append(checked);
+      return deadline;
     }
     const context = { silo: worker.silo, memberId: ownerId };
     const command = { id: `routine-session-create-${run.occurrenceId}`,
@@ -194,24 +216,18 @@ export async function prepareRoutineSession(store: EventStore,
       for await (const row of store.readStream(subject, from, deadline)) {
         if (row.event.type === 'conversation.created' &&
             (row.sequence <= saved.claim.sequence || row.event.commandId !== command.id ||
+              row.event.id !== command.id || row.event.silo !== worker.silo ||
+              row.event.subject !== `conversation-${run.conversationId}` ||
+              row.event.source !== 'opencrane-server' || row.event.principal?.kind !== 'human' ||
+              row.event.principal.id !== ownerId ||
               !isDeepStrictEqual(row.event.data, expectedCreation))) {
           throw new Error('Routine session refused');
         }
         yield row;
       }
     }
-    const guarded = { readStream, append };
-    const result = await chatCommand(guarded, keys, context, command, checkFresh);
-    if (result.status !== 'appended') {
-      throw new Error('Routine session refused');
-    }
-    // Withhold identifiers if authority changed while the append reply was in flight.
-    if (attemptedAppend) {
-      await checkOwner();
-    }
-    return { status: 'confirmed' as const, occurrenceId: run.occurrenceId,
-      conversationId: run.conversationId, eventId: command.id, position: result.sequence,
-      startBy: run.startBy, executionAvailable: false as const };
+    return { run, readStream, context, command, expectedCreation,
+      checkAccess, checkFresh, checkOwner, checkCurrent };
   } catch {
     // Keep missing access and private history or custody failures indistinguishable.
     throw new Error('Routine session refused');
