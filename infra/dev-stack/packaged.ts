@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
 import { readFile, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { directory, root } from './config.ts';
@@ -66,7 +67,9 @@ type PackageOwner = {
   releaseSecretUid?: string;
   installId?: string;
 };
-type PackageValues = Parameters<typeof checkCnpgInstallation>[0];
+type PackageValues = Parameters<typeof checkCnpgInstallation>[0] & {
+  natsCluster?: { enabled: boolean };
+};
 type PackageReview = {
   requiredSecrets: string[];
   chartVersion: string;
@@ -75,7 +78,7 @@ type PackageReview = {
 type SecretData = { data?: Record<string, string> };
 type ReleaseSecret = { metadata: { uid: string; labels?: Record<string, string> } };
 
-async function command(program: string, args: string[], timeoutMs = 120_000) {
+async function command(program: string, args: string[], timeoutMs = 120_000, cwd = root) {
   if (program === 'helm' && args.includes('--kube-context')) {
     const connection = await targetConnection();
     const context = args[args.indexOf('--kube-context') + 1];
@@ -91,7 +94,7 @@ async function command(program: string, args: string[], timeoutMs = 120_000) {
     args = [...args.slice(0, configIndex), ...args.slice(configIndex + 2)];
   }
   try {
-    const result = await execute(program, args, { cwd: root, env, timeout: timeoutMs });
+    const result = await execute(program, args, { cwd, env, timeout: timeoutMs });
     return result.stdout.trim();
   } catch {
     // Discard dependency output because it may contain credentials.
@@ -201,9 +204,17 @@ export async function packageConnectionArgs(owner: PackageOwner) {
   return connectionArgs(owner.context);
 }
 
+function valuesLocation(valuesFile: string) {
+  const absoluteFile = resolve(root, valuesFile);
+  return { directory: dirname(absoluteFile), name: basename(absoluteFile) };
+}
+
 async function readReviewedValues(valuesFile: string) {
-  const reviewFile = 'infra/package/reviewed-images.json';
-  await command('node', ['infra/package/preflight.mjs', valuesFile, reviewFile]);
+  const reviewFile = resolve(root, 'infra/package/reviewed-images.json');
+  const location = valuesLocation(valuesFile);
+  // Run inside the values directory so its private host path stays out of child arguments.
+  await command('node', [resolve(root, 'infra/package/preflight.mjs'),
+    location.name, reviewFile], 120_000, location.directory);
   const values = JSON.parse(await readFile(valuesFile, 'utf8')) as PackageValues;
   const review = JSON.parse(await readFile(reviewFile, 'utf8')) as PackageReview;
   const chart = await readFile('infra/package/chart/Chart.yaml', 'utf8');
@@ -243,6 +254,27 @@ function checkSecretFields(name: string, stored: SecretData) {
   }
 }
 
+function checkReplicaSettings(name: string, stored: SecretData, values: PackageValues) {
+  if (name !== 'runtime' && name !== 'bootstrap') {
+    return;
+  }
+  let replicas = '1';
+  if (values.natsCluster?.enabled === true) {
+    replicas = '3';
+  }
+  const expected = Buffer.from(replicas).toString('base64');
+  for (const key of ['NATS_REPLICAS', 'COMMAND_NATS_REPLICAS']) {
+    const encoded = stored.data?.[key];
+    // Require runtime settings even when bootstrap supplies its own overrides.
+    if (name === 'bootstrap' && encoded === undefined) {
+      continue;
+    }
+    if (encoded !== expected) {
+      throw new Error('Invalid package NATS replica settings');
+    }
+  }
+}
+
 async function checkNamedSecrets(values: PackageValues, review: PackageReview, context: string) {
   for (const name of review.requiredSecrets) {
     const secret = values.secrets[name]!;
@@ -250,13 +282,16 @@ async function checkNamedSecrets(values: PackageValues, review: PackageReview, c
       '--ignore-not-found', '-o', 'json'], context);
     if (!found) throw new Error(`Required secret is absent: ${name}`);
     const stored = JSON.parse(found) as SecretData;
+    checkReplicaSettings(name, stored, values);
     checkSecretFields(name, stored);
   }
 }
 
 async function checkRenderedPackage(valuesFile: string, review: PackageReview) {
-  const rendered = await command('helm', ['template', release, 'infra/package/chart',
-    '--namespace', namespace, '--values', valuesFile]);
+  const location = valuesLocation(valuesFile);
+  const chartDirectory = resolve(root, 'infra/package/chart');
+  const rendered = await command('helm', ['template', release, chartDirectory,
+    '--namespace', namespace, '--values', location.name], 120_000, location.directory);
   const reviewedImages = new Set(Object.values(review.images));
   const renderedImages = rendered.matchAll(/^\s*"?(image|imageName)"?:\s*"?([^",\n]+)"?,?\s*$/gmu);
   let imageCount = 0;
@@ -371,10 +406,12 @@ export async function installPackage(valuesFile: string) {
   owner.installId = randomUUID();
   await saveOwner(owner);
   try {
-    await command('helm', ['install', release, 'infra/package/chart',
-      '--kube-context', context, '--namespace', namespace, '--values', valuesFile,
+    const location = valuesLocation(valuesFile);
+    const chartDirectory = resolve(root, 'infra/package/chart');
+    await command('helm', ['install', release, chartDirectory,
+      '--kube-context', context, '--namespace', namespace, '--values', location.name,
       '--labels', `${installIdLabel}=${owner.installId}`,
-      '--wait=false'], 180_000);
+      '--wait=false'], 180_000, location.directory);
   } catch (error) {
     const releaseUid = await ownedReleaseSecretUid(owner);
     if (releaseUid) owner.releaseSecretUid = releaseUid;

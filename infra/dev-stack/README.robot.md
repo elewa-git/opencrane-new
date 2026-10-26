@@ -2,6 +2,10 @@
 
 For people, read [README.md](README.md) first.
 
+The packaged installer runs preflight and Helm from the values file's directory.
+It passes only the filename as the values argument, so an absolute private
+directory does not enter child command arguments.
+
 ## Personal Memory response collection
 
 `memory-personal-browser.ts` comes from the draft personal Memory journey. It records
@@ -2024,6 +2028,16 @@ requires bootstrap-compatible generated passwords and checks connection values
 after the bootstrap Secret overrides runtime settings. The shipped
 image review still refuses CNPG; this check does not enable a live installation.
 
+## Package replica checks
+
+`packaged.ts` requires `NATS_REPLICAS` and `COMMAND_NATS_REPLICAS` in the runtime
+Secret before any Helm command. Both must match the chart's replica count.
+Same-named bootstrap overrides are optional, but must match that count too.
+The installer refuses missing, unsupported, unequal or conflicting values without
+printing them. R3 installation remains refused by the unchanged preflight.
+The executed-command cases in `infra/package/cnpg-install.test.mjs` check refusals
+and the matching R1 path through real Helm rendering.
+
 ## Recorded package connections
 
 `packaged.ts` carries the context checked at the start into every later
@@ -2047,8 +2061,10 @@ reaches JSON parsing. Target, package and stack owner reads use this helper.
 
 Target Kubernetes calls and internal package Kubernetes and Helm calls pass the
 connection filename through `KUBECONFIG`. The placement collector uses the same
-rule, including its inherited ownership checks. The existing argument helper for
-private preparation and forwarding retains its separate calling contract.
+rule, including its inherited ownership checks. Private preparation and forwarding
+use the same child environment transport.
+The argument helper retains its calling contract; its callers remove the filename
+from arguments before starting the child.
 
 The package placement collector tests exercise these helpers with disposable files
 and command fixtures. The claim tests check the changed child environment through

@@ -859,9 +859,8 @@ async function packageConnectionLifecycle(isolated: boolean) {
     await fixture.loadState();
     for (const [index, call] of fixture.state.calls.entries()) {
       if (call[0] !== 'kubectl' && call[0] !== 'helm') continue;
-      const forward = call.includes('port-forward');
-      assert.equal(call.includes('--kubeconfig'), isolated && forward);
-      if (isolated && !forward) {
+      assert.equal(call.includes('--kubeconfig'), false);
+      if (isolated) {
         assert.equal(fixture.state.kubeconfigs[index], `${fixture.slotDirectory}/target.kubeconfig`);
         assert.equal(call.includes(`${fixture.slotDirectory}/target.kubeconfig`), false);
       }

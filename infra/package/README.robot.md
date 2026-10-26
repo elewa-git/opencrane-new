@@ -61,6 +61,11 @@ names in the chart.
 Pass a JSON values file, which Helm accepts as YAML, with the reviewed images,
 six secret names and all three exposure flags set to `false`:
 
+Preflight and Helm run from the values file's directory and receive only its
+filename. The private directory remains in the child process's working directory,
+outside its command arguments. The chart, preflight script and image review use
+absolute paths under this worktree so they remain available from that directory.
+
 ```sh
 infra/dev-stack/run.sh package-prepare --id "$DEV_STACK_ID"
 DEV_STACK_ID="$DEV_STACK_ID" node --experimental-strip-types infra/package/prepare.ts /private/values.json
@@ -255,11 +260,10 @@ NOT RUN under #15. Rendering is not live k3d proof.
 
 P5-4 PR 2 adds an opt-in render path. It does not install or qualify R3. The
 ordinary installer still rejects `natsCluster` as an unsupported package setting,
-even with complete references. Preparation and bootstrap still request R1.
-The cluster render omits the R1 bootstrap Job. Other application templates are
-unchanged and are not ready for an R3 installation. Never apply this output as a
-working package. Route identity preparation is described below. R3 runtime wiring
-and image promotion come later.
+even with complete references. The preview now includes the complete bootstrap Job
+and its private file mounts. The source behaviour is described in
+[Packaged bootstrap](#packaged-bootstrap). Controller and storage checks and a reviewed compatible
+image are still required before R3 installation. Never apply this preview as a working package.
 
 These chart-only settings are added to an otherwise complete values file:
 
@@ -332,6 +336,45 @@ The helper does not start NATS, change client settings, bootstrap R3 or enable i
 runs disposable certificate and Kubernetes command fixtures, including pinned NATS parsing.
 The [receipt](../../docs/process/p5-4-pr3/receipt.md) records source checks.
 Live rotation and three-node installation remain NOT RUN.
+
+## Packaged bootstrap
+
+P5-4 PR 5a carries one replica choice through preparation and bootstrap. The private
+settings writer chooses `1` when `natsCluster` is absent or explicitly disabled.
+It chooses `3` only when `enabled` and `renderOnly` are both `true`. Missing or
+invalid flags and conflicting modes refuse before credentials or Secrets are written.
+It writes the same value to `NATS_REPLICAS` and `COMMAND_NATS_REPLICAS`.
+The ordinary preparation entry point still runs the unchanged installer preflight,
+which refuses `natsCluster`. The R3 writer is tested through the existing preparation
+fixture; there is no new command or environment bypass to enable installation.
+
+Before any Helm command, the installer requires both runtime replica settings to
+match the chart's count. Any same-named setting in the bootstrap Secret must also
+match; bootstrap cannot supply a missing runtime setting. It compares the Secret
+fields in memory and reports only a fixed error, never their supplied values.
+`cnpg-install.test.mjs` records executed commands and checks that mismatches,
+missing fields and conflicting overrides run no Helm command. Matching R1 inputs
+reach rendering and the existing-release check. R3 still refuses at preflight.
+
+Bootstrap requires both replica settings to be exactly `1` or `3` and to agree.
+It checks them before database setup, stream provisioning and private owner files.
+It passes that count to the existing `EVENTS` stream and writes it into the owner's
+private `command.env`. The dispatcher consumer inherits the stream's count.
+An existing incompatible stream refuses without changing its configuration or data.
+There is no extra stream or automatic conversion from R1 to R3.
+
+The Helm preview includes the same Job, service account and private mounts as the
+default render. The shipped image pin is unchanged and has not been qualified for
+this source. Controller and storage prerequisites and a compatible image must
+be checked before the ordinary installer can accept R3.
+
+The chart tests inspect real Helm output and the existing preparation fixture's
+written settings. `bootstrap.test.ts` executes the bootstrap functions with disposable
+TLS NATS peers and captures the private settings passed to the owner command.
+It checks R1, R3, consumer inheritance, invalid settings and an unchanged incompatible
+stream. These are source checks. Images, controller and storage prerequisites, and
+live Kubernetes placement are NOT RUN. The
+[receipt](../../docs/process/p5-4-pr5a/receipt.md) records the checks.
 
 ## Event-byte export
 
@@ -524,7 +567,11 @@ P5-4 PR 4 is split. This first part connects private preparation and browser
 forwarding to the recorded package target. `packageConnectionArgs` checks the
 current package owner and namespace UID against the owner captured at the start.
 It then checks target ownership again before returning context and kubeconfig
-arguments. Each of the six Secret creations uses this check. Route preparation
+arguments. Each of the six Secret creations uses this check. Preparation and
+forwarding move the private kubeconfig filename into the child environment before
+spawning Kubernetes commands. Secret creation runs with the private temporary
+folder as its working directory and uses `--from-file=.`. The folder stays mode
+0700 and its files stay mode 0600 until removal after creation. Route preparation
 retains its existing target check before each Secret operation.
 
 Helm compares the requested context with the currently checked target before
@@ -589,7 +636,8 @@ nice -n 10 node --experimental-strip-types --test infra/package/nats-placement.t
   infra/package/nats-placement-collect.test.ts infra/package/fresh-twice.test.ts
 ```
 
-The installer still refuses R3 and bootstrap still selects R1. These source checks
+The installer still refuses R3. Bootstrap source supports R1 and R3, but the shipped
+image has not been qualified with this source. These source checks
 do not qualify a live install. See the [receipt](../../docs/process/p5-4-live1/receipt.md) for blockers and remaining work.
 
 ## Local operator guide

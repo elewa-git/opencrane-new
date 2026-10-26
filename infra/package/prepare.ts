@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { chmod, copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { issueCertificate } from '../../libs/event-store/test/certificates.ts';
 import { tokenIssuer } from '@opencrane/auth';
@@ -15,8 +16,14 @@ const execute = promisify(execFile);
 type PackageOwner = Awaited<ReturnType<typeof verifyPackageOwner>>;
 let stage = 'preflight';
 
-async function command(program: string, args: string[]) {
-  await execute(program, args, { cwd: root, timeout: 120_000 });
+async function command(program: string, args: string[], cwd = root) {
+  const env = { ...process.env };
+  const configIndex = args.indexOf('--kubeconfig');
+  if (configIndex !== -1) {
+    env['KUBECONFIG'] = args[configIndex + 1];
+    args = [...args.slice(0, configIndex), ...args.slice(configIndex + 2)];
+  }
+  await execute(program, args, { cwd, env, timeout: 120_000 });
 }
 
 async function createSecret(owner: PackageOwner, name: string, environment?: string,
@@ -32,8 +39,9 @@ async function createSecret(owner: PackageOwner, name: string, environment?: str
       await chmod(`${source}/${key}`, 0o600);
     }
     const connection = await packageConnectionArgs(owner);
+    // Read relative to the private directory so its host path never enters child arguments.
     await command('kubectl', [...connection, '-n', owner.namespace,
-      'create', 'secret', 'generic', name, `--from-file=${source}`]);
+      'create', 'secret', 'generic', name, '--from-file=.'], source);
   } finally {
     await rm(source, { recursive: true, force: true });
   }
@@ -43,7 +51,26 @@ function databaseUrl(role: string, password: string, database: string) {
   return `postgres://${role}:${password}@postgres:5432/${database}`;
 }
 
-async function prepareSettings() {
+function packageReplicas(values: { natsCluster?: unknown }): 1 | 3 {
+  const cluster = values.natsCluster;
+  if (cluster === undefined) {
+    return 1;
+  }
+  const invalid = 'Invalid package NATS replica settings';
+  assert(cluster !== null && typeof cluster === 'object' && !Array.isArray(cluster), invalid);
+  const settings = cluster as Record<string, unknown>;
+  if (settings['enabled'] === true && settings['renderOnly'] === true) {
+    return 3;
+  }
+  if (settings['enabled'] === false &&
+      (settings['renderOnly'] === undefined || settings['renderOnly'] === false)) {
+    return 1;
+  }
+  throw new Error(invalid);
+}
+
+async function prepareSettings(values: { natsCluster?: unknown }) {
+  const replicas = packageReplicas(values);
   const ownerEmail = await readOwnerEmail();
   assert(ownerEmail, 'Private dev-owner-email file is empty');
   await generate(localOrigin);
@@ -67,7 +94,7 @@ async function prepareSettings() {
     NATS_CERT_FILE: '/run/opencrane/files/command.crt',
     NATS_KEY_FILE: '/run/opencrane/files/command.key',
     NATS_NKEY_SEED_FILE: '/run/opencrane/files/command.seed',
-    NATS_INBOX_PREFIX: '_INBOX.command', NATS_REPLICAS: '1',
+    NATS_INBOX_PREFIX: '_INBOX.command', NATS_REPLICAS: String(replicas),
   };
   const serverDatabase = databaseUrl('server', passwords['server']!, 'projections');
   const projectionDatabase = databaseUrl('projection', passwords['projection']!, 'projections');
@@ -147,12 +174,16 @@ async function main() {
   assert(secondary, 'Package secrets require a claimed secondary slot');
   const valuesFile = process.argv[2];
   assert(valuesFile && process.argv.length === 3, 'Pass one private values file path');
-  await command('node', ['infra/package/preflight.mjs', valuesFile,
-    'infra/package/reviewed-images.json']);
+  const privateValuesFile = resolve(root, valuesFile);
+  const valuesDirectory = dirname(privateValuesFile);
+  const valuesName = basename(privateValuesFile);
+  // Run inside the values directory so its private host path stays out of child arguments.
+  await command('node', [resolve(root, 'infra/package/preflight.mjs'), valuesName,
+    resolve(root, 'infra/package/reviewed-images.json')], valuesDirectory);
   stage = 'claim';
   const owner = await verifyPackageOwner();
   const values = JSON.parse(await readFile(valuesFile, 'utf8')) as {
-    secrets: Record<string, string>;
+    secrets: Record<string, string>; natsCluster?: unknown;
   };
   stage = 'development sign-in setup';
   if (process.env['PACKAGE_SKIP_PROVIDER_SETUP'] !== '1') {
@@ -163,7 +194,7 @@ async function main() {
       'infra/dev-stack/zitadel-setup.ts', '--read-only']);
   }
   stage = 'private settings';
-  await prepareSettings();
+  await prepareSettings(values);
   stage = 'Kubernetes secrets';
   await provisionSecrets(values.secrets, owner);
   console.log('PASS private package secrets created from files in the claimed slot');

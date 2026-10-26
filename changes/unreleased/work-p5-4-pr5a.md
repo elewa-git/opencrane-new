@@ -1,0 +1,3 @@
+The packaged setup keeps one consistent event-copy count through private preparation, stream creation and the first owner. The three-peer preview includes the complete setup job; installation remains refused pending controller and storage prerequisites and a compatible image review.
+
+Packaged installation refuses missing or conflicting replica settings before any Helm command. Secret creation and browser forwarding keep private Secret folder and kubeconfig filenames out of Kubernetes command arguments. Preparation and installation keep private values-file folders out of preflight and Helm command arguments.
