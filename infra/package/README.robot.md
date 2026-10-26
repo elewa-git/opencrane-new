@@ -398,6 +398,9 @@ TLS NATS peers and captures the private settings passed to the owner command.
 It checks standalone and clustered R1, R3, consumer inheritance, invalid settings,
 an unchanged incompatible stream, delayed metadata readiness, placement recovery,
 shared-deadline refusal and immediate refusal of other creation errors.
+The two success tests with injected clocks prepare real NATS placement statistics
+and remove the setup stream before checking their exact retry timing. The ordinary
+R3 test uses real time and starts without this extra preparation.
 These are source checks. Images, controller and storage prerequisites, and
 live Kubernetes placement are NOT RUN. The
 [receipt](../../docs/process/p5-4-pr5a/receipt.md) records the checks.

@@ -4,12 +4,13 @@ import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import ts from 'typescript';
-import { JetStreamApiError } from '@nats-io/jetstream';
+import { JetStreamApiError, jetstreamManager } from '@nats-io/jetstream';
 import { expect, it, vi } from 'vitest';
 import { connectNats, createEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { provisionDispatcher } from '@opencrane/handlers';
 import { natsFixture } from '../../libs/event-store/test/testing.ts';
 import { clusterFixture } from '../../libs/event-store/test/cluster-fixture.ts';
+import { waitForClusterStream } from '../../libs/event-store/test/cluster-stream.ts';
 
 type Bootstrap = {
   provisionEvents(): Promise<void>;
@@ -233,9 +234,21 @@ function metadataReport(leader: string, current: boolean, offline = false) {
     data: { meta_cluster: { leader, replicas: followers } } };
 }
 
+async function preparePlacementStatistics(cluster: Awaited<ReturnType<typeof clusterFixture>>) {
+  // Prepare real storage statistics before testing readiness with an injected clock.
+  const connection = await cluster.client(cluster.peers[0]!);
+  const store = await createEventStore(connection);
+  await waitForClusterStream(store);
+  const manager = await jetstreamManager(connection);
+  await manager.streams.delete('EVENTS');
+  const reply = await connection.request('$JS.API.INFO');
+  expect(reply.json<{ streams: number }>().streams).toBe(0);
+}
+
 async function waitsUntilMetadataLeaderHasEnoughCurrentPeers() {
   const cluster = await clusterFixture();
   try {
+    await preparePlacementStatistics(cluster);
     const noLeader = metadataReport('', true);
     const missingPeer = metadataReport('peer-1', true);
     missingPeer.data.meta_cluster.replicas.pop();
@@ -306,6 +319,7 @@ function placementRefusal() {
 async function provisionsAfterPlacementStatisticsArrive() {
   const cluster = await clusterFixture();
   try {
+    await preparePlacementStatistics(cluster);
     const readiness = { replies: [metadataReport('peer-1', true)], elapsed: 0 };
     const placement = { failure: placementRefusal(), refusals: 2, attempts: 0 };
     const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
