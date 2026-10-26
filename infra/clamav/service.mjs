@@ -8,7 +8,10 @@ const maximumConnections = 8;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const allowedHeaders = new Set(['host', 'connection', 'authorization', 'expect',
   'content-type', 'content-length', 'x-scan-silo', 'x-scan-purpose',
-  'x-scan-request-id', 'x-scan-file-id', 'x-scan-sha256']);
+  'x-scan-request-id', 'x-scan-sha256']);
+const uploadHeaders = new Set([...allowedHeaders, 'x-scan-file-id']);
+const imageHeaders = new Set([...allowedHeaders, 'x-scan-server-id', 'x-scan-attempt-id',
+  'x-scan-platform', 'x-scan-image-digest']);
 
 function requireRequest(condition) {
   if (!condition) {
@@ -16,12 +19,25 @@ function requireRequest(condition) {
   }
 }
 
+function imageBindings(headers) {
+  const attempt = headers['x-scan-attempt-id'];
+  const input = { serverId: headers['x-scan-server-id'], attemptId: Number(attempt),
+    platform: headers['x-scan-platform'], targetImageDigest: headers['x-scan-image-digest'] };
+  requireRequest(typeof input.serverId === 'string' && /^[\w-]{1,200}$/.test(input.serverId));
+  requireRequest(/^[1-9][0-9]*$/.test(attempt) && Number.isSafeInteger(input.attemptId));
+  requireRequest(input.platform === 'linux/amd64' || input.platform === 'linux/arm64');
+  requireRequest(/^[a-f0-9]{64}$/.test(input.targetImageDigest));
+  return input;
+}
+
 function metadata(request) {
   const headers = request.headers;
-  requireRequest(request.method === 'POST' && request.url === '/scan/upload');
+  const isImagePart = request.url === '/scan/image-part';
+  requireRequest(request.method === 'POST' && (isImagePart || request.url === '/scan/upload'));
+  const routeHeaders = isImagePart ? imageHeaders : uploadHeaders;
   for (let index = 0; index < request.rawHeaders.length; index += 2) {
     const name = request.rawHeaders[index].toLowerCase();
-    requireRequest(allowedHeaders.has(name));
+    requireRequest(routeHeaders.has(name));
   }
   requireRequest(request.rawHeaders.length === Object.keys(headers).length * 2);
   requireRequest(headers.expect === '100-continue' &&
@@ -30,11 +46,18 @@ function metadata(request) {
   requireRequest(/^(0|[1-9][0-9]*)$/.test(headers['content-length']) &&
     Number.isSafeInteger(byteCount) && byteCount <= maximumBytes);
   const input = { purpose: headers['x-scan-purpose'], silo: headers['x-scan-silo'],
-    requestId: headers['x-scan-request-id'], fileId: headers['x-scan-file-id'],
+    requestId: headers['x-scan-request-id'],
     sha256: headers['x-scan-sha256'], byteCount };
-  const validFileId = uuid.test(input.fileId) || /^[a-f0-9]{64}$/.test(input.fileId);
-  requireRequest(input.purpose === 'upload' && /^[\w-]{1,200}$/.test(input.silo) &&
-    uuid.test(input.requestId) && validFileId && /^[a-f0-9]{64}$/.test(input.sha256));
+  const purpose = isImagePart ? 'image' : 'upload';
+  requireRequest(input.purpose === purpose && /^[\w-]{1,200}$/.test(input.silo) &&
+    uuid.test(input.requestId) && /^[a-f0-9]{64}$/.test(input.sha256));
+  if (isImagePart) {
+    const bindings = imageBindings(headers);
+    Object.assign(input, bindings);
+  } else {
+    input.fileId = headers['x-scan-file-id'];
+    requireRequest(uuid.test(input.fileId) || /^[a-f0-9]{64}$/.test(input.fileId));
+  }
   requireRequest(typeof headers.authorization === 'string' &&
     headers.authorization.startsWith('Bearer '));
   return input;
@@ -118,7 +141,7 @@ export function createScannerService({ scanner, tls, trust, clock = Date.now }) 
   let activeRequests = 0;
 
   async function authenticate(value, input) {
-    const expected = { purpose: 'upload', requestId: input.requestId };
+    const expected = { purpose: input.purpose, requestId: input.requestId };
     for (const verifier of verifiers) {
       try {
         const claims = await verifier.verifyScanner(value, expected);

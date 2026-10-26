@@ -1,0 +1,1 @@
+- Image workers can request authenticated scans of bounded image parts, with exact image and byte bindings. Uploads and image parts use separate passes and share bounded capacity. Whole-image coverage and admission remain unavailable.
