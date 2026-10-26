@@ -44,7 +44,16 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
     for (const grant of turns.values()) {
       if (grant.turnId === binding.turnId) throw new Error('Turn already granted');
     }
-    return privateAuthority.register(binding);
+    const registration = privateAuthority.register(binding);
+    const turnId = binding.turnId;
+    function bind(thread: string) {
+      // Refuse existing ordinary work before recording ownership of this thread.
+      const grant = turns.get(thread);
+      if (grant && grant.turnId !== turnId) throw new Error('Private caller refused');
+      mcp.checkPrivateThread(thread, turnId);
+      registration.bind(thread);
+    }
+    return { caller: registration.caller, bind, close: registration.close };
   }
   writeFileSync(options.callerPath, caller, { mode: 0o600 });
   const control = createServer((req, res) => {

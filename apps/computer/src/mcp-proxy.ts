@@ -128,6 +128,14 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     requests.drop(turnId);
   }
 
+  function checkPrivateThread(thread: string, turnId: string) {
+    for (const load of catalogues.values()) {
+      if (load.thread === thread && (!load.restricted || load.turnId !== turnId)) {
+        throw new Error('Private caller refused');
+      }
+    }
+  }
+
   async function handle(incoming: IncomingMessage, response: ServerResponse,
     permits: (turnId: string, thread?: string) => boolean = allowTurn) {
     const { call, raw } = await readRequest(incoming);
@@ -194,6 +202,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
       requests, hold);
   }
   return { catalogue, drop, dropTurn, dropThread, extendThread, discovered, handle,
+    checkPrivateThread,
     get size() { return catalogues.size; },
     get currentSize() { return current.size; } };
 }

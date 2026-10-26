@@ -1524,6 +1524,9 @@ remembers at most 4,096 used turn identities. At that limit it refuses new priva
 registrations until restart. A thread can be bound once. Grants and catalogues must
 match the recorded identity. A private caller cannot use ordinary work or another
 turn, and the ordinary caller cannot use registered private work.
+Binding a private caller refuses a thread with an ordinary catalogue or another
+turn's grant. This check runs before recording the binding. Ordinary grants and
+catalogues also refuse a thread already bound to a private turn.
 
 Restricted catalogues replace lists for their own turn only. Fixed discovery can
 run before binding; calls need the bound thread and matching live grant. Ordinary
@@ -1531,6 +1534,13 @@ catalogue replacement and thread reuse retain their existing behaviour. Close,
 expiry and Stop remove grants, lists and pending upstream requests. Closing the
 proxy removes every private caller. Delayed grants and registrations cannot reopen
 an ended identity. The model proxy checks again after reading the request body.
+Every tool call checks its caller against the actual grant's turn and thread before
+forwarding. Approval retries repeat this check after renewal. An ordinary catalogue
+can use a later ordinary turn's grant on its thread, but cannot borrow a private one.
+`test/private-proxy.test.ts` checks both borrowing attempts through real loopback
+HTTP and the Unix control socket. The first sends no upstream request; the approval
+case sends only the initial approval request, with no retry or private result.
+The file also checks conflicting bindings in both orders and ordinary thread reuse.
 
 No private caller bytes enter the caller file, control replies or errors. The existing
 control socket remains a trusted input; supervisor authentication and process launch
