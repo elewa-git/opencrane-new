@@ -128,6 +128,22 @@ function provesWholeRow(proof, rowId) {
   return true;
 }
 
+function checkOperatorPrerequisites(rows) {
+  const statuses = new Map();
+  for (const row of rows) {
+    statuses.set(row.id, row.status);
+  }
+  if (statuses.get('P5-14') !== 'PASS') {
+    return;
+  }
+  // Keep operator completion tied to the prerequisites in the ticket catalogue.
+  for (const id of ['P5-9', 'P5-10', 'P5-13']) {
+    if (statuses.get(id) !== 'PASS') {
+      refuse('prerequisites');
+    }
+  }
+}
+
 export function checkQualification(input, directory) {
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
@@ -170,6 +186,7 @@ export function checkQualification(input, directory) {
       refuse('row blockers');
     }
   }
+  checkOperatorPrerequisites(index.rows);
   return index;
 }
 
