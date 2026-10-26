@@ -1115,7 +1115,7 @@ function routineRootTests() {
   it.each(['custody', 'provider', 'stop'])(
     'withholds the receipt after a late %s change', lateChange);
 
-  async function trafficDuringConfirmation(revocation: string) {
+  async function trafficDuringConfirmation(revocation: string, computerActivity = false) {
     let appended = 0;
     async function appendDuringCheck() {
       appended += 1;
@@ -1125,9 +1125,17 @@ function routineRootTests() {
       const activity = record(`other-activity-${appended}`, `conversation-${otherConversation}`,
         'agent.turn_started', data);
       await nats.seed([activity]);
+      if (computerActivity) {
+        const started = record(`other-computer-turn-${appended}`, 'computer-sales-assistant',
+          'computer.turn_started', { ...data, computerId: 'computer', threadId: 'another-thread',
+            requesterId: 'alice', task: 'chat_turn', executionMode: 'restricted' });
+        await nats.seed([started]);
+      }
       // Keep traffic arriving on every check, including later receipt passes.
       duringCheck = appendDuringCheck;
-      if (appended !== 2 || revocation === 'none') return;
+      if (appended !== 2 || revocation === 'none') {
+        return;
+      }
       if (revocation === 'member') {
         const removed = record('late-removed', 'member-alice', 'member.removed',
           { memberId: 'alice', removedBy: 'admin' });
@@ -1166,6 +1174,10 @@ function routineRootTests() {
   it.each(['none', 'member', 'payer', 'grant'])(
     'confirms through sustained unrelated traffic unless access is revoked: %s',
     trafficDuringConfirmation);
+  async function otherThreadDuringConfirmation() {
+    await trafficDuringConfirmation('none', true);
+  }
+  it('confirms through sustained activity in another computer thread', otherThreadDuringConfirmation);
 
   async function noEffects() {
     const saved = await history(nats.store, 'budget-test', 'test');
