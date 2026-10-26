@@ -374,6 +374,43 @@ CNPG/WAL, objects, volumes, custody inventory and coordinated restore remain lat
 work, with live P5-3/P5-5 still required. See the
 [receipt](../../docs/process/p5-7-pr1/receipt.md).
 
+## Event-referenced object copy
+
+`collectObjectBackup` in `object-backup.ts` accepts source and empty disposable NATS
+connections, the existing scoped `storageClient`, and options naming the private
+event archive directory, a new destination, silo and attempt. `writersStopped: true`
+and `disposable: true` are required. The operator must stop writers and keep them
+stopped throughout. Unchanged positions alone cannot prove this.
+
+The helper restores the checked archive into that disposable server before reading
+its `file.uploaded` events. It reuses event descriptor, subject, silo and source
+position checks. Both NATS servers must be standalone, with the source reachable.
+The target stays isolated and is left intact on success or failure; dispose of it
+separately. No product process starts. This helper has no command-line wrapper.
+
+Only the fixed `files` bucket is read. Addresses must match the event's silo,
+conversation id, file id and hash. Delivered files and screenshots stay included;
+unreferenced objects are outside scope. Matching duplicates share one copy;
+conflicting counts or hashes refuse. Capture is limited to 1,000 distinct objects,
+64 MiB of object bytes and 60 seconds including archive validation and restore.
+Tests may tighten those limits. Existing event archive limits still apply separately.
+
+Absolute directories must be owned, mode 0700, with no symlink ancestors. The new
+destination must not exist. Object files and the descriptor use exclusive mode 0600.
+Each object is counted, hashed and flushed before `descriptor.json` is published.
+The private descriptor binds silo, attempt, event archive and descriptor hashes to
+each object's opaque identity, byte count and SHA-256. Names, addresses and bytes
+never enter diagnostics or the descriptor. A failed capture removes only its own
+output and returns `Object backup refused` without a dependency error or cause.
+The archive and source positions are checked again before completion.
+
+`apps/server/test/object-backup.test.ts` runs in the existing CI test glob with
+real disposable NATS and scoped MinIO. Selected stream faults are injected after
+opening a real object response. The [receipt](../../docs/process/p5-7-pr2/receipt.md)
+records local checks. P5-7 remains PARTIAL: encryption, CNPG/WAL, computer volumes,
+coordinated-set completion, admission reopening and fresh-install recovery are NOT RUN.
+The private descriptor is trusted operator material, not an authenticated manifest.
+
 ## Event-byte restore
 
 `event-restore-run.ts SILO DIRECTORY --disposable` restores the event-only export.

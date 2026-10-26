@@ -1,0 +1,1 @@
+- Operators can capture checked event-referenced files and screenshots beside an event archive, with private output, byte checks and refusal of incomplete copies. Full coordinated backup remains unfinished.

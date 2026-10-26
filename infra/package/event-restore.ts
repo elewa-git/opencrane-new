@@ -22,7 +22,7 @@ function refusal() {
   return new Error('Event restore refused; keep target isolated');
 }
 
-function readPrivateFile(path: string, limit: number) {
+export function readPrivateFile(path: string, limit: number) {
   const file = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const info = fstatSync(file);
@@ -49,11 +49,12 @@ function checkInfo(info: z.infer<typeof infoSchema>, descriptor: Descriptor) {
       info.state.messages !== descriptor.eventCount) throw refusal();
 }
 
-async function checkHistory(bounds: Bounds, descriptor: Descriptor, maxBytes: number) {
+export async function checkHistory(bounds: Bounds, descriptor: Descriptor, maxBytes: number,
+  visit?: Parameters<typeof readIdentities>[4]) {
   const before = infoSchema.parse(await bounds.request('$JS.API.STREAM.INFO.EVENTS', {}));
   checkInfo(before, descriptor);
   if (before.created !== descriptor.created) throw refusal();
-  const identities = await readIdentities(bounds, before, descriptor.silo, maxBytes);
+  const identities = await readIdentities(bounds, before, descriptor.silo, maxBytes, visit);
   // Compare plain records because the scanner deliberately builds a record without a prototype.
   const positions = { ...identities.subjectPositions };
   if (identities.identityDigest !== descriptor.identityDigest ||
@@ -98,7 +99,7 @@ function checkConnections(source: NatsConnection, target: NatsConnection, dispos
 
 /** Restore event bytes only. Leave every uncertain target intact and isolated. */
 export async function restoreEventBackup(source: NatsConnection, target: NatsConnection,
-  options: Options): Promise<void> {
+  options: Options): Promise<{ descriptor: Descriptor; targetDescriptor: Descriptor }> {
   const bounds = captureBounds(target, options);
   try {
     const maxBytes = options.maxBytes ?? maximumBytes;
@@ -129,6 +130,7 @@ export async function restoreEventBackup(source: NatsConnection, target: NatsCon
     // NATS assigns a new creation time. Require that restored stream to stay unchanged.
     const targetDescriptor = { ...descriptor, created: restored.created };
     await checkHistory(bounds, targetDescriptor, maxBytes);
+    return { descriptor, targetDescriptor };
   } catch {
     // Never erase or retry: a missing reply can still mean NATS completed the restore.
     throw refusal();

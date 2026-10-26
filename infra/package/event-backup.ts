@@ -104,7 +104,7 @@ export function captureBounds(connection: NatsConnection,
 type Bounds = ReturnType<typeof captureBounds>;
 
 export async function readIdentities(bounds: Bounds, before: z.infer<typeof infoSchema>,
-  silo: string, maxBytes: number) {
+  silo: string, maxBytes: number, visit?: (event: ReturnType<typeof decodeEvent>) => void) {
   if (before.state.messages === 0 || before.state.messages > 100_000 ||
       before.state.last_seq - before.state.first_seq + 1 !== before.state.messages) throw refusal();
   const identity = createHash('sha256');
@@ -120,6 +120,7 @@ export async function readIdentities(bounds: Bounds, before: z.infer<typeof info
     if (readBytes > maxBytes || parsed.seq !== sequence) throw refusal();
     const event = decodeEvent(bytes, parsed.subject);
     if (event.silo !== silo) throw refusal();
+    visit?.(event);
     identity.update(JSON.stringify([sequence, parsed.subject, event.id]));
     identity.update('\n');
     subjectPositions[parsed.subject] = sequence;
