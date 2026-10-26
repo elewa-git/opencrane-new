@@ -1,6 +1,9 @@
-import { expect, it, vi } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
+import type { TurnSummary } from '@opencrane/auth';
+import { envelope } from '@opencrane/models';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { memoryScopeId } from '@opencrane/projections';
+import { privateCallers } from '../../computer/test/server.ts';
 import { buildPersonalRecallTools, buildTurnTools, mayOfferTurnTools,
   type TurnToolServerState } from '../src/chat/turn-tools.ts';
 import { memoryAdmission } from '../src/chat/memory-admission.ts';
@@ -16,7 +19,37 @@ const definition = JSON.stringify({
 });
 const reviewed = losslessJson(definition);
 
+function callerRegistry() {
+  function dropped() { /* Keep this fixture independent of proxy network requests. */ }
+  const callers = privateCallers(dropped);
+  onTestFinished(callers.close);
+  return callers;
+}
+
+function privateBinding() {
+  const callers = callerRegistry();
+  const grant = {
+    silo: 'test', requesterId: 'alice', assistantId: 'assistant', computerId: 'computer',
+    conversation: 'conversation', turnId: 'turn', thread: 'thread',
+    generation: 1, inputGeneration: 1, expires: Date.now() + 60_000,
+  };
+  const registration = callers.register(grant);
+  registration.bind(grant.thread);
+  const data = {
+    conversationId: 'conversation', turnId: 'turn', threadId: 'thread',
+    requesterId: 'alice', assistantId: 'assistant', computerId: 'computer',
+    task: 'chat_turn', executionMode: 'restricted',
+  };
+  const event = envelope('test', 'computer-assistant', 'computer.turn_started', data);
+  event.source = 'opencrane-server';
+  const turn: TurnSummary = {
+    hasStart: true, firstStart: { sequence: 1, event }, firstClose: undefined,
+  };
+  return { callers, registration, grant, data, turn };
+}
+
 function fixture() {
+  const binding = privateBinding();
   const state: TurnToolServerState = {
     serverId: 'memory', connectionId: 'server', published: true, accountMode: 'none',
     serverInfo: { name: 'OpenCrane memory', version: '1' },
@@ -32,9 +65,75 @@ function fixture() {
     silo: 'test', scopeId: memoryScopeId('test', 'person', 'alice'),
     requesterId: 'alice', assistantId: 'assistant', baseMessageBytes: 100,
     readServer: vi.fn(read), canUse: vi.fn(allow),
+    turn: binding.turn as TurnSummary | undefined,
+    grant: binding.grant as typeof binding.grant | undefined,
+    caller: binding.registration.caller as string | undefined,
+    callers: binding.callers,
   };
-  return { state, input };
+  return { state, input, binding };
 }
+
+const invalidBindings = [
+  'no registration', 'no caller', 'no grant', 'another requester grant', 'another turn grant',
+  'changed requester and scope', 'changed requester scope and grant', 'changed assistant',
+  'changed silo and scope', 'no recorded turn', 'closed turn', 'ordinary turn', 'shared turn',
+  'untrusted turn', 'another conversation grant', 'another thread grant', 'another computer grant',
+  'another generation grant', 'another input generation grant', 'expired grant', 'closed caller',
+] as const;
+async function refusesBinding(change: typeof invalidBindings[number]) {
+  const { input, binding } = fixture();
+  const grant = binding.grant;
+  if (change === 'no registration') input.callers = callerRegistry();
+  if (change === 'no caller') input.caller = undefined;
+  if (change === 'no grant') input.grant = undefined;
+  if (change === 'another requester grant') grant.requesterId = 'bob';
+  if (change === 'another turn grant') grant.turnId = 'other-turn';
+  if (change === 'changed requester and scope' || change === 'changed requester scope and grant') {
+    input.requesterId = 'bob';
+    input.scopeId = memoryScopeId('test', 'person', 'bob');
+  }
+  if (change === 'changed requester scope and grant') grant.requesterId = 'bob';
+  if (change === 'changed assistant') input.assistantId = 'other-assistant';
+  if (change === 'changed silo and scope') {
+    input.silo = 'elsewhere';
+    input.scopeId = memoryScopeId('elsewhere', 'person', 'alice');
+  }
+  if (change === 'no recorded turn') input.turn = undefined;
+  if (change === 'closed turn') binding.turn.firstClose = { sequence: 2, status: 'completed' };
+  if (change === 'ordinary turn') binding.data.executionMode = 'memory_free';
+  if (change === 'shared turn') {
+    binding.turn.firstStart!.event.data = { ...binding.data, sharingClass: 'shared_only' };
+  }
+  if (change === 'untrusted turn') binding.turn.firstStart!.event.source = 'untrusted';
+  if (change === 'another conversation grant') grant.conversation = 'other-conversation';
+  if (change === 'another thread grant') grant.thread = 'other-thread';
+  if (change === 'another computer grant') grant.computerId = 'other-computer';
+  if (change === 'another generation grant') grant.generation = 2;
+  if (change === 'another input generation grant') grant.inputGeneration = 2;
+  if (change === 'expired grant') grant.expires = Date.now() - 1;
+  if (change === 'closed caller') binding.registration.close();
+  expect(await buildPersonalRecallTools(input)).toEqual([]);
+  expect(input.readServer).not.toHaveBeenCalled();
+  expect(input.canUse).not.toHaveBeenCalled();
+}
+it.each(invalidBindings)('offers no recall with %s', refusesBinding);
+
+async function closesDuringAssembly(stage: 'catalogue' | 'access') {
+  const { input, binding, state } = fixture();
+  function readServer() {
+    binding.registration.close();
+    return Promise.resolve(state);
+  }
+  function canUse() {
+    binding.registration.close();
+    return Promise.resolve(true);
+  }
+  if (stage === 'catalogue') input.readServer.mockImplementation(readServer);
+  if (stage === 'access') input.canUse.mockImplementation(canUse);
+  expect(await buildPersonalRecallTools(input)).toEqual([]);
+}
+it.each(['catalogue', 'access'] as const)(
+  'offers no recall when the caller closes during %s checks', closesDuringAssembly);
 
 async function selectsRecall() {
   const { state, input } = fixture();
