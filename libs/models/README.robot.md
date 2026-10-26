@@ -2,6 +2,38 @@
 
 For people, read [README.md](README.md) first.
 
+## Private OAuth preparation (P3-9 PR 8a, first part; Part of #50)
+
+`oauth-attempt.ts` supplies internal `prepareOAuthAttempt(custody, context, configuration, rows)`.
+It is not exported from the package or called by a route. The caller supplies trusted
+member/session context and previously loaded server history. Preparation checks the
+personal remote server, exact endpoint digest and current policy revision against operator
+configuration. It accepts exact HTTPS issuer, consent and callback URLs without credentials,
+queries, fragments or URL normalisation. No provider request or DNS lookup runs here.
+Required scopes come from the configured map for enabled reviewed tools, plus disclosed
+protocol scopes. Blocked tools contribute nothing. Missing enabled-tool mappings refuse.
+
+State and PKCE S256 verifier each use 32 random bytes. The existing path-loaded custody
+stores them privately. The attempt digest binds the silo, member, session digest, installed
+server, profile, operation, expected sequence, configuration and scopes. Attempt names
+are separate from bearer generation names. The journal fixes the ten-minute expiry before
+create and pins the original UID/version. Retry recovers those values; a create reply lost
+before identity is pinned stays unknown. Preparation returns digests, challenge and exact
+references only. It returns neither state nor verifier nor a consent URL.
+
+`readAttempt(stage, identity)` is private recovery, requiring the exact operation, bindings,
+UID and version. It never reads bearer material. Expired or changed attempts cannot be read.
+The existing scanner and deletion adapter retain every OAuth attempt, including expired and
+uncertain ones. Bearer folds and cleanup keep their existing behaviour. The journal holds
+no state or verifier. No dependency or licence change is needed.
+
+This split stops before the consent-start command. Membership, persistent admin block and
+policy checks at append/receipt, `connection.oauth_started` schema/registry/catalogue,
+conditional append and approved URL return are NOT BUILT. They must land together next.
+Callback, confirmation, refresh, revoke and release also remain later work. No event or
+public API is added here; no replay path invokes preparation or custody.
+Own check results and remaining qualification are in the [receipt](../../docs/process/p3-9-pr8a/receipt.md).
+
 ## Shared routine presence check for member reviews
 
 `providerRoutinePresence` is exported for member departure reads. Its internal result

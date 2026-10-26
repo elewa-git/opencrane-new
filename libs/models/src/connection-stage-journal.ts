@@ -50,6 +50,19 @@ export function connectionStageJournal(directory: string) {
       throw error;
     }
   }
+  async function preparation(operationId: string): Promise<Record | undefined> {
+    try {
+      const raw: unknown = JSON.parse(await files.read(reference('stage', operationId)));
+      const schema = z.strictObject({ operationId: z.literal(operationId), reference: z.string(),
+        expectedSequence: z.int().nonnegative(), appendUntil: z.int().positive() });
+      return schema.parse(raw);
+    } catch (error) {
+      if (missingFile.safeParse(error).success) {
+        return undefined;
+      }
+      throw new Error('Connection preparation unavailable');
+    }
+  }
   async function readIdentity(kind: string, name: string): Promise<Identity | undefined> {
     try {
       const raw: unknown = JSON.parse(await files.read(reference(kind, name)));
@@ -92,5 +105,5 @@ export function connectionStageJournal(directory: string) {
     // Keep the exact identity across restart while Kubernetes waits for finalisers.
     return saveIdentity('deletion', observed);
   }
-  return { prepared, identity, pin, claimCreate, deletion, markDeletion };
+  return { prepared, preparation, identity, pin, claimCreate, deletion, markDeletion };
 }

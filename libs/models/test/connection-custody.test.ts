@@ -22,7 +22,8 @@ import { reconcileConnectionPage, reconcileConnectionStage } from '../src/connec
 import { withConnectionStage } from '../src/connection-stage-lock.ts';
 import { z } from 'zod';
 import { connectionCustody, type ConnectionStage } from '../src/connection-custody.ts';
-import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
+import { losslessJson } from '@opencrane/events/lossless-json';
 import { prepareOAuthAttempt } from '../src/oauth-attempt.ts';
 
 const material = 'synthetic-custody-material';
@@ -240,7 +241,7 @@ async function recoversRecordedCreate() {
 }
 it('recovers one recorded private generation across restart and retries', recoversRecordedCreate);
 
-function oauthFixture() {
+function oauthFixture(withTools = false) {
   const context = { siloId: 'silo-a', userId: 'member-a', serverId: 'server-a',
     connectionId: 'install-a', profileId: 'profile-a', changeRef: 'consent-a',
     sessionDigest: 'b'.repeat(64), expectedSequence: 0 };
@@ -251,17 +252,33 @@ function oauthFixture() {
     endpointDigest: endpointHash.digest('hex'), policyRevision: 4,
     issuer: 'https://identity.example.test/', consentEndpoint: 'https://identity.example.test/consent',
     redirectUri: 'https://app.example.test/api/my/tools/oauth/callback', clientId: 'fixture',
-    protocolScopes: ['openid'], toolScopes: {} };
+    protocolScopes: ['openid'], toolScopes: { 'data.read': ['read'], 'data.write': ['write'] } };
+  const tools = [];
+  const choices = [];
+  if (withTools) {
+    for (const name of ['data.read', 'data.write']) {
+      const definition = JSON.stringify({ name, inputSchema: { type: 'object' } });
+      const review = { action: 'Read data', consequence: 'Returns data', targetArgument: 'id',
+        fields: ['id'], stepUp: false };
+      const tool = { name, revision: losslessJson(definition).digest, definition,
+        reviewed: false, costCents: 0, review };
+      tools.push(tool);
+      const mode = name === 'data.read' ? 'ask' : 'block';
+      choices.push({ name, revision: tool.revision, reviewDigest: toolReviewDigest(tool), mode });
+    }
+  }
+  const checkedAt = Date.now();
   const catalogue = { serverId: context.serverId, connectionId: context.connectionId,
-    accountMode: 'personal', tools: [], toolCount: 0, schemaDigest: catalogueDigest([]),
-    checkedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 600_000).toISOString() };
+    accountMode: 'personal', tools, toolCount: tools.length, schemaDigest: catalogueDigest(tools),
+    checkedAt: new Date(checkedAt).toISOString(),
+    expiresAt: new Date(checkedAt + 300_000).toISOString() };
   const entries = [
     ['mcp.server_registered', { serverId: context.serverId, kind: 'remote', locator,
       registeredBy: 'admin' }],
     ['mcp.server_discovered', catalogue],
     ['mcp.server_reviewed', { serverId: context.serverId, connectionId: context.connectionId,
       accountMode: 'personal', catalogueDigest: catalogue.schemaDigest, policyRevision: 2,
-      reviewedBy: 'admin', tools: [] }],
+      reviewedBy: 'admin', tools: choices }],
     ['mcp.server_published', { serverId: context.serverId, publishedBy: 'admin' }],
   ] as const;
   const rows: StoredEvent[] = [];
@@ -280,7 +297,9 @@ async function preparesPrivateConsent() {
   const first = await prepareOAuthAttempt(store.custody, input.context,
     input.configuration, input.rows);
   expect(first.status).toBe('prepared');
-  if (first.status !== 'prepared') throw new Error('Fixture preparation failed');
+  if (first.status !== 'prepared') {
+    throw new Error('Fixture preparation failed');
+  }
   expect(first.stage.appendUntil).toBeGreaterThanOrEqual(before + 600_000);
   expect(first.stage.appendUntil).toBeLessThanOrEqual(Date.now() + 600_000);
   const privateData = JSON.parse(Buffer.from(store.secret.data.token, 'base64').toString()) as unknown;
@@ -298,6 +317,202 @@ async function preparesPrivateConsent() {
   expect(store.creates).toBe(1);
 }
 it('prepares one private PKCE attempt and keeps its original expiry on retry', preparesPrivateConsent);
+
+async function requestsReviewedScopes() {
+  const store = await fixture();
+  const input = oauthFixture(true);
+  const prepared = await prepareOAuthAttempt(store.custody, input.context,
+    input.configuration, input.rows);
+  expect(prepared).toMatchObject({ status: 'prepared', requestedScopes: ['openid', 'read'] });
+}
+it('prepares OAuth scopes for enabled reviewed tools only', requestsReviewedScopes);
+
+async function refusesChangedConsent(field: string) {
+  const store = await fixture();
+  const input = oauthFixture();
+  const original = await prepareOAuthAttempt(store.custody, input.context,
+    input.configuration, input.rows);
+  expect(original.status).toBe('prepared');
+  const changed: Record<string, unknown> = { ...input.configuration };
+  changed[field] = 'https://changed.example.test/';
+  if (field === 'protocolScopes') {
+    changed[field] = ['offline_access'];
+  }
+  if (field === 'policyRevision') {
+    changed[field] = 5;
+  }
+  if (field === 'endpointDigest') {
+    changed[field] = 'c'.repeat(64);
+  }
+  expect(await prepareOAuthAttempt(store.restart(), input.context, changed, input.rows))
+    .toEqual({ status: 'unknown' });
+  expect(store.creates).toBe(1);
+}
+it.each(['issuer', 'redirectUri', 'consentEndpoint', 'clientId', 'protocolScopes',
+  'policyRevision', 'endpointDigest', 'serverId', 'connectionId'])(
+  'refuses changed OAuth configuration %s for the same operation', refusesChangedConsent);
+
+async function refusesChangedSession() {
+  const store = await fixture();
+  const input = oauthFixture();
+  await prepareOAuthAttempt(store.custody, input.context, input.configuration, input.rows);
+  const changed = { ...input.context, sessionDigest: 'c'.repeat(64) };
+  expect(await prepareOAuthAttempt(store.restart(), changed, input.configuration, input.rows))
+    .toEqual({ status: 'unknown' });
+  expect(store.creates).toBe(1);
+}
+it('refuses a changed OAuth session binding without replacing its private material',
+  refusesChangedSession);
+
+async function refusesUnsafeConsent(value: string) {
+  for (const field of ['issuer', 'consentEndpoint', 'redirectUri']) {
+    const store = await fixture();
+    const input = oauthFixture();
+    const configuration = { ...input.configuration, [field]: value };
+    expect(await prepareOAuthAttempt(store.custody, input.context, configuration, input.rows))
+      .toEqual({ status: 'unknown' });
+    expect(store.creates).toBe(0);
+  }
+}
+it.each(['http://example.test/', 'https://user:synthetic-canary@example.test/',
+  'https://127.0.0.1/', 'https://example.test/#fragment', 'https://example.test/?state=canary',
+  'https://example.test/../callback', 'https://example.test/\\callback'])(
+  'refuses an unsafe OAuth destination %s before staging', refusesUnsafeConsent);
+
+async function losesConsentReply(ambiguous: boolean) {
+  const store = await fixture();
+  const input = oauthFixture();
+  if (ambiguous) {
+    store.loseCreate();
+  }
+  store.failReads();
+  expect(await prepareOAuthAttempt(store.custody, input.context, input.configuration, input.rows))
+    .toEqual({ status: 'unknown' });
+  const original = structuredClone(store.secret);
+  store.restoreReads();
+  const retry = await prepareOAuthAttempt(store.restart(), input.context,
+    input.configuration, input.rows);
+  expect(retry.status).toBe(ambiguous ? 'unknown' : 'prepared');
+  expect(store.secret).toEqual(original);
+  expect(store.creates).toBe(1);
+}
+it.each([false, true])('recovers OAuth replies only with a pinned identity (ambiguous: %s)',
+  losesConsentReply);
+
+async function refusesDamagedConsent(change: string) {
+  const store = await fixture();
+  const input = oauthFixture();
+  const prepared = await prepareOAuthAttempt(store.custody, input.context,
+    input.configuration, input.rows);
+  if (prepared.status !== 'prepared') {
+    throw new Error('Fixture preparation failed');
+  }
+  if (change === 'uid') {
+    store.secret.metadata.uid = 'replacement';
+  }
+  if (change === 'version') {
+    store.secret.metadata.resourceVersion = '2';
+  }
+  if (change === 'missing') {
+    store.finishDeletion();
+  }
+  if (change === 'outage') {
+    store.failReads();
+  }
+  if (change === 'material') {
+    store.secret.data.token = Buffer.from(material).toString('base64');
+  }
+  expect(await store.restart().readAttempt(prepared.stage, prepared.identity)).toBeUndefined();
+  expect(await prepareOAuthAttempt(store.restart(), input.context, input.configuration, input.rows))
+    .toEqual({ status: 'unknown' });
+  expect(store.creates).toBe(1);
+  expect(store.deletes).toBe(0);
+}
+it.each(['uid', 'version', 'missing', 'outage', 'material'])(
+  'keeps damaged OAuth custody unknown: %s', refusesDamagedConsent);
+
+async function concurrentConsent() {
+  const store = await fixture();
+  const input = oauthFixture();
+  const pending = [prepareOAuthAttempt(store.custody, input.context, input.configuration, input.rows),
+    prepareOAuthAttempt(store.restart(), input.context, input.configuration, input.rows)];
+  await Promise.all(pending);
+  const first = await prepareOAuthAttempt(store.restart(), input.context,
+    input.configuration, input.rows);
+  expect(first.status).toBe('prepared');
+  expect(await prepareOAuthAttempt(store.restart(), input.context, input.configuration, input.rows))
+    .toEqual(first);
+  expect(store.creates).toBe(1);
+}
+it('recovers concurrent OAuth preparation as one immutable attempt', concurrentConsent);
+
+async function retainsConsentAlongsideBearer() {
+  const test = await candidateFixture();
+  await test.activate();
+  const input = oauthFixture();
+  input.context.siloId = test.input.siloId;
+  input.context.profileId = test.input.profileId;
+  for (const row of input.rows) {
+    row.event.silo = test.input.siloId;
+  }
+  const prepared = await prepareOAuthAttempt(test.store.custody, input.context,
+    input.configuration, input.rows);
+  if (prepared.status !== 'prepared') {
+    throw new Error('Fixture preparation failed');
+  }
+  expect(test.store.secrets.size).toBe(2);
+  expect(await test.reconcile()).toEqual({ status: 'retained' });
+  const result = await reconcileConnectionStage(events.store, test.db,
+    test.store.restart(), prepared.stage);
+  expect(result).toEqual({ status: 'retained' });
+  const rows = await history(events.store, test.subject, 'test');
+  expect(rows).toHaveLength(1);
+  expect(foldConnection(rows).status).toBe('saved_unverified');
+  const changed = { ...prepared.stage, operationId: 'different-operation' };
+  expect(await test.store.restart().readAttempt(changed, prepared.identity)).toBeUndefined();
+  expect(await test.store.restart().readAttempt(test.input, prepared.identity)).toBeUndefined();
+  expect(test.store.deletes).toBe(0);
+}
+it('retains pending OAuth custody beside the current bearer without changing its fold',
+  retainsConsentAlongsideBearer);
+
+async function loadsPrivateAttemptAfterRestart() {
+  const store = await fixture();
+  const input = oauthFixture();
+  const config = { apiUrl: store.apiUrl, namespace: 'custody', journalDirectory: store.directory,
+    currentKeyId: 'fixture', keys: { fixture: keyring.keys.fixture.toString('base64') } };
+  const filename = `${store.directory}/configuration.json`;
+  await writeFile(filename, JSON.stringify(config), { mode: 0o600 });
+  const loaded = await connectionCustodyFromFile(filename);
+  if (!loaded) {
+    throw new Error('Fixture configuration failed');
+  }
+  const prepared = await prepareOAuthAttempt(loaded, input.context, input.configuration, input.rows);
+  if (prepared.status !== 'prepared') {
+    throw new Error('Fixture preparation failed');
+  }
+  const contents = await loaded.readAttempt(prepared.stage, prepared.identity);
+  expect(contents).toBeDefined();
+  const later = prepared.stage.appendUntil - 1;
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(later);
+  try {
+    expect(await store.restart().readAttempt(prepared.stage, prepared.identity)).toBe(contents);
+    clock.mockReturnValue(prepared.stage.appendUntil);
+    expect(await store.restart().readAttempt(prepared.stage, prepared.identity)).toBeUndefined();
+    const pending = await reconcileConnectionStage(events.store, pgDb(storage.queue), loaded,
+      prepared.stage);
+    expect(pending).toEqual({ status: 'retained' });
+    expect(store.secrets.size).toBe(1);
+  } finally {
+    clock.mockRestore();
+  }
+  const filenames = await readdir(store.directory);
+  for (const name of filenames) {
+    expect(await readFile(`${store.directory}/${name}`, 'utf8')).not.toContain(contents!);
+  }
+}
+it('loads OAuth custody from its private path and retains expired attempts without releasing them',
+  loadsPrivateAttemptAfterRestart);
 
 
 async function refusesUnrecordedCreate(replace: boolean) {
