@@ -35,7 +35,7 @@ import { assistantSnapshot, processConversation } from '../src/chat/bridge-conve
 import { agentSession } from '../src/chat/reports.ts';
 import { prepareRoutineInput } from '../src/routine-input.ts';
 import { allocateRoutineRoot } from '../src/routine-root.ts';
-import { BudgetActor, history, rootTotals } from '@opencrane/models';
+import { BudgetActor, budgets, history, priceTableId, readBudget, rootTotals } from '@opencrane/models';
 import { grantStream } from '@opencrane/authz';
 
 let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
@@ -358,6 +358,7 @@ async function changedControl(type: string) {
 it.each(controls)('refuses preparation after %s', changedControl);
 async function changesAtAppend(kind: string) {
   const original = await rows();
+  const budgetPosition = await nats.store.head('budget-test');
   const append = nats.store.append.bind(nats.store);
   async function changeBeforeAppend(change: AppendCommand) {
     expect(change.checkAccess).toBeTypeOf('function');
@@ -375,6 +376,7 @@ async function changesAtAppend(kind: string) {
   vi.spyOn(nats.store, 'append').mockImplementationOnce(changeBeforeAppend);
   await expect(prepare()).rejects.toThrow(refusal());
   expect(await rows()).toEqual(original);
+  if (rootMode) expect(await nats.store.head('budget-test')).toBe(budgetPosition);
 }
 it.each([...controls, 'member', 'worker', 'expiry'])('rechecks %s at append', changesAtAppend);
 async function changesAfterAppend(kind: string) {
@@ -395,7 +397,12 @@ async function changesAfterAppend(kind: string) {
   }
   vi.spyOn(nats.store, 'append').mockImplementationOnce(changeAfterAppend);
   await expect(prepare()).rejects.toThrow(refusal());
-  expect(await rows()).toHaveLength(count + 1);
+  if (rootMode) {
+    expect(await rows()).toHaveLength(count);
+    expect(actor.state.roots).toHaveLength(1);
+  } else {
+    expect(await rows()).toHaveLength(count + 1);
+  }
 }
 it.each(['member', 'worker', 'expiry'])('checks %s before returning identifiers', changesAfterAppend);
 async function expires() {
@@ -453,6 +460,7 @@ async function masksHistory(failedSubject: string) {
 it.each(['routine-orders', subject])('masks private %s history errors', masksHistory);
 async function expiredWrite() {
   const original = await rows();
+  const budgetPosition = await nats.store.head('budget-test');
   const append = nats.store.append.bind(nats.store);
   async function expire(change: AppendCommand) {
     vi.spyOn(performance, 'now').mockReturnValue(change.deadline! + 1);
@@ -462,6 +470,7 @@ async function expiredWrite() {
   await expect(prepare()).rejects.toThrow(refusal());
   vi.restoreAllMocks();
   expect(await rows()).toEqual(original);
+  if (rootMode) expect(await nats.store.head('budget-test')).toBe(budgetPosition);
 }
 it('keeps the original two-second deadline at publication', expiredWrite);
 async function unrelatedActivity() {
@@ -530,6 +539,39 @@ async function replay() {
 }
 it('replays with appends, jobs, wake, credentials, tokens and external calls forbidden', replay,
   30_000);
+
+async function noDelivery(state: string) {
+  await prepare();
+  if (state === 'computer.ready') {
+    const encrypted = keys.encrypt('test', conversationId, 'Earlier human message');
+    const human = record('human-message', subject, 'message.posted', { conversationId,
+      authorKind: 'human', authorId: 'alice', contentType: 'text', ...encrypted });
+    await nats.seed([human]);
+  }
+  const saved = await rows();
+  const creation = agentSession(saved);
+  const conversation: Parameters<typeof processConversation>[2] = {
+    ...creation, createdAt: saved[0]!.event.time, assistantKind: 'team' };
+  const example = z.record(z.string(), z.unknown()).parse(getEventDefinition(state)!.example);
+  const lifecycle = record('computer-state', 'computer-sales-assistant', state,
+    { ...example, assistantId: 'sales-assistant', computerId: 'computer' });
+  await nats.seed([lifecycle]);
+  const assistant = assistantSnapshot([{ sequence: 100, event: lifecycle }], 'team', 'test');
+  const options = { silo: 'test', store: nats.store, keys, db, binding };
+  const connection = vi.fn(forbiddenEffect);
+  const append = vi.spyOn(nats.store, 'append').mockImplementation(forbiddenEffect);
+  // Refuse every token operation; preparation must never reach lifecycle admission.
+  const tokens = { computer: forbiddenEffect, turn: forbiddenEffect, egress: forbiddenEffect,
+    scanner: forbiddenEffect, jwks: { keys: [] },
+    verify: forbiddenEffect, verifyScanner: forbiddenEffect, memoryContext: forbiddenEffect,
+    takeoverGate: forbiddenEffect, budget: forbiddenEffect, providerVerification: forbiddenEffect };
+  const result = await processConversation(options, tokens, conversation, assistant,
+    new Set(), connection);
+  expect(result).toEqual({ pending: false, retry: false });
+  expect(connection).not.toHaveBeenCalled();
+  expect(append).not.toHaveBeenCalled();
+  expect(await rows()).toEqual(saved);
+}
 
 function routineInputTests() {
   async function preparedSession() {
@@ -802,44 +844,13 @@ function routineInputTests() {
   it.each([false, true])('refuses custody lost during access checks, with input saved: %s',
     losesCustodyDuringCheck);
 
-  async function noDelivery(state: string) {
-    await prepare();
-    if (state === 'computer.ready') {
-      const encrypted = keys.encrypt('test', conversationId, 'Earlier human message');
-      const human = record('human-message', subject, 'message.posted', { conversationId,
-        authorKind: 'human', authorId: 'alice', contentType: 'text', ...encrypted });
-      await nats.seed([human]);
-    }
-    const saved = await rows();
-    const creation = agentSession(saved);
-    const conversation: Parameters<typeof processConversation>[2] = {
-      ...creation, createdAt: saved[0]!.event.time, assistantKind: 'team' };
-    const example = z.record(z.string(), z.unknown()).parse(getEventDefinition(state)!.example);
-    const lifecycle = record('computer-state', 'computer-sales-assistant', state,
-      { ...example, assistantId: 'sales-assistant', computerId: 'computer' });
-    await nats.seed([lifecycle]);
-    const assistant = assistantSnapshot([{ sequence: 100, event: lifecycle }], 'team', 'test');
-    const options = { silo: 'test', store: nats.store, keys, db, binding };
-    const connection = vi.fn(forbiddenEffect);
-    const append = vi.spyOn(nats.store, 'append').mockImplementation(forbiddenEffect);
-    // Refuse every token operation; preparation must never reach lifecycle admission.
-    const tokens = { computer: forbiddenEffect, turn: forbiddenEffect, egress: forbiddenEffect,
-      scanner: forbiddenEffect, jwks: { keys: [] },
-      verify: forbiddenEffect, verifyScanner: forbiddenEffect, memoryContext: forbiddenEffect,
-      takeoverGate: forbiddenEffect, budget: forbiddenEffect, providerVerification: forbiddenEffect };
-    const result = await processConversation(options, tokens, conversation, assistant,
-      new Set(), connection);
-    expect(result).toEqual({ pending: false, retry: false });
-    expect(connection).not.toHaveBeenCalled();
-    expect(append).not.toHaveBeenCalled();
-    expect(await rows()).toEqual(saved);
-  }
   it.each(['computer.suspended', 'computer.ready', 'computer.claimed'])(
     'never wakes or delivers the saved input when %s', noDelivery);
 }
 describe('routine input', routineInputTests);
 
 function routineRootTests() {
+  let expectedHolds: BudgetActor['state']['reservations'] = [];
   async function preparedInput() {
     encryption.mockRestore();
     decryption.mockRestore();
@@ -861,6 +872,14 @@ function routineRootTests() {
     actor = new BudgetActor(nats.store, 'test');
     await actor.start(10_000, 10_000, 'sales');
     rootMode = true;
+    expectedHolds = [];
+    const fetch = globalThis.fetch;
+    function permissionsOnly(url: Parameters<typeof fetch>[0], options?: RequestInit) {
+      const address = url instanceof Request ? url.url : url.toString();
+      if (!address.startsWith(binding.apiUrl + '/')) return forbiddenEffect();
+      return fetch(url, options);
+    }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(permissionsOnly);
   }
   beforeEach(preparedInput);
   it.each(lostAccess)('refuses allocation after losing %s', losesAccess);
@@ -875,6 +894,8 @@ function routineRootTests() {
   it('keeps the original write deadline', expiredWrite);
   it('refuses expired root receipts', expires);
   it('replays without execution', replay, 30_000);
+  it.each(['computer.suspended', 'computer.ready'])(
+    'keeps allocated input idle with %s', noDelivery);
 
   async function once() {
     const before = await nats.store.head();
@@ -896,7 +917,7 @@ function routineRootTests() {
 
   async function recover() {
     const append = nats.store.append.bind(nats.store);
-    async function loseReply(command: AppendCommand) {
+    async function loseReply(command: AppendCommand): Promise<never> {
       await append(command);
       throw new Error('private-service-canary');
     }
@@ -914,6 +935,17 @@ function routineRootTests() {
     expect(await prepare(store)).toMatchObject({ rootId: actor.state.roots[0]!.rootId });
     expect(actor.state.roots).toHaveLength(1);
     expect(await store.head()).toBe(before);
+    const storage = await database('pg');
+    try {
+      const logger = createLogger('routine-budget-replay', { level: 'silent' });
+      const runner = new ProjectionRunner(storage.db, store, logger);
+      await runner.initialise(budgets);
+      await runner.rebuild(budgets);
+      expect(await readBudget(storage.db, 'test')).toEqual(actor.state);
+      expect(await store.head()).toBe(before);
+    } finally {
+      await storage.close();
+    }
   }
   it('recovers a lost allocation reply after broker and actor restart', recover);
 
@@ -962,6 +994,27 @@ function routineRootTests() {
   it.each(['conversation.created', 'message.posted', 'foreign', 'replaced'])(
     'refuses missing or substituted %s', changedRecord);
 
+  async function revokedModel(granteeKind: string) {
+    const granteeId = granteeKind === 'member' ? 'alice' : 'sales-assistant';
+    const revoked = record('revoked-model', grantStream('model', 'gpt-6.1-sol'),
+      'grant.revoked', { resourceType: 'model', resourceId: 'gpt-6.1-sol',
+        granteeKind, granteeId, revokedBy: 'alice' });
+    await apply([revoked]);
+    await refuses();
+  }
+  it.each(['member', 'assistant'])('refuses lost %s model permission', revokedModel);
+
+  async function changedThread() {
+    await prepare();
+    const changed = { ...selection, threadId: 'other-thread' };
+    const worker = { silo: 'test', binding, workerId: 'routine-worker', checkCurrent, now: clock };
+    const before = await nats.store.head();
+    await expect(allocateRoutineRoot(nats.store, keys, worker, input, actor, changed))
+      .rejects.toThrow('Routine root refused');
+    expect(await nats.store.head()).toBe(before);
+  }
+  it('cannot replace the prepared thread on retry', changedThread);
+
   async function provider(model = 'gpt-6.1-sol') {
     const enabled = record('enabled', 'budget-test', 'provider.managed_calls_enabled',
       { providerId: 'primary', revision: 1, changedBy: 'alice', expectedProviderSequence: 0 });
@@ -1002,12 +1055,65 @@ function routineRootTests() {
   it.each(['provider', 'generation', 'retry'])(
     'refuses changed preparation during allocation or retry: %s', changedPreparation);
 
+  async function computerActivity(sameThread: boolean) {
+    async function activity() {
+      const threadId = sameThread ? selection.threadId : 'another-thread';
+      const started = record('other-start', 'computer-sales-assistant', 'computer.turn_started',
+        { assistantId: 'sales-assistant', computerId: 'computer', conversationId: 'another-chat',
+          turnId: 'another-turn', threadId, requesterId: 'alice', task: 'chat_turn',
+          executionMode: 'restricted' });
+      await nats.seed([started]);
+    }
+    duringCheck = activity;
+    if (sameThread) {
+      await expect(prepare()).rejects.toThrow('Routine root refused');
+      expect(actor.state.roots).toEqual([]);
+    } else {
+      expect(await prepare()).toMatchObject({ executionAvailable: false });
+    }
+  }
+  it.each([false, true])('checks computer activity for the selected thread only: %s', computerActivity);
+
+  async function retainsHold() {
+    await prepare();
+    const root = actor.state.roots[0]!;
+    const call = { requesterId: 'alice', conversationId, turnId: root.turnId,
+      assistantId: 'sales-assistant', payingGroupId: 'sales', ...selection,
+      model: 'gpt-6.1-sol', priceTableId, contextDigest: '0'.repeat(64) };
+    await actor.reserve(call, 100, undefined, undefined, root.rootId);
+    expectedHolds = structuredClone(actor.state.reservations);
+    await control('routine.run_stop_requested');
+    await refuses();
+    expect(rootTotals(actor.state, root.rootId).heldCents).toBe(100);
+  }
+  it('retains an existing hold when a stopped routine cannot recover allocation', retainsHold);
+
+  async function lateChange(kind: string) {
+    async function change() {
+      if (kind === 'custody') vi.spyOn(keys, 'decrypt').mockImplementation(forbiddenEffect);
+      else if (kind === 'provider') await provider();
+      else await control('routine.run_stop_requested');
+    }
+    async function arm() { duringCheck = change; }
+    const original = actor.setRootAllowance.bind(actor);
+    async function afterAllocation(...args: Parameters<typeof original>) {
+      const root = await original(...args);
+      duringCheck = arm;
+      return root;
+    }
+    vi.spyOn(actor, 'setRootAllowance').mockImplementationOnce(afterAllocation);
+    await expect(prepare()).rejects.toThrow('Routine root refused');
+    expect(actor.state.roots).toHaveLength(1);
+  }
+  it.each(['custody', 'provider', 'stop'])(
+    'withholds the receipt after a late %s change', lateChange);
+
   async function noEffects() {
     const saved = await history(nats.store, 'budget-test', 'test');
     for (const row of saved) {
-      expect(row.event.type).toMatch(/^budget\.(ceiling_set|period_started|root_allowance_set)$/u);
+      expect(row.event.type).toMatch(/^(budget\.(ceiling_set|period_started|root_allowance_set|reserved)|provider\.managed_calls_enabled)$/u);
     }
-    expect(actor.state.reservations).toEqual([]);
+    expect(actor.state.reservations).toEqual(expectedHolds);
     expect(actor.state.dispatches).toEqual([]);
   }
   afterEach(noEffects);
