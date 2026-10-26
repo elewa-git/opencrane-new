@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { test } from 'node:test';
 import { parseAllDocuments } from 'yaml';
+import { certificates, issueCertificate } from '../../libs/event-store/test/certificates.ts';
+import { prepareNatsFixture } from './nats-install-fixture.mjs';
+import { expireCertificate } from './expired-certificate-fixture.mjs';
 
 const source = resolve('.');
 const canary = 'private-canary:%/?@';
@@ -40,17 +43,11 @@ function validFixture() {
   for (const key of fields.split(/\s+/u)) runtime[key] = canary;
   secrets.runtime = secret(runtime);
   const files = {};
-  const fileNames = `conversation-wrap-key ca.crt command.crt command.key command.seed
-    projection.crt projection.key projection.seed dispatcher.crt dispatcher.key dispatcher.seed
-    token-signing-key.pem zitadel-client-secret model-jwks.json model-stub-key`;
+  const fileNames = `conversation-wrap-key token-signing-key.pem zitadel-client-secret
+    model-jwks.json model-stub-key`;
   for (const key of fileNames.split(/\s+/u)) files[key] = canary;
   secrets.runtimefiles = secret(files);
-  const nats = {};
-  const natsFields = `nats.conf ca.crt server.crt server.key NATS_LISTEN NATS_STORE_DIR
-    NATS_CA_FILE NATS_CERT_FILE NATS_KEY_FILE NATS_COMMAND_NKEY NATS_PROJECTION_NKEY
-    NATS_DISPATCHER_NKEY NATS_COMPUTER_NKEY NATS_GATEWAY_NKEY`;
-  for (const key of natsFields.split(/\s+/u)) nats[key] = canary;
-  secrets.nats = secret(nats);
+  secrets.nats = secret({});
   secrets.postgres = secret({ POSTGRES_PASSWORD: canary });
   secrets.openfga = secret({ OPENFGA_DATASTORE_ENGINE: 'postgres',
     OPENFGA_DATASTORE_URI: database('openfga', 'openfga') });
@@ -92,6 +89,8 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
       namespace, namespaceUid: 'owned', release: namespace };
     await writeFile(`${directory}/stack-owner`, `worktree=${directory}\n`);
     await writeFile(`${directory}/package-owner.json`, JSON.stringify(owner));
+    await prepareNatsFixture(fixture, directory);
+    if (fixture.cluster) await prepareClusterFixture(fixture, directory, owner);
     await writeFile(`${directory}/fixture.json`, JSON.stringify(fixture));
     const privateDirectory = `${directory}/private-values`;
     await mkdir(privateDirectory, { mode: 0o700 });
@@ -112,13 +111,14 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
       env.PACKAGE_VALUES_FILE = valuesFile;
     }
     const result = spawnSync(process.execPath, args, { cwd: directory, env, encoding: 'utf8' });
-    const expectedStatus = fixture.install ? 0 : 1;
+    const expectedStatus = fixture.install && !expected ? 0 : 1;
     assert.equal(result.status, expectedStatus, result.stderr);
     assert.ok(!result.stderr.includes(canary), 'Errors must discard private values and causes');
     assert.ok(!result.stdout.includes(canary), 'Standard output must discard private values');
     assert.ok(!result.stderr.includes(generatedPassword), 'Errors must discard generated passwords');
     assert.ok(!result.stdout.includes(generatedPassword), 'Output must discard generated passwords');
     const callText = await readFile(`${directory}/calls.jsonl`, 'utf8');
+    if (fixture.cluster) assert.ok(!callText.includes('k3d-ocn'), 'Never fall back to the shared cluster');
     assert.ok(!callText.includes(canary), 'Arguments must not include private values');
     assert.ok(!callText.includes(generatedPassword), 'Arguments must not include passwords');
     const trimmedCalls = callText.trim();
@@ -129,6 +129,11 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
         assert.ok(!argument.includes(privateDirectory),
           `${call.program} arguments must not include the private values directory`);
       }
+      if (call.program === 'openssl') {
+        for (const argument of call.args) {
+          assert.ok(!isAbsolute(argument), 'OpenSSL arguments must use relative filenames');
+        }
+      }
       if (call.program === 'helm') {
         assert.equal(renders, true, 'Helm must not run with incomplete inputs');
         if (fixture.install) {
@@ -138,7 +143,7 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
         }
       }
     }
-    if (fixture.install) {
+    if (fixture.install && !expected) {
       const helmCommands = [];
       for (const call of calls) {
         if (call.program === 'helm') {
@@ -411,3 +416,226 @@ for (const renderOnly of [false, true]) {
   }
   test(`packaged installer still refuses R3 with renderOnly=${renderOnly}`, refusesClusterInstallation);
 }
+
+async function prepareClusterFixture(fixture, directory, owner) {
+  owner.context = 'k3d-opencrane-target-1';
+  await writeFile(`${directory}/package-owner.json`, JSON.stringify(owner));
+  const target = { worktree: directory, slot: '1', name: 'opencrane-target-1',
+    context: owner.context, id: '12345678-1234-1234-1234-123456789abc',
+    containers: ['zero', 'one', 'two'], network: 'network', nodes: {} };
+  fixture.nodes = { items: [] };
+  for (let index = 0; index < 3; index++) {
+    const name = `node-${index}`;
+    target.nodes[name] = `uid-${index}`;
+    fixture.nodes.items.push({ metadata: { name, uid: target.nodes[name], labels: {
+      'opencrane.dev/target-id': target.id, 'kubernetes.io/hostname': name,
+    } }, status: { conditions: [{ type: 'Ready', status: 'True' }] } });
+  }
+  await writeFile(`${directory}/target-owner.json`, JSON.stringify(target));
+  await prepareRouteFixture(fixture, directory, owner);
+}
+
+async function prepareRouteFixture(fixture, directory, owner) {
+  const routes = `${directory}/nats-routes`;
+  await mkdir(routes, { mode: 0o700 });
+  await certificates(routes);
+  fixture.secrets.nats.data['ca.crt'] = encoded(await readFile(`${directory}/ca.crt`));
+  if (fixture.routeFault === 'client trust') {
+    fixture.secrets.nats.data['ca.crt'] = encoded(await readFile(`${routes}/ca.crt`));
+  }
+  const references = ['route-trust', 'route-zero', 'route-one', 'route-two'];
+  for (let index = 0; index < 3; index++) {
+    const dns = `nats-${index}-0.nats-routes.${owner.namespace}.svc.cluster.local`;
+    let extensions = `subjectAltName=DNS:${dns}\nextendedKeyUsage=serverAuth,clientAuth\n`;
+    if (index === 0 && fixture.routeFault === 'DNS') extensions = extensions.replace(dns, 'foreign');
+    if (index === 0 && fixture.routeFault === 'usage') extensions = extensions.replace(',clientAuth', '');
+    await issueCertificate(routes, `peer-${index}`, '/CN=route', extensions);
+  }
+  if (fixture.routeFault === 'expired') {
+    await expireCertificate(routes);
+  }
+  if (fixture.routeFault === 'issuer') {
+    await writeFile(`${routes}/ca.crt`, await readFile(`${directory}/ca.crt`));
+    await writeFile(`${routes}/ca.key`, await readFile(`${directory}/ca.key`));
+  }
+  if (fixture.routeFault === 'duplicate') {
+    for (const suffix of ['crt', 'key']) {
+      await writeFile(`${routes}/peer-1.${suffix}`, await readFile(`${routes}/peer-0.${suffix}`));
+    }
+  }
+  for (const identity of ['ca', 'peer-0', 'peer-1', 'peer-2']) {
+    for (const suffix of ['crt', 'key']) await chmod(`${routes}/${identity}.${suffix}`, 0o600);
+  }
+  const uids = [];
+  for (let index = 0; index < references.length; index++) {
+    const name = references[index];
+    const data = {};
+    const fields = index === 0 ? { 'ca.crt': 'ca.crt' } :
+      { 'tls.crt': `peer-${index - 1}.crt`, 'tls.key': `peer-${index - 1}.key` };
+    for (const [key, file] of Object.entries(fields)) {
+      data[key] = encoded(await readFile(`${routes}/${file}`));
+    }
+    uids.push(`uid-${name}`);
+    fixture.secrets[name] = { type: 'Opaque', immutable: true, data, metadata: {
+      name, namespace: owner.namespace, uid: uids[index], annotations: {
+        'opencrane.dev/namespace-uid': owner.namespaceUid, 'opencrane.dev/worktree': directory,
+      },
+    } };
+  }
+  const binding = { namespaceUid: owner.namespaceUid, context: owner.context,
+    namespace: owner.namespace, worktree: directory, references };
+  if (fixture.routeFault === 'binding') binding.context = 'foreign';
+  await writeFile(`${routes}/prepared.json`, JSON.stringify({ binding, uids }), { mode: 0o600 });
+  if (fixture.routeFault === 'missing') delete fixture.secrets['route-one'];
+  if (fixture.routeFault === 'replaced') fixture.secrets['route-one'].metadata.uid = 'replacement';
+  if (fixture.routeFault === 'foreign') fixture.secrets['route-one'].metadata.annotations = {};
+  if (fixture.routeFault === 'mutable') fixture.secrets['route-one'].immutable = false;
+  if (fixture.nodeFault === 'missing') fixture.nodes.items.pop();
+  if (fixture.nodeFault === 'hostname') {
+    fixture.nodes.items[1].metadata.labels['kubernetes.io/hostname'] = 'node-0';
+  }
+  if (fixture.nodeFault === 'uid') fixture.nodes.items[1].metadata.uid = 'uid-0';
+  if (fixture.nodeFault === 'unready') fixture.nodes.items[1].status.conditions = [];
+  if (fixture.nodeFault === 'cordoned') fixture.nodes.items[1].spec = { unschedulable: true };
+  if (fixture.nodeFault === 'tainted') fixture.nodes.items[1].spec = { taints: [{ effect: 'NoSchedule' }] };
+}
+
+function clusterFixture() {
+  const fixture = validFixture();
+  fixture.cluster = true;
+  fixture.install = true;
+  fixture.values.natsCluster = { enabled: true, renderOnly: false, routeCASecret: 'route-trust',
+    peerCertificateSecrets: ['route-zero', 'route-one', 'route-two'] };
+  fixture.review.natsCluster = { replicas: 3, server: fixture.values.images.server,
+    web: fixture.values.images.web };
+  fixture.secrets.runtime.data.NATS_REPLICAS = encoded('3');
+  fixture.secrets.runtime.data.COMMAND_NATS_REPLICAS = encoded('3');
+  return fixture;
+}
+
+async function installsPreparedCluster() {
+  await runFixture(clusterFixture(), undefined, true);
+}
+test('prepared R3 reaches real Helm rendering and exactly one install', installsPreparedCluster);
+
+for (const reason of ['missing', 'replaced', 'foreign', 'mutable', 'binding', 'DNS', 'issuer',
+  'duplicate', 'usage', 'expired', 'lost target', 'client trust']) {
+  async function refusesIdentity() {
+    const fixture = clusterFixture();
+    fixture.routeFault = reason;
+    if (reason === 'lost target') fixture.loseRouteTarget = true;
+    await runFixture(fixture, 'Prepared NATS routes are incomplete or incompatible');
+  }
+  test(`R3 identity refuses before Helm: ${reason}`, refusesIdentity);
+}
+for (const reason of ['missing', 'hostname', 'uid', 'unready', 'cordoned', 'tainted']) {
+  async function refusesNodes() {
+    const fixture = clusterFixture();
+    fixture.nodeFault = reason;
+    const expected = ['missing', 'uid'].includes(reason) ? 'Target node ownership changed' :
+      'NATS cluster needs three eligible distinct nodes';
+    await runFixture(fixture, reason === 'missing' ? 'Target needs three distinct nodes' : expected);
+  }
+  test(`R3 nodes refuse before Helm: ${reason}`, refusesNodes);
+}
+const clusterRefusals = ['review', 'server', 'web', 'setting', 'preview',
+  'runtime', 'bootstrap', 'lost target'];
+for (const reason of clusterRefusals) {
+  async function refusesClusterInputs() {
+    const fixture = clusterFixture();
+    if (reason === 'review') delete fixture.review.natsCluster;
+    if (reason === 'server' || reason === 'web') fixture.review.natsCluster[reason] = 'unreviewed';
+    if (reason === 'setting') fixture.values.natsCluster.replicas = 3;
+    if (reason === 'preview') fixture.values.natsCluster.renderOnly = true;
+    if (reason === 'runtime') fixture.secrets.runtime.data.NATS_REPLICAS = encoded('1');
+    if (reason === 'bootstrap') fixture.secrets.bootstrap.data.COMMAND_NATS_REPLICAS = encoded('1');
+    if (reason === 'lost target') fixture.loseTarget = true;
+    let expected = 'Package command failed';
+    if (reason === 'runtime' || reason === 'bootstrap') expected = 'Invalid package NATS replica settings';
+    if (reason === 'lost target') expected = refusal;
+    await runFixture(fixture, expected);
+  }
+  test(`R3 inputs refuse before Helm: ${reason}`, refusesClusterInputs);
+}
+
+const natsRefusal = 'Package NATS inputs are incomplete or incompatible';
+for (const role of ['server', 'command', 'projection', 'dispatcher']) {
+  for (const fault of ['key', 'expired', 'future', 'name', 'SAN', 'usage', 'extra usage',
+    'issuer', 'CA identity']) {
+    async function refusesMountedIdentity() {
+      const fixture = clusterFixture();
+      fixture.identityFault = [role, fault];
+      await runFixture(fixture, natsRefusal);
+    }
+    test(`mounted NATS ${role} refuses ${fault} before Helm`, refusesMountedIdentity);
+  }
+}
+const configFaults = [
+  ['store directory', '$NATS_STORE_DIR', '"/tmp"'],
+  ['client verification', 'verify: true', 'verify: false'],
+  ['client TLS', 'tls {', 'ignored_tls {'],
+  ['TLS handshake', 'handshake_first: true', 'handshake_first: false'],
+  ['TLS version', 'min_version: "1.2"', 'min_version: "1.0"'],
+  ['account', 'EVENT_CORE {', 'FOREIGN {'],
+  ['publish permissions', '"ev.>"', '">"'],
+  ['subscribe permissions', '"_INBOX.projection.>"', '">"'],
+  ['excluded permissions', 'deny: [">"]', 'allow: [">"]'],
+  ['extra setting', '\nlisten:', '\ninclude foreign.conf\nlisten:'],
+];
+for (const [name, before, after] of configFaults) {
+  async function refusesConfig() {
+    const fixture = clusterFixture();
+    fixture.configFault = [before, after];
+    await runFixture(fixture, natsRefusal);
+  }
+  test(`NATS config refuses changed ${name} before Helm`, refusesConfig);
+}
+const connectionFaults = [
+  ['nats', 'NATS_LISTEN', '127.0.0.1:4222'], ['nats', 'NATS_STORE_DIR', '/tmp'],
+  ['nats', 'NATS_CA_FILE', '/foreign/ca.crt'], ['nats', 'NATS_CERT_FILE', '/foreign/server.crt'],
+  ['nats', 'NATS_KEY_FILE', '/foreign/server.key'],
+];
+for (const prefix of ['', 'COMMAND_']) {
+  for (const [name, value] of [
+    ['NATS_URL', 'nats://nats:4223'], ['NATS_CA_FILE', '/foreign/ca.crt'],
+    ['NATS_CERT_FILE', '/run/opencrane/files/projection.crt'],
+    ['NATS_KEY_FILE', '/run/opencrane/files/projection.key'],
+    ['NATS_NKEY_SEED_FILE', '/run/opencrane/files/projection.seed'],
+    ['NATS_INBOX_PREFIX', '_INBOX.foreign'],
+  ]) {
+    connectionFaults.push(['runtime', `${prefix}${name}`, value]);
+    connectionFaults.push(['bootstrap', `${prefix}${name}`, value]);
+  }
+}
+for (const fault of connectionFaults) {
+  async function refusesConnection() {
+    const fixture = clusterFixture();
+    fixture.settingFault = fault;
+    await runFixture(fixture, natsRefusal);
+  }
+  test(`NATS connection refuses ${fault[0]} ${fault[1]} before Helm`, refusesConnection);
+}
+for (const role of ['command', 'projection', 'dispatcher', 'computer']) {
+  for (const fault of ['invalid', 'duplicate', 'seed']) {
+    if (role === 'computer' && fault === 'seed') continue;
+    async function refusesRoleKey() {
+      const fixture = clusterFixture();
+      fixture.nkeyFault = [role, fault];
+      await runFixture(fixture, natsRefusal);
+    }
+    test(`NATS ${role} refuses ${fault} role key before Helm`, refusesRoleKey);
+  }
+}
+async function refusesDifferentRuntimeTrust() {
+  const fixture = clusterFixture();
+  fixture.caFault = 'runtime';
+  await runFixture(fixture, natsRefusal);
+}
+test('NATS refuses different mounted runtime trust before Helm', refusesDifferentRuntimeTrust);
+
+async function refusesStandaloneIdentity() {
+  const fixture = validFixture();
+  fixture.identityFault = ['command', 'expired'];
+  await runFixture(fixture, natsRefusal);
+}
+test('R1 also refuses an expired mounted command certificate before Helm', refusesStandaloneIdentity);

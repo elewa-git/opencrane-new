@@ -10,6 +10,7 @@ import { readBoundedJson, readBoundedText } from './bounded-input.ts';
 import { secondary, stackId } from './identity.ts';
 import { targetConnection, targetRecorded } from './target.ts';
 import { checkCnpgInstallation } from './cnpg.ts';
+import { checkNatsInputs } from '../package/check-nats-inputs.ts';
 
 const execute = promisify(execFile);
 const namespace = `opencrane-package-${stackId}`;
@@ -209,6 +210,11 @@ export async function packageConnectionArgs(owner: PackageOwner) {
   return { args, environment };
 }
 
+async function ownedKubectl(owner: PackageOwner, args: string[], timeoutMs?: number) {
+  await packageConnectionArgs(owner);
+  return kubectl(args, owner.context, timeoutMs);
+}
+
 function valuesLocation(valuesFile: string) {
   const absoluteFile = resolve(root, valuesFile);
   return { directory: dirname(absoluteFile), name: basename(absoluteFile) };
@@ -280,16 +286,60 @@ function checkReplicaSettings(name: string, stored: SecretData, values: PackageV
   }
 }
 
-async function checkNamedSecrets(values: PackageValues, review: PackageReview, context: string) {
+async function checkClusterNodes(owner: PackageOwner) {
+  if (!await targetRecorded() || owner.context === 'k3d-ocn') {
+    throw new Error('NATS cluster requires a recorded isolated target');
+  }
+  await packageConnectionArgs(owner);
+  const target = await readBoundedJson(`${directory}/target-owner.json`) as {
+    id: string; nodes: Record<string, string>;
+  };
+  const output = await kubectl(['get', 'nodes', '-o', 'json'], owner.context);
+  const nodes = JSON.parse(output) as { items: Array<{
+    metadata: { name: string; uid: string; labels?: Record<string, string> };
+    spec?: { unschedulable?: boolean; taints?: Array<{ effect: string }> };
+    status?: { conditions?: Array<{ type: string; status: string }> };
+  }> };
+  const names = new Set<string>();
+  const uids = new Set<string>();
+  const hostnames = new Set<string>();
+  for (const node of nodes.items) {
+    if (!node.metadata.name || !node.metadata.uid ||
+        target.nodes[node.metadata.name] !== node.metadata.uid ||
+        node.metadata.labels?.['opencrane.dev/target-id'] !== target.id) {
+      throw new Error('Target node ownership changed');
+    }
+    const hostname = node.metadata.labels?.['kubernetes.io/hostname'];
+    let ready = false;
+    for (const condition of node.status?.conditions ?? []) {
+      if (condition.type === 'Ready' && condition.status === 'True') ready = true;
+    }
+    for (const taint of node.spec?.taints ?? []) {
+      if (taint.effect === 'NoSchedule' || taint.effect === 'NoExecute') ready = false;
+    }
+    if (!ready || node.spec?.unschedulable || typeof hostname !== 'string' || !hostname) continue;
+    names.add(node.metadata.name);
+    uids.add(node.metadata.uid);
+    hostnames.add(hostname);
+  }
+  if (nodes.items.length !== 3 || names.size !== 3 || uids.size !== 3 || hostnames.size !== 3) {
+    throw new Error('NATS cluster needs three eligible distinct nodes');
+  }
+}
+
+async function checkNamedSecrets(values: PackageValues, review: PackageReview, owner: PackageOwner) {
+  const secrets: Record<string, SecretData> = {};
   for (const name of review.requiredSecrets) {
     const secret = values.secrets[name]!;
-    const found = await kubectl(['-n', namespace, 'get', 'secret', secret,
-      '--ignore-not-found', '-o', 'json'], context);
+    const found = await ownedKubectl(owner, ['-n', namespace, 'get', 'secret', secret,
+      '--ignore-not-found', '-o', 'json']);
     if (!found) throw new Error(`Required secret is absent: ${name}`);
     const stored = JSON.parse(found) as SecretData;
     checkReplicaSettings(name, stored, values);
     checkSecretFields(name, stored);
+    secrets[name] = stored;
   }
+  return secrets;
 }
 
 async function checkRenderedPackage(valuesFile: string, review: PackageReview) {
@@ -316,15 +366,15 @@ async function checkRenderedPackage(valuesFile: string, review: PackageReview) {
   }
 }
 
-async function checkLiveExposure(context: string) {
-  const gatewayResources = await kubectl(['api-resources',
-    '--api-group=gateway.networking.k8s.io', '--no-headers', '--output=name'], context);
+async function checkLiveExposure(owner: PackageOwner) {
+  const gatewayResources = await ownedKubectl(owner, ['api-resources',
+    '--api-group=gateway.networking.k8s.io', '--no-headers', '--output=name']);
   const resourcesToCheck = ['services', 'ingresses'];
   if (gatewayResources.split('\n').includes('gateways.gateway.networking.k8s.io')) {
     resourcesToCheck.push('gateways.gateway.networking.k8s.io');
   }
-  const live = await kubectl(['-n', namespace, 'get',
-    resourcesToCheck.join(','), '-o', 'json'], context);
+  const live = await ownedKubectl(owner, ['-n', namespace, 'get',
+    resourcesToCheck.join(','), '-o', 'json']);
   const resources = JSON.parse(live) as {
     items: Array<{ kind: string; spec?: { type?: string } }>;
   };
@@ -336,9 +386,9 @@ async function checkLiveExposure(context: string) {
   }
 }
 
-async function releaseSecret(context: string) {
-  const secret = await kubectl(['-n', namespace, 'get', 'secret',
-    `sh.helm.release.v1.${release}.v1`, '--ignore-not-found', '-o', 'json'], context);
+async function releaseSecret(owner: PackageOwner) {
+  const secret = await ownedKubectl(owner, ['-n', namespace, 'get', 'secret',
+    `sh.helm.release.v1.${release}.v1`, '--ignore-not-found', '-o', 'json']);
   if (!secret) return undefined;
   return JSON.parse(secret) as ReleaseSecret;
 }
@@ -351,7 +401,7 @@ function requireOwnedRelease(secret: ReleaseSecret | undefined, owner: PackageOw
 }
 
 async function ownedReleaseSecretUid(owner: PackageOwner) {
-  const secret = await releaseSecret(owner.context);
+  const secret = await releaseSecret(owner);
   if (!secret) return undefined;
   requireOwnedRelease(secret, owner);
   return secret.metadata.uid;
@@ -365,11 +415,10 @@ function failed(condition: { type: string; status: string }) {
   return condition.type === 'Failed' && condition.status === 'True';
 }
 
-async function waitForBootstrap(context: string) {
+async function waitForBootstrap(owner: PackageOwner) {
   const deadline = Date.now() + 600_000;
   while (Date.now() < deadline) {
-    const output = await kubectl(['-n', namespace, 'get', 'job', 'bootstrap', '-o', 'json'],
-      context);
+    const output = await ownedKubectl(owner, ['-n', namespace, 'get', 'job', 'bootstrap', '-o', 'json']);
     const job = JSON.parse(output) as {
       status?: { conditions?: Array<{ type: string; status: string }> };
     };
@@ -383,17 +432,16 @@ async function waitForBootstrap(context: string) {
   throw new Error('Package bootstrap Job timed out');
 }
 
-async function configureComputerGateway(context: string) {
-  const output = await kubectl(['-n', namespace, 'get', 'service', 'server', '-o', 'json'],
-    context);
+async function configureComputerGateway(owner: PackageOwner) {
+  const output = await ownedKubectl(owner, ['-n', namespace, 'get', 'service', 'server', '-o', 'json']);
   const service = JSON.parse(output) as { spec?: { type?: string; clusterIP?: string } };
   const address = service.spec?.clusterIP;
   if (service.spec?.type !== 'ClusterIP' || !address || isIP(address) === 0) {
     throw new Error('The private gateway Service has no ClusterIP');
   }
   const patch = JSON.stringify({ data: { gateway: `http://${address}:43000` } });
-  await kubectl(['-n', namespace, 'patch', 'configmap', 'computer-runtime',
-    '--type=merge', '-p', patch], context);
+  await ownedKubectl(owner, ['-n', namespace, 'patch', 'configmap', 'computer-runtime',
+    '--type=merge', '-p', patch]);
 }
 
 export async function installPackage(valuesFile: string) {
@@ -401,18 +449,25 @@ export async function installPackage(valuesFile: string) {
   const owner = await verifyPackageOwner();
   const context = owner.context;
   function checkedKubectl(args: string[], timeoutMs?: number) {
-    return kubectl(args, context, timeoutMs);
+    return ownedKubectl(owner, args, timeoutMs);
   }
   await checkCnpgInstallation(values, namespace, checkedKubectl);
-  await checkNamedSecrets(values, review, context);
+  const secrets = await checkNamedSecrets(values, review, owner);
+  if (values.natsCluster?.enabled) {
+    await checkClusterNodes(owner);
+    const { checkPreparedNatsRoutes } = await import('../package/prepare-nats-routes.ts');
+    await checkPreparedNatsRoutes(valuesFile, owner);
+  }
+  await checkNatsInputs(secrets);
   await checkRenderedPackage(valuesFile, review);
-  if (await releaseSecret(context)) throw new Error('A Helm release already uses this namespace');
+  if (await releaseSecret(owner)) throw new Error('A Helm release already uses this namespace');
   // Save the identity before Helm runs so interrupted cleanup can recognise this install.
   owner.installId = randomUUID();
   await saveOwner(owner);
   try {
     const location = valuesLocation(valuesFile);
     const chartDirectory = resolve(root, 'infra/package/chart');
+    await packageConnectionArgs(owner);
     await command('helm', ['install', release, chartDirectory,
       '--kube-context', context, '--namespace', namespace, '--values', location.name,
       '--labels', `${installIdLabel}=${owner.installId}`,
@@ -429,18 +484,18 @@ export async function installPackage(valuesFile: string) {
   else delete owner.releaseSecretUid;
   if (!owner.releaseSecretUid) throw new Error('Helm did not record its release');
   await saveOwner(owner);
-  await configureComputerGateway(context);
-  await waitForBootstrap(context);
+  await configureComputerGateway(owner);
+  await waitForBootstrap(owner);
   const deployments = [
     'server', 'web', 'worker-members', 'worker-mcp-catalogue', 'worker-computers',
     'worker-conversations', 'worker-files', 'worker-budgets', 'worker-audit',
     'worker-dispatcher',
   ];
   for (const deployment of deployments) {
-    await kubectl(['-n', namespace, 'rollout', 'status', `deployment/${deployment}`,
-      '--timeout=180s'], context, 240_000);
+    await checkedKubectl(['-n', namespace, 'rollout', 'status', `deployment/${deployment}`,
+      '--timeout=180s'], 240_000);
   }
-  await checkLiveExposure(context);
+  await checkLiveExposure(owner);
 }
 
 export async function removePackage(checkUnrecordedNamespace = true) {
@@ -469,7 +524,7 @@ export async function removePackage(checkUnrecordedNamespace = true) {
   for (const installed of releases) {
     if (installed.name !== release) throw new Error('Another Helm release uses this namespace');
   }
-  const secret = await releaseSecret(context);
+  const secret = await releaseSecret(owner);
   if (releases.length > 0 || secret) {
     requireOwnedRelease(secret, owner);
     if (!owner.releaseSecretUid) {

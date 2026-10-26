@@ -241,6 +241,11 @@ Helm; image refusals allow rendering but never installation. Complete CNPG and
 standalone fixtures reach the release check. These fixtures do not qualify live CNPG.
 The [installer receipt](../../docs/process/p5-3-pr2/receipt.md) records local checks.
 
+The installer and route-preparation tests share `expired-certificate-fixture.mjs`.
+It signs a peer certificate with an ordered start and end date in the past.
+This avoids negative certificate lifetimes, which some OpenSSL versions refuse.
+The fixture checks both dates before the expired identity reaches validation.
+
 The fresh-install runner and NATS route preparation tests use `packaged-fixture.ts`
 to copy the installer and its local imports into temporary worktrees. The helper
 checks imports with the installed TypeScript parser. A new local import must join
@@ -258,19 +263,17 @@ NOT RUN under #15. Rendering is not live k3d proof.
 
 ## Three-peer NATS rendering
 
-P5-4 PR 2 adds an opt-in render path. It does not install or qualify R3. The
-ordinary installer still rejects `natsCluster` as an unsupported package setting,
-even with complete references. The preview now includes the complete bootstrap Job
-and its private file mounts. The source behaviour is described in
-[Packaged bootstrap](#packaged-bootstrap). Controller and storage checks and a reviewed compatible
-image are still required before R3 installation. Never apply this preview as a working package.
+The chart describes three peers for preview or checked installation. Installation
+requires `renderOnly: false`. Preflight accepts only the four settings below and
+requires `reviewed-images.json` to contain `natsCluster.replicas: 3`, plus
+`natsCluster.server` and `natsCluster.web` equal to the exact reviewed image pins.
+The shipped review has no such approval, so its old image still refuses.
+Preparation can pass preflight before route objects exist. Image promotion is separate.
 
-These chart-only settings are added to an otherwise complete values file:
-
-| Setting | Default | Required for the cluster render |
+| Setting | Default | Required for the cluster |
 | --- | --- | --- |
 | `natsCluster.enabled` | `false` | `true` |
-| `natsCluster.renderOnly` | `false` | `true`; otherwise rendering refuses |
+| `natsCluster.renderOnly` | `false` | `true` for preview; `false` for installation |
 | `natsCluster.routeCASecret` | empty | Separate Secret containing only public route trust in `ca.crt` |
 | `natsCluster.peerCertificateSecrets` | empty list | Three distinct Secrets, ordered 0–2, each with `tls.crt` and `tls.key` |
 
@@ -302,8 +305,8 @@ fallback. No signing key belongs in the route trust Secret.
 `chart-render.test.mjs` checks the real Helm output and uses the pinned NATS server
 to parse each peer's configuration with disposable certificates. It checks missing
 trust refusals, storage, node separation rules, private services, the disruption
-budget and unchanged default rendering. `preflight.test.mjs` checks the ordinary
-installer's refusal. Existing event-store cluster tests retain real TLS refusals.
+budget and unchanged default rendering. `preflight.test.mjs` checks image compatibility
+and refusal of the shipped image. Existing event-store cluster tests retain real TLS refusals.
 [The receipt](../../docs/process/p5-4-pr2/receipt.md) separates source checks from
 three-node placement, R3 bootstrap, rotation and P5-5, all still NOT RUN.
 
@@ -314,7 +317,7 @@ P5-4 PR 3b adds `prepare-nats-routes.ts`. After ordinary private preparation, ru
 The values include the cluster render settings above. The command checks the recorded
 package owner, uses its verified Kubernetes context, checks reviewed image pins and
 renders the real chart in that namespace. Each Secret read and creation checks the
-target again and uses its private kubeconfig when a separate target is recorded.
+package owner and namespace UID again. The private kubeconfig travels in the child environment.
 Without a separate target, it uses the existing `k3d-ocn` context. There is no caller
 context override. Offline chart rendering does not connect to Kubernetes.
 
@@ -330,7 +333,16 @@ A successful retry verifies the saved namespace, references, object UIDs and exa
 contents. Changed or foreign objects, missing objects and incomplete preparation
 refuse without overwriting anything. An interrupted attempt requires operator inspection;
 there is no automatic cleanup, renewal or recovery. Command output is withheld on failure.
-The helper does not start NATS, change client settings, bootstrap R3 or enable installation.
+Installation reuses this validation without generating or creating objects. It
+requires the exact saved namespace, context, worktree, references, object UIDs and
+contents, immutable objects, distinct peer keys, exact DNS names, valid dates, both
+TLS usages and separate route trust. The live NATS client CA must still match the
+prepared client CA. Every object operation rechecks ownership.
+The target must be recorded and isolated, with exactly three recorded node UIDs,
+three different hostnames and three Ready, schedulable nodes without blocking taints.
+`cnpg-install.test.mjs` uses synthetic Kubernetes replies and real Helm to check
+admission and refusal. Live R3 remains NOT RUN; see the
+[installer receipt](../../docs/process/p5-4-pr5b/receipt.md).
 
 `nice -n 10 node --experimental-strip-types --test infra/package/prepare-nats-routes.test.mjs`
 runs disposable certificate and Kubernetes command fixtures, including pinned NATS parsing.
@@ -341,12 +353,11 @@ Live rotation and three-node installation remain NOT RUN.
 
 P5-4 PR 5a carries one replica choice through preparation and bootstrap. The private
 settings writer chooses `1` when `natsCluster` is absent or explicitly disabled.
-It chooses `3` only when `enabled` and `renderOnly` are both `true`. Missing or
+It chooses `3` when `enabled` is `true` and `renderOnly` is a boolean. Missing or
 invalid flags and conflicting modes refuse before credentials or Secrets are written.
 It writes the same value to `NATS_REPLICAS` and `COMMAND_NATS_REPLICAS`.
-The ordinary preparation entry point still runs the unchanged installer preflight,
-which refuses `natsCluster`. The R3 writer is tested through the existing preparation
-fixture; there is no new command or environment bypass to enable installation.
+The preparation entry point runs image and settings preflight first. It does not
+require route objects, which the separate route preparation command creates later.
 
 Before any Helm command, the installer requires both runtime replica settings to
 match the chart's count. Any same-named setting in the bootstrap Secret must also
@@ -354,7 +365,8 @@ match; bootstrap cannot supply a missing runtime setting. It compares the Secret
 fields in memory and reports only a fixed error, never their supplied values.
 `cnpg-install.test.mjs` records executed commands and checks that mismatches,
 missing fields and conflicting overrides run no Helm command. Matching R1 inputs
-reach rendering and the existing-release check. R3 still refuses at preflight.
+reach rendering and the existing-release check. Prepared R3 with a synthetic image
+review reaches exactly one install; the shipped review still refuses.
 
 Bootstrap requires both replica settings to be exactly `1` or `3` and to agree.
 It checks them before database setup, stream provisioning and private owner files.
@@ -397,8 +409,8 @@ The [readiness evidence](../../docs/process/ci-flakes-15.md) records the checks.
 
 The Helm preview includes the same Job, service account and private mounts as the
 default render. The shipped image pin is unchanged and has not been qualified for
-this source. Controller and storage prerequisites and a compatible image must
-be checked before the ordinary installer can accept R3.
+this source. Image promotion and live controller, storage and placement checks
+remain separate work.
 
 The chart tests inspect real Helm output and the existing preparation fixture's
 written settings. `bootstrap.test.ts` executes the bootstrap functions with disposable
@@ -729,13 +741,10 @@ starting a loopback-only forward. The launcher forwards SIGINT and SIGTERM to
 its child and waits for it to exit. Command output is withheld and failures use
 fixed text, including when Kubernetes includes private values in an error.
 
-R3 installation remains refused by preflight. This part changes host-side
-commands, not the running bootstrap or adapter. It neither promotes a new runtime
-image nor treats an old image as proof of new bootstrap code. The next part must
-validate prepared identities, eligible nodes and reviewed pins; use one replica
-choice across stream setup, owner bootstrap, runtime and dispatcher; render the
-complete cluster bootstrap Job; and promote the changed runtime through digest
-and licence checks. Those steps block live installation.
+R3 installation now checks prepared identities, eligible isolated nodes and an
+explicit compatibility review for the server and web image pins. The shipped review
+still refuses. The source uses one replica choice across preparation, bootstrap,
+runtime and dispatcher. Image promotion and live qualification remain separate work.
 
 The [receipt](../../docs/process/p5-4-pr4/receipt.md) records source checks.
 Live placement, rotation and node failure remain NOT RUN.
@@ -845,3 +854,34 @@ Exit zero means submitted records cover the checklist, including synthetic test
 records. The output still says PARTIAL; it does not establish live qualification.
 Exit one lists missing/refused evidence. The [source receipt](../../docs/process/p5-13-pr1/receipt.md)
 records checks and outstanding native-memory, company-credential and routine proof.
+
+## Mounted NATS inputs before installation
+
+`check-nats-inputs.ts` checks the actual NATS and runtime-files Secrets collected
+by the installer, for both R1 and R3, before Helm rendering or installation.
+The server certificate must have subject `CN=nats`, exactly the DNS names `nats`
+and `localhost` and IP address `127.0.0.1`, and only the server TLS usage.
+Command, projection and dispatcher certificates must have their exact role as
+common name, no extra alternative names and only the client TLS usage.
+All four certificates must be current, must match their private key and must be
+issued by the mounted client CA. The CA must be current and self-signed; runtime
+and server trust bytes must agree. OpenSSL also checks each certificate's purpose.
+R3 retains the comparison with the locally prepared client CA and separate route trust.
+
+The mounted `nats.conf` must match `infra/nats/nats.conf` byte for byte. This is a
+fixed package policy, including comments and whitespace; custom configuration is
+refused. It protects the store directory variable, verified client TLS, accounts,
+imports, exports and permissions, including against extra includes or duplicate
+settings. The server must listen on `0.0.0.0:4222`, store data in `/data` and use
+`/tls/ca.crt`, `/tls/server.crt` and `/tls/server.key`.
+Runtime and dispatcher command connections must use `tls://nats:4222`, the command
+certificate, key and seed under `/run/opencrane/files`, and `_INBOX.command`.
+Optional bootstrap overrides must agree. All five public NKeys must be valid,
+distinct user keys. Each mounted role seed must match its public key.
+
+Only fixed public certificate filenames enter OpenSSL arguments. Temporary files
+are private and removed afterwards. Credential values, errors and private host
+paths are withheld from output. The installer tests use generated certificates,
+real NKeys and the shipped configuration. Separate cases change each mounted
+identity's key, dates, names, usages, CA status and issuer, then check refusal
+before any Helm command. Expired and future fixtures use explicit ordered dates.

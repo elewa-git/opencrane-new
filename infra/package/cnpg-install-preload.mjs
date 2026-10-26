@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import childProcess from 'node:child_process';
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { registerHooks, syncBuiltinESMExports } from 'node:module';
 import { promisify } from 'node:util';
 
@@ -22,8 +22,13 @@ registerHooks(hooks);
 const original = childProcess.execFile;
 let installed = false;
 function kubernetes(args) {
-  assert.equal(args[0], '--context=k3d-ocn');
-  if (args.includes('namespace')) return fixture.namespace;
+  const context = fixture.cluster ? 'k3d-opencrane-target-1' : 'k3d-ocn';
+  assert(args.includes(`--context=${context}`) || args[args.indexOf('--context') + 1] === context);
+  if (args.includes('nodes')) return fixture.nodes;
+  if (args.includes('namespace')) {
+    if (fixture.loseTarget) rmSync('target-owner.json', { force: true });
+    return fixture.namespace;
+  }
   if (args.includes('--raw')) {
     if (fixture.dependencyFailure === 'api') throw new Error(fixture.canary);
     return fixture.api;
@@ -63,13 +68,29 @@ function kubernetes(args) {
       'opencrane.dev/install-id': owner.installId,
     } } };
   }
+  if (fixture.loseRouteTarget && name === 'route-trust') rmSync('target-owner.json');
   if (fixture.dependencyFailure === name) throw new Error(fixture.canary);
   if (fixture.invalidJson === name) return fixture.canary;
   return fixture.secrets[name] ?? '';
 }
 function execute(program, args, options, callback) {
   appendFileSync('calls.jsonl', JSON.stringify({ program, args }) + '\n');
-  if (program === 'node') return original(program, args, options, callback);
+  if (program === 'node' || program === process.execPath || program === 'openssl') return original(program, args, options, callback);
+  if (program === 'docker') {
+    const record = JSON.parse(readFileSync('target-owner.json', 'utf8'));
+    const labels = { 'opencrane.dev/target-id': record.id };
+    let output = record.containers.join('\n');
+    if (args[0] === 'network') {
+      output = record.network;
+      if (args[1] === 'inspect') output = JSON.stringify([{ Id: record.network, Labels: labels }]);
+    } else if (args[0] === 'inspect') {
+      const containers = [];
+      for (const Id of record.containers) containers.push({ Id, Config: { Labels: labels }, Mounts: [] });
+      output = JSON.stringify(containers);
+    }
+    callback(null, output, '');
+    return;
+  }
   if (program === 'helm') {
     if (fixture.install) {
       const valuesName = args[args.indexOf('--values') + 1];

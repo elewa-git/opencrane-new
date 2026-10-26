@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createPrivateKey, X509Certificate } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { resolve, basename } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { issueCertificate } from '../../libs/event-store/test/certificates.ts';
 import { directory, root } from '../dev-stack/config.ts';
-import { verifyPackageOwner } from '../dev-stack/packaged.ts';
-import { targetConnection } from '../dev-stack/target.ts';
+import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
 
 const execute = promisify(execFile);
 const routesDirectory = `${directory}/nats-routes`;
@@ -26,17 +27,15 @@ type Secret = {
   data: Record<string, string>;
 };
 
-async function command(program: string, args: string[], cwd = root) {
-  const result = await execute(program, args, { cwd, timeout: 30_000, maxBuffer: 2_000_000 });
+async function command(program: string, args: string[], cwd = root, env = { ...process.env }) {
+  const result = await execute(program, args, { cwd, env, timeout: 30_000, maxBuffer: 2_000_000 });
   return result.stdout.trim();
 }
 
 async function kubectl(owner: Owner, args: string[]) {
-  const connection = await targetConnection();
-  assert.equal(connection.context, owner.context);
-  const options = [`--context=${connection.context}`];
-  if (connection.kubeconfig) options.push('--kubeconfig', connection.kubeconfig);
-  return command('kubectl', [...options, '-n', owner.namespace, ...args]);
+  const options = await packageConnectionArgs(owner);
+  return command('kubectl', [...options.args, '-n', owner.namespace, ...args],
+    directory, options.environment);
 }
 
 async function privateDirectory(path: string) {
@@ -45,10 +44,11 @@ async function privateDirectory(path: string) {
   assert.equal(await realpath(path), path);
 }
 
-async function reviewedReferences(valuesFile: string, owner: Owner) {
+async function reviewedReferences(valuesFile: string, owner: Owner, checkOnly: boolean) {
   const values = JSON.parse(await readFile(valuesFile, 'utf8')) as Record<string, unknown>;
   const cluster = values['natsCluster'] as Cluster;
-  assert(cluster?.enabled === true && cluster.renderOnly === true);
+  assert(cluster?.enabled === true && typeof cluster.renderOnly === 'boolean');
+  if (checkOnly) assert.equal(cluster.renderOnly, false);
   const allowed = ['enabled', 'renderOnly', 'routeCASecret', 'peerCertificateSecrets'];
   for (const key of Object.keys(cluster)) assert(allowed.includes(key));
   assert(Array.isArray(cluster.peerCertificateSecrets) && cluster.peerCertificateSecrets.length === 3);
@@ -60,17 +60,18 @@ async function reviewedReferences(valuesFile: string, owner: Owner) {
     assert(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/u.test(reference));
     assert(!clientReferences.includes(reference));
   }
+  if (checkOnly) return references;
   const temporary = await mkdtemp(`${directory}/route-check-`);
   try {
     await writeFile(`${temporary}/chart.json`, JSON.stringify(values), { mode: 0o600 });
     delete values['natsCluster'];
     await writeFile(`${temporary}/base.json`, JSON.stringify(values), { mode: 0o600 });
-    await command(process.execPath, ['infra/package/preflight.mjs', `${temporary}/base.json`,
-      'infra/package/reviewed-images.json']);
+    await command(process.execPath, [`${root}/infra/package/preflight.mjs`, 'base.json',
+      `${root}/infra/package/reviewed-images.json`], temporary);
     const chart = await readFile(`${root}/infra/package/chart/Chart.yaml`, 'utf8');
     assert.equal(chart.match(/^version:\s*(\S+)$/mu)?.[1], values['chartVersion']);
-    await command('helm', ['template', owner.release, 'infra/package/chart',
-      '--namespace', owner.namespace, '--values', `${temporary}/chart.json`]);
+    await command('helm', ['template', owner.release, `${root}/infra/package/chart`,
+      '--namespace', owner.namespace, '--values', 'chart.json'], temporary);
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
@@ -157,10 +158,9 @@ function matches(found: Secret, expected: Secret) {
   assert.deepEqual(found.data, expected.data);
 }
 
-async function prepare(valuesFile: string) {
-  const owner = await verifyPackageOwner();
+async function prepare(valuesFile: string, checkOnly: boolean, owner: Owner) {
   await privateDirectory(directory);
-  const references = await reviewedReferences(valuesFile, owner);
+  const references = await reviewedReferences(valuesFile, owner, checkOnly);
   const binding = { namespaceUid: owner.namespaceUid, context: owner.context,
     namespace: owner.namespace, worktree: owner.worktree, references };
   let existing = false;
@@ -175,6 +175,7 @@ async function prepare(valuesFile: string) {
     const output = await kubectl(owner, ['get', 'secret', name, '--ignore-not-found', '-o', 'json']);
     found.push(output ? JSON.parse(output) as Secret : undefined);
   }
+  if (checkOnly) assert(existing);
   if (!existing) {
     for (const object of found) assert.equal(object, undefined);
     await generate(owner);
@@ -187,6 +188,7 @@ async function prepare(valuesFile: string) {
       binding: typeof binding; uids: string[];
     };
     assert.deepEqual(state.binding, binding);
+    assert.equal(state.uids.length, references.length);
     for (let index = 0; index < references.length; index++) {
       const expected = await secret(owner, references[index]!, index);
       const stored = found[index];
@@ -204,7 +206,7 @@ async function prepare(valuesFile: string) {
     const manifest = `${routesDirectory}/secret-${index}.json`;
     await writeFile(manifest, JSON.stringify(expected), { mode: 0o600, flag: 'wx' });
     // Create only. Kubernetes must refuse an object that appeared after the absence check.
-    const output = await kubectl(owner, ['create', '-f', manifest, '-o', 'json']);
+    const output = await kubectl(owner, ['create', '-f', `nats-routes/${basename(manifest)}`, '-o', 'json']);
     const created = JSON.parse(output) as Secret;
     matches(created, expected);
     uids.push(created.metadata.uid!);
@@ -212,12 +214,29 @@ async function prepare(valuesFile: string) {
   await writeFile(stateFile, JSON.stringify({ binding, uids }), { mode: 0o600, flag: 'wx' });
 }
 
-try {
-  assert(process.argv.length === 3 && process.argv[2]);
-  await prepare(process.argv[2]);
-  console.log('PASS private NATS route identities prepared');
-} catch {
-  // Withhold subprocess output and assertions because either can contain credential bytes.
-  console.error('FAIL private NATS route preparation');
-  process.exitCode = 1;
+export async function checkPreparedNatsRoutes(valuesFile: string, owner: Owner) {
+  try {
+    await prepare(valuesFile, true, owner);
+    const values = JSON.parse(await readFile(valuesFile, 'utf8')) as {
+      secrets: { nats: string };
+    };
+    const output = await kubectl(owner, ['get', 'secret', values.secrets.nats, '-o', 'json']);
+    const client = JSON.parse(output) as Secret;
+    const preparedCA = await readFile(`${directory}/ca.crt`);
+    assert.equal(client.data['ca.crt'], preparedCA.toString('base64'));
+  } catch {
+    throw new Error('Prepared NATS routes are incomplete or incompatible');
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  try {
+    assert(process.argv.length === 3 && process.argv[2]);
+    await prepare(process.argv[2], false, await verifyPackageOwner());
+    console.log('PASS private NATS route identities prepared');
+  } catch {
+    // Withhold subprocess output and assertions because either can contain credential bytes.
+    console.error('FAIL private NATS route preparation');
+    process.exitCode = 1;
+  }
 }

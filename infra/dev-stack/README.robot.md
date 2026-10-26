@@ -2034,9 +2034,12 @@ image review still refuses CNPG; this check does not enable a live installation.
 Secret before any Helm command. Both must match the chart's replica count.
 Same-named bootstrap overrides are optional, but must match that count too.
 The installer refuses missing, unsupported, unequal or conflicting values without
-printing them. R3 installation remains refused by the unchanged preflight.
-The executed-command cases in `infra/package/cnpg-install.test.mjs` check refusals
-and the matching R1 path through real Helm rendering.
+printing them. R3 also requires an explicit compatibility review for the exact
+server/web pins, prepared route identities and three eligible distinct nodes in the
+recorded isolated target. The shipped review still refuses. Kubernetes operations
+recheck the original package owner and namespace UID before each request.
+`infra/package/cnpg-install.test.mjs` checks R1, R3 and refusals with real Helm
+rendering and synthetic Kubernetes replies. Live R3 remains NOT RUN.
 
 ## Recorded package connections
 
@@ -2051,7 +2054,7 @@ for private preparation and browser forwarding. It supplies the recorded context
 as an argument and the private kubeconfig path through `KUBECONFIG` in the child
 environment, without reading or printing credential contents.
 The [package notes](../package/README.robot.md#recorded-connection-during-package-operations)
-describe the split scope and remaining R3 installation work.
+describe checked R3 admission and the remaining image and live qualification work.
 
 ## Bounded package ownership reads
 
@@ -2076,3 +2079,13 @@ package ownership and cleanup. Neither test requires a running development stack
 
 The [local operator guide and index](../../docs/process/p5-14-pr1/operator.md)
 link existing commands and distinguish source checks from live qualification.
+
+## Mounted event-log credentials
+
+Before any Helm command, `packaged.ts` passes the collected Secrets to the
+[package NATS checker](../package/README.robot.md#mounted-nats-inputs-before-installation).
+It validates the mounted server, command, projection and dispatcher certificates,
+keys, role seeds and connection settings. The NATS configuration must match the
+shipped storage, TLS and account policy. These checks apply to one and three peers.
+Route preparation uses the connection helper's separate arguments and environment,
+so the private kubeconfig filename remains outside child command arguments.

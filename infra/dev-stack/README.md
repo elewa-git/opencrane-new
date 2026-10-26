@@ -21,7 +21,7 @@ flowchart LR
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
   stack -->|starts apps; keeps keys private; checks journeys, times Memory body reads and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
-  stack -->|checks ownership, cluster, private values and replica settings| package["infra/package<br/>Helm install"]
+  stack -->|checks ownership, nodes, certificates and settings| package["infra/package<br/>Helm install"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
 ```
 
@@ -57,6 +57,9 @@ available for diagnosis.
 - Refuses incomplete controller or credential settings for an optional PostgreSQL standby.
   Checks password format and conflicting database connections before installation.
   Requires runtime and setup replica settings to match the chart before Helm runs.
+  Checks mounted event-log certificates and keys, connection settings and account rules.
+  Checks three-node eligibility, prepared certificates and image compatibility for
+  a three-peer event log. The shipped image review still refuses that mode.
 - Keeps two spare test stacks separate from the owner's copy and from each other.
 - Checks sign-in, personal memory reads, saves, correction and forgetting on an
   empty installation. Checks supplied memory receipts and records incomplete

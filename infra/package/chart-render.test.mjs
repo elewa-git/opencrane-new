@@ -344,7 +344,7 @@ function defaultPeerUnchanged() {
 test('default rendering retains one peer and the ordinary bootstrap', defaultPeerUnchanged);
 
 const invalidClusters = [
-  { renderOnly: false },
+  { renderOnly: "false" },
   { routeCASecret: '' },
   { routeCASecret: 'chart-test-nats' },
   { peerCertificateSecrets: [] },
@@ -421,17 +421,18 @@ async function refusesClusterInstallation() {
   const directory = await mkdtemp(join(tmpdir(), 'chart-install-'));
   try {
     const values = clusterValues();
-    const review = { chartVersion: values.chartVersion, images: values.images };
+    const review = { chartVersion: values.chartVersion, images: values.images,
+      requiredSecrets: Object.keys(values.secrets) };
     await writeFile(`${directory}/values.json`, JSON.stringify(values));
     await writeFile(`${directory}/review.json`, JSON.stringify(review));
     const args = ['infra/package/preflight.mjs', `${directory}/values.json`,
       `${directory}/review.json`];
     const result = spawnSync('node', args, { encoding: 'utf8' });
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /Unsupported package setting/u);
+    assert.match(result.stderr, /Unsupported NATS cluster setting/u);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 }
-test('ordinary installer refuses even a complete cluster render configuration',
+test('ordinary installer refuses preview-only cluster settings',
   refusesClusterInstallation);

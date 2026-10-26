@@ -9,6 +9,7 @@ import { isDeepStrictEqual, promisify } from 'node:util';
 import { parseAllDocuments } from 'yaml';
 import { issueCertificate, sharedCertificates } from '../../libs/event-store/test/certificates.ts';
 import { copyPackagedFixture } from './packaged-fixture.ts';
+import { expireCertificate } from './expired-certificate-fixture.mjs';
 
 const execute = promisify(execFile);
 const namespace = 'opencrane-package-1';
@@ -23,13 +24,8 @@ if (fs.existsSync(slot + '/target-owner.json')) {
   const context = args.includes('--context=k3d-opencrane-target-1') ||
     args[args.indexOf('--context') + 1] === 'k3d-opencrane-target-1';
   if (!context) process.exit(30);
-  const inherited = args.includes('nodes') || args.includes('namespace');
-  if (inherited) {
-    if (args.includes('--kubeconfig')) process.exit(30);
-    if (process.env.KUBECONFIG !== slot + '/target.kubeconfig') process.exit(30);
-  } else if (args[args.indexOf('--kubeconfig') + 1] !== slot + '/target.kubeconfig') {
-    process.exit(30);
-  }
+  if (args.includes('--kubeconfig')) process.exit(30);
+  if (process.env.KUBECONFIG !== slot + '/target.kubeconfig') process.exit(30);
 } else if (!args.includes('--context=k3d-ocn')) process.exit(30);
 if (args.includes('nodes')) {
   process.stdout.write(fs.readFileSync(home + '/nodes.json'));
@@ -257,31 +253,6 @@ async function preparesExistingClusterIdentities() {
 }
 test('prepares route identities in the existing local cluster when no target is recorded',
   preparesExistingClusterIdentities);
-
-async function expireCertificate(directory) {
-  const config = `[ca]
-default_ca = issuer
-[issuer]
-database = index.txt
-serial = serial.txt
-new_certs_dir = .
-certificate = ca.crt
-private_key = ca.key
-default_md = sha256
-policy = subject
-[subject]
-commonName = supplied
-`;
-  await writeFile(`${directory}/expired.conf`, config);
-  await writeFile(`${directory}/index.txt`, '');
-  await writeFile(`${directory}/serial.txt`, '01\n');
-  await execute('openssl', ['ca', '-batch', '-notext', '-config', 'expired.conf',
-    '-in', 'peer-0.csr', '-out', 'peer-0.crt', '-extfile', 'peer-0.ext',
-    '-startdate', '20200101000000Z', '-enddate', '20200102000000Z'], { cwd: directory });
-  const expired = new X509Certificate(await readFile(`${directory}/peer-0.crt`));
-  assert(Date.parse(expired.validFrom) < Date.parse(expired.validTo));
-  assert(Date.parse(expired.validTo) < Date.now());
-}
 
 const refusals = ['missing reference', 'duplicate reference', 'client reference', 'wrong namespace',
   'foreign owner', 'wrong pin', 'partial preparation', 'expired certificate', 'client issuer',
