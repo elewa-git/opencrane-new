@@ -529,12 +529,13 @@ async function refusesAttemptExpiringDuringRecovery(operation: 'readAttempt' | '
     throw new Error('Fixture preparation failed');
   }
   const original = structuredClone(store.secret);
-  const clock = vi.spyOn(Date, 'now').mockReturnValue(prepared.stage.appendUntil - 1);
+  const appendUntil = prepared.stage.appendUntil;
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(appendUntil - 1);
   let reads = 0;
   function expireDuringRead() {
     reads += 1;
     if (reads === expireOnRead) {
-      clock.mockReturnValue(prepared.stage.appendUntil + 1);
+      clock.mockReturnValue(appendUntil + 1);
     }
   }
   function refuseNewMaterial(): string {
@@ -550,7 +551,7 @@ async function refusesAttemptExpiringDuringRecovery(operation: 'readAttempt' | '
       const result = await restarted.prepareAttempt(prepared.stage, refuseNewMaterial);
       expect(result).toEqual({ status: 'unknown' });
     }
-    expect(Date.now()).toBe(prepared.stage.appendUntil + 1);
+    expect(Date.now()).toBe(appendUntil + 1);
     expect(store.secret).toEqual(original);
     expect(store.creates).toBe(1);
   } finally {
