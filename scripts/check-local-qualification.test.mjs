@@ -153,6 +153,19 @@ function retainsPartialResults() {
   expect(fetch).not.toHaveBeenCalled();
 }
 
+function refusesUnlinkedRecordedResults(status) {
+  const row = index.rows[14];
+  row.status = status;
+  row.blockers = ['Recorded run did not complete.'];
+  row.receipts = [];
+  expect(check).toThrow('Qualification index refused: recorded results.');
+}
+
+function acceptsUnrunRows() {
+  index.rows[14] = emptyRow('P5-14');
+  expect(check()).toEqual(index);
+}
+
 function refusesExternalArtefacts(artefact) {
   symlinkSync(tmpdir(), join(directory, 'escape'));
   index.rows[14].receipts[0].artefacts = [artefact];
@@ -192,6 +205,10 @@ const missingScans = ['absent', 'empty scan', 'empty scan file', 'open High'];
 test.each(missingScans)('refuses %s clearance', refusesVulnerabilityClearance);
 test('refuses local evidence labelled hosted', refusesLocalAsHosted);
 test('retains exact partial failures and blockers', retainsPartialResults);
+test.each(['PARTIAL', 'FAIL'])(
+  'refuses unlinked %s results', refusesUnlinkedRecordedResults,
+);
+test('accepts rows with no recorded run', acceptsUnrunRows);
 const outside = ['https://example.invalid/proof', '../outside', 'escape'];
 test.each(outside)('refuses external or escaping artefact %s', refusesExternalArtefacts);
 test('bounds input and sanitises malformed JSON', refusesInvalidInput);
