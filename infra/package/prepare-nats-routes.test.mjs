@@ -23,7 +23,13 @@ if (fs.existsSync(slot + '/target-owner.json')) {
   const context = args.includes('--context=k3d-opencrane-target-1') ||
     args[args.indexOf('--context') + 1] === 'k3d-opencrane-target-1';
   if (!context) process.exit(30);
-  if (args[args.indexOf('--kubeconfig') + 1] !== slot + '/target.kubeconfig') process.exit(30);
+  const inherited = args.includes('nodes') || args.includes('namespace');
+  if (inherited) {
+    if (args.includes('--kubeconfig')) process.exit(30);
+    if (process.env.KUBECONFIG !== slot + '/target.kubeconfig') process.exit(30);
+  } else if (args[args.indexOf('--kubeconfig') + 1] !== slot + '/target.kubeconfig') {
+    process.exit(30);
+  }
 } else if (!args.includes('--context=k3d-ocn')) process.exit(30);
 if (args.includes('nodes')) {
   process.stdout.write(fs.readFileSync(home + '/nodes.json'));

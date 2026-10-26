@@ -24,7 +24,7 @@ flowchart LR
   stack -->|checks ownership, cluster access and bootstrap connections| package
   package -->|uses local cluster| devbox
   package -->|starts services and replays memory| apps["apps<br/>product services and replay"]
-  package -->|runs| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
+  package -->|runs services and checks NATS placement| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
 ```
@@ -58,6 +58,7 @@ running install still need work.
 - Restores checked events into an empty disposable NATS target.
 - Checks event and budget recovery after an interrupted change to handler subscriptions.
 - Checks current memory deletion records before replaying older events.
+- Checks three event-log placements against Kubernetes and fresh-install observations.
 - Removes only this worktree's install, including after an interrupted launcher.
 
 ## Processes it handles
@@ -99,6 +100,9 @@ nodes. A separate preparation command creates their private certificates and pub
 It checks ownership and uses the claimed cluster's private connection settings.
 It preserves the same identities on retry. Installation still uses
 one peer; the ordinary installer refuses three-peer mode. Live checks remain outstanding.
+A bounded collector can check recorded nodes, storage and replica state once a supported
+install exists. It requires mounted claim storage and event history with no expiry limits.
+It checks placement only; sign-in, chat and service refusals need their own checks.
 
 The chart render test needs Helm and checks the installation files without starting
 an install. It uses made-up settings. The [operator notes](README.robot.md) give the command.

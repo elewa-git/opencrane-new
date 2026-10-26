@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
-import { directory, exists, root } from './config.ts';
+import { directory, root } from './config.ts';
+import { readBoundedJson, readBoundedText } from './bounded-input.ts';
 import { secondary, stackId } from './identity.ts';
 
 const execute = promisify(execFile);
@@ -35,9 +36,15 @@ type Target = {
   nodes: Record<string, string>;
 };
 
-async function command(program: string, args: string[], timeout = 10_000) {
+async function command(program: string, args: string[], timeout = 10_000,
+  configPath?: string) {
   try {
-    const result = await execute(program, args, { cwd: root, timeout, maxBuffer: 1024 * 1024 });
+    const env = { ...process.env };
+    if (configPath) {
+      env['KUBECONFIG'] = configPath;
+    }
+    const result = await execute(program, args,
+      { cwd: root, env, timeout, maxBuffer: 1024 * 1024 });
     return result.stdout.trim();
   } catch {
     // Discard command output: kubeconfig and upstream errors can contain credentials.
@@ -46,15 +53,26 @@ async function command(program: string, args: string[], timeout = 10_000) {
 }
 
 export async function targetRecorded() {
-  return secondary && await exists(recordFile);
+  if (!secondary) {
+    return false;
+  }
+  try {
+    await access(recordFile);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
+    }
+    throw error;
+  }
 }
 
 async function readTarget() {
-  const owner = await readFile(`${directory}/stack-owner`, 'utf8');
+  const owner = await readBoundedText(`${directory}/stack-owner`);
   if (!secondary || !owner.startsWith(`worktree=${root}\n`)) {
     throw new Error('This worktree does not own the target slot');
   }
-  const record = JSON.parse(await readFile(recordFile, 'utf8')) as Target;
+  const record = await readBoundedJson(recordFile) as Target;
   if (record.worktree !== root || record.slot !== stackId || record.name !== name ||
       record.context !== context || !/^[a-f0-9-]{36}$/u.test(record.id)) {
     throw new Error('Target ownership differs from the recorded slot');
@@ -122,8 +140,8 @@ async function inspect(record: Target) {
 }
 
 async function readNodes(record: Target) {
-  const output = await command('kubectl', ['--kubeconfig', kubeconfig, '--context', context,
-    '--request-timeout=8s', 'get', 'nodes', '-o', 'json']);
+  const output = await command('kubectl', ['--context', context,
+    '--request-timeout=8s', 'get', 'nodes', '-o', 'json'], 10_000, kubeconfig);
   const { items } = JSON.parse(output) as { items: Node[] };
   const nodes: Record<string, string> = {};
   for (const node of items) {
@@ -191,8 +209,8 @@ async function startTarget(record: Target) {
     }
   }
   await saveTarget(record);
-  await command('kubectl', ['--kubeconfig', kubeconfig, '--context', context,
-    'wait', '--for=condition=Ready', 'node', '--all', '--timeout=120s'], 130_000);
+  await command('kubectl', ['--context', context,
+    'wait', '--for=condition=Ready', 'node', '--all', '--timeout=120s'], 130_000, kubeconfig);
   record.nodes = await readNodes(record);
   await saveTarget(record);
 }

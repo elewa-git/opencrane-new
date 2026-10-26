@@ -2037,3 +2037,19 @@ for private preparation and browser forwarding. It supplies the recorded context
 and private kubeconfig path without reading or printing credential contents.
 The [package notes](../package/README.robot.md#recorded-connection-during-package-operations)
 describe the split scope and remaining R3 installation work.
+
+## Bounded package ownership reads
+
+`bounded-input.ts` reads at most 1 MiB plus one byte from a regular file. The extra
+byte detects a file that grows after its initial size check; oversized input never
+reaches JSON parsing. Target, package and stack owner reads use this helper.
+`targetRecorded` checks existence without reading the file's contents.
+
+Target Kubernetes calls and internal package Kubernetes and Helm calls pass the
+connection filename through `KUBECONFIG`. The placement collector uses the same
+rule, including its inherited ownership checks. The existing argument helper for
+private preparation and forwarding retains its separate calling contract.
+
+The package placement collector tests exercise these helpers with disposable files
+and command fixtures. The claim tests check the changed child environment through
+package ownership and cleanup. Neither test requires a running development stack.

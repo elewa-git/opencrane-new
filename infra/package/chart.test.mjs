@@ -293,7 +293,8 @@ test('the installer sets the computer gateway from a validated Service IP', asyn
   function executeFixture(program, args, options, callback) {
     assert.equal(program, 'kubectl');
     assert.ok(args.includes('--context=k3d-test-target'));
-    assert.equal(args[args.indexOf('--kubeconfig') + 1], '/tmp/package-test/target.kubeconfig');
+    assert.equal(args.includes('--kubeconfig'), false);
+    assert.equal(options.env.KUBECONFIG, '/tmp/package-test/target.kubeconfig');
     if (args.includes('get') && args.includes('service')) {
       callback(null, { stdout: JSON.stringify(service), stderr: '' });
       return;
@@ -472,6 +473,10 @@ async function refusesReplacedPackageNamespace() {
     }
     return JSON.stringify(current);
   }
+  async function readJsonFixture(path) {
+    const contents = await readFileFixture(path);
+    return JSON.parse(contents);
+  }
   async function targetConnectionFixture() {
     return { context: current.context, kubeconfig: '/private/target.kubeconfig' };
   }
@@ -486,7 +491,7 @@ async function refusesReplacedPackageNamespace() {
   const connectionArgs = loadPrivateFunction('infra/dev-stack/packaged.ts',
     'packageConnectionArgs', {
       'node:child_process': { execFile: executeFixture },
-      'node:fs/promises': { readFile: readFileFixture },
+      './bounded-input.ts': { readBoundedText: readFileFixture, readBoundedJson: readJsonFixture },
       './config.ts': { directory: '/private/slot', root: process.cwd() },
       './identity.ts': { secondary: true, stackId: '1' },
       './target.ts': { targetConnection: targetConnectionFixture },
