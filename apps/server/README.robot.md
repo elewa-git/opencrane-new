@@ -5373,8 +5373,8 @@ Errors have fixed status values and no saved or upstream details.
 It checks owner isolation, disabled reads without grants, removal during loading,
 slow history, unrelated chats, strict output, private canaries and no appended effects.
 Repeated reads rebuild the same exact history. Instance routes and their change-status
-route are unchanged. Lists, admin/status reads, writes, screens and live qualification
-remain later work.
+route are unchanged. Lists, admin disable/status HTTP, screens and live qualification remain later work.
+Admin metadata reads are described below.
 
 ## Original review receipt HTTP contract (P4-27 PR 7b; Part of #109)
 
@@ -5677,3 +5677,19 @@ and expiry, and each original-event identity field during append readback.
 Direct handler checks cover bounded, strict path parameters. HTTP tests also reject
 each mismatched target field before append and race two requests against the same
 saved revision, confirming one saved event and the same receipt.
+
+## Admin personal profile metadata (Part of #49)
+
+`GET /api/integrations/:serverId/members/:userId/profiles/:profileId` uses the existing
+profile route's organisation session, member lookup, strict input and no-store replies.
+Cookie roles grant nothing. Query overrides and GET body framing are refused.
+The response has the own-profile eight-field allowlist plus `controlRevision`, the
+member/server control stream sequence (zero when absent), for a later disable request.
+The field names pass the unchanged `RISKY_FIELD_NAME` matcher. Errors remain fixed:
+400 refused input, 401 no session, 403 refused access, 404 unknown and 503 unavailable.
+No custody details or dependency errors enter replies or logs.
+
+The admin reader's contract is in the [models notes](../../libs/models/README.robot.md#admin-personal-profile-metadata).
+`test/connection-profile-admin-read.test.ts` checks access races, exact output, failed
+loads, slow history, unrelated activity, lifecycle sequences and replay after server restart.
+Own reads keep their existing behaviour. Admin disable HTTP/status and live use are NOT RUN.
