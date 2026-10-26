@@ -152,6 +152,9 @@ export function checkQualification(input, directory) {
       refuse('rows');
     }
     seen.add(row.id);
+    if ((row.status === 'PARTIAL' || row.status === 'FAIL') && !row.receipts.length) {
+      refuse('recorded results');
+    }
     let complete = false;
     for (const proof of row.receipts) {
       checkReceipt(proof, row.id, root);
