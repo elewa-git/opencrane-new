@@ -2,6 +2,47 @@
 
 For people, read [README.md](README.md) first.
 
+## Private provider transport (P3-9 PR 9a, first part; Part of #50)
+
+Base includes PR 8c merge `a7fd07f60b21d3b0c584dff4490ca058f6dd90e3`.
+This is the transport part of the requested exchange, split to keep the change below
+about 600 lines. `oauth-exchange.ts` is internal, with no package export, route, reaction
+or production caller. Replay cannot invoke it through an event registration.
+
+`oauthProviderTransport(configuration, network?)` copies trusted operator settings for
+one exact HTTPS token endpoint, client id and redirect URI. Its returned function accepts
+only private code/verifier material and a cancellation signal; request input cannot choose
+an endpoint or add form fields. The existing address policy checks every resolved address
+and pins one to the socket. TLS verifies the configured hostname. Redirects, URL credentials,
+query strings, fragments, IP literals and non-exact URL spellings are refused.
+The optional network port follows the existing transport test contract; it is trusted code,
+never request input. Tests map only `https://mcp.example.test/token` at `93.184.216.34`
+to their disposable loopback TLS provider. Production address rules are unchanged.
+
+The request uses a fixed authorisation-code form with a 43-character S256 verifier.
+The provider checks the verifier against the challenge. Limits are 4,096 ASCII characters
+for the code, 20,000 request bytes, 8,192 reply bytes and five seconds including DNS and
+response completion. Cancellation destroys the request. Every error is the fixed
+`OAuth exchange unavailable`, with no attached cause or provider body. No logging is added.
+The adapter makes one request per invocation and has no retry loop.
+
+A successful return is a private Buffer containing the exact response bytes, after UTF-8,
+JSON and basic Bearer token-shape checks. This Buffer must never reach an API or event.
+Optional identity fields are preserved privately but are not verified or trusted. This
+adapter records no profile and grants no permission. It does not yet store the response.
+
+Still required: durable send claim before invocation; original claimed-worker binding;
+current access/configuration/expiry checks before sending and staging; immutable result
+custody with exact UID/version recovery; safe status reads; and concurrency, duplicate,
+restart, uncertain-send and lost-reply recovery tests. Repeated explicit invocations are
+not made safe by this adapter. The later worker must prevent them using saved events.
+Confirmation, activation, reconnect, refresh and revoke remain outside this part.
+
+`oauth-exchange.test.ts` uses a recording local TLS provider to check the form, PKCE/client/
+redirect refusals, exact private bytes, fixed configuration, TLS, address pinning, mixed
+public/private DNS, rebinding, redirects, invalid and oversized responses, unfinished
+replies, deadlines and cancellation. No dependencies are added. Live qualification: NOT RUN.
+
 ## Private callback claim (P3-9 PR 8c; Part of #50)
 
 `oauth-callback.ts` supplies internal `claimPersonalOAuthCallback`. Trusted server code

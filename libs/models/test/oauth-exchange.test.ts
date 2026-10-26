@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { LookupFunction } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { oauthProviderTransport } from '../src/oauth-exchange.ts';
 import type { RemoteNetwork } from '../src/remote-https.ts';
@@ -88,10 +89,10 @@ function operatorNetwork(): RemoteNetwork {
     expect(options.agent).toBe(false);
     const originalLookup = options.lookup!;
     const boundOptions = { ...options, lookup: function boundLookup(host, settings, done) {
-      function checked(error, address, family) {
+      const checked: Parameters<LookupFunction>[2] = function checked(error, address, family) {
         expect(address).toBe('93.184.216.34');
         done(error, address, family);
-      }
+      };
       originalLookup(host, settings, checked);
     } } satisfies typeof options;
     return fixture.network.request!(url, boundOptions, callback);
