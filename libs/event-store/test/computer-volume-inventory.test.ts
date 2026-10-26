@@ -272,6 +272,9 @@ async function refusesFault(fault: typeof faults[number]) {
     if (fault === 'corrupt-archive') await writeFile(join(setup.archive, 'events.snapshot'), canary);
     if (fault === 'oversized-reply') Reflect.set(pvc, 'private', canary.repeat(100_000));
     await expect(setup.collect()).rejects.toEqual(refused);
+    if (fault === 'pvc-unbound') {
+      expect(setup.requests).not.toContain('persistentvolumes');
+    }
   } finally { await setup.close(); }
 }
 it.each(faults)('refuses without private output: %s', refusesFault);
