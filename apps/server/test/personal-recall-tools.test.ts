@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { losslessJson } from '@opencrane/events';
+import { losslessJson } from '@opencrane/events/lossless-json';
 import { memoryScopeId } from '@opencrane/projections';
 import { buildPersonalRecallTools, buildTurnTools, mayOfferTurnTools,
   type TurnToolServerState } from '../src/chat/turn-tools.ts';
