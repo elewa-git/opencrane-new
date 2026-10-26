@@ -199,7 +199,9 @@ async function refusesGateAndCancelsDisconnectedPrivateWork(input: GateCase) {
     const callsBefore = [...test.calls];
     const closed = once(test.socket, 'close');
     test.send(await input.make(test));
-    const [code, reason] = await closed;
+    const closeValues: unknown[] = await closed;
+    const code = closeValues[0];
+    const reason = closeValues[1];
     expect(code).toBe(1008);
     expect(String(reason)).toBe('Invalid bridge message');
     function accessRemoved() { return !test.grants.has(privateThread); }
