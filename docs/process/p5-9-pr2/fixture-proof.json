@@ -1,0 +1,29 @@
+{
+  "source": "4b7af3b68",
+  "eventCount": 270,
+  "interruptedTarget": "270",
+  "interruptedSequence": "256",
+  "parkedJobs": 258,
+  "budgetBefore": {
+    "checkpoint": 270,
+    "rowsDigest": "afbb22e658f45efbc4916b55446d19da8a80749d0c3a2f64e8a6b72e45a9e79e"
+  },
+  "budgetRebuilds": [
+    {
+      "checkpoint": 270,
+      "rowsDigest": "afbb22e658f45efbc4916b55446d19da8a80749d0c3a2f64e8a6b72e45a9e79e"
+    },
+    {
+      "checkpoint": 270,
+      "rowsDigest": "afbb22e658f45efbc4916b55446d19da8a80749d0c3a2f64e8a6b72e45a9e79e"
+    }
+  ],
+  "externalCalls": 0,
+  "uncertainRestore": {
+    "outcome": "uncertain; target isolated",
+    "transfers": 1,
+    "targetEvents": 270,
+    "projectionStarted": false,
+    "externalCalls": 0
+  }
+}

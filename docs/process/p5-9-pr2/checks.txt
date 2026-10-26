@@ -1,0 +1,25 @@
+26 October 2026; source 4b7af3b68; test-first commit 7755b2616.
+All checks below use nice -n 10. Tests use --maxWorkers=1 and PG_TEST_URL
+for the throwaway PostgreSQL 17.6 container's random loopback port.
+
+RED: vitest run infra/package/upgrade-recovery-budget.test.ts
+Initial attempt: 8 expected comparison failures and 2 test-reset failures.
+After fixing reset: 10 expected refusal failures; 1 unchanged case passed.
+The comparison was an empty function in the test-first commit.
+
+PASS: vitest run infra/package/upgrade-recovery.test.ts
+  infra/package/upgrade-recovery-budget.test.ts
+  infra/package/upgrade-recovery-check.test.ts
+  libs/handlers/test/upgrade.test.ts libs/events/test/security-rules.test.ts
+507 cases passed across 5 files; 364.44 seconds.
+
+PASS: vitest run infra/package/upgrade-recovery.test.ts
+  infra/package/upgrade-recovery-budget.test.ts
+14 cases passed again across 2 files; 74.39 seconds.
+
+PASS: npm run typecheck
+PASS: npm run check:events (154 event types)
+PASS: npm run lint (includes knip and npm run lint:changelog)
+Code lint: 25 function-size warnings in unchanged files; zero errors.
+
+No full root suite, dev stack or model call. Fresh packaged recovery: NOT RUN.
