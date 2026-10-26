@@ -401,6 +401,69 @@ missing WAL, denied storage access, encryption, standby promotion and fresh-inst
 backup work remain **NOT RUN**. Local S3 would prove local recovery only. The
 matched event/database/object/volume set in the accepted design remains later work.
 
+## Exact database recovery preview
+
+P5-3 PR 3b builds on PR 3a, merged as PR #749 at
+`441c96a4f6f87bcc9410335c332972895c9a5d83`. The accepted design is backup steps
+3–4 and D03/D06/D07 in `docs/specs/phase-5/`. This preview follows the CNPG 1.30
+[recovery contract](https://github.com/cloudnative-pg/cloudnative-pg/blob/release-1.30/docs/src/recovery.md)
+and the native object-store contract linked above. Native support is deprecated;
+this change adds no plugin.
+
+For a recovery preview, use `postgres.recovery` instead of `postgres.backup`.
+Keep the existing CNPG mode, operator contract and role Secret references.
+This example names a recorded source and an exact WAL position:
+
+```yaml
+recovery:
+  enabled: true
+  renderOnly: true
+  method: barmanObjectStore
+  source: recorded-origin
+  serverName: postgres
+  destinationPath: s3://database-backups/local-check
+  endpointURL: https://backup-store.cluster-test.svc:9000
+  endpointCA: { name: backup-trust, key: ca.crt }
+  s3Credentials:
+    accessKeyId: { name: backup-identity, key: ACCESS_KEY_ID }
+    secretAccessKey: { name: backup-identity, key: ACCESS_SECRET_KEY }
+  recoveryTarget:
+    backupID: "20261026T120000"
+    targetLSN: "0/7000028"
+    targetTLI: "2"
+```
+
+`source` binds `bootstrap.recovery.source` to exactly one `externalClusters` entry.
+`serverName` selects the source server's folder within the saved S3 path; it is
+never inferred from the new Cluster name. Both names use 1–63 lower-case letters,
+digits or hyphens, starting and ending with a letter or digit. Storage addresses,
+CA and credential references use the same validation as the backup preview.
+The references must exist in the fresh target namespace. YAML checks their shape,
+not their contents, ownership, permissions or availability.
+
+The target requires a Barman timestamp ID (`YYYYMMDDTHHMMSS`), a hexadecimal LSN
+with 1–8 digits on each side of `/`, and a quoted decimal timeline from 1 to
+4294967295. There is no `latest` fallback. Other targets and overrides refuse.
+Recovery replaces `initdb` and keeps the actual `projections` database, `projection`
+owner, application Secret and superuser Secret. These package names differ from
+the older `opencrane`/`jobs` labels in the accepted design; no database is renamed.
+No backup writer or schedule is emitted. Any simultaneous `postgres.backup`
+setting refuses, even when disabled, so recovery cannot write into its source.
+
+The description is for a fresh Cluster with new storage in an isolated namespace,
+not an existing installation. Rendering cannot prove that a destination is empty.
+The package preflight refuses every recovery setting before Helm, even with
+synthetic ordinary CNPG image approval. The preview must not be applied directly.
+Opening installation needs reviewed images/helpers, checks of the fresh target
+and private storage references, and real recovery proof with effects kept stopped.
+No image or inventory files change here.
+
+Real Helm tests check exact values, unchanged ordinary resources and refusals.
+Installer tests use synthetic Kubernetes replies. Live restore, WAL availability,
+missing/corrupt backups and denied storage access remain **NOT RUN**. Rendered YAML
+does not prove storage access or a usable restore. A database-only restore would
+still not qualify the matched event/database/object/volume recovery set.
+
 ## Three-peer NATS rendering
 
 The chart describes three peers for preview or checked installation. Installation

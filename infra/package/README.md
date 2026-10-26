@@ -23,8 +23,8 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
   package -->|uses local cluster| devbox
-  package -->|starts services, checks and exports all computer homes, copies and restores files and replays memory| apps["apps<br/>product services and replay"]
-  package -->|waits for NATS, checks placement, setup time, recovery, fresh browser journeys and database backup descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
+  package -->|starts services, checks computer volume bindings, exports homes, restores files and replays memory| apps["apps<br/>product services and replay"]
+  package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
 ```
@@ -51,6 +51,10 @@ the record PostgreSQL uses to recover changes. It refers to private settings alr
 held by Kubernetes. Its schedule is paused, and the installer refuses this option
 until image, private-setting and storage checks are ready. Rendering the description
 does not save a database backup.
+A separate preview describes recovery from one named backup to an exact position
+in that log. It keeps the existing database users and refers to saved private
+settings by name. Installation remains blocked until a real restore is checked;
+rendering cannot prove that the saved data is readable.
 
 ## What it is responsible for
 

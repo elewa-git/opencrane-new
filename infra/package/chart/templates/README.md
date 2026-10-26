@@ -8,6 +8,8 @@ a PostgreSQL controller installed separately. Rendering checks this description;
 a running standby has not yet been tested. A backup preview describes encrypted base
 backups and the write-ahead log, which PostgreSQL uses to recover changes.
 Its schedule stays paused, and installation refuses until the remaining checks are ready.
+A separate preview describes recovery into fresh storage from one named backup and
+an exact log position. It keeps the existing database users and emits no backup schedule.
 
 ## What it is responsible for
 
@@ -24,9 +26,10 @@ Its schedule stays paused, and installation refuses until the remaining checks a
 | --- | --- |
 | `apps.yaml` | Runs the website, server, AI access process and permissions service. |
 | `workers.yaml` | Runs background jobs and connects gateway preparation to content storage. |
-| `data.yaml` | Describes the database, optional backup settings, event log and saved storage. |
+| `data.yaml` | Describes the database, optional backup and recovery settings, event log and saved storage. |
 | `backup.yaml` | Describes one paused database backup schedule for preview only. |
-| `_backup.tpl` | Checks local backup addresses and existing private-setting references. |
+| `_backup.tpl` | Checks local storage addresses and existing private-setting references. |
+| `_recovery.tpl` | Requires one exact recovery source, backup and log position. |
 | `nats-cluster.yaml` | Renders three private event-log peers with separate storage and certificates. |
 | `services.yaml` | Gives the programs private network addresses. |
 | `bootstrap.yaml` | Sets up initial data and the access needed by setup and workers. |
@@ -43,7 +46,7 @@ images first. The setup job runs [bootstrap.ts](../../bootstrap.ts); workers run
 
 ```mermaid
 flowchart LR
-  chart["Local installation chart"] --> templates["templates<br/>programs, database standby and backup preview"]
+  chart["Local installation chart"] --> templates["templates<br/>programs, database standby, backup and recovery previews"]
   chart --> values["values.yaml<br/>installation settings"]
   values --> templates
 ```

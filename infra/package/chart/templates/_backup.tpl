@@ -36,6 +36,12 @@
 {{- fail "CNPG backup requires enabled and renderOnly to be true" -}}
 {{- end -}}
 {{- end -}}
+{{- include "opencrane.objectStoreGuard" (dict "store" $backup "namespace" .Release.Namespace) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "opencrane.objectStoreGuard" -}}
+{{- $backup := .store -}}
 {{- if not (and (kindIs "string" $backup.method) (eq $backup.method "barmanObjectStore")) -}}
 {{- fail "CNPG backup requires the native barmanObjectStore method" -}}
 {{- end -}}
@@ -46,7 +52,7 @@
 {{- end -}}
 {{- $endpointPattern := printf
       "^https://[a-z0-9]([-a-z0-9]*[a-z0-9])?\\.%s\\.svc(\\.cluster\\.local)?(:[0-9]{1,5})?/?$"
-      .Release.Namespace -}}
+      .namespace -}}
 {{- if not (and (kindIs "string" $backup.endpointURL)
       (regexMatch $endpointPattern $backup.endpointURL)) -}}
 {{- fail "CNPG backup requires an HTTPS Service endpoint in this namespace" -}}
@@ -70,5 +76,4 @@
 {{- end -}}
 {{- include "opencrane.backupReference" $credentials.accessKeyId -}}
 {{- include "opencrane.backupReference" $credentials.secretAccessKey -}}
-{{- end -}}
 {{- end -}}

@@ -9,6 +9,7 @@ saved data on a spare test stack. It is part of the work towards a customer inst
 - Describes the package that Helm installs into Kubernetes.
 - Can describe a PostgreSQL primary and standby with separate storage and nodes.
 - Can preview encrypted database backups with a paused schedule; installation refuses.
+- Can preview recovery from an exact backup and log position; installation refuses.
 - Lists the required program images and names of private settings.
 - Keeps public network access switched off in the default settings.
 - Groups the templates that start apps, services, workers and assistant computers.
@@ -31,7 +32,7 @@ combines those settings with the templates.
 
 ```mermaid
 flowchart LR
-  package["Local installation tools"] --> chart["chart<br/>installation, database standby and backup preview"]
+  package["Local installation tools"] --> chart["chart<br/>installation, database standby, backup and recovery previews"]
   package --> prepare["Preparation and checks"]
   chart --> templates["templates<br/>programs and settings"]
 ```

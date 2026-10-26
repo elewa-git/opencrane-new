@@ -28,6 +28,10 @@ function checkPostgres(values, review) {
   if (!postgres || typeof postgres !== 'object' || Array.isArray(postgres)) {
     throw new Error('Unsupported PostgreSQL setting');
   }
+  // Keep recovery blocked until images, helpers and real storage recovery are checked.
+  if (Object.hasOwn(postgres, 'recovery')) {
+    throw new Error('CNPG recovery installation is not enabled');
+  }
   // Refuse before Helm: suspending base backups does not stop WAL archiving.
   if (Object.hasOwn(postgres, 'backup')) {
     throw new Error('CNPG backup installation is not enabled');

@@ -12,7 +12,9 @@
 {{- end -}}
 {{- end -}}
 {{- range $name, $value := .Values.postgres -}}
-{{- if not (has $name (list "mode" "operatorContract" "superuserSecret" "applicationSecret" "backup")) -}}
+{{- $allowed := list "mode" "operatorContract" "superuserSecret"
+                    "applicationSecret" "backup" "recovery" -}}
+{{- if not (has $name $allowed) -}}
 {{- fail "Unsupported PostgreSQL setting" -}}
 {{- end -}}
 {{- end -}}
@@ -36,6 +38,7 @@
 {{- fail "Separate CNPG credential references are required" -}}
 {{- end -}}
 {{- end -}}
+{{- include "opencrane.recoveryGuard" . -}}
 {{- include "opencrane.backupGuard" . -}}
 {{- if .Values.natsCluster.enabled -}}
 {{- if not (kindIs "bool" .Values.natsCluster.renderOnly) -}}
