@@ -1340,7 +1340,8 @@ async function wakesApprovalsThroughWatcher() {
 it('wakes the right computer through watchBridges while another hold leaves reports and turns free',
   wakesApprovalsThroughWatcher);
 
-async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: number) {
+async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: number,
+  retryStop = false) {
   const setup = await approvalWatcherFixture();
   const { fixture, dbs, stop, sockets, frames, work, append } = setup;
   const approvalId = 'a'.repeat(64);
@@ -1360,6 +1361,13 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
   function settlementArrived() {
     const received = frames.get('computer');
     return received?.some(isSettlement) === true;
+  }
+  function isStop(value: unknown) {
+    return typeof value === 'object' && value !== null && Reflect.get(value, 'type') === 'stop';
+  }
+  function stopArrived() {
+    const received = frames.get('computer');
+    return received?.some(isStop) === true;
   }
   function isStopOrSettlement(value: unknown) {
     return typeof value === 'object' && value !== null &&
@@ -1392,6 +1400,10 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
     await entered.promise;
     let delayedComputerReads = 0;
     let delayedApprovalRead = false;
+    const realNow = performance.now.bind(performance);
+    function afterStopRetryInterval() {
+      return realNow() + 1000;
+    }
     async function* delayedRead(subject: string, from?: number, deadline?: number) {
       if (subject === 'computer-assistant') {
         delayedComputerReads++;
@@ -1400,6 +1412,11 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
       if (subject === `approval-${approvalId}` && !delayedApprovalRead) {
         delayedApprovalRead = true;
         await delay(approvalDelay);
+        if (retryStop) {
+          await until(stopArrived, 5000);
+          // Cross the sender's retry interval while approval settlement is still held.
+          vi.spyOn(performance, 'now').mockImplementation(afterStopRetryInterval);
+        }
       }
       yield* read(subject, from, deadline);
     }
@@ -1433,6 +1450,12 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
 it.each([[300, 0], [0, 300], [300, 300], [0, 0]])(
   'sends Stop before approval wake with computer delay %i ms and approval delay %i ms',
   stopsBeforeApprovalWake);
+
+async function retriesStopBeforeApprovalWake() {
+  await stopsBeforeApprovalWake(300, 300, true);
+}
+it('retries the same Stop before approval wake when its retry interval passes',
+  retriesStopBeforeApprovalWake);
 
 async function reissuesSavedProviderModel() {
   const fixture = await replayFixture(['alice']);
