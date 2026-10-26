@@ -34,7 +34,8 @@ afterAll(close);
 
 const corruptions = [
   ['held amount', 'UPDATE model_budget_calls SET held_cents = held_cents + 1'],
-  ['missing settlement', "DELETE FROM model_budget_effects WHERE type = 'effect.resolved'"],
+  ['missing saved effect', "DELETE FROM model_budget_effects WHERE type = 'effect.resolved'"],
+  ['missing settlement', 'UPDATE model_budget_calls SET settled_cents = NULL'],
   ['current effect state', `UPDATE model_current_effects
     SET data = jsonb_set(data, '{state}', '"released"')`],
   ['lost reservation', 'DELETE FROM model_budget_calls WHERE held_cents = 120'],
