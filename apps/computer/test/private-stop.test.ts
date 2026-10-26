@@ -5,8 +5,9 @@ import { reportJournal, wireReport } from '../src/report-journal.ts';
 
 type Computer = Awaited<ReturnType<typeof fixture>>;
 
-async function startPrivate(test: Computer, id: string, thread: string, requesterId = 'alice') {
-  const frame = { type: 'turn', id, conversationId: id, requesterId,
+async function startPrivate(test: Computer, id: string, thread: string, requesterId = 'alice',
+  conversationId = id) {
+  const frame = { type: 'turn', id, conversationId, requesterId,
     assistantId: 'assistant', executionMode: 'restricted', text: 'Hello',
     token: 'initial', expiresAt: Date.now() + 60_000 };
   test.send(frame);
@@ -168,11 +169,13 @@ async function preservesOtherReplies(mode: 'restricted' | 'memory_free') {
     if (mode === 'memory_free') conversationId = 'first';
     test.send({ type: 'stop', turnId: 'first', conversationId });
     await test.flush();
+    if (mode === 'memory_free') output(test, 'thread-1', 'ordinary-after-stop');
     test.frames.length = 0;
     test.send({ type: 'resume', since: 0 });
     await test.flush();
     expect(JSON.stringify(test.frames)).toContain('retained-reply');
     if (mode === 'restricted') expect(test.grants.has('thread-1')).toBe(true);
+    else expect(JSON.stringify(test.frames)).toContain('ordinary-after-stop');
   } finally {
     await test.close();
   }
@@ -232,3 +235,27 @@ async function startsFreshAfterStop() {
 }
 it('refuses a held renewal and starts a fresh private thread only for an explicit new request',
   startsFreshAfterStop);
+
+async function preservesLaterReplyInSameChat() {
+  const test = await fixture();
+  try {
+    await startPrivate(test, 'first', 'thread-1');
+    output(test, 'thread-1', 'earlier-private-reply');
+    test.finish('thread-1');
+    await test.flush();
+    await startPrivate(test, 'second', 'thread-2', 'alice', 'first');
+    output(test, 'thread-2', 'current-private-reply');
+    test.send({ type: 'stop', turnId: 'first', conversationId: 'first' });
+    await test.flush();
+    test.frames.length = 0;
+    test.send({ type: 'resume', since: 0 });
+    await test.flush();
+    expect(JSON.stringify(test.frames)).not.toContain('earlier-private-reply');
+    expect(JSON.stringify(test.frames)).toContain('current-private-reply');
+    expect(test.grants.has('thread-2')).toBe(true);
+  } finally {
+    await test.close();
+  }
+}
+it('keeps a later private reply in the same conversation when only the earlier turn is stopped',
+  preservesLaterReplyInSameChat);
