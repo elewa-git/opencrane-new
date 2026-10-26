@@ -37,13 +37,35 @@ async function streamInfo(connection: Awaited<ReturnType<typeof connectNats>>) {
     state: { consumer_count: number } }>();
 }
 
-type ReadinessFixture = { replies: unknown[]; elapsed: number; failure?: Error };
+type DelayedReply = { subject: string; occurrence: number; milliseconds: number };
+type ReadinessFixture = {
+  replies: unknown[];
+  elapsed: number;
+  failure?: Error;
+  delayedReply?: DelayedReply;
+  requestMilliseconds?: number;
+};
 type PlacementFixture = { failure: Error; refusals: number; attempts: number };
 
 async function bootstrapFixture(env: NodeJS.ProcessEnv, readiness?: ReadinessFixture,
   placement?: PlacementFixture) {
   const files = new Map<string, string>();
   const actions: string[] = [];
+  const requests: { subject: string; timeout: number | undefined; elapsed: number }[] = [];
+  let matchingReplies = 0;
+  function finishReply(subject: string) {
+    if (!readiness) {
+      return;
+    }
+    readiness.elapsed += readiness.requestMilliseconds ?? 0;
+    const delayed = readiness.delayedReply;
+    if (delayed && subject === delayed.subject) {
+      matchingReplies += 1;
+      if (matchingReplies === delayed.occurrence) {
+        readiness.elapsed += delayed.milliseconds;
+      }
+    }
+  }
   async function mkdirFixture(path: string, options: { mode: number }) {
     assert.equal(options.mode, 0o700);
     actions.push(path);
@@ -76,13 +98,18 @@ async function bootstrapFixture(env: NodeJS.ProcessEnv, readiness?: ReadinessFix
           const reply = readiness!.replies.shift();
           return { json: () => reply } as Awaited<ReturnType<typeof connected.request>>;
         }
+        requests.push({ subject: args[0], timeout: args[2]?.timeout,
+          elapsed: readiness!.elapsed });
         if (args[0] === '$JS.API.STREAM.CREATE.EVENTS' && placement) {
           placement.attempts += 1;
           if (placement.attempts <= placement.refusals) {
+            finishReply(args[0]);
             throw placement.failure;
           }
         }
-        return request(...args);
+        const reply = await request(...args);
+        finishReply(args[0]);
+        return reply;
       }
       vi.spyOn(connected, 'request').mockImplementation(requestFixture);
     }
@@ -123,7 +150,7 @@ async function bootstrapFixture(env: NodeJS.ProcessEnv, readiness?: ReadinessFix
   }
   runInNewContext(compiled.outputText, { exports, require: fixtureRequire,
     process: { env, execPath: process.execPath }, Buffer, console, Date: Clock, setTimeout });
-  return { ...exports, files, actions };
+  return { ...exports, files, actions, requests };
 }
 
 for (const replicas of ['1', '3']) {
@@ -409,3 +436,97 @@ async function refusesR1PlacementWithoutRetry() {
   }
 }
 it('bootstrap preserves an R1 placement refusal without retry', refusesR1PlacementWithoutRetry);
+
+const setupDeadlineError = 'JetStream setup exceeded 120000 ms bootstrap deadline';
+const consumerSubject = '$JS.API.CONSUMER.CREATE.EVENTS.handler-dispatcher.ev.>';
+const lateSetupReplies = [
+  { subject: '$JS.API.INFO', occurrence: 1, streams: 0, consumers: 0 },
+  { subject: '$JS.API.STREAM.INFO.EVENTS', occurrence: 1, streams: 0, consumers: 0 },
+  { subject: '$JS.API.STREAM.CREATE.EVENTS', occurrence: 1, streams: 1, consumers: 0 },
+  { subject: '$JS.API.INFO', occurrence: 2, streams: 1, consumers: 0 },
+  { subject: consumerSubject, occurrence: 1, streams: 1, consumers: 1 },
+];
+
+async function refusesLateSetupReply(testCase: typeof lateSetupReplies[number]) {
+  const cluster = await clusterFixture();
+  try {
+    await preparePlacementStatistics(cluster);
+    const replies: unknown[] = Array<null>(599).fill(null);
+    replies.push(metadataReport('peer-1', true));
+    const delayedReply = { subject: testCase.subject, occurrence: testCase.occurrence,
+      milliseconds: 1000 };
+    const readiness = { replies, elapsed: 0, delayedReply };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness);
+    await expect(bootstrap.provisionEvents()).rejects.toThrow(setupDeadlineError);
+    expect(readiness.elapsed).toBe(120800);
+    expect(bootstrap.requests.at(-1)?.subject).toBe(testCase.subject);
+    const connection = await cluster.client(cluster.peers[0]!);
+    const reply = await connection.request('$JS.API.INFO');
+    expect(reply.json<{ streams: number }>().streams).toBe(testCase.streams);
+    if (testCase.streams > 0) {
+      const stream = await streamInfo(connection);
+      expect(stream.state.consumer_count).toBe(testCase.consumers);
+    }
+    expect(bootstrap.files.size).toBe(0);
+  } finally {
+    await cluster.close();
+  }
+}
+it.each(lateSetupReplies)('bootstrap refuses a late setup reply: %j', refusesLateSetupReply);
+
+async function boundsEverySetupRequestByRemainingTime() {
+  const cluster = await clusterFixture();
+  try {
+    await preparePlacementStatistics(cluster);
+    const replies: unknown[] = Array<null>(599).fill(null);
+    replies.push(metadataReport('peer-1', true));
+    const readiness = { replies, elapsed: 0, requestMilliseconds: 20 };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness);
+    await bootstrap.provisionEvents();
+    expect(bootstrap.requests).toEqual([
+      { subject: '$JS.API.INFO', timeout: 200, elapsed: 119800 },
+      { subject: '$JS.API.STREAM.INFO.EVENTS', timeout: 180, elapsed: 119820 },
+      { subject: '$JS.API.STREAM.CREATE.EVENTS', timeout: 160, elapsed: 119840 },
+      { subject: '$JS.API.INFO', timeout: 140, elapsed: 119860 },
+      { subject: consumerSubject, timeout: 120, elapsed: 119880 },
+    ]);
+    expect(readiness.elapsed).toBe(119900);
+    const connection = await cluster.client(cluster.peers[0]!);
+    const stream = await streamInfo(connection);
+    expect(stream.config.num_replicas).toBe(3);
+    expect(stream.state.consumer_count).toBe(1);
+  } finally {
+    await cluster.close();
+  }
+}
+it('bootstrap gives every setup request only the remaining time',
+  boundsEverySetupRequestByRemainingTime);
+
+async function refusesLatePlacementWithoutBackoff() {
+  const cluster = await clusterFixture();
+  try {
+    const replies: unknown[] = Array<null>(599).fill(null);
+    replies.push(metadataReport('peer-1', true));
+    const delayedReply = { subject: '$JS.API.STREAM.CREATE.EVENTS', occurrence: 1,
+      milliseconds: 1000 };
+    const readiness = { replies, elapsed: 0, delayedReply };
+    const placement = { failure: placementRefusal(), refusals: Infinity, attempts: 0 };
+    const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
+      NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness, placement);
+    await expect(bootstrap.provisionEvents()).rejects.toThrow(
+      'JetStream R3 stream placement refused within 120000 ms bootstrap deadline');
+    expect(readiness.elapsed).toBe(120800);
+    expect(placement.attempts).toBe(1);
+    expect(bootstrap.requests.at(-1)?.timeout).toBe(200);
+    const connection = await cluster.client(cluster.peers[0]!);
+    const reply = await connection.request('$JS.API.INFO');
+    expect(reply.json<{ streams: number; consumers: number }>()).toMatchObject(
+      { streams: 0, consumers: 0 });
+  } finally {
+    await cluster.close();
+  }
+}
+it('bootstrap refuses a late placement refusal without another wait or request',
+  refusesLatePlacementWithoutBackoff);
