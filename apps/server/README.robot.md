@@ -1058,8 +1058,8 @@ one of its required settings is missing.
 | `CONVERSATION_WRAP_KEY_FILE` | Both | No | Unset | Optional 32-byte Kubernetes Secret used to encrypt conversation keys stored in that directory. The chat server and model process must use the same file. |
 | `MINIO_CREDENTIALS_FILE` | Server | No | Unset | Enables file storage with credentials read from this file. |
 | `MINIO_URL` | Server | Required with MinIO credentials | None | MinIO object-storage address. |
-| `CLAMD_HOST` | Server | No | `127.0.0.1` | Address of the file scanner. |
-| `CLAMD_PORT` | Server | No | `43310` | Port of the file scanner. |
+| `SCANNER_URL` | Server | Uploads | None | Fixed private HTTPS endpoint ending in `/scan/upload`. |
+| `SCANNER_CA_FILE` | Server | Uploads | None | Trusted scanner CA certificate file. |
 | `KUBECONFIG` | Server | Required for chat computers | None | Path to Kubernetes access settings. |
 | `KUBE_NAMESPACE` | Server | Required for chat computers | None | Kubernetes namespace holding computers. |
 | `TOKEN_SIGNING_KEY_FILE` | Server | Required with chat or budget checks | None | Path to the private token-signing key. |
@@ -1690,8 +1690,8 @@ blocked through the list check, so that check still proves unscanned files are a
 The [upload API](../../docs/architecture/upload-api.md) documents raw-byte POST
 and replayable GET on `/api/conversations/:conversationId/files`. Enable it with
 the chat configuration, `MINIO_URL` and `MINIO_CREDENTIALS_FILE` (a rotating,
-bucket-scoped STS lease); `CLAMD_HOST` defaults to `127.0.0.1`, `CLAMD_PORT` to
-`43310`. Provision private `quarantine` and `files` buckets and run the `files`
+bucket-scoped STS lease), `SCANNER_URL`, `SCANNER_CA_FILE`, `TOKEN_SIGNING_KEY_FILE`
+and `TOKEN_ISSUER`. Missing scanner settings refuse uploads with typed 503. Provision private `quarantine` and `files` buckets and run the `files`
 projection separately. The computer receives clean bytes through the server's
 bridge and holds no object-store credentials. [Evidence and qualification](../../docs/process/upload-evidence.md)
 cover real-service tests and the pending fresh-install journey.
@@ -5707,3 +5707,19 @@ The admin reader's contract is in the [models notes](../../libs/models/README.ro
 `test/connection-profile-admin-read.test.ts` checks access races, exact output, failed
 loads, slow history, unrelated activity, lifecycle sequences and replay after server restart.
 Own reads keep their existing behaviour. Admin disable HTTP/status and live use are NOT RUN.
+
+## Authenticated upload scans
+
+The server issues the existing two-minute scanner pass with its deployed silo and
+service identity. Each attempt has a fresh request UUID. Node HTTPS verifies the
+configured CA and hostname, rejects redirects and sends bytes only after 100 Continue.
+The complete attempt, including issuance, has 60 seconds; replies have 4 KiB.
+The response must match purpose, silo, request, file hash identity, SHA-256 and count.
+It must carry strict clean/infected status, image/manifest digests and all three
+database files with valid hashes, versions and build dates. The upstream update
+check must be within 24 hours; expiry is capped by that check, the pass and two minutes.
+After the access recheck, the caller checks expiry and unchanged bytes before storage.
+Unknown responses produce a fixed scanner 503; verified infection retains rejection.
+There is no browser proof, result cache or TCP fallback. Direct daemon tests keep
+their adapter under test support; they do not qualify the authenticated deployment.
+P5-6b PR 1 leaves image consumers, deployed entry/rotation and live checks for later.

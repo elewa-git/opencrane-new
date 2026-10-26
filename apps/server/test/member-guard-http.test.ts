@@ -43,7 +43,10 @@ function memberId(_silo: string, _issuer: string, sub: string) {
   return Promise.resolve(sub);
 }
 function scan() {
-  return Promise.resolve('clean' as const);
+  function validate() {
+    return 'clean' as const;
+  }
+  return Promise.resolve(validate);
 }
 function server(config: AuthConfig, binding: Binding = services.binding) {
   const chat = { silo: 'test', store: services.nats.store, db: services.db,

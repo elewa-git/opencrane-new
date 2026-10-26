@@ -18,7 +18,7 @@ flowchart LR
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> nats["infra/nats<br/>event log settings"]
   stack -->|builds and starts| clamav
-  server["apps/server<br/>file uploads"] -->|sends file bytes| clamav
+  server["apps/server<br/>file uploads"] -->|sends file bytes over HTTPS| launcher
   clamav -->|candidate updater checks| updates["ClamAV update service"]
   packaging["packaging job"] -->|checks image databases| clamav
   launcher["separate HTTPS service"] -->|limits requests and checks caller passes| clamav
@@ -88,7 +88,9 @@ asking for file bytes. It reserves room for each request before checking the pas
 and refuses excess requests immediately. It also limits connections before TLS starts.
 Its response binds the result to that file and connection.
 A copied result grants nothing. Caller expiry and database expiry are checked again
-before replying. Deployed issuance and upload consumers are not connected yet.
+before replying. Upload callers now check this response before storage. They keep
+the same file identity when retrying, with a new request each time. Deployed service
+startup and key rotation still need qualification.
 
 If updater cleanup fails, the directory stays locked to prevent another updater
 from changing the same files. An operator must confirm the updater has stopped

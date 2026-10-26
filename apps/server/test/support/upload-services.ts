@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Client } from 'minio';
 import { until } from '@opencrane/authz/testing';
-import { scanFile } from '../../src/files/scanner.ts';
+import { scanFile } from './clamd.ts';
 
 const exec = promisify(execFile);
 export async function uploadServices() {
@@ -38,6 +38,13 @@ export async function uploadServices() {
     const leaseFile = `${directory}/lease`;
     await writeFile(leaseFile, JSON.stringify({ ...lease, expiresAt: Date.now()+840_000 }), { mode: 0o600 });
     const objects = storageClient(`http://127.0.0.1:${minioPort}`, leaseFile);
-    return { client, objects, scan: (bytes: Buffer) => scanFile('127.0.0.1', clamPort, bytes), close };
+    async function scan(bytes: Buffer) {
+      const verdict = await scanFile('127.0.0.1', clamPort, bytes);
+      function validate() {
+        return verdict;
+      }
+      return validate;
+    }
+    return { client, objects, scan, close };
   } catch (error) { await close(); throw error; }
 }

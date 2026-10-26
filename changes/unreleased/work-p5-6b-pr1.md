@@ -1,0 +1,1 @@
+Uploads now require the private authenticated HTTPS scanner and fresh results for the exact file bytes. Missing trust settings, invalid results and scanner outages return unavailable before storage. Existing upload identities and infected-file rejection are preserved.

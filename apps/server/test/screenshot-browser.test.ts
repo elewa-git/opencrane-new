@@ -26,7 +26,7 @@ it.runIf(process.env['SCREENSHOT_BROWSER'] === '1')('captures real desktop pixel
   let failScan = false, infected = false;
   const app = buildServer(config, { chat: options, liveView: { ...options, open: desktop.open }, files: { ...options, objects: services.objects, async scan(bytes) {
     if (failScan) throw new Error('Scanner unavailable');
-    if (infected) return 'infected';
+    if (infected) return infectedVerdict;
     scanning = true; await new Promise<void>(resolve => { release = resolve; }); return services.scan(bytes);
   } } });
   const realtime = attachWebSocketServer(app.server, app.log, config, { binding, feed, chat: options });
@@ -101,3 +101,7 @@ it.runIf(process.env['SCREENSHOT_BROWSER'] === '1')('captures real desktop pixel
     await app.close(); await fixture.close(); await services.close(); await desktop.close();
   }
 }, 180_000);
+
+function infectedVerdict() {
+  return 'infected' as const;
+}

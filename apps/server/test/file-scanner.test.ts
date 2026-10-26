@@ -2,7 +2,7 @@ import { once } from 'node:events';
 import { createServer, type Socket } from 'node:net';
 import { expect, it, vi } from 'vitest';
 import { FileUnavailable } from '../src/files/refusals.ts';
-import { scanFile } from '../src/files/scanner.ts';
+import { scanFile } from './support/clamd.ts';
 
 async function scannerTimeout() {
   const sockets = new Set<Socket>();
@@ -39,4 +39,4 @@ async function scannerTimeout() {
   }
 }
 
-it('marks the scanner deadline as a typed 503 outage', scannerTimeout);
+it('marks the disposable daemon deadline as a typed 503 outage', scannerTimeout);

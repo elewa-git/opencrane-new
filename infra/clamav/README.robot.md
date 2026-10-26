@@ -19,8 +19,8 @@ uploads do not use it.
 `upstream/clamscan.ts` is copied unchanged from
 [OpenCrane 1 commit 10abd0ef6](https://github.com/elewa-git/opencrane/blob/10abd0ef6/libs/backend/artifacts/scanner/main/src/clamscan.ts).
 That scanner uses shell-free execution, bounded time and fail-closed verdicts.
-The server's `scanner.ts` adapts those rules to clamd's INSTREAM protocol, sending
-every byte and accepting only an explicit clean verdict. The upstream AGPL notice
+The server's `scanner.ts` now calls the authenticated HTTPS wrapper. Direct INSTREAM
+checks remain in disposable test support and in the wrapper's owned scan operation. The upstream AGPL notice
 is retained in `upstream/LICENCE`; no OpenCrane 1 contracts or other runtime code
 are imported.
 
@@ -243,3 +243,11 @@ and transfer timeout, and TCP admission before TLS. Cancelling an active scan st
 retires the scanner; releasing capacity does not make a retired scanner reusable.
 Production issuance, consumers, fresh clean/EICAR and
 two-silo qualification remain NOT RUN. This admits no production upload.
+
+## Upload file identity compatibility
+
+The wrapper accepts the existing lowercase 64-hex upload file id as well as UUIDs.
+Request ids still require UUIDs. P5-6b PR 1 connects the upload caller with trusted
+silo/file bindings; it changes no image, event or image-worker contract.
+The real TLS consumer tests interleave two trusted silos. Their scanner facts are
+fixtures; deployed clean/EICAR, entry/rotation and fresh-install checks remain NOT RUN.

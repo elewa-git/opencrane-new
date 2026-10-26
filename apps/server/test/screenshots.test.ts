@@ -128,19 +128,19 @@ it('refuses stale authority, arbitrary capture input, failed scans and oversized
     expect((await request()).statusCode).toBe(503);
     fileOptions.scan = async () => {
       await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
-      return 'clean';
+      return cleanVerdict;
     };
     expect((await request()).statusCode).toBe(403);
     await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', grant, true);
     fileOptions.scan = async () => {
       await fixture.append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'desktop', generation: 2, sandboxUid: 'next', tokenId: 'token:next' });
       await fixture.append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'desktop', generation: 2, podUid: 'next' });
-      return 'clean';
+      return cleanVerdict;
     };
     expect((await request()).statusCode).toBe(403);
     expect((await history(nats.store, 'conversation-chat', 'test')).filter(row => row.event.type === 'file.uploaded')).toHaveLength(0);
     expect(await services.client.listObjectsV2('files', '', true).toArray()).toEqual([]);
-    fileOptions.scan = () => Promise.resolve('infected');
+    fileOptions.scan = () => Promise.resolve(infectedVerdict);
     expect((await request()).statusCode).toBe(422);
     expect((await request()).statusCode).toBe(422);
     expect((await history(nats.store, 'conversation-chat', 'test')).filter(row => row.event.type === 'file.rejected')).toHaveLength(1);
@@ -204,3 +204,10 @@ async function refusesTeamScreenshotBeforeCapture() {
 }
 it('refuses a team screenshot before capturing the shared desktop',
   refusesTeamScreenshotBeforeCapture, 120_000);
+
+function cleanVerdict() {
+  return 'clean' as const;
+}
+function infectedVerdict() {
+  return 'infected' as const;
+}
