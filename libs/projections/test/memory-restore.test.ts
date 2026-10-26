@@ -62,7 +62,7 @@ async function prepare() {
   survivor = { ...root, ownerId: 'bob', memoryId: 'neighbour',
     scopeId: memoryScopeId('test', 'person', 'bob') };
   const dependency = [{ scopeId, memoryId: 'root', revision: 1 }];
-  await source.seed([value('neighbour', 'bob'), value('root'),
+  await source.seed([value('earlier', 'charlie'), value('neighbour', 'bob'), value('root'),
     value('child', 'alice', 1, dependency), value('child', 'alice', 2)]);
   await cp(sourceDirectory, `${directory}/stale`, { recursive: true });
   const backup = `${directory}/backup`;
@@ -141,7 +141,7 @@ async function guardedConnection(settings) {
     const reply = await request(subject, ...args);
     if (process.env.CHANGE_IDENTITY && subject === '$JS.API.STREAM.MSG.GET.EVENTS') {
       const saved = reply.json();
-      if (saved.message.seq === 2) {
+      if (saved.message.seq === 3) {
         const event = JSON.parse(Buffer.from(saved.message.data, 'base64').toString('utf8'));
         event.data.keyId = 'key:' + 'f'.repeat(64);
         saved.message.data = Buffer.from(JSON.stringify(event)).toString('base64');
@@ -243,11 +243,10 @@ async function historicalEvidence(fault: string, settings: NodeJS.ProcessEnv) {
   settings['SOURCE_MEMORY_KEY_DIRECTORY'] = incomplete;
 }
 
-const matchingDamage = ['empty', 'missing', 'wrong-key'] as const;
-async function damagedSurvivor(fault: typeof matchingDamage[number]) {
-  const damagedSource = `${directory}/survivor-${fault}`;
+async function damagedSurvivor(fault: 'empty' | 'missing' | 'wrong-key', memoryId = 'earlier') {
+  const damagedSource = `${directory}/survivor-${memoryId}-${fault}`;
   await cp(sourceDirectory, damagedSource, { recursive: true });
-  const path = `${damagedSource}/${references.get('neighbour-1')!}`;
+  const path = `${damagedSource}/${references.get(`${memoryId}-1`)!}`;
   if (fault === 'missing') {
     await rm(path);
   } else if (fault === 'empty') {
@@ -256,14 +255,37 @@ async function damagedSurvivor(fault: typeof matchingDamage[number]) {
     await writeFile(path, Buffer.alloc(32, 7));
   }
   await resetCandidate(damagedSource);
-  const settings = { ...env, SOURCE_MEMORY_KEY_DIRECTORY: damagedSource, EXPECT_REFUSAL: '1' };
+  const settings: NodeJS.ProcessEnv = { ...env, SOURCE_MEMORY_KEY_DIRECTORY: damagedSource,
+    EXPECT_REFUSAL: '1' };
+  if (fault !== 'wrong-key') {
+    settings['EXPECT_NO_DECRYPT'] = '1';
+  }
   await expect(run(settings)).rejects.toMatchObject({
     stdout: 'effects:0\n', stderr: refused,
   });
   const tables = await storage.db.query("SELECT tablename FROM pg_tables WHERE schemaname='public'");
   expect(tables.rows).toEqual([]);
 }
-it.each(matchingDamage)('refuses matching %s surviving custody in both folders', damagedSurvivor);
+const unavailableCustody = ['empty', 'missing'] as const;
+async function refuseUnavailableCustody(fault: typeof unavailableCustody[number]) {
+  await damagedSurvivor(fault);
+}
+it.each(unavailableCustody)(
+  'refuses matching %s surviving custody in both folders without decryption',
+  refuseUnavailableCustody,
+);
+it('refuses matching wrong-key surviving custody after authentication',
+  async function refuseWrongKey() {
+    await damagedSurvivor('wrong-key');
+  });
+
+async function refuseLaterUnavailableCustody(fault: typeof unavailableCustody[number]) {
+  await damagedSurvivor(fault, 'neighbour');
+}
+it.each(unavailableCustody)(
+  'refuses later matching %s custody before decrypting an earlier healthy fact',
+  refuseLaterUnavailableCustody,
+);
 
 const lateRefusals = ['root-1', 'root-2', 'child-3', 'key-identity', 'source-history', 'target-history',
   'source-inventory', 'candidate-inventory'] as const;
@@ -309,7 +331,7 @@ it('replays older events twice with current markers, scoped search and zero effe
   async function recovery() {
     await resetCandidate();
     const first = await run();
-    expect(first.stdout).toContain('PASS: memory rebuilt through event 4');
+    expect(first.stdout).toContain('PASS: memory rebuilt through event 5');
     expect(first.stdout).toContain('effects:0');
     expect(first.stderr).toBe('');
     const before = await snapshot();
@@ -327,8 +349,8 @@ it('replays older events twice with current markers, scoped search and zero effe
     ]);
     const jobs = await storage.db.query("SELECT tablename FROM pg_tables WHERE schemaname='pgboss'");
     expect(jobs.rows).toEqual([]);
-    expect(await source.reader.head()).toBe(5);
-    expect(await target.reader.head()).toBe(4);
+    expect(await source.reader.head()).toBe(6);
+    expect(await target.reader.head()).toBe(5);
     const output = first.stdout + first.stderr + second.stdout + second.stderr;
     expect(output).not.toContain('canary');
     for (const identity of [root, child, { ...child, revision: 2 }]) {
@@ -341,10 +363,10 @@ it('refuses truncated current source history before opening the database', async
   const before = await snapshot();
   const info = await source.connection.request('$JS.API.STREAM.INFO.EVENTS', '{}');
   const saved = info.json<{ config: Record<string, unknown> }>();
-  const config = { ...saved.config, max_msgs: 4 };
+  const config = { ...saved.config, max_msgs: 5 };
   const changed = await source.connection.request('$JS.API.STREAM.UPDATE.EVENTS',
     JSON.stringify(config));
-  expect(changed.json()).toMatchObject({ state: { first_seq: 2, messages: 4 } });
+  expect(changed.json()).toMatchObject({ state: { first_seq: 2, messages: 5 } });
   const settings: NodeJS.ProcessEnv = { ...env, EXPECT_REFUSAL: '1' };
   await expect(run(settings)).rejects.toMatchObject({ stdout: 'effects:0\n', stderr: refused });
   expect(await snapshot()).toEqual(before);
