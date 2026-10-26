@@ -75,6 +75,7 @@ async function fixture() {
   const listedNames: string[] = [];
   const removals: { name: string; preconditions: unknown }[] = [];
   let listAction: (() => Promise<void>) | undefined;
+  let readAction: (() => void) | undefined;
   let listFailures = 0;
   let deleteFailure = false;
   let deleteAttempts = 0;
@@ -184,6 +185,9 @@ async function fixture() {
       response.writeHead(404).end(material);
       return;
     }
+    if (request.method === 'GET') {
+      readAction?.();
+    }
     response.setHeader('content-type', 'application/json');
     response.end(JSON.stringify(secret));
   }
@@ -206,6 +210,7 @@ async function fixture() {
   return { custody, restart, directory, pages, secrets, listings, listedNames, removals,
     get maximumLists() { return maximumLists; }, get deleteAttempts() { return deleteAttempts; },
     onList(action: () => Promise<void>) { listAction = action; },
+    onRead(action: () => void) { readAction = action; },
     failLists(count: number) { listFailures = count; },
     failDeletes(failed: boolean) { deleteFailure = failed; }, apiUrl: `http://127.0.0.1:${port}`,
     get secret() { return secret!; }, get creates() { return creates; },
@@ -513,6 +518,50 @@ async function loadsPrivateAttemptAfterRestart() {
 }
 it('loads OAuth custody from its private path and retains expired attempts without releasing them',
   loadsPrivateAttemptAfterRestart);
+
+async function refusesAttemptExpiringDuringRecovery(operation: 'readAttempt' | 'prepareAttempt',
+  expireOnRead: number) {
+  const store = await fixture();
+  const input = oauthFixture();
+  const prepared = await prepareOAuthAttempt(store.custody, input.context,
+    input.configuration, input.rows);
+  if (prepared.status !== 'prepared') {
+    throw new Error('Fixture preparation failed');
+  }
+  const original = structuredClone(store.secret);
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(prepared.stage.appendUntil - 1);
+  let reads = 0;
+  function expireDuringRead() {
+    reads += 1;
+    if (reads === expireOnRead) {
+      clock.mockReturnValue(prepared.stage.appendUntil + 1);
+    }
+  }
+  function refuseNewMaterial(): string {
+    throw new Error('Retry must retain the original material');
+  }
+  store.onRead(expireDuringRead);
+  try {
+    const restarted = store.restart();
+    if (operation === 'readAttempt') {
+      const contents = await restarted.readAttempt(prepared.stage, prepared.identity);
+      expect(contents).toBeUndefined();
+    } else {
+      const result = await restarted.prepareAttempt(prepared.stage, refuseNewMaterial);
+      expect(result).toEqual({ status: 'unknown' });
+    }
+    expect(Date.now()).toBe(prepared.stage.appendUntil + 1);
+    expect(store.secret).toEqual(original);
+    expect(store.creates).toBe(1);
+  } finally {
+    clock.mockRestore();
+  }
+}
+it.each([
+  ['readAttempt', 1], ['readAttempt', 2],
+  ['prepareAttempt', 2], ['prepareAttempt', 3],
+] as const)('refuses OAuth %s when custody read %s crosses expiry',
+  refusesAttemptExpiringDuringRecovery);
 
 
 async function refusesUnrecordedCreate(replace: boolean) {
