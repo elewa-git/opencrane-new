@@ -1,0 +1,1 @@
+- Restore checked encrypted file backups into a new disposable MinIO bucket, preserve file addresses and types, and verify every stored file. Existing buckets and uncertain transfers refuse without retry or deletion.

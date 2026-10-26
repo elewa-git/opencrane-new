@@ -71,6 +71,15 @@ or retry. An uncertain target stays isolated even if bytes arrived. Original
 [export](../p5-7-pr1/receipt.md), [restore](../p5-8-pr1/receipt.md) and
 [interrupted-handler](../p5-9-pr1/receipt.md) receipts prove their stated subsets only.
 
+## File objects in a disposable target
+
+The [file restore helper](../../../infra/package/README.robot.md#file-object-restore)
+uses the checked native event restore and its matching encrypted object archive.
+It requires stopped, exclusive disposable MinIO with no files bucket. It checks
+all files before creation and reads back every upload. Failed or uncertain writes
+leave the target isolated and intact; a rerun refuses its bucket. There is no CLI
+or permission to reopen admission. Current access and deletion checks still apply.
+
 ## Recovery limits and qualification
 
 Normal preparation/bootstrap use R1: one stored copy. R3 means three copies; process tests

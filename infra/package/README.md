@@ -23,7 +23,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership and cluster access; keeps values paths private| package
   package -->|uses local cluster| devbox
-  package -->|starts services, encrypts copied files and replays memory| apps["apps<br/>product services and replay"]
+  package -->|starts services, copies and restores files and replays memory| apps["apps<br/>product services and replay"]
   package -->|runs services and checks placement and fresh browser journeys| services["Core services<br/>NATS, PostgreSQL, OpenFGA and optional standby"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
@@ -55,7 +55,7 @@ running install still need work.
 - Renders an optional three-peer event log and prepares its separate private certificates.
 - Gives computers the private gateway address and short-lived access passes.
 - Saves a bounded private copy of the event log and its referenced files for an operator.
-- Restores checked events into an empty disposable NATS target.
+- Restores checked events and files into separate empty disposable targets.
 - Checks event and budget recovery after an interrupted change to handler subscriptions.
 - Checks current memory deletion records before replaying older events.
 - Checks three event-log placements against Kubernetes and fresh-install observations.
@@ -133,6 +133,13 @@ checksum before saving a completion record. Its restore checker refuses changed
 encrypted files before returning their contents.
 It does not copy unreferenced files or prove that a whole installation can recover.
 The [object notes](README.robot.md#event-referenced-object-copy) explain its limits.
+
+The file restore helper checks every encrypted file before creating a new storage
+bucket. It restores the saved addresses and file types, then reads every file back
+to check its size and checksum. Existing buckets refuse, including empty ones.
+A failed transfer leaves the target isolated for inspection; it never retries or
+deletes the bucket. Restored files grant no access and do not reopen the installation.
+The [file restore notes](README.robot.md#file-object-restore) describe the requirements.
 
 The event restore command checks that copy against its reachable source, then sends
 it to a separate disposable NATS server with no event stream. It checks the restored

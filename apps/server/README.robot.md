@@ -5807,3 +5807,7 @@ Failures close the connection and reject the SDK's pending request, including wh
 reading a bad body already closed its socket. HTTP 503 keeps its existing safe error.
 The storage fixtures withhold headers and send oversized or unfinished bodies;
 they check socket closure. Object capture also checks that no descriptor remains.
+
+`withBounds({ signal, timeoutMs }, operation)` carries the same limits through
+bucket creation and restore writes. `endpoint` exposes the normalised origin for
+source/target comparison. These helpers add no HTTP route or access decision.

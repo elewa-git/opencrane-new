@@ -149,6 +149,10 @@ export function storageClient(url: string, leaseFile: string) {
     credentialsProvider,
   };
   const client = new Client(options);
+  function withBounds<Value>(bounds: RequestBounds, operation: () => Promise<Value>) {
+    bounds.signal.throwIfAborted();
+    return context.run(bounds, operation);
+  }
   function getObjectBounded(bucket: string, address: string, bounds: RequestBounds) {
     bounds.signal.throwIfAborted();
     function download() {
@@ -157,5 +161,5 @@ export function storageClient(url: string, leaseFile: string) {
     // Carry one capture's cancellation through region lookup and the object request.
     return context.run(bounds, download);
   }
-  return Object.assign(client, { getObjectBounded });
+  return Object.assign(client, { getObjectBounded, withBounds, endpoint: endpoint.origin });
 }

@@ -476,6 +476,34 @@ records local checks. P5-7 remains PARTIAL: CNPG/WAL, computer volumes,
 coordinated-set completion, admission reopening and fresh-install recovery are NOT RUN.
 The private descriptor is trusted operator material, not an authenticated manifest.
 
+## File object restore
+
+`restoreObjectBackup` in `object-restore.ts` accepts the stopped NATS target and
+`proof` returned by `restoreEventBackup`, plus source and target `storageClient`
+instances. The caller supplies `directory` for objects, `eventDirectory`,
+`backupKeyFile`, `silo`, `attempt`, `targetSilo`, and true `stopped`, `exclusive`
+and `disposable` confirmations. The operator owns these confirmations and keeps
+all target product processes and other writers stopped. Endpoint comparison
+rejects the source address; an alias with its existing files bucket also refuses.
+The private descriptors remain trusted operator material, not signed manifests.
+
+Before any storage write, it checks the merged version-2 encrypted descriptor,
+both archive hashes, silo and attempt, private paths/modes/owners, every file's
+authentication, count and checksum, and the checked events' addresses and MIME types.
+Matching upload references share one object; conflicting references refuse.
+At most 1,000 objects and 64 MiB of plaintext stay in memory. The whole operation
+has 60 seconds; `timeoutMs` may shorten it and `signal` may cancel it.
+
+Only the local MinIO fixture is qualified. Atomic bucket creation must refuse an
+existing bucket, even if empty; S3 providers that accept repeated creation are
+unsupported. Each upload also requires the address to be absent. Every object is
+read back, counted and hashed, with its stored MIME type checked. No failure deletes
+or resends anything. All failures return `Object restore refused; keep target isolated`.
+A rerun refuses the leftover bucket. Credentials and paths stay out of diagnostics.
+Bytes grant no access: replay/access comparison and current custody/deletion checks
+still apply. No scan, delivery, event recreation or admission reopening runs here.
+The [object-only receipt](../../docs/process/p5-8-pr2/receipt.md) records the checks.
+
 ## Event-byte restore
 
 `event-restore-run.ts SILO DIRECTORY --disposable` restores the event-only export.
