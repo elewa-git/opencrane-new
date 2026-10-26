@@ -570,13 +570,13 @@ const consentWaits = [
 ] as const;
 it.each(consentWaits)('refuses private consent after %s waits across %s', checksAfterConsentWait);
 
-async function policyChangesDuringConfiguration(readNumber: number) {
+async function accessChangesDuringConfiguration(readNumber: number, change: string) {
   const test = await consentStartFixture();
   let reads = 0;
   async function delayedConfiguration() {
     reads += 1;
     if (reads === readNumber) {
-      await changeConsentAccess(test, 'policy');
+      await changeConsentAccess(test, change);
     }
     return test.configuration;
   }
@@ -585,8 +585,72 @@ async function policyChangesDuringConfiguration(readNumber: number) {
   const rows = await history(events.store, test.subject, 'test');
   expect(rows).toHaveLength(readNumber === 2 ? 0 : 1);
 }
-it.each([2, 3])('rechecks private consent policy after configuration read %s',
-  policyChangesDuringConfiguration);
+const consentConfigurationWaits = [
+  [2, 'policy'], [3, 'policy'], [2, 'removed'], [3, 'removed'],
+  [2, 'disabled'], [3, 'disabled'],
+] as const;
+it.each(consentConfigurationWaits)(
+  'rechecks private consent after configuration read %s across %s',
+  accessChangesDuringConfiguration);
+
+async function changesDuringFinalConsentMembershipRead(change: string) {
+  const test = await consentStartFixture();
+  const readAttempt = test.custody.readAttempt.bind(test.custody);
+  let privateReads = 0;
+  async function observePrivateRead(...args: Parameters<typeof readAttempt>) {
+    const contents = await readAttempt(...args);
+    privateReads += 1;
+    return contents;
+  }
+  test.custody.readAttempt = observePrivateRead;
+  const head = events.store.head.bind(events.store);
+  let membershipReads = 0;
+  let changed = false;
+  async function delayedMembershipRead(subject?: string, deadline?: number) {
+    const position = await head(subject, deadline);
+    if (privateReads === 2 && subject === `member-${test.session.userId}`) {
+      membershipReads += 1;
+      // Let the last membership read return its old position after the dependency changes.
+      if (membershipReads === 3) {
+        await changeConsentAccess(test, change);
+        changed = true;
+      }
+    }
+    return position;
+  }
+  const fault = vi.spyOn(events.store, 'head').mockImplementation(delayedMembershipRead);
+  try {
+    const result = await test.start();
+    expect(changed).toBe(true);
+    expect(result).toEqual({ status: 'unknown' });
+  } finally {
+    fault.mockRestore();
+  }
+}
+it.each(['policy', 'configuration', 'profile'])(
+  'withholds private consent when %s changes during the final membership read',
+  changesDuringFinalConsentMembershipRead);
+
+async function unrelatedActivityDuringConsentConfiguration() {
+  const test = await consentStartFixture();
+  let reads = 0;
+  async function delayedConfiguration() {
+    reads += 1;
+    if (reads === 3) {
+      const memberId = 'unrelated-consent-member';
+      const joined = envelope('test', `member-${memberId}`, 'member.joined', {
+        memberId, role: 'member', email: `${memberId}@example.test`, displayName: memberId,
+      });
+      await events.seed([joined]);
+    }
+    return test.configuration;
+  }
+  test.loader.loadConfiguration = delayedConfiguration;
+  expect((await test.start()).status).toBe('started');
+  expect(await history(events.store, test.subject, 'test')).toHaveLength(1);
+}
+it('returns private consent after unrelated activity during the final configuration read',
+  unrelatedActivityDuringConsentConfiguration);
 
 async function refusesUnconfirmedConsentRecord() {
   const test = await consentStartFixture();
