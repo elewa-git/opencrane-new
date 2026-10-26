@@ -1,0 +1,1 @@
+- Current Owners and Admins can save a persistent member account block through HTTP. It covers every profile for that member and integration, including later reconnects, without reading credentials or enabling calls.
