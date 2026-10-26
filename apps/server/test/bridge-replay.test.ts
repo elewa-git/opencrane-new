@@ -1369,13 +1369,6 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
     const received = frames.get('computer');
     return received?.some(isStop) === true;
   }
-  function isStoppedChatOrControl(value: unknown) {
-    if (isStop(value) || isSettlement(value)) {
-      return true;
-    }
-    return typeof value === 'object' && value !== null &&
-      Reflect.get(value, 'conversationId') === 'alice';
-  }
   try {
     await until(turnArrived);
     const read = fixture.store.readStream.bind(fixture.store);
@@ -1405,6 +1398,13 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
     await entered.promise;
     const received = frames.get('computer')!;
     const beforeStop = received.length;
+    function isStoppedChatOrControl(value: unknown, index: number) {
+      if (isStop(value) || isSettlement(value)) {
+        return true;
+      }
+      return index >= beforeStop && typeof value === 'object' && value !== null &&
+        Reflect.get(value, 'conversationId') === 'alice';
+    }
     let delayedComputerReads = 0;
     let delayedApprovalRead = false;
     const realNow = performance.now.bind(performance);
@@ -1445,8 +1445,8 @@ async function stopsBeforeApprovalWake(computerDelay: number, approvalDelay: num
     stop.abort();
     await work;
     // Allow delivery retries, but keep the same command and send Stop before the only wake.
-    const laterFrames = received.slice(beforeStop);
-    const commands = laterFrames.filter(isStoppedChatOrControl);
+    // Check every Stop and settlement, including frames received during startup.
+    const commands = received.filter(isStoppedChatOrControl);
     const expectedStop = { type: 'stop', ...savedStop };
     const expectedSettlement = { type: 'approval_settled', approvalId, state: 'cancelled' };
     expect(commands[0]).toEqual(expectedStop);
