@@ -67,7 +67,7 @@ does not save a database backup.
 - Saves a bounded private copy of the event log and its referenced files for an operator.
 - Checks retained computer homes against saved events and current Kubernetes ownership.
 - Encrypts one bounded home export while checking that its ownership stays unchanged.
-- Restores checked events and files into separate empty disposable targets.
+- Restores checked events and files in order into empty disposable targets.
 - Checks event and budget recovery after an interrupted change to handler subscriptions.
 - Checks current memory deletion records before replaying older events.
 - Checks company journey records against the full acceptance checklist.
@@ -203,6 +203,13 @@ it to a separate disposable NATS server with no event stream. It checks the rest
 events and leaves uncertain results isolated for inspection. It starts no product
 processes. This does not restore or reopen a working installation.
 The [restore notes](README.robot.md#event-byte-restore) explain the requirements.
+
+The combined restore helper checks both copies before changing either target. It
+restores events first, then files, under one time limit. Only privately provisioned
+local targets can be used. Failed or cancelled work leaves both targets isolated
+and never deletes or resends bytes. It starts no product readers or background work.
+The [combined restore notes](README.robot.md#combined-event-and-file-restore) explain
+what still blocks reopening.
 
 A separate test interrupts a change to the events that background handlers receive.
 It restores the earlier event copy and rebuilds membership and spending tables with

@@ -115,6 +115,25 @@ async function prepareObjects(bounds: Bounds, options: Options) {
   }
 }
 
+/** Validate both private copies against the stopped source before either target changes. */
+export async function checkObjectBackup(events: NatsConnection, options: Omit<Options, 'proof'>) {
+  const bounds = captureBounds(events, options);
+  try {
+    const saved = readPrivateFile(join(options.eventDirectory, 'descriptor.json'), 1024 * 1024);
+    const descriptor = descriptorSchema.parse(JSON.parse(saved.toString('utf8')));
+    const proof = { descriptor, targetDescriptor: descriptor };
+    const checkedOptions = { ...options, proof };
+    const prepared = await prepareObjects(bounds, checkedOptions);
+    for (const object of prepared) {
+      object.bytes.fill(0);
+    }
+  } catch {
+    throw refusal();
+  } finally {
+    bounds.dispose();
+  }
+}
+
 async function verifyObject(target: Storage, object: Awaited<ReturnType<typeof prepareObjects>>[number],
   bounds: Bounds, signal: AbortSignal, timeoutMs: number) {
   let stream: Readable | undefined;

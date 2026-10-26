@@ -94,11 +94,17 @@ export async function provisionDisposableObjectTarget(silo: string) {
 
 /** Reserve this instance once and verify its destination before any restored bytes are sent. */
 export function claimDisposableObjectTarget(client: Storage, silo: string, signal: AbortSignal) {
+  const check = inspectDisposableObjectTarget(client, silo, signal);
+  targets.get(client)!.claimed = true;
+  return check;
+}
+
+/** Check ownership without claiming or changing storage during combined restore preflight. */
+export function inspectDisposableObjectTarget(client: Storage, silo: string, signal: AbortSignal) {
   const state = targets.get(client);
   if (!state || state.silo !== silo || state.closed || state.claimed) {
     throw new Error('Disposable storage claim refused');
   }
-  state.claimed = true;
   const target = state;
   async function check() {
     signal.throwIfAborted();

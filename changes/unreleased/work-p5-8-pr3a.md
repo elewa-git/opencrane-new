@@ -1,0 +1,1 @@
+- Restore checked events and encrypted files in one bounded offline sequence. Check both copies and actual disposable target ownership before mutation; leave uncertain targets isolated without deleting or resending bytes. Full recovery and reopening remain unqualified.

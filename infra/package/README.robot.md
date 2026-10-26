@@ -818,6 +818,45 @@ all databases/CNPG, object and volume ownership, current custody/deletion state,
 rights/cents comparisons, outbound-effect suppression and reopening are NOT RUN.
 A partial event archive cannot authorise a full restore; full P5-8 needs live P5-7.
 
+## Combined event and file restore
+
+`restoreRecoveryBackup` in `recovery-restore.ts` takes source and target NATS
+connections, source and target storage clients, and the file restore options without
+`proof`. It also requires `effectsDisabled: true`. The stopped, exclusive and
+disposable confirmations must be true, and both silo declarations must match.
+The source must stay reachable and stopped. Operators remain responsible for stopping
+source writers and effects; this helper never starts or stops product processes.
+
+`provisionRecoveryEventTarget(silo)` starts a fresh standalone local NATS process
+with an empty private directory and a random private token. It returns a connection
+and an explicit `close()` operation. The temporary mode-0600 configuration is removed
+once the server starts. No token is passed in arguments or diagnostics. Only that
+registered connection, server identity and running child can be claimed, once.
+The file target must come from `provisionDisposableObjectTarget(silo)`. Host
+administrators and the operator's private archive directories remain trusted.
+
+Before mutation, the helper reuses object restore validation against the source:
+private descriptors, matching silo/attempt/archive hashes, encrypted object checks,
+and event-derived addresses and MIME types. It erases the checked plaintext.
+It checks that NATS contains no streams and storage contains only its owner-marker
+bucket. It verifies the actual storage owner and process list before native restore.
+Native restore then validates the reachable source again. Its exact result goes to
+object restore, which repeats validation against the restored events and reads back
+all uploaded bytes. Neither stage deletes, retries, recreates events or starts actors.
+
+The whole sequence shares one cancellation signal and a deadline of at most 60 seconds.
+`timeoutMs` can shorten it. Cancellation closes the NATS connection and active storage
+requests. Failed or uncertain completion returns only
+`Recovery restore refused; keep both targets isolated`. Successful completion returns
+only `{ kind: 'events-and-objects-only' }`. Targets stay intact until the operator
+explicitly disposes of them; a second attempt with either claimed target refuses.
+There is no command-line wrapper or new archive format.
+
+P5-8 PR 3a is PARTIAL. This result never authorises reopening. Computer volumes,
+CNPG/WAL and database restore, current deletion/key custody and comparisons still
+block it. Coordinated live recovery is NOT RUN. The
+[receipt](../../docs/process/p5-8-pr3a/receipt.md) records local fixture checks.
+
 ## Interrupted handler upgrade check
 
 `upgrade-recovery.ts` collects ordered ids, positions and event SHA-256 values,
