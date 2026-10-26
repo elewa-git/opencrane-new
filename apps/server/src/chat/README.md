@@ -17,7 +17,9 @@ cannot create, change or read those sessions through these routes.
 
 The private recall tool-list builder checks the saved turn, requester, matching grant
 and registered caller before selecting the exact reviewed built-in definition.
-Only the requester's personal scope is accepted. Live private tool delivery remains disabled.
+Only the requester's personal scope is accepted. Passing privacy evidence must match
+the server source, computer image and host. The builder repeats these checks after
+waiting for tool definitions and permissions. Live private tool delivery remains disabled.
 
 **Messages and access.** Two members can exchange private messages without starting assistant work. Members can start group chats with reviewed people. Offered groups are limited to those they belong to. Creators can add or remove participants; others can leave. Changes reject stale choices, and saved retries cannot add someone again. New chats can report that permissions are still applying so the website keeps the draft. A saved removal stops reads and live connections before the permissions service catches up. Later joiners see only messages from their latest join onwards. Lists reuse permission facts within a request and check for changes after each answer from the permissions service.
 

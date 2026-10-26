@@ -18,6 +18,20 @@ const definition = JSON.stringify({
 });
 const reviewed = losslessJson(definition);
 
+function qualificationFixture() {
+  const runtime = {
+    sourceSha: 'a'.repeat(40), imageDigest: `sha256:${'b'.repeat(64)}`,
+    environmentId: 'disposable-test-host',
+  };
+  const checks: Record<string, string> = {
+    privateTurns: 'PASS', nativeRecall: 'PASS', requesterIsolation: 'PASS',
+    sessionIsolation: 'PASS', invalidation: 'PASS', unrelatedActivity: 'PASS',
+    stopReconnect: 'PASS', replacementReload: 'PASS', persistence: 'PASS',
+  };
+  const qualification = { ...runtime, result: 'PASS', checks };
+  return { runtime, qualification };
+}
+
 function callerRegistry() {
   function dropped() { /* Keep this fixture independent of proxy network requests. */ }
   const callers = privateCallers(dropped);
@@ -61,6 +75,7 @@ function fixture() {
     return Promise.resolve(true);
   }
   const input = {
+    ...qualificationFixture(),
     silo: 'test', scopeId: memoryScopeId('test', 'person', 'alice'),
     requesterId: 'alice', assistantId: 'assistant', baseMessageBytes: 100,
     readServer: vi.fn(read), canUse: vi.fn(allow),
@@ -305,3 +320,77 @@ async function refusesMissingServer() {
   expect(await buildPrivateTurnRecallTools({ ...input, readServer: missing })).toEqual([]);
 }
 it('offers nothing when the server is absent', refusesMissingServer);
+
+const invalidQualifications = [
+  'missing qualification', 'missing runtime', 'wrong image', 'wrong source', 'wrong environment',
+  'unbound image tag', 'short source', 'empty environment', 'failed result',
+  'empty checks', 'tool-free proof', 'unknown check',
+] as const;
+async function refusesQualification(change: typeof invalidQualifications[number]) {
+  const { input } = fixture();
+  let qualification: unknown = input.qualification;
+  let runtime: typeof input.runtime | undefined = input.runtime;
+  if (change === 'missing qualification') qualification = undefined;
+  if (change === 'missing runtime') runtime = undefined;
+  if (change === 'wrong image') input.qualification.imageDigest = `sha256:${'c'.repeat(64)}`;
+  if (change === 'wrong source') input.qualification.sourceSha = 'd'.repeat(40);
+  if (change === 'wrong environment') input.qualification.environmentId = 'another-host';
+  if (change === 'unbound image tag') {
+    input.qualification.imageDigest = 'computer:latest';
+    input.runtime.imageDigest = 'computer:latest';
+  }
+  if (change === 'short source') {
+    input.qualification.sourceSha = 'aaaaaaa';
+    input.runtime.sourceSha = 'aaaaaaa';
+  }
+  if (change === 'empty environment') {
+    input.qualification.environmentId = '';
+    input.runtime.environmentId = '';
+  }
+  if (change === 'failed result') input.qualification.result = 'FAIL';
+  if (change === 'empty checks') input.qualification.checks = {};
+  if (change === 'tool-free proof') input.qualification.checks = { privateTurns: 'PASS' };
+  if (change === 'unknown check') input.qualification.checks['invented'] = 'PASS';
+  const request = { ...input, runtime, qualification };
+  expect(await buildPrivateTurnRecallTools(request)).toEqual([]);
+  expect(input.readServer).not.toHaveBeenCalled();
+  expect(input.canUse).not.toHaveBeenCalled();
+}
+it.each(invalidQualifications)('refuses recall before catalogue reads with %s',
+  refusesQualification);
+
+const requiredChecks = Object.keys(qualificationFixture().qualification.checks);
+async function refusesIncompleteCheck(check: string) {
+  for (const result of ['FAIL', 'PARTIAL', 'NOT RUN', undefined]) {
+    const { input } = fixture();
+    if (result === undefined) delete input.qualification.checks[check];
+    else input.qualification.checks[check] = result;
+    expect(await buildPrivateTurnRecallTools(input)).toEqual([]);
+    expect(input.readServer).not.toHaveBeenCalled();
+  }
+}
+it.each(requiredChecks)('requires a passing %s check', refusesIncompleteCheck);
+
+const lateChanges = ['qualification', 'image', 'source', 'environment', 'generation',
+  'input generation', 'requester', 'scope', 'closed turn', 'closed caller'] as const;
+async function refusesLateAssembly(change: typeof lateChanges[number]) {
+  const { input, binding, state } = fixture();
+  const pending = Promise.withResolvers<typeof state>();
+  function readServer() { return pending.promise; }
+  input.readServer.mockImplementation(readServer);
+  const assembling = buildPrivateTurnRecallTools(input);
+  expect(input.readServer).toHaveBeenCalledOnce();
+  if (change === 'qualification') input.qualification.checks['persistence'] = 'FAIL';
+  if (change === 'image') input.runtime.imageDigest = `sha256:${'e'.repeat(64)}`;
+  if (change === 'source') input.runtime.sourceSha = 'f'.repeat(40);
+  if (change === 'environment') input.runtime.environmentId = 'replacement-host';
+  if (change === 'generation') binding.grant.generation += 1;
+  if (change === 'input generation') binding.grant.inputGeneration += 1;
+  if (change === 'requester') input.requesterId = 'bob';
+  if (change === 'scope') input.scopeId = memoryScopeId('test', 'person', 'bob');
+  if (change === 'closed turn') binding.turn.firstClose = { sequence: 2, status: 'completed' };
+  if (change === 'closed caller') binding.registration.close();
+  pending.resolve(state);
+  expect(await assembling).toEqual([]);
+}
+it.each(lateChanges)('discards a late catalogue reply after changed %s', refusesLateAssembly);

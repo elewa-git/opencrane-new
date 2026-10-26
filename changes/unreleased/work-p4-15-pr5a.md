@@ -1,0 +1,1 @@
+Personal recall tool preparation now requires passing privacy evidence for the exact source, computer image and host, and refuses delayed lists after qualification or scope changes. Native memory remains disabled while live delivery and qualification are incomplete.
