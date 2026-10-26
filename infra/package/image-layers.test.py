@@ -23,6 +23,7 @@ class ImageLayerTests(unittest.TestCase):
         archive_path = os.environ["PACKAGE_IMAGE_ARCHIVE"]
         cls.paths = set()
         cls.executables = set()
+        cls.nonempty_layers = 0
         with tarfile.open(archive_path) as archive:
             manifest = json.load(archive.extractfile("manifest.json"))
             if len(manifest) != 1:
@@ -31,13 +32,17 @@ class ImageLayerTests(unittest.TestCase):
             cls.configuration = json.load(archive.extractfile(image["Config"]))
             cls.layers = image["Layers"]
             for layer_path in cls.layers:
+                has_files = False
                 with archive.extractfile(layer_path) as layer_file:
                     with tarfile.open(fileobj=layer_file, mode="r|*") as layer:
                         for member in layer:
+                            has_files = True
                             path = str(PurePosixPath(member.name)).lstrip("/")
                             cls.paths.add(path)
                             if member.isfile() and member.mode & 0o111:
                                 cls.executables.add(path)
+                if has_files:
+                    cls.nonempty_layers += 1
 
     def test_removed_files_are_absent_from_every_shipped_layer(self):
         for removed in REMOVED_PATHS:
@@ -48,9 +53,10 @@ class ImageLayerTests(unittest.TestCase):
                         matches.append(path)
                 self.assertEqual(len(matches), 0, f"Shipped files remain under {removed}")
 
-    def test_cleaned_filesystem_is_shipped_as_one_layer(self):
-        self.assertEqual(len(self.layers), 1)
-        self.assertEqual(len(self.configuration["rootfs"]["diff_ids"]), 1)
+    def test_cleaned_filesystem_has_one_nonempty_layer(self):
+        # Allow the empty layer that Docker may add when restoring WORKDIR.
+        self.assertEqual(self.nonempty_layers, 1)
+        self.assertEqual(len(self.configuration["rootfs"]["diff_ids"]), len(self.layers))
 
     def test_runtime_configuration_is_preserved(self):
         configuration = self.configuration["config"]

@@ -65,8 +65,9 @@ class LicenceTests(unittest.TestCase):
             reviewed, inventory, inspection, path, revision = self.promotion_fixture(directory)
             scan = checker.read_json(path)
             # Include the older layer's package just as an all-layer scan would.
-            scan["artifacts"].append({"type": "npm", "name": "npm", "version": "10.9.4",
-                                      "licenses": [{"spdxExpression": "Artistic-2.0"}]})
+            removed_package = {"type": "npm", "name": "npm", "version": "10.9.4",
+                               "licenses": [{"spdxExpression": "Artistic-2.0"}]}
+            scan["artifacts"].append(removed_package)
             path.write_text(json.dumps(scan), encoding="utf-8")
             reviewed["natsCluster"]["scanSha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
             with self.assertRaisesRegex(ValueError, "scan differs from the reviewed inventory"):

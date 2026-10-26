@@ -74,8 +74,10 @@ those files. It uses disposable services and does not reopen a running installat
 
 Before a new server and website image is approved, its source label, fixed image
 digest and licence inventory must agree with the recorded review. The scan includes
-files hidden by later image layers. Three-peer installation also needs an exact
-source revision in its compatibility review. The current image has no such approval.
+files hidden by later image layers. The build copies the cleaned filesystem into
+one filesystem layer, so removed npm and computer files are absent from the saved image.
+Three-peer installation also needs an exact source revision in its compatibility
+review. The current image has no such approval.
 
 1. **A developer claims a spare stack.** Preparation checks that its Docker Compose
    stack is stopped, then creates a separate space in Kubernetes for the package.
