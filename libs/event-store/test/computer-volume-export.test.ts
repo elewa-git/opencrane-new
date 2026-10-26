@@ -2,7 +2,7 @@ import { createDecipheriv, createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { collectEventBackup } from '../../../infra/package/event-backup.ts';
@@ -23,6 +23,9 @@ async function fixture(fault = '') {
   const target = await natsFixture({ provision: false });
   const directory = await mkdtemp(join(tmpdir(), 'home-export-'));
   async function close() {
+    vi.mocked(fs.writeSync).mockReset();
+    vi.mocked(fs.fsyncSync).mockReset();
+    vi.mocked(fs.lstatSync).mockReset();
     vi.restoreAllMocks();
     await source.close();
     await target.close();
@@ -96,17 +99,24 @@ async function fixture(fault = '') {
   function cancel() { controller.abort(new Error(canary)); }
   function idle() {
     if (fault === 'cancel-active') setImmediate(cancel);
+    if (fault === 'reader-error') stream.destroy(new Error(canary));
   }
   let stream = Readable.from([bytes.subarray(0, 5), bytes.subarray(5)]);
   if (fault === 'truncated') stream = Readable.from([bytes.subarray(0, -1)]);
   if (fault === 'overflow') stream = Readable.from([bytes, bytes]);
   if (fault === 'checksum') stream = Readable.from([Buffer.alloc(bytes.length)]);
   if (['stall', 'cancel', 'cancel-active'].includes(fault)) stream = new Readable({ read: idle });
+  if (fault === 'reader-error' || fault === 'destroy-error') {
+    function destroy(_error: Error | null, done: (error?: Error | null) => void) {
+      done(new Error(canary));
+    }
+    stream = new Readable({ read: idle, destroy });
+  }
   const controller = new AbortController();
   function readExport() {
     opened = true;
     if (fault === 'missing') throw new Error(canary);
-    if (fault === 'cancel') controller.abort(new Error(canary));
+    if (fault === 'cancel' || fault === 'destroy-error') controller.abort(new Error(canary));
     const byteCount = fault === 'size-limit' ? 64 * 1024 * 1024 + 1 : bytes.length;
     return Promise.resolve({ stream, byteCount, sha256: digest(bytes) });
   }
@@ -123,7 +133,7 @@ function decrypt(saved: Buffer, associated: unknown, material = key) {
   return Buffer.concat([decipher.update(saved.subarray(12, -16)), decipher.final()]);
 }
 
-it('encrypts one checked home and independently recovers every byte', async function () {
+async function roundTripsEveryByte() {
   const setup = await fixture();
   const result = await setup.collect();
   expect(result.kind).toBe('volume-export-only');
@@ -140,56 +150,59 @@ it('encrypts one checked home and independently recovers every byte', async func
   expect(descriptor).not.toContain(setup.options.backupKeyFile);
   expect(descriptor).not.toContain(key.toString('hex'));
   expect(setup.stream.destroyed).toBe(true);
-});
+}
+it('encrypts one checked home and independently recovers every byte', roundTripsEveryByte);
 
+async function authenticatesBinding() {
+  const setup = await fixture();
+  const result = await setup.collect();
+  const saved = await readFile(join(setup.options.destination, 'home.enc'));
+  const changes = [
+    ['silo'], ['attempt'], ['eventArchiveSha256'], ['eventDescriptorSha256'],
+    ['namespace', 'uid'], ['namespace', 'name'], ['namespace', 'resourceVersion'],
+    ['volumes', '0', 'generation'], ['volumes', '0', 'assistantId'],
+    ['volumes', '0', 'computerId'],
+  ];
+  for (const resource of ['sandbox', 'home', 'volume']) {
+    for (const field of ['uid', 'name', 'resourceVersion']) {
+      changes.push(['volumes', '0', resource, field]);
+    }
+  }
+  for (const path of changes) {
+    const binding = structuredClone(result.binding);
+    let object: object = binding;
+    for (const field of path.slice(0, -1)) {
+      const next: unknown = Reflect.get(object, field);
+      if (!next || typeof next !== 'object') throw new Error('Invalid fixture');
+      object = next;
+    }
+    Reflect.set(object, path.at(-1)!, 'changed');
+    function changed() { return decrypt(saved, [binding, bytes.length, digest(bytes)]); }
+    expect(changed).toThrow();
+  }
+  function wrongCount() { return decrypt(saved, [result.binding, 1, result.sha256]); }
+  function wrongHash() { return decrypt(saved, [result.binding, bytes.length, 'a'.repeat(64)]); }
+  function wrongKey() {
+    return decrypt(saved, [result.binding, bytes.length, result.sha256], Buffer.alloc(32, 72));
+  }
+  const other = await fixture();
+  other.options.attempt = 'other';
+  const descriptorPath = join(other.options.directory, 'descriptor.json');
+  const descriptor = await readFile(descriptorPath, 'utf8');
+  await writeFile(descriptorPath, descriptor.replace('"attempt":"copy"', '"attempt":"other"'));
+  const otherResult = await other.collect();
+  function swapped() { return decrypt(saved, [otherResult.binding, bytes.length, result.sha256]); }
+  for (const refuses of [wrongCount, wrongHash, wrongKey, swapped]) expect(refuses).toThrow();
+}
 it('authenticates ownership, generation, archive, attempt, count and hash independently',
-  async function () {
-    const setup = await fixture();
-    const result = await setup.collect();
-    const saved = await readFile(join(setup.options.destination, 'home.enc'));
-    const changes = [
-      ['silo'], ['attempt'], ['eventArchiveSha256'], ['eventDescriptorSha256'],
-      ['namespace', 'uid'], ['namespace', 'name'], ['namespace', 'resourceVersion'],
-      ['volumes', '0', 'generation'], ['volumes', '0', 'assistantId'],
-      ['volumes', '0', 'computerId'],
-    ];
-    for (const resource of ['sandbox', 'home', 'volume']) {
-      for (const field of ['uid', 'name', 'resourceVersion']) {
-        changes.push(['volumes', '0', resource, field]);
-      }
-    }
-    for (const path of changes) {
-      const binding = structuredClone(result.binding);
-      let object: object = binding;
-      for (const field of path.slice(0, -1)) {
-        const next: unknown = Reflect.get(object, field);
-        if (!next || typeof next !== 'object') throw new Error('Invalid fixture');
-        object = next;
-      }
-      Reflect.set(object, path.at(-1)!, 'changed');
-      function changed() { return decrypt(saved, [binding, bytes.length, digest(bytes)]); }
-      expect(changed).toThrow();
-    }
-    function wrongCount() { return decrypt(saved, [result.binding, 1, result.sha256]); }
-    function wrongHash() { return decrypt(saved, [result.binding, bytes.length, 'a'.repeat(64)]); }
-    function wrongKey() {
-      return decrypt(saved, [result.binding, bytes.length, result.sha256], Buffer.alloc(32, 72));
-    }
-    const other = await fixture();
-    other.options.attempt = 'other';
-    const descriptorPath = join(other.options.directory, 'descriptor.json');
-    const descriptor = await readFile(descriptorPath, 'utf8');
-    await writeFile(descriptorPath, descriptor.replace('"attempt":"copy"', '"attempt":"other"'));
-    const otherResult = await other.collect();
-    function swapped() { return decrypt(saved, [otherResult.binding, bytes.length, result.sha256]); }
-    for (const refuses of [wrongCount, wrongHash, wrongKey, swapped]) expect(refuses).toThrow();
-  });
+  authenticatesBinding);
 
 const faults = ['missing', 'truncated', 'overflow', 'checksum', 'stall', 'cancel', 'cancel-active',
   'late-namespace', 'late-sandbox', 'late-generation', 'late-home', 'late-volume',
   'late-binding', 'resume', 'late-writer', 'late-archive', 'late-attempt',
-  'key', 'key-link', 'foreign-output', 'output-link', 'existing', 'disk-write', 'disk-flush',
-  'attempt', 'silo', 'active-writer', 'size-limit', 'timeout-limit'];
+  'key', 'key-link', 'foreign-output', 'foreign-owner', 'output-link', 'existing',
+  'disk-write', 'disk-flush',
+  'attempt', 'silo', 'active-writer', 'size-limit', 'timeout-limit', 'reader-error', 'destroy-error'];
 async function refusesFault(fault: string) {
   const setup = await fixture(fault);
   const options = setup.options;
@@ -215,7 +228,16 @@ async function refusesFault(fault: string) {
     }
     if (fault === 'existing') options.destination = foreign;
   }
-  function diskFailure() { throw new Error(canary); }
+  function diskFailure(): never { throw new Error(canary); }
+  if (fault === 'foreign-owner') {
+    const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+    function foreignMetadata(path: fs.PathLike) {
+      const result = actual.lstatSync(path);
+      if (path === dirname(options.destination)) result.uid++;
+      return result;
+    }
+    vi.mocked(fs.lstatSync).mockImplementation(foreignMetadata);
+  }
   if (fault === 'disk-write') vi.spyOn(fs, 'writeSync').mockImplementation(diskFailure);
   if (fault === 'disk-flush') vi.spyOn(fs, 'fsyncSync').mockImplementation(diskFailure);
   const logs = vi.spyOn(console, 'log');
@@ -225,6 +247,7 @@ async function refusesFault(fault: string) {
   expect(logs).not.toHaveBeenCalled();
   expect(errors).not.toHaveBeenCalled();
   expect(fs.existsSync(join(options.destination, 'descriptor.json'))).toBe(false);
+  if (fault === 'size-limit') expect(setup.stream.readableDidRead).toBe(false);
   if (['stall', 'cancel', 'cancel-active'].includes(fault)) {
     expect(setup.stream.destroyed).toBe(true);
     expect(performance.now() - started).toBeLessThan(2_000);
