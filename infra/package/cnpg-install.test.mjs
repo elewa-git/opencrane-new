@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { X509Certificate } from 'node:crypto';
 import { chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { parseAllDocuments } from 'yaml';
 import { certificates, issueCertificate, sharedCertificates } from '../../libs/event-store/test/certificates.ts';
+import { expireCertificate } from './expired-certificate-fixture.mjs';
 
 const source = resolve('.');
 const canary = 'private-canary:%/?@';
@@ -449,15 +449,10 @@ async function prepareRouteFixture(fixture, directory, owner) {
     let extensions = `subjectAltName=DNS:${dns}\nextendedKeyUsage=serverAuth,clientAuth\n`;
     if (index === 0 && fixture.routeFault === 'DNS') extensions = extensions.replace(dns, 'foreign');
     if (index === 0 && fixture.routeFault === 'usage') extensions = extensions.replace(',clientAuth', '');
-    const days = index === 0 && fixture.routeFault === 'expired' ? -1 : 1;
-    await issueCertificate(routes, `peer-${index}`, '/CN=route', extensions, days);
+    await issueCertificate(routes, `peer-${index}`, '/CN=route', extensions);
   }
   if (fixture.routeFault === 'expired') {
-    const expired = new X509Certificate(await readFile(`${routes}/peer-0.crt`));
-    assert.ok(Date.parse(expired.validFrom) < Date.parse(expired.validTo),
-      'The expired identity must have an ordered validity interval');
-    assert.ok(Date.parse(expired.validTo) < Date.now(),
-      'The identity must have expired before the installer runs');
+    await expireCertificate(routes);
   }
   if (fixture.routeFault === 'issuer') {
     await writeFile(`${routes}/ca.crt`, await readFile(`${directory}/ca.crt`));

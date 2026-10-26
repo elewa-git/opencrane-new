@@ -9,6 +9,7 @@ import { isDeepStrictEqual, promisify } from 'node:util';
 import { parseAllDocuments } from 'yaml';
 import { issueCertificate, sharedCertificates } from '../../libs/event-store/test/certificates.ts';
 import { copyPackagedFixture } from './packaged-fixture.ts';
+import { expireCertificate } from './expired-certificate-fixture.mjs';
 
 const execute = promisify(execFile);
 const namespace = 'opencrane-package-1';
@@ -252,31 +253,6 @@ async function preparesExistingClusterIdentities() {
 }
 test('prepares route identities in the existing local cluster when no target is recorded',
   preparesExistingClusterIdentities);
-
-async function expireCertificate(directory) {
-  const config = `[ca]
-default_ca = issuer
-[issuer]
-database = index.txt
-serial = serial.txt
-new_certs_dir = .
-certificate = ca.crt
-private_key = ca.key
-default_md = sha256
-policy = subject
-[subject]
-commonName = supplied
-`;
-  await writeFile(`${directory}/expired.conf`, config);
-  await writeFile(`${directory}/index.txt`, '');
-  await writeFile(`${directory}/serial.txt`, '01\n');
-  await execute('openssl', ['ca', '-batch', '-notext', '-config', 'expired.conf',
-    '-in', 'peer-0.csr', '-out', 'peer-0.crt', '-extfile', 'peer-0.ext',
-    '-startdate', '20200101000000Z', '-enddate', '20200102000000Z'], { cwd: directory });
-  const expired = new X509Certificate(await readFile(`${directory}/peer-0.crt`));
-  assert(Date.parse(expired.validFrom) < Date.parse(expired.validTo));
-  assert(Date.parse(expired.validTo) < Date.now());
-}
 
 const refusals = ['missing reference', 'duplicate reference', 'client reference', 'wrong namespace',
   'foreign owner', 'wrong pin', 'partial preparation', 'expired certificate', 'client issuer',

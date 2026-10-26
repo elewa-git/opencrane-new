@@ -241,6 +241,11 @@ Helm; image refusals allow rendering but never installation. Complete CNPG and
 standalone fixtures reach the release check. These fixtures do not qualify live CNPG.
 The [installer receipt](../../docs/process/p5-3-pr2/receipt.md) records local checks.
 
+The installer and route-preparation tests share `expired-certificate-fixture.mjs`.
+It signs a peer certificate with an ordered start and end date in the past.
+This avoids negative certificate lifetimes, which some OpenSSL versions refuse.
+The fixture checks both dates before the expired identity reaches validation.
+
 The fresh-install runner and NATS route preparation tests use `packaged-fixture.ts`
 to copy the installer and its local imports into temporary worktrees. The helper
 checks imports with the installed TypeScript parser. A new local import must join
