@@ -76,7 +76,7 @@ async function saveRoutineInput(...args: Parameters<typeof loadRoutinePreparatio
     // Finish history and custody reads before starting the short publication check.
     const deadline = await preparation.checkAccess();
     async function checkAccess() {
-      await preparation.checkOwner();
+      await preparation.checkCurrent();
       checkCustody(data);
     }
     const command = { event, expectedSequence: rows.at(-1)!.sequence, historyChecked: true as const,

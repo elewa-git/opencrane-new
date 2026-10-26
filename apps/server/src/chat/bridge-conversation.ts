@@ -185,6 +185,10 @@ function isRoutinePreparation(created: ReturnType<typeof agentSession>) {
   return 'routinePreparation' in created && created.routinePreparation !== undefined;
 }
 
+function computerUnavailable(type: string, computerId: string, refused: Set<string>) {
+  return type !== 'computer.ready' || refused.has(computerId);
+}
+
 export async function processConversation(options: WatchOptions, tokens: Tokens,
   conversation: AgentSession, assistant: ReturnType<typeof assistantSnapshot>,
   refused: Set<string>, connection: Connection,
@@ -241,7 +245,7 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
     await resumeComputer(options.store, tokens, options.silo, conversation.assistantId);
     return { pending: true, retry: true };
   }
-  if (current.type !== 'computer.ready' || refused.has(computer.computerId)) {
+  if (computerUnavailable(current.type, computer.computerId, refused)) {
     return { pending: true, retry: true };
   }
   const link = await connection(computer.computerId, conversation.assistantId);

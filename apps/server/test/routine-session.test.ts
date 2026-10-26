@@ -509,7 +509,7 @@ async function replay() {
 it('replays with appends, jobs, wake, credentials, tokens and external calls forbidden', replay,
   30_000);
 
-describe('routine input', () => {
+function routineInputTests() {
   async function preparedSession() {
     encryption.mockRestore();
     decryption.mockRestore();
@@ -664,4 +664,5 @@ describe('routine input', () => {
   }
   it.each(['computer.suspended', 'computer.ready', 'computer.claimed'])(
     'never wakes or delivers the saved input when %s', noDelivery);
-});
+}
+describe('routine input', routineInputTests);
