@@ -21,7 +21,7 @@ flowchart LR
   server["apps/server<br/>file uploads"] -->|sends file bytes| clamav
   clamav -->|candidate updater checks| updates["ClamAV update service"]
   packaging["packaging job"] -->|checks image databases| clamav
-  launcher["separate launcher"] -->|starts and scans with verified databases| clamav
+  launcher["separate HTTPS service"] -->|limits requests and checks caller passes| clamav
 ```
 
 ## What it is responsible for
@@ -34,6 +34,8 @@ flowchart LR
 - Checks that a packaged image contains exactly the reviewed virus definitions.
 - Offers a separate launcher that keeps those files read-only and stops at database expiry.
 - Scans bounded file bytes through that launcher and returns the loaded database facts.
+- Checks service passes before receiving upload bytes through a separate HTTPS wrapper.
+- Limits open connections and active requests, refusing excess work without a waiting list.
 - Keeps the original scanner code from the earlier version of OpenCrane, with its licence, for reference.
 
 ## Processes it handles
@@ -81,7 +83,12 @@ The failed request waits for container cleanup, even if its Docker client never 
 This confirms that a remote scan has stopped before the ownership record is removed.
 Failed removal keeps that record and blocks reuse. No file bytes or raw scanner
 replies are saved or returned.
-This launcher is not yet connected to uploads or the planned HTTPS service.
+The separate HTTPS wrapper checks the caller's service, silo and request before
+asking for file bytes. It reserves room for each request before checking the pass
+and refuses excess requests immediately. It also limits connections before TLS starts.
+Its response binds the result to that file and connection.
+A copied result grants nothing. Caller expiry and database expiry are checked again
+before replying. Deployed issuance and upload consumers are not connected yet.
 
 If updater cleanup fails, the directory stays locked to prevent another updater
 from changing the same files. An operator must confirm the updater has stopped

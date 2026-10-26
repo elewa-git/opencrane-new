@@ -198,3 +198,48 @@ removal succeeds. Failed cleanup blocks reuse, including another launch at that
 ownership path. Per-request recovery without retiring the daemon is not provided.
 These are internal process results, not authenticated HTTP responses or admission
 proof. Upload/image consumers and fresh-database qualification remain NOT RUN.
+
+## Authenticated HTTPS uploads
+
+P5-6a PR 6 adds `createScannerService({ scanner, tls, trust, clock? })` in
+`service.mjs`. Supply a `launchScanner` handle, TLS key/certificate material from
+existing custody, and public trust entries `{ issuer, jwks, services }`.
+`services` maps each allowed service to its silo. The existing `verifyScanner`
+checks each configured issuer; requests cannot choose keys or change the mapping.
+The returned Node HTTPS server starts listening only when its caller starts it.
+Node execution needs `--experimental-strip-types` for auth. The launch handle's
+new `signal` also refuses pending HTTP transfers when the scanner retires.
+
+Only `POST /scan/upload` is accepted, with `Expect: 100-continue`,
+`Content-Type: application/octet-stream`, `Content-Length` and the standard
+`Authorization: Bearer` pass. Metadata headers are `X-Scan-Silo`, `X-Scan-Purpose`
+(exactly `upload`), `X-Scan-Request-Id`, `X-Scan-File-Id` (UUIDs) and `X-Scan-Sha256`
+(lowercase hex). Unknown/duplicate headers refuse. Identity is checked before
+`100 Continue` and file reading. Early bytes cannot bypass verification.
+Header receipt, verification, transfer and scanning share 60 seconds after TLS.
+TLS handshakes also have a 60-second limit. Headers are at most 8 KiB, files 20 MiB and replies
+4 KiB. Connections handle one request. The server admits at most eight TCP connections,
+including incomplete TLS handshakes. Node closes excess connections before creating
+TLS or HTTP buffers. A shared limit admits two active requests before metadata checks,
+pass verification, body collection or scanning. Excess requests receive the fixed
+503 refusal without `100 Continue`, body collection or a queue. Each active request
+can collect at most 20 MiB; the existing scan operation also copies and frames those
+bytes. The reservation lasts until the request finishes, including cancelled scan
+cleanup, and is released on success, error, timeout or client abort.
+Disconnect cancels scanning and retires
+the handle; cleanup retains its separate limits. Refusals are fixed HTTP 503 JSON
+`{ "error": "Scanner request refused" }`; malformed HTTP may close the socket.
+
+Responses contain owned scan facts plus `silo`, `purpose`, `requestId` and `fileId`.
+Expiry is capped by the pass, database expiry and the scan's two minutes. Pass and
+database freshness are checked after transfer and before replying. Callers must
+check their configured CA/hostname and match results against unchanged bytes and
+the pending request. Retries need fresh ids; copied JSON grants nothing.
+No URL, redirect, minting endpoint, queue, store, credential log or clamd port is added.
+`scripts/clamav-service.test.mjs` uses real TLS/ES256 and process fixtures for the
+existing scan operation. Capacity tests cover transfer and scan saturation, early
+bytes on refused requests, reuse after success, authentication error, transfer abort
+and transfer timeout, and TCP admission before TLS. Cancelling an active scan still
+retires the scanner; releasing capacity does not make a retired scanner reusable.
+Production issuance, consumers, fresh clean/EICAR and
+two-silo qualification remain NOT RUN. This admits no production upload.

@@ -192,7 +192,8 @@ export async function launchScanner(options) {
     starting = false;
     const expiresIn = Date.parse(manifest.databaseUpdatedAt) + maximumAge - clock();
     timer = setTimeout(terminate, Math.max(0, expiresIn));
-    return { databaseUpdatedAt: manifest.databaseUpdatedAt, ready, stop, scan };
+    return { databaseUpdatedAt: manifest.databaseUpdatedAt, ready, stop, scan,
+      signal: shutdown.signal };
   } catch {
     if (owned) {
       await stop();
