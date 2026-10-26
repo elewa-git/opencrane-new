@@ -88,3 +88,48 @@ The bootstrap test runs separately with Vitest and at most two workers.
 All test runs use `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`
 and `nice -n 10`. Node tests use `--test-concurrency=1`.
 Safe local logs are `/tmp/p5-4-pr5b-fix-*.log`.
+
+## Mounted NATS validation
+
+Date: 26 October 2026. Source: `68edcb48919e4ba1b176aee2e40c7cc3634c81b9`.
+Rebased onto `f19d0db406e71e104b721849133cb0135ee7da6a`. The rebase finished,
+and that main commit is an ancestor. Existing dependencies were reused on Linux
+with Node 22.23.3. Tests used disposable credentials, synthetic Kubernetes replies,
+real Helm rendering and disposable NATS peers. No development stack was claimed
+or started. Image pins, dependencies, event contracts and access checks are unchanged.
+
+Test commit `538b3cc1d` came before the behaviour change. After adapting route
+preparation to the rebased connection helper, the positive three-peer case passed,
+but a mismatched server key and changed store configuration still reached
+installation. Those refusal tests failed as expected. The implementation now checks
+all mounted NATS identities, role keys, connection settings and the shipped policy
+before any Helm command. Certificate checks keep private host paths out of arguments.
+
+The initial rebased test attempt failed because route preparation still expected
+an argument array from the connection helper. The helper now returns arguments
+and environment separately. The caller was corrected; assertions were not weakened.
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| Failing-first refusal tests | PASS | The positive case passed and both new refusal cases failed before validation was added. |
+| Focused NATS admission | PASS | 89 cases passed, including separate key, expiry, future-date, name, usage and issuer refusals for every mounted identity. |
+| Targeted package tests twice | PASS | 427/427 passed in each run, with no skips. |
+| Bootstrap twice | PASS | 15/15 in each run with disposable real NATS peers. |
+| Lint | PASS | All stages passed; zero errors and 28 warnings. |
+| Typecheck | PASS | All workspaces and package/dev-stack tooling passed. |
+| Event catalogue | PASS | All 154 event names agree. |
+| Explicit Knip and changelog | PASS | Both commands passed. Knip reported two configuration hints. |
+| Fresh installation and live three-node qualification | NOT RUN | No stack or target was started. |
+| Full root suite and post-push CI | NOT RUN | Excluded by this task. |
+
+The repeated Node set includes `cnpg-install`, `prepare-nats-routes`, `chart`,
+`chart-render`, `preflight`, `fresh-twice` and dev-stack `claim`. It covers packaged
+ownership and preparation as well as admission. Both runs use
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`, `nice -n 10`,
+`node --experimental-strip-types --test --test-concurrency=1` and explicit files.
+Bootstrap uses the same environment and `nice -n 10 npx vitest run
+infra/package/bootstrap.test.ts --maxWorkers=2`.
+Logs are `/tmp/pr738-package-{1,2}.log`, `/tmp/pr738-bootstrap-{1,2}.log`,
+`/tmp/pr738-red-confirmed.log`, `/tmp/pr738-green-new.log`, `/tmp/pr738-lint.log`
+and `/tmp/pr738-typecheck.log`. The shipped image still refuses three-node
+installation; promotion and live qualification remain separate work.
