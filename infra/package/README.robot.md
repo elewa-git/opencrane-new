@@ -830,8 +830,16 @@ source writers and effects; this helper never starts or stops product processes.
 `provisionRecoveryEventTarget(silo)` starts a fresh standalone local NATS process
 with an empty private directory and a random private token. It returns a connection
 and an explicit `close()` operation. The temporary mode-0600 configuration is removed
-once the server starts. No token is passed in arguments or diagnostics. Only that
-registered connection, server identity and running child can be claimed, once.
+once the server starts. NATS receives only its configuration filename in arguments;
+the private directory is its working directory. Tokens and private paths stay out of
+arguments and returned errors. Directory creation, configuration writes and startup
+failures return `Recovery event target refused`. Cleanup attempts connection close,
+child termination and directory removal even if an earlier step fails. Explicit
+cleanup failures return `Recovery event target cleanup refused`; cleanup cannot
+replace a startup refusal. Only that registered connection, server identity and
+running child can be claimed, once.
+`apps/server/test/recovery-event-target.test.ts` inspects the real spawn arguments
+and injects setup and cleanup failures, including simultaneous failures.
 The file target must come from `provisionDisposableObjectTarget(silo)`. Host
 administrators and the operator's private archive directories remain trusted.
 
