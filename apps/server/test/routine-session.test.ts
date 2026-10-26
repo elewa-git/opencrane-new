@@ -1115,6 +1115,58 @@ function routineRootTests() {
   it.each(['custody', 'provider', 'stop'])(
     'withholds the receipt after a late %s change', lateChange);
 
+  async function trafficDuringConfirmation(revocation: string) {
+    let appended = 0;
+    async function appendDuringCheck() {
+      appended += 1;
+      const otherConversation = 'another-conversation';
+      const data = { conversationId: otherConversation, turnId: `other-turn-${appended}`,
+        assistantId: 'sales-assistant' };
+      const activity = record(`other-activity-${appended}`, `conversation-${otherConversation}`,
+        'agent.turn_started', data);
+      await nats.seed([activity]);
+      // Keep traffic arriving on every check, including later receipt passes.
+      duringCheck = appendDuringCheck;
+      if (appended !== 2 || revocation === 'none') return;
+      if (revocation === 'member') {
+        const removed = record('late-removed', 'member-alice', 'member.removed',
+          { memberId: 'alice', removedBy: 'admin' });
+        await nats.seed([removed]);
+      } else if (revocation === 'payer') {
+        const removed = record('late-payer-removed', 'team-sales', 'team.member_removed',
+          { teamId: 'sales', memberId: 'alice', removedBy: 'admin' });
+        await nats.seed([removed]);
+      } else {
+        const revoked = record('late-grant-revoked', grantStream('model', 'gpt-6.1-sol'),
+          'grant.revoked', { resourceType: 'model', resourceId: 'gpt-6.1-sol',
+            granteeKind: 'member', granteeId: 'alice', revokedBy: 'admin' });
+        await nats.seed([revoked]);
+      }
+    }
+    const original = actor.setRootAllowance.bind(actor);
+    async function afterAllocation(...args: Parameters<typeof original>) {
+      const root = await original(...args);
+      duringCheck = appendDuringCheck;
+      return root;
+    }
+    vi.spyOn(actor, 'setRootAllowance').mockImplementationOnce(afterAllocation);
+    if (revocation === 'none') {
+      const receipt = await prepare();
+      expect(receipt).toMatchObject({ status: 'confirmed', allowanceCents: 1000,
+        executionAvailable: false });
+    } else {
+      await expect(prepare()).rejects.toThrow('Routine root refused');
+    }
+    expect(appended).toBeGreaterThanOrEqual(2);
+    expect(actor.state.roots).toHaveLength(1);
+    expect(actor.state.roots[0]!.allowanceCents).toBe(1000);
+    expect(actor.state.reservations).toEqual([]);
+    expect(actor.state.dispatches).toEqual([]);
+  }
+  it.each(['none', 'member', 'payer', 'grant'])(
+    'confirms through sustained unrelated traffic unless access is revoked: %s',
+    trafficDuringConfirmation);
+
   async function noEffects() {
     const saved = await history(nats.store, 'budget-test', 'test');
     for (const row of saved) {
