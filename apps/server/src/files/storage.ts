@@ -64,12 +64,8 @@ function storageTransport(useSSL: boolean, context: AsyncLocalStorage<RequestBou
         fail();
         return;
       }
-      const path = new URL(requestOptions.path ?? '/', 'http://storage.invalid');
-      const isMetadata = path.searchParams.has('location');
-      const isError = !response.statusCode || response.statusCode < 200 ||
-        response.statusCode >= 300;
-      if (isMetadata || isError) {
-        // Bound these bytes before the SDK collects a whole region or error body in memory.
+      if (!isObjectResponse(requestOptions, response.statusCode)) {
+        // Bound every body the SDK may collect, including unexpected successful statuses.
         void boundedResponse(response, onResponse).catch(fail);
         return;
       }
@@ -80,6 +76,18 @@ function storageTransport(useSSL: boolean, context: AsyncLocalStorage<RequestBou
     return outgoing;
   }
   return { request };
+}
+
+function isObjectResponse(options: RequestOptions, status: number | undefined) {
+  if (options.method !== 'GET') return false;
+  const path = new URL(options.path ?? '/', 'http://storage.invalid');
+  if (!/^\/[^/]+\/.+/.test(path.pathname)) return false;
+  for (const key of path.searchParams.keys()) {
+    if (key !== 'versionId') return false;
+  }
+  if (status === 200) return true;
+  // Accept partial bytes only when the SDK requested a range; otherwise it parses an error.
+  return status === 206 && options.headers !== undefined && 'range' in options.headers;
 }
 
 async function boundedResponse(response: IncomingMessage, callback?: ResponseCallback) {
