@@ -3,9 +3,7 @@ WORKDIR /app
 COPY . .
 RUN nice -n 10 npm ci && nice -n 10 npm run build -w apps/web && nice -n 10 npm prune --omit=dev
 
-FROM node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3
-ARG SOURCE_REVISION
-LABEL org.opencontainers.image.revision="$SOURCE_REVISION"
+FROM node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS runtime
 WORKDIR /app
 COPY --from=build /app /app
 # Leave build tools and unrelated packages out of the running image.
@@ -18,5 +16,14 @@ ADD --checksum=sha256:daca5cda76e8c5ab0c1a75912fecf2d6365095403f810db72029c49d14
   https://github.com/agentgateway/agentgateway/releases/download/v1.5.0/agentgateway-linux-amd64 \
   /usr/local/bin/agentgateway
 RUN chmod 755 /usr/local/bin/kubectl /usr/local/bin/agentgateway
+
+# Copy only the cleaned filesystem so deleted files cannot ship in older layers.
+FROM scratch
+COPY --from=runtime / /
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.revision="$SOURCE_REVISION"
+ENV NODE_VERSION=22.23.1 YARN_VERSION=1.22.22
+WORKDIR /app
 USER node
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "--experimental-strip-types", "apps/server/src/main.ts"]
