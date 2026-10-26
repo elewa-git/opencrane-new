@@ -672,6 +672,17 @@ class TurnRunner {
     this.journal.forgetTurnText(input.conversationId, input.id);
   }
 
+  connectionLost() {
+    // Include finished replies whose acknowledgements were lost with the connection.
+    for (const report of this.journal.reports) this.journal.forgetText(report.sequence);
+    for (const input of this.state.preparing.values()) {
+      if (input.executionMode === 'restricted') this.cancelTurn(input);
+    }
+    for (const input of this.state.running.values()) {
+      if (input.executionMode === 'restricted') this.failTurn(input);
+    }
+  }
+
   private async dropStoppedAccess(input: Turn, threadId: string | undefined) {
     if (threadId) await this.dropAccess(threadId, input);
     else await this.loads.cancel(input.id);

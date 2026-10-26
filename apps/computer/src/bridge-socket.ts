@@ -18,6 +18,7 @@ interface TurnRunnerPort {
     accept: (value: Record<string, unknown>) => void): Promise<Record<string, unknown>>;
   start(turn: ReturnType<typeof parseTurn>): Promise<void>;
   interrupt(value: Record<string, unknown>): Promise<void>;
+  connectionLost(): void;
   acknowledge(sequence: unknown, value?: Record<string, unknown>): void;
 }
 
@@ -171,13 +172,24 @@ function installHandlers(
   sendReports: (since: unknown) => void,
   approvals: ReturnType<typeof approvalHolds> | undefined,
 ) {
-  state.socket?.terminate();
+  if (state.socket) {
+    state.resumed = false;
+    runner.connectionLost();
+    state.socket.terminate();
+  }
   state.socket = next;
   state.resumed = false;
   const receiveFile = createFileReceiver(driver);
   const expiry = setTimeout(closeForCredentialExpiry(next),
     Math.max(1, expiresAt - Date.now()));
-  next.once('close', clearExpiry(expiry));
+  function closed() {
+    clearTimeout(expiry);
+    if (state.socket !== next) return;
+    delete state.socket;
+    state.resumed = false;
+    runner.connectionLost();
+  }
+  next.once('close', closed);
   next.on('error', terminateSocket(next));
   next.on('message', receiveMessage(next, state, runner, receiveFile, sendReports, approvals));
 }
@@ -185,12 +197,6 @@ function installHandlers(
 function closeForCredentialExpiry(next: WebSocket) {
   return function closeExpiredSocket() {
     next.close(4001, 'Credential expired');
-  };
-}
-
-function clearExpiry(expiry: NodeJS.Timeout) {
-  return function clearSocketExpiry() {
-    clearTimeout(expiry);
   };
 }
 
@@ -292,6 +298,7 @@ export function bridgeSocket(
     stopBridge: runner.stopBridge.bind(runner),
     start: runner.start.bind(runner),
     interrupt: runner.interrupt.bind(runner),
+    connectionLost: runner.connectionLost.bind(runner),
     acknowledge,
   };
 
@@ -331,6 +338,8 @@ export function bridgeSocket(
   wss.on('connection', handleConnection);
 
   function close() {
+    state.resumed = false;
+    runner.connectionLost();
     function closeWebSocketServer(resolve: () => void) {
       for (const client of wss.clients) {
         client.terminate();
