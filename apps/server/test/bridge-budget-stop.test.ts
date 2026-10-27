@@ -195,12 +195,16 @@ async function budgetBridge(realChannel = false) {
     link = { ...await connectBridge(options, input, tokens), connectionId: 2 };
     frames.length = 0;
   }
-  function repeatStop() {
+  async function repeatStop() {
     const stop = frames.find(isStop);
     if (!stop) {
       throw new Error('Expected a saved Stop frame');
     }
     link.socket.send(JSON.stringify(stop));
+    // Wait for the repeated frame and the fixture's resolved cleanup promises.
+    const pong = once(link.socket, 'pong');
+    link.socket.ping();
+    await pong;
   }
   async function upload(turn: Turn) {
     const uploaded = { conversationId: turn.conversationId, fileId: 'upload',
@@ -363,15 +367,11 @@ async function isolatesRealTurns() {
     { type: 'stop', ...first, reason: 'budget', stopId: 'first-stop' },
   ]);
   expect(test.frames.filter(isTurn)).toEqual([]);
-  test.repeatStop();
-  function interruptedAgain() {
-    return test.interrupts.length === 2;
-  }
-  await until(interruptedAgain);
+  await test.repeatStop();
   expect(test.interrupts).toEqual([
     { threadId: 'thread-1', turnId: 'codex-thread-1' },
-    { threadId: 'thread-1', turnId: 'codex-thread-1' },
   ]);
+  expect(test.revocations).toEqual(['thread-1']);
   expect(test.catalogues.size).toBe(1);
   expect(test.grants).toEqual(['thread-1', 'thread-2']);
   await test.channel!.renew('thread-2');
@@ -399,6 +399,7 @@ async function isolatesRealTurns() {
   const stoppedRows = await chatHistory(test.store, 'test', 'first');
   const savedStops = stoppedRows.filter(isSavedStop);
   expect(savedStops).toHaveLength(1);
+  expect(test.interrupts).toEqual([{ threadId: 'thread-1', turnId: 'codex-thread-1' }]);
 }
 it('interrupts only the stopped payer on the real team computer channel', isolatesRealTurns);
 
