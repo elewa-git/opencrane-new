@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { recoveryHomes } from './support/recovery-homes.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
@@ -82,6 +83,8 @@ async function prepare() {
   const orphan = { ...root, memoryId: 'unpublished' };
   references.set('orphan', store.provision(orphan).slice(4));
   store.delete(orphan);
+  const collectHomes = await recoveryHomes(frozen, []);
+  const volumeDirectory = join(directory, 'homes');
   const eventDirectory = join(directory, 'events');
   const objectDirectory = join(directory, 'objects');
   const backupKeyFile = join(directory, 'backup-key');
@@ -96,9 +99,10 @@ async function prepare() {
   } finally {
     await scratch.close();
   }
-  options = { directory: objectDirectory, eventDirectory, backupKeyFile, silo: 'test',
+  options = { volumeDirectory, directory: objectDirectory, eventDirectory, backupKeyFile, silo: 'test',
     targetSilo: 'test', attempt: 'old', stopped: true, exclusive: true, disposable: true,
     effectsDisabled: true };
+  await collectHomes({ ...options, volumeDirectory });
 }
 beforeAll(prepare, 120_000);
 async function cleanup() {

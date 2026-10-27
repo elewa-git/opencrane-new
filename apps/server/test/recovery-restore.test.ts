@@ -1,8 +1,10 @@
 import { z } from 'zod';
 import { until } from '@opencrane/authz/testing';
+import { recoveryHomes } from './support/recovery-homes.ts';
 import { stalledStorage } from './support/stalled-storage.ts';
-import { randomBytes } from 'node:crypto';
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createCipheriv, createHash, randomBytes } from 'node:crypto';
+import * as fs from 'node:fs';
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it, onTestFinished, vi } from 'vitest';
@@ -10,6 +12,7 @@ import { createEventStore } from '@opencrane/event-store';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { ProjectionRunner } from '@opencrane/projections';
 import { HandlerRuntime } from '@opencrane/handlers';
+import { volumeExportDescriptorSchema } from '../../../infra/package/computer-volume-export.ts';
 import { collectEventBackup, descriptorSchema } from '../../../infra/package/event-backup.ts';
 import { collectObjectBackup } from '../../../infra/package/object-backup.ts';
 import * as native from '../../../infra/package/event-restore.ts';
@@ -21,6 +24,8 @@ import { restoreRecoveryBackup } from '../../../infra/package/recovery-restore.t
 import { seedRecoveryFiles } from '../../../infra/package/upgrade-recovery-files-fixture.ts';
 import { recoveryEffectProbes } from '../../../infra/package/upgrade-recovery-files-effects.ts';
 import { restoreStorage } from './support/restore-storage.ts';
+
+vi.mock('node:fs', { spy: true });
 
 let source: Awaited<ReturnType<typeof natsFixture>>;
 let storage: Awaited<ReturnType<typeof restoreStorage>>;
@@ -34,6 +39,8 @@ async function start() {
   storage = await restoreStorage();
   directory = await mkdtemp(join(tmpdir(), 'recovery-restore-'));
   uploads = await seedRecoveryFiles(source, storage.client);
+  const collectHomes = await recoveryHomes(source, ['one', 'two']);
+  const volumeDirectory = join(directory, 'homes');
   const eventDirectory = join(directory, 'events');
   const objectDirectory = join(directory, 'objects');
   const backupKeyFile = join(directory, 'key');
@@ -53,9 +60,10 @@ async function start() {
   await mkdir(sourceDirectory, { mode: 0o700 });
   await mkdir(candidateDirectory, { mode: 0o700 });
   const memory = { source: source.connection, sourceDirectory, candidateDirectory };
-  options = { memory, directory: objectDirectory, eventDirectory, backupKeyFile,
+  options = { memory, volumeDirectory, directory: objectDirectory, eventDirectory, backupKeyFile,
     silo: 'test', attempt: 'copy', targetSilo: 'test', stopped: true,
     exclusive: true, disposable: true, effectsDisabled: true };
+  await collectHomes({ ...options, volumeDirectory });
 }
 async function stop() {
   await source?.close();
@@ -100,7 +108,7 @@ async function fixture() {
   async function untouched() {
     expect(writes).not.toHaveBeenCalled();
     expect(buckets).not.toHaveBeenCalled();
-    for (const [subject] of requests.mock.calls) expect(subject).not.toMatch(/RESTORE|DELETE|PURGE/);
+    for (const [subject] of requests.mock.calls) expect(subject).not.toMatch(/RESTORE|CREATE|DELETE|PURGE/);
     expect(await target.client.bucketExists('files')).toBe(false);
   }
   return { events, target, restore, untouched, writes, buckets, requests,
@@ -113,7 +121,9 @@ async function restoresOnce() {
   const eventRestore = vi.spyOn(native, 'restoreEventBackup');
   const objectRestore = vi.spyOn(objects, 'restoreObjectBackup');
   const result = await setup.restore();
-  expect(result.kind).toBe('events-objects-and-custody-only');
+  expect(result).toEqual({ kind: 'events-objects-and-custody-only' });
+  expect(fs.readdirSync(options.volumeDirectory).sort())
+    .toEqual(['descriptor.json', 'home-0000.enc', 'home-0001.enc']);
   const proof: unknown = await eventRestore.mock.results[0]!.value;
   expect(objectRestore.mock.calls[0]![3].proof).toBe(proof);
   const reader = await createEventStore(setup.events.connection);
@@ -134,6 +144,153 @@ async function restoresOnce() {
   expect(setup.writes).toHaveBeenCalledTimes(2);
 }
 it('restores original event identities and file bytes once with no activity', restoresOnce);
+
+async function missingHomeExport() {
+  const setup = await fixture();
+  const volumeDirectory = join(directory, 'missing-home-export');
+  await expect(setup.restore({ volumeDirectory })).rejects.toEqual(new Error(refusal));
+  await setup.untouched();
+}
+it('refuses a missing home export before either target changes', missingHomeExport);
+
+type HomeDescriptor = z.infer<typeof volumeExportDescriptorSchema>;
+async function encryptHomes(path: string, descriptor: HomeDescriptor, key: Buffer,
+  fault: string) {
+  for (const entry of descriptor.exports) {
+    const bytes = Buffer.from(`private-home-canary-${entry.home.computerId}`);
+    const hash = createHash('sha256');
+    hash.update(bytes);
+    entry.sha256 = hash.digest('hex');
+    entry.byteCount = bytes.length;
+    if (fault === 'count') entry.byteCount++;
+    if (fault === 'checksum') entry.sha256 = '0'.repeat(64);
+    const nonce = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', key, nonce);
+    const associated = [2, 'volume-export-only', 'aes-256-gcm', descriptor.binding, entry];
+    cipher.setAAD(Buffer.from(JSON.stringify(associated)));
+    const encrypted = Buffer.concat([nonce, cipher.update(bytes), cipher.final(), cipher.getAuthTag()]);
+    await writeFile(join(path, entry.file), encrypted, { mode: 0o600 });
+  }
+}
+
+async function alterHomes(path: string, fault: string) {
+  const description = join(path, 'descriptor.json');
+  const descriptor = volumeExportDescriptorSchema.parse(JSON.parse(await readFile(description, 'utf8')));
+  const entry = descriptor.exports[1]!;
+  const file = join(path, entry.file);
+  if (['missing', 'empty'].includes(fault)) {
+    descriptor.binding.volumes.pop();
+    descriptor.exports.pop();
+    await rm(file);
+    if (fault === 'empty') {
+      descriptor.binding.volumes = [];
+      descriptor.exports = [];
+      await rm(join(path, 'home-0000.enc'));
+    }
+  }
+  if (fault === 'duplicate' || fault === 'extra') {
+    const added = structuredClone(entry);
+    added.file = 'home-0002.enc';
+    if (fault === 'extra') {
+      added.home.assistantId = 'extra';
+      added.home.computerId = 'computer-extra';
+    }
+    descriptor.binding.volumes.push(added.home);
+    descriptor.exports.push(added);
+  }
+  if (fault === 'generation') {
+    entry.home.generation++;
+    descriptor.binding.volumes[1]!.generation++;
+  }
+  if (fault === 'sandbox') {
+    entry.home.sandbox.uid = 'replaced';
+    descriptor.binding.volumes[1]!.sandbox.uid = 'replaced';
+  }
+  if (fault === 'attempt' || fault === 'silo') descriptor.binding[fault] = 'other';
+  if (fault === 'archive') descriptor.binding.eventArchiveSha256 = '0'.repeat(64);
+  if (fault === 'event-description') descriptor.binding.eventDescriptorSha256 = '0'.repeat(64);
+  // Re-authenticate edited metadata so coverage and event checks must stand on their own.
+  let key = await readFile(options.backupKeyFile);
+  if (fault === 'material') key = randomBytes(32);
+  await encryptHomes(path, descriptor, key, fault);
+  await writeFile(description, JSON.stringify(descriptor));
+  if (fault === 'missing-file') await rm(file);
+  if (fault === 'extra-file') await writeFile(join(path, 'home-0999.enc'), 'unused');
+  if (fault === 'swapped') {
+    const first = join(path, 'home-0000.enc');
+    const saved = await readFile(first);
+    await writeFile(first, await readFile(file));
+    await writeFile(file, saved);
+  }
+  if (['tag', 'truncated', 'oversized'].includes(fault)) {
+    const bytes = await readFile(file);
+    if (fault === 'tag') bytes[bytes.length - 1]! ^= 1;
+    await writeFile(file, bytes);
+    if (fault === 'truncated') fs.truncateSync(file, bytes.length - 1);
+    if (fault === 'oversized') fs.truncateSync(file, 64 * 1024 * 1024 + 29);
+  }
+  if (fault === 'symlink') {
+    await rm(file);
+    await symlink(join(options.volumeDirectory, entry.file), file);
+  }
+}
+const homeFaults = ['missing', 'empty', 'extra', 'duplicate', 'generation', 'sandbox',
+  'attempt', 'silo', 'archive', 'event-description', 'material', 'checksum', 'count',
+  'missing-file', 'extra-file', 'swapped', 'tag', 'truncated', 'oversized', 'symlink'];
+async function refusesBadHome(fault: string) {
+  const setup = await fixture();
+  const volumeDirectory = join(directory, `homes-${fault}`);
+  await cp(options.volumeDirectory, volumeDirectory, { recursive: true });
+  await alterHomes(volumeDirectory, fault);
+  const logs = vi.spyOn(console, 'log');
+  const errors = vi.spyOn(console, 'error');
+  await expect(setup.restore({ volumeDirectory })).rejects.toEqual(new Error(refusal));
+  await setup.untouched();
+  expect(logs).not.toHaveBeenCalled();
+  expect(errors).not.toHaveBeenCalled();
+}
+it.each(homeFaults)('refuses bad home %s without changing either target', refusesBadHome);
+
+async function changesDuringValidation(fault: string) {
+  const setup = await fixture();
+  const volumeDirectory = join(directory, `changing-${fault}`);
+  await cp(options.volumeDirectory, volumeDirectory, { recursive: true });
+  const controller = new AbortController();
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  let now = 0;
+  function clock() { return now; }
+  vi.spyOn(performance, 'now').mockImplementation(clock);
+  let changed = false;
+  function opening(...args: Parameters<typeof fs.openSync>) {
+    const result = actual.openSync(...args);
+    if (fault === 'deadline' && args[0] === join(options.directory, 'descriptor.json')) {
+      now = 30_000;
+    }
+    if (args[0] !== join(volumeDirectory, 'home-0001.enc') || changed) return result;
+    changed = true;
+    if (fault === 'cancel') controller.abort(new Error('private-home-canary'));
+    if (fault === 'deadline') now = 60_000;
+    if (fault === 'descriptor') {
+      actual.appendFileSync(join(volumeDirectory, 'descriptor.json'), '\n');
+    }
+    if (fault === 'replacement') {
+      const file = join(volumeDirectory, 'home-0000.enc');
+      const saved = actual.readFileSync(file);
+      actual.renameSync(file, join(directory, 'replaced-home'));
+      actual.writeFileSync(file, saved, { mode: 0o600 });
+    }
+    return result;
+  }
+  vi.mocked(fs.openSync).mockImplementation(opening);
+  function reset() { vi.mocked(fs.openSync).mockReset(); }
+  onTestFinished(reset);
+  await expect(setup.restore({ volumeDirectory, signal: controller.signal }))
+    .rejects.toEqual(new Error(refusal));
+  expect(changed).toBe(true);
+  await setup.untouched();
+}
+it.each(['descriptor', 'replacement', 'deadline', 'cancel'])(
+  'refuses %s during home validation before mutation', changesDuringValidation);
 
 const faults = ['missing-events', 'missing-objects', 'corrupt-events', 'corrupt-objects',
   'archive', 'missing-archive', 'missing-ciphertext', 'mixed-events', 'mixed-objects', 'mode', 'ciphertext', 'source', 'target',

@@ -7,10 +7,12 @@ import { checkObjectBackup, restoreObjectBackup } from './object-restore.ts';
 import { inspectDisposableObjectTarget } from './disposable-object-target.ts';
 import { claimRecoveryEventTarget } from './recovery-event-target.ts';
 import { checkMemoryRestore } from './memory-restore-check.ts';
+import { checkComputerVolumeBackup } from './computer-volume-check.ts';
 
 type Storage = ReturnType<typeof storageClient>;
 type Options = Omit<Parameters<typeof restoreObjectBackup>[3], 'proof'> & {
   effectsDisabled: boolean;
+  volumeDirectory: string;
   memory: {
     source: NatsConnection;
     sourceDirectory: string;
@@ -57,6 +59,7 @@ export async function restoreRecoveryBackup(source: NatsConnection, target: Nats
       }
     }
     await bounds.bounded(targetObjects.withBounds(requestBounds, preflightStorage));
+    await checkComputerVolumeBackup(source, boundedOptions, bounds);
     checkEvents();
     bounds.check();
     const eventOptions = { directory: options.eventDirectory, silo: options.silo,

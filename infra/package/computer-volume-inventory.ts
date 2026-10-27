@@ -76,7 +76,7 @@ function digest(bytes: Buffer) {
   return hash.digest('hex');
 }
 
-function requiredComputers() {
+export function requiredComputers() {
   const assistants = new Set<string>();
   const computers = new Map<string, Computer>();
   const owners = new Map<string, string>();
