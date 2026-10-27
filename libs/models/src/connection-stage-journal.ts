@@ -91,12 +91,18 @@ export function connectionStageJournal(directory: string) {
   async function pin(observed: Identity) {
     return saveIdentity('identity', observed);
   }
-  async function claimCreate(name: string) {
-    const path = reference('create', name);
+  async function claimOnce(kind: string, name: string) {
+    const path = reference(kind, name);
     const attemptId = randomUUID();
-    // Claim the create before sending it. A lost reply must never cause a second create.
+    // Save before sending. A lost reply must never cause a second attempt.
     await publish(path, attemptId);
     return await files.read(path) === attemptId;
+  }
+  async function claimCreate(name: string) {
+    return claimOnce('create', name);
+  }
+  async function claimSend(name: string) {
+    return claimOnce('send', name);
   }
   async function deletion(name: string) {
     return readIdentity('deletion', name);
@@ -105,5 +111,5 @@ export function connectionStageJournal(directory: string) {
     // Keep the exact identity across restart while Kubernetes waits for finalisers.
     return saveIdentity('deletion', observed);
   }
-  return { prepared, preparation, identity, pin, claimCreate, deletion, markDeletion };
+  return { prepared, preparation, identity, pin, claimCreate, claimSend, deletion, markDeletion };
 }

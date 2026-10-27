@@ -162,8 +162,14 @@ describe('private OAuth provider transport', function transportTests() {
     'refuses %s responses without retrying', async function refusedReply(value) {
       mode = value;
       const transport = oauthProviderTransport(configuration, operatorNetwork());
-      await expect(transport(material, new AbortController().signal))
-        .rejects.toThrow(/^OAuth exchange unavailable$/u);
+      function caught(error: unknown) {
+        return error;
+      }
+      const error = await transport(material, new AbortController().signal).catch(caught);
+      expect(error).toEqual(new Error('OAuth exchange unavailable'));
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toHaveProperty('cause');
+      expect(JSON.stringify(error)).not.toContain('canary');
       expect(requests).toHaveLength(1);
       expect(fixture.dnsCalls()).toBe(1);
     });

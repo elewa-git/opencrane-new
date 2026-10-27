@@ -21,6 +21,7 @@ export const oauthConfigurationSchema = z.strictObject({
   serverId: id, connectionId: id, endpointDigest: digestSchema, policyRevision: z.int().positive(),
   issuer: z.string().max(2048), consentEndpoint: z.string().max(2048),
   redirectUri: z.string().max(2048), clientId: id,
+  tokenEndpoint: z.string().max(2048).optional(),
   protocolScopes: scopes, toolScopes: z.record(toolName, scopes),
 });
 const privateSchema = z.strictObject({

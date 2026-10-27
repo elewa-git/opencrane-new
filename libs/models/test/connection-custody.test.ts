@@ -2969,7 +2969,10 @@ async function exchangeFixture(mode = 'valid') {
   async function respond(request: IncomingMessage, response: ServerResponse) {
     const chunks: Buffer[] = [];
     for await (const chunk of request) {
-      chunks.push(Buffer.from(chunk));
+      if (!Buffer.isBuffer(chunk)) {
+        throw new Error('Fixture request invalid');
+      }
+      chunks.push(chunk);
     }
     const parameters = new URLSearchParams(Buffer.concat(chunks).toString());
     const hash = createHash('sha256');
@@ -2979,6 +2982,7 @@ async function exchangeFixture(mode = 'valid') {
     expect(parameters.get('code')).toBe('private-callback-canary');
     expect(request.url).toBe('/token');
     sends++;
+    response.setHeader('content-type', 'application/json');
     await beforeReply?.();
     if (mode === 'crash') {
       response.destroy();
@@ -2993,8 +2997,8 @@ async function exchangeFixture(mode = 'valid') {
     void respond(request, response);
   }
   const providerFixture = await remoteFixture(false, provider);
-  async function run(restarted = false) {
-    const live = restarted ? undefined : claim;
+  async function run(restarted = false, supplied = claim) {
+    const live = restarted ? undefined : supplied;
     const currentCustody = restarted ? test.store.restart() : custody;
     return exchangePersonalOAuth(events.store, consentBinding, test.session, currentCustody,
       test.command, test.loader.loadConfiguration, pgDb(storage.queue), live,
@@ -3003,7 +3007,7 @@ async function exchangeFixture(mode = 'valid') {
   function before(action: () => Promise<void>) {
     beforeReply = action;
   }
-  return { ...test, custody, run, before, responseText, providerFixture,
+  return { ...test, claim, custody, run, before, responseText, providerFixture,
     get sends() { return sends; } };
 }
 
@@ -3023,7 +3027,15 @@ async function exchangesOnce() {
     expect(foldConnection(rows).status).toBe('unavailable');
     expect(test.sends).toBe(1);
     const publicData = JSON.stringify({ results, recovered, rows });
-    for (const canary of ['result-canary', 'private-callback-canary']) {
+    const canaries = ['result-canary', 'private-callback-canary'];
+    for (const secret of test.store.secrets.values()) {
+      const contents = Buffer.from(secret.data.token, 'base64').toString();
+      const parsed = z.object({ state: z.string(), verifier: z.string() }).safeParse(JSON.parse(contents));
+      if (parsed.success) {
+        canaries.push(parsed.data.state, parsed.data.verifier);
+      }
+    }
+    for (const canary of canaries) {
       expect(publicData).not.toContain(canary);
     }
   } finally {
@@ -3034,42 +3046,31 @@ it('sends one OAuth exchange concurrently and recovers its exact unconfirmed rep
 
 async function keepsUnknownExchange(mode: string) {
   const test = await exchangeFixture(mode);
+  const claimSend = test.custody.claimSend.bind(test.custody);
+  async function existingMarker(...args: Parameters<typeof claimSend>) {
+    expect(await claimSend(...args)).toBe(true);
+    if (mode === 'marker') {
+      throw new Error('result-canary');
+    }
+    return claimSend(...args);
+  }
+  const hasMarker = mode === 'marker' || mode === 'existing';
+  if (hasMarker) {
+    vi.spyOn(test.custody, 'claimSend').mockImplementationOnce(existingMarker);
+  }
   try {
     expect(await test.run()).toEqual({ status: 'unknown' });
     expect(await test.run(true)).toEqual({ status: 'unknown' });
-    expect(test.sends).toBe(1);
+    expect(test.sends).toBe(hasMarker ? 0 : 1);
     expect(test.store.creates).toBe(2);
-  } finally {
-    await test.providerFixture.close();
-  }
-}
-it.each(['crash', 'timeout'])('never resends OAuth after a possible send: %s', keepsUnknownExchange);
-
-async function refusesExchangeRead(change: string) {
-  const test = await exchangeFixture();
-  const read = test.custody.readAttempt.bind(test.custody);
-  async function changedRead(...args: Parameters<typeof read>) {
-    const result = await read(...args);
-    if (change === 'expiry') {
-      vi.spyOn(Date, 'now').mockReturnValue(test.started.appendUntil);
-    } else {
-      await changeConsentAccess(test, change);
-    }
-    return result;
-  }
-  vi.spyOn(test.custody, 'readAttempt').mockImplementationOnce(changedRead);
-  try {
-    expect(await test.run()).toEqual({ status: 'unknown' });
-    expect(test.sends).toBe(0);
   } finally {
     vi.restoreAllMocks();
     await test.providerFixture.close();
   }
 }
-it.each(['removed', 'disabled', 'configuration', 'expiry'])(
-  'rechecks OAuth access after private reads: %s', refusesExchangeRead);
+it.each(['crash', 'timeout', 'marker', 'existing'])('never resends OAuth after a possible send: %s', keepsUnknownExchange);
 
-async function refusesLateExchange(change: string) {
+async function refusesExchangeChange(point: string, change: string) {
   const test = await exchangeFixture();
   async function changeNow() {
     if (change === 'expiry') {
@@ -3078,27 +3079,45 @@ async function refusesLateExchange(change: string) {
       await changeConsentAccess(test, change);
     }
   }
-  test.before(changeNow);
+  if (point === 'read') {
+    const read = test.custody.readAttempt.bind(test.custody);
+    async function changedRead(...args: Parameters<typeof read>) {
+      const result = await read(...args);
+      await changeNow();
+      return result;
+    }
+    vi.spyOn(test.custody, 'readAttempt').mockImplementationOnce(changedRead);
+  } else {
+    test.before(changeNow);
+  }
   try {
     expect(await test.run()).toEqual({ status: 'unknown' });
-    expect(test.sends).toBe(1);
+    expect(test.sends).toBe(point === 'read' ? 0 : 1);
     expect(test.store.creates).toBe(2);
   } finally {
     vi.restoreAllMocks();
     await test.providerFixture.close();
   }
 }
-it.each(['removed', 'disabled', 'configuration', 'expiry'])(
-  'refuses usable OAuth completion after a provider wait: %s', refusesLateExchange);
+it.each([
+  ['read', 'removed'], ['read', 'disabled'], ['read', 'configuration'], ['read', 'expiry'],
+  ['provider', 'removed'], ['provider', 'disabled'], ['provider', 'configuration'],
+  ['provider', 'expiry'],
+])('refuses OAuth after %s wait changes access: %s', refusesExchangeChange);
 
 async function damagedExchangeResult(change: string) {
   const test = await exchangeFixture();
   try {
     expect((await test.run()).status).toBe('unconfirmed');
-    if (change === 'uid') test.store.secret.metadata.uid = 'recreated';
-    else if (change === 'version') test.store.secret.metadata.resourceVersion = '2';
-    else if (change === 'material') test.store.secret.data.token = Buffer.from('{}').toString('base64');
-    else test.store.secrets.delete(test.store.secret.metadata.name);
+    if (change === 'uid') {
+      test.store.secret.metadata.uid = 'recreated';
+    } else if (change === 'version') {
+      test.store.secret.metadata.resourceVersion = '2';
+    } else if (change === 'material') {
+      test.store.secret.data.token = Buffer.from('{}').toString('base64');
+    } else {
+      test.store.secrets.delete(test.store.secret.metadata.name);
+    }
     expect(await test.run(true)).toEqual({ status: 'unknown' });
     expect(test.sends).toBe(1);
   } finally {
@@ -3111,7 +3130,7 @@ it.each(['uid', 'version', 'material', 'missing'])(
 async function lostExchangeReply() {
   const test = await exchangeFixture();
   const stageResult = test.custody.stage.bind(test.custody);
-  async function loseReply(...args: Parameters<typeof stageResult>) {
+  async function loseReply(...args: Parameters<typeof stageResult>): Promise<never> {
     await stageResult(...args);
     throw new Error('result-canary', { cause: new Error('private-callback-canary') });
   }
@@ -3127,42 +3146,125 @@ async function lostExchangeReply() {
 }
 it('recovers an exact saved OAuth response after its staging reply is lost', lostExchangeReply);
 
-async function refusesSendJournalFailure(afterMarker: boolean) {
-  const test = await exchangeFixture();
-  const claimSend = test.custody.claimSend.bind(test.custody);
-  async function failClaim(...args: Parameters<typeof claimSend>) {
-    if (afterMarker) await claimSend(...args);
-    throw new Error('result-canary');
-  }
-  vi.spyOn(test.custody, 'claimSend').mockImplementationOnce(failClaim);
-  try {
-    expect(await test.run()).toEqual({ status: 'unknown' });
-    expect(await test.run(true)).toEqual({ status: 'unknown' });
-    expect(test.sends).toBe(0);
-  } finally {
-    vi.restoreAllMocks();
-    await test.providerFixture.close();
-  }
-}
-it.each([false, true])('never sends after journal failure or restart (marker saved: %s)',
-  refusesSendJournalFailure);
-
-async function refusesResultFlush() {
+async function refusesJournalFlush(point: string) {
   const test = await exchangeFixture();
   const descriptor = await open(test.store.directory, 'r');
-  async function failSync() { throw new Error('result-canary'); }
-  async function failAfterSend() {
-    vi.spyOn(Object.getPrototypeOf(descriptor), 'sync').mockImplementation(failSync);
+  function failSync() {
+    return Promise.reject(new Error('result-canary'));
   }
-  test.before(failAfterSend);
+  function hasSync(value: object | null): value is Pick<typeof descriptor, 'sync'> {
+    return value !== null && 'sync' in value && typeof value.sync === 'function';
+  }
+  function failFlush() {
+    const prototype = Reflect.getPrototypeOf(descriptor);
+    if (!hasSync(prototype)) {
+      throw new Error('Fixture file handle unavailable');
+    }
+    vi.spyOn(prototype, 'sync').mockImplementation(failSync);
+    return Promise.resolve();
+  }
+  const claimSend = test.custody.claimSend.bind(test.custody);
+  async function failSendFlush(...args: Parameters<typeof claimSend>) {
+    await failFlush();
+    return claimSend(...args);
+  }
+  if (point === 'send') {
+    vi.spyOn(test.custody, 'claimSend').mockImplementationOnce(failSendFlush);
+  } else {
+    test.before(failFlush);
+  }
   try {
     expect(await test.run()).toEqual({ status: 'unknown' });
     expect(await test.run(true)).toEqual({ status: 'unknown' });
-    expect(test.sends).toBe(1);
+    expect(test.sends).toBe(point === 'send' ? 0 : 1);
   } finally {
     vi.restoreAllMocks();
     await descriptor.close();
     await test.providerFixture.close();
   }
 }
-it('refuses OAuth result use when the journal cannot flush', refusesResultFlush);
+it.each(['send', 'result'])('refuses OAuth %s when the journal cannot flush', refusesJournalFlush);
+
+async function refusesForeignClaimReadback() {
+  const test = await callbackFixture();
+  const read = events.store.readStream.bind(events.store);
+  async function* foreignClaim(subject: string, from?: number, deadline?: number) {
+    for await (const row of read(subject, from, deadline)) {
+      if (subject === test.subject && row.event.type === 'connection.oauth_exchange_claimed') {
+        const data = z.record(z.string(), z.unknown()).parse(row.event.data);
+        const event = { ...row.event, data: { ...data, workerId: 'different-worker' } };
+        yield { ...row, event };
+      } else {
+        yield row;
+      }
+    }
+  }
+  vi.spyOn(events.store, 'readStream').mockImplementation(foreignClaim);
+  try {
+    expect(await test.callback()).toEqual({ status: 'unknown' });
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it('refuses another OAuth worker claim during callback readback', refusesForeignClaimReadback);
+
+async function refusesChangedExchangeMaterial(kind: string, change: string) {
+  const test = await exchangeFixture();
+  try {
+    for (const secret of test.store.secrets.values()) {
+      const contents = Buffer.from(secret.data.token, 'base64').toString();
+      if (!contents.includes(`"${kind}"`)) {
+        continue;
+      }
+      if (change === 'uid') {
+        secret.metadata.uid = 'recreated';
+      } else if (change === 'version') {
+        secret.metadata.resourceVersion = '2';
+      } else {
+        secret.data.token = Buffer.from('{}').toString('base64');
+      }
+    }
+    expect(await test.run()).toEqual({ status: 'unknown' });
+    expect(test.sends).toBe(0);
+  } finally {
+    await test.providerFixture.close();
+  }
+}
+it.each([
+  ['code', 'uid'], ['code', 'version'], ['code', 'material'],
+  ['verifier', 'uid'], ['verifier', 'version'], ['verifier', 'material'],
+])('refuses changed OAuth %s custody: %s', refusesChangedExchangeMaterial);
+
+async function refusesCopiedClaim() {
+  const test = await exchangeFixture();
+  try {
+    const copied = structuredClone(test.claim);
+    expect(await test.run(false, copied)).toEqual({ status: 'unknown' });
+    expect(test.sends).toBe(0);
+    expect((await test.run()).status).toBe('unconfirmed');
+    expect(test.sends).toBe(1);
+  } finally {
+    await test.providerFixture.close();
+  }
+}
+it('cannot turn an OAuth claim readback into live send permission', refusesCopiedClaim);
+
+
+async function refusesAfterProviderLookup() {
+  const test = await exchangeFixture();
+  const resolve = test.providerFixture.network.resolve!;
+  async function changedLookup(...args: Parameters<typeof resolve>) {
+    const addresses = await resolve(...args);
+    await changeConsentAccess(test, 'disabled');
+    return addresses;
+  }
+  test.providerFixture.network.resolve = changedLookup;
+  try {
+    expect(await test.run()).toEqual({ status: 'unknown' });
+    expect(test.sends).toBe(0);
+  } finally {
+    await test.providerFixture.close();
+  }
+}
+it('rechecks OAuth permission after provider address lookup and before sending',
+  refusesAfterProviderLookup);

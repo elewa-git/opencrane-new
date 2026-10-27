@@ -41,7 +41,8 @@ export function oauthProviderTransport(rawConfiguration: unknown, network: Remot
   const configuration = checkedConfiguration(rawConfiguration);
   // Copy settings so later caller mutation cannot redirect a prepared request.
   const configuredNetwork = { ...network };
-  async function exchange(rawMaterial: unknown, signal: AbortSignal): Promise<Buffer> {
+  async function exchange(rawMaterial: unknown, signal: AbortSignal,
+    checkCurrent?: () => Promise<unknown>): Promise<Buffer> {
     const controller = new AbortController();
     function expire() {
       controller.abort();
@@ -61,6 +62,8 @@ export function oauthProviderTransport(rawConfiguration: unknown, network: Remot
       }
       const target = await prepareRemote(configuration.tokenEndpoint, configuredNetwork,
         boundedSignal);
+      await checkCurrent?.();
+      boundedSignal.throwIfAborted();
       const headers = { 'content-type': 'application/x-www-form-urlencoded',
         accept: 'application/json', 'content-length': Buffer.byteLength(body) };
       const reply = await exchangeRemote(target, body, headers, configuredNetwork,

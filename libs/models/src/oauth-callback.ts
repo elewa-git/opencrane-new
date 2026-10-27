@@ -12,6 +12,19 @@ import { withConnectionStage } from './connection-stage-lock.ts';
 import { oauthConsentUrl } from './oauth-attempt.ts';
 import { checkPersonalOAuthStart, inputSchema, sessionSchema } from './oauth-start.ts';
 
+const liveClaims = new WeakMap<object, LiveClaim>();
+type LiveClaim = { status: 'claimed'; claimId: string; sequence: number; workerId: string };
+
+/** Consume the original in-memory result once. Event readback alone cannot grant a send. */
+export function takePersonalOAuthClaim(raw: unknown): LiveClaim | undefined {
+  if (typeof raw !== 'object' || raw === null) {
+    return undefined;
+  }
+  const claim = liveClaims.get(raw);
+  liveClaims.delete(raw);
+  return claim;
+}
+
 const callbackSchema = inputSchema.extend({ redirectUri: z.string().max(2048),
   parameters: z.instanceof(URLSearchParams) });
 const parametersSchema = z.strictObject({ state: z.string().regex(/^[A-Za-z0-9_-]{43}$/u),
@@ -82,8 +95,10 @@ export async function claimPersonalOAuthCallback(store: EventStore, binding: Bin
     if (Date.now() >= result.saved.expiresAt) {
       throw new Error('OAuth callback expired');
     }
-    return { status: 'claimed' as const, claimId: result.claimId,
-      sequence: result.sequence, workerId };
+    const live = Object.freeze({ status: 'claimed' as const, claimId: result.claimId,
+      sequence: result.sequence, workerId });
+    liveClaims.set(live, live);
+    return live;
   } catch {
     // Hide callback values and dependency errors, including private storage responses.
     return { status: 'unknown' as const };
