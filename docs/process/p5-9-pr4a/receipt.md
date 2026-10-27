@@ -77,3 +77,58 @@ installation journey. Home validation does not restore mounted volumes. CNPG/WAL
 all-database restore, credential renewal, reopening and live recovery are NOT RUN.
 The fixture uses synthetic content and Kubernetes replies. Its effect probes
 observe application entry points. No new CLI, event/API fields or dependencies.
+
+## Backup ownership deadline fix
+
+Date: 27 October 2026. Base fetched for this fix: `044e55d31`, including
+`3763f17c7` (#764). The rebase finished; neither Git rebase state directory remains.
+Failing-test commit: `c46ab0826`. Fixed source: `b5542c595999013c2f3db0aec3ff904960a54e9e`.
+
+CI run `40466171098` failed the remaining-time assertion during target-node
+ownership checks. The backup checker passed a remaining duration. The package
+callback added that duration to its later start time, allowing a scheduling delay
+to extend the original deadline. Every ownership command already received the
+cancellation signal; that signal remains unchanged.
+
+Expected FAIL: the new test delays callback dispatch by 40 ms and reaches the
+existing assertion, “Each child must use the remaining time, including earlier
+ownership checks”. This test was committed before the fix. The fix passes the
+original absolute deadline through the callback into package and target ownership
+checks. Each child receives the time left and the same cancellation signal.
+The original assertion and all four original stalled-child cases remain unchanged.
+
+Environment: Node 22.23.3, this worktree and the requested PostgreSQL test service
+on loopback port 55432 through `PG_TEST_URL`. Suites create and drop their own
+databases and use disposable NATS, MinIO and OpenFGA. Package command fixtures use
+synthetic ownership records and command replies. No dev stack or full root suite ran.
+Every lint, typecheck and test command uses `nice -n 10`. Vitest uses one worker;
+Node test files run one at a time.
+
+PASS: full lint (zero errors, 31 existing size warnings), full typecheck,
+check:events (156 event types), explicit Knip and changelog validation.
+
+The first combined Vitest command passed all 579 recovery and security tests in
+seven files, including all nine interrupted-upgrade cases. Its 23 additional
+gateway cases could not start because this checkout lacked the pinned gateway
+binary, so that combined command exited with failure. The repository's
+`fetch-tools.sh` downloaded and verified the pinned binary before the clean reruns.
+The same CI run had a separate gateway publication acknowledgement timeout; its
+access assertions and product code remain unchanged.
+
+PASS twice: all 528 selected package, backup-checker and ownership tests, with
+zero failures or skipped tests in either run. This includes all four original
+stalled-child cases and the delayed-dispatch regression.
+
+PASS twice: all 579 recovery and security tests in seven files. The clean second
+combined command also passed all 23 gateway cases, giving 602 passing tests.
+A separate gateway repeat passed all 23 again, including the team-removal case
+that timed out in CI. No access, money or memory assertion was loosened.
+
+The [comparison output](fixture-summary.json) was refreshed from the second
+successful recovery. It retains 281 archived and recovered events, matching
+rebuild results, original money identities and zero recorded effects.
+The [commands](checks.txt) list the selected files and setup steps.
+
+PARTIAL: recovery qualification remains as described above. Fresh installation,
+CNPG/WAL, mounted home restoration, reopening and pinned-package upgrades remain
+NOT RUN. CI after the push is NOT RUN by this task.

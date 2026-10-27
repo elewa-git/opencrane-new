@@ -19,3 +19,55 @@ Repeat changed tests:
 nice -n 10 node_modules/.bin/vitest run infra/package/upgrade-recovery.test.ts --maxWorkers=1 --no-file-parallelism --reporter=verbose
 
 No full root suite or live journey.
+
+
+Backup deadline fix, 27 October 2026:
+Fetched base: 044e55d31. Fixed source: b5542c595999013c2f3db0aec3ff904960a54e9e.
+PG_TEST_URL uses the requested PostgreSQL test service on loopback port 55432.
+
+Expected FAIL at c46ab0826, before the implementation:
+nice -n 10 node --experimental-strip-types --test \
+  --test-name-pattern='original deadline when dispatch' infra/package/chart.test.mjs
+
+PASS after the fix:
+nice -n 10 npm run lint
+nice -n 10 npm run typecheck
+nice -n 10 npm run check:events
+nice -n 10 npm run lint:unused
+nice -n 10 npm run lint:changelog
+
+Package and ownership selection, run twice:
+nice -n 10 node --experimental-strip-types --test --test-concurrency=1 \
+  infra/package/chart.test.mjs infra/dev-stack/cnpg-backup.test.ts \
+  infra/package/cnpg-install.test.mjs infra/dev-stack/claim.test.ts \
+  infra/package/fresh-twice.test.ts infra/package/nats-placement-collect.test.ts \
+  infra/package/prepare-nats-routes.test.mjs infra/package/journey-run.test.ts \
+  infra/dev-stack/browser-ownership.test.ts
+
+Recovery selection, run twice, with the gateway suite in both commands:
+nice -n 10 node_modules/.bin/vitest run \
+  infra/package/upgrade-recovery.test.ts infra/package/upgrade-recovery-check.test.ts \
+  infra/package/upgrade-recovery-budget.test.ts infra/package/upgrade-recovery-files.test.ts \
+  apps/server/test/recovery-restore.test.ts apps/server/test/recovery-custody.test.ts \
+  libs/events/test/security-rules.test.ts apps/server/test/integration-access-gateway.test.ts \
+  --maxWorkers=1 --no-file-parallelism --reporter=verbose
+
+The first command passed the seven recovery/security files but could not start the
+23 gateway cases. The pinned gateway binary was then installed with:
+nice -n 10 bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+
+A separate repeat gives the gateway suite two configured runs:
+nice -n 10 node_modules/.bin/vitest run apps/server/test/integration-access-gateway.test.ts \
+  --maxWorkers=1 --no-file-parallelism --reporter=verbose
+
+
+Final receipt checks:
+nice -n 10 npm run lint:docs
+nice -n 10 npm run lint:readmes
+nice -n 10 npm run lint:links
+nice -n 10 npm run lint:changelog
+git diff --check
+
+PASS twice: 528 package/ownership tests; 579 recovery/security tests;
+23 configured gateway tests. The initial gateway setup failure is recorded above.
+No full root suite or live journey. No dev stack was started or claimed.
