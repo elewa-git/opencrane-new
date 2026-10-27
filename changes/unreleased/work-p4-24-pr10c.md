@@ -1,0 +1,1 @@
+- Internal routine sender preparation can check the exact saved admission without creating another attempt. Delivery stays unknown and routine execution remains disabled; bridge delivery is still pending.

@@ -14,14 +14,20 @@ type Arguments = Parameters<typeof loadRoutineRootPreparation>;
 export async function admitRoutineActivation(store: Arguments[0], keys: Arguments[1],
   worker: Arguments[2], raw: unknown, selection: Arguments[4], senderAttemptId: string) {
   try {
-    return await admit(store, keys, worker, raw, selection, senderAttemptId);
+    const checked = await admit(store, keys, worker, raw, selection, senderAttemptId, true);
+    return checked.receipt;
   } catch {
     throw new Error('Routine activation refused');
   }
 }
 
+export async function readRoutineActivation(store: Arguments[0], keys: Arguments[1],
+  worker: Arguments[2], raw: unknown, selection: Arguments[4], senderAttemptId: string) {
+  return admit(store, keys, worker, raw, selection, senderAttemptId, false);
+}
+
 async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[2],
-  raw: unknown, selection: Arguments[4], senderAttemptId: string) {
+  raw: unknown, selection: Arguments[4], senderAttemptId: string, recordAdmission: boolean) {
   z.string().regex(/^[\w-]{1,200}$/u).parse(senderAttemptId);
   // Read growing budget history before preparation starts its access deadline.
   const budgetSubject = `budget-${worker.silo}`;
@@ -79,6 +85,8 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
     saved = row;
   }
   for (const row of preparation.routineRows) checkRoutine(row);
+  // Never repair a missing admission while inspecting an existing sender attempt.
+  if (!recordAdmission && !saved) throw new Error('Routine activation refused');
   async function readBudgetChanges() {
     for await (const row of store.readStream(budgetSubject, budgetPosition + 1, deadline)) {
       checkBudget(row);
@@ -131,7 +139,8 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
       throw new Error('Routine activation refused');
     }
   }
-  return { status: 'confirmed' as const, occurrenceId: run.occurrenceId,
+  const receipt = { status: 'confirmed' as const, occurrenceId: run.occurrenceId,
     conversationId: run.conversationId, eventId: saved.event.id, position: saved.sequence,
     startBy: run.startBy, executionAvailable: false as const };
+  return { receipt, messageId: run.messageId, turnId: run.turnId, rootId, senderAttemptId };
 }
