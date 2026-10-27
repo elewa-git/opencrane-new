@@ -84,3 +84,71 @@ in `PG_TEST_URL`.
 Live recovery is NOT RUN. The set is incomplete and admission remains closed.
 The standalone target and trusted-operator limits of the existing restore helpers
 still apply. A frozen archive is not evidence of current deletion state.
+
+## Private path protection (27 October 2026)
+
+Source: `435104db2e99af8a75b3294d79450ae04a24d1ac`. The test runs used
+`851ef94415a7a30997a10a4e98246c972805d307`, before the final rebase. All
+`.ts`, `.js` and `.json` files are unchanged after that rebase.
+
+The branch was rebased onto fetched `origin/main` at
+`cfe2fea7c3edffbc648d575207e47ce0f3ff1783`. Main advanced during checks, so
+a final rebase includes `6718d0bf534dd6e801042f589d62c6d6fdfc5977`. It finished
+successfully. The README conflict keeps the current computer-volume, database-recovery
+and memory-key descriptions. The added main commit changes chart and preflight
+files, their tests and documentation; it changes none of the tested restore code.
+
+Docker now starts from the private credential directory and receives only the
+filename `environment`. Directory creation is inside the setup error handler.
+Explicit close returns a fixed cleanup refusal. Setup keeps its original fixed
+provisioning refusal even when cleanup fails, and cleanup still attempts both
+container and directory removal.
+
+PASS: failing-first commit `531f5a5c4` (now `1b4eade69` after rebase) contains the
+new regression tests before the implementation change. Nine cases failed against the old implementation, including
+an assertion on the actual Docker launch arguments. Two cases for already sanitised
+write failures passed. After the fix, all 11 cases passed with real disposable MinIO.
+The tests inject ENOSPC and EACCES during setup, multiple removal failures, and
+simultaneous Docker and directory cleanup failures. They remove their own containers
+and volumes after restoring the real cleanup functions.
+
+The first typecheck found a missing `never` return type on the deliberately throwing
+test helper. That annotation is now explicit; the test assertions are unchanged.
+
+The checks use `nice -n 10`. Tests use one worker, disposable NATS and MinIO, and
+a fresh throwaway PostgreSQL 17.6 container. The projection run uses that container's
+reported loopback port in `PG_TEST_URL`, following the throwaway-database rule.
+The provisioner-only failing-first and first passing runs use the supplied test URL.
+No dev stack is claimed or started. The full root suite and live recovery are NOT RUN.
+Overall recovery remains PARTIAL.
+
+- PASS: first regression run, 648 tests across ten files.
+- PASS: full `npm run typecheck` after the test-helper annotation fix.
+- PASS: full `npm run lint`, including Knip (`npm run lint:unused`). ESLint reports
+  zero errors and 30 warnings in unchanged code.
+- PASS: `npm run check:events`, with all 156 event types agreeing.
+- PASS: separate `npm run lint:changelog`, also repeated within full lint.
+
+Both regression runs select these files:
+
+```sh
+nice -n 10 npx vitest run --maxWorkers=1 \
+  apps/server/test/disposable-object-target.test.ts \
+  apps/server/test/recovery-custody.test.ts \
+  apps/server/test/recovery-restore.test.ts \
+  apps/server/test/recovery-event-target.test.ts \
+  apps/server/test/object-restore.test.ts \
+  libs/event-store/test/event-restore.test.ts \
+  libs/projections/test/memory-restore.test.ts \
+  libs/projections/test/memory-keys.test.ts \
+  apps/ops/test/memory-replay.test.ts \
+  libs/events/test/security-rules.test.ts
+```
+
+- PASS: second identical regression run, 648 tests across ten files. The first run
+  took 414.77 seconds; the second took 435.00 seconds.
+- PASS: removed the throwaway PostgreSQL container with `docker rm -f -v`.
+- PASS: after the final rebase, 531 chart-render, CNPG-installer and preflight tests
+  across the three imported test files. These use chart rendering and isolated
+  command fixtures, not a running installation.
+- PASS: documentation and changelog checks after the final rebase.
