@@ -208,6 +208,54 @@ for (const fault of faults) {
   it(`withholds combined evidence after ${fault}`, refusesChangedCapture);
 }
 
+async function changesDuringLaterHomeCopy() {
+  const setup = await fixture();
+  const read: ReadHome = async function read(binding, signal, home) {
+    if (home.computerId === 'computer-two') {
+      const path = join(setup.options.destination, 'homes', 'home-0000.enc');
+      expect(fs.statSync(path).size).toBeGreaterThan(bytes.length);
+      fs.writeFileSync(path, bytes);
+    }
+    return setup.readHome(binding, signal, home);
+  };
+  await expect(setup.capture(read)).rejects.toEqual(refused);
+  expect(fs.existsSync(join(setup.options.destination, 'descriptor.json'))).toBe(false);
+}
+it('refuses a saved home corrupted while reading the second home', changesDuringLaterHomeCopy);
+
+for (const component of ['events', 'objects']) {
+  async function changesDuringLaterObjectCopy() {
+    const setup = await fixture();
+    const secondKey = `test/chat/second/${digest(bytes)}`;
+    await storage.client.putObject('files', secondKey, bytes);
+    const file = {
+      conversationId: 'chat', fileId: 'second', uploadedBy: 'alice', name: 'second.txt',
+      mime: 'text/plain', size: bytes.length, sha256: digest(bytes), objectKey: secondKey,
+    };
+    const upload = envelope('test', 'conversation-chat', 'file.uploaded', file);
+    await setup.source.seed([upload]);
+    const get = storage.client.getObjectBounded.bind(storage.client);
+    let corrupted = false;
+    async function corruptEarlierArchive(...args: Parameters<typeof get>) {
+      if (args[1] === secondKey) {
+        const directory = join(setup.options.destination, component);
+        const objectIdentity = digest(Buffer.from(JSON.stringify(['test', 'chat', 'file'])));
+        const filename = component === 'events' ? 'events.snapshot' : objectIdentity;
+        const path = join(directory, filename);
+        expect(fs.statSync(path).size).toBeGreaterThan(bytes.length);
+        fs.writeFileSync(path, bytes);
+        corrupted = true;
+      }
+      return get(...args);
+    }
+    vi.spyOn(storage.client, 'getObjectBounded').mockImplementation(corruptEarlierArchive);
+    await expect(setup.capture()).rejects.toEqual(refused);
+    expect(corrupted).toBe(true);
+    expect(fs.existsSync(join(setup.options.destination, 'descriptor.json'))).toBe(false);
+  }
+  it(`refuses saved ${component} corrupted while copying a later file`, changesDuringLaterObjectCopy);
+}
+
 async function emptyHomes() {
   const setup = await fixture(0);
   const result = await setup.capture();
