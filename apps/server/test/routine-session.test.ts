@@ -863,6 +863,7 @@ describe('routine input', routineInputTests);
 
 function routineRootTests() {
   let expectedHolds: BudgetActor['state']['reservations'] = [];
+  let expectedStop: EventEnvelope | undefined;
   async function preparedInput() {
     encryption.mockRestore();
     decryption.mockRestore();
@@ -885,6 +886,7 @@ function routineRootTests() {
     await actor.start(10_000, 10_000, 'sales');
     rootMode = true;
     expectedHolds = [];
+    expectedStop = undefined;
     const fetch = globalThis.fetch;
     function permissionsOnly(url: Parameters<typeof fetch>[0], options?: RequestInit) {
       const address = url instanceof Request ? url.url : url.toString();
@@ -1343,6 +1345,71 @@ function routineRootTests() {
     it('refuses revocation after the last authority check while reading budget changes',
       lastAwaitRevocation);
 
+    async function budgetStop(timing: string, ownRoot: boolean) {
+      let rootId = actor.state.roots[0]!.rootId;
+      if (!ownRoot) {
+        const binding = { requesterId: 'alice', conversationId: 'other-conversation',
+          turnId: 'other-turn', assistantId: 'sales-assistant', payingGroupId: 'sales',
+          ...selection, allowanceCents: 100 };
+        const otherRoot = await actor.setRootAllowance(binding, 1);
+        rootId = otherRoot.rootId;
+      }
+      const append = nats.store.append.bind(nats.store);
+      const read = nats.store.readStream.bind(nats.store);
+      const head = nats.store.head.bind(nats.store);
+      const before = await head('routine-orders');
+      const beforePublication = await head();
+      let admitted = false;
+      let checkedBudget = false;
+      let stopped = false;
+      async function stop() {
+        stopped = true;
+        const saved = record('late-budget-stop', 'budget-test', 'budget.root_stopped', {
+          rootId, reason: 'allowance_exhausted', attemptedBoundCents: 1, availableCents: 0,
+        });
+        saved.source = 'models';
+        saved.principal = { kind: 'system', id: 'models' };
+        expectedStop = saved;
+        await nats.seed([saved]);
+      }
+      async function publish(command: AppendCommand) {
+        if (timing === 'before publication') await stop();
+        const result = await append(command);
+        admitted = result.status === 'appended';
+        return result;
+      }
+      async function* readBudget(...args: Parameters<typeof read>) {
+        yield* read(...args);
+        // Insert Stop after the bounded admission read, not a provider summary read.
+        if (admitted && args[0] === 'budget-test' && args[2]! <= performance.now() + 2000) {
+          checkedBudget = true;
+        }
+      }
+      async function stopDuringReceipt(...args: Parameters<typeof head>) {
+        if (checkedBudget && !stopped && args[0] === 'member-alice') await stop();
+        return head(...args);
+      }
+      vi.spyOn(nats.store, 'append').mockImplementationOnce(publish);
+      vi.spyOn(nats.store, 'readStream').mockImplementation(readBudget);
+      vi.spyOn(nats.store, 'head').mockImplementation(stopDuringReceipt);
+      const outcomes = await Promise.allSettled([prepare()]);
+      expect(stopped).toBe(true);
+      const budget = await history(nats.store, 'budget-test', 'test');
+      expect(budget.at(-1)!.event).toEqual(expectedStop);
+      if (ownRoot) {
+        expect(outcomes[0]).toMatchObject({ status: 'rejected', reason: new Error(refusal()) });
+      } else {
+        expect(outcomes[0]).toMatchObject({ status: 'fulfilled',
+          value: { status: 'confirmed', executionAvailable: false } });
+      }
+      const expectedPosition = timing === 'before publication' ? before : beforePublication + 1;
+      expect(await head('routine-orders')).toBe(expectedPosition);
+    }
+    const stopCases: [string, boolean][] = [
+      ['before publication', true], ['during receipt confirmation', true],
+      ['during receipt confirmation', false],
+    ];
+    it.each(stopCases)('checks budget Stop %s for its own root: %s', budgetStop);
 
   }
   describe('routine activation', activationTests);
@@ -1350,6 +1417,10 @@ function routineRootTests() {
   async function noEffects() {
     const saved = await history(nats.store, 'budget-test', 'test');
     for (const row of saved) {
+      if (row.event.type === 'budget.root_stopped') {
+        expect(row.event).toEqual(expectedStop);
+        continue;
+      }
       expect(row.event.type).toMatch(/^(budget\.(ceiling_set|period_started|root_allowance_set|reserved)|provider\.managed_calls_enabled)$/u);
     }
     expect(actor.state.reservations).toEqual(expectedHolds);
