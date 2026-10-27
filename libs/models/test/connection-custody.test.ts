@@ -1,3 +1,6 @@
+import { exchangePersonalOAuth } from '../src/oauth-worker.ts';
+import { remoteFixture } from './support/remote-mcp.ts';
+import { open } from 'node:fs/promises';
 import { scanConnections } from '../src/connection-scan.ts';
 import { connectionRevokedDataSchema } from '@opencrane/events';
 import { HandlerRuntime } from '@opencrane/handlers';
@@ -260,6 +263,7 @@ function oauthFixture(withTools = false) {
   endpointHash.update(JSON.stringify(locator));
   const configuration = { serverId: context.serverId, connectionId: context.connectionId,
     endpointDigest: endpointHash.digest('hex'), policyRevision: 4,
+    tokenEndpoint: 'https://mcp.example.test/token',
     issuer: 'https://identity.example.test/', consentEndpoint: 'https://identity.example.test/consent',
     redirectUri: 'https://app.example.test/api/my/tools/oauth/callback', clientId: 'fixture',
     protocolScopes: ['openid'], toolScopes: { 'data.read': ['read'], 'data.write': ['write'] } };
@@ -2953,3 +2957,212 @@ async function clearsUnknownAfterSuccess() {
   }
 }
 it('scan clears consecutive unknown state after a successful page', clearsUnknownAfterSuccess);
+
+
+async function exchangeFixture(mode = 'valid') {
+  const test = await callbackFixture();
+  const claim = await test.callback();
+  const custody = test.store.restart();
+  let sends = 0;
+  let beforeReply: (() => Promise<void>) | undefined;
+  const responseText = ' {"access_token":"result-canary","token_type":"Bearer"}\n';
+  async function respond(request: IncomingMessage, response: ServerResponse) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) {
+      chunks.push(Buffer.from(chunk));
+    }
+    const parameters = new URLSearchParams(Buffer.concat(chunks).toString());
+    const hash = createHash('sha256');
+    hash.update(parameters.get('code_verifier') ?? '');
+    expect(hash.digest('base64url')).toBe(
+      new URL(test.started.consentUrl).searchParams.get('code_challenge'));
+    expect(parameters.get('code')).toBe('private-callback-canary');
+    expect(request.url).toBe('/token');
+    sends++;
+    await beforeReply?.();
+    if (mode === 'crash') {
+      response.destroy();
+    } else if (mode === 'timeout') {
+      response.writeHead(200);
+      response.write('{');
+    } else {
+      response.end(responseText);
+    }
+  }
+  function provider(request: IncomingMessage, response: ServerResponse) {
+    void respond(request, response);
+  }
+  const providerFixture = await remoteFixture(false, provider);
+  async function run(restarted = false) {
+    const live = restarted ? undefined : claim;
+    const currentCustody = restarted ? test.store.restart() : custody;
+    return exchangePersonalOAuth(events.store, consentBinding, test.session, currentCustody,
+      test.command, test.loader.loadConfiguration, pgDb(storage.queue), live,
+      providerFixture.network);
+  }
+  function before(action: () => Promise<void>) {
+    beforeReply = action;
+  }
+  return { ...test, custody, run, before, responseText, providerFixture,
+    get sends() { return sends; } };
+}
+
+async function exchangesOnce() {
+  const test = await exchangeFixture();
+  try {
+    const results = await Promise.all([test.run(), test.run()]);
+    expect(results).toContainEqual(expect.objectContaining({ status: 'unconfirmed' }));
+    expect(test.sends).toBe(1);
+    const recovered = await test.run(true);
+    expect(recovered.status).toBe('unconfirmed');
+    expect(test.sends).toBe(1);
+    expect(test.store.creates).toBe(3);
+    expect(Buffer.from(test.store.secret.data.token, 'base64').toString()).toBe(test.responseText);
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(2);
+    expect(foldConnection(rows).status).toBe('unavailable');
+    expect(test.sends).toBe(1);
+    const publicData = JSON.stringify({ results, recovered, rows });
+    for (const canary of ['result-canary', 'private-callback-canary']) {
+      expect(publicData).not.toContain(canary);
+    }
+  } finally {
+    await test.providerFixture.close();
+  }
+}
+it('sends one OAuth exchange concurrently and recovers its exact unconfirmed reply', exchangesOnce);
+
+async function keepsUnknownExchange(mode: string) {
+  const test = await exchangeFixture(mode);
+  try {
+    expect(await test.run()).toEqual({ status: 'unknown' });
+    expect(await test.run(true)).toEqual({ status: 'unknown' });
+    expect(test.sends).toBe(1);
+    expect(test.store.creates).toBe(2);
+  } finally {
+    await test.providerFixture.close();
+  }
+}
+it.each(['crash', 'timeout'])('never resends OAuth after a possible send: %s', keepsUnknownExchange);
+
+async function refusesExchangeRead(change: string) {
+  const test = await exchangeFixture();
+  const read = test.custody.readAttempt.bind(test.custody);
+  async function changedRead(...args: Parameters<typeof read>) {
+    const result = await read(...args);
+    if (change === 'expiry') {
+      vi.spyOn(Date, 'now').mockReturnValue(test.started.appendUntil);
+    } else {
+      await changeConsentAccess(test, change);
+    }
+    return result;
+  }
+  vi.spyOn(test.custody, 'readAttempt').mockImplementationOnce(changedRead);
+  try {
+    expect(await test.run()).toEqual({ status: 'unknown' });
+    expect(test.sends).toBe(0);
+  } finally {
+    vi.restoreAllMocks();
+    await test.providerFixture.close();
+  }
+}
+it.each(['removed', 'disabled', 'configuration', 'expiry'])(
+  'rechecks OAuth access after private reads: %s', refusesExchangeRead);
+
+async function refusesLateExchange(change: string) {
+  const test = await exchangeFixture();
+  async function changeNow() {
+    if (change === 'expiry') {
+      vi.spyOn(Date, 'now').mockReturnValue(test.started.appendUntil);
+    } else {
+      await changeConsentAccess(test, change);
+    }
+  }
+  test.before(changeNow);
+  try {
+    expect(await test.run()).toEqual({ status: 'unknown' });
+    expect(test.sends).toBe(1);
+    expect(test.store.creates).toBe(2);
+  } finally {
+    vi.restoreAllMocks();
+    await test.providerFixture.close();
+  }
+}
+it.each(['removed', 'disabled', 'configuration', 'expiry'])(
+  'refuses usable OAuth completion after a provider wait: %s', refusesLateExchange);
+
+async function damagedExchangeResult(change: string) {
+  const test = await exchangeFixture();
+  try {
+    expect((await test.run()).status).toBe('unconfirmed');
+    if (change === 'uid') test.store.secret.metadata.uid = 'recreated';
+    else if (change === 'version') test.store.secret.metadata.resourceVersion = '2';
+    else if (change === 'material') test.store.secret.data.token = Buffer.from('{}').toString('base64');
+    else test.store.secrets.delete(test.store.secret.metadata.name);
+    expect(await test.run(true)).toEqual({ status: 'unknown' });
+    expect(test.sends).toBe(1);
+  } finally {
+    await test.providerFixture.close();
+  }
+}
+it.each(['uid', 'version', 'material', 'missing'])(
+  'refuses changed saved OAuth result: %s', damagedExchangeResult);
+
+async function lostExchangeReply() {
+  const test = await exchangeFixture();
+  const stageResult = test.custody.stage.bind(test.custody);
+  async function loseReply(...args: Parameters<typeof stageResult>) {
+    await stageResult(...args);
+    throw new Error('result-canary', { cause: new Error('private-callback-canary') });
+  }
+  vi.spyOn(test.custody, 'stage').mockImplementationOnce(loseReply);
+  try {
+    expect(await test.run()).toEqual({ status: 'unknown' });
+    expect((await test.run(true)).status).toBe('unconfirmed');
+    expect(test.sends).toBe(1);
+  } finally {
+    vi.restoreAllMocks();
+    await test.providerFixture.close();
+  }
+}
+it('recovers an exact saved OAuth response after its staging reply is lost', lostExchangeReply);
+
+async function refusesSendJournalFailure(afterMarker: boolean) {
+  const test = await exchangeFixture();
+  const claimSend = test.custody.claimSend.bind(test.custody);
+  async function failClaim(...args: Parameters<typeof claimSend>) {
+    if (afterMarker) await claimSend(...args);
+    throw new Error('result-canary');
+  }
+  vi.spyOn(test.custody, 'claimSend').mockImplementationOnce(failClaim);
+  try {
+    expect(await test.run()).toEqual({ status: 'unknown' });
+    expect(await test.run(true)).toEqual({ status: 'unknown' });
+    expect(test.sends).toBe(0);
+  } finally {
+    vi.restoreAllMocks();
+    await test.providerFixture.close();
+  }
+}
+it.each([false, true])('never sends after journal failure or restart (marker saved: %s)',
+  refusesSendJournalFailure);
+
+async function refusesResultFlush() {
+  const test = await exchangeFixture();
+  const descriptor = await open(test.store.directory, 'r');
+  async function failSync() { throw new Error('result-canary'); }
+  async function failAfterSend() {
+    vi.spyOn(Object.getPrototypeOf(descriptor), 'sync').mockImplementation(failSync);
+  }
+  test.before(failAfterSend);
+  try {
+    expect(await test.run()).toEqual({ status: 'unknown' });
+    expect(await test.run(true)).toEqual({ status: 'unknown' });
+    expect(test.sends).toBe(1);
+  } finally {
+    vi.restoreAllMocks();
+    await descriptor.close();
+    await test.providerFixture.close();
+  }
+}
+it('refuses OAuth result use when the journal cannot flush', refusesResultFlush);
