@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { z } from 'zod';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { generateKeyPairSync } from 'node:crypto';
+import { tokenIssuer } from '@opencrane/auth';
+import { until } from '@opencrane/authz/testing';
+import { bridgeChannel } from '../../computer/test/server.ts';
+import { connectBridge } from '../src/chat/bridge.ts';
+import { createRoutineSender } from '../src/routine-sender.ts';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { natsFixture, event } from '@opencrane/event-store/testing';
 import { foldRoutine, routineActivationSchema, type EventEnvelope } from '@opencrane/events';
@@ -21,6 +30,8 @@ let actor: BudgetActor;
 let directory: string;
 let now: number;
 let owned: boolean;
+const proposedEvent = z.object({ type: z.string() });
+const frameSchema = z.record(z.string(), z.unknown());
 const input = { routineId: 'orders', occurrenceId: 'occurrence' };
 const selection = { threadId: 'prepared-thread', computerId: 'computer', generation: 1 };
 const conversationId = 'routine-session-occurrence';
@@ -91,7 +102,9 @@ async function setup() {
   await prepareRoutineInput(nats.store, keys, worker(), input);
   const ready = record('ready', 'computer-sales-assistant', 'computer.ready',
     { assistantId: 'sales-assistant', computerId: 'computer', generation: 1 });
-  await nats.seed([ready]);
+  await nats.seed([record('claimed', 'computer-sales-assistant', 'computer.claimed',
+    { assistantId: 'sales-assistant', computerId: 'computer', generation: 1,
+      tokenId: 'token:fixture-computer' }), ready]);
   actor = new BudgetActor(nats.store, 'test');
   await actor.start(10_000, 10_000, 'sales');
   await allocateRoutineRoot(nats.store, keys, worker(), input, actor, selection);
@@ -275,3 +288,435 @@ async function unrelatedTraffic() {
   expect(count).toBeGreaterThan(1);
 }
 it('sustained unrelated activity does not prevent inspection', unrelatedTraffic);
+
+
+function sender(enabled = true, replay = false) {
+  return createRoutineSender({ enabled, replay }, nats.store, keys, worker(), input,
+    selection, 'sender-attempt');
+}
+async function recordingComputer(computerId = 'computer') {
+  const server = createServer();
+  let starts = 0;
+  let sends = 0;
+  function rpc(method: string) {
+    if (method === 'turn/start') starts++;
+    return Promise.resolve({ thread: { id: selection.threadId, ephemeral: true, path: null },
+      turn: { id: 'recorded-turn' } });
+  }
+  async function grant() {}
+  function credential() {
+    return { value: 'fixture-bridge', expiresAt: Date.now() + 120_000 };
+  }
+  function privateSession() {
+    function close() {}
+    function stayOpen() {}
+    const session = { rpc, close, closed: new Promise<void>(stayOpen) };
+    return Promise.resolve(session);
+  }
+  const driver = { rpc, grant, credential, privateSession, journal: `${directory}/journal` };
+  let channel = bridgeChannel(server, driver);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Fixture unavailable');
+  const pair = generateKeyPairSync('ec', { namedCurve: 'P-256',
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' } });
+  await writeFile(`${directory}/signing.pem`, pair.privateKey, { mode: 0o600 });
+  const tokens = await tokenIssuer({ privateKeyPath: `${directory}/signing.pem`,
+    issuer: 'https://routine.test/' });
+  const connection = { computerId, assistantId: 'sales-assistant',
+    bearer: 'fixture-bridge', url: `ws://127.0.0.1:${address.port}/bridge` };
+  const options = { silo: 'test', store: nats.store, keys, binding };
+  let link = await connectBridge(options, connection, tokens);
+  function trackFrames() {
+    const send = link.socket.send.bind(link.socket);
+    function tracked(bytes: Parameters<typeof send>[0]) {
+      if (typeof bytes === 'string') {
+        const frame = frameSchema.parse(JSON.parse(bytes));
+        if (frame['type'] === 'turn') sends++;
+      }
+      send(bytes);
+    }
+    vi.spyOn(link.socket, 'send').mockImplementation(tracked);
+  }
+  trackFrames();
+  function wake() {
+    return Promise.resolve(link);
+  }
+  async function restart() {
+    link.socket.terminate();
+    await link.settled();
+    await channel.close();
+    channel = bridgeChannel(server, driver);
+    link = await connectBridge(options, connection, tokens);
+    trackFrames();
+  }
+  async function close() {
+    link.socket.terminate();
+    await channel.close();
+    await link.settled();
+    server.close();
+  }
+  function executed() {
+    if (link.socket.readyState === link.socket.CLOSED) {
+      throw new Error(`Recording bridge closed: ${link.rejection ?? 'unavailable'}`);
+    }
+    return starts === 1;
+  }
+  return { wake, restart, close, executed, get starts() { return starts; },
+    get sends() { return sends; } };
+}
+async function savedStarts() {
+  const rows = await history(nats.store, 'computer-sales-assistant', 'test');
+  function started(row: typeof rows[number]) {
+    return row.event.type === 'computer.turn_started';
+  }
+  return rows.filter(started);
+}
+async function handsOffOnce() {
+  const authority = sender();
+  const computer = await recordingComputer();
+  const root = actor.state.roots[0]!;
+  const call = { requesterId: 'alice', conversationId, turnId,
+    assistantId: 'sales-assistant', payingGroupId: 'sales', ...selection,
+    model: 'gpt-6.1-sol', priceTableId, contextDigest: '0'.repeat(64) };
+  const hold = await actor.reserve(call, 100, undefined, undefined, root.rootId);
+  await actor.uncertain(hold, 'settle_timeout');
+  const budgetPosition = await nats.store.head('budget-test');
+  const head = nats.store.head.bind(nats.store);
+  let activity = 0;
+  let startAppends = 0;
+  let conflicted = false;
+  const append = nats.store.append.bind(nats.store);
+  async function trackStart(...args: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(args[0].event);
+    if (proposed.type === 'computer.turn_started') startAppends++;
+    return append(...args);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(trackStart);
+  async function unrelated(target?: string, deadline?: number) {
+    // Keep traffic flowing through preparation, then force one publication conflict.
+    if (startAppends > 0 && (target === undefined || conflicted)) return head(target, deadline);
+    if (startAppends > 0) conflicted = true;
+    activity++;
+    await nats.seed([record(`busy-${activity}`, 'conversation-other', 'agent.turn_started',
+      { conversationId: 'other', turnId: `other-${activity}`, assistantId: 'sales-assistant' })]);
+    return head(target, deadline);
+  }
+  async function wake() {
+    advanceWake();
+    vi.spyOn(nats.store, 'head').mockImplementation(unrelated);
+    return computer.wake();
+  }
+  try {
+    const results = await Promise.all([authority.send(wake), sender().send(wake)]);
+    expect(results).toContainEqual({ status: 'sent' });
+    await until(computer.executed);
+    const starts = await savedStarts();
+    expect(starts).toHaveLength(1);
+    expect(starts[0]!.event.data).toMatchObject({ turnId, messageId,
+      rootId: actor.state.roots[0]!.rootId, threadId: selection.threadId });
+    expect(await readFile(`${directory}/journal.executions`, 'utf8')).toBe(`${turnId}\n`);
+    expect(await authority.send(computer.wake)).toEqual({ status: 'unknown' });
+    await computer.restart();
+    expect(await sender().send(computer.wake)).toEqual({ status: 'unknown' });
+    expect(computer.starts).toBe(1);
+    expect(computer.sends).toBe(1);
+    expect(await savedStarts()).toHaveLength(1);
+    expect(actor.state.roots).toHaveLength(1);
+    expect(activity).toBeGreaterThan(2);
+    expect(startAppends).toBe(2);
+    expect(await nats.store.head('budget-test')).toBe(budgetPosition);
+    expect(rootTotals(actor.state, root.rootId)).toEqual({
+      settledCents: 0, heldCents: 100, availableCents: 900 });
+    const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
+    function isInput(row: typeof rows[number]) {
+      return row.event.type === 'message.posted';
+    }
+    expect(rows.filter(isInput)).toHaveLength(1);
+  } finally { await computer.close(); }
+}
+it('hands an admitted routine to the real bridge and journal once with distinct ids', handsOffOnce);
+
+function advanceWake() {
+  const monotonic = performance.now.bind(performance);
+  function afterWake() {
+    return monotonic() + 14_000;
+  }
+  now += 14_000;
+  vi.spyOn(performance, 'now').mockImplementation(afterWake);
+}
+async function refusesAfterWake(kind: string) {
+  const authority = sender();
+  const computer = await recordingComputer();
+  let wakes = 0;
+  async function wake() {
+    wakes++;
+    advanceWake();
+    if (kind === 'Stop') {
+      const root = actor.state.roots[0]!;
+      const subject = `conversation-${conversationId}`;
+      await nats.seed([record('stop', subject, 'agent.turn_stop_requested',
+        { conversationId, turnId, requestedBy: 'alice' })]);
+      const position = await nats.store.head(subject);
+      await actor.stopRoot(root.rootId, 'requester_stop', subject, position);
+    } else await changes(kind);
+    return computer.wake();
+  }
+  try {
+    expect(await authority.send(wake)).toEqual({ status: 'unknown' });
+    expect(wakes).toBe(1);
+    expect(computer.sends).toBe(0);
+    expect(computer.starts).toBe(0);
+    expect(await savedStarts()).toEqual([]);
+    expect(await authority.send(computer.wake)).toEqual({ status: 'unknown' });
+  } finally { await computer.close(); }
+}
+it.each(['member', 'grant', 'expiry', 'routine.paused', 'computer', 'Stop'])(
+  'sends nothing after fourteen-second wake and %s', refusesAfterWake);
+
+async function inert(enabled: boolean, replay: boolean) {
+  const before = await nats.store.head();
+  const wake = vi.fn(forbidden);
+  const authority = enabled ? sender(enabled, replay)
+    : createRoutineSender({}, nats.store, keys, worker(), input, selection, 'sender-attempt');
+  expect(await authority.send(wake)).toEqual({ status: 'unknown' });
+  expect(wake).not.toHaveBeenCalled();
+  expect(await nats.store.head()).toBe(before);
+}
+it.each([[false, false], [true, true]])('does not wake or send enabled=%s replay=%s', inert);
+
+async function losesReply(stage: string) {
+  const authority = sender();
+  const computer = await recordingComputer();
+  const append = nats.store.append.bind(nats.store);
+  let lost = false;
+  async function loseStart(...args: Parameters<typeof append>) {
+    const result = await append(...args);
+    const proposed = proposedEvent.parse(args[0].event);
+    if (!lost && proposed.type === stage) {
+      expect(result.status).toBe('appended');
+      lost = true;
+      forbidden();
+    }
+    return result;
+  }
+  async function wake() {
+    const link = await computer.wake();
+    if (stage === 'send') {
+      const send = link.socket.send.bind(link.socket);
+      function loseSend(bytes: Parameters<typeof send>[0]) {
+        send(bytes);
+        lost = true;
+        forbidden();
+      }
+      vi.spyOn(link.socket, 'send').mockImplementationOnce(loseSend);
+    }
+    return link;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(loseStart);
+  try {
+    await authority.send(wake);
+    function replyLost() {
+      return lost;
+    }
+    await until(replyLost);
+    if (stage === 'send') await until(computer.executed);
+    expect(await authority.send(computer.wake)).toEqual({ status: 'unknown' });
+    await computer.restart();
+    expect(await sender().send(computer.wake)).toEqual({ status: 'unknown' });
+    expect(computer.starts).toBeLessThanOrEqual(1);
+    expect(computer.sends).toBe(stage === 'routine.run_activation_admitted' ? 0 : 1);
+    expect((await savedStarts()).length).toBeLessThanOrEqual(1);
+    expect(actor.state.roots).toHaveLength(1);
+  } finally { await computer.close(); }
+}
+it.each(['routine.run_activation_admitted', 'send', 'computer.turn_started'])(
+  'never redelivers after losing %s reply', losesReply);
+
+
+async function refusesChangedStart(field: string) {
+  const authority = sender();
+  const computer = await recordingComputer();
+  const link = await computer.wake();
+  const send = link.socket.send.bind(link.socket);
+  function alter(bytes: Parameters<typeof send>[0]) {
+    const text = z.string().parse(bytes);
+    const frame = frameSchema.parse(JSON.parse(text));
+    frame[field] = 'different';
+    send(JSON.stringify(frame));
+  }
+  vi.spyOn(link.socket, 'send').mockImplementationOnce(alter);
+  function closed() {
+    return link.socket.readyState === link.socket.CLOSED;
+  }
+  try {
+    await authority.send(computer.wake);
+    await until(closed);
+    expect(await savedStarts()).toEqual([]);
+    expect(computer.starts).toBe(0);
+  } finally { await computer.close(); }
+}
+it.each(['messageId', 'id', 'rootId', 'senderAttemptId'])(
+  'refuses changed %s through real report admission', refusesChangedStart);
+
+async function changesAtStartAppend() {
+  const authority = sender();
+  const computer = await recordingComputer();
+  const append = nats.store.append.bind(nats.store);
+  let attempted = false;
+  async function loseOwnership(...args: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(args[0].event);
+    if (proposed.type === 'computer.turn_started') {
+      attempted = true;
+      owned = false;
+    }
+    return append(...args);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(loseOwnership);
+  function reachedAppend() {
+    return attempted;
+  }
+  try {
+    await authority.send(computer.wake);
+    await until(reachedAppend);
+    const link = await computer.wake();
+    await link.settled();
+    expect(await savedStarts()).toEqual([]);
+    expect(computer.starts).toBe(0);
+  } finally { await computer.close(); }
+}
+it('rechecks live authority inside the computer start append', changesAtStartAppend);
+
+
+async function wrongComputerLink() {
+  const computer = await recordingComputer('other-computer');
+  try {
+    expect(await sender().send(computer.wake)).toEqual({ status: 'unknown' });
+    expect(computer.sends).toBe(0);
+    expect(await savedStarts()).toEqual([]);
+  } finally { await computer.close(); }
+}
+it('keeps routine instructions off a connection for another computer', wrongComputerLink);
+
+async function refusesLateChange(kind: string) {
+  const computer = await recordingComputer();
+  const append = nats.store.append.bind(nats.store);
+  let injected = false;
+  async function changed(...args: Parameters<typeof append>) {
+    const result = await append(...args);
+    const proposed = proposedEvent.parse(args[0].event);
+    if (!injected && proposed.type === 'computer.turn_started' && result.status === 'appended') {
+      injected = true;
+      if (kind === 'Stop') {
+        const stoppedData = { rootId: actor.state.roots[0]!.rootId,
+          reason: 'allowance_exhausted', attemptedBoundCents: 1, availableCents: 0 };
+        const stopped = record('late-stop', 'budget-test', 'budget.root_stopped', stoppedData);
+        stopped.source = 'models';
+        stopped.principal = { kind: 'system', id: 'models' };
+        await nats.seed([stopped]);
+      } else if (kind === 'payer') {
+        const removed = { teamId: 'sales', memberId: 'alice', removedBy: 'admin' };
+        const removal = record('late-payer', 'team-sales', 'team.member_removed', removed);
+        await nats.seed([removal]);
+      } else {
+        await changes(kind);
+      }
+    }
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changed);
+  try {
+    await sender().send(computer.wake);
+    const link = await computer.wake();
+    function completed() {
+      return computer.starts > 0 || link.socket.readyState === link.socket.CLOSED;
+    }
+    await until(completed);
+    expect(injected).toBe(true);
+    expect(computer.starts).toBe(0);
+    expect(await savedStarts()).toHaveLength(1);
+  } finally {
+    await computer.close();
+  }
+}
+it.each(['Stop', 'grant', 'payer', 'worker', 'routine.paused', 'member', 'computer'])(
+  'refuses late %s after saving the start and before releasing credentials', refusesLateChange);
+
+async function acceptsOtherThread() {
+  const computer = await recordingComputer();
+  const append = nats.store.append.bind(nats.store);
+  let injected = false;
+  async function changed(...args: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(args[0].event);
+    if (!injected && proposed.type === 'computer.turn_started') {
+      injected = true;
+      const otherStart = { assistantId: 'sales-assistant', computerId: 'computer',
+        conversationId: 'another-chat', turnId: 'another-turn', threadId: 'another-thread',
+        requesterId: 'alice', task: 'chat_turn', executionMode: 'restricted' };
+      const started = record('other-start', 'computer-sales-assistant',
+        'computer.turn_started', otherStart);
+      await nats.seed([started]);
+    }
+    return append(...args);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changed);
+  try {
+    await sender().send(computer.wake);
+    const link = await computer.wake();
+    function completed() {
+      return computer.starts > 0 || link.socket.readyState === link.socket.CLOSED;
+    }
+    await until(completed);
+    expect(injected).toBe(true);
+    expect(computer.starts).toBe(1);
+    expect(await savedStarts()).toHaveLength(2);
+  } finally {
+    await computer.close();
+  }
+}
+it('retries an unsaved start after another computer thread advances its stream', acceptsOtherThread);
+
+
+async function refusesRelevantComputerChange(kind: string) {
+  const computer = await recordingComputer();
+  const append = nats.store.append.bind(nats.store);
+  let injected = false;
+  async function changeBeforeAppend(...args: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(args[0].event);
+    if (!injected && proposed.type === 'computer.turn_started') {
+      injected = true;
+      if (kind === 'replacement') {
+        await changes('computer');
+      } else {
+        const competingStart = { assistantId: 'sales-assistant', computerId: 'computer',
+          conversationId, turnId: 'competing-turn', threadId: selection.threadId,
+          requesterId: 'alice', task: 'chat_turn', executionMode: 'restricted' };
+        const competing = record('competing-start', 'computer-sales-assistant',
+          'computer.turn_started', competingStart);
+        await nats.seed([competing]);
+      }
+    }
+    return append(...args);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changeBeforeAppend);
+  try {
+    await sender().send(computer.wake);
+    const link = await computer.wake();
+    function completed() {
+      return computer.starts > 0 || link.socket.readyState === link.socket.CLOSED;
+    }
+    await until(completed);
+    expect(injected).toBe(true);
+    expect(computer.starts).toBe(0);
+    const starts = await savedStarts();
+    for (const start of starts) {
+      expect(start.event.data).not.toMatchObject({ turnId });
+    }
+  } finally {
+    await computer.close();
+  }
+}
+it.each(['replacement', 'selected thread'])(
+  'refuses %s activity while saving the computer start', refusesRelevantComputerChange);

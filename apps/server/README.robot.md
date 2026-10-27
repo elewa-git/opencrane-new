@@ -5360,22 +5360,63 @@ The result contains identifiers only. It preserves the separate message and turn
 and returns the actual budget root id, plus the admission event id and saved position.
 It always returns `status: unknown` and `executionAvailable: false`. These mean delivery
 has not been established by this helper. An admission receipt is not proof of an unsent
-attempt. This is preparation for a future sender operation, not a public status route
-or a permission to dispatch. There is no production caller or bridge hook.
+attempt. This check is not a public status route or a permission to dispatch.
+There is no production caller for the inspector.
 
-This is the first part of P4-24 PR 10c, Part of #106. The remaining part needs the actual
-bridge/journal hand-off, positive unsent proof, wake, fresh company prerequisites and
-recording-computer turn-start tests. The current bridge identifies turns by message id;
-routine admissions retain separate ids. That binding must be carried through report
-admission before enabling delivery. Bound owner Ask, company calls, full reconciliation
-and production enablement remain later work. No fresh-install journey has run.
-Prerequisite #763 merged at `db34b24dffe0699bfcc24eaaa3d3ffb294481239`.
+### Internal routine hand-off
 
-`test/routine-sender.test.ts` checks missing and changed admission, duplicate inspection,
-lost admission replies, restart, changed access and controls after fourteen seconds of
-simulated preparation time, long histories, unrelated traffic and uncertain holds.
-It does not simulate wake or claim a recorded computer start. The existing routine
-session suite covers the unchanged production bridge exclusion and replay guards.
+`createRoutineSender({ enabled, replay }, ...admissionArguments)` is internal and
+has no production caller. Omitted `enabled`, false, or replay refuses before wake.
+Only `AppendOutcome.kind=appended` creates one live sender. Duplicate receipts,
+missing publication replies and restart return unknown. The sender is consumed before
+waiting for wake; it cannot repeat. The wake callback returns the existing connected
+bridge. Saved activation receipts keep `executionAvailable: false`.
+
+After wake, `readRoutineActivation` reloads history before starting its two-second
+check. The sender repeats the short checks immediately before sending. It supplies
+labelled user instructions without tools. Its one live `checkStart` callback checks
+the reported input, turn, allocated root, sender attempt and prepared thread. The
+computer append repeats current checks within the same deadline. The sending connection
+binds that callback to its turn, consumes it once and forgets it on disconnect. The ordinary
+bridge keeps refusing prepared sessions, and no one-second resend loop is used.
+
+The computer journal keeps the distinct ids on its start report and records execution
+before `turn/start`. The server saves messageId and rootId on the computer start.
+A proven unsaved computer append rereads new computer events and retries with their
+latest position within the original deadline. Current preparation checks still refuse
+computer replacement, control changes and activity on the selected thread.
+A lost or uncertain reply never qualifies for that retry.
+After the start is saved, admission checks the small access streams, worker ownership,
+routine state and the allocated root's Stop again before releasing credentials.
+Only the exact start event just saved is exempt from the computer change check.
+History is loaded before the short access check; later checks read only new events.
+A repeated start after lost acknowledgement cannot obtain another execution grant.
+This conservative path does not recover uncertain work or renew a routine turn.
+Allowances and uncertain holds remain unchanged. Company dispatch, lifecycle Stop
+reactions and bound Ask (design rows 11–13) must precede automatic enablement.
+
+Part of #106, P4-24 PR 10d. `test/routine-sender.test.ts` uses real NATS/OpenFGA,
+the WebSocket bridge and computer journal with a local recording execution driver.
+It covers duplicate senders, lost replies, restart and a controlled fourteen-second
+wake followed by changed authority. It also holds the saved start reply while Stop,
+model grant loss, payer membership loss, worker ownership loss or routine pause occurs.
+Each must leave zero driver `turn/start` calls. Another thread's computer activity must
+allow exactly one execution; replacement and selected-thread activity must refuse it.
+No model service or dev stack is called. Fresh-install live qualification: NOT RUN.
+
+The success fixture supplies the allocated thread id. It proves admission and transport
+behaviour only. A driver-generated private thread id still fails the exact identity check.
+This is the remaining third finding for #775, deferred under the requested rework size limit.
+The native-thread probe reproduces zero executions where one is required.
+The follow-up must prepare an ephemeral native thread before root allocation, return its
+actual id with the computer generation, and retain that same private session for delivery.
+It must reuse the native-thread-first ordering from #762 and the private routine session
+rules from #735. Bind preparation to the occurrence and live connection, consume it once,
+and close it on refusal, disconnect, Stop or lost ownership. Replace the selected-id success
+fixture with generated native ids and test expiry, replacement, duplicate delivery and
+lost replies. Keep exact thread, access, money and memory checks and automatic execution
+disabled throughout. Connecting this exchange and its runner lifecycle with the race tests
+would exceed about 600 changed lines in this rework.
 
 ## Routine metadata reads
 

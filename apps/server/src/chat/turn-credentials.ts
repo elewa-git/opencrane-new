@@ -66,7 +66,7 @@ async function turnContextFor(options: BridgeOptions,
   report: Report,
   binding: NonNullable<Awaited<ReturnType<typeof turnCommand>>>) {
   function isMessage(row: ChatRows[number]) {
-    return row.event.type === 'message.posted' && row.event.id === report.turnId;
+    return row.event.type === 'message.posted' && row.event.id === (binding.messageId ?? report.turnId);
   }
   function decrypt(data: unknown) {
     return options.keys.decrypt(options.silo, report.conversationId, data);

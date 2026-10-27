@@ -15,6 +15,9 @@ fingerprint of the checked request and a fixed reason. They contain no computer 
 Approval cancellation can record takeover as its fixed cause. It ends unused
 consent for a matching saved control request and carries no private review details.
 
+Computer turn records can keep a routine's input id separate from its turn id,
+alongside the allocated spending root. These identifiers grant no permission to send.
+
 ## Where it fits
 
 This is one of the packages that build everything from the
@@ -28,7 +31,7 @@ Allow, Ask or Block choice for a tool.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions"]
-  server["apps/server<br/>back end"] -.->|checks routine allowance fingerprints and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
+  server["apps/server<br/>back end"] -.->|checks routine turn identities, allowance fingerprints and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events

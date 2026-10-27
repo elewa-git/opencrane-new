@@ -17,6 +17,7 @@ class MemoryReportRejected extends ReportRejected {}
 
 const existingReportSchema = z.object({ sequence: z.int().positive(), previousSequence: z.int().nonnegative().optional(), conversationId: z.string().regex(/^[\w-]{1,200}$/u),
   turnId: z.string(), assistantId: z.string(), requesterId: z.string().optional(), threadId: z.string().optional(), messageId: z.string().optional(), text: z.string().max(128_000).optional(),
+  rootId: z.string().optional(), senderAttemptId: z.string().optional(),
   commandDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(), exitCode: z.int().optional(),
   executionMode: z.enum(['restricted', 'memory_free']).optional(),
   sharingClass: z.literal('shared_only').optional(),

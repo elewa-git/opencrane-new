@@ -22,6 +22,8 @@ export interface BridgeReport {
   exitCode?: number;
   threadId?: string;
   messageId?: string;
+  rootId?: string;
+  senderAttemptId?: string;
   text?: string;
   executionMode?: 'restricted' | 'memory_free';
   sharingClass?: 'shared_only';
@@ -31,12 +33,23 @@ export interface BridgeReport {
 }
 
 interface ReportInput {
+  messageId?: string;
+  rootId?: string;
+  senderAttemptId?: string;
   executionMode?: 'restricted' | 'memory_free';
   sharingClass?: 'shared_only';
   id: string;
   conversationId: string;
   assistantId: string;
   requesterId?: string;
+}
+
+function addRoutineStart(report: BridgeReport, input: ReportInput | BridgeReport) {
+  if (report.type !== 'agent.turn_started' || !input.senderAttemptId) return;
+  if (!input.messageId || !input.rootId) throw new Error('Invalid routine start');
+  report.messageId = input.messageId;
+  report.rootId = input.rootId;
+  report.senderAttemptId = input.senderAttemptId;
 }
 
 interface JournalDriver {
@@ -81,6 +94,10 @@ function parseStoredReport(line: string): BridgeReport {
     assistantId: requiredString(value, 'assistantId'),
     type: requiredString(value, 'type'),
   };
+  const rootId = optionalString(value, 'rootId');
+  const senderAttemptId = optionalString(value, 'senderAttemptId');
+  if (rootId) report.rootId = rootId;
+  if (senderAttemptId) report.senderAttemptId = senderAttemptId;
   const requesterId = optionalString(value, 'requesterId');
   if (requesterId) report.requesterId = requesterId;
   const previousSequence = optionalNumber(value, 'previousSequence');
@@ -186,6 +203,7 @@ export function reportJournal(driver: JournalDriver) {
       previousSequence: previousReport?.sequence ?? 0,
       sequence: reports.length + 1,
     };
+    addRoutineStart(report, input);
     if (input.requesterId) report.requesterId = input.requesterId;
     if (input.executionMode === 'restricted') report.executionMode = 'restricted';
     if (input.sharingClass === 'shared_only') {

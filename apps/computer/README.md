@@ -19,7 +19,7 @@ flowchart LR
   apps --> ops["apps/ops<br/>background workers"]
   apps --> server["apps/server<br/>back end"]
   ops -->|starts and pauses| computer
-  server -->|messages, files, Stop and disconnect| computer
+  server -->|messages, internal routine turns, files and Stop| computer
   computer -->|progress and results| server
   computer -.->|records private thread before tool approval| server
   computer -->|checks command ownership| executor["socket-denied executor"]
@@ -62,6 +62,10 @@ flowchart LR
   Cleanup also removes newly created folders if opening them fails.
   Network execution stays disabled until the call's identity and isolation are proved.
 - Checks the image's licences before publishing it.
+
+An internal routine turn keeps its saved input id separate from its execution id.
+The journal returns both ids and the spending root when asking the server to start.
+Automatic routine execution remains disabled.
 
 ## Processes it handles
 

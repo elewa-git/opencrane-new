@@ -30,6 +30,8 @@ import type { ChatOptions } from './routes.ts';
 type BridgeOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
   Partial<Pick<ChatOptions, 'binding'>> &
   Pick<Parameters<typeof bridgeControl>[0], 'stopExecution'>;
+type RoutineStart = NonNullable<Parameters<typeof turnCommand>[1]['routineStart']>;
+type ReportOptions = BridgeOptions & { routineStart: RoutineStart };
 type BridgeInput = { url: string; computerId: string; assistantId: string; bearer: string };
 type ReportBatch = { values: unknown[]; sequences: number[]; textLength: number;
   bytes: number; started: boolean };
@@ -38,7 +40,8 @@ type ReportQueue = { pending: Promise<void>; count: number; bytes: number;
 const receiptData = z.object({ type: z.literal('file_received') });
 const reportDetails = z.object({
   sequence: z.int(), previousSequence: z.int().optional(), conversationId: z.string(),
-  turnId: z.string(), type: z.string(),
+  turnId: z.string(), type: z.string(), messageId: z.string().optional(),
+  rootId: z.string().optional(), senderAttemptId: z.string().optional(),
   text: z.string().optional(),
   executionMode: z.enum(['restricted', 'memory_free']).optional(), threadId: z.string().optional(),
 });
@@ -72,13 +75,14 @@ function turnStatus(type: string) {
   return 'failed';
 }
 
-async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
+async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
   tokens: Tokens | undefined, socket: WebSocket,
   report: z.infer<typeof reportDetails>, batch: ReportBatch) {
   // Save reports already accepted into the bounded queue after a disconnect.
   // Otherwise a replay can fill the queue again before its saved position advances.
   const context: Parameters<typeof turnCommand>[1] = { silo: options.silo, ...input };
   if (options.binding) context.binding = options.binding;
+  context.routineStart = options.routineStart;
   if (report.type === 'agent.turn_started') {
     const facts = await readChatFacts(options.store, options.silo,
       report.conversationId, report.turnId);
@@ -154,7 +158,7 @@ async function deliverFile(options: BridgeOptions, input: BridgeInput, socket: W
   delivered.add(file.fileId);
 }
 
-function reportReceiver(options: BridgeOptions, input: BridgeInput,
+function reportReceiver(options: ReportOptions, input: BridgeInput,
   tokens: Tokens | undefined, socket: WebSocket, refuse: (reason: string) => void,
   approvals: ReturnType<typeof bridgeApprovals>, control: ReturnType<typeof bridgeControl>) {
   function reportFailure(error: unknown) {
@@ -247,7 +251,23 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     if (code === 1008 && !control.receipt) rejection ??= 'Bridge gate refused';
   }
   socket.once('close', closed);
-  const reports = reportReceiver(options, input, tokens, socket, refuse, approvals, control);
+  const routineStarts = new Map<string, RoutineStart>();
+  function bindRoutineStart(turnId: string, check: RoutineStart) {
+    if (routineStarts.has(turnId)) throw new ReportRejected('Routine sender already bound');
+    routineStarts.set(turnId, check);
+  }
+  async function routineStart(report: Parameters<RoutineStart>[0]) {
+    const check = routineStarts.get(report.turnId);
+    routineStarts.delete(report.turnId);
+    if (!check) throw new ReportRejected('Routine start unavailable');
+    return check(report);
+  }
+  function forgetRoutineStarts() {
+    routineStarts.clear();
+  }
+  socket.once('close', forgetRoutineStarts);
+  const reportOptions = { ...options, routineStart };
+  const reports = reportReceiver(reportOptions, input, tokens, socket, refuse, approvals, control);
   socket.on('message', reports.receiveReport);
   try {
     await resumeBridgeReports(options, input, socket, control);
@@ -275,6 +295,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   }
   return {
     socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting, control,
+    bindRoutineStart, computerId: input.computerId, assistantId: input.assistantId,
     get rejection() { return rejection; },
     settled,
   };

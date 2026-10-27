@@ -13,6 +13,9 @@ export interface ToolServer {
 export interface Turn {
   executionMode: 'restricted' | 'memory_free';
   sharingClass?: 'shared_only';
+  messageId?: string;
+  rootId?: string;
+  senderAttemptId?: string;
   id: string;
   conversationId: string;
   assistantId: string;
@@ -67,10 +70,19 @@ export function parseTurn(value: Record<string, unknown>): Turn {
     attachments: value['attachments'],
     omittedAttachments,
   };
+  readRoutineTurn(value, turn);
   if (sharingClass) turn.sharingClass = sharingClass;
   if (typeof requesterId === 'string') turn.requesterId = requesterId;
   if (value['tools'] !== undefined) turn.tools = parseTools(value['tools']);
   return turn;
+}
+
+function readRoutineTurn(value: Record<string, unknown>, turn: Turn) {
+  if (value['senderAttemptId'] !== undefined) {
+    turn.messageId = requiredString(value, 'messageId');
+    turn.rootId = requiredString(value, 'rootId');
+    turn.senderAttemptId = requiredString(value, 'senderAttemptId');
+  }
 }
 
 function parseContextClass(value: unknown, executionMode: Turn['executionMode']) {
