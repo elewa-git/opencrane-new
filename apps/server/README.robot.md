@@ -6034,7 +6034,11 @@ conversation, turn, thread, input generation and a saved cause id. It derives th
 requester, assistant, computer, generation, personal scope and loaded references from
 saved chat evidence. It accepts versioned personal correction/forget events only.
 `memoryReferences` must show that this exact event changes a loaded reference or its
-dependency from current to unavailable, at the same check time. Unrelated changes save nothing.
+dependency from current to unavailable. Both checks use the saved cause's timestamp,
+so processing the cause after the old fact expires still records the same change.
+Each addition must be valid at its saved load time and scope position. A later recall
+can add facts written after the cause; those additions remain in replay and do not
+need to exist before the cause. Unrelated changes save nothing.
 Missing or mismatched evidence refuses. It reads no keys, facts table or permissions.
 The former reader need not retain access for the server to withdraw use of that context.
 
@@ -6043,13 +6047,17 @@ and attempts one conditional append with a two-second deadline. It does not crea
 access snapshot: this operation only withdraws use, and grants no authority.
 Recall or closure races return `reload_required`; callers must reload and reconcile.
 An uncertain append returns `unavailable`. Repeating the same request recovers the
-saved event id and input generation. A saved invalidation never transitions twice.
+saved event id and input generation before reading memory history or checking expiry.
+This also recovers a lost append reply after the old fact expires. A saved invalidation
+never transitions twice.
 The receipt confirms evidence only, not process termination or buffer clearance.
 Replay retains all loaded references and creates no grant or Stop effect.
 
 Tests: `test/memory-invalidation.test.ts`, plus the command-to-model/tool/renewal
 case in `test/memory-dispatch.test.ts`. The existing fold and security suites cover
 retained references and the unchanged event contract. No route or event type was added.
+The invalidation tests use real NATS to check retries and delayed first attempts at
+and after expiry, lost replies, and a competing recall with a newly written fact.
 Native admission remains disabled. Subscriptions, expiry/access invalidation, Stop,
 volatile delivery, native forwarding and qualified enablement remain later work.
 Fresh-install live qualification: NOT RUN.

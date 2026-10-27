@@ -69,6 +69,8 @@ Correct and Forget validate their targets but remain disabled.
 An internal command can record that a personal turn's loaded memory became invalid
 after a saved correction or forget. It keeps every loaded reference for replay and
 returns a receipt without fact text. Automatic detection and stopping remain planned.
+Retries recover the same saved receipt after the old fact expires. A competing recall
+keeps its added references when the server reloads and records the invalidation.
 After a restart, memory recovery uses the existing private keys and saved command records.
 Overlapping recovery calls wait for the same scan to finish before reporting completion.
 A new assistant with no access to notes does not block personal memory.

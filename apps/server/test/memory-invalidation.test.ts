@@ -154,7 +154,7 @@ async function lostReplyAfterExpiry() {
   const { expiresAt } = await loadExpiringFact();
   await change('forgotten', 'expiring');
   const appendSaved = setup.store.append.bind(setup.store);
-  async function loseReply(command: Parameters<typeof appendSaved>[0]) {
+  async function loseReply(command: Parameters<typeof appendSaved>[0]): Promise<never> {
     appendSpy.mockRestore();
     const result = await appendSaved(command);
     expect(result.status).toBe('appended');
@@ -169,7 +169,9 @@ async function lostReplyAfterExpiry() {
   const clock = vi.spyOn(Date, 'now').mockReturnValue(expiresAt + 60_000);
   const read = setup.store.readStream.bind(setup.store);
   async function* unavailableMemoryHistory(...args: Parameters<typeof read>) {
-    if (args[0] === `scope-${scopeId}`) throw new Error('Memory history unavailable');
+    if (args[0] === `scope-${scopeId}`) {
+      throw new Error('Memory history unavailable');
+    }
     yield* read(...args);
   }
   const readSpy = vi.spyOn(setup.store, 'readStream').mockImplementation(unavailableMemoryHistory);

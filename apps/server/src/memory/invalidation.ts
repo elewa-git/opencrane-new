@@ -48,8 +48,39 @@ function checkedCause(rows: StoredEvent[], request: Request, saved: MemoryContex
   return { index, row, data };
 }
 
+function checkLoadedReferences(options: Options, rows: StoredEvent[],
+  state: MemoryContextState, scopeId: string) {
+  for (const encoded of state.events.values()) {
+    const decoded: unknown = JSON.parse(encoded);
+    const loaded = memoryContextRecordedEventSchema.parse(decoded);
+    if (loaded.data.action !== 'loaded' || loaded.data.additions.length === 0) {
+      continue;
+    }
+    function matchesScope(position: MemoryContextRecord['scopePositions'][number]) {
+      return position.scopeId === scopeId;
+    }
+    const position = loaded.data.scopePositions.find(matchesScope);
+    if (!position) {
+      throw new Error('Memory evidence unavailable');
+    }
+    const scopePosition = position.position;
+    function throughLoad(row: StoredEvent) {
+      return row.sequence <= scopePosition;
+    }
+    const loadedRows = rows.filter(throughLoad);
+    const loadedAt = Date.parse(loaded.time);
+    const references = memoryReferences(loadedRows, options.silo, scopeId, 'event-only', loadedAt);
+    // Check each addition where it was loaded; later recalls need not predate the cause.
+    for (const reference of loaded.data.additions) {
+      if (reference.scopeId !== scopeId || references.current(reference) !== 'current') {
+        throw new Error('Memory evidence unavailable');
+      }
+    }
+  }
+}
+
 function affected(options: Options, rows: StoredEvent[], request: Request,
-  saved: MemoryContextRecord, chat: ChatFacts, scopeId: string) {
+  saved: MemoryContextRecord, state: MemoryContextState, scopeId: string) {
   const cause = checkedCause(rows, request, saved);
   const beforeRows = rows.slice(0, cause.index);
   const afterRows = rows.slice(0, cause.index + 1);
@@ -60,12 +91,12 @@ function affected(options: Options, rows: StoredEvent[], request: Request,
   const after = memoryReferences(afterRows, options.silo, scopeId, 'event-only', checkedAt);
   const target = { scopeId, memoryId: cause.data.memoryId, revision: cause.data.expectedRevision };
   if (before.current(target) !== 'current') throw new Error('Memory change unavailable');
+  checkLoadedReferences(options, rows, state, scopeId);
   let changed = false;
-  for (const reference of chat.memoryContext!.references) {
-    if (reference.scopeId !== scopeId || before.current(reference) !== 'current') {
-      throw new Error('Memory evidence unavailable');
+  for (const reference of state.references) {
+    if (before.current(reference) === 'current' && after.current(reference) !== 'current') {
+      changed = true;
     }
-    changed ||= after.current(reference) !== 'current';
   }
   return { changed, position: cause.row.sequence };
 }
@@ -88,6 +119,7 @@ async function recordInvalidation(options: Options, request: Request): Promise<R
     inputGeneration: saved.inputGeneration };
   const recorded = state.events.get(id);
   if (recorded !== undefined) {
+    // Recover the durable result before expiry or unavailable memory history can hide it.
     const decoded: unknown = JSON.parse(recorded);
     const recovered = memoryContextRecordedEventSchema.parse(decoded);
     if (recovered.data.action !== 'invalidated' ||
@@ -102,7 +134,7 @@ async function recordInvalidation(options: Options, request: Request): Promise<R
   const scopeId = memoryScopeId(options.silo, 'person', saved.requesterId);
   const rows = await history(options.store, `scope-${scopeId}`, options.silo,
     performance.now() + 10_000);
-  const cause = affected(options, rows, request, saved, chat, scopeId);
+  const cause = affected(options, rows, request, saved, state, scopeId);
   if (!cause.changed) return { status: 'unchanged' };
 
   const current = await readChatFacts(options.store, options.silo,
