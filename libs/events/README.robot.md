@@ -6,6 +6,15 @@ This package is the typed event catalogue used by server validation and the even
 core. It defines envelopes, per-type data schemas and examples; it does not
 append, project or dispatch events. Its routine fold rebuilds facts in memory.
 
+`connection.created.activation` accepts `oauth_confirmed` with required `account`:
+verified `issuer` and `subject`, actual `scopes` (at most 64), and integer `expiresAt`.
+Its existing fields pin generation 1, exact custody UID/version, endpoint, operation,
+owner and preceding claim position. The internal confirmation command stages the exact
+saved reply first; no material-derived digest enters the event. The fold requires the
+two preceding consent records and keeps OAuth unavailable for selection and release.
+Legacy records without activation and bearer saves still parse unchanged. Refreshed
+records retain the bearer-only activation contract. No event type or reaction is added.
+
 `connection.oauth_started` is a strict first-connect record on the personal profile stream.
 It binds user/server/installation/profile, attempt and state digests, exact custody reference,
 UID/version, expectedSequence zero and original appendUntil. Its internal command confirms

@@ -2,6 +2,31 @@
 
 For people, read [README.md](README.md) first.
 
+## First OAuth account confirmation (P3-9 PR 9d; Part of #50)
+
+`confirmPersonalOAuth` is internal and has no route, package export or replay reaction.
+The original frozen verified worker result plus explicit `true` confirmation is required
+for a new activation. Copies, unsigned results and another attempt cannot activate it.
+The worker keeps private bindings in a WeakMap. Restart recovers and verifies the saved
+reply again, without another exchange, to obtain a new confirmation result.
+
+The shared profile lock covers history, exact attempt/reply UID/version reads, signature
+verification, generation staging and one conditional `connection.created` append. The
+command derives the account from signed evidence and requires explicit `scope` and
+`expires_in` in the private reply. Expiry counts from the earlier saved claim time, so
+recovery cannot extend it. Missing lifetime or scopes refuse activation. The full reply
+is staged unchanged as generation 1. No token value or material-derived digest is public.
+Current membership, settings, policy and admin blocks are rechecked at publication,
+inside the original two-second deadline. A changed verification key refuses recovery.
+
+The fold accepts exactly consent, callback claim and first activation in that order.
+It retains the exact generation references but reports `unavailable`, keeping bearer
+selection, rotation and release closed. Existing bearer and legacy folds remain unchanged.
+Original receipts return `saved`, generation 1 and `callsAvailable: false`; current owner
+membership is checked once. Receipt recovery precedes expired consent reads and performs
+no staging or exchange. It confirms a past save, never present permission to use it.
+Reconnect, refresh, OAuth revoke/use integration and UI remain later work. Live: NOT RUN.
+
 ## Signed identity from private custody (P3-9 PR 9c; Part of #50)
 
 `oauth-identity.ts` verifies the identity in the exact saved response using installed
@@ -33,8 +58,8 @@ without another provider send. Uncertain custody stays unknown.
 attempts and safe errors. `connection-custody.test.ts` uses the real callback/exchange
 with a signed local provider, exact recovery, nonce privacy and final-read faults.
 Each consent test uses a separate server record so its history does not include earlier cases.
-Confirmation, activation, selection, reconnect, refresh, revoke and governed use remain
-later work. Live provider and fresh-install qualification: NOT RUN.
+The confirmation above saves a first generation. Selection, reconnect, refresh, revoke
+and governed use remain later work. Live provider and fresh-install qualification: NOT RUN.
 
 ## Private provider transport (P3-9 PR 9a, first part; Part of #50)
 
@@ -90,7 +115,7 @@ The exact reply is immutable private custody. `unconfirmed` returns changeRef, s
 reference and optional verified identity as described above. Neither status nor custody grants identity confirmation or tool access.
 Changed objects, failed flushes and lost replies are covered with real fixture services.
 Valid JSON passes at 8,192 bytes and fails above it. Production guards stay unchanged.
-Routes, activation, refresh and revoke remain later work. Live qualification: NOT RUN.
+Routes, refresh and revoke remain later work; internal confirmation is described above. Live qualification: NOT RUN.
 
 ## Private callback claim (P3-9 PR 8c; Part of #50)
 
@@ -169,7 +194,7 @@ Failures return fixed `unknown` without a URL. Retries retain the original chang
 beyond transport deduplication. The private `consentUrl` contains fixed code/S256 parameters,
 configured client/redirect/scopes and opaque state. No provider request or discovery runs.
 The event carries references and digests only, adds no reaction and leaves bearer folds/readers
-unchanged. Replay cannot read custody or return a URL. No public API is added. Guarded exchange, confirmation, activation, selection and reconnect remain later work.
+unchanged. Replay cannot read custody or return a URL. No public API is added. Guarded exchange, selection and reconnect remain later work; internal confirmation is described above.
 `connection-custody.test.ts` covers real custody, NATS, PostgreSQL locks and OpenFGA, including
 concurrent starts, lost replies, changed bindings and changes while dependencies are awaited.
 Member removal or server withdrawal before publication leaves zero consent events. Changes

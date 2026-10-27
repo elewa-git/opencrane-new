@@ -6,7 +6,7 @@ import { connectionOAuthExchangeClaimedDataSchema } from '@opencrane/events';
 import type { Db } from '@opencrane/projections';
 import { history } from './actor.ts';
 import { connectionOperationId } from './bearer-connections.ts';
-import type { connectionCustody } from './connection-custody.ts';
+import type { connectionCustody, ConnectionStage } from './connection-custody.ts';
 import { withConnectionStage } from './connection-stage-lock.ts';
 import { oauthConsentUrl } from './oauth-attempt.ts';
 import { takePersonalOAuthClaim } from './oauth-callback.ts';
@@ -17,6 +17,18 @@ import type { RemoteNetwork } from './remote-https.ts';
 
 type Custody = ReturnType<typeof connectionCustody>;
 type Saved = Awaited<ReturnType<typeof checkPersonalOAuthStart>>;
+type Evidence = { session: unknown; input: unknown; saved: Saved;
+  claimed: StoredEvent; resultStage: ConnectionStage;
+  identity: NonNullable<Awaited<ReturnType<Custody['recover']>>['identity']> };
+const evidence = new WeakMap<object, Evidence>();
+
+/** Accept only the original live result. Copies and event readback cannot confirm an account. */
+export function personalOAuthEvidence(value: unknown) {
+  if (typeof value === 'object' && value !== null) {
+    return evidence.get(value);
+  }
+  return undefined;
+}
 
 /** Run only from trusted live orchestration. Replay never calls this worker. */
 export async function exchangePersonalOAuth(store: EventStore, binding: Binding,
@@ -92,13 +104,25 @@ export async function exchangePersonalOAuth(store: EventStore, binding: Binding,
     if (verified && Date.now() >= verified.expiresAt) {
       throw new Error('OAuth identity expired');
     }
-    const verifiedIdentity = verified?.identity;
-    return { status: 'unconfirmed' as const, changeRef: result.resultStage.operationId,
-      sequence: result.claimed.sequence, reference: result.identity.reference, verifiedIdentity };
+    const checked = { ...result, session, input };
+    return unconfirmedResult(checked, verified);
   } catch {
     // Keep provider replies, custody failures and their causes out of returned status.
     return { status: 'unknown' as const };
   }
+}
+
+function unconfirmedResult(checked: Evidence,
+  verified: Awaited<ReturnType<typeof verifyOAuthIdentity>>) {
+  const verifiedIdentity = Object.freeze(verified?.identity);
+  const fields = { status: 'unconfirmed' as const,
+    changeRef: checked.resultStage.operationId, sequence: checked.claimed.sequence,
+    reference: checked.identity.reference, verifiedIdentity };
+  const receipt = Object.freeze(fields);
+  if (verified) {
+    evidence.set(receipt, checked);
+  }
+  return receipt;
 }
 
 function checkedClaim(saved: Saved, claimed: StoredEvent) {

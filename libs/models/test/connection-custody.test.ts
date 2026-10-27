@@ -3004,7 +3004,8 @@ async function exchangeFixture(mode = 'valid', signed = false) {
     signedClaims.setExpirationTime('1m');
     const token = await signedClaims.sign(keys.privateKey);
     responseText = JSON.stringify({ access_token: 'result-canary', token_type: 'Bearer',
-      id_token: token, name: 'provider-name-canary', scope: 'read', expires_in: 3600 });
+      id_token: token, refresh_token: 'refresh-canary', name: 'provider-name-canary',
+      scope: 'read', expires_in: 3600 });
   }
   async function respond(request: IncomingMessage, response: ServerResponse) {
     const chunks: Buffer[] = [];
@@ -3457,8 +3458,13 @@ async function confirmsOneGeneration() {
     expect(test.sends).toBe(1);
     expect(test.store.creates).toBe(4);
     const exposed = JSON.stringify({ results, rows });
-    for (const canary of ['result-canary', 'provider-name-canary', test.responseText]) {
-      const digest = createHash('sha256').update(canary).digest('hex');
+    const privateReply = z.object({ id_token: z.string() }).parse(JSON.parse(test.responseText));
+    const canaries = ['result-canary', 'refresh-canary', 'provider-name-canary',
+      privateReply.id_token, test.responseText];
+    for (const canary of canaries) {
+      const hash = createHash('sha256');
+      hash.update(canary);
+      const digest = hash.digest('hex');
       expect(exposed).not.toContain(canary);
       expect(exposed).not.toContain(digest);
     }
@@ -3477,9 +3483,10 @@ it('confirms one exact OAuth generation and recovers its receipt after consent e
 async function refusesConfirmation(change: string) {
   const test = await exchangeFixture('valid', true);
   try {
-    let evidence: unknown = await test.run();
+    const original = await test.run();
+    let evidence: unknown = original;
     if (change === 'account') {
-      evidence = { ...evidence as object,
+      evidence = { ...original,
         verifiedIdentity: { issuer: test.configuration.issuer, subject: 'other-account' } };
     } else if (change === 'profile') {
       test.command.profileId = 'another-profile';
@@ -3490,7 +3497,8 @@ async function refusesConfirmation(change: string) {
     } else if (change === 'expiry') {
       vi.spyOn(Date, 'now').mockReturnValue(test.started.appendUntil);
     } else if (change === 'key') {
-      test.configuration.identityVerification!.publicKey += 'changed';
+      // Keep the key valid, so only the original configuration binding can refuse restart.
+      test.configuration.identityVerification!.publicKey += '\n';
       expect(await test.run(true)).toEqual({ status: 'unknown' });
     } else if (change === 'stage') {
       vi.spyOn(test.custody, 'stage').mockRejectedValue(new Error('result-canary'));
@@ -3539,7 +3547,7 @@ async function recoversConfirmationReply() {
   try {
     const evidence = await test.run();
     const append = events.store.append.bind(events.store);
-    async function loseReply(command: AppendCommand) {
+    async function loseReply(command: AppendCommand): Promise<never> {
       await append(command);
       throw new Error('result-canary');
     }
@@ -3558,3 +3566,21 @@ async function recoversConfirmationReply() {
 }
 it('recovers a lost OAuth activation reply without staging or exchanging again',
   recoversConfirmationReply);
+
+async function refusesUnsignedAndForeignEvidence() {
+  const unsigned = await exchangeFixture();
+  const verified = await exchangeFixture('valid', true);
+  try {
+    const unsignedEvidence = await unsigned.run();
+    const foreignEvidence = await verified.run();
+    expect(await confirmAccount(unsigned, unsignedEvidence)).toEqual({ status: 'unknown' });
+    expect(await confirmAccount(unsigned, foreignEvidence)).toEqual({ status: 'unknown' });
+    expect(await history(events.store, unsigned.subject, 'test')).toHaveLength(2);
+    expect(unsigned.store.creates).toBe(3);
+  } finally {
+    await unsigned.providerFixture.close();
+    await verified.providerFixture.close();
+  }
+}
+it('refuses unsigned and another original attempt as OAuth confirmation evidence',
+  refusesUnsignedAndForeignEvidence);

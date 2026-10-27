@@ -11,19 +11,31 @@ const secretRefSchema = z
 
 // Keep old profiles readable. Require all activation details together for new generations.
 const connectionId = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
-const connectionActivationSchema = z.strictObject({
+const activationFields = z.strictObject({
   connectionId, ownerKind: z.literal('personal'), purpose: z.literal('personal'),
   generation: z.int().positive(), uid: connectionId, resourceVersion: connectionId,
   endpointDigest: digestSchema, operationId: connectionId, changedBy: connectionId,
   expectedSequence: z.int().nonnegative(), appendUntil: z.int().positive(),
+});
+const bearerActivationSchema = activationFields.extend({
   reason: z.enum(['bearer_create', 'bearer_rotation']),
 });
+const connectionActivationSchema = z.discriminatedUnion('reason', [
+  bearerActivationSchema,
+  activationFields.extend({ reason: z.literal('oauth_confirmed'), account: z.strictObject({
+    issuer: z.url().max(2048), subject: z.string().regex(/^[\x21-\x7e]{1,255}$/u),
+    scopes: z.array(z.string().regex(/^[\x21\x23-\x5b\x5d-\x7e]{1,200}$/u)).max(64),
+    expiresAt: z.int().positive(),
+  }) }),
+]);
 export const connectionCreatedDataSchema = z
   .object({ userId: id, serverId: id, profile: id, secretRef: secretRefSchema,
     activation: connectionActivationSchema.optional() })
   .strict();
 
-export const connectionRefreshedDataSchema = connectionCreatedDataSchema.clone();
+export const connectionRefreshedDataSchema = connectionCreatedDataSchema.extend({
+  activation: bearerActivationSchema.optional(),
+});
 
 export const connectionOAuthStartedDataSchema = z.strictObject({
   userId: connectionId, serverId: connectionId, connectionId, profile: connectionId,

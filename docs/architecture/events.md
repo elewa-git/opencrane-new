@@ -398,13 +398,19 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `grant.given` / `grant.revoked` (a typed revoke removes only that kind; old untyped revokes remove all matching kinds) | admin or owner; initial model grants from reaction or upgrade; departure revocation reaction | grants | OpenFGA tuples |
 | `connection.company_opt_in_set` | explicit admin opt-in/removal command | company control fold binds silo, server, installation and registration revision; defaults to disabled | no grant, credential, selection, release or provider call |
 | `connection.selected` | explicit personal select/clear command | selection fold binds the requester, server, installation and checked profile revision; clear chooses nothing | no grant, custody read, release or provider call |
-| `connection.created` | personal bearer create command after private staging | connection fold (exact reference and generation; identity unverified) | explicit live candidate cleanup keeps current references; no automatic reaction |
+| `connection.created` | personal bearer create or internal explicit first OAuth confirmation after private staging | exact reference and generation; bearer identity stays unverified; OAuth requires the preceding consent and callback claim, and records verified issuer/subject, actual scopes and expiry | live cleanup retains current references; replay reads no custody and calls no provider; OAuth selection and release stay closed; no automatic reaction |
 | `connection.oauth_started` | internal personal consent command after private preparation and current owner checks | exact attempt reference, binding and state digests, UID/version and original expiry only | no activation, selection, custody read, URL return or provider request on replay; no reaction |
 | `connection.oauth_exchange_claimed` | internal callback command after exact consent validation and private code staging | one conditional claim on the personal profile for its exact live worker | no provider send, activation, selection, custody read or other effect on replay; no reaction |
 | `connection.refreshed` | personal bearer rotate command after private staging; planned OAuth refresh | connection fold replaces the exact reference at the expected generation and revision | `cleanup-connection` confirms the saved rotation and removes superseded exact generations under the shared profile lock; never release on replay |
 | `connection.revoked` | personal profile owner command | connection fold invalidates the profile at its expected revision | retain material in the command; `cleanup-connection` confirms the saved revocation and removes invalidated exact generations under the shared profile lock |
 | `connection.operation_closed` | live staged-secret reconciliation after its private append deadline | connection fold keeps the current reference and reserves the closed generation number | conditional append at the stage's expected profile position blocks a delayed save; exact UID/version deletion follows confirmation; no replay effects or provider outcome claim |
 | `connection.disabled` | current admin command | member/server control stream blocks all personal profile saves, including new profiles | no deletion, enable or credential release; owner reconnect cannot clear the block |
+
+First OAuth confirmation uses the exact saved private reply, never caller-supplied account,
+scopes or lifetime. It stages generation 1 before one conditional append, checking current
+membership, configuration, policy and admin blocks at publication. Duplicate confirmation
+recovers the original receipt before reading expired consent. Receipts grant no use and
+always report `callsAvailable: false`. No token value or token-derived digest enters an event.
 
 Private instance starts identify the silo, user, opaque profile, server and
 `startupAccessGeneration`. This positive integer counts versions of the profile's
