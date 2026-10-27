@@ -697,7 +697,7 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 | `routine.occurrence_skipped` / `routine.occurrences_missed` | server system | saved cursor/next facts | none |
 | `routine.run_activation_admitted` | internal server conditional command | saved exact admission and sender attempt | none; receipt only, execution remains disabled |
 | `routine.run_finished` | server system | saved run facts | none; records grant no authority |
-| `routine.run_stop_requested` | server for checked owner/admin | saved Stop intent | none; the internal budget Stop accepts verified evidence, but callers and lifecycle reactions are not built |
+| `routine.run_stop_requested` | internal server command for the current owner | saved Stop intent | none subscribed; explicitly enabled internal cleanup applies verified evidence to an existing budget root; execution remains disabled |
 | `delegation.started` / `delegation.completed` | server; legacy computer records are replay-only | delegations and computer-root read indexes | no effect reaction; shared native starts retain the admission’s `sharingClass`; native execution remains disabled |
 
 The activation command requires an existing checked allocation. Its `admission` reference

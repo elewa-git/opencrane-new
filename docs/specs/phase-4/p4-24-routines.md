@@ -353,6 +353,12 @@ and its branch release note. Source-ready records pending journeys; done needs f
 Ask, measured revoke/Stop, restart/replay and phone comparisons. Fixtures qualify governance but cannot claim a real paid-model
 journey.
 
+Owner Stop now has an internal intent command and a separate budget cleanup operation
+(row 12, PR 12b, part of #106). A successor can stop the frozen old run without private
+chat access. Cleanup recovers by the original source reference and never creates capacity.
+Routes, subscriptions, other lifecycle causes and running-turn termination remain later work.
+Execution is disabled; live qualification is NOT RUN.
+
 ## 7. Open questions and recommended defaults
 
 - Owner eligibility: any active member with all required grants may own a routine; team assistants only initially, payer fixed to
