@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import { once } from 'node:events';
+import { WebSocket } from 'ws';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { memoryContextRecordedEventSchema, parseEventByType } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -332,6 +333,16 @@ async function racingPollsShareInterrupt() {
 }
 it('shares an in-flight interruption across repeated and racing polls', racingPollsShareInterrupt);
 
+async function startReplacement() {
+  const encrypted = keys.encrypt('test', 'chat', 'New request');
+  await append('conversation-chat', 'message.posted', { conversationId: 'chat',
+    authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted }, 'replacement');
+  await append('computer-assistant', 'computer.turn_started', { conversationId: 'chat',
+    turnId: 'replacement', requesterId: 'alice', assistantId: 'assistant', computerId: 'computer',
+    threadId: 'thread-2', task: 'chat_turn', executionMode: 'restricted' });
+  await startTurn('replacement', 'chat', 'alice', 'thread-2');
+}
+
 async function delayedStopPreservesReplacement() {
   await invalidated();
   const send = link.socket.send.bind(link.socket);
@@ -346,13 +357,7 @@ async function delayedStopPreservesReplacement() {
   computer.finish('thread-1');
   await flush();
   await link.settled();
-  const encrypted = keys.encrypt('test', 'chat', 'New request');
-  await append('conversation-chat', 'message.posted', { conversationId: 'chat',
-    authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted }, 'replacement');
-  await append('computer-assistant', 'computer.turn_started', { conversationId: 'chat',
-    turnId: 'replacement', requesterId: 'alice', assistantId: 'assistant', computerId: 'computer',
-    threadId: 'thread-2', task: 'chat_turn', executionMode: 'restricted' });
-  await startTurn('replacement', 'chat', 'alice', 'thread-2');
+  await startReplacement();
   sending.mockRestore();
   send(delayed!);
   await flush();
@@ -379,7 +384,7 @@ async function boundsHistory() {
 }
 it('bounds a stalled history read and retries it on a later poll', boundsHistory, 15_000);
 
-async function completionBeforePoll() {
+async function completionBeforePoll(replace: boolean) {
   const send = link.socket.send.bind(link.socket);
   let stops = 0;
   function holdAcknowledgements(data: Parameters<typeof send>[0]) {
@@ -399,6 +404,7 @@ async function completionBeforePoll() {
   computer.finish('thread-1');
   await flush();
   await link.settled();
+  if (replace) await startReplacement();
   await poll();
   let replayed = false;
   function inspect(raw: Buffer) {
@@ -410,8 +416,52 @@ async function completionBeforePoll() {
   await link.settled();
   await poll();
   expect(link.rejection).toBeUndefined();
+  if (replace) {
+    expect(computer.grants.has('thread-2')).toBe(true);
+    expect(computer.calls).not.toContain('turn/interrupt:thread-2');
+  }
   expect({ stops, privateTextReplayedAfterInvalidation: replayed })
     .toEqual({ stops: 1, privateTextReplayedAfterInvalidation: false });
 }
-it('clears withdrawn output when completion precedes the first poll',
+it.each([false, true])('clears withdrawn output when completion precedes polling, replacement=%s',
   completionBeforePoll);
+
+async function retriesUntilClearanceReceipt() {
+  const send = WebSocket.prototype.send;
+  let heldReceipt: string | undefined;
+  let peer: WebSocket | undefined;
+  let stops = 0;
+  function holdReceipt(this: WebSocket, data: Parameters<typeof send>[0]) {
+    if (typeof data === 'string') {
+      const frame = JSON.parse(data) as { type: string };
+      if (frame.type === 'private_output_cleared') {
+        heldReceipt = data;
+        peer = this;
+        return;
+      }
+      if (frame.type === 'stop') stops++;
+    }
+    send.call(this, data);
+  }
+  vi.spyOn(WebSocket.prototype, 'send').mockImplementation(holdReceipt);
+  await invalidated();
+  computer.finish('thread-1');
+  await flush();
+  await link.settled();
+  await poll();
+  expect(stops).toBe(1);
+  expect(heldReceipt).toBeDefined();
+  const wrongThread = { type: 'private_output_cleared', conversationId: 'chat',
+    turnId: 'turn', threadId: 'another-thread' };
+  send.call(peer!, JSON.stringify(wrongThread));
+  await flush();
+  await poll();
+  expect(stops).toBe(2);
+  send.call(peer!, heldReceipt!);
+  await flush();
+  await poll();
+  expect(stops).toBe(2);
+  expect(link.rejection).toBeUndefined();
+}
+it('retries completed withdrawal until the exact computer clearance receipt arrives',
+  retriesUntilClearanceReceipt);
