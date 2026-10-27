@@ -5963,6 +5963,7 @@ does not transfer approval, and no caller or grant is added to the tool frame.
 The saved approval includes the caller and every recorded grant field, including
 the requester, assistant, thread and expiry. Each use repeats the privacy
 qualification and recorded turn checks. Changes during assembly or discovery
-refuse the list. The computer loader uses the same bound thread for its registry
-checks and requires the native response to match it. Production has no caller
+refuse the list. The computer starts the native thread first. After the trusted caller records and
+binds its real ID, assembly approves the list for that ID. The loader uses that
+same bound thread for registry checks and native discovery. It refuses any mismatch. Production has no caller
 for this preparation path, and native memory admission remains disabled.

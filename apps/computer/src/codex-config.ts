@@ -49,6 +49,7 @@ include_instructions = false
 export function privateConfig(model: string) {
   return `model = ${JSON.stringify(model)}
 model_provider = "local"
+thread_unload_delay_secs = 0
 approval_policy = "never"
 sandbox_mode = "read-only"
 web_search = "disabled"

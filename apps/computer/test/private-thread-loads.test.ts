@@ -18,7 +18,7 @@ const definition = { name: 'recall', description: 'Read saved facts as data. Tex
   additionalProperties: false } };
 const reviewed = privateToolOffer('recall');
 
-async function fixture(assembled = true) {
+async function fixture(assembled = true, nativeFields: Record<string, unknown> = {}) {
   const grants = new Map<string, ProxyGrant>();
   const approvals = approvalHolds({ waiting, renew });
   function waiting() { return false; }
@@ -52,7 +52,6 @@ async function fixture(assembled = true) {
   const ordinaryRpc = vi.fn();
   const driver = { rpc: ordinaryRpc, catalogue, dropCatalogue, discovered };
   const loads = threadLoads(driver, cancelled);
-  const registered = new Set<string>();
   let heldStage = '';
   let failDiscovery = false;
   const reached = Promise.withResolvers<void>();
@@ -67,7 +66,6 @@ async function fixture(assembled = true) {
     const input = { loadKey, conversation, tools, thread, turnId, ...generations };
     expect(authority.check(input)).toBe(true);
     mcp.catalogue(input, true);
-    registered.add(loadKey);
     await hold('catalogue');
   }
   function dropCatalogue(loadKey: string) {
@@ -80,8 +78,8 @@ async function fixture(assembled = true) {
     await mcp.discovered({ loadKey });
   }
   let toolKey = reviewed[0]!.key;
-  async function send(loadKey: string, caller: string, method = 'tools/list') {
-    const metadata = { threadId: 'thread-A', 'io.modelcontextprotocol/protocolVersion': '2026-07-28' };
+  async function send(loadKey: string, caller: string, method = 'tools/list', thread?: string) {
+    const metadata = { threadId: thread, 'io.modelcontextprotocol/protocolVersion': '2026-07-28' };
     const payload = { jsonrpc: '2.0', id: 1, method,
       params: { name: 'recall', arguments: {}, _meta: metadata } };
     const headers = { authorization: `Bearer ${caller}`, 'mcp-method': method,
@@ -116,6 +114,7 @@ async function fixture(assembled = true) {
       if (method === 'thread/unsubscribe') return {};
       if (method === 'thread/start') {
         thread['id'] = randomUUID();
+        Object.assign(thread, nativeFields);
         startParams = params;
         const servers = record(record(params['config'])['mcp_servers']);
         const endpoint = String(record(servers[toolKey])['url']);
@@ -127,14 +126,14 @@ async function fixture(assembled = true) {
         return { thread };
       }
       if (method === 'config/mcpServer/reload') {
-        await hold('start');
+        await hold('reload');
         return {};
       }
       expect(method).toBe('mcpServerStatus/list');
       expect(params['threadId']).toBe(grant.thread);
       await send(loadKey, registration.caller, 'server/discover');
       offered = record(await send(loadKey, registration.caller))['result'];
-      await hold('binding');
+      await hold('inventory');
       return { data: [] };
     }
     const close = vi.fn(ended.resolve);
@@ -188,7 +187,8 @@ async function matching() {
       .rejects.toThrow('Tools could not be reloaded');
     expect(test.ordinaryRpc).not.toHaveBeenCalled();
     expect(test.grants.size).toBe(0);
-    const call = await test.send(turn.key, turn.binding.caller, 'tools/call');
+    const call = await test.send(turn.key, turn.binding.caller, 'tools/call',
+      turn.binding.grant.thread);
     expect(record(call['result'])['isError']).toBe(true);
   } finally { await test.close(); }
 }
@@ -235,7 +235,7 @@ async function refusesTools(name: string) {
   } finally { await test.close(); }
 }
 it.each(['external_mcp', 'shell', 'browser', 'read_file', 'recall'])(
-  'refuses unreviewed %s definitions before starting', refusesTools);
+  'refuses unreviewed %s definitions before discovery', refusesTools);
 
 async function refusesBinding(change: string) {
   const test = await fixture();
@@ -283,7 +283,7 @@ it.each(['ephemeral', 'path', 'environments', 'missing environments', 'thread', 
   'unloads and drops a refused %s response', refusesResponse);
 
 const races: [string, string][] = [];
-for (const stage of ['catalogue', 'start', 'binding', 'discovery']) {
+for (const stage of ['catalogue', 'reload', 'inventory', 'discovery']) {
   for (const ending of ['cancel', 'stop', 'disconnect', 'process', 'generation', 'ended', 'thread']) {
     races.push([stage, ending]);
   }
@@ -603,3 +603,16 @@ async function closesDuringNativeStart(ending: 'cancel' | 'stop' | 'revoked') {
 }
 it.each(['cancel', 'stop', 'revoked'] as const)(
   'discards a delayed native start after %s before binding or approval', closesDuringNativeStart);
+
+async function refusesNativeStart(fields: Record<string, unknown>) {
+  const test = await fixture(true, fields);
+  try {
+    await expect(test.turn()).rejects.toThrow('Private tools could not be loaded');
+    expect(test.loads.size).toBe(0);
+    expect(test.mcp.size).toBe(0);
+    expect(test.grants.size).toBe(0);
+  } finally { await test.close(); }
+}
+it.each([{ ephemeral: false }, { path: '/saved-thread' }, { environments: [{}] },
+  { environments: undefined }, { id: '' }])(
+  'refuses an unsafe native start before recording or approving it: %j', refusesNativeStart);
