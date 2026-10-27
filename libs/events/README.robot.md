@@ -19,8 +19,11 @@ Its existing fields pin generation 1, exact custody UID/version, endpoint, opera
 owner and preceding claim position. The internal confirmation command stages the exact
 saved reply first; no material-derived digest enters the event. The fold requires the
 two preceding consent records and keeps OAuth unavailable for selection and release.
-Legacy records without activation and bearer saves still parse unchanged. Refreshed
-records retain the bearer-only activation contract.
+Legacy records without activation and bearer saves still parse unchanged.
+`connection.refreshed` also accepts the same OAuth account fields. Its fold requires
+one matching refresh start and claim, unchanged account and scopes, and exactly the next
+generation. The internal save checks current access and policy before publication and
+retires both superseded private copies afterwards. Replay performs no private effects.
 
 `connection.oauth_started` is a strict first-connect record on the personal profile stream.
 It binds user/server/installation/profile, attempt and state digests, exact custody reference,

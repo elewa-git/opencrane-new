@@ -1,0 +1,1 @@
+- Internal OAuth refresh saves the next account generation once and retires both old private token copies, even if the member is removed before recovery. Retries recover the saved generation without sending again; current membership and server settings guard publication. Tool use and OAuth revocation remain unavailable.

@@ -429,12 +429,10 @@ async function claimsCallbackOnce(failure: string) {
     expect(foldConnection(rows).status).toBe('unavailable');
     expect(effects).not.toHaveBeenCalled();
     await manager.streams.update('EVENTS', { duplicate_window: 100_000_000 });
-    await delay(150);
     const probe = envelope('test', `member-dedup-${test.session.userId}`, 'member.joined', {
       memberId: 'probe', email: 'probe@example.test', displayName: 'Probe',
       role: 'member' }, claims[0]!.event.id);
-    await events.seed([probe]);
-    expect(await events.store.head(probe.subject)).toBeGreaterThan(claims[0]!.sequence);
+    await waitForDuplicateExpiry(probe, claims[0]!.sequence);
     fault.mockClear();
     expect(await test.callback(test.input, true)).toEqual({ status: 'unknown' });
     expect(effects).not.toHaveBeenCalled();
@@ -2982,6 +2980,19 @@ async function clearsUnknownAfterSuccess() {
 it('scan clears consecutive unknown state after a successful page', clearsUnknownAfterSuccess);
 
 
+function refreshLifetime(mode: string) {
+  if (mode === 'renewable') {
+    return 120;
+  }
+  if (mode === 'short') {
+    return 1;
+  }
+  if (mode === 'lifetime') {
+    return 86_401;
+  }
+  return 300;
+}
+
 async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) {
   let identityVerification: IdentityVerification | undefined;
   const keys = await generateKeyPair('RS256');
@@ -3001,7 +3012,8 @@ async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) 
     refreshSends++;
     response.setHeader('content-type', 'application/json');
     expect(Object.fromEntries(parameters)).toEqual({ grant_type: 'refresh_token',
-      client_id: test.configuration.clientId, refresh_token: 'refresh-canary' });
+      client_id: test.configuration.clientId,
+      refresh_token: refreshMode === 'next' ? 'next-refresh-canary' : 'refresh-canary' });
     await beforeReply?.();
     if (refreshMode === 'lost') {
       response.destroy();
@@ -3019,10 +3031,16 @@ async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) 
     const signedClaims = new SignJWT(claims);
     signedClaims.setProtectedHeader({ alg: 'RS256' });
     const idToken = await signedClaims.sign(keys.privateKey);
+    let refreshToken = 'next-refresh-canary';
+    if (refreshMode === 'unrotated') {
+      refreshToken = 'refresh-canary';
+    } else if (refreshMode === 'next') {
+      refreshToken = 'third-refresh-canary';
+    }
     const reply = { access_token: 'next-access-canary', token_type: 'Bearer',
-      refresh_token: refreshMode === 'unrotated' ? 'refresh-canary' : 'next-refresh-canary',
+      refresh_token: refreshToken,
       id_token: idToken, scope: refreshMode === 'scopes' ? 'write' : 'read',
-      expires_in: refreshMode === 'lifetime' ? 86_401 : 300 };
+      expires_in: refreshLifetime(refreshMode) };
     response.end(JSON.stringify(reply));
   }
   let beforeReply: (() => Promise<void>) | undefined;
@@ -3675,12 +3693,10 @@ async function refreshRaceAndRecovery(mode: string) {
     expect(rows).toHaveLength(4);
     expect(rows[3]!.event.type).toBe('connection.refresh_started');
     await manager.streams.update('EVENTS', { duplicate_window: 100_000_000 });
-    await delay(200);
     const probe = envelope('test', `member-probe-${test.session.userId}`, 'member.joined', {
       memberId: 'probe', email: 'probe@example.test', displayName: 'Probe', role: 'member',
     }, rows[3]!.event.id);
-    await events.seed([probe]);
-    expect(await events.store.head(probe.subject)).toBeGreaterThan(rows[3]!.sequence);
+    await waitForDuplicateExpiry(probe, rows[3]!.sequence);
     const effects = vi.spyOn(globalThis, 'fetch');
     const rebuilt = foldConnection(structuredClone(rows));
     expect(rebuilt.data).toEqual(test.generation);
@@ -3935,12 +3951,10 @@ async function claimsRefreshOnce(mode: string) {
     expect(rebuilt.status).toBe('unavailable');
     expect(effects).not.toHaveBeenCalled();
     await manager.streams.update('EVENTS', { duplicate_window: 100_000_000 });
-    await delay(200);
     const probe = envelope('test', `member-claim-probe-${test.session.userId}`, 'member.joined', {
       memberId: 'probe', email: 'probe@example.test', displayName: 'Probe', role: 'member',
     }, claimed.event.id);
-    await events.seed([probe]);
-    expect(await events.store.head(probe.subject)).toBeGreaterThan(claimed.sequence);
+    await waitForDuplicateExpiry(probe, claimed.sequence);
     const writes = vi.spyOn(events.store, 'append');
     writes.mockClear();
     expect(await claimRefresh(test, test.input, test.session, true)).toEqual({ status: 'unknown' });
@@ -4293,3 +4307,291 @@ async function refusesChangedRefreshCustody(change: string) {
 it.each(['generation-uid', 'generation-version', 'result-uid', 'result-version',
   'claim-expired', 'result-expired'])(
   'refuses a claimed refresh with changed %s', refusesChangedRefreshCustody);
+
+async function saveRefresh(test: Awaited<ReturnType<typeof refreshFixture>>, live?: unknown,
+  restart = false) {
+  const { savePersonalOAuthRefresh } = await import('../src/oauth-refresh-save.ts');
+  const custody = restart ? test.store.restart() : test.custody;
+  return savePersonalOAuthRefresh(events.store, consentBinding, test.session, custody,
+    test.input, test.loader.loadConfiguration, pgDb(storage.queue), live,
+    test.providerFixture.network);
+}
+
+async function savesRefreshOnce(fault: string) {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    const append = events.store.append.bind(events.store);
+    async function lostReply(command: AppendCommand): Promise<never> {
+      await append(command);
+      throw new Error('next-refresh-canary');
+    }
+    if (fault === 'append') {
+      vi.spyOn(events.store, 'append').mockImplementationOnce(lostReply);
+    } else if (fault === 'delete') {
+      test.store.failDeletes(true);
+    } else if (fault === 'stage') {
+      const stage = test.custody.stage.bind(test.custody);
+      async function lostStage(...args: Parameters<typeof stage>) {
+        const result = await stage(...args);
+        if (args[0].generation === 2) {
+          throw new Error('next-refresh-canary');
+        }
+        return result;
+      }
+      vi.spyOn(test.custody, 'stage').mockImplementation(lostStage);
+    }
+    const results = await Promise.all([saveRefresh(test, claim), saveRefresh(test, claim)]);
+    test.store.failDeletes(false);
+    const saved = await saveRefresh(test, undefined, true);
+    expect(saved).toMatchObject({ status: 'saved', generation: 2, callsAvailable: false });
+    vi.spyOn(Date, 'now').mockReturnValue(test.dueAt + 600_000);
+    expect(await saveRefresh(test, undefined, true)).toEqual(saved);
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(6);
+    expect(rows[5]!.event.type).toBe('connection.refreshed');
+    const rebuilt = foldConnection(structuredClone(rows));
+    expect(rebuilt.lastGeneration).toBe(2);
+    expect(rebuilt.status).toBe('unavailable');
+    expect(rebuilt.data?.activation).toMatchObject({ reason: 'oauth_confirmed', generation: 2,
+      account: { subject: 'account-123', scopes: ['read'] } });
+    const alterations = { generation: 4, expectedSequence: 0, operationId: 'another-save',
+      configurationDigest: 'f'.repeat(64), appendUntil: 1 };
+    for (const [field, value] of Object.entries(alterations)) {
+      const altered = structuredClone(rows);
+      const data = rebuilt.data!;
+      altered[5]!.event.data = { ...data, activation: { ...data.activation, [field]: value } };
+      expect(foldConnection(altered).data).toBeUndefined();
+    }
+    expect(test.refreshSends).toBe(1);
+    expect(test.store.creates).toBe(6);
+    expect(test.store.secrets.has(test.generation.secretRef.slice(7))).toBe(false);
+    for (const secret of test.store.secrets.values()) {
+      const contents = Buffer.from(secret.data.token, 'base64').toString();
+      expect(contents).not.toContain('"refresh_token":"refresh-canary"');
+    }
+    expect(await sendRefresh(test, claim)).toEqual({ status: 'unknown' });
+    const publicValues = JSON.stringify({ rows, results, saved });
+    expect(publicValues).not.toMatch(/next-access-canary|next-refresh-canary|refresh-canary/);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['none', 'append', 'delete', 'stage'])(
+  'saves the next OAuth generation once and retires old copies after %s failure', savesRefreshOnce);
+
+async function retiresRefreshAfterMemberRemoval() {
+  const test = await refreshFixture();
+  try {
+    const oldCopies: string[] = [];
+    for (const secret of test.store.secrets.values()) {
+      const contents = Buffer.from(secret.data.token, 'base64').toString();
+      if (contents.includes('"refresh_token":"refresh-canary"')) {
+        oldCopies.push(secret.metadata.name);
+      }
+    }
+    expect(oldCopies).toHaveLength(2);
+    await test.start();
+    const claim = await claimRefresh(test);
+    const append = events.store.append.bind(events.store);
+    async function lostReply(command: AppendCommand): Promise<never> {
+      const result = await append(command);
+      expect(result.status).toBe('appended');
+      throw new Error('Fixture lost refresh save reply');
+    }
+    vi.spyOn(events.store, 'append').mockImplementationOnce(lostReply);
+    expect(await saveRefresh(test, claim)).toEqual({ status: 'unknown' });
+    const savedRows = await history(events.store, test.subject, 'test');
+    expect(savedRows).toHaveLength(6);
+    expect(savedRows[5]!.event.type).toBe('connection.refreshed');
+    expect(foldConnection(savedRows).lastGeneration).toBe(2);
+    for (const name of oldCopies) {
+      expect(test.store.secrets.has(name)).toBe(true);
+    }
+    await changeConsentAccess(test, 'removed');
+    expect(await saveRefresh(test, undefined, true)).toEqual({ status: 'unknown' });
+    for (const name of oldCopies) {
+      expect(test.store.secrets.has(name)).toBe(false);
+    }
+    expect(test.store.deletes).toBe(2);
+    expect(await saveRefresh(test, undefined, true)).toEqual({ status: 'unknown' });
+    expect(test.store.deletes).toBe(2);
+    expect(await history(events.store, test.subject, 'test')).toEqual(savedRows);
+    expect(test.store.creates).toBe(6);
+    expect(test.refreshSends).toBe(1);
+  } finally {
+    await test.close();
+  }
+}
+it('retires both old OAuth copies after a lost save reply and member removal',
+  retiresRefreshAfterMemberRemoval);
+
+async function refusesNewRefreshAfterMemberRemoval() {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    expect((await sendRefresh(test, claim)).status).toBe('verified');
+    const originalRows = await history(events.store, test.subject, 'test');
+    expect(originalRows).toHaveLength(5);
+    await changeConsentAccess(test, 'removed');
+    const anotherAttempt = { ...test.input, changeRef: 'removed-member-refresh' };
+    expect(await test.start(anotherAttempt)).toEqual({ status: 'unknown' });
+    expect(await saveRefresh(test, claim)).toEqual({ status: 'unknown' });
+    expect(await saveRefresh(test, undefined, true)).toEqual({ status: 'unknown' });
+    expect(await history(events.store, test.subject, 'test')).toEqual(originalRows);
+    expect(test.store.creates).toBe(5);
+    expect(test.store.deletes).toBe(0);
+    expect(test.refreshSends).toBe(1);
+  } finally {
+    await test.close();
+  }
+}
+it('refuses a new OAuth refresh start or save after member removal',
+  refusesNewRefreshAfterMemberRemoval);
+
+async function refusesRefreshSave(mode: string) {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    test.setRefreshMode(mode);
+    expect(await saveRefresh(test, claim)).toEqual({ status: 'unknown' });
+    expect(await saveRefresh(test, undefined, true)).toEqual({ status: 'unknown' });
+    expect(await history(events.store, test.subject, 'test')).toHaveLength(5);
+    expect(test.refreshSends).toBe(1);
+    expect(test.store.deletes).toBe(0);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['expired', 'revoked', 'audience'])(
+  'refuses to save an OAuth refresh reply with %s', refusesRefreshSave);
+
+async function refusesRefreshSaveAtPublication(change: string) {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    const append = events.store.append.bind(events.store);
+    async function changedAccess(command: AppendCommand) {
+      fault.mockRestore();
+      if (change === 'expiry') {
+        vi.spyOn(Date, 'now').mockReturnValue(test.dueAt + 2000);
+      } else {
+        await changeConsentAccess(test, change);
+      }
+      return append(command);
+    }
+    if (change === 'expiry') {
+      test.setRefreshMode('short');
+    }
+    const fault = vi.spyOn(events.store, 'append').mockImplementationOnce(changedAccess);
+    expect(await saveRefresh(test, claim)).toEqual({ status: 'unknown' });
+    expect(await history(events.store, test.subject, 'test')).toHaveLength(5);
+    expect(test.store.deletes).toBe(0);
+    expect(test.refreshSends).toBe(1);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['removed', 'policy', 'disabled', 'configuration', 'expiry'])(
+  'refuses saving the OAuth refresh after %s at publication', refusesRefreshSaveAtPublication);
+
+async function refreshesTheNextGeneration() {
+  const test = await refreshFixture();
+  try {
+    test.setRefreshMode('renewable');
+    await test.start();
+    expect((await saveRefresh(test, await claimRefresh(test))).status).toBe('saved');
+    const rows = await history(events.store, test.subject, 'test');
+    const second = foldConnection(rows).data!;
+    if (second.activation.reason !== 'oauth_confirmed') {
+      throw new Error('Fixture account missing');
+    }
+    test.input.expectedGeneration = 2;
+    test.input.expectedSequence = rows[5]!.sequence;
+    test.input.changeRef = 'refresh-next';
+    test.setRefreshMode('next');
+    vi.spyOn(Date, 'now').mockReturnValue(second.activation.account.expiresAt - 30_000);
+    expect((await test.start()).status).toBe('saved');
+    const saved = await saveRefresh(test, await claimRefresh(test));
+    expect(saved).toMatchObject({ status: 'saved', generation: 3 });
+    expect(await saveRefresh(test, undefined, true)).toEqual(saved);
+    expect(test.refreshSends).toBe(2);
+    expect(test.store.secrets.has(second.secretRef.slice(7))).toBe(false);
+    const final = await history(events.store, test.subject, 'test');
+    expect(final).toHaveLength(9);
+    expect(foldConnection(final).lastGeneration).toBe(3);
+  } finally {
+    await test.close();
+  }
+}
+it('refreshes the next saved OAuth generation and retires its earlier reply',
+  refreshesTheNextGeneration);
+
+async function refusesExpiryDuringFinalRefreshCheck() {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    test.setRefreshMode('short');
+    const read = test.custody.readAttempt.bind(test.custody);
+    let resultRead = false;
+    async function observedRead(...args: Parameters<typeof read>) {
+      const result = await read(...args);
+      resultRead = true;
+      return result;
+    }
+    vi.spyOn(test.custody, 'readAttempt').mockImplementationOnce(observedRead);
+    const load = test.loader.loadConfiguration.bind(test.loader);
+    function delayedCheck() {
+      if (resultRead) {
+        vi.spyOn(Date, 'now').mockReturnValue(test.dueAt + 2000);
+      }
+      return load();
+    }
+    vi.spyOn(test.loader, 'loadConfiguration').mockImplementation(delayedCheck);
+    expect(await sendRefresh(test, claim)).toEqual({ status: 'unknown' });
+    expect(await sendRefresh(test, undefined, true)).toEqual({ status: 'unknown' });
+    expect(test.refreshSends).toBe(1);
+    expect(await history(events.store, test.subject, 'test')).toHaveLength(5);
+  } finally {
+    await test.close();
+  }
+}
+it('refuses reply expiry during final access checks while the refresh claim is still valid',
+  refusesExpiryDuringFinalRefreshCheck);
+
+async function blocksRetiredPrivateReads(attempt: boolean) {
+  const test = await fixture();
+  const input: ConnectionStage = { ...stage, appendUntil: Date.now() + 60_000 };
+  if (attempt) {
+    input.attemptId = input.operationId;
+    input.attemptDigest = 'a'.repeat(64);
+  }
+  const material = '{"refresh_token":"retired-refresh-canary"}';
+  const saved = await test.custody.stage(input, material);
+  expect(saved.status).toBe('staged');
+  test.failDeletes(true);
+  expect(await test.custody.retire(input, saved.identity!)).toEqual({ status: 'unknown' });
+  const restarted = test.restart();
+  expect(await restarted.readAttempt(input, saved.identity!)).toBeUndefined();
+  expect(await restarted.readRefreshMaterial(input, saved.identity!)).toBeUndefined();
+  expect(test.secrets.size).toBe(1);
+  test.failDeletes(false);
+  expect(await restarted.retire(input, saved.identity!)).toEqual({ status: 'deleted' });
+  expect(test.secrets.size).toBe(0);
+}
+it.each([false, true])('refuses retired private reads while deletion waits, attempt=%s',
+  blocksRetiredPrivateReads);
+
+async function waitForDuplicateExpiry(probe: ReturnType<typeof envelope>, sequence: number) {
+  // Wait for the broker's duplicate record to expire, not just its configured window.
+  async function expired() {
+    await events.seed([probe]);
+    return await events.store.head(probe.subject) > sequence;
+  }
+  await until(expired);
+}

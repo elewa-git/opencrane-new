@@ -40,7 +40,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
-  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks consent starts, callback and refresh claims, refresh starts and first account confirmations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal and saved tool choices, company opt-in, and blocks| events
+  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks consent starts, callback and refresh claims, refresh starts, account confirmations and replacement generations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal and saved tool choices, company opt-in, and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
 ```
 
@@ -64,7 +64,8 @@ flowchart LR
 
 A first account confirmation records the verified issuer and account, granted scopes,
 expiry and exact private storage reference. It follows the consent and callback records.
-Replaying those three records starts no work and grants no tool access.
+A refresh saves the next generation after a matching refresh start and claim.
+Replaying these records starts no work and grants no tool access.
 
 A personal callback claim records the one worker allowed to continue the attempt.
 It contains only references. It does not confirm a provider request or activate an account.

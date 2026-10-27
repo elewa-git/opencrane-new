@@ -35,7 +35,7 @@ export const connectionCreatedDataSchema = z
   .strict();
 
 export const connectionRefreshedDataSchema = connectionCreatedDataSchema.extend({
-  activation: bearerActivationSchema.optional(),
+  activation: connectionActivationSchema.optional(),
 });
 
 export const connectionOAuthStartedDataSchema = z.strictObject({
