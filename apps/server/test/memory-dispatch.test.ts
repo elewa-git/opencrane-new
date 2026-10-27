@@ -1,3 +1,4 @@
+import { invalidateMemoryContext } from '../src/memory/invalidation.ts';
 import { once } from 'node:events';
 import { WebSocketServer, type WebSocket, type RawData } from 'ws';
 import { connectBridge } from '../src/chat/bridge.ts';
@@ -1824,3 +1825,33 @@ async function signedRecallHasPreparation() {
 }
 it('prepares the direct recall fixture before signing its executable pass',
   signedRecallHasPreparation);
+
+async function refusesRecordedInvalidation() {
+  await prepareExternalTool();
+  await seedRecallFact();
+  expect((await directRecall('load')).statusCode).toBe(200);
+  const bridge = await renewalBridge();
+  try {
+    expect(await bridge.exchange(1)).toHaveProperty('token');
+    const chat = await savedContext();
+    const first = chat.memoryContext!.events.values().next().value!;
+    const decoded: unknown = JSON.parse(first);
+    const saved = memoryContextRecordedEventSchema.parse(decoded).data;
+    const cause = await setup.append(`scope-${scopeId}`, 'memory.forgotten', {
+      schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
+      memoryId: 'private-fact', revision: 2, expectedRevision: 1 });
+    const options = { silo: 'test', store: setup.nats.store };
+    const request = { conversationId: saved.conversationId, turnId: saved.turnId,
+      threadId: saved.threadId, inputGeneration: saved.inputGeneration, causeId: cause.id };
+    expect(await invalidateMemoryContext(options, request)).toMatchObject({ status: 'invalidated' });
+    expect((await setup.call()).status).toBe(403);
+    expect((await setup.call(toolHeaders, toolCall, toolRoute)).status).toBe(403);
+    const refused = { type: 'ack', sequence: 2, refused: 'memory_context_unavailable' };
+    expect(await bridge.exchange(2)).toEqual(refused);
+    expect(setup.received()).toBe(0);
+  } finally {
+    await bridge.close();
+  }
+}
+it('refuses model, tool and renewal after the command records invalidation',
+  refusesRecordedInvalidation);
