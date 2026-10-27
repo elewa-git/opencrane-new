@@ -8,7 +8,7 @@ export const budgetRootAllowanceSetDataSchema = z.object({
   preparationDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
 }).strict();
 const sourceStopSchema = z.object({
-  rootId: id, reason: z.enum(['requester_stop', 'turn_ended', 'access_revoked']),
+  rootId: id, reason: z.enum(['requester_stop', 'turn_ended', 'access_revoked', 'routine_stop']),
   sourceSubject: id, sourcePosition: z.int().positive(), sourceEventId: id,
 }).strict();
 export const budgetRootStoppedDataSchema = z.discriminatedUnion('reason', [

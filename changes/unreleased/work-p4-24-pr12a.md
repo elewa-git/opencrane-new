@@ -1,0 +1,1 @@
+The internal budget Stop command now verifies saved routine owner or admin Stop evidence against the allocated run. It keeps the first reason, keeps money held for calls with unknown results and refuses further spending on that root. Routine execution remains disabled.

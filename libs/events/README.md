@@ -38,7 +38,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
-  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks consent starts, callback claims, refresh starts and first account confirmations, takeover cancellation and saved event shapes, including native access expiry, retry records, personal and saved tool choices, company opt-in, and blocks| events
+  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks consent starts, callback claims, refresh starts and first account confirmations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal and saved tool choices, company opt-in, and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
 ```
 
@@ -102,6 +102,9 @@ who may read metadata or manage a routine. These subscriptions start no routine 
 
 The publication subscription names the worker that prepares complete gateway
 configurations. Withdrawal has no preparation subscription.
+
+A routine Stop has its own fixed budget reason and keeps the saved source reference.
+It does not describe an admin intervention as a requester Stop or start routine work.
 
 Budget turn stops carry only their reason kind and a reference to the saved spending
 stop. Participants can read them without seeing amounts or payer ids. Member stops
