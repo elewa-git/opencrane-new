@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { TurnSummary } from '@opencrane/auth';
 import { envelope, privateCallers } from '@opencrane/models';
 import { losslessJson } from '@opencrane/events/lossless-json';
@@ -43,3 +44,14 @@ export async function privateCatalogue(callers: ReturnType<typeof privateCallers
 }
 
 export { checkPrivateTurnTools } from '../../src/chat/turn-tools.ts';
+
+export function privateToolOffer(name: 'recall' | 'remember') {
+  let definition: typeof recallTool | typeof rememberTool = recallTool;
+  if (name === 'remember') definition = rememberTool;
+  const hash = createHash('sha256');
+  hash.update('memory');
+  const key = `oc_${hash.digest('hex').slice(0, 10)}`;
+  return [{ key, serverId: 'memory', connectionId: 'server',
+    serverInfo: { name: 'OpenCrane memory', version: '1' },
+    definitions: [JSON.stringify(definition)], modes: { [name]: 'allow' as const } }];
+}

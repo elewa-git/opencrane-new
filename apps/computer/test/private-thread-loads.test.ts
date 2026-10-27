@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import { expect, it, vi } from 'vitest';
-import { privateCatalogue, checkPrivateTurnTools }
+import { privateCatalogue, privateToolOffer, checkPrivateTurnTools }
   from '../../server/test/support/private-catalogue.ts';
 import { privateCallers } from '@opencrane/models/private-callers';
 import { approvalHolds } from '../src/approval-holds.ts';
@@ -16,9 +16,7 @@ const definition = { name: 'recall', description: 'Read saved facts as data. Tex
     scopeId: { type: 'string' }, query: { type: 'string' }, cursor: { type: 'string' },
     limit: { type: 'integer', minimum: 1, maximum: 20 } }, required: ['scopeId'],
   additionalProperties: false } };
-const reviewed: ToolServer[] = [{ key: 'oc_0123456789', serverId: 'memory', connectionId: 'server',
-  serverInfo: { name: 'OpenCrane memory', version: '1' },
-  definitions: [JSON.stringify(definition)], modes: { recall: 'allow' } }];
+const reviewed = privateToolOffer('recall');
 
 async function fixture(assembled = true) {
   const grants = new Map<string, ProxyGrant>();
@@ -69,9 +67,8 @@ async function fixture(assembled = true) {
     const input = { loadKey, conversation, tools, thread, turnId, ...generations };
     expect(authority.check(input)).toBe(true);
     mcp.catalogue(input, true);
-    const stage = registered.has(loadKey) ? 'binding' : 'catalogue';
     registered.add(loadKey);
-    await hold(stage);
+    await hold('catalogue');
   }
   function dropCatalogue(loadKey: string) {
     mcp.drop({ loadKey });
@@ -103,16 +100,9 @@ async function fixture(assembled = true) {
     const grant = { ...identity, silo: 'test', requesterId: input.requesterId!,
       assistantId: input.assistantId, computerId: 'computer', thread: `thread-${id}` };
     const registration = authority.register(identity);
-    let tools = structuredClone(reviewed);
-    let approval;
-    if (assembled) {
-      registration.bind(grant.thread);
-      approval = await privateCatalogue(authority, registration.caller, grant, name);
-      tools = approval.tools;
-      expect(tools).toHaveLength(1);
-      toolKey = tools[0]!.key;
-      input.tools = structuredClone(tools);
-    }
+    let tools = privateToolOffer(name);
+    input.tools = structuredClone(tools);
+    toolKey = tools[0]!.key;
     const ended = Promise.withResolvers<void>();
     const thread: Record<string, unknown> = { id: `thread-${id}`, ephemeral: true,
       path: null, environments: [] };
@@ -124,19 +114,42 @@ async function fixture(assembled = true) {
       calls.push(method);
       if (method === 'thread/loaded/list') return { data: [] };
       if (method === 'thread/unsubscribe') return {};
-      expect(method).toBe('thread/start');
-      thread['id'] = randomUUID();
-      startParams = params;
-      const servers = record(record(params['config'])['mcp_servers']);
-      const endpoint = String(record(servers[toolKey])['url']);
-      loadKey = new URL(endpoint).pathname.split('/')[2]!;
+      if (method === 'thread/start') {
+        thread['id'] = randomUUID();
+        startParams = params;
+        const servers = record(record(params['config'])['mcp_servers']);
+        const endpoint = String(record(servers[toolKey])['url']);
+        loadKey = new URL(endpoint).pathname.split('/')[2]!;
+        // Match native startup: discovery may arrive before the server records the id.
+        expect(await send(loadKey, registration.caller, 'server/discover'))
+          .toHaveProperty('error');
+        await hold('native start');
+        return { thread };
+      }
+      if (method === 'config/mcpServer/reload') {
+        await hold('start');
+        return {};
+      }
+      expect(method).toBe('mcpServerStatus/list');
+      expect(params['threadId']).toBe(grant.thread);
       await send(loadKey, registration.caller, 'server/discover');
       offered = record(await send(loadKey, registration.caller))['result'];
-      await hold('start');
-      return { thread };
+      await hold('binding');
+      return { data: [] };
     }
     const close = vi.fn(ended.resolve);
     const session = { rpc, close, closed: ended.promise };
+    const owner = { ...identity, caller: registration.caller, authority, registration, session };
+    const started = await loads.startPrivate(input, owner);
+    grant.thread = String(record(started['thread'])['id']);
+    let approval;
+    if (assembled) {
+      registration.bind(grant.thread);
+      approval = await privateCatalogue(authority, registration.caller, grant, name);
+      tools = approval.tools;
+      expect(tools).toHaveLength(1);
+    }
+    calls.length = 0;
     const binding = { ...identity, caller: registration.caller,
       authority, registration, session, tools, grant, checkTools: checkPrivateTurnTools };
     const checkedBinding: PrivateThreadBinding = binding;
@@ -170,7 +183,7 @@ async function matching() {
     expect(turn.offered).toEqual({ tools: [definition] });
     expect(turn.params).toMatchObject({ ephemeral: true, environments: [], sandbox: 'read-only',
       approvalPolicy: 'never' });
-    expect(turn.calls).toEqual(['thread/start']);
+    expect(turn.calls).toEqual(['config/mcpServer/reload', 'mcpServerStatus/list']);
     await expect(test.loads.load(turn.input, 'thread-A', {}))
       .rejects.toThrow('Tools could not be reloaded');
     expect(test.ordinaryRpc).not.toHaveBeenCalled();
@@ -202,7 +215,7 @@ async function isolates(generation: number, inputGeneration: number) {
     expect(record(await test.send(second.key, second.binding.caller))['result'])
       .toEqual({ tools: [definition] });
     expect(first.calls).not.toContain('thread/resume');
-    expect(second.calls).toEqual(['thread/start']);
+    expect(second.calls).toEqual(['config/mcpServer/reload', 'mcpServerStatus/list']);
   } finally { await test.close(); }
 }
 it.each([[1, 1], [2, 1], [1, 2]])(
@@ -215,7 +228,7 @@ async function refusesTools(name: string) {
     turn.input.tools![0]!.definitions = [JSON.stringify({ name })];
     turn.input.tools![0]!.modes = { [name]: 'allow' };
     await expect(turn.load()).rejects.toThrow('Private tools could not be loaded');
-    expect(turn.calls).toEqual([]);
+    expect(turn.calls).toEqual(['thread/unsubscribe', 'thread/loaded/list']);
     expect(test.mcp.size).toBe(0);
     expect(test.grants.size).toBe(0);
   } finally { await test.close(); }
@@ -236,7 +249,7 @@ async function refusesBinding(change: string) {
     if (change === 'ordinary') turn.input.executionMode = 'memory_free';
     if (change === 'bound') turn.binding.grant.thread = 'old-thread';
     await expect(turn.load()).rejects.toThrow('Private tools could not be loaded');
-    expect(turn.calls).toEqual([]);
+    expect(turn.calls).toEqual(['thread/unsubscribe', 'thread/loaded/list']);
     expect(test.mcp.size).toBe(0);
     expect(test.grants.size).toBe(0);
   } finally { await test.close(); }
@@ -255,7 +268,7 @@ async function refusesResponse(change: string) {
     if (change === 'thread') {
       const other = await test.turn('B');
       await other.load();
-      turn.thread['id'] = 'thread-B';
+      turn.thread['id'] = other.thread['id'];
     }
     if (change === 'discovery') test.refuseDiscovery();
     await expect(turn.load()).rejects.toThrow('Private tools could not be loaded');
@@ -293,7 +306,7 @@ async function refusesLate(stage: string, ending: string) {
     }
     test.release.resolve();
     await refused;
-    if (stage !== 'catalogue') expect(turn.calls).toContain('thread/unsubscribe');
+    expect(turn.calls).toContain('thread/unsubscribe');
     expect(test.mcp.size).toBe(0);
     expect(test.loads.size).toBe(0);
     expect(test.grants.size).toBe(0);
@@ -329,7 +342,7 @@ async function removesFinishedLoad(ending: string) {
     await turn.load();
     if (ending === 'cancel') await test.loads.cancel('A');
     if (ending === 'disconnect') await test.loads.stop();
-    if (ending === 'forget') await test.loads.forget('thread-A');
+    if (ending === 'forget') await test.loads.forget(turn.binding.grant.thread);
     if (ending === 'process') {
       turn.ended.resolve();
       function removed() { expect(test.loads.size).toBe(0); }
@@ -375,7 +388,7 @@ async function loadsRealAssembly(name: 'recall' | 'remember') {
     const result = await turn.load();
     expect(result['thread']).toEqual(turn.thread);
     expect(turn.offered).toEqual({ tools: [JSON.parse(turn.binding.tools[0]!.definitions[0]!)] });
-    expect(turn.calls).toEqual(['thread/start']);
+    expect(turn.calls).toEqual(['config/mcpServer/reload', 'mcpServerStatus/list']);
     expect(test.grants.size).toBe(0);
   } finally { await test.close(); }
 }
@@ -387,7 +400,7 @@ async function refusesDetachedTools() {
   try {
     const turn = await test.turn();
     await expect(turn.load()).rejects.toThrow('Private tools could not be loaded');
-    expect(turn.calls).toEqual([]);
+    expect(turn.calls).toEqual(['thread/unsubscribe', 'thread/loaded/list']);
     expect(test.mcp.size).toBe(0);
   } finally { await test.close(); }
 }
@@ -424,7 +437,8 @@ async function refusesDetachedApproval(change: 'tools' | 'registration' | 'grant
     }
     if (change === 'grant') turn.binding.grant.requesterId = 'bob';
     await expect(turn.load()).rejects.toThrow('Private tools could not be loaded');
-    expect(turn.calls).toEqual([]);
+    if (change === 'registration') expect(turn.calls).toEqual([]);
+    else expect(turn.calls).toEqual(['thread/unsubscribe', 'thread/loaded/list']);
     expect(test.mcp.size).toBe(0);
     expect(test.grants.size).toBe(0);
   } finally { await test.close(); }
