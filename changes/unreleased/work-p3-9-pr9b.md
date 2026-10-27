@@ -1,0 +1,1 @@
+- Personal sign-in workers can send a claimed provider code once and retain its exact reply privately. Restart recovers a saved unconfirmed result without resending; uncertain sends and changed access remain unavailable. Public connection routes and activation remain later work.

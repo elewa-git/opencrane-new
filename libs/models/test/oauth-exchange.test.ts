@@ -22,7 +22,7 @@ const responseText = ' { "access_token": "fixture-access-canary", "token_type": 
 let fixture: Awaited<ReturnType<typeof remoteFixture>>;
 let requests: URLSearchParams[];
 let accepted: number;
-let mode: 'valid' | 'redirect' | 'unfinished' | 'truncated' | 'malformed' | 'large' | 'invalid';
+let mode: 'valid' | 'redirect' | 'unfinished' | 'truncated' | 'malformed' | 'large' | 'boundary' | 'invalid';
 let response: ServerResponse | undefined;
 let received: Promise<void>;
 let notifyReceived: () => void;
@@ -68,7 +68,9 @@ function provider(request: IncomingMessage, reply: ServerResponse) {
     if (mode === 'malformed') {
       reply.end('not JSON: fixture-access-canary');
     } else if (mode === 'large') {
-      reply.end(' '.repeat(8193));
+      reply.end(responseText.padEnd(8193, ' '));
+    } else if (mode === 'boundary') {
+      reply.end(responseText.padEnd(8192, ' '));
     } else if (mode === 'invalid') {
       reply.end('{"access_token":"fixture-access-canary","token_type":"MAC"}');
     } else {
@@ -130,6 +132,13 @@ describe('private OAuth provider transport', function transportTests() {
     expect(fixture.dnsCalls()).toBe(1);
   });
 
+  it('accepts valid JSON at the exact byte limit', async function boundary() {
+    mode = 'boundary';
+    const transport = oauthProviderTransport(configuration, operatorNetwork());
+    const reply = await transport(material, new AbortController().signal);
+    expect(reply).toEqual(Buffer.from(responseText.padEnd(8192, ' ')));
+  });
+
   it.each(['verifier', 'clientId', 'redirectUri'] as const)(
     'lets the provider refuse a wrong %s without exposing its body',
     async function wrongBinding(field) {
@@ -153,8 +162,14 @@ describe('private OAuth provider transport', function transportTests() {
     'refuses %s responses without retrying', async function refusedReply(value) {
       mode = value;
       const transport = oauthProviderTransport(configuration, operatorNetwork());
-      await expect(transport(material, new AbortController().signal))
-        .rejects.toThrow(/^OAuth exchange unavailable$/u);
+      function caught(error: unknown) {
+        return error;
+      }
+      const error = await transport(material, new AbortController().signal).catch(caught);
+      expect(error).toEqual(new Error('OAuth exchange unavailable'));
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toHaveProperty('cause');
+      expect(JSON.stringify(error)).not.toContain('canary');
       expect(requests).toHaveLength(1);
       expect(fixture.dnsCalls()).toBe(1);
     });

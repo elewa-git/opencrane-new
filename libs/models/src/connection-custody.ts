@@ -204,6 +204,14 @@ class ConnectionCustody {
     }
     return this.recoverCreate(checked, material);
   }
+  /** Call under the profile stage lock, after confirming the live callback worker. */
+  async claimSend(input: ConnectionStage) {
+    const stage = checkedStage(input);
+    if (!stage.attemptId || Date.now() >= stage.appendUntil) {
+      return false;
+    }
+    return this.journal.claimSend(nameFor(stage));
+  }
   /** Prepare private consent material once. A saved create claim prevents another create. */
   async prepareAttempt(input: Omit<ConnectionStage, 'appendUntil'>, material: () => string) {
     try {

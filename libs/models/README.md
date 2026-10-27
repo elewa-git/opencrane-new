@@ -46,9 +46,10 @@ This shared library is used by the server, background workers and personal compu
 Its private credential adapter talks to Kubernetes through the server’s local proxy.
 It can record private sign-in attempts and return an approved consent link internally.
 It can also validate a private callback and record which worker claimed it once.
-A private transport can exchange a sign-in code with a configured provider in tests.
-It checks the destination and limits the request and reply. The worker that saves
-send permission and keeps the reply in private storage is not built yet.
+A private worker can exchange a sign-in code once with a configured provider in tests.
+It checks current access, saves that a send may happen, and keeps the exact reply privately.
+After a restart it can recover a saved reply, but cannot send the code again.
+The result stays unconfirmed and grants no tool access.
 Public routes remain unavailable.
 It checks passes with `libs/auth`, permissions with `libs/authz`, and starts agentgateway
 to handle AI calls.
@@ -66,7 +67,7 @@ flowchart LR
   models -->|tests private sign-in requests; checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models and checks private callers; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
-  models -->|stages credentials and callback codes, recovers private consent attempts, shares a database lock for personal saves and cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
+  models -->|stages credentials, callback codes and unconfirmed replies, recovers private consent attempts, shares a database lock for personal saves and cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|saves events, remote starts and unsent proof; recovers budgets in order and reads spending and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]

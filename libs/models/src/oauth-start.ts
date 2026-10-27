@@ -67,7 +67,7 @@ async function recordStart(store: EventStore, binding: Binding, session: Session
 
 /** Reuse the original consent bindings and publication checks for a private callback. */
 export async function checkPersonalOAuthStart(store: EventStore, binding: Binding, session: Session,
-  custody: Custody, input: Input, loadConfiguration: ConfigurationLoader) {
+  custody: Custody, input: Input, loadConfiguration: ConfigurationLoader, claimed?: StoredEvent) {
   const subject = `connection-${session.userId}-${input.serverId}-${input.profileId}`;
   const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
   const configuration = oauthConfigurationSchema.parse(await loadConfiguration(input.serverId));
@@ -82,7 +82,12 @@ export async function checkPersonalOAuthStart(store: EventStore, binding: Bindin
   const controlSubject = `connection-control-${session.userId}-${input.serverId}`;
   const options = { requiredRole: 'member' as const, membership };
   await activeMember(store, binding, session.userId, options);
-  if (await store.head(controlSubject, performance.now() + 10_000) !== 0 || rows.length > 1) {
+  const expectedRows = claimed ? 2 : 1;
+  if (claimed && (rows.length !== 2 || !isDeepStrictEqual(rows[1], claimed))) {
+    throw new Error('OAuth claim changed');
+  }
+  if (await store.head(controlSubject, performance.now() + 10_000) !== 0 ||
+      rows.length > expectedRows) {
     throw new Error('OAuth start refused');
   }
   const original = rows[0];

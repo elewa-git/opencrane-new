@@ -29,19 +29,34 @@ The adapter makes one request per invocation and has no retry loop.
 A successful return is a private Buffer containing the exact response bytes, after UTF-8,
 JSON and basic Bearer token-shape checks. This Buffer must never reach an API or event.
 Optional identity fields are preserved privately but are not verified or trusted. This
-adapter records no profile and grants no permission. It does not yet store the response.
+adapter records no profile and grants no permission. The worker below stores the response.
 
-Still required: durable send claim before invocation; original claimed-worker binding;
-current access/configuration/expiry checks before sending and staging; immutable result
-custody with exact UID/version recovery; safe status reads; and concurrency, duplicate,
-restart, uncertain-send and lost-reply recovery tests. Repeated explicit invocations are
-not made safe by this adapter. The later worker must prevent them using saved events.
-Confirmation, activation, reconnect, refresh and revoke remain outside this part.
+The worker below prevents repeated sends. Confirmation, activation, reconnect, refresh
+and revoke remain outside this part.
 
 `oauth-exchange.test.ts` uses a recording local TLS provider to check the form, PKCE/client/
 redirect refusals, exact private bytes, fixed configuration, TLS, address pinning, mixed
 public/private DNS, rebinding, redirects, invalid and oversized responses, unfinished
 replies, deadlines and cancellation. No dependencies are added. Live qualification: NOT RUN.
+
+## One private provider send (P3-9 PR 9b; Part of #50)
+
+`exchangePersonalOAuth` has no route, package export or replay reaction. It accepts trusted
+session context, original start input, current settings, custody and the database lock.
+Only the original frozen callback result grants one send; copies and readback grant none.
+The callback event remains business authority. The worker checks the exact two-event history
+and original bindings. Optional `tokenEndpoint` keeps old starts readable; exchange requires
+it and the attempt digest binds it. The unchanged profile lock covers reads, send and staging.
+
+Exact UID/version and authenticated material protect code, verifier and reply. The private
+journal flushes an exclusive send marker before transport. Access/configuration/expiry checks
+run after private reads, marker flush and DNS lookup, before staging and after final recovery.
+History loads precede short access checks. Restart only recovers; missing results stay unknown.
+The exact reply is immutable private custody. `unconfirmed` returns changeRef, sequence and
+reference only. Neither status nor custody grants identity confirmation or tool access.
+Changed objects, failed flushes and lost replies are covered with real fixture services.
+Valid JSON passes at 8,192 bytes and fails above it. Production guards stay unchanged.
+Routes, activation, refresh and revoke remain later work. Live qualification: NOT RUN.
 
 ## Private callback claim (P3-9 PR 8c; Part of #50)
 
@@ -66,7 +81,7 @@ reply for that invocation only. A saved claim refuses all later invocations befo
 reads, including after restart or transport deduplication expiry. Final custody, access,
 configuration and expiry checks precede a `claimed` result containing only claim/worker ids
 and sequence. This result is internal and must never be exposed as public send permission.
-A later guarded exchange must retain this live worker identity; this change sends nothing.
+The worker above consumes this live result once before any guarded exchange.
 Replay has no registered reaction and never reads custody. Activation and selection remain
 separate future commands. Normal fixture tests cover races, refusals and non-disclosure.
 Live provider and fresh-install qualification: NOT RUN.
