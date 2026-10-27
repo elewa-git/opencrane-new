@@ -1,4 +1,5 @@
 import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
 import { expect, it, vi } from 'vitest';
 import { until } from '@opencrane/authz/testing';
 import { fixture } from './bridge-gate-fixture.ts';
@@ -282,3 +283,33 @@ async function acceptsBeforeResume() {
 }
 it('acknowledges active work before resume on every reconnect, without claiming completion',
   acceptsBeforeResume);
+
+async function waitsForPreparedRoutineExit() {
+  const lifetime = Promise.withResolvers<void>();
+  const test = await fixture(true, lifetime.promise);
+  function prepared() {
+    function isPrepared(frame: Record<string, unknown>) {
+      return frame['type'] === 'routine_prepared';
+    }
+    return test.frames.some(isPrepared);
+  }
+  function quiet() { return Boolean(test.receipt()); }
+  try {
+    const request = { type: 'routine_prepare', id: 'routine-turn', conversationId: 'routine-chat',
+      assistantId: 'assistant', requesterId: 'alice', expiresAt: Date.now() + 50_000 };
+    test.send(request);
+    await until(prepared);
+    test.send(await test.signedGate());
+    await test.flush();
+    await delay(100);
+    expect(test.receipt()).toBeUndefined();
+    lifetime.resolve();
+    await until(quiet);
+    expect(test.calls).not.toContain('turn/start:thread-1');
+  } finally {
+    lifetime.resolve();
+    await test.close();
+  }
+}
+it('waits for an unused routine process to exit before confirming computer Stop',
+  waitsForPreparedRoutineExit);

@@ -1,0 +1,1 @@
+- Internal routine preparation now starts an empty private thread before recording its spending allowance. Delivery uses that same native thread once and refuses a different identity, repeated preparation or expired session. Automatic routine execution remains disabled.

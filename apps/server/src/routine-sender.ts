@@ -1,4 +1,5 @@
 import type { connectBridge } from './chat/bridge.ts';
+import { cancelRoutineThread } from './chat/routine-thread.ts';
 import { claimRoutineActivation, readRoutineActivation } from './routine-activation.ts';
 
 // Check saved identity only. Missing delivery evidence never proves that a send is safe.
@@ -36,11 +37,14 @@ export function createRoutineSender(options: { enabled?: boolean; replay?: boole
     const unknown = { status: 'unknown' as const };
     if (!enabled || used) return unknown;
     used = true;
+    let link: Link | undefined;
+    let admitted: Awaited<ReturnType<typeof claimRoutineActivation>> | undefined;
+    let sent = false;
     try {
       args[3] = structuredClone(raw);
-      const admitted = await claimRoutineActivation(...args);
+      admitted = await claimRoutineActivation(...args);
       if (!admitted.published) return unknown;
-      const link = await wake();
+      link = await wake();
       const checked = await readRoutineActivation(...args);
       const run = checked.run;
       if (link.computerId !== args[4].computerId ||
@@ -48,6 +52,7 @@ export function createRoutineSender(options: { enabled?: boolean; replay?: boole
       const instructions = keys.decrypt(worker.silo, `routine-${run.routineId}`,
         run.definition.instructions);
       const frame = { type: 'turn', id: checked.turnId, messageId: checked.messageId,
+        threadId: args[4].threadId,
         rootId: checked.rootId, senderAttemptId: checked.senderAttemptId,
         conversationId: run.conversationId, assistantId: run.definition.assistantId,
         requesterId: run.definition.ownerId, executionMode: 'restricted',
@@ -59,10 +64,16 @@ export function createRoutineSender(options: { enabled?: boolean; replay?: boole
       // Consume this live authority before the transport can lose its reply.
       awaitingStart = true;
       link.bindRoutineStart(checked.turnId, checkStart);
+      // Treat a missing transport reply as a possible delivery.
+      sent = true;
       link.socket.send(bytes);
       return { status: 'sent' as const };
     } catch {
       return unknown;
+    } finally {
+      if (link && admitted && !sent) {
+        cancelRoutineThread(link.socket, admitted.turnId, admitted.run.conversationId);
+      }
     }
   }
   async function checkStart(report: Start) {

@@ -26,7 +26,8 @@ async function fixture() {
   function stopBridge() { return Promise.resolve({}); }
   function connectionLost() {}
   function acknowledge() { /* Keep acknowledgements independent of the journal fixture. */ }
-  const runner = { gate: { closed: false }, start, interrupt, stopBridge, acknowledge,
+  const runner = { gate: { closed: false }, start, prepareRoutine: rpc,
+    interrupt, stopBridge, acknowledge,
     connectionLost };
   function reportCount() { return reports.length; }
   function replayReports(since: number, send: (value: BridgeReport) => void) {

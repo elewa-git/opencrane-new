@@ -13,15 +13,12 @@ import { itemReport } from './item-reports.ts';
 import { turnInput, privateTurnInput } from './turn-input.ts';
 import { threadLoads, unload, ThreadLoadFailed, type ThreadLoadDriver } from './thread-loads.ts';
 import { revokeTurnAccess } from './turn-stop.ts';
+import { routineThreads, startPrivateThread, type PrivateSession } from './routine-threads.ts';
+export type { PrivateSession } from './routine-threads.ts';
 
 const MAX_PRIVATE_TURNS = 2;
 const PRIVATE_ITEM_TYPES = new Set(['userMessage', 'agentMessage', 'reasoning', 'contextCompaction']);
 type Grant = { token: string; expiresAt: number; model?: string | undefined; context?: unknown };
-export interface PrivateSession {
-  rpc(this: void, method: string, params: Record<string, unknown>): Promise<unknown>;
-  close(this: void): void;
-  closed: Promise<void>;
-}
 
 export interface TurnDriver extends ThreadLoadDriver {
   privateSession?(): Promise<PrivateSession>;
@@ -103,6 +100,7 @@ class TurnRunner {
   private readonly approvals: Pick<ReturnType<typeof approvalHolds>, 'endThread'>
     & Partial<Pick<ReturnType<typeof approvalHolds>, 'stop' | 'size'>> | undefined;
   private readonly loads: ReturnType<typeof threadLoads>;
+  private readonly routines: ReturnType<typeof routineThreads>;
   private readonly journal: ReturnType<typeof reportJournal>;
   private readonly send: (report: BridgeReport) => void;
   private readonly closeCurrentSocket: (code: number, reason: string) => void;
@@ -130,6 +128,7 @@ class TurnRunner {
     this.approvals = approvals;
     this.signal = signal;
     this.loads = threadLoads(driver, this.state.cancelled);
+    this.routines = routineThreads(driver.privateSession?.bind(driver), this.gate.track.bind(this.gate));
     this.journal = journal;
     this.send = send;
     this.closeCurrentSocket = closeCurrentSocket;
@@ -290,7 +289,8 @@ class TurnRunner {
       return;
     }
 
-    if (input.executionMode === 'restricted' && this.privateTurnCount() >= MAX_PRIVATE_TURNS) {
+    if (input.executionMode === 'restricted' && !input.senderAttemptId
+      && this.privateTurnCount() + this.routines.size >= MAX_PRIVATE_TURNS) {
       return;
     }
     const previousStart = this.lastStartedReport(input.id);
@@ -321,6 +321,7 @@ class TurnRunner {
     const identity = credential.expiresAt > Date.now() ? credential.gateIdentity : undefined;
     const accepted = this.gate.close(value, identity);
     accept(accepted);
+    this.routines.stop();
     this.approvals?.stop?.();
     void this.gate.track(this.loads.stop());
     for (const input of this.state.preparing.values()) this.state.cancelled.add(input.id);
@@ -484,22 +485,31 @@ class TurnRunner {
   }
 
   private async preparePrivateThread(input: Turn) {
+    if (input.senderAttemptId) {
+      const prepared = this.routines.take(input);
+      this.keepPrivateSession(input, prepared.session);
+      return prepared.response;
+    }
     if (!this.driver.privateSession) throw new Error('Private sessions unavailable');
     const session = await this.driver.privateSession();
+    this.keepPrivateSession(input, session);
+    return startPrivateThread(session, input.taskKind);
+  }
+
+  private keepPrivateSession(input: Turn, session: PrivateSession) {
     this.state.sessions.set(input.id, session);
     const sessionClosed = this.privateSessionClosed.bind(this, input);
     void session.closed.then(sessionClosed, sessionClosed);
-    const params = { model: modelForTask(input.taskKind), approvalPolicy: 'never',
-      sandbox: 'read-only', ephemeral: true, environments: [] };
-    const response = record(await session.rpc('thread/start', params));
-    const thread = record(response['thread']);
-    const environments = thread['environments'];
-    if (thread['ephemeral'] !== true || thread['path'] !== null
-      || (environments !== undefined && (!Array.isArray(environments) || environments.length))) {
-      session.close();
-      throw new Error('Private thread is not ephemeral');
+  }
+
+  async prepareRoutine(value: Record<string, unknown>) {
+    if (this.gate.closed) throw new Error('Bridge stopped');
+    this.preparingCount++;
+    try {
+      return await this.routines.prepare(value, this.privateTurnCount());
+    } finally {
+      this.preparingCount--;
     }
-    return response;
   }
 
   private async prepareAndRun(input: Turn) {
@@ -635,6 +645,7 @@ class TurnRunner {
       const threadId = this.findRunningThread(turnId) ?? started?.threadId;
       if (expectedThread !== threadId || started?.conversationId !== conversationId) return;
     }
+    this.routines.cancel(turnId, conversationId);
     // Clear queued and replayable private text before any asynchronous cleanup.
     this.journal.forgetTurnText(conversationId, turnId);
     const input = findTurn(this.state, turnId, conversationId);
@@ -714,6 +725,7 @@ class TurnRunner {
   }
 
   connectionLost() {
+    this.routines.stop();
     // Include finished replies whose acknowledgements were lost with the connection.
     for (const report of this.journal.reports) this.journal.forgetText(report.sequence);
     for (const input of this.state.preparing.values()) {

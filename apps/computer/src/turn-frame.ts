@@ -16,6 +16,7 @@ export interface Turn {
   messageId?: string;
   rootId?: string;
   senderAttemptId?: string;
+  threadId?: string;
   id: string;
   conversationId: string;
   assistantId: string;
@@ -79,6 +80,8 @@ export function parseTurn(value: Record<string, unknown>): Turn {
 
 function readRoutineTurn(value: Record<string, unknown>, turn: Turn) {
   if (value['senderAttemptId'] !== undefined) {
+    if (turn.executionMode !== 'restricted') throw new Error('Invalid routine mode');
+    turn.threadId = requiredString(value, 'threadId');
     turn.messageId = requiredString(value, 'messageId');
     turn.rootId = requiredString(value, 'rootId');
     turn.senderAttemptId = requiredString(value, 'senderAttemptId');

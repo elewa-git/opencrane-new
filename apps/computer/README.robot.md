@@ -8,12 +8,22 @@ use separate caches, written only by main pushes. See the
 
 ## Routine start identity
 
-The internal routine frame carries messageId, rootId and senderAttemptId beside
+The internal routine frame carries threadId, messageId, rootId and senderAttemptId beside
 id (the turn id). The journal retains these on agent.turn_started, including reload.
 Execution still records the turn id in the existing execution journal before calling
 the driver. The server requires its live sender and exact saved admission before
 returning a start grant. No retry or routine enablement is added to the computer.
 The server routine-sender suite exercises the real channel with a recording driver.
+
+`routine_prepare` opens an empty ephemeral private thread before the server records its
+session, input and allowance. The computer retains the process and checks the returned
+native id, turn, conversation, assistant and requester on delivery. It consumes preparation
+before checking delivery and never starts a second thread for that routine frame.
+Prepared and running private turns share the two-process limit. Each preparation expires
+within sixty seconds; Stop, disconnect or process closure removes it sooner. The bridge
+remembers at most 4,096 attempted turn ids and refuses further preparations at that limit.
+A reply from an old connection cannot be sent on a replacement connection.
+The request and reply contain no routine instructions. No production dispatcher is enabled.
 
 ## Test dependencies
 
