@@ -6026,3 +6026,47 @@ refuse the list. The computer starts the native thread first. After the trusted 
 binds its real ID, assembly approves the list for that ID. The loader uses that
 same bound thread for registry checks and native discovery. It refuses any mismatch. Production has no caller
 for this preparation path, and native memory admission remains disabled.
+
+## Exact personal memory invalidation (P4-15 PR 3d)
+
+`memory/invalidation.ts` exports `invalidateMemoryContext`. This internal command takes
+conversation, turn, thread, input generation and a saved cause id. It derives the
+requester, assistant, computer, generation, personal scope and loaded references from
+saved chat evidence. It accepts versioned personal correction/forget events only.
+`memoryReferences` must show that this exact event changes a loaded reference or its
+dependency from current to unavailable, at the same check time. Unrelated changes save nothing.
+Missing or mismatched evidence refuses. It reads no keys, facts table or permissions.
+The former reader need not retain access for the server to withdraw use of that context.
+
+The command reads history with separate ten-second deadlines, reloads chat evidence,
+and attempts one conditional append with a two-second deadline. It does not create an
+access snapshot: this operation only withdraws use, and grants no authority.
+Recall or closure races return `reload_required`; callers must reload and reconcile.
+An uncertain append returns `unavailable`. Repeating the same request recovers the
+saved event id and input generation. A saved invalidation never transitions twice.
+The receipt confirms evidence only, not process termination or buffer clearance.
+Replay retains all loaded references and creates no grant or Stop effect.
+
+Tests: `test/memory-invalidation.test.ts`, plus the command-to-model/tool/renewal
+case in `test/memory-dispatch.test.ts`. The existing fold and security suites cover
+retained references and the unchanged event contract. No route or event type was added.
+Native admission remains disabled. Subscriptions, expiry/access invalidation, Stop,
+volatile delivery, native forwarding and qualified enablement remain later work.
+Fresh-install live qualification: NOT RUN.
+
+Prerequisites on main:
+
+- #745: `d35b7957ff85fcc826a8ae6f1b7fbf020191ef94`.
+- #762 (PR 4d): `b35059f91ea080e18541f2fa40cd13388a60a0d5`.
+
+Read the accepted design section 2 and remaining row 3, the PR 3c review and
+verification, PR 5a review, and PR 4d final reports and review/verification files.
+
+Own checks on 27 October 2026: PASS, all 24 new tests twice, plus 146 supporting
+checks in the full targeted run. PASS, unchanged event security, 460 tests once.
+PASS: lint (including Knip), typecheck, check:events and lint:changelog.
+Tests were committed before implementation. The participation-close regression
+also failed before its fix. An earlier setup run lacked the pinned test gateway;
+`npm run pretest` supplied it. Fixture parsing was corrected before the passing runs.
+All suites used `nice -n 10`, one worker and disposable services. No full root suite,
+dev stack or model call ran. Live qualification: NOT RUN.

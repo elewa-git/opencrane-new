@@ -66,6 +66,9 @@ Recall, Correct and Forget load their history before the gateway signs the short
 The server keeps that data briefly for one call and checks current access before use.
 Calls and turn renewal prepare access receipts for every memory scope already loaded.
 Correct and Forget validate their targets but remain disabled.
+An internal command can record that a personal turn's loaded memory became invalid
+after a saved correction or forget. It keeps every loaded reference for replay and
+returns a receipt without fact text. Automatic detection and stopping remain planned.
 After a restart, memory recovery uses the existing private keys and saved command records.
 Overlapping recovery calls wait for the same scan to finish before reporting completion.
 A new assistant with no access to notes does not block personal memory.
@@ -96,7 +99,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks private callers, reads original tool reviews, checks access before history errors, prepares and allocates child and routine allowances, checks saved routine admission, and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; records personal account revocations, choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, encrypted inputs and checked admission receipts, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; records invalid personal memory contexts and personal account revocations, choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, encrypted inputs and checked admission receipts, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres

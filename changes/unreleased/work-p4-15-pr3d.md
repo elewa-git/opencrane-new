@@ -1,0 +1,1 @@
+An internal server command can record exactly which personal turn lost valid loaded memory after a saved correction or forget. Repeated requests recover one receipt, and replay keeps all loaded references. Automatic detection and stopping remain planned; native memory admission stays disabled.
