@@ -142,7 +142,7 @@ export async function clusterFixture(missingTrust = false, children: ChildProces
   }
 }
 
-async function completeRoutes(peer: Peer) {
+export async function completeRoutes(peer: Peer) {
   const response = await fetch(`http://127.0.0.1:${peer.monitor}/routez`,
     { signal: AbortSignal.timeout(1000) });
   const result: unknown = await response.json();
