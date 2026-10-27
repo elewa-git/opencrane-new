@@ -103,6 +103,7 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
   while (!saved) {
     const before = confirmed;
     async function checkAccess() {
+      if (!await worker.checkCurrent()) throw new Error('Routine activation refused');
       await readChanges();
       const after = await checked.receiptState();
       preparation.checkTime();
