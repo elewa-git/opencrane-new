@@ -1,3 +1,4 @@
+import { exportSPKI, generateKeyPair, SignJWT } from 'jose';
 import { exchangePersonalOAuth } from '../src/oauth-worker.ts';
 import { remoteFixture } from './support/remote-mcp.ts';
 import { open } from 'node:fs/promises';
@@ -304,10 +305,17 @@ function oauthFixture(withTools = false) {
   return { context, configuration, rows };
 }
 
-async function consentStartFixture() {
+type IdentityVerification = { algorithm: 'RS256'; publicKey: string };
+
+async function consentStartFixture(identityVerification?: IdentityVerification) {
   const store = await fixture();
   const input = oauthFixture(true);
-  const configuration = { ...input.configuration };
+  const configuration: typeof input.configuration & {
+    identityVerification?: IdentityVerification;
+  } = { ...input.configuration };
+  if (identityVerification) {
+    configuration.identityVerification = identityVerification;
+  }
   candidateCount += 1;
   const userId = `consent${candidateCount}`;
   const context = { ...input.context, siloId: 'test', userId };
@@ -348,8 +356,8 @@ async function consentStartFixture() {
   return { store, configuration, session, command, start, subject, custody, loader };
 }
 
-async function callbackFixture() {
-  const test = await consentStartFixture();
+async function callbackFixture(identityVerification?: IdentityVerification) {
+  const test = await consentStartFixture(identityVerification);
   const started = await test.start();
   if (started.status !== 'started') {
     throw new Error('Fixture consent failed');
@@ -953,7 +961,12 @@ async function preparesPrivateConsent() {
   expect(first.stage.appendUntil).toBeGreaterThanOrEqual(before + 600_000);
   expect(first.stage.appendUntil).toBeLessThanOrEqual(Date.now() + 600_000);
   const privateData = JSON.parse(Buffer.from(store.secret.data.token, 'base64').toString()) as unknown;
-  const material = z.strictObject({ state: z.string(), verifier: z.string() }).parse(privateData);
+  const material = z.strictObject({ state: z.string(), verifier: z.string(), nonce: z.string() })
+    .parse(privateData);
+  expect(material.nonce).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+  expect(material.nonce).not.toBe(material.state);
+  expect(material.nonce).not.toBe(material.verifier);
+  expect(JSON.stringify(first)).not.toContain(material.nonce);
   expect(material.state).toMatch(/^[A-Za-z0-9_-]{43}$/u);
   expect(material.verifier).toMatch(/^[A-Za-z0-9_-]{43}$/u);
   expect(material.state).not.toBe(material.verifier);
@@ -2959,13 +2972,30 @@ async function clearsUnknownAfterSuccess() {
 it('scan clears consecutive unknown state after a successful page', clearsUnknownAfterSuccess);
 
 
-async function exchangeFixture(mode = 'valid') {
-  const test = await callbackFixture();
+async function exchangeFixture(mode = 'valid', signed = false) {
+  let identityVerification: IdentityVerification | undefined;
+  const keys = await generateKeyPair('RS256');
+  if (signed) {
+    identityVerification = { algorithm: 'RS256', publicKey: await exportSPKI(keys.publicKey) };
+  }
+  const test = await callbackFixture(identityVerification);
   const claim = await test.callback();
   const custody = test.store.restart();
   let sends = 0;
   let beforeReply: (() => Promise<void>) | undefined;
-  const responseText = ' {"access_token":"result-canary","token_type":"Bearer"}\n';
+  let responseText = ' {"access_token":"result-canary","token_type":"Bearer"}\n';
+  if (signed && mode !== 'missing') {
+    const nonce = new URL(test.started.consentUrl).searchParams.get('nonce');
+    const claims = { iss: test.configuration.issuer, aud: test.configuration.clientId,
+      sub: 'account-123', nonce, name: 'provider-name-canary' };
+    const signedClaims = new SignJWT(claims);
+    signedClaims.setProtectedHeader({ alg: 'RS256' });
+    signedClaims.setIssuedAt();
+    signedClaims.setExpirationTime('5m');
+    const token = await signedClaims.sign(keys.privateKey);
+    responseText = JSON.stringify({ access_token: 'result-canary', token_type: 'Bearer',
+      id_token: token, name: 'provider-name-canary' });
+  }
   async function respond(request: IncomingMessage, response: ServerResponse) {
     const chunks: Buffer[] = [];
     for await (const chunk of request) {
@@ -3268,3 +3298,98 @@ async function refusesAfterProviderLookup() {
 }
 it('rechecks OAuth permission after provider address lookup and before sending',
   refusesAfterProviderLookup);
+
+
+async function verifiesSavedIdentity() {
+  const test = await exchangeFixture('valid', true);
+  try {
+    const nonce = new URL(test.started.consentUrl).searchParams.get('nonce');
+    expect(nonce).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+    const result = await test.run();
+    expect(result).toMatchObject({ status: 'unconfirmed',
+      verifiedIdentity: { issuer: test.configuration.issuer, subject: 'account-123' } });
+    const stored = test.store.secret;
+    expect(Buffer.from(stored.data.token, 'base64').toString()).toBe(test.responseText);
+    expect(await test.run(true)).toEqual(result);
+    expect(test.sends).toBe(1);
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(2);
+    expect(foldConnection(rows).status).toBe('unavailable');
+    const exposed = JSON.stringify({ result, rows });
+    for (const canary of ['result-canary', 'provider-name-canary', nonce!, test.responseText]) {
+      expect(exposed).not.toContain(canary);
+    }
+  } finally {
+    await test.providerFixture.close();
+  }
+}
+it('verifies the exact saved OAuth reply on reload without another send or activation',
+  verifiesSavedIdentity);
+
+async function refusesMissingSavedIdentity() {
+  const test = await exchangeFixture('missing', true);
+  try {
+    expect(await test.run()).toEqual({ status: 'unknown' });
+    expect(await test.run(true)).toEqual({ status: 'unknown' });
+    expect(test.sends).toBe(1);
+    expect(Buffer.from(test.store.secret.data.token, 'base64').toString()).toBe(test.responseText);
+  } finally {
+    await test.providerFixture.close();
+  }
+}
+it('keeps a saved OAuth reply with missing identity private and never resends',
+  refusesMissingSavedIdentity);
+
+async function refusesFinalIdentityChange(change: string) {
+  const test = await exchangeFixture('valid', true);
+  const read = test.custody.readAttempt.bind(test.custody);
+  let changed = false;
+  async function changedRead(...args: Parameters<typeof read>) {
+    if (test.store.creates !== 3 || changed) {
+      return read(...args);
+    }
+    changed = true;
+    const saved = test.store.secrets.get(args[1].reference)!;
+    if (change === 'uid') {
+      saved.metadata.uid = 'replacement';
+    } else if (change === 'version') {
+      saved.metadata.resourceVersion = '2';
+    } else if (change === 'dependency') {
+      throw new Error('dependency-private-canary', { cause: new Error('result-canary') });
+    }
+    const result = await read(...args);
+    if (change === 'expiry') {
+      vi.spyOn(Date, 'now').mockReturnValue(test.started.appendUntil);
+    } else if (change === 'key') {
+      test.configuration.identityVerification!.publicKey += 'changed';
+    } else if (!['uid', 'version'].includes(change)) {
+      await changeConsentAccess(test, change);
+    }
+    return result;
+  }
+  vi.spyOn(test.custody, 'readAttempt').mockImplementation(changedRead);
+  try {
+    expect(await test.run()).toEqual({ status: 'unknown' });
+    expect(changed).toBe(true);
+    expect(test.sends).toBe(1);
+  } finally {
+    vi.restoreAllMocks();
+    await test.providerFixture.close();
+  }
+}
+it.each(['removed', 'rejoined', 'disabled', 'configuration', 'key', 'expiry', 'uid',
+  'version', 'dependency'])(
+  'refuses OAuth identity when final recovery changes %s', refusesFinalIdentityChange);
+
+async function refusesChangedIdentitySession() {
+  const test = await exchangeFixture('valid', true);
+  try {
+    expect((await test.run()).status).toBe('unconfirmed');
+    test.session.sessionDigest = 'c'.repeat(64);
+    expect(await test.run(true)).toEqual({ status: 'unknown' });
+    expect(test.sends).toBe(1);
+  } finally {
+    await test.providerFixture.close();
+  }
+}
+it('refuses saved OAuth identity from a changed session', refusesChangedIdentitySession);
