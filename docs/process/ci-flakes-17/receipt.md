@@ -2,9 +2,9 @@
 
 Date: 27 October 2026. Part of #576.
 
-Latest result: PASS. The corrected fixture passed all 30 loaded runs.
-The earlier failed series remain below, followed by the
-[final results](#final-loaded-series).
+Latest result: PASS. The latest fixture fixes and all thirty loaded runs are
+recorded in [the latest checks](#fixture-timeout-and-deletion-checks).
+Earlier series and their failures remain below.
 
 ## Source and environment
 
@@ -353,3 +353,103 @@ Final focused logs are `.tools/final-timeout-focused-1.log` and
 `.tools/final-timeout-focused-2.log`. Full check logs include `.tools/lint-final-base.log`,
 `.tools/typecheck-final-base.log` and `.tools/docs-rebased-final.log`.
 The final documentation commit changes only the receipt and the package test notes.
+
+## Fixture timeout and deletion checks
+
+Date: 2026-10-27. Result: PASS.
+Source: `e675289c8fcc155905e02b84ed260b5abd29b9c1`. Failing-test commit: `da7e8295e`.
+The branch was fetched and rebased onto `807079af02bee23341762d47f41921f96a6e2a81`.
+Both rebase state directories are absent and that fetched main is an ancestor.
+
+The bootstrap fixture now polls the real account stream count for at most twenty
+seconds after deleting its setup stream. It still requires exactly zero streams
+before provisioning and reports the last count on expiry. It finishes as soon as
+the count reaches zero. A regression supplies one stale count after the real delete,
+then requires another account read.
+
+Route monitoring request timeouts now retry within the original twenty-second
+route deadline. They retain the last successfully observed route list. Other request
+errors still throw immediately before the deadline. Regressions check recovery after
+a timeout and retention of the route lists when later requests time out until expiry.
+
+Metadata expiry now includes the queried server's report and the leader's report,
+with each server's name. A regression gives the follower an ordinary report while
+its leader reports an offline peer. The failure must include both complete reports.
+All existing assertions remain. Product bootstrap and the chart test are unchanged.
+
+### Failing-first and ordinary checks
+
+FAIL as expected: the new route and leader-diagnostic cases failed before the fix.
+The separate bootstrap regression failed with one stream where zero was required.
+The first combined run also found an invalid reply in the new bootstrap test helper.
+That helper was corrected before the test commit. The separate bootstrap run then
+reached the intended zero-stream assertion.
+The failing tests were committed before implementation. Raw logs are
+`.tools/revision-runs/red.log` and `.tools/revision-runs/bootstrap-red.log`.
+The focused check after the fix passed all four new cases.
+
+| Check | Result |
+| --- | --- |
+| Full lint | PASS |
+| Full typecheck | PASS |
+| check:events | PASS, 156 event types |
+| Knip | PASS |
+| lint:changelog | PASS |
+| Changed tests, first run | PASS, 82/82, 164.31 seconds |
+| Changed tests, second run | PASS, 82/82, 181.12 seconds |
+| Loaded repetitions | PASS, 30/30 target runs passed |
+| Companion runs | 252 PASS, 0 FAIL |
+| Full root suite and fresh-install journeys | NOT RUN |
+
+The two ordinary checks used the supplied
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+Their seven files include bootstrap, all four cluster suites, route readiness and
+metadata readiness. Static check logs, both changed-test logs and JSON reports are
+in `.tools/revision-runs/`.
+
+### Every loaded repetition
+
+The loaded series ran the same seven files thirty times in sequence. It used
+`--maxWorkers=2 --fileParallelism`, with a separate process repeatedly running
+`libs/events/test` except `security-rules.test.ts`. Both processes used
+`taskset -c 0,1 nice -n 10`. Each companion run checks 701 tests in 33 files.
+The tests used a throwaway PostgreSQL 17.6 container on a randomly assigned loopback
+port. It was checked with `pg_isready` before use and removed with its volume afterwards.
+No owner service or Docker setting was changed.
+
+Every numbered run is retained; no failed run was replaced. Raw logs, JSON reports,
+start and finish times, companion logs and source hashes are in
+`.tools/revision-loaded-runs/`. The runner is `.tools/run-revision-loaded.py`.
+
+| Run | Result | Tests passed | Failed | Skipped | Seconds |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 1 | PASS | 82/82 | 0 | 0 | 211.79 |
+| 2 | PASS | 82/82 | 0 | 0 | 216.39 |
+| 3 | PASS | 82/82 | 0 | 0 | 218.32 |
+| 4 | PASS | 82/82 | 0 | 0 | 207.23 |
+| 5 | PASS | 82/82 | 0 | 0 | 184.68 |
+| 6 | PASS | 82/82 | 0 | 0 | 202.89 |
+| 7 | PASS | 82/82 | 0 | 0 | 189.43 |
+| 8 | PASS | 82/82 | 0 | 0 | 183.30 |
+| 9 | PASS | 82/82 | 0 | 0 | 193.39 |
+| 10 | PASS | 82/82 | 0 | 0 | 177.37 |
+| 11 | PASS | 82/82 | 0 | 0 | 176.01 |
+| 12 | PASS | 82/82 | 0 | 0 | 176.59 |
+| 13 | PASS | 82/82 | 0 | 0 | 161.28 |
+| 14 | PASS | 82/82 | 0 | 0 | 162.62 |
+| 15 | PASS | 82/82 | 0 | 0 | 163.43 |
+| 16 | PASS | 82/82 | 0 | 0 | 169.36 |
+| 17 | PASS | 82/82 | 0 | 0 | 168.56 |
+| 18 | PASS | 82/82 | 0 | 0 | 165.84 |
+| 19 | PASS | 82/82 | 0 | 0 | 165.59 |
+| 20 | PASS | 82/82 | 0 | 0 | 180.02 |
+| 21 | PASS | 82/82 | 0 | 0 | 179.75 |
+| 22 | PASS | 82/82 | 0 | 0 | 181.46 |
+| 23 | PASS | 82/82 | 0 | 0 | 183.13 |
+| 24 | PASS | 82/82 | 0 | 0 | 156.97 |
+| 25 | PASS | 82/82 | 0 | 0 | 169.81 |
+| 26 | PASS | 82/82 | 0 | 0 | 163.30 |
+| 27 | PASS | 82/82 | 0 | 0 | 183.45 |
+| 28 | PASS | 82/82 | 0 | 0 | 166.18 |
+| 29 | PASS | 82/82 | 0 | 0 | 190.63 |
+| 30 | PASS | 82/82 | 0 | 0 | 170.27 |
