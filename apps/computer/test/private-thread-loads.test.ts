@@ -1,6 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import { expect, it, vi } from 'vitest';
+import { privateCatalogue, checkPrivateTurnTools }
+  from '../../server/test/support/private-catalogue.ts';
 import { privateCallers } from '@opencrane/models/private-callers';
 import { approvalHolds } from '../src/approval-holds.ts';
 import { mcpProxy, type ProxyGrant } from '../src/mcp-proxy.ts';
@@ -17,7 +19,7 @@ const reviewed: ToolServer[] = [{ key: 'oc_0123456789', serverId: 'memory', conn
   serverInfo: { name: 'OpenCrane memory', version: '1' },
   definitions: [JSON.stringify(definition)], modes: { recall: 'allow' } }];
 
-async function fixture() {
+async function fixture(assembled = false) {
   const grants = new Map<string, ProxyGrant>();
   const approvals = approvalHolds({ waiting, renew });
   function waiting() { return false; }
@@ -51,6 +53,7 @@ async function fixture() {
   const ordinaryRpc = vi.fn();
   const driver = { rpc: ordinaryRpc, catalogue, dropCatalogue, discovered };
   const loads = threadLoads(driver, cancelled);
+  const registered = new Set<string>();
   let heldStage = '';
   let failDiscovery = false;
   const reached = Promise.withResolvers<void>();
@@ -65,7 +68,9 @@ async function fixture() {
     const input = { loadKey, conversation, tools, thread, turnId, ...generations };
     expect(authority.check(input)).toBe(true);
     mcp.catalogue(input, true);
-    await hold(thread ? 'binding' : 'catalogue');
+    const stage = registered.has(loadKey) ? 'binding' : 'catalogue';
+    registered.add(loadKey);
+    await hold(stage);
   }
   function dropCatalogue(loadKey: string) {
     mcp.drop({ loadKey });
@@ -76,6 +81,7 @@ async function fixture() {
     if (failDiscovery) throw new Error('fixture-secret');
     await mcp.discovered({ loadKey });
   }
+  let toolKey = reviewed[0]!.key;
   async function send(loadKey: string, caller: string, method = 'tools/list') {
     const metadata = { threadId: 'thread-A', 'io.modelcontextprotocol/protocolVersion': '2026-07-28' };
     const payload = { jsonrpc: '2.0', id: 1, method,
@@ -83,16 +89,29 @@ async function fixture() {
     const headers = { authorization: `Bearer ${caller}`, 'mcp-method': method,
       'mcp-name': 'recall', 'mcp-protocol-version': '2026-07-28' };
     const options = { method: 'POST', headers, body: JSON.stringify(payload) };
-    const response = await fetch(`${url}/mcp/${loadKey}/${reviewed[0]!.key}`, options);
+    const response = await fetch(`${url}/mcp/${loadKey}/${toolKey}`, options);
     return record(await response.json());
   }
-  function turn(id = 'A', generation = 1, inputGeneration = 1) {
+  async function turn(id = 'A', generation = 1, inputGeneration = 1,
+    name: 'recall' | 'remember' = 'recall') {
     const input = parseTurn({ id, conversationId: 'same-chat', assistantId: 'assistant',
       requesterId: 'alice', executionMode: 'restricted', text: 'Hello', token: 'fixture',
       expiresAt: Date.now() + 60_000, tools: structuredClone(reviewed) });
     const identity = { turnId: id, conversation: input.conversationId, generation,
       inputGeneration, expires: input.expiresAt };
+    const grant = { ...identity, silo: 'test', requesterId: input.requesterId!,
+      assistantId: input.assistantId, computerId: 'computer', thread: `thread-${id}` };
     const registration = authority.register(identity);
+    let tools = structuredClone(reviewed);
+    let approval;
+    if (assembled) {
+      registration.bind(grant.thread);
+      approval = await privateCatalogue(authority, registration.caller, grant, name);
+      tools = approval.tools;
+      expect(tools).toHaveLength(1);
+      toolKey = tools[0]!.key;
+      input.tools = structuredClone(tools);
+    }
     const ended = Promise.withResolvers<void>();
     const thread: Record<string, unknown> = { id: `thread-${id}`, ephemeral: true,
       path: null, environments: [] };
@@ -107,7 +126,7 @@ async function fixture() {
       expect(method).toBe('thread/start');
       startParams = params;
       const servers = record(record(params['config'])['mcp_servers']);
-      const endpoint = String(record(servers[reviewed[0]!.key])['url']);
+      const endpoint = String(record(servers[toolKey])['url']);
       loadKey = new URL(endpoint).pathname.split('/')[2]!;
       await send(loadKey, registration.caller, 'server/discover');
       offered = record(await send(loadKey, registration.caller))['result'];
@@ -116,10 +135,11 @@ async function fixture() {
     }
     const close = vi.fn(ended.resolve);
     const session = { rpc, close, closed: ended.promise };
-    const binding: PrivateThreadBinding = { ...identity, caller: registration.caller,
-      authority, registration, session, tools: structuredClone(reviewed) };
-    function load() { return loads.loadPrivate(input, binding); }
-    return { input, binding, load, calls, close, thread, ended,
+    const binding = { ...identity, caller: registration.caller,
+      authority, registration, session, tools, grant, checkTools: checkPrivateTurnTools };
+    const checkedBinding: PrivateThreadBinding = binding;
+    function load() { return loads.loadPrivate(input, checkedBinding); }
+    return { input, binding, load, calls, close, thread, ended, approval,
       get key() { return loadKey; }, get offered() { return offered; },
       get params() { return startParams; } };
   }
@@ -142,7 +162,7 @@ async function fixture() {
 async function matching() {
   const test = await fixture();
   try {
-    const turn = test.turn();
+    const turn = await test.turn();
     const result = await turn.load();
     expect(result['thread']).toEqual(turn.thread);
     expect(turn.offered).toEqual({ tools: [definition] });
@@ -162,8 +182,8 @@ it('discovers only the reviewed memory definition without granting calls', match
 async function isolates(generation: number, inputGeneration: number) {
   const test = await fixture();
   try {
-    const first = test.turn();
-    const second = test.turn('B', generation, inputGeneration);
+    const first = await test.turn();
+    const second = await test.turn('B', generation, inputGeneration);
     await Promise.all([first.load(), second.load()]);
     expect(first.key).not.toBe(second.key);
     expect(first.binding.caller).not.toBe(second.binding.caller);
@@ -189,7 +209,7 @@ it.each([[1, 1], [2, 1], [1, 2]])(
 async function refusesTools(name: string) {
   const test = await fixture();
   try {
-    const turn = test.turn();
+    const turn = await test.turn();
     turn.input.tools![0]!.definitions = [JSON.stringify({ name })];
     turn.input.tools![0]!.modes = { [name]: 'allow' };
     await expect(turn.load()).rejects.toThrow('Private tools could not be loaded');
@@ -204,7 +224,7 @@ it.each(['external_mcp', 'shell', 'browser', 'read_file', 'recall'])(
 async function refusesBinding(change: string) {
   const test = await fixture();
   try {
-    const turn = test.turn();
+    const turn = await test.turn();
     if (change === 'caller') turn.binding.caller = 'wrong-caller';
     if (change === 'ended') turn.binding.registration.close();
     if (change === 'generation') turn.binding.generation++;
@@ -225,13 +245,13 @@ it.each(['caller', 'ended', 'generation', 'inputGeneration', 'turn', 'conversati
 async function refusesResponse(change: string) {
   const test = await fixture();
   try {
-    const turn = test.turn();
+    const turn = await test.turn();
     if (change === 'ephemeral') turn.thread['ephemeral'] = false;
     if (change === 'path') turn.thread['path'] = '/fixture-secret';
     if (change === 'environments') turn.thread['environments'] = [{}];
     if (change === 'missing environments') delete turn.thread['environments'];
     if (change === 'thread') {
-      const other = test.turn('B');
+      const other = await test.turn('B');
       await other.load();
       turn.thread['id'] = 'thread-B';
     }
@@ -255,7 +275,7 @@ for (const stage of ['catalogue', 'start', 'binding', 'discovery']) {
 async function refusesLate(stage: string, ending: string) {
   const test = await fixture();
   try {
-    const turn = test.turn();
+    const turn = await test.turn();
     test.pause(stage);
     const pending = turn.load();
     const refused = expect(pending).rejects.toThrow('Private tools could not be loaded');
@@ -286,7 +306,7 @@ it.each(races)('discards delayed %s completion after %s', refusesLate);
 async function discoveryTimeout() {
   const test = await fixture();
   try {
-    const turn = test.turn();
+    const turn = await test.turn();
     test.pause('discovery');
     const pending = turn.load();
     const refused = expect(pending).rejects.toThrow('Private tools could not be loaded');
@@ -304,7 +324,7 @@ it('drops a timed out discovery and ignores its delayed completion', discoveryTi
 async function removesFinishedLoad(ending: string) {
   const test = await fixture();
   try {
-    const turn = test.turn();
+    const turn = await test.turn();
     await turn.load();
     if (ending === 'cancel') await test.loads.cancel('A');
     if (ending === 'disconnect') await test.loads.stop();
@@ -328,7 +348,7 @@ it.each(['cancel', 'disconnect', 'forget', 'process'])(
 async function hidesCleanupErrors() {
   const test = await fixture();
   try {
-    const turn = test.turn();
+    const turn = await test.turn();
     await turn.load();
     const rpc = turn.binding.session.rpc;
     function failsUnload(method: string, params: Record<string, unknown>) {
@@ -346,3 +366,48 @@ async function hidesCleanupErrors() {
   } finally { await test.close(); }
 }
 it('revokes access and hides native cleanup errors', hidesCleanupErrors);
+
+async function loadsRealAssembly(name: 'recall' | 'remember') {
+  const test = await fixture(true);
+  try {
+    const turn = await test.turn('A', 1, 1, name);
+    const result = await turn.load();
+    expect(result['thread']).toEqual(turn.thread);
+    expect(turn.offered).toEqual({ tools: [JSON.parse(turn.binding.tools[0]!.definitions[0]!)] });
+    expect(turn.calls).toEqual(['thread/start']);
+    expect(test.grants.size).toBe(0);
+  } finally { await test.close(); }
+}
+it.each(['recall', 'remember'] as const)(
+  'loads %s from the real assembler with its bound caller and recorded grant', loadsRealAssembly);
+
+async function refusesDetachedTools() {
+  const test = await fixture();
+  try {
+    const turn = await test.turn();
+    await expect(turn.load()).rejects.toThrow('Private tools could not be loaded');
+    expect(turn.calls).toEqual([]);
+    expect(test.mcp.size).toBe(0);
+  } finally { await test.close(); }
+}
+it('refuses an unbound registration and detached tool definitions', refusesDetachedTools);
+
+async function refusesChangedSubject(subject: 'requesterId' | 'assistantId') {
+  const test = await fixture();
+  try {
+    const turn = await test.turn();
+    test.pause('discovery');
+    const loading = turn.load();
+    const refused = expect(loading).rejects.toThrow('Private tools could not be loaded');
+    await test.reached.promise;
+    turn.input[subject] = 'another-person';
+    test.release.resolve();
+    await refused;
+    expect(test.mcp.size).toBe(0);
+    expect(test.loads.size).toBe(0);
+    expect(test.grants.size).toBe(0);
+    expect(turn.close).toHaveBeenCalled();
+  } finally { await test.close(); }
+}
+it.each(['requesterId', 'assistantId'] as const)(
+  'refuses changed %s during discovery', refusesChangedSubject);
