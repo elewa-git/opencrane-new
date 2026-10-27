@@ -2992,6 +2992,36 @@ async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) 
   const claim = await test.callback();
   const custody = test.store.restart();
   let sends = 0;
+  let refreshSends = 0;
+  let refreshMode = 'valid';
+  function setRefreshMode(value: string) {
+    refreshMode = value;
+  }
+  async function refreshResponse(parameters: URLSearchParams, response: ServerResponse) {
+    refreshSends++;
+    expect(Object.fromEntries(parameters)).toEqual({ grant_type: 'refresh_token',
+      client_id: test.configuration.clientId, refresh_token: 'refresh-canary' });
+    await beforeReply?.();
+    if (refreshMode === 'lost') {
+      response.destroy();
+      return;
+    }
+    if (refreshMode === 'revoked') {
+      response.end(JSON.stringify({ error: 'invalid_grant' }));
+      return;
+    }
+    const now = Math.floor(Date.now() / 1000);
+    const aud = refreshMode === 'audience' ? 'another-client' : test.configuration.clientId;
+    const sub = refreshMode === 'account' ? 'another-account' : 'account-123';
+    const claims = { iss: test.configuration.issuer, aud, sub, iat: now,
+      exp: refreshMode === 'expired' ? now - 1 : now + 300 };
+    const signedClaims = new SignJWT(claims);
+    signedClaims.setProtectedHeader({ alg: 'RS256' });
+    const idToken = await signedClaims.sign(keys.privateKey);
+    response.end(JSON.stringify({ access_token: 'next-access-canary', token_type: 'Bearer',
+      refresh_token: refreshMode === 'unrotated' ? 'refresh-canary' : 'next-refresh-canary',
+      id_token: idToken, scope: refreshMode === 'scopes' ? 'write' : 'read', expires_in: 300 }));
+  }
   let beforeReply: (() => Promise<void>) | undefined;
   let responseText = ' {"access_token":"result-canary","token_type":"Bearer"}\n';
   if (signed && mode !== 'missing') {
@@ -3018,6 +3048,10 @@ async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) 
       chunks.push(chunk);
     }
     const parameters = new URLSearchParams(Buffer.concat(chunks).toString());
+    if (parameters.get('grant_type') === 'refresh_token') {
+      await refreshResponse(parameters, response);
+      return;
+    }
     const hash = createHash('sha256');
     hash.update(parameters.get('code_verifier') ?? '');
     expect(hash.digest('base64url')).toBe(
@@ -3050,7 +3084,8 @@ async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) 
   function before(action: () => Promise<void>) {
     beforeReply = action;
   }
-  return { ...test, claim, custody, run, before, responseText, providerFixture,
+  return { ...test, claim, custody, run, before, responseText, providerFixture, setRefreshMode,
+    get refreshSends() { return refreshSends; },
     get sends() { return sends; } };
 }
 
@@ -3611,6 +3646,7 @@ async function refreshFixture(mode = 'valid') {
     await test.providerFixture.close();
   }
   return { ...test, input, start, close, generation, dueAt,
+    get refreshSends() { return test.refreshSends; },
     get sends() { return test.sends; } };
 }
 
@@ -4082,3 +4118,41 @@ async function checksRefreshClaimReplay() {
 }
 it('retains refresh claims without rereading consent and refuses altered replay bindings',
   checksRefreshClaimReplay);
+
+async function sendRefresh(test: Awaited<ReturnType<typeof refreshFixture>>,
+  live?: unknown, restart = false, network = test.providerFixture.network) {
+  const { exchangePersonalOAuthRefresh } = await import('../src/oauth-refresh-worker.ts');
+  const custody = restart ? test.store.restart() : test.custody;
+  return exchangePersonalOAuthRefresh(events.store, consentBinding, test.session, custody,
+    test.input, test.loader.loadConfiguration, pgDb(storage.queue), live, network);
+}
+
+async function sendsClaimedRefreshOnce() {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    expect(await sendRefresh(test, { ...claim })).toEqual({ status: 'unknown' });
+    expect(test.refreshSends).toBe(0);
+    const results = await Promise.all([sendRefresh(test, claim), sendRefresh(test, claim)]);
+    expect(results[0]).toMatchObject({ status: 'verified', callsAvailable: false });
+    expect(results[1]).toEqual(results[0]);
+    expect(await sendRefresh(test, undefined, true)).toEqual(results[0]);
+    expect(test.refreshSends).toBe(1);
+    expect(test.sends).toBe(1);
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(5);
+    expect(foldConnection(rows).lastGeneration).toBe(1);
+    const publicValues = JSON.stringify({ rows, results });
+    for (const canary of ['next-access-canary', 'next-refresh-canary', 'refresh-canary']) {
+      const hash = createHash('sha256');
+      hash.update(canary);
+      expect(publicValues).not.toContain(canary);
+      expect(publicValues).not.toContain(hash.digest('hex'));
+    }
+  } finally {
+    await test.close();
+  }
+}
+it('sends a claimed refresh once under racing callers and recovers after restart',
+  sendsClaimedRefreshOnce);
