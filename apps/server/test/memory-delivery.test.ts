@@ -390,7 +390,7 @@ async function completionBeforePoll(replace: boolean) {
   function holdAcknowledgements(data: Parameters<typeof send>[0]) {
     if (typeof data === 'string') {
       const frame = JSON.parse(data) as { type: string };
-      if (frame.type === 'ack') return;
+      if (frame.type === 'ack' && !('token' in frame)) return;
       if (frame.type === 'stop') stops++;
     }
     send(data);
