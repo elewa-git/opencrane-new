@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { realpathSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import { rootCertificates } from 'node:tls';
 import * as files from 'node:fs/promises';
 import { registerHooks } from 'node:module';
 
 assert.equal(process.getuid(), 1000);
 assert.equal(process.cwd(), '/app');
-assert.equal(homedir(), '/home/node');
+assert.equal(userInfo().username, 'node');
+assert.equal(homedir(), userInfo().homedir);
 assert.ok(rootCertificates.length > 0);
 for (const name of ['event-store', 'authz', 'handlers']) {
   assert.equal(realpathSync(`/app/node_modules/@opencrane/${name}`), `/app/libs/${name}`);
@@ -22,6 +23,7 @@ for (const name of ['pg', '@opencrane/event-store', '@opencrane/authz',
 }
 
 const owner = process.argv[1]?.endsWith('/owner-bootstrap.ts');
+let ownerWrites = 0;
 const defaults = {
   NATS_REPLICAS: '1', COMMAND_NATS_REPLICAS: '1', DEV_STACK_ID: 'owner',
   POSTGRES_ADMIN_URL: 'postgres://fixture', PROJECTION_DATABASE_URL: 'postgres://fixture',
@@ -121,6 +123,7 @@ const services = {
       async function* readStream() {}
       async function append() {
         sequence += 1;
+        ownerWrites += 1;
         return { status: 'appended', sequence };
       }
       async function close() {}
@@ -158,12 +161,26 @@ function load(url, context, nextLoad) {
 }
 registerHooks({ resolve, load });
 
-function verifyCompletion() {
-  if (owner || process.exitCode) {
+async function verifyCompletion() {
+  if (process.exitCode) {
     return;
   }
+  if (owner) {
+    assert.equal(ownerWrites, 2, 'Synthetic owner setup did not finish');
+    await files.writeFile('/tmp/owner-fixture-complete', 'complete', { mode: 0o600 });
+    return;
+  }
+  const completion = await files.readFile('/tmp/owner-fixture-complete', 'utf8');
+  assert.equal(completion, 'complete', 'Owner subprocess did not finish');
   const ready = patched.at(-2)?.data?.OWNER_BOOTSTRAP_READY;
   assert.equal(ready, Buffer.from('ready').toString('base64'), 'Bootstrap did not finish');
   console.log('PASS synthetic bootstrap completed through owner setup');
 }
-process.on('beforeExit', verifyCompletion);
+function finish() {
+  function failed() {
+    console.error('FAIL synthetic bootstrap completion');
+    process.exitCode = 1;
+  }
+  void verifyCompletion().catch(failed);
+}
+process.once('beforeExit', finish);

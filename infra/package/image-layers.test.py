@@ -18,6 +18,14 @@ REMOVED_PATHS = (
 )
 
 
+def read_checked_blob(archive, digest):
+    contents = archive.extractfile("blobs/" + digest.replace(":", "/")).read()
+    actual = "sha256:" + hashlib.sha256(contents).hexdigest()
+    if actual != digest:
+        raise ValueError("Saved image identity differs from its contents")
+    return json.loads(contents)
+
+
 class ImageLayerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -27,6 +35,9 @@ class ImageLayerTests(unittest.TestCase):
         cls.sources = {}
         cls.executables = set()
         cls.nonempty_layers = 0
+        result = subprocess.run(["docker", "image", "inspect", os.environ["PACKAGE_IMAGE_NAME"]],
+                                capture_output=True, text=True, check=True)
+        cls.inspection = json.loads(result.stdout)[0]
         with tarfile.open(archive_path) as archive:
             manifest = json.load(archive.extractfile("manifest.json"))
             if len(manifest) != 1:
@@ -37,6 +48,13 @@ class ImageLayerTests(unittest.TestCase):
             cls.configuration_digest = "sha256:" + hashlib.sha256(configuration_bytes).hexdigest()
             cls.archive_index = json.load(archive.extractfile("index.json"))
             cls.archive_config_path = image["Config"]
+            saved_index = read_checked_blob(archive, cls.archive_index["manifests"][0]["digest"])
+            for descriptor in saved_index["manifests"]:
+                saved_manifest = read_checked_blob(archive, descriptor["digest"])
+                if saved_manifest["config"]["digest"] == cls.configuration_digest:
+                    break
+            else:
+                raise ValueError("Saved image does not name the tested configuration")
             cls.layers = image["Layers"]
             for layer_path in cls.layers:
                 has_files = False
@@ -55,9 +73,7 @@ class ImageLayerTests(unittest.TestCase):
                     cls.nonempty_layers += 1
 
     def test_archive_identifies_the_exercised_image(self):
-        result = subprocess.run(["docker", "image", "inspect", os.environ["PACKAGE_IMAGE_NAME"]],
-                                capture_output=True, text=True, check=True)
-        inspection = json.loads(result.stdout)[0]
+        inspection = self.inspection
         manifests = self.archive_index["manifests"]
         self.assertEqual(len(manifests), 1)
         self.assertEqual(manifests[0]["digest"], inspection["Id"])
@@ -91,13 +107,16 @@ class ImageLayerTests(unittest.TestCase):
     def test_development_files_stay_within_the_narrow_allowlist(self):
         allowed = {"config.ts", "identity.ts", "owner-bootstrap.ts", "private-directories.ts",
                    "model-stub.ts", "secondary-models.ts", "zitadel.json"}
+        package_files = {"bootstrap.ts", "web.mjs", "worker.mjs", "kubeconfig.mjs"}
         for path in self.paths:
+            if path.startswith("app/infra/package/"):
+                self.assertIn(path.removeprefix("app/infra/package/"), package_files)
             if path.startswith("app/infra/dev-stack/"):
                 self.assertIn(path.removeprefix("app/infra/dev-stack/"), allowed)
             self.assertFalse(path.startswith(("app/.keys/", "app/.tools/", "app/.git/")))
 
     def test_real_bootstrap_entry_point_with_synthetic_services(self):
-        image = os.environ["PACKAGE_IMAGE_NAME"]
+        image = self.inspection["Id"]
         fixture = Path("infra/package/bootstrap-runtime-fixture.mjs").resolve()
         arguments = ["docker", "run", "--rm", "--network", "none", "--read-only",
                      "--cap-drop", "ALL", "--security-opt", "no-new-privileges",

@@ -16,7 +16,8 @@ function checkImports(sources) {
     const source = sources[file];
     assert.equal(typeof source, 'string');
     assert.equal(source, readFileSync(file, 'utf8'));
-    const options = { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ESNext };
+    const options = { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ESNext,
+      verbatimModuleSyntax: true };
     const compiled = ts.transpileModule(source, { compilerOptions: options });
     const imports = ts.preProcessFile(compiled.outputText, true, true);
     for (const imported of imports.importedFiles) {

@@ -554,7 +554,8 @@ async function checksBootstrapContextImports() {
       assert.ok(rules.has(`!${file}`), 'Bootstrap runtime import is outside the Docker context');
     }
     const source = await readFile(file, 'utf8');
-    const options = { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ESNext };
+    const options = { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ESNext,
+      verbatimModuleSyntax: true };
     const compiled = ts.transpileModule(source, { compilerOptions: options });
     const imports = ts.preProcessFile(compiled.outputText, true, true);
     for (const imported of imports.importedFiles) {

@@ -169,12 +169,28 @@ executable files. Docker may also add an empty layer for `WORKDIR`:
 
 ```sh
 nice -n 10 docker image save -o /tmp/package-image.tar <local-image>
-PACKAGE_IMAGE_ARCHIVE=/tmp/package-image.tar PACKAGE_IMAGE_REVISION=<commit> \
+PACKAGE_IMAGE_NAME=<local-image> \
+  PACKAGE_IMAGE_ARCHIVE=/tmp/package-image.tar PACKAGE_IMAGE_REVISION=<commit> \
   nice -n 10 python3 infra/package/image-layers.test.py
 ```
 
-Both environment variables are required; a missing archive fails the test.
-This check does not replace the complete Syft scan or the licence review.
+All three environment variables are required; a missing archive fails the test.
+The archive must identify the same image that the container checks exercise.
+The recursive import check compares the packaged TypeScript files with the source
+checkout. It follows runtime imports after removing TypeScript types, starting at
+both bootstrap programs. Removing a required imported file refuses even when
+`bootstrap.ts` remains. The existing bootstrap source suite also checks that every
+imported dev-stack file has an explicit Docker context exception.
+
+The container check runs the real bootstrap entry point and its owner subprocess.
+A read-only test loader first imports the real service packages, then supplies
+made-up database, event-log, access and Kubernetes replies. Only the identity file
+and service-account reads receive made-up data. The generated environment files
+stay in the container's temporary filesystem. The container keeps the image's
+user and entry point, has no network and mounts no host settings. Its success
+requires the final owner-ready update; a settings refusal cannot pass. Failures
+withhold dependency output and fixture values.
+These checks do not replace the complete Syft scan, licence review or fresh install.
 
 The existing `natsCluster` review binds `replicas: 3`, both role pins and
 `sourceRevision` to `imageId`, Syft's image configuration digest, and `scanSha256`
@@ -207,7 +223,11 @@ R3 approval and release qualification remain blocked. Unknown licences or open
 Critical/High findings also block qualification. The
 [first image receipt](../../docs/process/p5-4-images1/receipt.md) records the original refusals.
 The [layer receipt](../../docs/process/p5-4-images2/receipt.md) records the flattened local
-build. Bootstrap imports and the complete licence inventory remain separate follow-ups.
+build. The [bootstrap receipt](../../docs/process/p5-4-images3/receipt.md) records
+the local import fix and synthetic setup checks. A complete candidate inventory,
+bundled notices and remaining declarations still need authenticated Debian-main
+evidence. Registry publication, promotion, vulnerability clearance and fresh R3
+installation remain NOT RUN.
 
 ## Private owner email
 
