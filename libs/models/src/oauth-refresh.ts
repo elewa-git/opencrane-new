@@ -1,8 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { connectionRefreshStartedDataSchema } from '@opencrane/events';
+import { connectionRefreshStartedDataSchema,
+  connectionOAuthExchangeClaimedDataSchema, type EventEnvelope } from '@opencrane/events';
 import type { Db } from '@opencrane/projections';
 import { envelope, history } from './actor.ts';
 import { authorityFence } from './authority.ts';
@@ -19,6 +21,100 @@ import { toolPolicyFromRows } from './tool-policy.ts';
 const refreshInput = inputSchema.extend({ expectedSequence: z.int().positive(),
   expectedGeneration: z.int().positive() });
 type Custody = Pick<ReturnType<typeof connectionCustody>, 'hasRefreshMaterial'>;
+type LiveClaim = { status: 'claimed'; claimId: string; sequence: number; workerId: string };
+const liveClaims = new WeakMap<object, LiveClaim>();
+
+/** Consume only the original live claim. A copied receipt or replay grants no send. */
+export function takePersonalOAuthRefreshClaim(raw: unknown): LiveClaim | undefined {
+  if (typeof raw !== 'object' || raw === null) {
+    return undefined;
+  }
+  const claim = liveClaims.get(raw);
+  liveClaims.delete(raw);
+  return claim;
+}
+
+/** Claim only a saved refresh attempt. Transport and staging are separate work. */
+export async function claimPersonalOAuthRefresh(store: EventStore, binding: Binding,
+  rawSession: unknown, custody: Custody, raw: unknown,
+  loadConfiguration: Loader, db: Pick<Db, 'lock'>) {
+  try {
+    const session = sessionSchema.parse(rawSession);
+    const input = refreshInput.parse(raw);
+    if (session.siloId !== binding.silo || session.userId !== input.userId) {
+      throw new Error('OAuth refresh refused');
+    }
+    const profile = { ...input, siloId: binding.silo };
+    const workerId = randomUUID();
+    async function claim() {
+      const prepared = await prepareRefresh(store, binding, session, input, loadConfiguration);
+      if (!prepared.original || prepared.state.refreshClaim) {
+        throw new Error('OAuth refresh claim unavailable');
+      }
+      // Fix expiry before private reads. Retrying cannot extend a saved claim's lifetime.
+      const now = Date.now();
+      const appendUntil = now + 60_000;
+      await checkPrivateRefresh(custody, prepared, binding.silo, true);
+      const checked = await refreshAccess(store, binding, prepared, loadConfiguration);
+      const event = refreshClaimEvent(binding.silo, prepared, workerId, now, appendUntil);
+      async function checkAccess() {
+        await checked.checkAccess();
+        if (Date.now() >= appendUntil) {
+          throw new Error('OAuth refresh claim expired');
+        }
+      }
+      await checkAccess();
+      const sequence = await appendRefreshClaim(store, event, checked, checkAccess);
+      return { prepared, sequence, event, appendUntil };
+    }
+    const result = await withConnectionStage(db, profile, claim);
+    // Finish lock release and exact private reads before granting this worker permission.
+    await checkPrivateRefresh(custody, result.prepared, binding.silo, true);
+    const checked = await refreshAccess(store, binding, result.prepared,
+      loadConfiguration, result.sequence);
+    await checked.checkAccess();
+    if (Date.now() >= result.appendUntil) {
+      throw new Error('OAuth refresh claim expired');
+    }
+    const live = Object.freeze({ status: 'claimed' as const, claimId: result.event.id,
+      sequence: result.sequence, workerId });
+    liveClaims.set(live, live);
+    return live;
+  } catch {
+    // Discard private errors and causes. An uncertain claim never grants permission.
+    return { status: 'unknown' as const };
+  }
+}
+
+function refreshClaimEvent(siloId: string, prepared: Prepared, workerId: string,
+  now: number, appendUntil: number) {
+  const { input, subject, activation, saved, original } = prepared;
+  const attempt = connectionRefreshStartedDataSchema.parse(original!.event.data);
+  const claimId = connectionOperationId(siloId, subject, `${attempt.attemptId}-exchange`);
+  const data = connectionOAuthExchangeClaimedDataSchema.parse({ userId: input.userId,
+    serverId: input.serverId, connectionId: input.connectionId, profile: input.profileId,
+    attemptId: attempt.attemptId, workerId, purpose: 'refresh', secretRef: saved.secretRef,
+    uid: activation.uid, resourceVersion: activation.resourceVersion,
+    expectedSequence: original!.sequence, appendUntil });
+  return { ...envelope(siloId, subject, 'connection.oauth_exchange_claimed', data, claimId,
+    new Date(now)), source: 'opencrane-server',
+    principal: { kind: 'human' as const, id: input.userId } };
+}
+
+/** Append once, then confirm this invocation's exact worker identity from saved history. */
+async function appendRefreshClaim(store: EventStore, event: EventEnvelope,
+  checked: Awaited<ReturnType<typeof refreshAccess>>, checkAccess: () => Promise<void>) {
+  const command = { event, expectedSequence: checked.categorySequence,
+    expectedSubject: 'connection-*', historyChecked: true as const,
+    deadline: checked.deadline, checkAccess };
+  await store.append(command);
+  const rows = await history(store, event.subject, event.silo, performance.now() + 10_000);
+  const saved = foldConnection(rows).refreshClaim;
+  if (!saved || !isDeepStrictEqual(saved.event, event)) {
+    throw new Error('OAuth refresh claim unconfirmed');
+  }
+  return saved.sequence;
+}
 
 /** Start or join an internal attempt. Saving its reference grants no provider send or tool use. */
 export async function startPersonalOAuthRefresh(store: EventStore, binding: Binding,
@@ -110,9 +206,10 @@ function refreshServer(rows: StoredEvent[], configuration: z.infer<typeof oauthC
   return server;
 }
 
-async function checkPrivateRefresh(custody: Custody, prepared: Prepared, siloId: string) {
+async function checkPrivateRefresh(custody: Custody, prepared: Prepared, siloId: string,
+  required = false) {
   const { input, original, due, activation, saved } = prepared;
-  if (!original && due) {
+  if (required || (!original && due)) {
     const stage: ConnectionStage = { siloId, userId: input.userId,
       serverId: input.serverId, profileId: input.profileId, connectionId: input.connectionId,
       purpose: 'personal', generation: activation.generation,
@@ -127,8 +224,8 @@ async function checkPrivateRefresh(custody: Custody, prepared: Prepared, siloId:
 }
 
 async function refreshAccess(store: EventStore, binding: Binding, prepared: Prepared,
-  loadConfiguration: Loader) {
-  const { input, subject, membership, configuration, state, server } = prepared;
+  loadConfiguration: Loader, sequence = prepared.state.sequence) {
+  const { input, subject, membership, configuration, server } = prepared;
   // Finish history and private reads before starting the original two-second access check.
   const subjects = [...membership.positions.keys()];
   const fresh = await authorityFence(store, performance.now(), subjects);
@@ -139,7 +236,7 @@ async function refreshAccess(store: EventStore, binding: Binding, prepared: Prep
   async function checkAccess() {
     const current = oauthConfigurationSchema.parse(await loadConfiguration(input.serverId));
     if (!isDeepStrictEqual(current, configuration) ||
-        await store.head(subject, fresh.deadline) !== state.sequence ||
+        await store.head(subject, fresh.deadline) !== sequence ||
         await store.head(control, fresh.deadline) !== 0 ||
         await store.head(`mcp-${input.serverId}`, fresh.deadline) !== server.sequence ||
         !Number.isFinite(server.expiresAt) || Date.now() >= server.expiresAt) {

@@ -3837,3 +3837,248 @@ async function checksRefreshHistory(mode: string) {
 }
 it.each(['slow', 'legacy', 'bearer', 'old-oauth'])(
   'checks OAuth refresh with %s profile history before its short access check', checksRefreshHistory);
+
+async function claimRefresh(test: Awaited<ReturnType<typeof refreshFixture>>,
+  input: unknown = test.input, session: unknown = test.session, restart = false,
+  db: Pick<Db, 'lock'> = pgDb(storage.queue)) {
+  const { claimPersonalOAuthRefresh } = await import('../src/oauth-refresh.ts');
+  const custody = restart ? test.store.restart() : test.custody;
+  return claimPersonalOAuthRefresh(events.store, consentBinding, session, custody,
+    input, test.loader.loadConfiguration, db);
+}
+
+async function claimsRefreshOnce(mode: string) {
+  const test = await refreshFixture();
+  const manager = await jetstreamManager(events.connection);
+  const stream = await manager.streams.info('EVENTS');
+  try {
+    const start = await test.start();
+    const { takePersonalOAuthRefreshClaim } = await import('../src/oauth-refresh.ts');
+    expect(takePersonalOAuthRefreshClaim(start)).toBeUndefined();
+    const append = events.store.append.bind(events.store);
+    async function loseReply(command: AppendCommand) {
+      await append(command);
+      if (mode === 'throw') {
+        throw new Error('refresh-canary', { cause: new Error(test.responseText) });
+      }
+      return { status: 'unavailable' as const, cause: new Error(test.responseText) };
+    }
+    if (mode !== 'race') {
+      vi.spyOn(events.store, 'append').mockImplementationOnce(loseReply);
+    }
+    const competing = { ...test.input, changeRef: 'another-refresh' };
+    const results = await Promise.all([claimRefresh(test), claimRefresh(test, competing)]);
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(5);
+    const claimed = rows[4]!;
+    expect(claimed.event.type).toBe('connection.oauth_exchange_claimed');
+    expect(claimed.event.data).toMatchObject({ purpose: 'refresh',
+      secretRef: test.generation.secretRef, uid: test.generation.activation.uid,
+      resourceVersion: test.generation.activation.resourceVersion,
+      expectedSequence: rows[3]!.sequence });
+    function wasClaimed(result: (typeof results)[number]) {
+      return result.status === 'claimed';
+    }
+    const live = results.find(wasClaimed);
+    expect(Boolean(live)).toBe(mode !== 'throw');
+    expect(takePersonalOAuthRefreshClaim({ ...live })).toBeUndefined();
+    if (live) {
+      expect(await test.run(false, live)).toEqual({ status: 'unknown' });
+      expect(Object.isFrozen(live)).toBe(true);
+      expect(takePersonalOAuthRefreshClaim(live)).toEqual(live);
+      expect(takePersonalOAuthRefreshClaim(live)).toBeUndefined();
+    }
+    const effects = vi.spyOn(globalThis, 'fetch');
+    const rebuilt = foldConnection(structuredClone(rows));
+    expect(rebuilt.data).toEqual(test.generation);
+    expect(rebuilt.refreshAttempt).toEqual(rows[3]);
+    expect(rebuilt.refreshClaim).toEqual(claimed);
+    expect(rebuilt.status).toBe('unavailable');
+    expect(effects).not.toHaveBeenCalled();
+    await manager.streams.update('EVENTS', { duplicate_window: 100_000_000 });
+    await delay(200);
+    const probe = envelope('test', `member-claim-probe-${test.session.userId}`, 'member.joined', {
+      memberId: 'probe', email: 'probe@example.test', displayName: 'Probe', role: 'member',
+    }, claimed.event.id);
+    await events.seed([probe]);
+    expect(await events.store.head(probe.subject)).toBeGreaterThan(claimed.sequence);
+    const writes = vi.spyOn(events.store, 'append');
+    writes.mockClear();
+    expect(await claimRefresh(test, test.input, test.session, true)).toEqual({ status: 'unknown' });
+    expect(await test.start()).toEqual(start);
+    expect(writes).not.toHaveBeenCalled();
+    expect(await history(events.store, test.subject, 'test')).toEqual(rows);
+    expect(test.store.creates).toBe(4);
+    expect(test.sends).toBe(1);
+    const publicValues = JSON.stringify({ results, rows });
+    for (const canary of ['result-canary', 'refresh-canary', test.responseText]) {
+      const digest = createHash('sha256');
+      digest.update(canary);
+      expect(publicValues).not.toContain(canary);
+      expect(publicValues).not.toContain(digest.digest('hex'));
+    }
+  } finally {
+    await manager.streams.update('EVENTS', { duplicate_window: stream.config.duplicate_window });
+    await test.close();
+  }
+}
+it.each(['race', 'lost-reply', 'throw'])(
+  'claims one refresh after %s without giving restart or copies permission', claimsRefreshOnce);
+
+async function refusesRefreshClaim(change: string) {
+  const test = await refreshFixture();
+  try {
+    if (change !== 'no-start') {
+      expect((await test.start()).status).toBe('saved');
+    }
+    const input = { ...test.input };
+    const session = { ...test.session };
+    if (change === 'generation') {
+      input.expectedGeneration++;
+    } else if (change === 'sequence') {
+      input.expectedSequence++;
+    } else if (change === 'owner') {
+      session.userId = 'other';
+    } else if (change === 'silo') {
+      session.siloId = 'other';
+    } else if (change === 'profile') {
+      input.profileId = 'other';
+    } else if (change === 'uid') {
+      test.store.secret.metadata.uid = 'replaced';
+    } else if (change === 'version') {
+      test.store.secret.metadata.resourceVersion = '2';
+    } else if (change !== 'no-start') {
+      await changeConsentAccess(test, change);
+    }
+    const writes = vi.spyOn(events.store, 'append');
+    expect(await claimRefresh(test, input, session)).toEqual({ status: 'unknown' });
+    expect(writes).not.toHaveBeenCalled();
+    expect(test.sends).toBe(1);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['no-start', 'generation', 'sequence', 'owner', 'silo', 'profile', 'uid', 'version',
+  'configuration', 'policy', 'disabled', 'removed'])(
+  'refuses refresh claim with %s', refusesRefreshClaim);
+
+async function checksRefreshClaimWait(point: string, change: string) {
+  const test = await refreshFixture();
+  try {
+    expect((await test.start()).status).toBe('saved');
+    async function changeAccess() {
+      if (change === 'expiry') {
+        vi.spyOn(Date, 'now').mockReturnValue(test.dueAt + 60_001);
+      } else if (change === 'unrelated') {
+        const event = envelope('test', 'member-unrelated-claim', 'member.joined', {
+          memberId: 'other', email: 'other@example.test', displayName: 'Other', role: 'member',
+        });
+        await events.seed([event]);
+      } else {
+        await changeConsentAccess(test, change);
+      }
+    }
+    if (point === 'private-read' || point === 'final-read') {
+      const read = test.custody.hasRefreshMaterial.bind(test.custody);
+      let reads = 0;
+      async function afterRead(...args: Parameters<typeof read>) {
+        const result = await read(...args);
+        reads++;
+        if (point === 'private-read' || reads === 2) {
+          await changeAccess();
+        }
+        return result;
+      }
+      vi.spyOn(test.custody, 'hasRefreshMaterial').mockImplementation(afterRead);
+    } else {
+      const append = events.store.append.bind(events.store);
+      async function beforeAppend(command: AppendCommand) {
+        fault.mockRestore();
+        await changeAccess();
+        return append(command);
+      }
+      const fault = vi.spyOn(events.store, 'append').mockImplementationOnce(beforeAppend);
+    }
+    const result = await claimRefresh(test);
+    expect(result.status).toBe(change === 'unrelated' ? 'claimed' : 'unknown');
+    const rows = await history(events.store, test.subject, 'test');
+    function isRefreshClaim(row: StoredEvent) {
+      return row.event.type === 'connection.oauth_exchange_claimed' &&
+        z.object({ purpose: z.string() }).parse(row.event.data).purpose === 'refresh';
+    }
+    const saved = point === 'final-read' || change === 'unrelated';
+    expect(rows.filter(isRefreshClaim)).toHaveLength(saved ? 1 : 0);
+    expect(test.sends).toBe(1);
+  } finally {
+    await test.close();
+  }
+}
+const refreshClaimWaitCases: [string, string][] = [];
+for (const point of ['private-read', 'publication', 'final-read']) {
+  for (const change of ['removed', 'policy', 'disabled', 'configuration', 'unrelated']) {
+    refreshClaimWaitCases.push([point, change]);
+  }
+}
+refreshClaimWaitCases.push(['publication', 'expiry'], ['final-read', 'expiry']);
+it.each(refreshClaimWaitCases)(
+  'checks refresh claim at %s after %s', checksRefreshClaimWait);
+
+async function refusesBlockedRefreshJoin() {
+  const test = await refreshFixture();
+  try {
+    expect((await test.start()).status).toBe('saved');
+    await changeConsentAccess(test, 'disabled');
+    const writes = vi.spyOn(events.store, 'append');
+    expect(await test.start()).toEqual({ status: 'unknown' });
+    expect(writes).not.toHaveBeenCalled();
+  } finally {
+    await test.close();
+  }
+}
+it('refuses an admin block when joining a saved refresh attempt', refusesBlockedRefreshJoin);
+
+async function checksRefreshClaimReplay() {
+  const test = await refreshFixture();
+  try {
+    const consentRead = vi.spyOn(test.custody, 'readAttempt');
+    consentRead.mockRejectedValue(new Error('expired-private-consent-canary'));
+    expect((await test.start()).status).toBe('saved');
+    expect((await claimRefresh(test)).status).toBe('claimed');
+    expect(consentRead).not.toHaveBeenCalled();
+    const rows = await history(events.store, test.subject, 'test');
+    const patches = [
+      { purpose: 'consent' }, { attemptId: 'f'.repeat(64) }, { userId: 'other' },
+      { serverId: 'other' }, { connectionId: 'other' }, { profile: 'other' },
+      { secretRef: 'secret:other' }, { uid: 'other' }, { resourceVersion: 'other' },
+      { expectedSequence: rows[2]!.sequence }, { appendUntil: test.dueAt + 120_000 },
+    ];
+    for (const patch of patches) {
+      const altered = structuredClone(rows);
+      const claim = altered[4]!;
+      const data = z.record(z.string(), z.unknown()).parse(claim.event.data);
+      claim.event.data = { ...data, ...patch };
+      expect(foldConnection(altered).data).toBeUndefined();
+    }
+    const envelopes = [
+      { silo: 'other' }, { subject: 'connection-other' }, { id: 'other' },
+      { commandId: 'other' }, { source: 'other' },
+      { principal: { kind: 'human' as const, id: 'other' } },
+    ];
+    for (const patch of envelopes) {
+      const altered = structuredClone(rows);
+      altered[4]!.event = { ...altered[4]!.event, ...patch };
+      expect(foldConnection(altered).data).toBeUndefined();
+    }
+    const repeated = [...rows, { ...rows[4]!, sequence: rows[4]!.sequence + 1 }];
+    expect(foldConnection(repeated).data).toBeUndefined();
+    const wrongConsent = structuredClone(rows.slice(0, 3));
+    const data = z.record(z.string(), z.unknown()).parse(wrongConsent[1]!.event.data);
+    wrongConsent[1]!.event.data = { ...data, purpose: 'refresh' };
+    expect(foldConnection(wrongConsent).data).toBeUndefined();
+    expect(test.sends).toBe(1);
+  } finally {
+    await test.close();
+  }
+}
+it('retains refresh claims without rereading consent and refuses altered replay bindings',
+  checksRefreshClaimReplay);

@@ -29,9 +29,13 @@ the human owner and exact saved event. It has no reaction, URL, raw state or ver
 replay grants no access and reads no custody. Existing bearer schemas remain unchanged.
 
 `connection.oauth_exchange_claimed` is a strict personal-profile record. It names the
-original attempt, one fresh worker id, consent purpose, private code reference and exact
-UID/version, previous profile position and original expiry. It stores no code, verifier
-or material digest. No handler subscribes. A claim alone proves no provider send and gives
+original attempt and one fresh worker id. Consent claims name the private code reference
+and exact UID/version, previous profile position and original expiry. Refresh claims
+use `purpose: refresh`, the current generation reference and its exact UID/version,
+the refresh-start position, and a fixed 60-second expiry. The preceding refresh-start
+record supplies generation, configuration and scopes. The fold accepts the refresh
+claim only after that matching start and keeps OAuth unavailable to credential use.
+It stores no code, verifier or material digest. No handler subscribes. A claim alone proves no provider send and gives
 a restarted worker no permission to send. The callback confirms the exact saved event.
 
 The existing `agent.turn_failed` schema accepts the fixed

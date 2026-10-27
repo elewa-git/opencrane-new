@@ -35,6 +35,7 @@ interface State {
   lastGeneration: number;
   closedOperations: string[];
   refreshAttempt?: StoredEvent;
+  refreshClaim?: StoredEvent;
 }
 
 /** Rebuild references only. Saving material does not prove the upstream account's identity. */
@@ -47,8 +48,9 @@ export function foldConnection(rows: StoredEvent[]): State {
     const previous = state;
     state = { status: 'unavailable', sequence: row.sequence, lastGeneration: 0,
       closedOperations: [] };
-    if (row.event.type === 'connection.refresh_started') {
-      state = applyRefreshStart(previous, row, silo) ?? state;
+    const refreshTypes = ['connection.refresh_started', 'connection.oauth_exchange_claimed'];
+    if (refreshTypes.includes(row.event.type)) {
+      state = applyRefreshRecord(previous, row, silo) ?? state;
       continue;
     }
     if (row.event.type === 'connection.operation_closed') {
@@ -76,6 +78,35 @@ export function foldConnection(rows: StoredEvent[]): State {
     }
   }
   return state;
+}
+function applyRefreshRecord(previous: State, row: StoredEvent, silo?: string) {
+  if (row.event.type === 'connection.refresh_started') {
+    return applyRefreshStart(previous, row, silo);
+  }
+  return applyRefreshClaim(previous, row, silo);
+}
+function applyRefreshClaim(previous: State, row: StoredEvent, silo?: string): State | undefined {
+  const parsed = connectionOAuthExchangeClaimedDataSchema.safeParse(row.event.data);
+  const saved = previous.data;
+  const original = previous.refreshAttempt;
+  if (!parsed.success || !saved || !original || previous.refreshClaim) {
+    return undefined;
+  }
+  const attempt = connectionRefreshStartedDataSchema.parse(original.event.data);
+  const claimId = connectionOperationId(row.event.silo, row.event.subject,
+    `${attempt.attemptId}-exchange`);
+  const data = parsed.data;
+  const expected = { ...data, userId: saved.userId, serverId: saved.serverId,
+    connectionId: saved.activation.connectionId, profile: saved.profile,
+    purpose: 'refresh', attemptId: attempt.attemptId, secretRef: saved.secretRef,
+    uid: saved.activation.uid, resourceVersion: saved.activation.resourceVersion,
+    expectedSequence: original.sequence, appendUntil: Date.parse(row.event.time) + 60_000 };
+  if (row.event.silo !== silo || row.event.id !== claimId || row.event.commandId !== claimId ||
+      row.sequence <= previous.sequence || previous.sequence !== original.sequence ||
+      !sameOAuthProfile(row, data, original, saved) || !isDeepStrictEqual(data, expected)) {
+    return undefined;
+  }
+  return { ...previous, sequence: row.sequence, refreshClaim: row };
 }
 function applyRefreshStart(previous: State, row: StoredEvent, silo?: string): State | undefined {
   const parsed = connectionRefreshStartedDataSchema.safeParse(row.event.data);
@@ -142,7 +173,8 @@ function oauthOrder(start: StoredEvent, claim: StoredEvent, row: StoredEvent,
     `${attempt.attemptId}-exchange`);
   const resultId = connectionOperationId(row.event.silo, row.event.subject, `${claimId}-result`);
   const operationId = connectionOperationId(row.event.silo, row.event.subject, `${resultId}-confirm`);
-  return exchange.attemptId === attempt.attemptId && start.event.id === attempt.attemptId &&
+  return exchange.purpose === 'consent' &&
+    exchange.attemptId === attempt.attemptId && start.event.id === attempt.attemptId &&
     claim.event.id === claimId && claim.event.commandId === claimId &&
     exchange.expectedSequence === start.sequence && claim.sequence > start.sequence &&
     row.sequence > claim.sequence && data.activation.expectedSequence === claim.sequence &&

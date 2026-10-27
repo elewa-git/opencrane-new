@@ -1,0 +1,1 @@
+- Record one internal OAuth refresh claim for the exact saved account generation. Copies and restarted workers cannot claim it again; refresh requests and replacement saves remain unavailable.
