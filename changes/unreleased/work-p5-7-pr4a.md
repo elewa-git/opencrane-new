@@ -1,0 +1,2 @@
+- Operators can capture matching events, files and all computer homes within one shared time limit. The result is partial component evidence; complete-system backup and live qualification remain unfinished.
+- Capture refuses a whole set if an archive changes during a later copy. Saved files and homes must authenticate and match their original encrypted output within the same time limit.

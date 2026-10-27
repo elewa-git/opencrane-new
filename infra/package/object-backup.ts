@@ -98,10 +98,11 @@ async function copyObject(objects: ReturnType<typeof storageClient>, address: st
     const response = await bounds.bounded(pending);
     output = openSync(join(destination, reference.identity), 'wx', 0o600);
     // Write only nonce, ciphertext and tag; bind each file to its archived identity and hash.
+    const archiveHash = createHash('sha256');
     const nonce = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', key, nonce);
     cipher.setAAD(Buffer.from(JSON.stringify([reference.identity, reference.sha256])));
-    writeBytes(output, nonce, bounds);
+    writeBytes(output, nonce, bounds, archiveHash);
     const iterator = response[Symbol.asyncIterator]();
     const hash = createHash('sha256');
     let byteCount = 0;
@@ -113,22 +114,26 @@ async function copyObject(objects: ReturnType<typeof storageClient>, address: st
       byteCount += bytes.length;
       if (byteCount > reference.byteCount) throw refusal();
       hash.update(bytes);
-      writeBytes(output, cipher.update(bytes), bounds);
+      writeBytes(output, cipher.update(bytes), bounds, archiveHash);
     }
     if (byteCount !== reference.byteCount || hash.digest('hex') !== reference.sha256) {
       throw refusal();
     }
-    writeBytes(output, cipher.final(), bounds);
-    writeBytes(output, cipher.getAuthTag(), bounds);
+    writeBytes(output, cipher.final(), bounds, archiveHash);
+    writeBytes(output, cipher.getAuthTag(), bounds, archiveHash);
     bounds.check();
     fsyncSync(output);
+    bounds.check();
+    return archiveHash.digest('hex');
   } finally {
     stream?.destroy();
     if (output !== undefined) closeSync(output);
   }
 }
 
-function writeBytes(output: number, bytes: Buffer, bounds: Bounds) {
+function writeBytes(output: number, bytes: Buffer, bounds: Bounds,
+  archiveHash: ReturnType<typeof createHash>) {
+  archiveHash.update(bytes);
   let offset = 0;
   while (offset < bytes.length) {
     bounds.check();
@@ -140,7 +145,8 @@ function writeBytes(output: number, bytes: Buffer, bounds: Bounds) {
 
 /** Keep writers stopped throughout capture. Stable event positions cannot prove that condition. */
 export async function collectObjectBackup(source: NatsConnection, target: NatsConnection,
-  objects: ReturnType<typeof storageClient>, options: Options): Promise<void> {
+  objects: ReturnType<typeof storageClient>, options: Options,
+  archiveWritten?: (file: string, sha256: string) => void): Promise<void> {
   let key: Buffer | undefined;
   let owned = false;
   let bounds: Bounds | undefined;
@@ -171,11 +177,14 @@ export async function collectObjectBackup(source: NatsConnection, target: NatsCo
     const collected = objectReferences(options.silo, maxObjects, maxBytes);
     await checkHistory(targetBounds, targetDescriptor, maximumBytes, collected.visit);
     const entries: ObjectReference[] = [];
+    const archiveHashes = new Map<string, string>();
     for (const reference of collected.references.values()) {
-      await copyObject(objects, reference.address, reference, options.destination, bounds,
-        key, signal, timeoutMs);
+      const archiveHash = await copyObject(objects, reference.address, reference,
+        options.destination, bounds, key, signal, timeoutMs);
       const { address: _address, ...entry } = reference;
       entries.push(entry);
+      archiveHashes.set(entry.identity, archiveHash);
+      archiveWritten?.(entry.identity, archiveHash);
     }
     await checkHistory(bounds, descriptor, maximumBytes);
     await checkHistory(targetBounds, targetDescriptor, maximumBytes);
@@ -185,6 +194,14 @@ export async function collectObjectBackup(source: NatsConnection, target: NatsCo
     const archive = readPrivateFile(join(options.directory, 'events.snapshot'), maximumBytes);
     if (!isDeepStrictEqual(current, descriptor) || archive.length !== descriptor.byteCount ||
         sha256(archive) !== descriptor.sha256) throw refusal();
+    // Retain the hash from encryption so a later copy cannot establish a corrupt baseline.
+    for (const entry of entries) {
+      bounds.check();
+      const path = join(options.destination, entry.identity);
+      const savedObject = readPrivateFile(path, entry.byteCount + 28);
+      if (savedObject.length !== entry.byteCount + 28 ||
+          sha256(savedObject) !== archiveHashes.get(entry.identity)) throw refusal();
+    }
     const result = { version: 2, encryption: 'aes-256-gcm',
       kind: 'event-referenced-objects-only', silo: descriptor.silo,
       attempt: descriptor.attempt, eventArchiveSha256: descriptor.sha256,

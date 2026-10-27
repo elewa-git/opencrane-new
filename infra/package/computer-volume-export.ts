@@ -7,7 +7,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { collectComputerVolumeInventory } from './computer-volume-inventory.ts';
 import { captureBounds } from './event-backup.ts';
-import { readBackupKey } from './event-restore.ts';
+import { readBackupKey, readPrivateFile } from './event-restore.ts';
 
 type InventoryArguments = Parameters<typeof collectComputerVolumeInventory>;
 type Inventory = Awaited<ReturnType<typeof collectComputerVolumeInventory>>;
@@ -71,7 +71,9 @@ function privateDirectory(path: string) {
       metadata.uid !== process.getuid?.() || (metadata.mode & 0o777) !== 0o700) throw refusal();
   return metadata;
 }
-function writeBytes(output: number, bytes: Buffer, bounds: Bounds) {
+function writeBytes(output: number, bytes: Buffer, bounds: Bounds,
+  archiveHash: ReturnType<typeof createHash>) {
+  archiveHash.update(bytes);
   let offset = 0;
   while (offset < bytes.length) {
     bounds.check();
@@ -88,11 +90,12 @@ async function encrypt(input: ExportInput, binding: Inventory, file: string, des
     byteCount: input.byteCount, sha256: input.sha256 };
   const output = openSync(join(destination, file), 'wx', 0o600);
   try {
+    const archiveHash = createHash('sha256');
     const nonce = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', key, nonce);
     const associated = [2, 'volume-export-only', 'aes-256-gcm', binding, entry];
     cipher.setAAD(Buffer.from(JSON.stringify(associated)));
-    writeBytes(output, nonce, bounds);
+    writeBytes(output, nonce, bounds, archiveHash);
     const iterator = input.stream[Symbol.asyncIterator]();
     const hash = createHash('sha256');
     let byteCount = 0;
@@ -104,16 +107,16 @@ async function encrypt(input: ExportInput, binding: Inventory, file: string, des
       byteCount += bytes.length;
       if (byteCount > entry.byteCount || byteCount > remainingBytes) throw refusal();
       hash.update(bytes);
-      writeBytes(output, cipher.update(bytes), bounds);
+      writeBytes(output, cipher.update(bytes), bounds, archiveHash);
     }
     const sha256 = hash.digest('hex');
     if (byteCount !== entry.byteCount || sha256 !== entry.sha256) throw refusal();
-    writeBytes(output, cipher.final(), bounds);
-    writeBytes(output, cipher.getAuthTag(), bounds);
+    writeBytes(output, cipher.final(), bounds, archiveHash);
+    writeBytes(output, cipher.getAuthTag(), bounds, archiveHash);
     bounds.check();
     fsyncSync(output);
     bounds.check();
-    return entry;
+    return { entry, archiveSha256: archiveHash.digest('hex') };
   } finally {
     closeSync(output);
   }
@@ -123,7 +126,8 @@ async function encrypt(input: ExportInput, binding: Inventory, file: string, des
 export async function collectComputerVolumeExport(source: InventoryArguments[0],
   target: InventoryArguments[1], options: Options,
   readExport: (binding: Inventory, signal: AbortSignal, home: Home) => Promise<ExportInput>,
-  readKubernetes?: InventoryArguments[3]) {
+  readKubernetes?: InventoryArguments[3],
+  archiveWritten?: (file: string, sha256: string) => void) {
   let key: Buffer | undefined;
   let bounds: Bounds | undefined;
   let owned: ReturnType<typeof privateDirectory> | undefined;
@@ -154,7 +158,8 @@ export async function collectComputerVolumeExport(source: InventoryArguments[0],
     bounds.check();
     mkdirSync(options.destination, { mode: 0o700 });
     owned = privateDirectory(options.destination);
-    const exports: Awaited<ReturnType<typeof encrypt>>[] = [];
+    const exports: z.infer<typeof entrySchema>[] = [];
+    const archiveHashes = new Map<string, string>();
     // Share the byte allowance across all homes; the bounds also cover the whole call.
     let totalBytes = 0;
     // Close a reader even if its open request finishes after the deadline.
@@ -187,8 +192,10 @@ export async function collectComputerVolumeExport(source: InventoryArguments[0],
           const file = fileIdentity(exports.length);
           const content = await encrypt(input, binding, file, options.destination, material,
             activeBounds, maximumBytes - totalBytes);
-          totalBytes += content.byteCount;
-          exports.push(content);
+          totalBytes += content.entry.byteCount;
+          exports.push(content.entry);
+          archiveHashes.set(file, content.archiveSha256);
+          archiveWritten?.(file, content.archiveSha256);
         } finally {
           closeReader();
         }
@@ -202,6 +209,15 @@ export async function collectComputerVolumeExport(source: InventoryArguments[0],
       encryption: 'aes-256-gcm', binding, exports };
     const result = volumeExportDescriptorSchema.parse(descriptor);
     checkOutput();
+    // Compare saved bytes with the original encryption output before reporting success.
+    for (const entry of exports) {
+      bounds.check();
+      const saved = readPrivateFile(join(options.destination, entry.file), entry.byteCount + 28);
+      const hash = createHash('sha256');
+      hash.update(saved);
+      if (saved.length !== entry.byteCount + 28 ||
+          hash.digest('hex') !== archiveHashes.get(entry.file)) throw refusal();
+    }
     bounds.check();
     writeFileSync(join(options.destination, 'descriptor.partial'), JSON.stringify(result),
       { flag: 'wx', mode: 0o600, flush: true });

@@ -739,7 +739,11 @@ The private descriptor binds silo, attempt, event archive and descriptor hashes 
 each object's opaque identity, byte count and SHA-256. Names, addresses and bytes
 never enter diagnostics or the descriptor. A failed capture removes only its own
 output and returns `Object backup refused` without a dependency error or cause.
-The archive and source positions are checked again before completion.
+The archive and source positions are checked again before completion. Each encrypted
+file's hash is calculated from the nonce, ciphertext and tag sent to disk. Every saved
+file must still match that hash before completion, including after later files copy.
+An optional final callback receives each filename and original encrypted hash after
+its copy finishes. Combined capture keeps these hashes for its final comparison.
 
 `apps/server/test/object-backup.test.ts` runs in the existing CI test glob with
 real disposable NATS and scoped MinIO. Selected stream faults are injected after
@@ -888,6 +892,11 @@ and both event archive hashes. Each `entry` has `file`, `home`, `byteCount` and
 or identities fails authentication. No plaintext file is made and no archive is
 extracted. The helper counts and hashes bytes as they arrive.
 
+Each encrypted home has an in-memory hash calculated from the nonce, ciphertext and
+tag sent to disk. The saved file must still match that hash after all copies and
+inventory checks. The optional sixth argument receives each filename and encrypted
+hash after its copy finishes, so combined capture can retain the original output.
+
 After complete input, encryption and flush, the inventory checks run again.
 Only then is the private descriptor published and returned with version 2,
 `kind: volume-export-only`, `encryption: aes-256-gcm`, `binding` and `exports`.
@@ -909,6 +918,44 @@ writer. It checks independent decryption, second-home failures, retained homes,
 strict descriptors, changes during either copy and shared size/deadline boundaries.
 The [local receipt](../../docs/process/p5-7-pr3c/receipt.md) records these checks.
 Live PVC capture, CSI, custody backup and coordinated recovery remain NOT RUN.
+
+## Matching component capture
+
+`collectBackupCapture` in `backup-capture.ts` composes the existing event, object and
+home collectors. Supply the source connection, two distinct owned disposable NATS
+connections, the existing storage client, export options, a trusted home reader and
+a Kubernetes reader (or `undefined` for the existing adapter). The namespace/context
+must already be checked. Both targets must be empty; they remain intact and isolated
+on success or failure. Lost completion is unknown and never triggers erase or resend.
+
+The absent destination is created under an owned private directory. Its `events`,
+`objects` and `homes` children retain the existing formats. One original deadline
+(at most 60 seconds) and cancellation cover the sequence, including final checks.
+Each stage receives only the remaining time. Keep `writersStopped` true throughout;
+the helper checks it between stages and during home copying. It does not stop or
+resume admission, and this assertion does not prove live quiescence.
+
+The helper checks silo, attempt, event archive and descriptor hashes across components.
+It retains each encrypted archive's hash when that archive is written, before any
+later copy can change it. The event snapshot must match the hash recorded during
+snapshot writing. After copying, the helper authenticates every file and home against
+its descriptor with the existing restore checkers, checks source history again, and
+compares every saved archive with its original output. All checks use the time left
+from the original deadline. Any mismatch refuses the whole set before returning
+counts and hashes labelled `capture-components-only`. No combined manifest
+is saved. Failed attempts may leave partial component evidence; it is not a usable
+system backup. Errors withhold dependency messages, private paths and content.
+
+`infra/package/backup-capture.test.ts` uses real disposable NATS and MinIO,
+synthetic Kubernetes records and two distinct home streams. It checks matching and
+empty-home results, refusals, original-deadline expiry, cancellation, lost completion
+and zero calls at actual replay, scheduler, model, tool and credential entry points.
+It also replaces an already saved first home while the second home is read, and
+replaces a saved event or file archive during a later file copy. Each refuses the set;
+changes during the final source check remain covered.
+P5-7 PR 4a is partial component evidence. P5-3 remains required. CNPG/WAL, custody
+capture, live mounted-source proof, admission stop/resume and the final complete
+manifest remain later work. Live qualification: NOT RUN.
 
 ## Event-byte restore
 
