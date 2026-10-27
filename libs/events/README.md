@@ -18,6 +18,9 @@ consent for a matching saved control request and carries no private review detai
 Computer turn records can keep a routine's input id separate from its turn id,
 alongside the allocated spending root. These identifiers grant no permission to send.
 
+Account refresh starts record one attempt for a saved generation. Rebuilding these
+records keeps the account and attempt without contacting its provider.
+
 ## Where it fits
 
 This is one of the packages that build everything from the
@@ -35,7 +38,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
-  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks consent starts, callback claims and first account confirmations, takeover cancellation and saved event shapes, including native access expiry, retry records, personal and saved tool choices, company opt-in, and blocks| events
+  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks consent starts, callback claims, refresh starts and first account confirmations, takeover cancellation and saved event shapes, including native access expiry, retry records, personal and saved tool choices, company opt-in, and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
 ```
 

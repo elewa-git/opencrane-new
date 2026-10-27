@@ -131,3 +131,8 @@ export function oauthConsentUrl(configuration: z.infer<typeof oauthConfiguration
   url.search = query.toString();
   return url.href;
 }
+
+/** Bind public operator settings, including the configured identity verifier, to a generation. */
+export function oauthConfigurationDigest(configuration: z.infer<typeof oauthConfigurationSchema>) {
+  return digest(JSON.stringify(configuration));
+}

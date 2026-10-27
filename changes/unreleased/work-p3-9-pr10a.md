@@ -1,0 +1,1 @@
+- Save one internal OAuth refresh attempt per current generation and recover its reference after races or lost replies. Refresh sends and tool use remain unavailable.

@@ -651,7 +651,8 @@ async function startsPrivateConsent() {
 }
 it('records private consent before returning only its approved URL', startsPrivateConsent);
 
-async function changeConsentAccess(test: Awaited<ReturnType<typeof consentStartFixture>>,
+async function changeConsentAccess(test: Pick<Awaited<ReturnType<typeof consentStartFixture>>,
+  'session' | 'command' | 'subject' | 'configuration'>,
   change: string) {
   const userId = test.session.userId;
   const serverId = test.command.serverId;
@@ -2981,7 +2982,7 @@ async function clearsUnknownAfterSuccess() {
 it('scan clears consecutive unknown state after a successful page', clearsUnknownAfterSuccess);
 
 
-async function exchangeFixture(mode = 'valid', signed = false) {
+async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) {
   let identityVerification: IdentityVerification | undefined;
   const keys = await generateKeyPair('RS256');
   if (signed) {
@@ -3004,8 +3005,9 @@ async function exchangeFixture(mode = 'valid', signed = false) {
     signedClaims.setExpirationTime('1m');
     const token = await signedClaims.sign(keys.privateKey);
     responseText = JSON.stringify({ access_token: 'result-canary', token_type: 'Bearer',
-      id_token: token, refresh_token: 'refresh-canary', name: 'provider-name-canary',
-      scope: 'read', expires_in: 3600 });
+      id_token: token, refresh_token: mode === 'no-refresh' ? undefined : 'refresh-canary',
+      name: 'provider-name-canary',
+      scope: 'read', expires_in: lifetime });
   }
   async function respond(request: IncomingMessage, response: ServerResponse) {
     const chunks: Buffer[] = [];
@@ -3584,3 +3586,254 @@ async function refusesUnsignedAndForeignEvidence() {
 }
 it('refuses unsigned and another original attempt as OAuth confirmation evidence',
   refusesUnsignedAndForeignEvidence);
+
+async function refreshFixture(mode = 'valid') {
+  const test = await exchangeFixture(mode, true, 120);
+  const evidence = await test.run();
+  expect((await confirmAccount(test, evidence)).status).toBe('saved');
+  const rows = await history(events.store, test.subject, 'test');
+  const generation = foldConnection(rows).data!;
+  if (generation.activation.reason !== 'oauth_confirmed') {
+    throw new Error('Fixture confirmation missing');
+  }
+  const input = { ...test.command, changeRef: 'refresh-first',
+    expectedSequence: rows[2]!.sequence, expectedGeneration: 1 };
+  const dueAt = generation.activation.account.expiresAt - 30_000;
+  vi.spyOn(Date, 'now').mockReturnValue(dueAt);
+  async function start(raw: unknown = input, session: unknown = test.session, restart = false) {
+    const { startPersonalOAuthRefresh } = await import('../src/oauth-refresh.ts');
+    const custody = restart ? test.store.restart() : test.custody;
+    return startPersonalOAuthRefresh(events.store, consentBinding, session, custody,
+      raw, test.loader.loadConfiguration, pgDb(storage.queue));
+  }
+  async function close() {
+    vi.restoreAllMocks();
+    await test.providerFixture.close();
+  }
+  return { ...test, input, start, close, generation, dueAt,
+    get sends() { return test.sends; } };
+}
+
+async function refreshRaceAndRecovery(mode: string) {
+  const test = await refreshFixture();
+  const manager = await jetstreamManager(events.connection);
+  const stream = await manager.streams.info('EVENTS');
+  try {
+    const append = events.store.append.bind(events.store);
+    async function loseReply(command: AppendCommand): Promise<never> {
+      await append(command);
+      throw new Error('refresh-canary');
+    }
+    if (mode === 'lost-reply') {
+      vi.spyOn(events.store, 'append').mockImplementationOnce(loseReply);
+      expect(await test.start()).toEqual({ status: 'unknown' });
+    }
+    const competing = { ...test.input, changeRef: 'refresh-second' };
+    const results = await Promise.all([test.start(), test.start(competing)]);
+    expect(results[0]).toEqual(results[1]);
+    expect(results[0]).toMatchObject({ status: 'saved', generation: 1, callsAvailable: false });
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(4);
+    expect(rows[3]!.event.type).toBe('connection.refresh_started');
+    await manager.streams.update('EVENTS', { duplicate_window: 100_000_000 });
+    await delay(200);
+    const probe = envelope('test', `member-probe-${test.session.userId}`, 'member.joined', {
+      memberId: 'probe', email: 'probe@example.test', displayName: 'Probe', role: 'member',
+    }, rows[3]!.event.id);
+    await events.seed([probe]);
+    expect(await events.store.head(probe.subject)).toBeGreaterThan(rows[3]!.sequence);
+    const effects = vi.spyOn(globalThis, 'fetch');
+    const rebuilt = foldConnection(structuredClone(rows));
+    expect(rebuilt.data).toEqual(test.generation);
+    expect(rebuilt.lastGeneration).toBe(1);
+    expect(rebuilt.status).toBe('unavailable');
+    expect(rebuilt.refreshAttempt?.sequence).toBe(rows[3]!.sequence);
+    expect(effects).not.toHaveBeenCalled();
+    const writes = vi.spyOn(events.store, 'append');
+    writes.mockClear();
+    expect(await test.start(test.input, test.session, true)).toEqual(results[0]);
+    expect(await test.start(competing, test.session, true)).toEqual(results[0]);
+    expect(writes).not.toHaveBeenCalled();
+    expect(await history(events.store, test.subject, 'test')).toEqual(rows);
+    expect(test.sends).toBe(1);
+    expect(test.store.creates).toBe(4);
+    expect(JSON.stringify({ rows, results })).not.toMatch(/result-canary|refresh-canary/);
+  } finally {
+    await manager.streams.update('EVENTS', { duplicate_window: stream.config.duplicate_window });
+    await test.close();
+  }
+}
+it.each(['race', 'lost-reply'])(
+  'starts one OAuth refresh after %s and recovers both references beyond deduplication',
+  refreshRaceAndRecovery);
+
+async function refusesRefresh(change: string) {
+  const mode = change === 'missing-material' ? 'no-refresh' : 'valid';
+  const test = await refreshFixture(mode);
+  try {
+    const input = { ...test.input };
+    const session = { ...test.session };
+    if (change === 'not-due') {
+      vi.spyOn(Date, 'now').mockReturnValue(test.dueAt - 60_000);
+    } else if (change === 'generation') {
+      input.expectedGeneration = 2;
+    } else if (change === 'sequence') {
+      input.expectedSequence++;
+    } else if (change === 'foreign-member') {
+      session.userId = 'another-member';
+    } else if (change === 'foreign-silo') {
+      session.siloId = 'another-silo';
+    } else if (change === 'foreign-profile') {
+      input.profileId = 'another-profile';
+    } else if (change === 'installation') {
+      input.connectionId = 'another-installation';
+    } else if (change === 'uid') {
+      test.store.secret.metadata.uid = 'replaced';
+    } else if (change === 'version') {
+      test.store.secret.metadata.resourceVersion = '2';
+    } else if (change === 'verifier') {
+      test.configuration.identityVerification!.publicKey += '\n';
+    } else {
+      await changeConsentAccess(test, change);
+    }
+    const result = await test.start(input, session);
+    const status = change === 'not-due' ? 'not_due' : 'unknown';
+    expect(result).toEqual({ status });
+    expect(await history(events.store, test.subject, 'test')).toHaveLength(3);
+    expect(test.sends).toBe(1);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['not-due', 'missing-material', 'generation', 'sequence', 'foreign-member',
+  'foreign-silo', 'foreign-profile', 'installation', 'uid', 'version', 'configuration',
+  'policy', 'disabled', 'removed', 'verifier'])(
+  'refuses OAuth refresh with %s', refusesRefresh);
+
+async function refusesRefreshDuringWait(point: string, change: string) {
+  const test = await refreshFixture();
+  try {
+    async function changeAccess() {
+      if (change === 'unrelated') {
+        const event = envelope('test', 'member-unrelated-refresh', 'member.joined', {
+          memberId: 'unrelated', email: 'other@example.test', displayName: 'Other', role: 'member',
+        });
+        await events.seed([event]);
+      } else if (change === 'deadline') {
+        vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 2001);
+      } else {
+        await changeConsentAccess(test, change);
+      }
+    }
+    if (point === 'publication') {
+      const append = events.store.append.bind(events.store);
+      async function beforeAppend(command: AppendCommand) {
+        fault.mockRestore();
+        await changeAccess();
+        return append(command);
+      }
+      const fault = vi.spyOn(events.store, 'append').mockImplementationOnce(beforeAppend);
+    } else {
+      const check = test.custody.hasRefreshMaterial.bind(test.custody);
+      async function afterPreparation(...args: Parameters<typeof check>) {
+        const result = await check(...args);
+        await changeAccess();
+        return result;
+      }
+      vi.spyOn(test.custody, 'hasRefreshMaterial').mockImplementationOnce(afterPreparation);
+    }
+    const result = await test.start();
+    const succeeds = change === 'unrelated';
+    expect(result.status).toBe(succeeds ? 'saved' : 'unknown');
+    const rows = await history(events.store, test.subject, 'test');
+    function isAttempt(row: StoredEvent) {
+      return row.event.type === 'connection.refresh_started';
+    }
+    expect(rows.filter(isAttempt)).toHaveLength(succeeds ? 1 : 0);
+    expect(test.sends).toBe(1);
+  } finally {
+    await test.close();
+  }
+}
+const refreshWaitCases: [string, string][] = [];
+for (const point of ['preparation', 'publication']) {
+  for (const change of ['removed', 'policy', 'profile', 'configuration', 'disabled', 'unrelated']) {
+    refreshWaitCases.push([point, change]);
+  }
+}
+refreshWaitCases.push(['publication', 'deadline']);
+it.each(refreshWaitCases)(
+  'checks OAuth refresh after %s changes %s', refusesRefreshDuringWait);
+
+async function checksRefreshReceiptBindings() {
+  const test = await refreshFixture();
+  try {
+    const receipt = await test.start();
+    expect(receipt.status).toBe('saved');
+    for (const patch of [{ expectedGeneration: 2 }, { expectedSequence: 1 },
+      { connectionId: 'other' }, { profileId: 'other' }, { serverId: 'other' }]) {
+      expect(await test.start({ ...test.input, ...patch })).toEqual({ status: 'unknown' });
+    }
+    test.configuration.clientId = 'changed';
+    expect(await test.start()).toEqual({ status: 'unknown' });
+    expect(await history(events.store, test.subject, 'test')).toHaveLength(4);
+  } finally {
+    await test.close();
+  }
+}
+it('refuses changed bindings under a saved OAuth refresh reference', checksRefreshReceiptBindings);
+
+async function checksRefreshHistory(mode: string) {
+  const test = await refreshFixture();
+  try {
+    const read = events.store.readStream.bind(events.store);
+    let delayed = false;
+    async function* changedHistory(...args: Parameters<typeof read>) {
+      for await (const row of read(...args)) {
+        expect(args[0]).not.toMatch(/^conversation-/u);
+        if (mode === 'bearer' && args[0] === test.subject &&
+            row.event.type !== 'connection.created') {
+          continue;
+        }
+        if (args[0] === test.subject && row.event.type === 'connection.created') {
+          if (mode === 'slow') {
+            expect(args[2]! - performance.now()).toBeGreaterThan(2000);
+            await delay(2100);
+            delayed = true;
+          } else {
+            const altered = structuredClone(row);
+            const schema = z.object({ activation: z.record(z.string(), z.unknown()) });
+            const payload = schema.parse(altered.event.data);
+            delete payload.activation['configurationDigest'];
+            if (mode === 'bearer') {
+              payload.activation['reason'] = 'bearer_create';
+              payload.activation['expectedSequence'] = 0;
+              delete payload.activation['account'];
+            }
+            altered.event.data = { ...test.generation, activation: payload.activation };
+            if (mode === 'bearer') {
+              expect(foldConnection([altered]).status).toBe('saved_unverified');
+            }
+            if (mode === 'legacy') {
+              const legacy = { userId: test.generation.userId, serverId: test.generation.serverId,
+                profile: test.generation.profile, secretRef: test.generation.secretRef };
+              altered.event.data = legacy;
+            }
+            yield altered;
+            continue;
+          }
+        }
+        yield row;
+      }
+    }
+    vi.spyOn(events.store, 'readStream').mockImplementation(changedHistory);
+    const result = await test.start();
+    expect(result.status).toBe(mode === 'slow' ? 'saved' : 'unknown');
+    expect(delayed).toBe(mode === 'slow');
+    expect(test.sends).toBe(1);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['slow', 'legacy', 'bearer', 'old-oauth'])(
+  'checks OAuth refresh with %s profile history before its short access check', checksRefreshHistory);

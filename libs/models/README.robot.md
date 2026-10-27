@@ -2,6 +2,29 @@
 
 For people, read [README.md](README.md) first.
 
+## Internal OAuth refresh start (Part of #50)
+
+`startPersonalOAuthRefresh` starts or joins one attempt within 60 seconds of expiry.
+It has no route or package export. The shared profile lock covers history, private
+availability, append and readback. One conditional `connection.refresh_started`
+append chooses the attempt. Its exact saved receipt serves competing change references
+and retries beyond broker deduplication, including a lost reply. Changed bindings refuse.
+The receipt grants no send or credential use. No scheduler or refresh exchange exists.
+
+Confirmation now saves a configuration digest from verified evidence. Old confirmations
+without it remain readable but cannot refresh. Custody checks exact generation UID/version
+and private authentication, returning only refresh availability. History and private reads
+finish before the original two-second access check. Membership, policy, configuration,
+profile position and admin block are checked again at publication. No conversation is watched.
+Replay retains account, generation and attempt; OAuth stays unavailable to bearer paths.
+The worker remains consent-only. Local fixtures send once to establish consent and zero
+additional requests for refresh. Live refresh and fresh-install qualification: NOT RUN.
+
+Own checks: PASS for typecheck and catalogue; 848 targeted tests including unchanged
+security rules, then 390 custody/bearer tests and all 35 refresh cases again after the
+final fixture additions. The 321 generated event-schema and registry tests also pass.
+Runs use `nice -n 10`, one Vitest worker and the supplied `PG_TEST_URL`. No root suite ran.
+
 ## First OAuth account confirmation (P3-9 PR 9d; Part of #50)
 
 `confirmPersonalOAuth` is internal and has no route, package export or replay reaction.
@@ -25,7 +48,7 @@ selection, rotation and release closed. Existing bearer and legacy folds remain 
 Original receipts return `saved`, generation 1 and `callsAvailable: false`; current owner
 membership is checked once. Receipt recovery precedes expired consent reads and performs
 no staging or exchange. It confirms a past save, never present permission to use it.
-Reconnect, refresh, OAuth revoke/use integration and UI remain later work. Live: NOT RUN.
+Refresh exchange, reconnect, OAuth revoke/use integration and UI remain later work. Live: NOT RUN.
 
 ## Signed identity from private custody (P3-9 PR 9c; Part of #50)
 
@@ -58,7 +81,7 @@ without another provider send. Uncertain custody stays unknown.
 attempts and safe errors. `connection-custody.test.ts` uses the real callback/exchange
 with a signed local provider, exact recovery, nonce privacy and final-read faults.
 Each consent test uses a separate server record so its history does not include earlier cases.
-The confirmation above saves a first generation. Selection, reconnect, refresh, revoke
+The confirmation above saves a first generation. Selection, reconnect, refresh exchange, revoke
 and governed use remain later work. Live provider and fresh-install qualification: NOT RUN.
 
 ## Private provider transport (P3-9 PR 9a, first part; Part of #50)
@@ -115,7 +138,7 @@ The exact reply is immutable private custody. `unconfirmed` returns changeRef, s
 reference and optional verified identity as described above. Neither status nor custody grants identity confirmation or tool access.
 Changed objects, failed flushes and lost replies are covered with real fixture services.
 Valid JSON passes at 8,192 bytes and fails above it. Production guards stay unchanged.
-Routes, refresh and revoke remain later work; internal confirmation is described above. Live qualification: NOT RUN.
+Routes, refresh exchange and revoke remain later work; internal confirmation is described above. Live qualification: NOT RUN.
 
 ## Private callback claim (P3-9 PR 8c; Part of #50)
 
