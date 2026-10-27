@@ -4381,6 +4381,76 @@ async function savesRefreshOnce(fault: string) {
 it.each(['none', 'append', 'delete', 'stage'])(
   'saves the next OAuth generation once and retires old copies after %s failure', savesRefreshOnce);
 
+async function retiresRefreshAfterMemberRemoval() {
+  const test = await refreshFixture();
+  try {
+    const oldCopies: string[] = [];
+    for (const secret of test.store.secrets.values()) {
+      const contents = Buffer.from(secret.data.token, 'base64').toString();
+      if (contents.includes('"refresh_token":"refresh-canary"')) {
+        oldCopies.push(secret.metadata.name);
+      }
+    }
+    expect(oldCopies).toHaveLength(2);
+    await test.start();
+    const claim = await claimRefresh(test);
+    const append = events.store.append.bind(events.store);
+    async function lostReply(command: AppendCommand): Promise<never> {
+      const result = await append(command);
+      expect(result.status).toBe('appended');
+      throw new Error('Fixture lost refresh save reply');
+    }
+    vi.spyOn(events.store, 'append').mockImplementationOnce(lostReply);
+    expect(await saveRefresh(test, claim)).toEqual({ status: 'unknown' });
+    const savedRows = await history(events.store, test.subject, 'test');
+    expect(savedRows).toHaveLength(6);
+    expect(savedRows[5]!.event.type).toBe('connection.refreshed');
+    expect(foldConnection(savedRows).lastGeneration).toBe(2);
+    for (const name of oldCopies) {
+      expect(test.store.secrets.has(name)).toBe(true);
+    }
+    await changeConsentAccess(test, 'removed');
+    expect(await saveRefresh(test, undefined, true)).toEqual({ status: 'unknown' });
+    for (const name of oldCopies) {
+      expect(test.store.secrets.has(name)).toBe(false);
+    }
+    expect(test.store.deletes).toBe(2);
+    expect(await saveRefresh(test, undefined, true)).toEqual({ status: 'unknown' });
+    expect(test.store.deletes).toBe(2);
+    expect(await history(events.store, test.subject, 'test')).toEqual(savedRows);
+    expect(test.store.creates).toBe(6);
+    expect(test.refreshSends).toBe(1);
+  } finally {
+    await test.close();
+  }
+}
+it('retires both old OAuth copies after a lost save reply and member removal',
+  retiresRefreshAfterMemberRemoval);
+
+async function refusesNewRefreshAfterMemberRemoval() {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    expect((await sendRefresh(test, claim)).status).toBe('verified');
+    const originalRows = await history(events.store, test.subject, 'test');
+    expect(originalRows).toHaveLength(5);
+    await changeConsentAccess(test, 'removed');
+    const anotherAttempt = { ...test.input, changeRef: 'removed-member-refresh' };
+    expect(await test.start(anotherAttempt)).toEqual({ status: 'unknown' });
+    expect(await saveRefresh(test, claim)).toEqual({ status: 'unknown' });
+    expect(await saveRefresh(test, undefined, true)).toEqual({ status: 'unknown' });
+    expect(await history(events.store, test.subject, 'test')).toEqual(originalRows);
+    expect(test.store.creates).toBe(5);
+    expect(test.store.deletes).toBe(0);
+    expect(test.refreshSends).toBe(1);
+  } finally {
+    await test.close();
+  }
+}
+it('refuses a new OAuth refresh start or save after member removal',
+  refusesNewRefreshAfterMemberRemoval);
+
 async function refusesRefreshSave(mode: string) {
   const test = await refreshFixture();
   try {
