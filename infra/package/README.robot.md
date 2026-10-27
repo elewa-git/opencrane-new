@@ -749,9 +749,14 @@ source, empty disposable target and options, plus `backupKeyFile`, a new absolut
 inventory checks suspension and absence of Pods again after copying; the helper
 does not stop writers itself. There is no command-line or public API wrapper.
 
-The trusted internal reader receives the checked inventory and cancellation signal.
-It supplies one Readable, its expected byte count and SHA-256. Exactly one required
-home is supported, with at most 64 MiB and 60 seconds including inventory checks.
+The trusted internal reader receives the checked inventory, cancellation signal and
+one requested home, in that argument order. For each home it supplies that exact
+identity, one Readable, its expected byte count and SHA-256. Every inventoried home
+is required, including lost and retired homes. Zero homes is valid only when the
+event-derived inventory is empty. All homes share a 64 MiB plaintext limit and one
+60-second deadline, including inventory checks. Reaching the deadline refuses;
+exactly 64 MiB is allowed. The helper reads homes sequentially inside one pair of
+inventory observations. Missing, substituted or wrong-generation replies refuse.
 The reader must honour cancellation before returning a stream. The helper destroys
 active streams and any stream returned after cancellation. Tests may shorten the deadline.
 Caller-declared metadata is not proof that a live PVC supplied those bytes.
@@ -764,24 +769,36 @@ changes after the final check. Dispose of the isolated NATS target separately.
 
 The key uses the existing private 32-byte key-file checks. Directories must be
 owned, mode 0700 and free of symlink ancestors; existing destinations refuse.
-`home.enc` is mode 0600: a random 12-byte nonce, AES-256-GCM ciphertext, then the
-16-byte tag. Associated data is UTF-8 JSON `[binding, byteCount, sha256]`, where
-`binding` is the complete checked inventory, including namespace, Sandbox, PVC/PV,
-generation, silo, attempt and both event archive hashes. No plaintext file is made
-and no archive is extracted. The helper counts and hashes bytes as they arrive.
+Files are named `home-0000.enc`, `home-0001.enc` and so on, in inventory order.
+Each is mode 0600: a random 12-byte nonce, AES-256-GCM ciphertext, then the 16-byte
+tag. Associated data is UTF-8 JSON
+`[2, "volume-export-only", "aes-256-gcm", binding, entry]`. `binding` is the complete
+checked inventory, including namespace, Sandbox, PVC/PV, generation, silo, attempt
+and both event archive hashes. Each `entry` has `file`, `home`, `byteCount` and
+`sha256`, in that order. `home` is the full matching inventory entry. Swapping files
+or identities fails authentication. No plaintext file is made and no archive is
+extracted. The helper counts and hashes bytes as they arrive.
 
 After complete input, encryption and flush, the inventory checks run again.
-Only then is the private descriptor published and returned with version 1,
-`kind: volume-export-only`, `encryption: aes-256-gcm`, binding, byte count and hash.
+Only then is the private descriptor published and returned with version 2,
+`kind: volume-export-only`, `encryption: aes-256-gcm`, `binding` and `exports`.
+`volumeExportDescriptorSchema` checks this format before publication. It rejects
+unknown fields at every level, unsupported versions or encryption, unsafe file
+names, missing or duplicate entries, identity mismatches and aggregate overflow.
+Version 1 is no longer accepted. Schema checks alone do not authenticate files;
+recovery must also verify each file's GCM tag against its associated data.
 Errors contain only `Computer volume export refused`, without a cause. Failure
 removes owned output where possible; incomplete output is never a completed export.
 Keys, key paths and home contents stay out of descriptors and diagnostics. A valid
 32-byte key cannot be identified as the wrong recovery key during encryption;
 independent decryption checks that changed keys or authenticated data refuse.
 
-P5-7 PR 3b builds on #743, merged at `d0584938cf7e05037961c0f8e5fcf4cf30b0bdd5`.
+P5-7 PR 3c extends #753's writer and keeps #743's inventory unchanged.
 `libs/event-store/test/computer-volume-export.test.ts` uses real disposable NATS,
-synthetic Kubernetes replies and a local stream through the production writer.
+synthetic Kubernetes replies and distinct local streams through the production
+writer. It checks independent decryption, second-home failures, retained homes,
+strict descriptors, changes during either copy and shared size/deadline boundaries.
+The [local receipt](../../docs/process/p5-7-pr3c/receipt.md) records these checks.
 Live PVC capture, CSI, custody backup and coordinated recovery remain NOT RUN.
 
 ## Event-byte restore

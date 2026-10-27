@@ -490,3 +490,10 @@ with an unprovisioned target. They check source and restored event proof, refusa
 without deletion, lost completion, client restart and command history after native
 deduplication loss. The [package contract](../../infra/package/README.robot.md#event-byte-restore)
 describes the standalone, reachable-source limit. The adapter contract is unchanged.
+
+The computer volume export tests use two distinct local byte streams and real
+NATS archive/replay. They cover whole-set completion, independent authenticated
+decryption, strict descriptors, retained homes and shared size/deadline limits.
+Second-home failures must close all opened readers and leave no completed set.
+The [volume export contract](../../infra/package/README.robot.md#computer-home-export)
+describes the format and the remaining live mounted-source work.

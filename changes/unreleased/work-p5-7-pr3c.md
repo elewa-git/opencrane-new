@@ -1,0 +1,1 @@
+Computer home exports now encrypt every inventoried home in one bounded set and publish completion only after all copies and ownership checks pass. This is volume export only; live volume capture and coordinated backup remain later work.

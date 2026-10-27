@@ -23,7 +23,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
   package -->|uses local cluster| devbox
-  package -->|starts services, checks and exports computer homes, copies and restores files and replays memory| apps["apps<br/>product services and replay"]
+  package -->|starts services, checks and exports all computer homes, copies and restores files and replays memory| apps["apps<br/>product services and replay"]
   package -->|waits for NATS, checks placement, setup time, recovery, fresh browser journeys and database backup descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
@@ -66,7 +66,7 @@ does not save a database backup.
 - Gives computers the private gateway address and short-lived access passes.
 - Saves a bounded private copy of the event log and its referenced files for an operator.
 - Checks retained computer homes against saved events and current Kubernetes ownership.
-- Encrypts one bounded home export while checking that its ownership stays unchanged.
+- Encrypts all required homes together while checking that their ownership stays unchanged.
 - Restores checked events and files in order into empty disposable targets.
 - Checks event and budget recovery after an interrupted change to handler subscriptions.
 - Checks current memory deletion records before replaying older events.
@@ -194,8 +194,9 @@ private metadata. This does not copy volume contents or prove a whole backup is 
 The [inventory notes](README.robot.md#computer-volume-inventory) describe its limits.
 
 The home export helper encrypts bytes from a trusted internal reader directly to a
-private file. It checks ownership before and after copying and saves a completion
-record only after every byte passes its count, checksum and disk flush. Writers
+private file for each required home. All homes share one size limit and deadline.
+It checks ownership before and after copying and saves one completion record only
+after every home passes its count, checksum and disk flush. Writers
 must stay stopped. The tests use a local stream; reading a live Kubernetes volume
 and proving which mount supplied its bytes still need work.
 The [export notes](README.robot.md#computer-home-export) describe the format and limits.

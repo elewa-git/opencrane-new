@@ -3,6 +3,8 @@ import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, realpathSync,
   renameSync, rmSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { Readable } from 'node:stream';
+import { isDeepStrictEqual } from 'node:util';
+import { z } from 'zod';
 import { collectComputerVolumeInventory } from './computer-volume-inventory.ts';
 import { captureBounds } from './event-backup.ts';
 import { readBackupKey } from './event-restore.ts';
@@ -15,12 +17,51 @@ type Options = InventoryArguments[2] & {
   destination: string;
   writersStopped: boolean;
 };
+type Home = Inventory['volumes'][number];
 interface ExportInput {
+  home: Home;
   stream: Readable;
   byteCount: number;
   sha256: string;
 }
 const maximumBytes = 64 * 1024 * 1024;
+const identifier = z.string().regex(/^[a-zA-Z0-9_.:-]{1,253}$/);
+const digest = z.string().regex(/^[a-f0-9]{64}$/);
+const reference = z.strictObject({ name: identifier, uid: identifier, resourceVersion: identifier });
+const homeSchema = z.strictObject({ assistantId: identifier, computerId: identifier,
+  generation: z.number().int().positive().safe(), sandbox: reference, home: reference,
+  volume: reference });
+const inventorySchema = z.strictObject({ kind: z.literal('computer-volume-inventory-only'),
+  silo: identifier, attempt: identifier, eventArchiveSha256: digest,
+  eventDescriptorSha256: digest, namespace: reference, volumes: z.array(homeSchema).max(1_000) });
+const entrySchema = z.strictObject({ file: z.string().regex(/^home-[0-9]{4}\.enc$/),
+  home: homeSchema, byteCount: z.number().int().nonnegative().max(maximumBytes), sha256: digest });
+const descriptorSchema = z.strictObject({ version: z.literal(2),
+  kind: z.literal('volume-export-only'), encryption: z.literal('aes-256-gcm'),
+  binding: inventorySchema, exports: z.array(entrySchema).max(1_000) });
+function fileIdentity(index: number) {
+  return `home-${index.toString().padStart(4, '0')}.enc`;
+}
+function completeInventory(descriptor: z.infer<typeof descriptorSchema>) {
+  if (descriptor.exports.length !== descriptor.binding.volumes.length) {
+    return false;
+  }
+  const computers = new Set<string>();
+  let totalBytes = 0;
+  for (let index = 0; index < descriptor.exports.length; index++) {
+    const entry = descriptor.exports[index]!;
+    const home = descriptor.binding.volumes[index];
+    if (!isDeepStrictEqual(entry.home, home) || entry.file !== fileIdentity(index) ||
+        computers.has(entry.home.computerId)) {
+      return false;
+    }
+    computers.add(entry.home.computerId);
+    totalBytes += entry.byteCount;
+  }
+  return totalBytes <= maximumBytes;
+}
+export const volumeExportDescriptorSchema = descriptorSchema.refine(completeInventory);
+
 function refusal() {
   return new Error('Computer volume export refused');
 }
@@ -39,15 +80,17 @@ function writeBytes(output: number, bytes: Buffer, bounds: Bounds) {
     offset += written;
   }
 }
-async function encrypt(input: ExportInput, binding: Inventory, destination: string,
-  key: Buffer, bounds: Bounds) {
+async function encrypt(input: ExportInput, binding: Inventory, file: string, destination: string,
+  key: Buffer, bounds: Bounds, remainingBytes: number) {
   if (!Number.isSafeInteger(input.byteCount) || input.byteCount < 0 ||
-      input.byteCount > maximumBytes || !/^[a-f0-9]{64}$/.test(input.sha256)) throw refusal();
-  const output = openSync(join(destination, 'home.enc'), 'wx', 0o600);
+      input.byteCount > remainingBytes || !/^[a-f0-9]{64}$/.test(input.sha256)) throw refusal();
+  const entry = { file, home: homeSchema.parse(input.home),
+    byteCount: input.byteCount, sha256: input.sha256 };
+  const output = openSync(join(destination, file), 'wx', 0o600);
   try {
     const nonce = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', key, nonce);
-    const associated = [binding, input.byteCount, input.sha256];
+    const associated = [2, 'volume-export-only', 'aes-256-gcm', binding, entry];
     cipher.setAAD(Buffer.from(JSON.stringify(associated)));
     writeBytes(output, nonce, bounds);
     const iterator = input.stream[Symbol.asyncIterator]();
@@ -59,18 +102,18 @@ async function encrypt(input: ExportInput, binding: Inventory, destination: stri
       const bytes: unknown = next.value;
       if (!Buffer.isBuffer(bytes)) throw refusal();
       byteCount += bytes.length;
-      if (byteCount > input.byteCount || byteCount > maximumBytes) throw refusal();
+      if (byteCount > entry.byteCount || byteCount > remainingBytes) throw refusal();
       hash.update(bytes);
       writeBytes(output, cipher.update(bytes), bounds);
     }
     const sha256 = hash.digest('hex');
-    if (byteCount !== input.byteCount || sha256 !== input.sha256) throw refusal();
+    if (byteCount !== entry.byteCount || sha256 !== entry.sha256) throw refusal();
     writeBytes(output, cipher.final(), bounds);
     writeBytes(output, cipher.getAuthTag(), bounds);
     bounds.check();
     fsyncSync(output);
     bounds.check();
-    return { byteCount, sha256 };
+    return entry;
   } finally {
     closeSync(output);
   }
@@ -79,7 +122,7 @@ async function encrypt(input: ExportInput, binding: Inventory, destination: stri
 /** Use a trusted internal reader; metadata alone does not prove that a live PVC supplied bytes. */
 export async function collectComputerVolumeExport(source: InventoryArguments[0],
   target: InventoryArguments[1], options: Options,
-  readExport: (binding: Inventory, signal: AbortSignal) => Promise<ExportInput>,
+  readExport: (binding: Inventory, signal: AbortSignal, home: Home) => Promise<ExportInput>,
   readKubernetes?: InventoryArguments[3]) {
   let key: Buffer | undefined;
   let bounds: Bounds | undefined;
@@ -111,7 +154,9 @@ export async function collectComputerVolumeExport(source: InventoryArguments[0],
     bounds.check();
     mkdirSync(options.destination, { mode: 0o700 });
     owned = privateDirectory(options.destination);
-    let content: { byteCount: number; sha256: string } | undefined;
+    const exports: Awaited<ReturnType<typeof encrypt>>[] = [];
+    // Share the byte allowance across all homes; the bounds also cover the whole call.
+    let totalBytes = 0;
     // Close a reader even if its open request finishes after the deadline.
     function accept(input: ExportInput) {
       stream = input.stream;
@@ -126,22 +171,36 @@ export async function collectComputerVolumeExport(source: InventoryArguments[0],
       }
     }
     async function capture(binding: Inventory) {
-      if (binding.volumes.length !== 1) throw refusal();
-      const pending = readExport(structuredClone(binding), signal).then(accept);
-      const input = await activeBounds.bounded(pending);
-      try {
-        checkOutput();
-        content = await encrypt(input, binding, options.destination, material, activeBounds);
-      } finally {
-        closeReader();
+      for (const home of binding.volumes) {
+        activeBounds.check();
+        if (options.writersStopped !== true) {
+          throw refusal();
+        }
+        const opening = readExport(structuredClone(binding), signal, structuredClone(home));
+        const pending = opening.then(accept);
+        const input = await activeBounds.bounded(pending);
+        try {
+          if (!isDeepStrictEqual(input.home, home)) {
+            throw refusal();
+          }
+          checkOutput();
+          const file = fileIdentity(exports.length);
+          const content = await encrypt(input, binding, file, options.destination, material,
+            activeBounds, maximumBytes - totalBytes);
+          totalBytes += content.byteCount;
+          exports.push(content);
+        } finally {
+          closeReader();
+        }
       }
     }
     const inventoryOptions = { ...options, timeoutMs, signal };
     const binding = await collectComputerVolumeInventory(source, target, inventoryOptions,
       readKubernetes, capture);
-    if (!content || options.writersStopped !== true) throw refusal();
-    const result = { version: 1, kind: 'volume-export-only' as const,
-      encryption: 'aes-256-gcm', binding, ...content };
+    if (options.writersStopped !== true) throw refusal();
+    const descriptor = { version: 2, kind: 'volume-export-only',
+      encryption: 'aes-256-gcm', binding, exports };
+    const result = volumeExportDescriptorSchema.parse(descriptor);
     checkOutput();
     bounds.check();
     writeFileSync(join(options.destination, 'descriptor.partial'), JSON.stringify(result),
@@ -149,6 +208,7 @@ export async function collectComputerVolumeExport(source: InventoryArguments[0],
     bounds.check();
     renameSync(join(options.destination, 'descriptor.partial'),
       join(options.destination, 'descriptor.json'));
+    bounds.check();
     return result;
   } catch {
     if (owned) {
