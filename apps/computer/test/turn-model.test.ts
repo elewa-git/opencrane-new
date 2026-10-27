@@ -269,3 +269,30 @@ async function explainsExecutionModeMismatch() {
 
 it('gives an execution-mode mismatch an explicit failure reason before running',
   explainsExecutionModeMismatch);
+
+async function retriesFailedInterrupt() {
+  const test = modelFixture('gpt-6-luna');
+  const originalRpc = test.driver.rpc;
+  let attempts = 0;
+  async function rpc(method: string, params: Record<string, unknown>) {
+    if (method === 'turn/interrupt') {
+      attempts++;
+      if (attempts === 1) throw new Error('Interrupt unavailable');
+    }
+    return originalRpc(method, params);
+  }
+  test.driver.rpc = rpc;
+  const stop = { turnId: 'turn', conversationId: 'chat', threadId: 'thread' };
+  try {
+    await test.runner.start(test.input);
+    await expect(test.runner.interrupt(stop)).rejects.toThrow('Interrupt unavailable');
+    await test.runner.interrupt(stop);
+    await test.runner.interrupt(stop);
+    expect(attempts).toBe(2);
+    await expect(test.runner.renew('thread')).rejects.toThrow('Turn ended');
+  } finally {
+    test.finish();
+  }
+}
+it('retries a failed interrupt and shares the successful retry with later Stops',
+  retriesFailedInterrupt);

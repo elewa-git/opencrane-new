@@ -137,6 +137,9 @@ async function stopsExactTurn(kind: 'corrected' | 'forgotten', requester: string
   } finally { release.resolve(); }
   function interrupted() { expect(computer.calls).toContain('turn/interrupt:thread-1'); }
   await vi.waitFor(interrupted);
+  await computer.flush();
+  function targetInterrupt(call: string) { return call === 'turn/interrupt:thread-1'; }
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(1);
   expect(computer.calls).not.toContain('turn/interrupt:thread-2');
   await expect(computer.channel.renew('thread-1')).rejects.toThrow('Turn ended');
   const before = [...computer.calls];
@@ -375,3 +378,136 @@ async function completesBeforeStopArrives() {
 }
 it('clears the exact completed reply when completion races with confirmed Stop delivery',
   completesBeforeStopArrives);
+
+async function coalescesRacingStops() {
+  await startTurn();
+  output('thread-1', 'withdrawn-canary');
+  const event = await invalidated();
+  const removing = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const grant = computer.driver.grant.bind(computer.driver);
+  let removals = 0;
+  async function heldRemoval(...args: Parameters<typeof grant>) {
+    await grant(...args);
+    if (args[0] === 'thread-1' && !args[2]) {
+      removals++;
+      removing.resolve();
+      await release.promise;
+    }
+  }
+  computer.driver.grant = heldRemoval;
+  const stop = { type: 'stop', conversationId: 'chat', turnId: 'turn', threadId: 'thread-1' };
+  try {
+    const first = react(event);
+    const second = react(event);
+    expect(await Promise.all([first, second])).toEqual(['sent', 'sent']);
+    await removing.promise;
+    computer.send(stop);
+    await computer.flush();
+    expect.soft(removals).toBe(1);
+    expect(computer.grants.has('thread-1')).toBe(false);
+    output('thread-1', 'late-canary');
+    expect(await replay()).not.toMatch(/withdrawn-canary|late-canary/u);
+  } finally {
+    release.resolve();
+  }
+  function targetInterrupt(call: string) { return call === 'turn/interrupt:thread-1'; }
+  function interrupted() { expect(computer.calls.filter(targetInterrupt)).toHaveLength(1); }
+  await vi.waitFor(interrupted);
+  expect(await react(event)).toBe('sent');
+  computer.send(stop);
+  await computer.flush();
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(1);
+  expect(removals).toBe(1);
+  await expect(computer.channel.renew('thread-1')).rejects.toThrow('Turn ended');
+}
+it('coalesces racing invalidations and duplicate frames into one removal and interrupt',
+  coalescesRacingStops);
+
+async function coalescesPendingInterrupts() {
+  const open = computer.driver.privateSession!.bind(computer.driver);
+  const interrupted = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function heldSession() {
+    const session = await open();
+    async function rpc(method: string, params: Record<string, unknown>) {
+      const result = await session.rpc(method, params);
+      if (method === 'turn/interrupt') {
+        interrupted.resolve();
+        await release.promise;
+      }
+      return result;
+    }
+    return { ...session, rpc };
+  }
+  computer.driver.privateSession = heldSession;
+  try {
+    await startTurn();
+    const event = await invalidated();
+    expect(await react(event)).toBe('sent');
+    await interrupted.promise;
+    expect(await react(event)).toBe('sent');
+    await computer.flush();
+    function targetInterrupt(call: string) { return call === 'turn/interrupt:thread-1'; }
+    expect(computer.calls.filter(targetInterrupt)).toHaveLength(1);
+    expect(computer.grants.has('thread-1')).toBe(false);
+  } finally {
+    release.resolve();
+  }
+}
+it('shares an interrupt still waiting for its reply across duplicate Stops',
+  coalescesPendingInterrupts);
+
+async function stopDuringStartReply() {
+  const open = computer.driver.privateSession!.bind(computer.driver);
+  const releaseStart = Promise.withResolvers<void>();
+  const startReturned = Promise.withResolvers<void>();
+  async function heldSession() {
+    const session = await open();
+    async function rpc(method: string, params: Record<string, unknown>) {
+      const result = await session.rpc(method, params);
+      if (method === 'turn/start') {
+        await releaseStart.promise;
+        startReturned.resolve();
+      }
+      return result;
+    }
+    return { ...session, rpc };
+  }
+  computer.driver.privateSession = heldSession;
+  const grant = computer.driver.grant.bind(computer.driver);
+  const removing = Promise.withResolvers<void>();
+  const releaseRemoval = Promise.withResolvers<void>();
+  let removals = 0;
+  async function heldRemoval(...args: Parameters<typeof grant>) {
+    await grant(...args);
+    if (args[0] === 'thread-1' && !args[2]) {
+      removals++;
+      removing.resolve();
+      await releaseRemoval.promise;
+    }
+  }
+  computer.driver.grant = heldRemoval;
+  try {
+    await startTurn();
+    const event = await invalidated();
+    expect(await react(event)).toBe('sent');
+    await removing.promise;
+    releaseStart.resolve();
+    await startReturned.promise;
+    await computer.flush();
+    expect.soft(computer.calls).not.toContain('turn/interrupt:thread-1');
+    releaseRemoval.resolve();
+    function targetInterrupt(call: string) { return call === 'turn/interrupt:thread-1'; }
+    function interrupted() { expect(computer.calls.filter(targetInterrupt)).toHaveLength(1); }
+    await vi.waitFor(interrupted);
+    expect(await react(event)).toBe('sent');
+    await computer.flush();
+    expect(computer.calls.filter(targetInterrupt)).toHaveLength(1);
+    expect(removals).toBe(1);
+  } finally {
+    releaseStart.resolve();
+    releaseRemoval.resolve();
+  }
+}
+it('shares Stop with a delayed native start reply and waits for access removal', stopDuringStartReply);
