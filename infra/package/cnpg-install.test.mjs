@@ -675,3 +675,15 @@ async function refusesRecoveryWithOrdinaryImageApproval() {
 }
 test('recovery refuses before Helm even with ordinary CNPG image approval',
   refusesRecoveryWithOrdinaryImageApproval);
+
+for (const property of ['backup', 'recovery']) {
+  for (const value of [null, false, { enabled: false }, { renderOnly: true }]) {
+    async function refusesClosedGate() {
+      const fixture = validFixture();
+      fixture.values.postgres[property] = value;
+      await runFixture(fixture, 'Package command failed');
+    }
+    test(`${property} property stays refused before Helm: ${JSON.stringify(value)}`,
+      refusesClosedGate);
+  }
+}
