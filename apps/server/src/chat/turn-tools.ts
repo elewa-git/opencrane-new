@@ -5,7 +5,7 @@ import { createLogger } from '@opencrane/observability';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import type { privateCallers } from '@opencrane/models';
 import { memoryScopeId } from '@opencrane/projections';
-import { recallTool, serverInfo as memoryServerInfo } from '../memory/mcp.ts';
+import { recallTool, rememberTool, serverInfo as memoryServerInfo } from '../memory/mcp.ts';
 import { personalRecallQualified } from './recall-qualification.ts';
 
 const maximumToolBytes = 48 * 1024;
@@ -63,44 +63,58 @@ export interface TurnDelivery {
 const logger = createLogger('bridge');
 
 export async function buildTurnTools(input: TurnToolInput): Promise<TurnToolServer[]> {
-  return assembleTurnTools(input, false);
+  return assembleTurnTools(input);
 }
 
-type PersonalRecallInput = Omit<TurnToolInput, 'rows' | 'approvalWaiting'> & {
+type PersonalMemoryInput = Omit<TurnToolInput, 'rows' | 'approvalWaiting'> & {
   silo: string;
   scopeId: string;
 };
 
 type PrivateCallers = ReturnType<typeof privateCallers>;
-type PrivateRecallGrant = Parameters<PrivateCallers['register']>[0] & {
+type PrivateMemoryGrant = Parameters<PrivateCallers['register']>[0] & {
   silo: string;
   requesterId: string;
   assistantId: string;
   computerId: string;
   thread: string;
 };
-type PrivateRecallInput = PersonalRecallInput & {
-  runtime?: { sourceSha: string; imageDigest: string; environmentId: string } | undefined;
-  qualification?: unknown;
+type PrivateMemoryInput = PersonalMemoryInput & {
   turn: TurnSummary | undefined;
-  grant: PrivateRecallGrant | undefined;
+  grant: PrivateMemoryGrant | undefined;
   caller: string | undefined;
   callers: Pick<PrivateCallers, 'identify' | 'permits' | 'check'>;
 };
+type QualifiedPrivateMemoryInput = PrivateMemoryInput & {
+  runtime?: { sourceSha: string; imageDigest: string; environmentId: string } | undefined;
+  qualification?: unknown;
+};
 
-export async function buildPrivateTurnRecallTools(input: PrivateRecallInput) {
-  if (!hasPrivateRecallBinding(input)) {
+export async function buildPrivateTurnRecallTools(input: QualifiedPrivateMemoryInput) {
+  if (!personalRecallQualified(input.runtime, input.qualification) || !hasPrivateBinding(input)) {
     return [];
   }
-  const tools = await buildPersonalRecallTools(input);
+  const tools = await buildPersonalMemoryTools(input, recallTool);
   // Refuse a caller that ended while the catalogue or access checks were waiting.
-  if (!hasPrivateRecallBinding(input)) {
+  if (!personalRecallQualified(input.runtime, input.qualification) || !hasPrivateBinding(input)) {
     return [];
   }
   return tools;
 }
 
-function recordedPrivateTurn(input: PrivateRecallInput) {
+// Prepare definitions only. Recall qualification does not approve native writes.
+export async function buildPrivateTurnRememberTools(input: QualifiedPrivateMemoryInput) {
+  if (!personalRecallQualified(input.runtime, input.qualification) || !hasPrivateBinding(input)) {
+    return [];
+  }
+  const tools = await buildPersonalMemoryTools(input, rememberTool);
+  if (!personalRecallQualified(input.runtime, input.qualification) || !hasPrivateBinding(input)) {
+    return [];
+  }
+  return tools;
+}
+
+function recordedPrivateTurn(input: PrivateMemoryInput) {
   const row = input.turn?.firstStart;
   if (!row || input.turn?.firstClose || row.event.source !== 'opencrane-server'
     || row.event.type !== 'computer.turn_started' || row.event.silo !== input.silo
@@ -119,10 +133,7 @@ function recordedPrivateTurn(input: PrivateRecallInput) {
   return turn;
 }
 
-function hasPrivateRecallBinding(input: PrivateRecallInput) {
-  if (!personalRecallQualified(input.runtime, input.qualification)) {
-    return false;
-  }
+function hasPrivateBinding(input: PrivateMemoryInput) {
   const scopeId = memoryScopeId(input.silo, 'person', input.requesterId);
   if (input.scopeId !== scopeId) {
     return false;
@@ -149,20 +160,22 @@ function hasPrivateRecallBinding(input: PrivateRecallInput) {
   }
 }
 
-function matchesRecordedGrant(input: PersonalRecallInput,
-  turn: NonNullable<ReturnType<typeof recordedPrivateTurn>>, grant: PrivateRecallGrant) {
+function matchesRecordedGrant(input: PersonalMemoryInput,
+  turn: NonNullable<ReturnType<typeof recordedPrivateTurn>>, grant: PrivateMemoryGrant) {
   return grant.silo === input.silo && grant.requesterId === turn.requesterId
     && grant.assistantId === turn.assistantId && grant.computerId === turn.computerId
     && grant.turnId === turn.turnId && grant.conversation === turn.conversationId
     && grant.thread === turn.threadId;
 }
 
-async function buildPersonalRecallTools(input: PersonalRecallInput) {
+type MemoryTool = typeof recallTool | typeof rememberTool;
+
+async function buildPersonalMemoryTools(input: PersonalMemoryInput, tool: MemoryTool) {
   const restricted = { ...input, rows: [{ serverId: 'memory' }], approvalWaiting: false };
-  return assembleTurnTools(restricted, true);
+  return assembleTurnTools(restricted, tool);
 }
 
-async function assembleTurnTools(input: TurnToolInput, personalRecall: boolean) {
+async function assembleTurnTools(input: TurnToolInput, memoryTool?: MemoryTool) {
   const availableBytes = Math.min(maximumToolBytes,
     maximumTurnBytes - input.baseMessageBytes - rootFieldBytes);
   if (availableBytes <= 0) {
@@ -174,10 +187,10 @@ async function assembleTurnTools(input: TurnToolInput, personalRecall: boolean) 
   const keys = new Set<string>();
   let omittedServers = 0;
   for (const row of input.rows) {
-    // Keep ordinary turns separate from the restricted recall catalogue.
-    if (row.serverId === 'memory' && !personalRecall) continue;
+    // Keep ordinary turns separate from the restricted memory catalogue.
+    if (row.serverId === 'memory' && !memoryTool) continue;
     let state = await input.readServer(row.serverId);
-    if (state && personalRecall) state = recallOnly(state);
+    if (state && memoryTool) state = memoryToolOnly(state, memoryTool);
     if (!state || !isAvailableServer(state)) continue;
     if (!hasComputerCompatibleFields(state)) {
       omittedServers += 1;
@@ -200,30 +213,30 @@ async function assembleTurnTools(input: TurnToolInput, personalRecall: boolean) 
   return tools;
 }
 
-function recallOnly(state: TurnToolServerState): TurnToolServerState | undefined {
+function memoryToolOnly(state: TurnToolServerState,
+  definition: MemoryTool): TurnToolServerState | undefined {
   if (state.serverId !== 'memory' || state.connectionId !== 'server' ||
       state.serverInfo?.name !== memoryServerInfo.name ||
       state.serverInfo.version !== memoryServerInfo.version) return undefined;
-  const discovered = state.discoveryTools.filter(isRecall);
-  const policies = state.policyTools.filter(isRecall);
+  function matchesName(tool: { name: string }) {
+    return tool.name === definition.name;
+  }
+  const discovered = state.discoveryTools.filter(matchesName);
+  const policies = state.policyTools.filter(matchesName);
   if (discovered.length !== 1 || policies.length !== 1) return undefined;
   const tool = discovered[0]!;
   const policy = policies[0]!;
   if (!tool.definition || policy.mode !== 'allow') return undefined;
-  const expected = losslessJson(JSON.stringify(recallTool));
+  const expected = losslessJson(JSON.stringify(definition));
   if (tool.revision !== expected.digest || policy.revision !== expected.digest) return undefined;
   try {
-    // Reject changed instructions or schemas, even if a saved review names recall.
+    // Reject changed instructions or schemas, even if a saved review names this tool.
     const actual = losslessJson(tool.definition);
     if (actual.canonical !== expected.canonical) return undefined;
   } catch {
     return undefined;
   }
   return { ...state, discoveryTools: discovered, policyTools: policies };
-}
-
-function isRecall(tool: { name: string }) {
-  return tool.name === 'recall';
 }
 
 export async function toolsForMessage(

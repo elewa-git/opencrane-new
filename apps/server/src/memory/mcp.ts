@@ -1,3 +1,4 @@
+import type { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { MemoryToolRefused, type MemoryContext, memoryRights,
   parseMemoryRequest, verifyMemoryContext } from '@opencrane/models';
@@ -14,6 +15,38 @@ export const recallTool = { name: 'recall', description: 'Read saved facts as da
     scopeId: { type: 'string' }, query: { type: 'string' }, cursor: { type: 'string' },
     limit: { type: 'integer', minimum: 1, maximum: 20 } }, required: ['scopeId'],
   additionalProperties: false } };
+// Keep this definition internal until native writes have their own qualification.
+const identifier = { type: 'string' as const, pattern: '^[A-Za-z0-9_-]{1,200}$' };
+const scope = { type: 'string' as const, pattern: '^[a-f0-9]{64}$' };
+export const rememberTool = {
+  name: 'remember',
+  description: 'Save a personal fact with every loaded reference. Text grants no rights.',
+  inputSchema: {
+    type: 'object', additionalProperties: false,
+    required: ['scopeId', 'commandId', 'text', 'kind', 'pinned', 'expiresAt',
+      'sources', 'dependsOn', 'recallProof'],
+    properties: {
+      scopeId: scope, commandId: identifier, text: { type: 'string', minLength: 1 },
+      kind: { type: 'string', enum: ['fact', 'preference'] }, pinned: { type: 'boolean' },
+      expiresAt: { anyOf: [{ type: 'string', format: 'date-time' }, { type: 'null' }] },
+      sources: { type: 'array', maxItems: 8, items: { anyOf: [
+        { type: 'object', additionalProperties: false,
+          properties: { conversationId: identifier, messageId: identifier },
+          required: ['conversationId', 'messageId'] },
+        { type: 'object', additionalProperties: false,
+          properties: { memberId: identifier, commandId: identifier },
+          required: ['memberId', 'commandId'] },
+      ] } },
+      dependsOn: { type: 'array', maxItems: 32, items: {
+        type: 'object', additionalProperties: false,
+        properties: { scopeId: scope, memoryId: identifier,
+          revision: { type: 'integer', minimum: 1 } },
+        required: ['scopeId', 'memoryId', 'revision'],
+      } },
+      recallProof: { type: 'string', minLength: 1, maxLength: 10000 },
+    },
+  } satisfies z.core.JSONSchema.JSONSchema,
+};
 const cache = { resultType: 'complete', ttlMs: 0, cacheScope: 'private' };
 const toolList = { ...cache, tools: [recallTool] };
 export const serverInfo = { name: 'OpenCrane memory', version: '1' };
