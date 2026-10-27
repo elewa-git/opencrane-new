@@ -344,3 +344,34 @@ async function changesDuringConfirmation() {
   expect(computer.grants.has('thread-1')).toBe(true);
 }
 it('checks the current generation after confirming saved history', changesDuringConfirmation);
+
+async function completesBeforeStopArrives() {
+  await startTurn();
+  output('thread-1', 'completed-withdrawn-canary');
+  await computer.flush();
+  const event = await invalidated();
+  let pendingFrame: string | undefined;
+  function holdStop(frame: unknown) {
+    expect(typeof frame).toBe('string');
+    pendingFrame = String(frame);
+  }
+  const delivery = vi.spyOn(computer.socket, 'send').mockImplementation(holdStop);
+  expect(await react(event)).toBe('sent');
+  delivery.mockRestore();
+  expect(pendingFrame).toBeDefined();
+  computer.finish('thread-1');
+  await computer.flush();
+  await startTurn('next', 'chat', 'alice', 'thread-2');
+  output('thread-2', 'replacement-canary');
+  computer.socket.send(pendingFrame!);
+  const replayed = await replay();
+  expect(replayed).not.toContain('completed-withdrawn-canary');
+  expect(replayed).toContain('agent.output_lost');
+  expect(replayed).toContain('replacement-canary');
+  expect(replayed).toContain('agent.turn_completed');
+  expect(computer.grants.has('thread-2')).toBe(true);
+  expect(computer.calls).not.toContain('turn/interrupt:thread-1');
+  expect(computer.calls).not.toContain('turn/interrupt:thread-2');
+}
+it('clears the exact completed reply when completion races with confirmed Stop delivery',
+  completesBeforeStopArrives);
