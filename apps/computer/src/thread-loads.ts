@@ -1,22 +1,70 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
 import { record } from './http.ts';
-import type { Turn } from './turn-frame.ts';
+import { parseTools, type Turn } from './turn-frame.ts';
+import type { privateCallers } from '@opencrane/models/private-callers';
+import { modelForTask } from '@opencrane/models/routing';
 
 export interface ThreadLoadDriver {
   rpc(method: string, params: Record<string, unknown>): Promise<unknown>;
   catalogue?(loadKey: string, conversation: string, tools: NonNullable<Turn['tools']>,
-    thread: string | undefined, turnId: string): Promise<void>;
+    thread: string | undefined, turnId: string,
+    generations?: { generation: number; inputGeneration: number }): Promise<void>;
   dropCatalogue?(loadKey: string): Promise<void>;
   discovered?(loadKey: string): Promise<void>;
 }
 
+// Supply this binding only from the trusted caller registry and reviewed server assembly.
+export interface PrivateThreadBinding {
+  turnId: string;
+  conversation: string;
+  generation: number;
+  inputGeneration: number;
+  caller: string;
+  tools: NonNullable<Turn['tools']>;
+  authority: Pick<ReturnType<typeof privateCallers>, 'identify' | 'permits' | 'check'>;
+  registration: ReturnType<ReturnType<typeof privateCallers>['register']>;
+  session: Pick<ThreadLoadDriver, 'rpc'> & { close(): void; closed: Promise<void> };
+}
+
+interface PrivateLoad {
+  binding: PrivateThreadBinding;
+  loadKey: string;
+  turnId: string;
+  identity: string;
+  tools: string;
+  thread?: string;
+  ended: boolean;
+}
+
+function privateIdentity(binding: PrivateThreadBinding) {
+  return JSON.stringify([binding.turnId, binding.conversation,
+    binding.generation, binding.inputGeneration, binding.caller]);
+}
+
+function privateTools(input: Turn, binding: PrivateThreadBinding) {
+  const tools = parseTools(input.tools);
+  const expected = parseTools(binding.tools);
+  const server = tools[0];
+  if (tools.length !== 1 || server?.serverId !== 'memory' || server.connectionId !== 'server'
+    || server.definitions.length !== 1 || JSON.stringify(tools) !== JSON.stringify(expected)) {
+    throw new Error('Private tool list refused');
+  }
+  const definition = record(JSON.parse(server.definitions[0]!));
+  const name = definition['name'];
+  if ((name !== 'recall' && name !== 'remember') || server.modes[name] !== 'allow'
+    || Object.keys(server.modes).length !== 1) throw new Error('Private tool list refused');
+  return tools;
+}
+
+function ignorePrivateCleanupFailure() { /* Keep upstream errors out of private load failures. */ }
+
 const RELOAD_LIMIT_MS = 10_000;
 export class ThreadLoadFailed extends Error {}
 
-function threadToolsConfig(turn: Turn, loadKey: string) {
+function threadToolsConfig(tools: Turn['tools'], loadKey: string) {
   const servers: Record<string, unknown> = {};
-  for (const server of turn.tools ?? []) {
+  for (const server of tools ?? []) {
     servers[server.key] = { url: `http://127.0.0.1:8080/mcp/${loadKey}/${server.key}`,
       bearer_token_env_var: 'PROXY_CALLER_TOKEN', tool_timeout_sec: 1200,
       startup_timeout_sec: 10 };
@@ -29,6 +77,7 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
   const keys = new Set<string>();
   const loaded = new Map<string, { fingerprint?: string; loadKey: string }>();
   const preparing = new Map<string, string>();
+  const privateLoads = new Map<string, PrivateLoad>();
 
   async function register(input: Turn, loadKey: string, thread?: string) {
     if (stopped || cancelled.has(input.id)) throw new Error('Thread loading stopped');
@@ -49,17 +98,23 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
 
   async function stop() {
     stopped = true;
+    const privatePending = [...privateLoads.values()].map(removePrivate);
     const pending = [...keys].map(drop);
-    await Promise.all(pending);
+    await Promise.all([...privatePending, ...pending]);
   }
 
   async function forget(thread: string) {
+    for (const entry of privateLoads.values()) {
+      if (entry.thread === thread) await removePrivate(entry);
+    }
     const previous = loaded.get(thread);
     loaded.delete(thread);
     if (previous) await drop(previous.loadKey);
   }
 
   async function cancel(turnId: string) {
+    const entry = privateLoads.get(turnId);
+    if (entry) await removePrivate(entry);
     const loadKey = preparing.get(turnId);
     if (loadKey) await drop(loadKey);
   }
@@ -118,7 +173,7 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
     let newThread: string | undefined;
     try {
       await register(input, loadKey, previousThread);
-      const config = threadToolsConfig(input, loadKey);
+      const config = threadToolsConfig(input.tools, loadKey);
       let method = 'thread/start';
       let params: Record<string, unknown> = { ...startParams, config };
       if (previousThread) {
@@ -150,11 +205,114 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
   async function load(input: Turn, previousThread: string | undefined,
     startParams: Record<string, unknown>) {
     try {
+      if (input.executionMode !== 'memory_free') throw new Error('Private binding required');
       return await prepare(input, previousThread, startParams);
     } catch (error) {
       throw new ThreadLoadFailed('Tools could not be reloaded', { cause: error });
     }
   }
+  function checkPrivate(entry: PrivateLoad, input: Turn) {
+    const binding = entry.binding;
+    if (stopped || entry.ended || cancelled.has(entry.turnId)
+      || privateLoads.get(entry.turnId) !== entry || privateIdentity(binding) !== entry.identity
+      || input.executionMode !== 'restricted' || input.id !== binding.turnId
+      || input.conversationId !== binding.conversation
+      || JSON.stringify(privateTools(input, binding)) !== entry.tools) {
+      throw new Error('Private binding refused');
+    }
+    const callerTurn = binding.authority.identify(`Bearer ${binding.caller}`);
+    const identity = { turnId: binding.turnId, conversation: binding.conversation,
+      generation: binding.generation, inputGeneration: binding.inputGeneration,
+      thread: entry.thread };
+    if (callerTurn !== entry.turnId
+      || !binding.authority.permits(callerTurn, entry.turnId, entry.thread)
+      || !binding.authority.check(identity)) throw new Error('Private binding refused');
+  }
+
+  async function registerPrivate(entry: PrivateLoad, input: Turn) {
+    checkPrivate(entry, input);
+    if (!driver.catalogue || !driver.dropCatalogue) {
+      throw new Error('Private catalogue unavailable');
+    }
+    const tools = parseTools(JSON.parse(entry.tools));
+    const generations = { generation: entry.binding.generation,
+      inputGeneration: entry.binding.inputGeneration };
+    await driver.catalogue(entry.loadKey, input.conversationId, tools,
+      entry.thread, entry.turnId, generations);
+    checkPrivate(entry, input);
+  }
+
+  async function abandonPrivate(entry: PrivateLoad) {
+    try {
+      await drop(entry.loadKey);
+    } finally {
+      try {
+        if (entry.thread) await unload(entry.binding.session, entry.thread);
+      } finally {
+        entry.binding.session.close();
+      }
+    }
+  }
+
+  async function removePrivate(entry: PrivateLoad) {
+    if (entry.ended) return;
+    // Revoke the caller before waiting for catalogue removal or native cleanup.
+    entry.ended = true;
+    entry.binding.registration.close();
+    privateLoads.delete(entry.turnId);
+    try {
+      await abandonPrivate(entry);
+    } catch {
+      throw new ThreadLoadFailed('Private tools could not be unloaded');
+    }
+  }
+
+  async function loadPrivate(input: Turn, binding: PrivateThreadBinding) {
+    if (stopped || privateLoads.has(input.id)) {
+      throw new ThreadLoadFailed('Private tools could not be loaded');
+    }
+    const entry: PrivateLoad = { binding, loadKey: randomBytes(16).toString('hex'),
+      turnId: input.id, identity: privateIdentity(binding),
+      tools: JSON.stringify(parseTools(binding.tools)), ended: false };
+    privateLoads.set(input.id, entry);
+    function closed() {
+      void removePrivate(entry).catch(ignorePrivateCleanupFailure);
+    }
+    void binding.session.closed.then(closed, closed);
+    let newThread: string | undefined;
+    try {
+      await registerPrivate(entry, input);
+      checkPrivate(entry, input);
+      const tools = parseTools(JSON.parse(entry.tools));
+      const config = threadToolsConfig(tools, entry.loadKey);
+      const params = { model: modelForTask(input.taskKind), approvalPolicy: 'never',
+        sandbox: 'read-only', ephemeral: true, environments: [], config };
+      const response = record(await binding.session.rpc('thread/start', params));
+      const thread = record(response['thread']);
+      if (isThreadId(thread['id'])) newThread = thread['id'];
+      if (!newThread || thread['ephemeral'] !== true || thread['path'] !== null
+        || !Array.isArray(thread['environments']) || thread['environments'].length !== 0) {
+        throw new Error('Private thread refused');
+      }
+      checkPrivate(entry, input);
+      binding.registration.bind(newThread);
+      entry.thread = newThread;
+      await registerPrivate(entry, input);
+      checkPrivate(entry, input);
+      if (!driver.discovered) throw new Error('Private discovery unavailable');
+      await beforeDeadline(driver.discovered(entry.loadKey), Date.now() + RELOAD_LIMIT_MS);
+      checkPrivate(entry, input);
+      if (record(response['thread'])['id'] !== entry.thread) throw new Error('Private thread refused');
+      return response;
+    } catch {
+      if (newThread) entry.thread = newThread;
+      // Drop again when an earlier cancellation overtook registration or thread/start.
+      if (entry.ended) await abandonPrivate(entry).catch(ignorePrivateCleanupFailure);
+      else await removePrivate(entry).catch(ignorePrivateCleanupFailure);
+      throw new ThreadLoadFailed('Private tools could not be loaded');
+    }
+  }
+
   async function quiet() {
     const params = {};
     const result = record(await driver.rpc('thread/loaded/list', params));
@@ -170,9 +328,10 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
     if (!Array.isArray(remaining['data']) || remaining['data'].length || remaining['nextCursor']) {
       throw new Error('Threads remain loaded');
     }
-    if (loaded.size || keys.size) throw new Error('Catalogues remain loaded');
+    if (loaded.size || keys.size || privateLoads.size) throw new Error('Catalogues remain loaded');
   }
-  return { load, forget, cancel, quiet, stop, get size() { return loaded.size; } };
+  return { load, loadPrivate, forget, cancel, quiet, stop,
+    get size() { return loaded.size + privateLoads.size; } };
 }
 
 async function resumeLoadedThread(driver: ThreadLoadDriver, threadId: string) {

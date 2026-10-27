@@ -1,0 +1,1 @@
+- Prepare private memory tool discovery for one fresh turn, with caller and generation checks and cleanup on cancellation. Native memory remains disabled.

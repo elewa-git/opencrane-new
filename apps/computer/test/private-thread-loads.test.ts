@@ -22,7 +22,7 @@ async function fixture() {
   const approvals = approvalHolds({ waiting, renew });
   function waiting() { return false; }
   function renew() { return Promise.reject(new Error('No grant')); }
-  const mcp = mcpProxy('http://127.0.0.1:1', grants, approvals);
+  const upstream = vi.fn();
   function dropped(turnId: string) { mcp.dropTurn(turnId); }
   const authority = privateCallers(dropped);
   async function receive(request: IncomingMessage, response: ServerResponse) {
@@ -33,6 +33,11 @@ async function fixture() {
     await mcp.handle(request, response, permits);
   }
   function handle(request: IncomingMessage, response: ServerResponse) {
+    if (request.url === '/mcp/memory/server') {
+      upstream();
+      response.end('fixture-private-fact');
+      return;
+    }
     void receive(request, response);
   }
   const listener = createServer(handle);
@@ -41,6 +46,7 @@ async function fixture() {
   const address = listener.address();
   if (!address || typeof address === 'string') throw new Error('Missing listener');
   const url = `http://127.0.0.1:${address.port}`;
+  const mcp = mcpProxy(url, grants, approvals);
   const cancelled = new Set<string>();
   const ordinaryRpc = vi.fn();
   const driver = { rpc: ordinaryRpc, catalogue, dropCatalogue, discovered };
@@ -61,7 +67,10 @@ async function fixture() {
     mcp.catalogue(input, true);
     await hold(thread ? 'binding' : 'catalogue');
   }
-  async function dropCatalogue(loadKey: string) { mcp.drop({ loadKey }); }
+  function dropCatalogue(loadKey: string) {
+    mcp.drop({ loadKey });
+    return Promise.resolve();
+  }
   async function discovered(loadKey: string) {
     await hold('discovery');
     if (failDiscovery) throw new Error('fixture-secret');
@@ -124,7 +133,7 @@ async function fixture() {
     listener.closeAllConnections();
     function finish(resolve: () => void) { listener.close(resolve); }
     await new Promise<void>(finish);
-    vi.useRealTimers();
+    expect(upstream).not.toHaveBeenCalled();
   }
   return { turn, loads, authority, mcp, grants, cancelled, ordinaryRpc, send,
     pause, reached, release, refuseDiscovery, close };
@@ -140,6 +149,8 @@ async function matching() {
     expect(turn.params).toMatchObject({ ephemeral: true, environments: [], sandbox: 'read-only',
       approvalPolicy: 'never' });
     expect(turn.calls).toEqual(['thread/start']);
+    await expect(test.loads.load(turn.input, 'thread-A', {}))
+      .rejects.toThrow('Tools could not be reloaded');
     expect(test.ordinaryRpc).not.toHaveBeenCalled();
     expect(test.grants.size).toBe(0);
     const call = await test.send(turn.key, turn.binding.caller, 'tools/call');
@@ -160,7 +171,9 @@ async function isolates(generation: number, inputGeneration: number) {
     expect(test.mcp.size).toBe(2);
     expect(await test.send(first.key, second.binding.caller)).toHaveProperty('error');
     expect(await test.send(second.key, first.binding.caller)).toHaveProperty('error');
+    first.binding.inputGeneration++;
     await expect(first.load()).rejects.toThrow('Private tools could not be loaded');
+    first.binding.inputGeneration--;
     expect(test.mcp.size).toBe(2);
     await test.loads.cancel('A');
     expect(test.mcp.size).toBe(1);
@@ -235,7 +248,7 @@ it.each(['ephemeral', 'path', 'environments', 'missing environments', 'thread', 
 
 const races: [string, string][] = [];
 for (const stage of ['catalogue', 'start', 'binding', 'discovery']) {
-  for (const ending of ['cancel', 'stop', 'disconnect', 'process', 'generation', 'ended']) {
+  for (const ending of ['cancel', 'stop', 'disconnect', 'process', 'generation', 'ended', 'thread']) {
     races.push([stage, ending]);
   }
 }
@@ -252,8 +265,14 @@ async function refusesLate(stage: string, ending: string) {
     if (ending === 'process') turn.ended.resolve();
     if (ending === 'generation') turn.binding.inputGeneration++;
     if (ending === 'ended') turn.binding.registration.close();
+    if (ending === 'thread') {
+      if (stage === 'catalogue' || stage === 'start') {
+        turn.binding.registration.bind('unexpected-thread');
+      } else turn.thread['id'] = 'unexpected-thread';
+    }
     test.release.resolve();
     await refused;
+    if (stage !== 'catalogue') expect(turn.calls).toContain('thread/unsubscribe');
     expect(test.mcp.size).toBe(0);
     expect(test.loads.size).toBe(0);
     expect(test.grants.size).toBe(0);
@@ -272,8 +291,6 @@ async function discoveryTimeout() {
     const pending = turn.load();
     const refused = expect(pending).rejects.toThrow('Private tools could not be loaded');
     await test.reached.promise;
-    vi.useFakeTimers();
-    await vi.advanceTimersByTimeAsync(10_001);
     await refused;
     test.release.resolve();
     expect(test.mcp.size).toBe(0);
@@ -283,3 +300,49 @@ async function discoveryTimeout() {
   } finally { await test.close(); }
 }
 it('drops a timed out discovery and ignores its delayed completion', discoveryTimeout);
+
+async function removesFinishedLoad(ending: string) {
+  const test = await fixture();
+  try {
+    const turn = test.turn();
+    await turn.load();
+    if (ending === 'cancel') await test.loads.cancel('A');
+    if (ending === 'disconnect') await test.loads.stop();
+    if (ending === 'forget') await test.loads.forget('thread-A');
+    if (ending === 'process') {
+      turn.ended.resolve();
+      function removed() { expect(test.loads.size).toBe(0); }
+      await vi.waitFor(removed);
+    }
+    expect(test.mcp.size).toBe(0);
+    expect(test.loads.size).toBe(0);
+    expect(await test.send(turn.key, turn.binding.caller)).toHaveProperty('error');
+    await expect(turn.load()).rejects.toThrow('Private tools could not be loaded');
+    expect(test.grants.size).toBe(0);
+  } finally { await test.close(); }
+}
+it.each(['cancel', 'disconnect', 'forget', 'process'])(
+  'removes a loaded private catalogue on %s', removesFinishedLoad);
+
+
+async function hidesCleanupErrors() {
+  const test = await fixture();
+  try {
+    const turn = test.turn();
+    await turn.load();
+    const rpc = turn.binding.session.rpc;
+    function failsUnload(method: string, params: Record<string, unknown>) {
+      if (method === 'thread/unsubscribe') {
+        return Promise.reject(new Error(turn.binding.caller));
+      }
+      return rpc(method, params);
+    }
+    turn.binding.session.rpc = failsUnload;
+    const ending = test.loads.cancel('A');
+    await expect(ending).rejects.toThrow('Private tools could not be unloaded');
+    await expect(ending).rejects.not.toHaveProperty('cause');
+    expect(test.mcp.size).toBe(0);
+    expect(turn.close).toHaveBeenCalled();
+  } finally { await test.close(); }
+}
+it('revokes access and hides native cleanup errors', hidesCleanupErrors);
