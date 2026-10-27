@@ -108,6 +108,42 @@ class LicenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             node_review.check_review(review, contents)
 
+    def test_node_review_refuses_blanket_grants_under_valid_section_hashes(self):
+        node_review, original, contents = self.node_review_fixture()
+        for section_index in (0, 6, 7, 11, 14, 35):
+            with self.subTest(section_index=section_index):
+                review = json.loads(json.dumps(original))
+                section = review["sections"][section_index]
+                section[2] = [[section[0].split(", located at ")[0], ["MIT"],
+                               "/usr/local/LICENSE", "All bundled parts are approved."]]
+                if section_index == 0:
+                    section[2][0][0] = "All Node libraries"
+                with self.assertRaises(ValueError):
+                    node_review.check_review(review, contents)
+
+    def test_node_unresolved_references_cannot_be_approved(self):
+        node_review, original, contents = self.node_review_fixture()
+        for index in range(len(original["blockedReferences"])):
+            with self.subTest(index=index):
+                review = json.loads(json.dumps(original))
+                review["blockedReferences"][index][3] = "APPROVED"
+                with self.assertRaises(ValueError):
+                    node_review.check_review(review, contents)
+        original["completeImageApproval"] = True
+        with self.assertRaises(ValueError):
+            node_review.check_review(original, contents)
+
+    def test_node_cli_withholds_missing_input_paths(self):
+        path = source.parents[2] / "docs/process/p5-4-images5/check-node-notices.py"
+        with tempfile.TemporaryDirectory() as directory:
+            missing = str(Path(directory) / "sensitive-fixture-marker")
+            result = subprocess.run([sys.executable, str(path), missing],
+                                    capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr,
+                             "FAIL Node notice evidence is missing, changed or unsupported\n")
+
     def test_candidate_inventory_uses_a_checked_baseline(self):
         candidate = self.candidate_checker()
         record = checker.read_json(candidate.RECORD)
