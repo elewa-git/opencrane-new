@@ -261,12 +261,15 @@ class ConnectionCustody {
       return undefined;
     }
   }
+  private async unreadable(stage: ConnectionStage) {
+    return await this.journal.deletion(nameFor(stage)) !== undefined ||
+      (stage.attemptId !== undefined && Date.now() >= stage.appendUntil);
+  }
   private async readMaterial(input: ConnectionStage, expected: ConnectionIdentity,
     attemptOnly: boolean) {
     try {
       const stage = checkedStage(input);
-      if (!expected || (attemptOnly && !stage.attemptId) ||
-          (stage.attemptId && Date.now() >= stage.appendUntil)) {
+      if (!expected || (attemptOnly && !stage.attemptId) || await this.unreadable(stage)) {
         return undefined;
       }
       const recovered = await this.recover(stage, expected);
@@ -282,8 +285,8 @@ class ConnectionCustody {
       if (!this.verify(secret, stage, expected)) {
         return undefined;
       }
-      // Refuse an attempt that expired while its private reads were waiting.
-      if (stage.attemptId && Date.now() >= stage.appendUntil) {
+      // Refuse retirement or expiry that happened while the private read was waiting.
+      if (await this.unreadable(stage)) {
         return undefined;
       }
       return decodeToken(secret.data.token)?.toString('utf8');
@@ -353,6 +356,10 @@ class ConnectionCustody {
     if (!expected || input.attemptId !== undefined) {
       return { status: 'conflict' };
     }
+    return this.retire(input, expected);
+  }
+  /** Retire an exact superseded OAuth copy only after its replacement is saved. */
+  async retire(input: ConnectionStage, expected: ConnectionIdentity): Promise<Result> {
     try {
       const checked = checkedStage(input);
       const pending = await this.journal.deletion(nameFor(checked));

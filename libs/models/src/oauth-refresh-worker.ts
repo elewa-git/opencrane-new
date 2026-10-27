@@ -16,6 +16,21 @@ import { sessionSchema } from './oauth-start.ts';
 import type { RemoteNetwork } from './remote-https.ts';
 
 type Custody = ReturnType<typeof connectionCustody>;
+type Evidence = { prepared: Awaited<ReturnType<typeof prepareRefresh>>;
+  claimed: StoredEvent; generation: ConnectionStage; resultStage: ConnectionStage;
+  contents: string; expiresAt: number };
+const evidence = new WeakMap<object, Evidence>();
+
+export function refreshSaveEvidence(result: object) {
+  return evidence.get(result);
+}
+
+function verifiedResult(result: Evidence) {
+  const verified = { status: 'verified' as const, sequence: result.claimed.sequence,
+    callsAvailable: false as const };
+  evidence.set(verified, result);
+  return verified;
+}
 
 /** Send only from the live claim. Restart can recover private bytes, never send again. */
 export async function exchangePersonalOAuthRefresh(store: EventStore, binding: Binding,
@@ -52,7 +67,7 @@ export async function exchangePersonalOAuthRefresh(store: EventStore, binding: B
       }
       const operationId = connectionOperationId(binding.silo, prepared.subject,
         `${claimed.event.id}-result`);
-      const resultStage = { ...generation, operationId, attemptId: operationId,
+      const resultStage = { ...generation, generation: 1, operationId, attemptId: operationId,
         attemptDigest: oauthConfigurationDigest(prepared.configuration),
         expectedSequence: claimed.sequence, appendUntil: claim.appendUntil };
       async function checkCurrent() {
@@ -86,14 +101,14 @@ export async function exchangePersonalOAuthRefresh(store: EventStore, binding: B
         throw new Error('OAuth refresh result unavailable');
       }
       const expiresAt = await verifyResult(prepared, claimed, contents, refreshToken);
-      return { sequence: claimed.sequence, checkCurrent, expiresAt };
+      return { prepared, claimed, generation, resultStage, contents, checkCurrent, expiresAt };
     }
     const result = await withConnectionStage(db, profile, exchange);
     await result.checkCurrent();
     if (Date.now() >= result.expiresAt) {
       throw new Error('OAuth refresh identity expired');
     }
-    return { status: 'verified' as const, sequence: result.sequence, callsAvailable: false as const };
+    return verifiedResult(result);
   } catch {
     // Discard private provider and custody failures, including attached causes.
     return { status: 'unknown' as const };

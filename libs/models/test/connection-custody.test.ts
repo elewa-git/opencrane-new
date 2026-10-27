@@ -429,12 +429,10 @@ async function claimsCallbackOnce(failure: string) {
     expect(foldConnection(rows).status).toBe('unavailable');
     expect(effects).not.toHaveBeenCalled();
     await manager.streams.update('EVENTS', { duplicate_window: 100_000_000 });
-    await delay(150);
     const probe = envelope('test', `member-dedup-${test.session.userId}`, 'member.joined', {
       memberId: 'probe', email: 'probe@example.test', displayName: 'Probe',
       role: 'member' }, claims[0]!.event.id);
-    await events.seed([probe]);
-    expect(await events.store.head(probe.subject)).toBeGreaterThan(claims[0]!.sequence);
+    await waitForDuplicateExpiry(probe, claims[0]!.sequence);
     fault.mockClear();
     expect(await test.callback(test.input, true)).toEqual({ status: 'unknown' });
     expect(effects).not.toHaveBeenCalled();
@@ -2983,6 +2981,9 @@ it('scan clears consecutive unknown state after a successful page', clearsUnknow
 
 
 function refreshLifetime(mode: string) {
+  if (mode === 'renewable') {
+    return 120;
+  }
   if (mode === 'short') {
     return 1;
   }
@@ -3011,7 +3012,8 @@ async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) 
     refreshSends++;
     response.setHeader('content-type', 'application/json');
     expect(Object.fromEntries(parameters)).toEqual({ grant_type: 'refresh_token',
-      client_id: test.configuration.clientId, refresh_token: 'refresh-canary' });
+      client_id: test.configuration.clientId,
+      refresh_token: refreshMode === 'next' ? 'next-refresh-canary' : 'refresh-canary' });
     await beforeReply?.();
     if (refreshMode === 'lost') {
       response.destroy();
@@ -3029,8 +3031,14 @@ async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) 
     const signedClaims = new SignJWT(claims);
     signedClaims.setProtectedHeader({ alg: 'RS256' });
     const idToken = await signedClaims.sign(keys.privateKey);
+    let refreshToken = 'next-refresh-canary';
+    if (refreshMode === 'unrotated') {
+      refreshToken = 'refresh-canary';
+    } else if (refreshMode === 'next') {
+      refreshToken = 'third-refresh-canary';
+    }
     const reply = { access_token: 'next-access-canary', token_type: 'Bearer',
-      refresh_token: refreshMode === 'unrotated' ? 'refresh-canary' : 'next-refresh-canary',
+      refresh_token: refreshToken,
       id_token: idToken, scope: refreshMode === 'scopes' ? 'write' : 'read',
       expires_in: refreshLifetime(refreshMode) };
     response.end(JSON.stringify(reply));
@@ -3685,12 +3693,10 @@ async function refreshRaceAndRecovery(mode: string) {
     expect(rows).toHaveLength(4);
     expect(rows[3]!.event.type).toBe('connection.refresh_started');
     await manager.streams.update('EVENTS', { duplicate_window: 100_000_000 });
-    await delay(200);
     const probe = envelope('test', `member-probe-${test.session.userId}`, 'member.joined', {
       memberId: 'probe', email: 'probe@example.test', displayName: 'Probe', role: 'member',
     }, rows[3]!.event.id);
-    await events.seed([probe]);
-    expect(await events.store.head(probe.subject)).toBeGreaterThan(rows[3]!.sequence);
+    await waitForDuplicateExpiry(probe, rows[3]!.sequence);
     const effects = vi.spyOn(globalThis, 'fetch');
     const rebuilt = foldConnection(structuredClone(rows));
     expect(rebuilt.data).toEqual(test.generation);
@@ -3945,12 +3951,10 @@ async function claimsRefreshOnce(mode: string) {
     expect(rebuilt.status).toBe('unavailable');
     expect(effects).not.toHaveBeenCalled();
     await manager.streams.update('EVENTS', { duplicate_window: 100_000_000 });
-    await delay(200);
     const probe = envelope('test', `member-claim-probe-${test.session.userId}`, 'member.joined', {
       memberId: 'probe', email: 'probe@example.test', displayName: 'Probe', role: 'member',
     }, claimed.event.id);
-    await events.seed([probe]);
-    expect(await events.store.head(probe.subject)).toBeGreaterThan(claimed.sequence);
+    await waitForDuplicateExpiry(probe, claimed.sequence);
     const writes = vi.spyOn(events.store, 'append');
     writes.mockClear();
     expect(await claimRefresh(test, test.input, test.session, true)).toEqual({ status: 'unknown' });
@@ -4327,6 +4331,16 @@ async function savesRefreshOnce(fault: string) {
       vi.spyOn(events.store, 'append').mockImplementationOnce(lostReply);
     } else if (fault === 'delete') {
       test.store.failDeletes(true);
+    } else if (fault === 'stage') {
+      const stage = test.custody.stage.bind(test.custody);
+      async function lostStage(...args: Parameters<typeof stage>) {
+        const result = await stage(...args);
+        if (args[0].generation === 2) {
+          throw new Error('next-refresh-canary');
+        }
+        return result;
+      }
+      vi.spyOn(test.custody, 'stage').mockImplementation(lostStage);
     }
     const results = await Promise.all([saveRefresh(test, claim), saveRefresh(test, claim)]);
     test.store.failDeletes(false);
@@ -4342,6 +4356,14 @@ async function savesRefreshOnce(fault: string) {
     expect(rebuilt.status).toBe('unavailable');
     expect(rebuilt.data?.activation).toMatchObject({ reason: 'oauth_confirmed', generation: 2,
       account: { subject: 'account-123', scopes: ['read'] } });
+    const alterations = { generation: 4, expectedSequence: 0, operationId: 'another-save',
+      configurationDigest: 'f'.repeat(64), appendUntil: 1 };
+    for (const [field, value] of Object.entries(alterations)) {
+      const altered = structuredClone(rows);
+      const data = rebuilt.data!;
+      altered[5]!.event.data = { ...data, activation: { ...data.activation, [field]: value } };
+      expect(foldConnection(altered).data).toBeUndefined();
+    }
     expect(test.refreshSends).toBe(1);
     expect(test.store.creates).toBe(6);
     expect(test.store.secrets.has(test.generation.secretRef.slice(7))).toBe(false);
@@ -4356,7 +4378,7 @@ async function savesRefreshOnce(fault: string) {
     await test.close();
   }
 }
-it.each(['none', 'append', 'delete'])(
+it.each(['none', 'append', 'delete', 'stage'])(
   'saves the next OAuth generation once and retires old copies after %s failure', savesRefreshOnce);
 
 async function refusesRefreshSave(mode: string) {
@@ -4406,3 +4428,100 @@ async function refusesRefreshSaveAtPublication(change: string) {
 }
 it.each(['removed', 'policy', 'disabled', 'configuration', 'expiry'])(
   'refuses saving the OAuth refresh after %s at publication', refusesRefreshSaveAtPublication);
+
+async function refreshesTheNextGeneration() {
+  const test = await refreshFixture();
+  try {
+    test.setRefreshMode('renewable');
+    await test.start();
+    expect((await saveRefresh(test, await claimRefresh(test))).status).toBe('saved');
+    const rows = await history(events.store, test.subject, 'test');
+    const second = foldConnection(rows).data!;
+    if (second.activation.reason !== 'oauth_confirmed') {
+      throw new Error('Fixture account missing');
+    }
+    test.input.expectedGeneration = 2;
+    test.input.expectedSequence = rows[5]!.sequence;
+    test.input.changeRef = 'refresh-next';
+    test.setRefreshMode('next');
+    vi.spyOn(Date, 'now').mockReturnValue(second.activation.account.expiresAt - 30_000);
+    expect((await test.start()).status).toBe('saved');
+    const saved = await saveRefresh(test, await claimRefresh(test));
+    expect(saved).toMatchObject({ status: 'saved', generation: 3 });
+    expect(await saveRefresh(test, undefined, true)).toEqual(saved);
+    expect(test.refreshSends).toBe(2);
+    expect(test.store.secrets.has(second.secretRef.slice(7))).toBe(false);
+    const final = await history(events.store, test.subject, 'test');
+    expect(final).toHaveLength(9);
+    expect(foldConnection(final).lastGeneration).toBe(3);
+  } finally {
+    await test.close();
+  }
+}
+it('refreshes the next saved OAuth generation and retires its earlier reply',
+  refreshesTheNextGeneration);
+
+async function refusesExpiryDuringFinalRefreshCheck() {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    test.setRefreshMode('short');
+    const read = test.custody.readAttempt.bind(test.custody);
+    let resultRead = false;
+    async function observedRead(...args: Parameters<typeof read>) {
+      const result = await read(...args);
+      resultRead = true;
+      return result;
+    }
+    vi.spyOn(test.custody, 'readAttempt').mockImplementationOnce(observedRead);
+    const load = test.loader.loadConfiguration.bind(test.loader);
+    function delayedCheck() {
+      if (resultRead) {
+        vi.spyOn(Date, 'now').mockReturnValue(test.dueAt + 2000);
+      }
+      return load();
+    }
+    vi.spyOn(test.loader, 'loadConfiguration').mockImplementation(delayedCheck);
+    expect(await sendRefresh(test, claim)).toEqual({ status: 'unknown' });
+    expect(await sendRefresh(test, undefined, true)).toEqual({ status: 'unknown' });
+    expect(test.refreshSends).toBe(1);
+    expect(await history(events.store, test.subject, 'test')).toHaveLength(5);
+  } finally {
+    await test.close();
+  }
+}
+it('refuses reply expiry during final access checks while the refresh claim is still valid',
+  refusesExpiryDuringFinalRefreshCheck);
+
+async function blocksRetiredPrivateReads(attempt: boolean) {
+  const test = await fixture();
+  const input: ConnectionStage = { ...stage, appendUntil: Date.now() + 60_000 };
+  if (attempt) {
+    input.attemptId = input.operationId;
+    input.attemptDigest = 'a'.repeat(64);
+  }
+  const material = '{"refresh_token":"retired-refresh-canary"}';
+  const saved = await test.custody.stage(input, material);
+  expect(saved.status).toBe('staged');
+  test.failDeletes(true);
+  expect(await test.custody.retire(input, saved.identity!)).toEqual({ status: 'unknown' });
+  const restarted = test.restart();
+  expect(await restarted.readAttempt(input, saved.identity!)).toBeUndefined();
+  expect(await restarted.readRefreshMaterial(input, saved.identity!)).toBeUndefined();
+  expect(test.secrets.size).toBe(1);
+  test.failDeletes(false);
+  expect(await restarted.retire(input, saved.identity!)).toEqual({ status: 'deleted' });
+  expect(test.secrets.size).toBe(0);
+}
+it.each([false, true])('refuses retired private reads while deletion waits, attempt=%s',
+  blocksRetiredPrivateReads);
+
+async function waitForDuplicateExpiry(probe: ReturnType<typeof envelope>, sequence: number) {
+  // Wait for the broker's duplicate record to expire, not just its configured window.
+  async function expired() {
+    await events.seed([probe]);
+    return await events.store.head(probe.subject) > sequence;
+  }
+  await until(expired);
+}

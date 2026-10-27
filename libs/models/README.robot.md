@@ -2,6 +2,33 @@
 
 For people, read [README.md](README.md) first.
 
+## Saving an OAuth refresh (Part of #50)
+
+`savePersonalOAuthRefresh` is internal, with no route or package export. It calls the
+existing one-send worker and uses only its private, verified evidence. The profile lock
+covers duplicate receipt recovery, staging and one conditional `connection.refreshed`
+append. Publication checks current membership, profile, configuration, server policy,
+admin block, claim deadline and reply expiry. Private reads precede short access checks.
+
+The fold accepts a replacement only after its matching refresh start and claim. It keeps
+the account and scopes, advances exactly one generation and leaves OAuth unavailable
+for tool use. Recovery reads exact saved history before expired private replies, checks
+current membership once and returns the original sequence and generation. It never sends.
+
+After a confirmed save, custody removes the prior generation and its earlier reply using
+exact UID/version preconditions. Deletion markers refuse further private reads, including
+while deletion is interrupted. Retries finish removal without saving again. A failed
+removal returns `unknown`; the saved event remains the truth. Revoke, governed use, routes
+and scheduling remain out of scope. Fresh-install live qualification: NOT RUN.
+
+Own checks: PASS lint (including Knip), typecheck, catalogue and changelog. PASS 435
+custody tests twice and 822 bearer/event tests, including unchanged security rules.
+Tests used disposable PostgreSQL, NATS, OpenFGA, private custody and a local TLS provider,
+with `nice -n 10` and one worker. The first test-only commit failed on the missing save function.
+The first broad run was FAIL: one fixed-delay broker duplicate check. These checks now
+wait for the broker to accept the probe; all seven cases also passed separately.
+The full root suite and fresh-install live qualification were NOT RUN.
+
 ## One private OAuth refresh send (Part of #50)
 
 PR 10c is split at verified private reply recovery to keep the change below about
@@ -25,9 +52,9 @@ an explicit access lifetime from one second to one day. Lifetime counts from the
 claim, with signed expiry as an additional limit. Only `verified`, the claim sequence
 and `callsAvailable: false` leave the worker; failures return fixed `unknown`.
 
-N+1 staging/publication, replay of replacement generations and retirement of the old
-refresh token are deferred to the next PR. This worker appends no event and grants no
-credential use. Revoke, governed use and failure/reconsent workflows remain out of scope.
+The save command above now handles replacement generations and retirement. The exchange
+worker itself appends no event and grants no credential use. Revoke, governed use and
+failure/reconsent workflows remain out of scope.
 Live provider and fresh-install qualification: NOT RUN.
 
 Own checks on 27 October 2026: PASS for lint (including Knip), typecheck, event catalogue
@@ -37,8 +64,7 @@ After allowing a recovery caller to reach the lock before the sender, the race c
 twice more and its file passed lint. Tests used disposable PostgreSQL, NATS, OpenFGA,
 private custody and a local TLS provider, with `nice -n 10` and one Vitest worker.
 The first test-only commit (`a4b3a1cce`) failed on the missing worker, as intended.
-The full root suite was NOT RUN. The complete refresh capability remains PARTIAL because
-N+1 saving and old-token retirement are deferred above.
+The full root suite was NOT RUN. That slice left N+1 saving and old-token retirement to the save command above.
 
 ## Internal OAuth refresh claim (Part of #50)
 
@@ -63,8 +89,8 @@ publication and before returning the live result. Unrelated activity does not re
 Replay retains the generation, attempt and claim without external effects.
 
 The refresh worker above adds transport, durable send marking, response retention and
-replacement validation. N+1 publication remains deferred. The existing consent worker
-cannot consume refresh claims. OAuth selection and release remain closed.
+replacement validation. The save command above handles N+1 publication. The existing
+consent worker cannot consume refresh claims. OAuth selection and release remain closed.
 Live refresh and fresh-install qualification: NOT RUN.
 
 Own checks on 27 October 2026: PASS for lint, typecheck, catalogue, Knip and changelog.

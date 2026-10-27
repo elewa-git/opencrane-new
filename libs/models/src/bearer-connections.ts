@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { refreshedOAuth, connectionOperationId } from './oauth-refresh-fold.ts';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Db } from '@opencrane/projections';
@@ -14,6 +15,8 @@ import { envelope, history } from './actor.ts';
 import { authorityFence } from './authority.ts';
 import { activeMember, readActiveMember } from './member-authority.ts';
 import { connectionServer } from './connection-server.ts';
+
+export { connectionOperationId } from './oauth-refresh-fold.ts';
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const commandSchema = z.strictObject({ action: z.enum(['create', 'rotate']),
@@ -67,8 +70,9 @@ export function foldConnection(rows: StoredEvent[]): State {
     }
     const first = previous.sequence === 0 && activation.generation === 1 &&
       row.event.type === 'connection.created' && activation.reason === 'bearer_create';
-    if (firstOAuth(rows, row, data)) {
-      state = { ...state, data, lastGeneration: 1 };
+    const oauth = savedOAuth(rows, row, data, previous, silo);
+    if (oauth) {
+      state = { ...state, data, lastGeneration: activation.generation };
       continue;
     }
     const replacement = replacesSaved(previous, row, data, silo);
@@ -136,7 +140,11 @@ function matchesRefreshGeneration(data: z.infer<typeof connectionRefreshStartedD
     isDeepStrictEqual(data.scopes, activation.account.scopes);
 }
 // Keep OAuth unavailable to bearer selection, rotation and release until their own checks exist.
-function firstOAuth(rows: StoredEvent[], row: StoredEvent, data: Saved) {
+function savedOAuth(rows: StoredEvent[], row: StoredEvent, data: Saved,
+  previous: State, silo?: string) {
+  if (row.event.type === 'connection.refreshed') {
+    return refreshedOAuth(previous, row, data, silo);
+  }
   const start = rows[0];
   const claim = rows[1];
   if (!start || !claim || rows[2] !== row || row.event.type !== 'connection.created' ||
@@ -244,9 +252,6 @@ function digest(value: unknown) {
   const hash = createHash('sha256');
   hash.update(JSON.stringify(value));
   return hash.digest('hex');
-}
-export function connectionOperationId(silo: string, subject: string, changeRef: string) {
-  return digest([silo, subject, changeRef]);
 }
 function receipt(row: StoredEvent) {
   const data = savedSchema.parse(row.event.data);
