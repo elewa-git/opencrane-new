@@ -579,7 +579,7 @@ async function refusesReplacedPackageNamespace() {
 test('preparation and forwarding refuse a replacement namespace despite an updated owner record',
   refusesReplacedPackageNamespace);
 
-async function stopsOwnershipChild(kind, cancellation) {
+async function stopsOwnershipChild(kind, cancellation, dispatchDelayMs = 0) {
   const owner = { worktree: process.cwd(), slot: '1', context: 'k3d-opencrane-target-1',
     namespace: 'opencrane-package-1', namespaceUid: 'owned', release: 'opencrane-package-1' };
   const target = { worktree: owner.worktree, slot: '1', context: owner.context,
@@ -664,8 +664,11 @@ async function stopsOwnershipChild(kind, cancellation) {
   replacements['./target.ts'] = { targetConnection };
   const ownedKubectl = loadPrivateFunction('infra/dev-stack/packaged.ts',
     'ownedKubectl', replacements);
-  function checkedKubectl(args, timeoutMs, signal) {
-    return ownedKubectl(owner, args, timeoutMs, signal);
+  async function checkedKubectl(args, timeoutMs, signal, deadline) {
+    if (dispatchDelayMs > 0) {
+      await delay(dispatchDelayMs);
+    }
+    return ownedKubectl(owner, args, timeoutMs, signal, deadline);
   }
   const backup = { endpointURL: 'https://backup-store.opencrane-package-1.svc:9000',
     endpointCA: { name: 'trust', key: 'ca.crt' }, s3Credentials: {
@@ -720,6 +723,12 @@ for (const kind of ['namespace', 'nodes']) {
     test(`backup ${reason} terminates a stalled ownership ${kind} child`, stopsStalledOwnership);
   }
 }
+
+async function keepsDeadlineAfterDispatchDelay() {
+  await stopsOwnershipChild('nodes', true, 40);
+}
+test('backup ownership checks keep the original deadline when dispatch is delayed',
+  keepsDeadlineAfterDispatchDelay);
 
 async function prepareThreeReplicas() {
   const packageValues = { natsCluster: { enabled: true, renderOnly: false } };

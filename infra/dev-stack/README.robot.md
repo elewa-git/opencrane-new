@@ -2122,6 +2122,9 @@ parser details, cancellation reasons and nested dependency or cleanup failures.
 `infra/package/chart.test.mjs` cancels and times out real stalled child processes
 during namespace and target-node ownership reads. It checks child termination,
 the remaining time for each command, private connection paths and no later work.
+The backup callback also carries the original absolute deadline. A delayed callback
+must not turn an earlier remaining duration into extra time for ownership checks.
+The chart tests delay dispatch and apply the same remaining-time assertion to every child.
 `cnpg-install.test.mjs` still checks refusal before Helm with synthetic image approval.
 Live checks are NOT RUN. Endpoint TLS identity, storage permissions and identity,
 image/helper approval, real base backup/WAL and recovery of `projections`, `handlers`

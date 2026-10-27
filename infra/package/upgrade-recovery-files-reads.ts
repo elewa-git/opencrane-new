@@ -11,7 +11,7 @@ import type { seedRecoveryFiles } from './upgrade-recovery-files-fixture.ts';
 import type { storageClient } from '../../apps/server/src/files/storage.ts';
 
 const config = { ...testAuthConfig(), expectedOrgId: 'org' };
-type Nats = Awaited<ReturnType<typeof natsFixture>>;
+type Nats = Pick<Awaited<ReturnType<typeof natsFixture>>, 'store' | 'seed'>;
 
 export async function seedRecoveryReader(nats: Nats) {
   for (const memberId of ['reader', 'foreign']) {

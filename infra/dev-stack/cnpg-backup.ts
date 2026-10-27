@@ -7,7 +7,8 @@ type Backup = {
   endpointCA: Reference;
   s3Credentials: { accessKeyId: Reference; secretAccessKey: Reference };
 };
-type Kubectl = (args: string[], timeoutMs?: number, signal?: AbortSignal) => Promise<string>;
+type Kubectl = (args: string[], timeoutMs?: number, signal?: AbortSignal,
+  deadline?: number) => Promise<string>;
 type ObjectIdentity = { apiVersion: string; kind: string; name: string; uid: string };
 type StoredObject = {
   apiVersion: string;
@@ -64,7 +65,7 @@ async function read(kubectl: Kubectl, namespace: string, kind: string, name: str
   signal.addEventListener('abort', abort, { once: true });
   try {
     const args = ['-n', namespace, 'get', kind.toLowerCase(), name, '-o', 'json'];
-    const request = kubectl(args, Math.max(1, deadline - Date.now()), signal);
+    const request = kubectl(args, Math.max(1, deadline - Date.now()), signal, deadline);
     const output = await Promise.race([request, cancelled]);
     signal.throwIfAborted();
     requireValid(Buffer.byteLength(output) <= 1_048_576);
