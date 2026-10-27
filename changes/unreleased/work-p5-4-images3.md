@@ -1,0 +1,1 @@
+- Include the setup code's required directory helper in package images, and check recursive imports and setup completion with synthetic services.

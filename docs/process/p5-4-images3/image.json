@@ -1,0 +1,18 @@
+{
+  "sourceRevision": "b2cfda681ad8fda57cfdf987471ac63a93e1d04c",
+  "sourceLabel": "b2cfda681ad8fda57cfdf987471ac63a93e1d04c",
+  "localImage": "opencrane-package:p5-4-images3",
+  "localIndexDigest": "sha256:38551c78795f5d0efac41a8577e60f396493499d2f7cbd2702e5672e78b2f57e",
+  "configurationDigest": "sha256:5395f20edc112da89f8f97ad5e611cdc594f4fe98ca2cbc6389f44e8d8c43c24",
+  "archiveSha256": "5e9b528c27dee1ba21fe8bd613a7e1d7c7e005b72335b8aec3b7d4a38f4caabf",
+  "committedSourceArchiveSha256": "bf2d5dba804640a18579264844a69d737c2b3a791f053393bb3afff2fa5d8b97",
+  "relativeRuntimeModules": 6,
+  "removedPathsCheckedAcrossEveryLayer": 7,
+  "savedLayers": 2,
+  "rejectedTarContextIndexDigest": "sha256:203b57cb51f3e5658501355465081f0f87af096c6248c9ed84f71f5fe011b9c3",
+  "candidateInventoryAndNotices": "NOT RUN",
+  "registryPublication": "NOT RUN",
+  "promotion": "NOT RUN",
+  "vulnerabilityClearance": "NOT RUN",
+  "freshR3InstallAndLiveQualification": "NOT RUN"
+}

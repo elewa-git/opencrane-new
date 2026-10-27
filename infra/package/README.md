@@ -18,7 +18,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>image checks and installs"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, setup and installs"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
@@ -85,6 +85,9 @@ Before a new server and website image is approved, its source label, fixed image
 digest and licence inventory must agree with the recorded review. The scan includes
 files hidden by later image layers. The build copies the cleaned filesystem into
 one filesystem layer, so removed npm and computer files are absent from the saved image.
+The image checks follow every relative setup import and run the setup entry point
+with made-up services and settings. This checks that the packaged code loads and
+finishes the fixture; a running installation needs its own checks.
 Three-peer installation also needs an exact source revision in its compatibility
 review. The current image has no such approval.
 

@@ -12,6 +12,7 @@ infra/dev-stack
 !infra/dev-stack
 infra/dev-stack/*
 !infra/dev-stack/config.ts
+!infra/dev-stack/private-directories.ts
 !infra/dev-stack/identity.ts
 !infra/dev-stack/owner-bootstrap.ts
 !infra/dev-stack/model-stub.ts
