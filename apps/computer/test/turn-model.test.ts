@@ -272,7 +272,7 @@ it('gives an execution-mode mismatch an explicit failure reason before running',
 
 async function retriesFailedInterrupt() {
   const test = modelFixture('gpt-6-luna');
-  const originalRpc = test.driver.rpc;
+  const originalRpc = test.driver.rpc.bind(test.driver);
   let attempts = 0;
   async function rpc(method: string, params: Record<string, unknown>) {
     if (method === 'turn/interrupt') {
