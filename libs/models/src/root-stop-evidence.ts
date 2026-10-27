@@ -1,5 +1,6 @@
+import { foldRoutineHistory } from '@opencrane/authz';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
-import { foldRoutine, parseEventByType, type EventEnvelope, type RoutineState }
+import { parseEventByType, type EventEnvelope, type RoutineState }
   from '@opencrane/events';
 import { data, type BudgetState } from './state.ts';
 import { withinBudgetDeadline } from './budget-writer.ts';
@@ -40,11 +41,12 @@ async function readEvidence(store: EventStore, subject: string, position: number
 
 async function readRoutineThroughStop(store: EventStore, source: StoredEvent, deadline: number) {
   let routine: RoutineState | undefined;
+  const completedRuns = new Map<string, NonNullable<RoutineState['activeRun']>>();
   for await (const row of store.readStream(source.event.subject, 1, deadline)) {
     if (performance.now() >= deadline || row.sequence > source.sequence) {
       break;
     }
-    routine = foldRoutine(routine, row.event);
+    routine = foldRoutineHistory(routine, row.event, completedRuns);
     if (row.sequence === source.sequence && row.event.id === source.event.id) {
       return routine;
     }
@@ -55,7 +57,7 @@ async function readRoutineThroughStop(store: EventStore, source: StoredEvent, de
 function matchesRoutineStop(root: Root, source: StopEvidence) {
   const routine = source.routine;
   const run = routine?.activeRun;
-  // Compare the Stop's routine root and revisions to its due through foldRoutine.
+  // Validate repeated completions and the Stop against their original runs while reading history.
   // Match that frozen run to the allocated budget root through its turn and people.
   return source.event.type === 'routine.run_stop_requested' && routine?.stopRequested === true &&
     run !== null && run !== undefined && matchesTurn(root, run) &&

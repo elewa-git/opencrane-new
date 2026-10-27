@@ -8,6 +8,7 @@ import { tokenIssuer } from '@opencrane/auth';
 import { until } from '@opencrane/authz/testing';
 import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
+import { requestRoutineStop } from '../src/routine-stop.ts';
 import { createRoutineSender } from '../src/routine-sender.ts';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { natsFixture, event } from '@opencrane/event-store/testing';
@@ -505,6 +506,11 @@ async function refusesAfterWake(kind: string) {
         { conversationId, turnId, requestedBy: 'alice' })]);
       const position = await nats.store.head(subject);
       await actor.stopRoot(root.rootId, 'requester_stop', subject, position);
+    } else if (kind === 'owner Stop') {
+      const request = { ...input, changeId: 'orders:stop-1',
+        expectedPosition: await nats.store.head('routine-orders'),
+        expectedDefinitionRevision: 1, expectedScheduleRevision: 1, expectedControlRevision: 1 };
+      await requestRoutineStop(nats.store, binding, 'alice', request);
     } else await changes(kind);
     return computer.wake();
   }
@@ -517,7 +523,7 @@ async function refusesAfterWake(kind: string) {
     expect(await authority.send(computer.wake)).toEqual({ status: 'unknown' });
   } finally { await computer.close(); }
 }
-it.each(['member', 'grant', 'expiry', 'routine.paused', 'computer', 'Stop'])(
+it.each(['member', 'grant', 'expiry', 'routine.paused', 'computer', 'Stop', 'owner Stop'])(
   'sends nothing after fourteen-second wake and %s', refusesAfterWake);
 
 async function inert(enabled: boolean, replay: boolean) {

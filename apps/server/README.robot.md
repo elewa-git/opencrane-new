@@ -6218,3 +6218,31 @@ No event or HTTP API field was added; the event security naming rule is unchange
 Admission remains disabled. Detecting correction/forget causes, access/expiry invalidation,
 volatile server/browser replies and native enablement remain later work.
 Fresh-install live qualification: NOT RUN.
+
+## Owner routine Stop
+
+`requestRoutineStop(store, binding, memberId, input)` accepts routineId, occurrenceId,
+changeId, expectedPosition, expectedDefinitionRevision, expectedScheduleRevision and
+expectedControlRevision. The reference uses `<routineId>:<unique-id>`. Current owner membership and exact IAM receipts are checked
+before conflicts or receipts. Spending, tool and private chat rights are not required.
+History has its own ten-second bound; the write watches only membership and ownership
+for two seconds. Routine position protects against a concurrent owner change.
+One conditional append saves `routine.run_stop_requested`. It keeps the due's run binding
+and frozen revisions, using the current owner as actor. The schedule and active slot stay.
+Exact retries retain the original request and receipt beyond deduplication expiry.
+
+`applyRoutineStop(store, silo, reference, actor, options)` is a separate internal operation.
+The reference contains routineId, eventId and position. Only `enabled: true` without replay
+allows effects. It verifies saved Stop evidence, actor/store/silo and the allocated root's
+conversation, turn and frozen people. It never uses the due's rootId as a budget id.
+Missing allocation returns pending without creating a root. Retry after allocation or a
+failed budget save uses the same reference. The first budget reason remains permanent.
+Cleanup uses the same validated history as the owner command. A correctly bound repeat
+completion for an older run cannot prevent Stop for the current run. The regression in
+`test/routine-session.test.ts` finishes two runs, claims a third, repeats the first completion,
+then saves the owner's Stop and checks the budget record and retry after actor recovery.
+Neither receipt proves termination. Routes, subscriptions, other lifecycle causes and
+running-turn interruption remain later work. Execution remains disabled.
+Tests in routine-session and routine-sender cover the real owner command, delayed cleanup,
+allocation races, privacy, frozen people, retained holds and late integer-cent settlement.
+Fresh-install/live qualification: NOT RUN. Part of #106, P4-24 PR 12b.

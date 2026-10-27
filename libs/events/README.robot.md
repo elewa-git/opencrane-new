@@ -627,16 +627,15 @@ The due's conversation, turn, frozen owner, assistant and payer must match the b
 The due's `rootId` is a routine reference, not the allocated budget root id.
 Later edits or reassignment do not replace those frozen facts. Both owner and admin sources
 use `routine_stop`, retaining the exact source reference and the first saved budget reason.
-This is an internal #106 prerequisite. Writers, routes, lifecycle reactions and interruption
-remain later work; execution and public `executionAvailable` remain disabled.
+The server owner command now saves intent and a separate internal operation applies its
+budget Stop. Routes, subscriptions and interruption remain later work; execution stays disabled.
 Chat turn close, completion or failure counts as turn-end evidence. Requester removal
 or close on participation, or requester removal on member, counts as access loss.
 Parent removal and creator departure remain for activation reconciliation.
 `libs/models/test/root-stop-evidence.test.ts` checks exact references, rejected evidence, serial
 ordering, lost replies, duplicate-window expiry, old writers and PostgreSQL replay.
-No new caller, reaction, route or running-turn interruption is connected here.
-Trusted call ids, grant/dispatch checks and the child dispatcher remain in row 5.
-There is no route, caller, running-turn fan-out or model call in this part.
+The internal owner cleanup caller is described in the server contract. Routes,
+subscriptions and running-turn interruption remain later work.
 
 ## Child request contract
 
@@ -842,8 +841,9 @@ The [permission contract](../authz/README.robot.md#routine-permissions) describe
 retired metadata, read checks and the stopped-services model/subscription upgrade.
 Other routine events still start no work.
 
-`routineControlSchema` is exported for the internal owner pause to validate and compare
-saved control facts. Its event shape and subscriptions are unchanged; it starts no work.
+`routineStopSchema` is exported for owner Stop validation and exact receipt comparison.
+It adds no event fields or subscriptions. `routineControlSchema` is exported for the
+internal owner pause to validate and compare saved control facts. Its event shape and subscriptions are unchanged; it starts no work.
 
 ## Company account opt-in
 

@@ -2664,14 +2664,17 @@ returns the fixed `Root stop evidence refused` error and appends nothing.
 The first saved stop is returned on valid retries, including a later different reason.
 Only member Stop counts as requester evidence; the budget Stop form is refused.
 Routine Stop reads and folds history only through the saved `routine.run_stop_requested`,
-within that same ten-second deadline and before entering the actor queue. `foldRoutine`
+within that same ten-second deadline and before entering the actor queue. `foldRoutineHistory`
 checks the source's occurrence, routine root, input, turn and revisions against its saved due.
+It retains each completed run while reading history. A repeated completion must match that
+original run before it is ignored, so it cannot replace or block Stop for the current run.
 The due's conversation, turn, frozen owner, assistant and payer must match the budget root.
 The due's `rootId` is a routine reference, not the allocated budget root id.
 Later edits or reassignment do not replace those frozen facts. Both owner and admin sources
 use `routine_stop`, retaining the exact source reference and the first saved budget reason.
-This is an internal #106 prerequisite. Writers, routes, lifecycle reactions and interruption
-remain later work; execution and public `executionAvailable` remain disabled.
+The server owner command saves intent. Its separate internal cleanup operation reuses
+exported `readRootStopEvidence` and calls `stopRoot` for an existing allocation. Routes,
+subscriptions and interruption remain later work; execution remains disabled.
 Chat turn close, completion or failure counts as turn-end evidence. Requester removal
 or close on participation, or requester removal on member, counts as access loss.
 Access-loss evidence must not precede the root's saved admission position. An old
@@ -2679,9 +2682,9 @@ removal cannot stop a new root after re-invitation; the old root stays stopped.
 Parent removal and creator departure remain for activation reconciliation.
 `libs/models/test/root-stop-evidence.test.ts` checks exact references, rejected evidence, serial
 ordering, lost replies, duplicate-window expiry, old writers and PostgreSQL replay.
-No new caller, reaction, route or running-turn interruption is connected here.
+The internal routine cleanup caller is described in the server contract.
 Root grant/dispatch and retry checks are described below. The child
-dispatcher remain separate work. Stop callers and running-turn interruption are absent.
+dispatcher remains separate work. Running-turn interruption remains absent.
 
 ## Hosted registration — first part of P3-6 PR 4
 

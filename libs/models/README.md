@@ -82,7 +82,7 @@ flowchart LR
   models -->|stages credentials, callback codes and replies, confirms first accounts, starts, joins, claims and sends refresh attempts, recovers replies and checks signed accounts, shares a database lock for personal saves and cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves events, remote starts and unsent proof; recovers budgets in order and checks saved routine Stops; reads spending and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
+  models -->|saves events, remote starts and unsent proof; recovers budgets in order and applies saved routine Stops; reads spending and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -255,11 +255,12 @@ while its full cost and an alert are saved. Other roots can still use the payer.
 An internal command also stops a root after its requester stops it, its turn ends,
 or its requester loses access. It also accepts a saved routine Stop from an owner or admin.
 It checks the routine's saved run against that root and keeps the original source reference.
+It validates repeated completions against their original runs before ignoring them.
 Reassignment leaves the stopped run's original owner, assistant and payer unchanged.
 Routine execution remains disabled.
 An earlier removal cannot stop a new root after the requester has been re-invited.
-The first stop stays permanent, and later usage still counts. No caller uses this
-command yet.
+The server can apply saved owner Stop intent to an existing routine allowance.
+The first stop stays permanent, and later usage still counts.
 Model calls find their root from the verified turn. Model, tool and memory calls
 check that root before granting permission and again before admitting a send.
 A stopped root refuses an old pass and releases a proven unsent hold at zero.
