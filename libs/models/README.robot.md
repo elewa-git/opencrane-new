@@ -2576,13 +2576,22 @@ full cost and the existing alert. Repeated settlement adds no stop or charge.
 A failed settlement or alert can be retried without reopening the root.
 Tests in `libs/models/test/root-budget.test.ts` use real NATS and PostgreSQL.
 `BudgetActor.stopRoot(rootId, reason, subject, position)` accepts requester_stop,
-turn_ended and access_revoked. It reads one event with `readEventAt` under a separate
+turn_ended, access_revoked and routine_stop. It reads the source with `readEventAt` under a separate
 ten-second deadline before queueing. Inside the queue it checks the saved root,
 silo, event type, stream and relevant turn, computer and person ids. It records
 sourceSubject, sourcePosition and sourceEventId. Invalid or unavailable evidence
 returns the fixed `Root stop evidence refused` error and appends nothing.
 The first saved stop is returned on valid retries, including a later different reason.
 Only member Stop counts as requester evidence; the budget Stop form is refused.
+Routine Stop reads and folds history only through the saved `routine.run_stop_requested`,
+within that same ten-second deadline and before entering the actor queue. `foldRoutine`
+checks the source's occurrence, routine root, input, turn and revisions against its saved due.
+The due's conversation, turn, frozen owner, assistant and payer must match the budget root.
+The due's `rootId` is a routine reference, not the allocated budget root id.
+Later edits or reassignment do not replace those frozen facts. Both owner and admin sources
+use `routine_stop`, retaining the exact source reference and the first saved budget reason.
+This is an internal #106 prerequisite. Writers, routes, lifecycle reactions and interruption
+remain later work; execution and public `executionAvailable` remain disabled.
 Chat turn close, completion or failure counts as turn-end evidence. Requester removal
 or close on participation, or requester removal on member, counts as access loss.
 Access-loss evidence must not precede the root's saved admission position. An old

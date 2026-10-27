@@ -3,7 +3,8 @@ import { replayBudgets } from '../src/accounting.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { jetstreamManager } from '@nats-io/jetstream';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { foldRoutine, getEventDefinition, routineDefinitionSchema, parseEventByType, type EventEnvelope } from '@opencrane/events';
+import { foldRoutine, getEventDefinition, routineDefinitionSchema, parseEventByType,
+  type EventEnvelope } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { databases } from '@opencrane/authz/testing';
 import { pgDb, ProjectionRunner } from '@opencrane/projections';
@@ -225,17 +226,22 @@ async function retriesFailedRead() {
   await stop(source, saved.position);
 }
 it('sanitises a failed bounded read and allows retry', retriesFailedRead);
-async function readsBeforeQueueing() {
-  const source = evidence[0]!;
+async function readsBeforeQueueing(source = evidence[0]!) {
   const saved = await save(source);
   const readStream = nats.store.readStream.bind(nats.store);
   const gate = Promise.withResolvers<void>();
+  const reading = Promise.withResolvers<void>();
   async function* slowRead(subject: string, position = 1, deadline = Infinity) {
-    if (subject === source.subject) await gate.promise;
+    const routineHistory = source.reason !== 'routine_stop' || position === 1;
+    if (subject === source.subject && routineHistory) {
+      reading.resolve();
+      await gate.promise;
+    }
     yield* readStream(subject, position, deadline);
   }
   nats.store.readStream = slowRead;
   const pending = stop(source, saved.position);
+  await reading.promise;
   try {
     await reserve();
   } finally {
@@ -243,7 +249,10 @@ async function readsBeforeQueueing() {
   }
   await pending;
 }
-it('reads source evidence before entering the serial queue', readsBeforeQueueing);
+async function memberReadBeforeQueue() {
+  await readsBeforeQueueing();
+}
+it('reads source evidence before entering the serial queue', memberReadBeforeQueue);
 async function keepsFirstStop() {
   const source = evidence[0]!;
   const saved = await save(source);
@@ -278,7 +287,9 @@ async function recoversLostReply(source = evidence[0]!) {
   expect(await stop(source, saved.position)).toMatchObject({ sourceEventId: saved.event.id });
   expect(await nats.store.head()).toBe(recovered);
 }
-async function recoversMemberReply() { await recoversLostReply(); }
+async function recoversMemberReply() {
+  await recoversLostReply();
+}
 it('recovers a lost reply and redelivery beyond the NATS duplicate window', recoversMemberReply);
 async function refusesOldLeader() {
   const source = evidence[0]!;
@@ -343,14 +354,22 @@ it.each([evidence[0]!, evidence[1]!, evidence[4]!])(
   'keeps $reason and late cost through raised caps, rollover, restart and PostgreSQL replay',
   replaysStop);
 
-
 function routineExample(type: string): Record<string, unknown> {
-  return { ...getEventDefinition(type)!.example as Record<string, unknown> };
+  const example: unknown = getEventDefinition(type)?.example;
+  if (typeof example !== 'object' || example === null) {
+    throw new Error('Missing routine example');
+  }
+  return { ...example };
 }
 function routineEvidence(type: string, data: Record<string, unknown>): Evidence {
   return { reason: 'routine_stop', subject: 'routine-orders', type, data };
 }
-async function prepareRoutine(source = 'owner', changedDefinition = {}, legacy = false) {
+async function saveRoutine(type: string, data: Record<string, unknown>) {
+  const source = routineEvidence(type, data);
+  return save(source);
+}
+async function prepareRoutine(source = 'owner',
+  changedDefinition: Record<string, unknown> = {}, legacy = false) {
   const due = routineExample('routine.due');
   const definition = routineDefinitionSchema.parse(due['definition']);
   const frozen = { ...definition, assistantId: binding.assistantId,
@@ -362,12 +381,14 @@ async function prepareRoutine(source = 'owner', changedDefinition = {}, legacy =
   const created = { ...routineExample('routine.created'), status: 'active',
     definition: due['definition'], actorId: frozen.ownerId };
   if (legacy) {
-    await save(routineEvidence('routine.created', { routineId: 'orders',
-      assistantId: 'assistant', schedule: '0 9 * * *', createdBy: 'alice' }));
-    await save(routineEvidence('routine.due', { routineId: 'orders', firedAt: due['firedAt'] }));
+    const legacyCreated = { routineId: 'orders', assistantId: 'assistant',
+      schedule: '0 9 * * *', createdBy: 'alice' };
+    const legacyDue = { routineId: 'orders', firedAt: due['firedAt'] };
+    await saveRoutine('routine.created', legacyCreated);
+    await saveRoutine('routine.due', legacyDue);
   } else {
-    await save(routineEvidence('routine.created', created));
-    await save(routineEvidence('routine.due', due));
+    await saveRoutine('routine.created', created);
+    await saveRoutine('routine.due', due);
   }
   const data = { ...routineExample('routine.run_stop_requested'), source,
     actorId: source === 'admin' ? 'admin' : 'alice', conversationId: binding.conversationId,
@@ -378,12 +399,16 @@ async function acceptsRoutine(sourceKind: string) {
   const source = await prepareRoutine(sourceKind);
   await acceptsEvidence(source);
   const saved = await nats.store.head(source.subject);
-  await refuses({ ...source, reason: 'requester_stop' }, saved);
+  const requesterSource: Evidence = { ...source, reason: 'requester_stop' };
+  await refuses(requesterSource, saved);
   async function fresh() {}
+  const toolCall = { ...call, model: 'mcp-zero-cost' };
   const dispatch = { callId: 'free', decisionId: 'decision', bodyDigest: '0'.repeat(64),
-    rootId, modelCall: call };
+    rootId, modelCall: toolCall };
+  const before = await nats.store.head();
   await expect(actor.admitDispatch(dispatch, fresh)).rejects.toMatchObject({ reason: 'routine_stop' });
   expect(actor.state.dispatches).toHaveLength(0);
+  expect(await nats.store.head()).toBe(before);
 }
 it.each(['owner', 'admin'])('stops only the allocated routine root for %s', acceptsRoutine);
 
@@ -396,9 +421,11 @@ async function routineRacesAndReasons() {
   expect(receipts[0]).toEqual(receipts[1]);
   expect(await stop(evidence[5]!, later.position)).toEqual(receipts[0]);
   expect(await nats.store.head()).toBe(before + 1);
-  const replacement = await actor.setRootAllowance({ ...binding, turnId: 'replacement' }, 1);
+  const replacementBinding = { ...binding, turnId: 'replacement' };
+  const replacementCall = { ...call, turnId: 'replacement' };
+  const replacement = await actor.setRootAllowance(replacementBinding, 1);
   await refuses(source, saved.position, replacement.rootId);
-  await actor.reserve({ ...call, turnId: 'replacement' }, 1, undefined, undefined,
+  await actor.reserve(replacementCall, 1, undefined, undefined,
     replacement.rootId);
 }
 it('keeps the first routine Stop through races and refuses an old Stop for a replacement',
@@ -424,7 +451,9 @@ async function routineReplay() {
   let state;
   const rows = await history(nats.store, source.subject, 'test');
   const before = await nats.store.head();
-  for (const row of rows) state = foldRoutine(state, row.event);
+  for (const row of rows) {
+    state = foldRoutine(state, row.event);
+  }
   expect(state).toMatchObject({ stopRequested: true, executionAvailable: false });
   expect(await nats.store.head()).toBe(before);
 }
@@ -435,6 +464,8 @@ async function routineUnknownCost() {
   await actor.uncertain(held, 'settle_timeout');
   const saved = await save(source);
   const receipt = await stop(source, saved.position);
+  actor = new BudgetActor(nats.store, 'test', now);
+  await actor.start();
   expect(rootTotals(actor.state, rootId).heldCents).toBe(1);
   await settle(held, 1234);
   expect(rootTotals(actor.state, rootId)).toEqual({
@@ -457,7 +488,9 @@ it.each(['occurrenceId', 'rootId', 'conversationId', 'messageId', 'turnId',
   'refuses a routine Stop with a forged %s and no budget append', routineWrongBinding);
 async function routineWrongDefinition(field: string) {
   const changed: Record<string, string> = { [field]: 'another' };
-  if (field === 'payingGroupId') changed['assistantPayingGroupId'] = 'another';
+  if (field === 'payingGroupId') {
+    changed['assistantPayingGroupId'] = 'another';
+  }
   const source = await prepareRoutine('admin', changed);
   const saved = await save(source);
   await refuses(source, saved.position);
@@ -470,7 +503,8 @@ async function routineBadSources() {
   const foreign = await save(source, 'other-silo');
   await refuses(source, foreign.position);
   const saved = await save(source);
-  await refuses({ ...source, subject: 'routine-other' }, saved.position);
+  const otherStream = { ...source, subject: 'routine-other' };
+  await refuses(otherStream, saved.position);
   await refuses(source, saved.position + 1000);
   await refuses(source, rows[1]!.sequence);
 }
@@ -492,7 +526,9 @@ async function routineReadFailure(mode: string) {
       historyStarted = true;
       expect(deadline - performance.now()).toBeGreaterThan(0);
       expect(deadline - performance.now()).toBeLessThanOrEqual(10_000);
-      if (mode === 'stalled') await gate.promise;
+      if (mode === 'stalled') {
+        await gate.promise;
+      }
       throw new Error('private fixture failure');
     }
     yield* readStream(subject, position, deadline);
@@ -512,3 +548,49 @@ async function routineReadFailure(mode: string) {
 }
 it.each(['missing', 'stalled'])('refuses %s routine history within its read deadline',
   routineReadFailure);
+
+async function routineBeforeQueue() {
+  const source = await prepareRoutine();
+  await readsBeforeQueueing(source);
+}
+it('loads routine history before entering the actor queue', routineBeforeQueue);
+async function routineFrozenRun() {
+  const source = await prepareRoutine('admin');
+  const revised = routineExample('routine.reassigned');
+  const definition = routineDefinitionSchema.parse(revised['definition']);
+  revised['definition'] = { ...definition, ownerId: 'bob', assistantId: 'replacement' };
+  revised['definitionRevision'] = 2;
+  revised['controlRevision'] = 2;
+  revised['actorId'] = 'admin';
+  await saveRoutine('routine.reassigned', revised);
+  const saved = await save(source);
+  const receipt = await stop(source, saved.position);
+  const finished = { ...routineExample('routine.run_finished'),
+    conversationId: binding.conversationId, turnId: binding.turnId };
+  await saveRoutine('routine.run_finished', finished);
+  const before = await nats.store.head();
+  expect(await stop(source, saved.position)).toEqual(receipt);
+  expect(await nats.store.head()).toBe(before);
+}
+it('checks the frozen due after reassignment and reads only through the saved Stop',
+  routineFrozenRun);
+async function routineOtherOccurrence() {
+  const source = await prepareRoutine();
+  const finished = { ...routineExample('routine.run_finished'),
+    conversationId: binding.conversationId, turnId: binding.turnId };
+  await saveRoutine('routine.run_finished', finished);
+  const due = routineExample('routine.due');
+  const definition = routineDefinitionSchema.parse(due['definition']);
+  due['definition'] = { ...definition, assistantId: binding.assistantId,
+    payingGroupId: binding.payingGroupId, assistantPayingGroupId: binding.payingGroupId };
+  const nextRun = { occurrenceId: 'next', rootId: 'next-routine-root',
+    conversationId: binding.conversationId, messageId: 'next-input', turnId: 'next-turn' };
+  const nextDue = { ...due, ...nextRun };
+  await saveRoutine('routine.due', nextDue);
+  const nextSource = { ...source, data: { ...source.data, ...nextRun } };
+  const saved = await save(nextSource);
+  await refuses(nextSource, saved.position);
+  await reserve();
+}
+it('refuses a valid source for another occurrence without stopping the earlier allocation',
+  routineOtherOccurrence);

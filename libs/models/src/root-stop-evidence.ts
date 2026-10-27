@@ -1,9 +1,12 @@
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
-import { parseEventByType, type EventEnvelope } from '@opencrane/events';
+import { foldRoutine, parseEventByType, type EventEnvelope, type RoutineState }
+  from '@opencrane/events';
 import { data, type BudgetState } from './state.ts';
+import { withinBudgetDeadline } from './budget-writer.ts';
 
 type Root = BudgetState['roots'][number];
-export type RootStopReason = 'requester_stop' | 'turn_ended' | 'access_revoked';
+export type RootStopReason = 'requester_stop' | 'turn_ended' | 'access_revoked' | 'routine_stop';
+type StopEvidence = StoredEvent & { routine?: RoutineState };
 type Append = (type: string, payload: unknown) => Promise<void>;
 
 export async function readRootStopEvidence(store: EventStore, subject: string, position: number) {
@@ -12,16 +15,53 @@ export async function readRootStopEvidence(store: EventStore, subject: string, p
       throw new Error('Invalid position');
     }
     const deadline = performance.now() + 10_000;
-    const saved = await readEventAt(store, subject, position, deadline);
-    const parsed = parseEventByType(saved?.event);
-    if (!saved || !parsed.success || parsed.event.subject !== subject) {
-      throw new Error('Missing source event');
-    }
-    return { sequence: saved.sequence, event: parsed.event };
+    const reading = readEvidence(store, subject, position, deadline);
+    return await withinBudgetDeadline(reading, deadline);
   } catch {
     // Keep store errors and evidence identities out of the caller's error.
     throw new Error('Root stop evidence refused');
   }
+}
+
+async function readEvidence(store: EventStore, subject: string, position: number,
+  deadline: number): Promise<StopEvidence> {
+  const saved = await readEventAt(store, subject, position, deadline);
+  const parsed = parseEventByType(saved?.event);
+  if (!saved || !parsed.success || parsed.event.subject !== subject) {
+    throw new Error('Missing source event');
+  }
+  const source = { sequence: saved.sequence, event: parsed.event };
+  if (source.event.type !== 'routine.run_stop_requested') {
+    return source;
+  }
+  const routine = await readRoutineThroughStop(store, source, deadline);
+  return { ...source, routine };
+}
+
+async function readRoutineThroughStop(store: EventStore, source: StoredEvent, deadline: number) {
+  let routine: RoutineState | undefined;
+  for await (const row of store.readStream(source.event.subject, 1, deadline)) {
+    if (performance.now() >= deadline || row.sequence > source.sequence) {
+      break;
+    }
+    routine = foldRoutine(routine, row.event);
+    if (row.sequence === source.sequence && row.event.id === source.event.id) {
+      return routine;
+    }
+  }
+  throw new Error('Missing routine history');
+}
+
+function matchesRoutineStop(root: Root, source: StopEvidence) {
+  const routine = source.routine;
+  const run = routine?.activeRun;
+  // Compare the Stop's routine root and revisions to its due through foldRoutine.
+  // Match that frozen run to the allocated budget root through its turn and people.
+  return source.event.type === 'routine.run_stop_requested' && routine?.stopRequested === true &&
+    run !== null && run !== undefined && matchesTurn(root, run) &&
+    run.definition.ownerId === root.requesterId &&
+    run.definition.assistantId === root.assistantId &&
+    run.definition.payingGroupId === root.payingGroupId;
 }
 
 function matchesTurn(root: Root, fields: Record<string, unknown>) {
@@ -56,21 +96,23 @@ function matchesAccessLoss(root: Root, event: EventEnvelope) {
   return event.type === 'conversation.closed' ||
     (event.type === 'participant.removed' && fields['participantId'] === root.requesterId);
 }
-function matchesReason(root: Root, reason: RootStopReason, event: EventEnvelope) {
+function matchesReason(root: Root, reason: RootStopReason, source: StopEvidence) {
+  const event = source.event;
   switch (reason) {
     case 'requester_stop': return matchesRequesterStop(root, event);
     case 'turn_ended': return matchesTurnEnd(root, event);
     case 'access_revoked': return matchesAccessLoss(root, event);
+    case 'routine_stop': return matchesRoutineStop(root, source);
     default: return false;
   }
 }
 export async function saveRootStop(state: BudgetState, silo: string, rootId: string,
-  reason: RootStopReason, source: StoredEvent, append: Append) {
+  reason: RootStopReason, source: StopEvidence, append: Append) {
   function matchesRoot(root: Root) {
     return root.rootId === rootId;
   }
   const root = state.roots.find(matchesRoot);
-  if (!root || source.event.silo !== silo || !matchesReason(root, reason, source.event)) {
+  if (!root || source.event.silo !== silo || !matchesReason(root, reason, source)) {
     throw new Error('Root stop evidence refused');
   }
   // Reject access loss from before this root existed, including removal before re-invitation.

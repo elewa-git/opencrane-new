@@ -458,13 +458,19 @@ Root totals count those calls over their whole lifetime, across budget periods.
 availableCents, ceiling_stop with the existing budget stopId, or
 budget_reservation_exceeded with the reservationId whose actual cost exceeded its hold.
 The actor saves an overrun stop before the full settlement and the existing alert.
-`requester_stop`, `turn_ended` and `access_revoked` each carry sourceSubject,
+`requester_stop`, `turn_ended`, `access_revoked` and `routine_stop` each carry sourceSubject,
 sourcePosition and sourceEventId. The actor reads exactly that event before queueing,
 then checks its silo and the saved root binding before appending. Requester evidence
 is a member `agent.turn_stop_requested`, never the budget form. Turn-end evidence
 is a matching chat `computer.turn_closed`, `agent.turn_completed` or `agent.turn_failed`.
 Access-loss evidence is requester removal or close on the root's participation stream,
 or removal on the requester's member stream. Parent changes are not accepted.
+Routine evidence is a saved `routine.run_stop_requested`. The actor folds history through
+that source within its separate ten-second read deadline, before queueing. The saved due
+must match the Stop's occurrence, routine root, input, turn and revisions. Its frozen owner,
+assistant, payer, conversation and turn must match the allocated budget root. The routine
+root reference differs from the allocated budget root id. Owner and admin sources both use
+`routine_stop`; later valid evidence cannot replace the first reason or source.
 The first stop stays permanent and refunds nothing. Dispatch checks follow separately.
 These internal records have no caller, route or reaction yet.
 
@@ -691,7 +697,7 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 | `routine.occurrence_skipped` / `routine.occurrences_missed` | server system | saved cursor/next facts | none |
 | `routine.run_activation_admitted` | internal server conditional command | saved exact admission and sender attempt | none; receipt only, execution remains disabled |
 | `routine.run_finished` | server system | saved run facts | none; records grant no authority |
-| `routine.run_stop_requested` | server for checked owner/admin | saved Stop intent | none; execution integration is not built |
+| `routine.run_stop_requested` | server for checked owner/admin | saved Stop intent | none; the internal budget Stop accepts verified evidence, but callers and lifecycle reactions are not built |
 | `delegation.started` / `delegation.completed` | server; legacy computer records are replay-only | delegations and computer-root read indexes | no effect reaction; shared native starts retain the admission’s `sharingClass`; native execution remains disabled |
 
 The activation command requires an existing checked allocation. Its `admission` reference
