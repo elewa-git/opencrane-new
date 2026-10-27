@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { isComputerLifecycle } from '@opencrane/auth';
-import { computerTurnStartedDataSchema, computerTurnClosedDataSchema } from '@opencrane/events';
+import { computerTurnStartedDataSchema, computerTurnClosedDataSchema,
+  type EventEnvelope } from '@opencrane/events';
 import { priceTableId, providerTurnAdmission, reservationCents,
   RootBudgetRefused, type BudgetActor } from '@opencrane/models';
 import { loadRootPreparation, requireRootComputer, rootPreparationModel }
@@ -10,21 +11,27 @@ import { loadRoutineInput } from './routine-input.ts';
 
 type Arguments = Parameters<typeof loadRoutineInput>;
 type Selection = Parameters<typeof requireRootComputer>[2];
+const inputChangeTypes = ['conversation.created', 'conversation.closed', 'message.posted'];
+
+function changesComputerPreparation(event: EventEnvelope, selected: Selection) {
+  const type = event.type;
+  if (isComputerLifecycle(type) || type.startsWith('takeover.')) {
+    return true;
+  }
+  if (type !== 'computer.turn_started' && type !== 'computer.turn_closed') {
+    return false;
+  }
+  const schema = type === 'computer.turn_started'
+    ? computerTurnStartedDataSchema : computerTurnClosedDataSchema;
+  const turn = schema.parse(event.data);
+  return turn.threadId === selected.threadId;
+}
 
 async function checkComputerChanges(store: Arguments[0], assistantId: string,
   position: number, selected: Selection, deadline: number) {
   for await (const row of store.readStream(`computer-${assistantId}`, position + 1, deadline)) {
-    const type = row.event.type;
-    if (isComputerLifecycle(type) || type.startsWith('takeover.')) {
+    if (changesComputerPreparation(row.event, selected)) {
       throw new Error('Routine root refused');
-    }
-    if (type === 'computer.turn_started' || type === 'computer.turn_closed') {
-      const schema = type === 'computer.turn_started'
-        ? computerTurnStartedDataSchema : computerTurnClosedDataSchema;
-      const turn = schema.parse(row.event.data);
-      if (turn.threadId === selected.threadId) {
-        throw new Error('Routine root refused');
-      }
     }
     position = row.sequence;
   }
@@ -90,7 +97,7 @@ async function allocate(store: Arguments[0], keys: Arguments[1], worker: Argumen
     // Reject later input or closure while allowing unrelated chat activity.
     for await (const row of store.readStream(`conversation-${run.conversationId}`,
       position + 1, deadline)) {
-      if (['conversation.created', 'conversation.closed', 'message.posted'].includes(row.event.type)) {
+      if (inputChangeTypes.includes(row.event.type)) {
         throw new Error('Routine root refused');
       }
       position = row.sequence;
@@ -116,12 +123,51 @@ async function allocate(store: Arguments[0], keys: Arguments[1], worker: Argumen
     binding.allowanceCents = error.availableCents;
     root = await actor.setRootAllowance(binding, firstCallBoundCents, confirmPreparation, deadline);
   }
-  // Repeat the small checks if an event arrived while the receipt was being checked.
-  let receiptPosition: number;
+  const receiptSubjects = preparation.accessSubjects();
+  const preparationPositions = new Map<string, number>([
+    [`routine-${run.routineId}`, preparation.position],
+    [`conversation-${run.conversationId}`, position],
+    [`computer-${assistantId}`, computerPosition],
+  ]);
+  let preparationChangePosition = 0;
+  function changesPreparation(subject: string, event: EventEnvelope) {
+    if (subject === `computer-${assistantId}`) {
+      return changesComputerPreparation(event, selected);
+    }
+    if (subject === `conversation-${run.conversationId}`) {
+      return inputChangeTypes.includes(event.type);
+    }
+    return true;
+  }
+  async function readReceiptSubject(subject: string) {
+    return store.head(subject, deadline);
+  }
+  async function receiptState() {
+    // Read only new preparation events. Keep growing histories out of the access watch.
+    for (const [subject, position] of preparationPositions) {
+      for await (const row of store.readStream(subject, position + 1, deadline)) {
+        preparationPositions.set(subject, row.sequence);
+        if (changesPreparation(subject, row.event)) {
+          preparationChangePosition = Math.max(preparationChangePosition, row.sequence);
+        }
+      }
+    }
+    const reads = receiptSubjects.map(readReceiptSubject);
+    const positions = await Promise.all(reads);
+    const current = await providerTurnAdmission(store, worker.silo, assistantId, deadline);
+    // Compare this assistant's choice and mode, not other calls' spending or provider choices.
+    return { positions, preparationChangePosition,
+      enabled: current.enabled, draining: current.draining, choice: current.choice };
+  }
+  // Repeat only for changes to this allocation's access, preparation or provider settings.
+  // Keep every pass within the original access deadline.
+  let before: Awaited<ReturnType<typeof receiptState>>;
+  let after: Awaited<ReturnType<typeof receiptState>>;
   do {
-    receiptPosition = await store.head(undefined, deadline);
+    before = await receiptState();
     await confirmPreparation();
-  } while (await store.head(undefined, deadline) !== receiptPosition);
+    after = await receiptState();
+  } while (!isDeepStrictEqual(before, after));
   return { status: 'confirmed' as const, occurrenceId: run.occurrenceId,
     conversationId: run.conversationId, rootId: root.rootId, allowanceCents: root.allowanceCents,
     startBy: run.startBy, executionAvailable: false as const };

@@ -1171,9 +1171,12 @@ function routineRootTests() {
     expect(actor.state.reservations).toEqual([]);
     expect(actor.state.dispatches).toEqual([]);
   }
+  async function confirmationRevocation(revocation: string) {
+    await trafficDuringConfirmation(revocation);
+  }
   it.each(['none', 'member', 'payer', 'grant'])(
     'confirms through sustained unrelated traffic unless access is revoked: %s',
-    trafficDuringConfirmation);
+    confirmationRevocation);
   async function otherThreadDuringConfirmation() {
     await trafficDuringConfirmation('none', true);
   }

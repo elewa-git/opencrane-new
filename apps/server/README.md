@@ -147,6 +147,8 @@ Older and retired routines still mean that complete dependency information is un
 An internal routine operation can record one spending allowance after checking its
 saved encrypted input, owner, model and prepared computer. Retries keep the same
 allowance. The operation does not start work or make instructions publicly readable.
+Other conversations can keep saving activity while the allowance is confirmed.
+Losing access during confirmation still refuses the receipt.
 
 An internal operation checks a child's saved activation and asks the budget actor
 to record its reviewed spending allowance. It prices the first call using the saved

@@ -258,8 +258,11 @@ async function createAuthorityFence(store: Pick<EventStore, 'readStream' | 'head
       continue;
     }
   }
+  function watchedSubjects() {
+    return [...watched];
+  }
   const snapshot = { include, head, deadline };
-  return { fresh: Object.assign(fresh, snapshot), confirm };
+  return { fresh: Object.assign(fresh, snapshot), confirm, subjects: watchedSubjects };
 }
 
 async function checkOutputReports(store: Pick<EventStore, 'readStream'>, subject: string, from: number,
@@ -371,11 +374,13 @@ function matchesGrantKind(fields: Record<string, unknown>, grantees: Set<string>
 }
 
 export async function ownershipWriteAccess(store: EventStore, positions: ReadonlyMap<string, number>) {
-  const fresh = await authorityFence(store, performance.now(), [...positions.keys()]);
+  const authority = await createAuthorityFence(store, performance.now(), [...positions.keys()],
+    Infinity, checkOutputReports);
+  const fresh = authority.fresh;
   for (const [subject, position] of positions) {
     if (await store.head(subject, fresh.deadline) !== position) {
       throw new Error('Authority changed');
     }
   }
-  return fresh;
+  return Object.assign(fresh, { subjects: authority.subjects });
 }

@@ -5292,6 +5292,13 @@ input changes, computer changes and closure are read incrementally. Activity in 
 computer thread remains allowed; changes to the selected thread refuse.
 Owner admission, manage, acts_for, payer and model grants are checked before the actor append
 and before returning the receipt. Stop, control changes and startBy still refuse recovery.
+Receipt checks compare only the access streams already selected by `authorityFence`, the
+routine, its conversation and computer, and the selected provider settings. They repeat when
+those change during confirmation, within the original deadline. They do not wait for the
+whole silo log to stop changing. Other conversations can keep appending while a valid
+allocation confirms. Ordinary conversation activity and turns in another computer thread
+do not repeat confirmation; only events that change this preparation count. Late member,
+payer and model-grant revocations still refuse, even before OpenFGA applies them.
 
 The existing budget actor derives root identity from silo, conversation and turn. The due
 record's routine root reference is retained inside the checked fingerprint; it does not replace
