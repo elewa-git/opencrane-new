@@ -47,7 +47,7 @@ export const connectionOAuthStartedDataSchema = z.strictObject({
 
 export const connectionOAuthExchangeClaimedDataSchema = z.strictObject({
   userId: connectionId, serverId: connectionId, connectionId, profile: connectionId,
-  attemptId: digestSchema, workerId: connectionId, purpose: z.literal('consent'),
+  attemptId: digestSchema, workerId: connectionId, purpose: z.enum(['consent', 'refresh']),
   secretRef: secretRefSchema, uid: connectionId, resourceVersion: connectionId,
   expectedSequence: z.int().positive(), appendUntil: z.int().positive(),
 });

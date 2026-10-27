@@ -20,6 +20,8 @@ alongside the allocated spending root. These identifiers grant no permission to 
 
 Account refresh starts record one attempt for a saved generation. Rebuilding these
 records keeps the account and attempt without contacting its provider.
+A later claim records one live worker and the exact saved credential reference.
+Replaying a claim cannot give a restarted worker permission to send.
 
 ## Where it fits
 
@@ -38,7 +40,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
-  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks consent starts, callback claims, refresh starts and first account confirmations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal and saved tool choices, company opt-in, and blocks| events
+  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks consent starts, callback and refresh claims, refresh starts and first account confirmations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal and saved tool choices, company opt-in, and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
 ```
 

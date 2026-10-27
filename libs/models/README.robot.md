@@ -2,6 +2,46 @@
 
 For people, read [README.md](README.md) first.
 
+## Internal OAuth refresh claim (Part of #50)
+
+This is the first part of PR 10b, split to stay below about 600 changed lines.
+`claimPersonalOAuthRefresh` claims an existing refresh attempt once. It has no route
+or package export. The profile lock covers history, exact private generation checks,
+one conditional append and exact readback. The event names the original attempt,
+current generation reference and UID/version, and one freshly generated worker id.
+The preceding start already binds generation, configuration and actual scopes.
+
+Only the original frozen in-memory result enters `takePersonalOAuthRefreshClaim`,
+and it can be consumed once. Copies, start/join receipts, restart and event replay
+cannot grant permission. A returned unavailable append result can be resolved by exact
+readback for this invocation. A thrown append error leaves the claim unavailable;
+retries never append another claim, even after broker deduplication expires.
+
+Claim preparation fixes a 60-second expiry before private reads. Its saved timestamp
+and `appendUntil` keep that limit. Final checks run after private reads and lock release;
+no expired consent or identity nonce is read. History precedes the two-second access
+check. Membership, profile, configuration, policy and admin blocks are rechecked at
+publication and before returning the live result. Unrelated activity does not refuse it.
+Replay retains the generation, attempt and claim without external effects.
+
+Refresh transport, durable send markers for refresh, response retention, replacement
+validation and N+1 publication remain for the next part. The existing consent worker
+cannot consume refresh claims. No refresh request is sent, and OAuth selection and
+release remain closed. Live refresh and fresh-install qualification: NOT RUN.
+
+Own checks on 27 October 2026: PASS for lint, typecheck, catalogue, Knip and changelog.
+PASS for 1,205 custody, bearer and event-contract tests, including unchanged security
+rules. All 34 new claim/join cases and 41 bearer cases passed again. The three claim
+race/lost-reply cases also passed after correcting the test double to return the
+store's real unavailable status. The initial test-only commit failed on the missing
+claim functions, as intended. Tests used disposable services, a fresh PostgreSQL
+container, `nice -n 10` and one Vitest worker. The full root suite was not run.
+
+Rebased onto `127eeda1a` after those full checks. The OAuth code and tests did not
+change. The shared guides retain both routine-budget and OAuth descriptions.
+Post-rebase checks: PASS for affected-package lint/typecheck, documentation, catalogue,
+Knip and changelog; PASS for all 34 claim cases and 822 bearer/event-contract tests.
+
 ## Internal OAuth refresh start (Part of #50)
 
 `startPersonalOAuthRefresh` starts or joins one attempt within 60 seconds of expiry.
