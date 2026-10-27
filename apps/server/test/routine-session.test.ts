@@ -956,6 +956,68 @@ async function stopRetries() {
 }
 it('owner Stop recovers one original intent after lost replies, expiry and restart', stopRetries);
 
+function stopRunBinding(occurrenceId: string) {
+  return { occurrenceId, rootId: `routine-root-${occurrenceId}`,
+    conversationId: `routine-session-${occurrenceId}`, messageId: `routine-input-${occurrenceId}`,
+    turnId: `routine-turn-${occurrenceId}` };
+}
+function finishedStopRun(occurrenceId: string) {
+  const example = getEventDefinition('routine.run_finished')!.example;
+  const data = z.record(z.string(), z.unknown()).parse(example);
+  const finished = record(`finished-${occurrenceId}`, 'routine-orders', 'routine.run_finished',
+    { ...data, ...stopRunBinding(occurrenceId) });
+  return { ...finished, principal: { kind: 'system' as const, id: 'opencrane-server' } };
+}
+async function stopAfterOlderCompletion() {
+  const firstFinished = finishedStopRun('occurrence');
+  await nats.seed([firstFinished]);
+  const dueTemplate = due();
+  const dueData = z.record(z.string(), z.unknown()).parse(dueTemplate.data);
+  for (const occurrenceId of ['run-b', 'run-c']) {
+    const claimed = { ...dueTemplate, id: `due-${occurrenceId}`, commandId: `due-${occurrenceId}`,
+      data: { ...dueData, ...stopRunBinding(occurrenceId) } };
+    await nats.seed([claimed]);
+    if (occurrenceId === 'run-b') {
+      await nats.seed([finishedStopRun(occurrenceId)]);
+    }
+  }
+  const finishedData = z.record(z.string(), z.unknown()).parse(firstFinished.data);
+  const lateCompletion = { ...firstFinished, id: 'late-completion', commandId: 'late-completion',
+    data: { ...finishedData, outcome: 'succeeded' } };
+  await nats.seed([lateCompletion]);
+  const currentRun = stopRunBinding('run-c');
+  const budget = new BudgetActor(nats.store, 'test');
+  await budget.start(10_000, 10_000, 'sales');
+  const allocation = { requesterId: 'alice', conversationId: currentRun.conversationId,
+    turnId: currentRun.turnId, assistantId: 'sales-assistant', payingGroupId: 'sales',
+    ...selection, allowanceCents: 1000 };
+  const root = await budget.setRootAllowance(allocation, 1);
+  expect(root.rootId).not.toBe(currentRun.rootId);
+  const request = { ...await stopRequest(), occurrenceId: 'run-c' };
+  const receipt = await requestRoutineStop(nats.store, binding, 'alice', request);
+  expect(receipt.status).toBe('confirmed');
+  const reference = { routineId: 'orders', eventId: receipt.eventId, position: receipt.position };
+  const before = await nats.store.head();
+  const result = await applyRoutineStop(nats.store, 'test', reference, budget, { enabled: true });
+  expect(result).toEqual({ status: 'confirmed' });
+  const expectedStop = { rootId: root.rootId, reason: 'routine_stop',
+    sourceSubject: 'routine-orders', sourcePosition: receipt.position,
+    sourceEventId: receipt.eventId };
+  expect(budget.state.roots[0]!.stop).toEqual(expectedStop);
+  expect(await nats.store.head()).toBe(before + 1);
+  const savedStop = await nats.store.readEvent(before + 1);
+  expect(savedStop.event).toMatchObject({ type: 'budget.root_stopped', data: expectedStop });
+  const recovered = new BudgetActor(nats.store, 'test');
+  await recovered.start();
+  const beforeRetry = await nats.store.head();
+  expect(await applyRoutineStop(nats.store, 'test', reference, recovered, { enabled: true }))
+    .toEqual(result);
+  expect(recovered.state.roots[0]!.stop).toEqual(expectedStop);
+  expect(await nats.store.head()).toBe(beforeRetry);
+}
+it('owner Stop applies and recovers after an older completed run finishes again',
+  stopAfterOlderCompletion);
+
 async function stopWriteChecks(kind: string) {
   const request = await stopRequest();
   const append = nats.store.append.bind(nats.store);
