@@ -73,7 +73,9 @@ Calls and turn renewal prepare access receipts for every memory scope already lo
 Correct and Forget validate their targets but remain disabled.
 An internal command can record that a personal turn's loaded memory became invalid
 after a saved correction or forget. It keeps every loaded reference for replay and
-returns a receipt without fact text. Automatic detection and stopping remain planned.
+returns a receipt without fact text. An internal reaction can send Stop after confirming
+that saved invalidation belongs to the connected private turn. It needs no read access
+from the former user. Automatic detection and subscriptions remain planned.
 Retries recover the same saved receipt after the old fact expires. A competing recall
 keeps its added references when the server reloads and records the invalidation.
 After a restart, memory recovery uses the existing private keys and saved command records.
@@ -110,7 +112,7 @@ flowchart LR
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
-  server -->|chat work, one internal routine hand-off, connections and checked reports| computer["apps/computer<br/>assistant computers"]
+  server -->|chat work, one internal routine hand-off, connections, Stop, checked reports and unavailable replies| computer["apps/computer<br/>assistant computers"]
   computer -.->|records private thread before tool approval| server
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime

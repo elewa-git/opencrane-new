@@ -37,6 +37,11 @@ Before renewing a turn pass, the server checks every loaded fact and its current
 
 **Nightly choices.** A member can choose an assistant and paying group and explicitly accept a cost limit. The server checks their access and returns the saved choice. Only the person who set it up can read its blocked or missed history. The history contains dates and fact references rather than memory text, and reading it starts no work. Status shows whether facts are waiting and the next 02:00 UTC boundary. Execution is still disabled.
 
+A saved invalidation can send Stop to the matching connected private turn. This internal
+reaction confirms the saved event and the current turn identity before sending.
+It does not require the former user to retain read access. Automatic detection and
+subscriptions are still planned.
+
 ## Main files
 
 | File | What it does |
@@ -46,6 +51,7 @@ Before renewing a turn pass, the server checks every loaded fact and its current
 | [commands-routes.ts](commands-routes.ts), [commands.ts](commands.ts), [correct.ts](correct.ts), [forget.ts](forget.ts) | Save facts, corrections and forget requests, and recover original results. |
 | [command-history.ts](command-history.ts), [journal.ts](journal.ts) | Track unfinished writes so recovery keeps the right keys. |
 | [mcp.ts](mcp.ts), [recall-delivery.ts](recall-delivery.ts), [recall-proof.ts](recall-proof.ts), [agent-lineage.ts](agent-lineage.ts) | Serve assistant recall and remember tools with proof of loaded facts. |
+| [invalidation.ts](invalidation.ts), [stop.ts](stop.ts) | Record withdrawn memory context and stop its matching connected turn. |
 | [turn-preview.ts](turn-preview.ts), [maintenance.ts](maintenance.ts) | Preview private-turn memories and record future upkeep choices and history. |
 
 ## How it connects

@@ -6119,3 +6119,36 @@ also failed before its fix. An earlier setup run lacked the pinned test gateway;
 `npm run pretest` supplied it. Fixture parsing was corrected before the passing runs.
 All suites used `nice -n 10`, one worker and disposable services. No full root suite,
 dev stack or model call ran. Live qualification: NOT RUN.
+
+## Stop after saved memory invalidation (P4-15 PR 3e)
+
+`memory/stop.ts` consumes `agent.memory_context_recorded` with `action=invalidated`.
+It confirms the complete event against `readChatFacts`, including the silo, and
+requires the saved personal session and invalidated status. It derives all target
+fields from that saved record. No former-user permission check is needed to withdraw use.
+The existing `invalidateMemoryContext` command remains the only decision/writer here.
+
+The internal caller supplies `current(binding)`: a synchronous lookup of an already
+connected turn, from trusted server state. It must return no turn once that turn ends.
+It must never open a connection, start work or reconstruct usable authority from replay.
+The reaction reads it after history and compares conversation, turn, requester, assistant,
+computer, computer generation, thread and input generation. It sends without another wait.
+The Stop frame carries the saved conversation, turn and thread. The computer checks the
+thread before its existing synchronous cancellation and private-buffer clearance.
+Each private generation uses a fresh thread, including after replacement.
+Saved invalidation already prevents dispatch and renewal while interruption is pending.
+
+Results are `sent`, `ignored` or `unavailable`. Sent means a frame was handed to the
+connection, not that interruption finished. Repeated delivery is safe and may repeat
+Stop. Transport/history failure returns no error detail and creates no authority.
+No subscription or production caller is connected. Admission stays disabled. Volatile
+server/browser delivery, native calls and fresh-install disk isolation remain unqualified.
+
+Prerequisite merges: #762 `b35059f91ea080e18541f2fa40cd13388a60a0d5`;
+PR #770 `807079af02bee23341762d47f41921f96a6e2a81`.
+Tests were committed first in `03ef3a157`. A temporary no-op reaction and the unchanged
+computer Stop produced six expected assertion failures; the temporary reaction was replaced.
+`test/memory-stop.test.ts` uses the real invalidation writer, NATS, computer bridge and
+proxy controls. It checks isolated Stop, buffer clearance before cleanup, late output,
+renewal, duplicate delivery, stale identity, disconnection and replay without execution.
+Live qualification: NOT RUN. Own check results are recorded in the pull request.

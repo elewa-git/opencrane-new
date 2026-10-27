@@ -1,0 +1,1 @@
+- Confirmed invalidation of a personal turn's saved memory can now send Stop to that exact connected turn. Stop clears its private reply buffers and removes access before interruption finishes; a delayed Stop cannot affect a replacement thread. Automatic subscriptions and memory admission remain disabled. Fresh-install isolation is not yet qualified.

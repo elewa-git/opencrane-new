@@ -626,6 +626,10 @@ class TurnRunner {
   async interrupt(value: Record<string, unknown>) {
     const turnId = requiredString(value, 'turnId');
     const conversationId = requiredString(value, 'conversationId');
+    // Ignore delayed withdrawal for a thread that has already been replaced.
+    const expectedThread = value['threadId'];
+    if (expectedThread !== undefined &&
+        expectedThread !== this.findRunningThread(turnId)) return;
     // Clear queued and replayable private text before any asynchronous cleanup.
     this.journal.forgetTurnText(conversationId, turnId);
     const input = findTurn(this.state, turnId, conversationId);
