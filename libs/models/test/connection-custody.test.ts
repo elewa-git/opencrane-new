@@ -1,4 +1,6 @@
 import { exportSPKI, generateKeyPair, SignJWT } from 'jose';
+import { OpenFgaClient } from '@openfga/sdk';
+import { MemberAccessRefused } from '../src/member-authority.ts';
 import { exchangePersonalOAuth } from '../src/oauth-worker.ts';
 import { remoteFixture } from './support/remote-mcp.ts';
 import { open } from 'node:fs/promises';
@@ -4595,3 +4597,194 @@ async function waitForDuplicateExpiry(probe: ReturnType<typeof envelope>, sequen
   }
   await until(expired);
 }
+
+async function revokeOAuth(test: Awaited<ReturnType<typeof refreshFixture>>,
+  input: unknown = test.input, actorId = test.session.userId, db = pgDb(storage.queue)) {
+  const { revokePersonalOAuth } = await import('../src/oauth-revoke.ts');
+  return revokePersonalOAuth(events.store, consentBinding, actorId, input, db);
+}
+
+async function revokesOAuthOnce(failure: string) {
+  const test = await refreshFixture();
+  try {
+    const append = events.store.append.bind(events.store);
+    async function loseReply(command: AppendCommand): Promise<never> {
+      await append(command);
+      throw new Error('refresh-canary');
+    }
+    if (failure === 'lost append reply') {
+      vi.spyOn(events.store, 'append').mockImplementationOnce(loseReply);
+      await expect(revokeOAuth(test)).rejects.toThrow(/^OAuth revoke unavailable$/u);
+    }
+    const competing = { ...test.input, changeRef: 'another-revoke' };
+    const results = await Promise.all([revokeOAuth(test), revokeOAuth(test, competing)]);
+    expect(results[0]).toEqual(results[1]);
+    expect(results[0]).toMatchObject({ status: 'revoked', generation: 1, callsAvailable: false });
+    vi.spyOn(Date, 'now').mockReturnValue(test.dueAt + 600_000);
+    expect(await revokeOAuth(test)).toEqual(results[0]);
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(4);
+    expect(rows[3]!.event.type).toBe('connection.revoked');
+    expect(foldConnection(structuredClone(rows)).data).toBeUndefined();
+    expect(await test.start()).toEqual({ status: 'unknown' });
+    expect(test.refreshSends).toBe(0);
+    expect(test.store.creates).toBe(4);
+    expect(test.store.deletes).toBe(0);
+    expect(JSON.stringify({ rows, results })).not.toMatch(/result-canary|refresh-canary/);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['none', 'lost append reply'])(
+  'revokes one OAuth generation under competing callers after %s', revokesOAuthOnce);
+
+async function cancelsClaimedOAuthRefresh() {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    expect(claim.status).toBe('claimed');
+    const append = events.store.append.bind(events.store);
+    let pending: ReturnType<typeof sendRefresh> | undefined;
+    async function race(command: AppendCommand) {
+      if (command.event.type === 'connection.revoked') {
+        pending = sendRefresh(test, claim);
+      }
+      return append(command);
+    }
+    vi.spyOn(events.store, 'append').mockImplementation(race);
+    expect(await revokeOAuth(test)).toMatchObject({ status: 'revoked' });
+    expect(pending).toBeDefined();
+    expect(await pending).toEqual({ status: 'unknown' });
+    expect(await sendRefresh(test, claim)).toEqual({ status: 'unknown' });
+    expect(await saveRefresh(test, claim)).toEqual({ status: 'unknown' });
+    expect(test.refreshSends).toBe(0);
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(6);
+    expect(rows[5]!.event.type).toBe('connection.revoked');
+    expect(foldConnection(rows).refreshClaim).toBeUndefined();
+  } finally {
+    await test.close();
+  }
+}
+it('cancels a claimed OAuth refresh waiting behind the revoke without sending',
+  cancelsClaimedOAuthRefresh);
+
+async function checksOAuthRevokeAccessOnce(outcome: string) {
+  const test = await refreshFixture();
+  try {
+    const read = events.store.readStream.bind(events.store);
+    const client = new OpenFgaClient(consentBinding);
+    const check = client.check.bind(client);
+    let prepared = false;
+    let checks = 0;
+    let denied = false;
+    async function* prepare(subject: string, from?: number, deadline?: number) {
+      if (subject === test.subject) {
+        prepared = true;
+        if (outcome === 'failed history') {
+          throw new Error('refresh-canary');
+        }
+        if (outcome === 'missing history') {
+          return;
+        }
+      }
+      yield* read(subject, from, deadline);
+    }
+    async function permission(...args: Parameters<typeof check>) {
+      if (args[0].relation === 'member') {
+        checks += 1;
+        expect(prepared).toBe(true);
+        if (denied) {
+          throw new Error('refresh-canary');
+        }
+      }
+      const result = await check(...args);
+      if (args[0].relation === 'member' && outcome === 'denied permission') {
+        denied = true;
+        return { ...result, allowed: false };
+      }
+      return result;
+    }
+    vi.spyOn(events.store, 'readStream').mockImplementation(prepare);
+    vi.spyOn(OpenFgaClient.prototype, 'check').mockImplementation(permission);
+    const writes = vi.spyOn(events.store, 'append');
+    const input = { ...test.input };
+    if (outcome === 'stale revision') {
+      input.expectedSequence++;
+    }
+    if (outcome === 'success') {
+      expect(await revokeOAuth(test, input)).toMatchObject({ status: 'revoked' });
+      expect(writes).toHaveBeenCalledTimes(1);
+    } else {
+      const pending = revokeOAuth(test, input);
+      if (outcome === 'denied permission') {
+        await expect(pending).rejects.toBeInstanceOf(MemberAccessRefused);
+      } else {
+        await expect(pending).rejects.toThrow(/^OAuth revoke unavailable$/u);
+      }
+      expect(writes).not.toHaveBeenCalled();
+    }
+    expect(checks).toBe(1);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['success', 'failed history', 'missing history', 'stale revision', 'denied permission'])(
+  'checks OAuth revoke access once after %s', checksOAuthRevokeAccessOnce);
+
+async function refusesOAuthRevoke(change: string) {
+  const test = await refreshFixture();
+  try {
+    const input = { ...test.input };
+    let actorId = test.session.userId;
+    let db = pgDb(storage.queue);
+    if (change === 'removed' || change === 'removed with failed history') {
+      await changeConsentAccess(test, 'removed');
+    } else if (change === 'another member' || change === 'admin') {
+      actorId = `other-${actorId}`;
+      const role = change === 'admin' ? 'admin' : 'member';
+      const joined = envelope('test', `member-${actorId}`, 'member.joined', {
+        memberId: actorId, role, email: 'other@example.test', displayName: 'Other',
+      });
+      await events.seed([joined]);
+      await memberAuthorisation(consentBinding).handler.handle(joined, pgDb(storage.queue));
+    } else if (change === 'generation') {
+      input.expectedGeneration++;
+    } else if (change === 'installation') {
+      input.connectionId = 'another-installation';
+    } else if (change === 'reused reference') {
+      input.changeRef = test.command.changeRef;
+    }
+    if (change === 'removed with failed history') {
+      const read = events.store.readStream.bind(events.store);
+      async function* unavailable(subject: string, from?: number, deadline?: number) {
+        if (subject === test.subject) {
+          throw new Error('refresh-canary');
+        }
+        yield* read(subject, from, deadline);
+      }
+      vi.spyOn(events.store, 'readStream').mockImplementation(unavailable);
+      async function failedRelease<Result>(_name: string, work: (db: Db) => Promise<Result>) {
+        await work(db);
+        throw new Error('refresh-canary');
+      }
+      db = { ...db, lock: failedRelease };
+    }
+    const writes = vi.spyOn(events.store, 'append');
+    const pending = revokeOAuth(test, input, actorId, db);
+    const refusal = ['removed', 'removed with failed history', 'another member', 'admin'];
+    if (refusal.includes(change)) {
+      await expect(pending).rejects.toBeInstanceOf(MemberAccessRefused);
+    } else {
+      await expect(pending).rejects.toThrow(/^OAuth revoke unavailable$/u);
+    }
+    expect(writes).not.toHaveBeenCalled();
+    expect(test.refreshSends).toBe(0);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['removed', 'removed with failed history', 'another member', 'admin',
+  'generation', 'installation', 'reused reference'])(
+  'refuses OAuth revoke for %s without exposing the account', refusesOAuthRevoke);
