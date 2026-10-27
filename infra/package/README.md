@@ -92,6 +92,9 @@ one filesystem layer, so removed npm and computer files are absent from the save
 The image checks follow every relative setup import and run the setup entry point
 with made-up services and settings. This checks that the packaged code loads and
 finishes the fixture; a running installation needs its own checks.
+A separate candidate record checks the proposed package list, saved image bytes
+and Debian main package versions. It keeps checksums for the shipped notices.
+Detailed bundled licence review still needs work, so this record cannot approve an install.
 Three-peer installation also needs an exact source revision in its compatibility
 review. The current image has no such approval.
 

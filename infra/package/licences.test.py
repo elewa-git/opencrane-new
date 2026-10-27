@@ -16,6 +16,142 @@ specification.loader.exec_module(checker)
 
 
 class LicenceTests(unittest.TestCase):
+    def candidate_checker(self):
+        path = source.parents[2] / "docs/process/p5-4-images4/check-candidate.py"
+        module_spec = importlib.util.spec_from_file_location("candidate", path)
+        candidate = importlib.util.module_from_spec(module_spec)
+        module_spec.loader.exec_module(candidate)
+        return candidate
+
+    def test_candidate_inventory_uses_a_checked_baseline(self):
+        candidate = self.candidate_checker()
+        record = checker.read_json(candidate.RECORD)
+        entries = candidate.inventory(record)
+        self.assertEqual(len(entries), 455)
+        expected = {(entry[1], entry[2]) for entry in entries}
+        self.assertIn(("@opencrane/demo-mcp", "0.1.0"), expected)
+        self.assertIn(("follow-redirects", "1.16.1"), expected)
+        self.assertIn(("zod", "4.6.6"), expected)
+        record["baselineSha256"] = "0" * 64
+        with self.assertRaises(ValueError):
+            candidate.inventory(record)
+
+    def test_candidate_comparison_and_refusals(self):
+        candidate = self.candidate_checker()
+        record = checker.read_json(candidate.RECORD)
+        entries = candidate.inventory(record)
+        artifacts = []
+        for entry in entries:
+            artifacts.append({"type": entry[0], "name": entry[1], "version": entry[2]})
+        scan = {"artifacts": artifacts}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "scan.json"
+            path.write_text(json.dumps(scan), encoding="utf-8")
+            checker.check_scan("candidate", entries, path, candidate.OSI)
+            old = checker.read_json(source.with_name("licence-inventory.json"))
+            with self.assertRaises(ValueError):
+                checker.check_scan("old", old["images"]["server"]["artifacts"], path,
+                                   candidate.OSI)
+            for case in ("older layer", "missing", "version", "unsupported"):
+                with self.subTest(case=case):
+                    changed = json.loads(json.dumps(scan))
+                    if case == "older layer":
+                        changed["artifacts"].append({"type": "npm", "name": "hidden",
+                                                      "version": "1.0"})
+                    elif case == "missing":
+                        changed["artifacts"].pop()
+                    elif case == "version":
+                        changed["artifacts"][0]["version"] = "0.0"
+                    else:
+                        changed["artifacts"][0]["licenses"] = [
+                            {"spdxExpression": "BUSL-1.1"}]
+                    path.write_text(json.dumps(changed), encoding="utf-8")
+                    with self.assertRaises(ValueError):
+                        checker.check_scan("candidate", entries, path, candidate.OSI)
+
+    def test_candidate_evidence_requires_exact_bytes(self):
+        candidate = self.candidate_checker()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "notice"
+            path.write_bytes(b"reviewed fixture")
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            candidate.checked_bytes(path, digest)
+            path.write_bytes(b"changed fixture")
+            with self.assertRaises(ValueError):
+                candidate.checked_bytes(path, digest)
+            path.unlink()
+            with self.assertRaises(OSError):
+                candidate.checked_bytes(path, digest)
+
+    def test_candidate_identity_refuses_changed_source_digest_and_scope(self):
+        candidate = self.candidate_checker()
+        record = checker.read_json(candidate.RECORD)
+        metadata = {"imageID": record["configurationDigest"], "labels": {
+            "org.opencontainers.image.revision": record["sourceRevision"]}}
+        scan = {"source": {"type": "image", "metadata": metadata},
+                "descriptor": {"configuration": {"search": {"scope": "all-layers"}}}}
+        inspection = [{"Id": record["localIndexDigest"], "Config": {
+            "Labels": metadata["labels"]}}]
+        candidate.check_identity(record, scan, inspection)
+        for case in ("source", "configuration", "index", "scope"):
+            with self.subTest(case=case):
+                changed = json.loads(json.dumps(record))
+                if case == "source":
+                    changed["sourceRevision"] = "a" * 40
+                elif case == "configuration":
+                    changed["configurationDigest"] = "sha256:" + "a" * 64
+                elif case == "index":
+                    changed["localIndexDigest"] = "sha256:" + "a" * 64
+                else:
+                    scan["descriptor"]["configuration"]["search"]["scope"] = "squashed"
+                with self.assertRaises(ValueError):
+                    candidate.check_identity(changed, scan, inspection)
+
+    def test_candidate_debian_index_and_installed_versions_must_match(self):
+        import lzma
+        candidate = self.candidate_checker()
+        index = lzma.compress(b"Package: example\nVersion: 1.0\n\n")
+        digest = hashlib.sha256(index).hexdigest()
+        release = f"SHA256:\n {digest}   {len(index)} main/binary-amd64/Packages.xz\n"
+        packages = candidate.main_packages(release, index)
+        candidate.check_installed("example\t1.0\n", packages, {("example", "1.0")})
+        with self.assertRaises(ValueError):
+            candidate.main_packages(release, index + b"altered")
+        with self.assertRaises(ValueError):
+            candidate.check_installed("example\t2.0\n", packages, {("example", "1.0")})
+        with self.assertRaises(ValueError):
+            candidate.check_installed("example\t1.0\n", set(), {("example", "1.0")})
+
+    def test_candidate_requires_notice_and_signed_index_evidence(self):
+        candidate = self.candidate_checker()
+        record = checker.read_json(candidate.RECORD)
+        for filename in ("node-LICENSE", "bookworm-InRelease", "scan.json"):
+            with self.subTest(filename=filename):
+                changed = json.loads(json.dumps(record))
+                del changed["files"][filename]
+                with self.assertRaisesRegex(ValueError, "evidence list is incomplete"):
+                    candidate.check_evidence(changed, Path("unused"))
+
+    def test_candidate_node_notice_sections_cannot_be_omitted_or_relabelled(self):
+        candidate = self.candidate_checker()
+        contents = b"Node notice\n- Library, located at deps/library:\nMIT text\n"
+        section = contents.split(b"- ", 1)[1]
+        digest = hashlib.sha256(b"- " + section).hexdigest()
+        row = ["Library, located at deps/library:", digest, "NOT RUN"]
+        notices = {"nodeSections": [row]}
+        candidate.check_node_sections(notices, contents)
+        for case in ("missing", "digest", "unreviewed approval"):
+            with self.subTest(case=case):
+                changed = json.loads(json.dumps(notices))
+                if case == "missing":
+                    changed["nodeSections"].clear()
+                elif case == "digest":
+                    changed["nodeSections"][0][1] = "0" * 64
+                else:
+                    changed["nodeSections"][0][2] = "APPROVED"
+                with self.assertRaises(ValueError):
+                    candidate.check_node_sections(changed, contents)
+
     def test_runtime_image_labels_its_source_revision(self):
         dockerfile = source.with_name("Dockerfile").read_text(encoding="utf-8")
         runtime = dockerfile.rsplit("FROM ", 1)[1]

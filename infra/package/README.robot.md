@@ -224,10 +224,25 @@ Critical/High findings also block qualification. The
 [first image receipt](../../docs/process/p5-4-images1/receipt.md) records the original refusals.
 The [layer receipt](../../docs/process/p5-4-images2/receipt.md) records the flattened local
 build. The [bootstrap receipt](../../docs/process/p5-4-images3/receipt.md) records
-the local import fix and synthetic setup checks. A complete candidate inventory,
-bundled notices and remaining declarations still need authenticated Debian-main
-evidence. Registry publication, promotion, vulnerability clearance and fresh R3
-installation remain NOT RUN.
+the local import fix and synthetic setup checks. The
+[candidate receipt](../../docs/process/p5-4-images4/receipt.md) records a separate
+455-component inventory and authenticated Debian-main evidence. Its inventory uses
+the checksum of the unchanged approved list plus three additions and two removals.
+The candidate checker compares the reconstructed list with the actual all-layer scan.
+It checks saved image, source, scan and notice checksums, the image configuration and
+index, Debian signatures and every installed package/version pair. Run it with:
+
+```sh
+nice -n 10 python3 docs/process/p5-4-images4/check-candidate.py /tmp/p5-4-images4
+```
+
+The directory must contain the files named in `candidate.json`. Missing or altered
+bytes refuse with fixed error text. `notices.json` lists all 43 Node notice sections
+by checksum; each still needs its detailed declaration review and acceptance reason.
+Other bundled declarations also remain outstanding. A passing inventory comparison
+is only part of image review. Approved pins and licence rules are unchanged.
+Registry publication, promotion, vulnerability clearance and fresh R3 installation
+remain NOT RUN.
 
 ## Private owner email
 

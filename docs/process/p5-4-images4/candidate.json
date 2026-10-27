@@ -1,0 +1,67 @@
+{
+  "status": "PARTIAL; inventory comparison only, bundled declarations remain blocked",
+  "sourceRevision": "0ba702c6e3ed062e7ff812875f9de873d41da4b3",
+  "configurationDigest": "sha256:9a6bd564f72ff4e708289f11db14ceff4e93e00cf7d7ce2e0c172fb6085fbbc5",
+  "localIndexDigest": "sha256:835a2664d9cc10647c5f5da587cdb1326fb9e3bbf08c458e93d17dcb7af116ac",
+  "baselineSha256": "1b07de02ff605002da027d44ebb6390c2b4ed442da62105cc4f70f6744312e79",
+  "components": 455,
+  "remove": [
+    [
+      "npm",
+      "follow-redirects",
+      "1.16.0"
+    ],
+    [
+      "npm",
+      "zod",
+      "4.6.5"
+    ]
+  ],
+  "add": [
+    [
+      "npm",
+      "@opencrane/demo-mcp",
+      "0.1.0",
+      "AGPL-3.0-or-later",
+      "Archived package.json and OpenCrane root LICENSE; shippedFiles checksums"
+    ],
+    [
+      "npm",
+      "follow-redirects",
+      "1.16.1",
+      "MIT",
+      "Archived package.json and LICENSE; shippedFiles checksums"
+    ],
+    [
+      "npm",
+      "zod",
+      "4.6.6",
+      "MIT",
+      "Archived package.json and LICENSE; shippedFiles checksums"
+    ]
+  ],
+  "noticesSha256": "ce7c67730ed3d0039b8e2e1b958974e6d190762dece34c0db8e5419adb429a89",
+  "shippedFiles": {
+    "app/LICENSE": "d2bf217acea2905d58d065b0c95e57ce0ce637a82181c72cb494e258a74d8f19",
+    "app/apps/demo-mcp/package.json": "d7ebcf0f2abd59bcfaffc70fc1072e73c165c8c10060d86146f44f1d64aa919a",
+    "app/node_modules/follow-redirects/LICENSE": "bfa8a54bb952ccda79f0f1889721d108f5b605babbb2b8a3705ffb52f4132eb7",
+    "app/node_modules/follow-redirects/package.json": "3b63e57223c63eff7b1c9ecdcd6615af8c6fcbaa9d436e949f02acf2b6dbe588",
+    "app/node_modules/zod/LICENSE": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8",
+    "app/node_modules/zod/package.json": "cff7e142055a9dd9bc2947a71ca3fb5e3aacdfda966d7728993ff3656245b94a",
+    "usr/local/LICENSE": "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4",
+    "usr/local/bin/agentgateway": "daca5cda76e8c5ab0c1a75912fecf2d6365095403f810db72029c49d14a37e7b",
+    "usr/local/bin/kubectl": "65691ff77eb6fa44c908b77a1082c9f092c3b9733b5cefabec0d1104890e21a8",
+    "var/lib/dpkg/status": "f837965a67204a8e632f02d3de84aea3155fcd2cfa6d75627e7aa039ad8b222c"
+  },
+  "files": {
+    "source.tar": "e321c4c76ebadbb431e543a7c02609da339a32b5acf8e03e12ae63866e1254b6",
+    "candidate.tar": "edb930042b118cd81c8f32899c0351b6d4acf3381004867d94c2669f55e698ea",
+    "scan.json": "02bfef92a9985add5347edc5bfe0b331ba75abc88ec724e99efffcbefd53de40",
+    "inspect.json": "3a8594240f657092c2b41b912010af1bb457b48a61bf4be7c044a20c19d5fcd6",
+    "installed.tsv": "7b2f2e224e1584c20ca98747392f19536748d6799573e3e2dbdf21289f574d00",
+    "node-LICENSE": "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4",
+    "bookworm-InRelease": "77737fa4b34f2693e982cc9ee35736816c35a7778fc2d326cc1bbf5b301fe1aa",
+    "bookworm-Packages.xz": "9e0b5aabb2465b3d2e7a7fe27f9913846277833f7a2826e7767acccff5b588c5",
+    "debian-archive-keyring.gpg": "506b815cbb32d9b6066b4a2aa524071e071761e7e7f68c3ac74f3061ba852017"
+  }
+}
