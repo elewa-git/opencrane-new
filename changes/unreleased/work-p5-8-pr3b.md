@@ -1,0 +1,2 @@
+- Offline event and file restore now checks current memory keys and permanent deletion markers before any replay or reads. Stale or incomplete custody refuses with both targets isolated. Admission stays closed; coordinated recovery remains incomplete.
+- Disposable file restore targets keep private directory paths out of Docker arguments and setup or cleanup errors, including when several operations fail together.

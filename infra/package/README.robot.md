@@ -747,6 +747,17 @@ id into `opencrane-restore/owner`. It returns `client`, `name` and an explicit `
 operation. The caller retains the target for inspection until it chooses to close it.
 Only clients registered by that provisioner in this process can restore files.
 
+Docker starts from the private directory and receives only `environment` as the
+environment filename. No private directory or credential value enters its command
+arguments. Directory creation and every later setup failure return
+`Disposable storage provisioning refused`. Cleanup still attempts container and
+directory removal; cleanup failures cannot replace the provisioning refusal.
+Explicit `close` failures return `Disposable storage cleanup refused`.
+`apps/server/test/disposable-object-target.test.ts` observes the real Docker launch
+arguments and injects directory, file and Docker failures, including simultaneous
+setup and cleanup failures. It uses disposable MinIO and removes its containers
+and volumes even when the injected cleanup fails.
+
 Restore claims the registered instance once, including after a failed attempt.
 It refuses a foreign silo, an unmanaged client, a closed instance or a second claim.
 Before bucket creation, before each upload and after readback, it checks the actual
@@ -922,10 +933,13 @@ A partial event archive cannot authorise a full restore; full P5-8 needs live P5
 
 `restoreRecoveryBackup` in `recovery-restore.ts` takes source and target NATS
 connections, source and target storage clients, and the file restore options without
-`proof`. It also requires `effectsDisabled: true`. The stopped, exclusive and
-disposable confirmations must be true, and both silo declarations must match.
-The source must stay reachable and stopped. Operators remain responsible for stopping
-source writers and effects; this helper never starts or stops product processes.
+`proof`. It also requires `effectsDisabled: true` and `memory`, containing the trusted
+current NATS `source`, `sourceDirectory` and prepared `candidateDirectory`. These
+private connections and paths stay in memory; there is no new command-line argument.
+The archive source and current deletion evidence are separate inputs. The stopped,
+exclusive and disposable confirmations must be true, and both silo declarations must match.
+Both event sources must stay reachable and stopped. Operators remain responsible for
+stopping their writers and effects; this helper never starts or stops product processes.
 
 `provisionRecoveryEventTarget(silo)` starts a fresh standalone local NATS process
 with an empty private directory and a random private token. It returns a connection
@@ -950,20 +964,31 @@ It checks that NATS contains no streams and storage contains only its owner-mark
 bucket. It verifies the actual storage owner and process list before native restore.
 Native restore then validates the reachable source again. Its exact result goes to
 object restore, which repeats validation against the restored events and reads back
-all uploaded bytes. Neither stage deletes, retries, recreates events or starts actors.
+all uploaded bytes. Only confirmed completion of both stages calls `checkMemoryRestore`
+with the trusted current source and restored target. The existing check requires a
+standalone source and target, a matching history prefix, identical current key folders,
+permanent deletion markers and usable surviving keys. It checks all deletion, identity
+and stability conditions before decrypting any surviving fact. It changes no custody.
+No stage deletes, retries, recreates events or starts actors.
 
 The whole sequence shares one cancellation signal and a deadline of at most 60 seconds.
 `timeoutMs` can shorten it. Cancellation closes the NATS connection and active storage
 requests. Failed or uncertain completion returns only
 `Recovery restore refused; keep both targets isolated`. Successful completion returns
-only `{ kind: 'events-and-objects-only' }`. Targets stay intact until the operator
+only `{ kind: 'events-objects-and-custody-only' }`. Targets stay intact until the operator
 explicitly disposes of them; a second attempt with either claimed target refuses.
 There is no command-line wrapper or new archive format.
 
-P5-8 PR 3a is PARTIAL. This result never authorises reopening. Computer volumes,
-CNPG/WAL and database restore, current deletion/key custody and comparisons still
-block it. Coordinated live recovery is NOT RUN. The
-[receipt](../../docs/process/p5-8-pr3a/receipt.md) records local fixture checks.
+P5-8 PR 3b is PARTIAL. This result never authorises replay, reads or reopening.
+Computer volumes, CNPG/WAL and database restore, full comparisons and credential
+renewal still block reopening. Coordinated live recovery is NOT RUN. The
+[receipt](../../docs/process/p5-8-pr3b/receipt.md) records local fixture checks.
+`recovery-custody.test.ts` restores real events and objects from an old archive, then
+checks current deletion markers. It refuses stale or missing custody, unavailable
+surviving keys, missing next-revision or orphan markers, changed inventories, wrong
+identities, non-prefix history and source movement with zero decryption. Wrong-key
+authentication has a separate case. Exercised probes forbid database opening, replay,
+key changes, schedulers, models, tools, scanning, delivery and credential release.
 
 ## Interrupted handler upgrade check
 

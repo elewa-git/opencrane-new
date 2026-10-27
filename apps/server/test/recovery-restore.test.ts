@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { until } from '@opencrane/authz/testing';
 import { stalledStorage } from './support/stalled-storage.ts';
 import { randomBytes } from 'node:crypto';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it, onTestFinished, vi } from 'vitest';
@@ -13,6 +13,7 @@ import { HandlerRuntime } from '@opencrane/handlers';
 import { collectEventBackup, descriptorSchema } from '../../../infra/package/event-backup.ts';
 import { collectObjectBackup } from '../../../infra/package/object-backup.ts';
 import * as native from '../../../infra/package/event-restore.ts';
+import * as custody from '../../../infra/package/memory-restore-check.ts';
 import * as objects from '../../../infra/package/object-restore.ts';
 import { provisionDisposableObjectTarget } from '../../../infra/package/disposable-object-target.ts';
 import { provisionRecoveryEventTarget } from '../../../infra/package/recovery-event-target.ts';
@@ -47,7 +48,12 @@ async function start() {
   } finally {
     await scratch.close();
   }
-  options = { directory: objectDirectory, eventDirectory, backupKeyFile,
+  const sourceDirectory = join(directory, 'current');
+  const candidateDirectory = join(directory, 'candidate');
+  await mkdir(sourceDirectory, { mode: 0o700 });
+  await mkdir(candidateDirectory, { mode: 0o700 });
+  const memory = { source: source.connection, sourceDirectory, candidateDirectory };
+  options = { memory, directory: objectDirectory, eventDirectory, backupKeyFile,
     silo: 'test', attempt: 'copy', targetSilo: 'test', stopped: true,
     exclusive: true, disposable: true, effectsDisabled: true };
 }
@@ -107,7 +113,7 @@ async function restoresOnce() {
   const eventRestore = vi.spyOn(native, 'restoreEventBackup');
   const objectRestore = vi.spyOn(objects, 'restoreObjectBackup');
   const result = await setup.restore();
-  expect(result.kind).toBe('events-and-objects-only');
+  expect(result.kind).toBe('events-objects-and-custody-only');
   const proof: unknown = await eventRestore.mock.results[0]!.value;
   expect(objectRestore.mock.calls[0]![3].proof).toBe(proof);
   const reader = await createEventStore(setup.events.connection);
@@ -222,6 +228,7 @@ it.each(faults)('refuses %s before either target changes', refusesBeforeMutation
 
 async function uncertain(stage: 'native' | 'object', saved: boolean) {
   const setup = await fixture();
+  const checked = vi.spyOn(custody, 'checkMemoryRestore');
   const request = setup.originalRequest;
   async function loseNative(...args: Parameters<typeof request>) {
     if (args[0] === '$JS.API.STREAM.RESTORE.EVENTS' && !saved) throw new Error('private-canary');
@@ -260,6 +267,7 @@ async function uncertain(stage: 'native' | 'object', saved: boolean) {
     expect(await reader.head()).toBe(descriptor.lastSequence);
   }
   await expect(setup.restore()).rejects.toThrow(refusal);
+  expect(checked).not.toHaveBeenCalled();
   for (const [subject] of setup.requests.mock.calls) expect(subject).not.toMatch(/DELETE|PURGE/);
 }
 async function nativeFailure() { await uncertain('native', false); }
