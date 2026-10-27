@@ -211,10 +211,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object';
 }
 
+function hasPlacementStatistics(value: unknown) {
+  return isRecord(value) && value['disabled'] !== true && isRecord(value['config']) &&
+    typeof value['config']['max_storage'] === 'number' &&
+    typeof value['memory'] === 'number' && typeof value['storage'] === 'number';
+}
+
 function metadataIsReady(value: unknown) {
-  if (!isRecord(value) || value['disabled'] === true || !isRecord(value['config']) ||
-    typeof value['config']['max_storage'] !== 'number' ||
-    typeof value['memory'] !== 'number' || typeof value['storage'] !== 'number') {
+  if (!isRecord(value) || !hasPlacementStatistics(value)) {
     return false;
   }
   const metadata = value['meta_cluster'];
@@ -264,7 +268,8 @@ export async function metadataReady(peer: Peer, peers: Peer[] = [peer]) {
         }
       }
       // Read current flags on the leader: followers only track their own link to it.
-      if (health === 200 && metadataIsReady(leaderReport) && performance.now() < deadline) {
+      if (health === 200 && hasPlacementStatistics(actual) && metadataIsReady(leaderReport) &&
+        performance.now() < deadline) {
         return;
       }
     } catch (error) {

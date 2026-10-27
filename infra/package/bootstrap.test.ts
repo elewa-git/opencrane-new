@@ -9,8 +9,8 @@ import { expect, it, vi } from 'vitest';
 import { connectNats, createEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { provisionDispatcher } from '@opencrane/handlers';
 import { natsFixture } from '../../libs/event-store/test/testing.ts';
-import { clusterFixture } from '../../libs/event-store/test/cluster-fixture.ts';
-import { waitForClusterStream } from '../../libs/event-store/test/cluster-stream.ts';
+import { clusterFixture, waitForClusterStream }
+  from '../../libs/event-store/test/cluster-fixture.ts';
 
 type Bootstrap = {
   provisionEvents(): Promise<void>;
@@ -155,7 +155,7 @@ async function bootstrapFixture(env: NodeJS.ProcessEnv, readiness?: ReadinessFix
 
 for (const replicas of ['1', '3']) {
   async function carriesReplicaChoice() {
-    const cluster = await clusterFixture();
+    const cluster = await bootstrapClusterFixture();
     try {
       const env = { ...clusterSettings(cluster), NATS_REPLICAS: replicas,
         COMMAND_NATS_REPLICAS: replicas, PROJECTION_DATABASE_URL: 'postgres://fixture' };
@@ -212,7 +212,7 @@ for (const [runtime, command] of invalidSettings) {
 }
 
 async function preservesExistingStream() {
-  const cluster = await clusterFixture();
+  const cluster = await bootstrapClusterFixture();
   try {
     const connection = await cluster.client(cluster.peers[0]!);
     const store = await createEventStore(connection);
@@ -235,7 +235,7 @@ it('bootstrap refuses an existing R1 stream without changing it or adding a cons
   preservesExistingStream);
 
 async function refusesWhenMetadataNeverBecomesReady() {
-  const cluster = await clusterFixture();
+  const cluster = await bootstrapClusterFixture();
   try {
     const readiness = { replies: [], elapsed: 0 };
     const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
@@ -272,10 +272,20 @@ async function preparePlacementStatistics(cluster: Awaited<ReturnType<typeof clu
   expect(reply.json<{ streams: number }>().streams).toBe(0);
 }
 
-async function waitsUntilMetadataLeaderHasEnoughCurrentPeers() {
+async function bootstrapClusterFixture() {
   const cluster = await clusterFixture();
   try {
     await preparePlacementStatistics(cluster);
+    return cluster;
+  } catch (error) {
+    await cluster.close();
+    throw error;
+  }
+}
+
+async function waitsUntilMetadataLeaderHasEnoughCurrentPeers() {
+  const cluster = await bootstrapClusterFixture();
+  try {
     const noLeader = metadataReport('', true);
     const missingPeer = metadataReport('peer-1', true);
     missingPeer.data.meta_cluster.replicas.pop();
@@ -319,7 +329,7 @@ async function provisionsStandalone() {
 it('bootstrap provisions a standalone R1 server without a metadata group', provisionsStandalone);
 
 async function preservesReadinessRefusals() {
-  const cluster = await clusterFixture();
+  const cluster = await bootstrapClusterFixture();
   try {
     const failure = new Error('Monitoring access refused');
     const readiness = { replies: [], elapsed: 0, failure };
@@ -344,9 +354,8 @@ function placementRefusal() {
 }
 
 async function provisionsAfterPlacementStatisticsArrive() {
-  const cluster = await clusterFixture();
+  const cluster = await bootstrapClusterFixture();
   try {
-    await preparePlacementStatistics(cluster);
     const readiness = { replies: [metadataReport('peer-1', true)], elapsed: 0 };
     const placement = { failure: placementRefusal(), refusals: 2, attempts: 0 };
     const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
@@ -366,7 +375,7 @@ it('bootstrap creates R3 when a placement refusal clears before the deadline',
   provisionsAfterPlacementStatisticsArrive);
 
 async function refusesPlacementAtTheOriginalDeadline() {
-  const cluster = await clusterFixture();
+  const cluster = await bootstrapClusterFixture();
   try {
     const replies: unknown[] = Array<null>(599).fill(null);
     replies.push(metadataReport('peer-1', true));
@@ -400,7 +409,7 @@ const creationFailures = [
 ];
 
 async function preservesOtherCreationFailures(failure: Error) {
-  const cluster = await clusterFixture();
+  const cluster = await bootstrapClusterFixture();
   try {
     const readiness = { replies: [metadataReport('peer-1', true)], elapsed: 0 };
     const placement = { failure, refusals: 1, attempts: 0 };
@@ -448,9 +457,8 @@ const lateSetupReplies = [
 ];
 
 async function refusesLateSetupReply(testCase: typeof lateSetupReplies[number]) {
-  const cluster = await clusterFixture();
+  const cluster = await bootstrapClusterFixture();
   try {
-    await preparePlacementStatistics(cluster);
     // Keep real NATS replies independent of the injected bootstrap clock.
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const replies: unknown[] = Array<null>(599).fill(null);
@@ -479,9 +487,8 @@ async function refusesLateSetupReply(testCase: typeof lateSetupReplies[number]) 
 it.each(lateSetupReplies)('bootstrap refuses a late setup reply: %j', refusesLateSetupReply);
 
 async function boundsEverySetupRequestByRemainingTime() {
-  const cluster = await clusterFixture();
+  const cluster = await bootstrapClusterFixture();
   try {
-    await preparePlacementStatistics(cluster);
     // Keep real NATS replies independent of the injected bootstrap clock.
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const replies: unknown[] = Array<null>(599).fill(null);
@@ -511,7 +518,7 @@ it('bootstrap gives every setup request only the remaining time',
   boundsEverySetupRequestByRemainingTime);
 
 async function refusesLatePlacementWithoutBackoff() {
-  const cluster = await clusterFixture();
+  const cluster = await bootstrapClusterFixture();
   try {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const replies: unknown[] = Array<null>(599).fill(null);
