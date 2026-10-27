@@ -239,9 +239,27 @@ class ConnectionCustody {
   }
   /** Read only an exact private attempt. Never expose this through a member or admin API. */
   async readAttempt(input: ConnectionStage, expected: ConnectionIdentity) {
+    return this.readMaterial(input, expected, true);
+  }
+  /** Check private refresh availability without returning any material to the command. */
+  async hasRefreshMaterial(input: ConnectionStage, expected: ConnectionIdentity) {
+    try {
+      if (input.attemptId) {
+        return false;
+      }
+      const contents = await this.readMaterial(input, expected, false);
+      const schema = z.object({ refresh_token: z.string().min(1).max(8192) });
+      return contents !== undefined && schema.safeParse(JSON.parse(contents)).success;
+    } catch {
+      return false;
+    }
+  }
+  private async readMaterial(input: ConnectionStage, expected: ConnectionIdentity,
+    attemptOnly: boolean) {
     try {
       const stage = checkedStage(input);
-      if (!stage.attemptId || !expected || Date.now() >= stage.appendUntil) {
+      if (!expected || (attemptOnly && !stage.attemptId) ||
+          (stage.attemptId && Date.now() >= stage.appendUntil)) {
         return undefined;
       }
       const recovered = await this.recover(stage, expected);
@@ -257,8 +275,8 @@ class ConnectionCustody {
       if (!this.verify(secret, stage, expected)) {
         return undefined;
       }
-      // Refuse material that expired while custody recovery or its final read was waiting.
-      if (Date.now() >= stage.appendUntil) {
+      // Refuse an attempt that expired while its private reads were waiting.
+      if (stage.attemptId && Date.now() >= stage.appendUntil) {
         return undefined;
       }
       return decodeToken(secret.data.token)?.toString('utf8');

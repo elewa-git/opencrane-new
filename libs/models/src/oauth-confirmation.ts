@@ -10,6 +10,7 @@ import type { connectionCustody, ConnectionStage } from './connection-custody.ts
 import { withConnectionStage } from './connection-stage-lock.ts';
 import { readActiveMember } from './member-authority.ts';
 import { verifyOAuthIdentity } from './oauth-identity.ts';
+import { oauthConfigurationDigest } from './oauth-attempt.ts';
 import { inputSchema, sessionSchema } from './oauth-start.ts';
 import { personalOAuthEvidence } from './oauth-worker.ts';
 
@@ -106,6 +107,7 @@ async function stageGeneration(custody: Custody, evidence: Evidence) {
       endpointDigest: stage.endpointDigest, operationId, changedBy: stage.userId,
       expectedSequence: stage.expectedSequence, appendUntil: stage.appendUntil,
       reason: 'oauth_confirmed', account,
+      configurationDigest: oauthConfigurationDigest(saved.configuration),
     } };
   const data = connectionCreatedDataSchema.parse(payload);
   const event = { ...envelope(stage.siloId, claimed.event.subject, 'connection.created',

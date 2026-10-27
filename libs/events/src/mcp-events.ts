@@ -120,6 +120,14 @@ export const mcpEvents = [
       action: 'select', profileId: 'personal_1', profileRevision: 1, expectedSequence: 0 },
   ),
   event(
+    'connection.refresh_started', 'connection',
+    'A member started one refresh attempt for the current OAuth generation.',
+    data.connectionRefreshStartedDataSchema,
+    { userId: 'mem_1', serverId: 'mcp_1', connectionId: 'installed_1', profile: 'personal_1',
+      attemptId: DIGEST_EXAMPLE, configurationDigest: DIGEST_EXAMPLE,
+      generation: 1, expectedSequence: 3, scopes: ['read'] },
+  ),
+  event(
     'connection.oauth_started', 'connection',
     'A member recorded a private consent attempt without activating a profile.',
     data.connectionOAuthStartedDataSchema,

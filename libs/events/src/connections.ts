@@ -22,7 +22,8 @@ const bearerActivationSchema = activationFields.extend({
 });
 const connectionActivationSchema = z.discriminatedUnion('reason', [
   bearerActivationSchema,
-  activationFields.extend({ reason: z.literal('oauth_confirmed'), account: z.strictObject({
+  activationFields.extend({ reason: z.literal('oauth_confirmed'),
+    configurationDigest: digestSchema.optional(), account: z.strictObject({
     issuer: z.url().max(2048), subject: z.string().regex(/^[\x21-\x7e]{1,255}$/u),
     scopes: z.array(z.string().regex(/^[\x21\x23-\x5b\x5d-\x7e]{1,200}$/u)).max(64),
     expiresAt: z.int().positive(),
@@ -81,4 +82,11 @@ export const connectionSelectedDataSchema = z.discriminatedUnion('action', [
 export const companyOptInSetDataSchema = z.strictObject({
   serverId: connectionId, connectionId, registrationRevision: z.int().positive(),
   enabled: z.boolean(), changedBy: connectionId, expectedSequence: z.int().nonnegative(),
+});
+
+export const connectionRefreshStartedDataSchema = z.strictObject({
+  userId: connectionId, serverId: connectionId, connectionId, profile: connectionId,
+  attemptId: digestSchema, configurationDigest: digestSchema,
+  generation: z.int().positive(), expectedSequence: z.int().positive(),
+  scopes: z.array(z.string().regex(/^[\x21\x23-\x5b\x5d-\x7e]{1,200}$/u)).max(64),
 });

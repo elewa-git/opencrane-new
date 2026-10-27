@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Db } from '@opencrane/projections';
@@ -6,6 +7,7 @@ import type { Binding } from '@opencrane/authz';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { connectionCreatedDataSchema, connectionOperationClosedDataSchema,
   connectionOAuthStartedDataSchema, connectionOAuthExchangeClaimedDataSchema,
+  connectionRefreshStartedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import type { connectionCustody, ConnectionStage } from './connection-custody.ts';
 import { envelope, history } from './actor.ts';
@@ -32,10 +34,12 @@ interface State {
   data?: Saved;
   lastGeneration: number;
   closedOperations: string[];
+  refreshAttempt?: StoredEvent;
 }
 
 /** Rebuild references only. Saving material does not prove the upstream account's identity. */
 export function foldConnection(rows: StoredEvent[]): State {
+  const silo = rows[0]?.event.silo;
   let state: State = { status: 'unavailable', sequence: 0, lastGeneration: 0,
     closedOperations: [] };
   for (const row of rows) {
@@ -43,8 +47,12 @@ export function foldConnection(rows: StoredEvent[]): State {
     const previous = state;
     state = { status: 'unavailable', sequence: row.sequence, lastGeneration: 0,
       closedOperations: [] };
+    if (row.event.type === 'connection.refresh_started') {
+      state = applyRefreshStart(previous, row, silo) ?? state;
+      continue;
+    }
     if (row.event.type === 'connection.operation_closed') {
-      state = applyClosure(previous, row, rows[0]?.event.silo) ?? state;
+      state = applyClosure(previous, row, silo) ?? state;
       continue;
     }
     if (!parsed.success) {
@@ -61,13 +69,40 @@ export function foldConnection(rows: StoredEvent[]): State {
       state = { ...state, data, lastGeneration: 1 };
       continue;
     }
-    const replacement = replacesSaved(previous, row, data, rows[0]?.event.silo);
+    const replacement = replacesSaved(previous, row, data, silo);
     if (first || replacement) {
       state = { status: 'saved_unverified', sequence: row.sequence, data,
         lastGeneration: activation.generation, closedOperations: previous.closedOperations };
     }
   }
   return state;
+}
+function applyRefreshStart(previous: State, row: StoredEvent, silo?: string): State | undefined {
+  const parsed = connectionRefreshStartedDataSchema.safeParse(row.event.data);
+  const saved = previous.data;
+  const activation = saved?.activation;
+  if (!parsed.success || !saved || activation?.reason !== 'oauth_confirmed' ||
+      previous.refreshAttempt) {
+    return undefined;
+  }
+  const data = parsed.data;
+  const attemptId = connectionOperationId(row.event.silo, row.event.subject,
+    `${row.event.commandId}-refresh`);
+  if (!row.event.commandId || row.event.silo !== silo ||
+      !sameOAuthProfile(row, data, row, saved) ||
+      row.event.subject !== `connection-${saved.userId}-${saved.serverId}-${saved.profile}` ||
+      row.event.id !== attemptId || data.attemptId !== attemptId ||
+      row.sequence <= previous.sequence ||
+      !matchesRefreshGeneration(data, activation, previous.sequence)) {
+    return undefined;
+  }
+  return { ...previous, sequence: row.sequence, refreshAttempt: row };
+}
+function matchesRefreshGeneration(data: z.infer<typeof connectionRefreshStartedDataSchema>,
+  activation: Extract<Saved['activation'], { reason: 'oauth_confirmed' }>, sequence: number) {
+  return data.expectedSequence === sequence && data.generation === activation.generation &&
+    data.configurationDigest === activation.configurationDigest &&
+    isDeepStrictEqual(data.scopes, activation.account.scopes);
 }
 // Keep OAuth unavailable to bearer selection, rotation and release until their own checks exist.
 function firstOAuth(rows: StoredEvent[], row: StoredEvent, data: Saved) {
