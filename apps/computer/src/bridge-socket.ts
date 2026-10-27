@@ -17,6 +17,7 @@ interface TurnRunnerPort {
   stopBridge(value: Record<string, unknown>,
     accept: (value: Record<string, unknown>) => void): Promise<Record<string, unknown>>;
   start(turn: ReturnType<typeof parseTurn>): Promise<void>;
+  prepareRoutine(value: Record<string, unknown>): Promise<Record<string, unknown>>;
   interrupt(value: Record<string, unknown>): Promise<void>;
   connectionLost(): void;
   acknowledge(sequence: unknown, value?: Record<string, unknown>): void;
@@ -99,6 +100,19 @@ async function interruptTurn(
   }
 }
 
+async function prepareRoutine(input: Record<string, unknown>, runner: TurnRunnerPort,
+  next: WebSocket, resumed: boolean) {
+  try {
+    if (!resumed) throw new Error('Bridge not resumed');
+    const reply = await runner.prepareRoutine(input);
+    sendFileReceipt(next, reply);
+  } catch {
+    // Keep other conversations running when only this preparation fails.
+    const refusal = { type: 'routine_prepare_refused', id: input['id'] };
+    sendFileReceipt(next, refusal);
+  }
+}
+
 function settleApproval(input: Record<string, unknown>,
   approvals: ReturnType<typeof approvalHolds> | undefined) {
   const approvalId = input['approvalId'];
@@ -154,6 +168,10 @@ function dispatch(
   }
   if (type === 'turn' && state.resumed) {
     void runner.start(parseTurn(input));
+    return;
+  }
+  if (type === 'routine_prepare') {
+    void prepareRoutine(input, runner, next, state.resumed);
     return;
   }
   if (type === 'stop' && state.resumed) {
@@ -297,6 +315,7 @@ export function bridgeSocket(
     gate: runner.gate,
     stopBridge: runner.stopBridge.bind(runner),
     start: runner.start.bind(runner),
+    prepareRoutine: runner.prepareRoutine.bind(runner),
     interrupt: runner.interrupt.bind(runner),
     connectionLost: runner.connectionLost.bind(runner),
     acknowledge,

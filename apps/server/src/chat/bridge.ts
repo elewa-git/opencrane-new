@@ -1,4 +1,5 @@
 import { releaseTurnCredentials } from './turn-credentials.ts';
+import { prepareRoutineThread } from './routine-thread.ts';
 import { executorStop } from '../computers/stop-executor.ts';
 import { childRequestHeld } from './child-hold.ts';
 import { createHash } from 'node:crypto';
@@ -37,7 +38,8 @@ type ReportBatch = { values: unknown[]; sequences: number[]; textLength: number;
   bytes: number; started: boolean };
 type ReportQueue = { pending: Promise<void>; count: number; bytes: number;
   last?: ReportBatch };
-const receiptData = z.object({ type: z.literal('file_received') });
+const receiptData = z.object({ type: z.enum(['file_received', 'routine_prepared',
+  'routine_prepare_refused']) });
 const reportDetails = z.object({
   sequence: z.int(), previousSequence: z.int().optional(), conversationId: z.string(),
   turnId: z.string(), type: z.string(), messageId: z.string().optional(),
@@ -296,6 +298,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   return {
     socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting, control,
     bindRoutineStart, computerId: input.computerId, assistantId: input.assistantId,
+    prepareRoutineThread: prepareRoutineThread.bind(undefined, socket),
     get rejection() { return rejection; },
     settled,
   };

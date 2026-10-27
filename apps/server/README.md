@@ -32,9 +32,11 @@ identifiers after checking current access. It saves nothing. Delivery remains un
 the check cannot wake a computer or authorise another send.
 A separate internal sender can hand a newly admitted routine to the computer once.
 It checks access after wake, just before sending, and after saving the turn start.
-A lost reply never permits another send. Preparing the computer's real private thread
-before allocating its budget is still missing. This path is disabled by default;
-automatic routines remain unavailable.
+A lost reply never permits another send. An internal preparation step starts an empty
+private thread first, then records its real id with the routine's spending allowance.
+Delivery uses that same private process once. If preparation fails, the server refuses
+that request and keeps the computer connection open for other conversations.
+Automatic routines remain unavailable.
 
 Owners and admins can read, save or remove company account opt-in for a tool installation.
 Re-registering the server clears the effective choice. Saving opt-in grants no tool access.
@@ -113,7 +115,7 @@ flowchart LR
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
-  server -->|chat work, one internal routine hand-off, connections, Stop for one turn, checked reports and unavailable replies| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, Stop for one turn and checked reports| computer["apps/computer<br/>assistant computers"]
   computer -.->|records private thread before tool approval| server
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime

@@ -5409,19 +5409,27 @@ Each must leave zero driver `turn/start` calls. Another thread's computer activi
 allow exactly one execution; replacement and selected-thread activity must refuse it.
 No model service or dev stack is called. Fresh-install live qualification: NOT RUN.
 
-The success fixture supplies the allocated thread id. It proves admission and transport
-behaviour only. A driver-generated private thread id still fails the exact identity check.
-This is the remaining third finding for #775, deferred under the requested rework size limit.
-The native-thread probe reproduces zero executions where one is required.
-The follow-up must prepare an ephemeral native thread before root allocation, return its
-actual id with the computer generation, and retain that same private session for delivery.
-It must reuse the native-thread-first ordering from #762 and the private routine session
-rules from #735. Bind preparation to the occurrence and live connection, consume it once,
-and close it on refusal, disconnect, Stop or lost ownership. Replace the selected-id success
-fixture with generated native ids and test expiry, replacement, duplicate delivery and
-lost replies. Keep exact thread, access, money and memory checks and automatic execution
-disabled throughout. Connecting this exchange and its runner lifecycle with the race tests
-would exceed about 600 changed lines in this rework.
+`prepareRoutineComputer` now starts the native thread before saving the private session,
+encrypted input and root allocation. It checks the routine before preparation and repeats
+current checks through the existing commands after startup. The authenticated connection
+returns the actual thread id. Allocation records that id with the computer generation;
+admission and delivery keep the same identity. No new event or budget writer is added.
+The `routine_prepare` request contains only identity and expiry, with no instructions.
+Its reply wait is limited to ten seconds. A matching `routine_prepare_refused` reply
+ends that wait immediately and sends Stop only for that turn. The report receiver
+recognises the refusal as a preparation reply and leaves the shared socket open.
+The routine-sender test checks prompt refusal, an open socket and cleanup of the
+repeated preparation's session. Missing replies still time out and cancel that turn.
+The sender includes the allocated thread id and cancels an unused preparation when a
+post-wake check refuses delivery. An unused preparation also expires within sixty seconds.
+
+Part of #106, P4-24 PR 10e. The recording driver now gives each native start a distinct
+id. Tests use the real preparation, allocation, admission, WebSocket bridge and journal.
+They check reuse of the original private process after another native start, mismatched
+identity, duplicate preparation, expiry and the existing late authority/Stop refusals.
+The fixture applies saved conversation access before allocation, as the permission worker
+would. Native model execution and fresh-install live qualification remain NOT RUN.
+No production caller or automatic execution switch is added.
 
 ## Routine metadata reads
 

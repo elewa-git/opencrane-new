@@ -16,9 +16,7 @@ import { BudgetActor, history, priceTableId, rootTotals } from '@opencrane/model
 import { conversationKeys } from '@opencrane/projections';
 import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
-import { prepareRoutineSession } from '../src/routine-session.ts';
-import { prepareRoutineInput } from '../src/routine-input.ts';
-import { allocateRoutineRoot } from '../src/routine-root.ts';
+import { prepareRoutineComputer } from '../src/routine-computer.ts';
 import { admitRoutineActivation } from '../src/routine-activation.ts';
 import { inspectRoutineSender } from '../src/routine-sender.ts';
 
@@ -30,6 +28,7 @@ let actor: BudgetActor;
 let directory: string;
 let now: number;
 let owned: boolean;
+let preparedComputer: Awaited<ReturnType<typeof startComputer>>;
 const proposedEvent = z.object({ type: z.string() });
 const frameSchema = z.record(z.string(), z.unknown());
 const input = { routineId: 'orders', occurrenceId: 'occurrence' };
@@ -95,11 +94,6 @@ async function setup() {
   const claimed = record('due', 'routine-orders', 'routine.due', due);
   claimed.principal = { kind: 'system', id: 'opencrane-server' };
   await nats.seed([claimed]);
-  await prepareRoutineSession(nats.store, keys, worker(), input);
-  const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
-  const auth = memberAuthorisation(binding, nats.store);
-  await auth.handler.handle(rows[0]!.event, { query: forbidden });
-  await prepareRoutineInput(nats.store, keys, worker(), input);
   const ready = record('ready', 'computer-sales-assistant', 'computer.ready',
     { assistantId: 'sales-assistant', computerId: 'computer', generation: 1 });
   await nats.seed([record('claimed', 'computer-sales-assistant', 'computer.claimed',
@@ -107,10 +101,29 @@ async function setup() {
       tokenId: 'token:fixture-computer' }), ready]);
   actor = new BudgetActor(nats.store, 'test');
   await actor.start(10_000, 10_000, 'sales');
-  await allocateRoutineRoot(nats.store, keys, worker(), input, actor, selection);
+  preparedComputer = await startComputer();
+  const append = nats.store.append.bind(nats.store);
+  async function projectCreation(...args: Parameters<typeof append>) {
+    const result = await append(...args);
+    if (proposedEvent.parse(args[0].event).type === 'conversation.created') {
+      expect(preparedComputer.nativeStarts).toBe(1);
+      const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
+      const auth = memberAuthorisation(binding, nats.store);
+      await auth.handler.handle(rows[0]!.event, { query: forbidden });
+    }
+    return result;
+  }
+  const projection = vi.spyOn(nats.store, 'append');
+  projection.mockImplementation(projectCreation);
+  const link = await preparedComputer.wake();
+  const preparedSelection = await prepareRoutineComputer(nats.store, keys, worker(),
+    input, actor, link, 1);
+  Object.assign(selection, preparedSelection);
+  projection.mockRestore();
 }
 async function cleanup() {
   vi.restoreAllMocks();
+  await preparedComputer?.close();
   await fga?.close();
   await nats?.close();
   if (directory) await rm(directory, { recursive: true, force: true });
@@ -295,25 +308,50 @@ function sender(enabled = true, replay = false) {
     selection, 'sender-attempt');
 }
 async function recordingComputer(computerId = 'computer') {
+  if (computerId === 'computer') return preparedComputer;
+  return startComputer(computerId);
+}
+async function startComputer(computerId = 'computer') {
   const server = createServer();
   let starts = 0;
   let sends = 0;
-  function rpc(method: string) {
-    if (method === 'turn/start') starts++;
-    return Promise.resolve({ thread: { id: selection.threadId, ephemeral: true, path: null },
-      turn: { id: 'recorded-turn' } });
-  }
+  let nativeStarts = 0;
   async function grant() {}
   function credential() {
     return { value: 'fixture-bridge', expiresAt: Date.now() + 120_000 };
   }
+  const executedThreads: string[] = [];
+  let closedSessions = 0;
   function privateSession() {
-    function close() {}
-    function stayOpen() {}
-    const session = { rpc, close, closed: new Promise<void>(stayOpen) };
+    const lifetime = Promise.withResolvers<void>();
+    let threadId: string | undefined;
+    let closed = false;
+    function close() {
+      if (!closed) closedSessions++;
+      closed = true;
+      lifetime.resolve();
+    }
+    function rpc(method: string, params: Record<string, unknown>) {
+      if (method === 'thread/start') {
+        expect(params).not.toHaveProperty('threadId');
+        expect(JSON.stringify(params)).not.toContain('Private routine instructions');
+        nativeStarts++;
+        threadId = `native-thread-${nativeStarts}`;
+      }
+      if (method === 'turn/start') {
+        expect(closed).toBe(false);
+        expect(params['threadId']).toBe(threadId);
+        expect(JSON.stringify(params)).toContain('Private routine instructions');
+        executedThreads.push(String(threadId));
+        starts++;
+      }
+      return Promise.resolve({ thread: { id: threadId, ephemeral: true, path: null },
+        turn: { id: 'recorded-turn' } });
+    }
+    const session = { rpc, close, closed: lifetime.promise };
     return Promise.resolve(session);
   }
-  const driver = { rpc, grant, credential, privateSession, journal: `${directory}/journal` };
+  const driver = { rpc: forbidden, grant, credential, privateSession, journal: `${directory}/journal` };
   let channel = bridgeChannel(server, driver);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -352,7 +390,10 @@ async function recordingComputer(computerId = 'computer') {
     link = await connectBridge(options, connection, tokens);
     trackFrames();
   }
+  let closed = false;
   async function close() {
+    if (closed) return;
+    closed = true;
     link.socket.terminate();
     await channel.close();
     await link.settled();
@@ -365,7 +406,8 @@ async function recordingComputer(computerId = 'computer') {
     return starts === 1;
   }
   return { wake, restart, close, executed, get starts() { return starts; },
-    get sends() { return sends; } };
+    get sends() { return sends; }, get nativeStarts() { return nativeStarts; },
+    get closedSessions() { return closedSessions; }, executedThreads };
 }
 async function savedStarts() {
   const rows = await history(nats.store, 'computer-sales-assistant', 'test');
@@ -422,6 +464,7 @@ async function handsOffOnce() {
     await computer.restart();
     expect(await sender().send(computer.wake)).toEqual({ status: 'unknown' });
     expect(computer.starts).toBe(1);
+    expect(computer.nativeStarts).toBe(1);
     expect(computer.sends).toBe(1);
     expect(await savedStarts()).toHaveLength(1);
     expect(actor.state.roots).toHaveLength(1);
@@ -431,6 +474,7 @@ async function handsOffOnce() {
     expect(rootTotals(actor.state, root.rootId)).toEqual({
       settledCents: 0, heldCents: 100, availableCents: 900 });
     const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
+    expect(JSON.stringify(rows)).not.toContain('Private routine instructions');
     function isInput(row: typeof rows[number]) {
       return row.event.type === 'message.posted';
     }
@@ -549,7 +593,7 @@ async function refusesChangedStart(field: string) {
   }
   vi.spyOn(link.socket, 'send').mockImplementationOnce(alter);
   function closed() {
-    return link.socket.readyState === link.socket.CLOSED;
+    return link.socket.readyState === link.socket.CLOSED || computer.closedSessions > 0;
   }
   try {
     await authority.send(computer.wake);
@@ -558,7 +602,8 @@ async function refusesChangedStart(field: string) {
     expect(computer.starts).toBe(0);
   } finally { await computer.close(); }
 }
-it.each(['messageId', 'id', 'rootId', 'senderAttemptId'])(
+it.each(['messageId', 'id', 'rootId', 'senderAttemptId', 'threadId',
+  'conversationId', 'assistantId', 'requesterId'])(
   'refuses changed %s through real report admission', refusesChangedStart);
 
 async function changesAtStartAppend() {
@@ -720,3 +765,62 @@ async function refusesRelevantComputerChange(kind: string) {
 }
 it.each(['replacement', 'selected thread'])(
   'refuses %s activity while saving the computer start', refusesRelevantComputerChange);
+
+function preparationIdentity(id = turnId) {
+  return { id, conversationId, assistantId: 'sales-assistant', requesterId: 'alice',
+    expiresAt: Date.now() + 50_000 };
+}
+async function keepsNativeSession() {
+  const computer = preparedComputer;
+  const link = await computer.wake();
+  const second = await link.prepareRoutineThread(preparationIdentity('other-turn'));
+  expect(second).toBe('native-thread-2');
+  expect(selection.threadId).toBe('native-thread-1');
+  await sender().send(computer.wake);
+  await until(computer.executed);
+  expect(computer.nativeStarts).toBe(2);
+  expect(computer.executedThreads).toEqual(['native-thread-1']);
+  expect(actor.state.roots[0]).toMatchObject({ threadId: 'native-thread-1' });
+  expect(await savedStarts()).toHaveLength(1);
+}
+it('retains the first native session when another start returns a distinct id', keepsNativeSession);
+
+async function refusesSecondPreparation() {
+  const link = await preparedComputer.wake();
+  let refusal: unknown;
+  function rememberRefusal(error: unknown) {
+    refusal = error;
+  }
+  const preparation = link.prepareRoutineThread(preparationIdentity());
+  const settled = preparation.catch(rememberRefusal);
+  function promptlyRefused() {
+    expect(refusal).toEqual(new Error('Routine thread unavailable'));
+  }
+  await vi.waitFor(promptlyRefused);
+  await settled;
+  expect(link.socket.readyState).toBe(link.socket.OPEN);
+  expect(preparedComputer.nativeStarts).toBe(1);
+  expect(preparedComputer.starts).toBe(0);
+  function released() {
+    return preparedComputer.closedSessions === 1;
+  }
+  await until(released);
+}
+it('refuses a second preparation for the same turn and closes its private session',
+  refusesSecondPreparation);
+
+async function refusesExpiredPreparation() {
+  const clock = Date.now();
+  function expired() { return clock + 61_000; }
+  const dateClock = vi.spyOn(Date, 'now');
+  dateClock.mockImplementation(expired);
+  const link = await preparedComputer.wake();
+  await sender().send(preparedComputer.wake);
+  function finished() {
+    return link.socket.readyState === link.socket.CLOSED || preparedComputer.closedSessions === 1;
+  }
+  await until(finished);
+  expect(preparedComputer.starts).toBe(0);
+  expect(preparedComputer.nativeStarts).toBe(1);
+}
+it('refuses delivery after the empty private session expires', refusesExpiredPreparation);

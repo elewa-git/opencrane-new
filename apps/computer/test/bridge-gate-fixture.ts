@@ -8,9 +8,10 @@ import { WebSocket } from 'ws';
 import { tokenIssuer } from '@opencrane/auth';
 import { bridgeChannel } from '../src/channel.ts';
 import { record } from '../src/http.ts';
-import type { TurnDriver } from '../src/turn-runner.ts';
+import type { PrivateSession, TurnDriver } from '../src/turn-runner.ts';
 
-export async function fixture(savedKey = true) {
+export async function fixture(savedKey = true, privateLifetime?: Promise<void>,
+  openPrivateSession?: () => Promise<PrivateSession>) {
   const directory = mkdtempSync(`${tmpdir()}/bridge-gate-`);
   const keys = generateKeyPairSync('ec', { namedCurve: 'P-256',
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
@@ -67,9 +68,11 @@ export async function fixture(savedKey = true) {
   function privateSession() {
     const lifetime = Promise.withResolvers<void>();
     privateExit = lifetime.resolve;
-    return Promise.resolve({ rpc, close: lifetime.resolve, closed: lifetime.promise });
+    return Promise.resolve({ rpc, close: lifetime.resolve,
+      closed: privateLifetime ?? lifetime.promise });
   }
-  const driver: TurnDriver = { rpc, grant, catalogue, dropCatalogue, credential, privateSession,
+  const driver: TurnDriver = { rpc, grant, catalogue, dropCatalogue, credential,
+    privateSession: openPrivateSession ?? privateSession,
     journal: `${directory}/reports` };
   const channel = bridgeChannel(server, driver);
   server.listen(0, '127.0.0.1');
