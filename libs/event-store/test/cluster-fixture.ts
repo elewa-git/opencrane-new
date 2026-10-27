@@ -211,7 +211,7 @@ function routeDescription(route: unknown) {
   return `${route.remote_name}/${account}`;
 }
 
-async function metadataReady(peer: Peer) {
+export async function metadataReady(peer: Peer) {
   const address = `http://127.0.0.1:${peer.monitor}`;
   const response = await fetch(`${address}/healthz?js-meta-only=true`,
     { signal: AbortSignal.timeout(1000) });
