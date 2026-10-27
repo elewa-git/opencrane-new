@@ -1650,6 +1650,8 @@ clearance remain shared. Native admission stays off; disk isolation is unqualifi
 
 Repeated Stops share access removal and interruption for the same turn object. This
 includes a native start reply that arrives while Stop is still removing access.
+Budget, member and memory Stops use this same rule. Different turns keep separate
+interruption work; neither a shared payer nor a shared computer combines their Stops.
 Successful interruption stays remembered for that turn object; failed ordinary
 interruption can retry, while failed private interruption closes its private session.
 The maps use weak keys, so finished turn objects are not retained for deduplication.

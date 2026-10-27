@@ -3610,6 +3610,11 @@ approval-history delays of zero and 300 ms in all four combinations.
 
 P3-14 PR 4b tests use real NATS, PostgreSQL and OpenFGA, plus the real computer
 channel for different saved payers on one team computer.
+Repeated budget Stop frames share one successful native interruption for the exact
+turn. Different turns keep separate interruption work, even on the same computer.
+The channel test waits for the repeated frame to be processed and requires exactly
+one interruption. It also checks that the other payer keeps its grant and tool list,
+can renew its grant and can complete without a saved Stop.
 
 P3-14 PR 4c keeps one conversation delivery pass running while the main watcher
 continues polling every 250 ms. During an unfinished pass it reads saved Stops
