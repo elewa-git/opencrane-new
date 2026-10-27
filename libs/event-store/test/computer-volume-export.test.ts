@@ -241,13 +241,25 @@ async function authenticatesBinding() {
       object = next;
     }
     Reflect.set(object, path.at(-1)!, 'changed');
-    function changed() { return decrypt(saved, [2, 'volume-export-only', 'aes-256-gcm', binding, entry]); }
+    function changed() {
+      const associated = [2, 'volume-export-only', 'aes-256-gcm', binding, entry];
+      return decrypt(saved, associated);
+    }
     expect(changed).toThrow();
   }
-  function wrongCount() { return decrypt(saved, [2, 'volume-export-only', 'aes-256-gcm', result.binding, { ...entry, byteCount: 1 }]); }
-  function wrongHash() { return decrypt(saved, [2, 'volume-export-only', 'aes-256-gcm', result.binding, { ...entry, sha256: 'a'.repeat(64) }]); }
+  function wrongCount() {
+    const changed = { ...entry, byteCount: 1 };
+    const associated = [2, 'volume-export-only', 'aes-256-gcm', result.binding, changed];
+    return decrypt(saved, associated);
+  }
+  function wrongHash() {
+    const changed = { ...entry, sha256: 'a'.repeat(64) };
+    const associated = [2, 'volume-export-only', 'aes-256-gcm', result.binding, changed];
+    return decrypt(saved, associated);
+  }
   function wrongKey() {
-    return decrypt(saved, [2, 'volume-export-only', 'aes-256-gcm', result.binding, entry], Buffer.alloc(32, 72));
+    const associated = [2, 'volume-export-only', 'aes-256-gcm', result.binding, entry];
+    return decrypt(saved, associated, Buffer.alloc(32, 72));
   }
   const other = await fixture();
   other.options.attempt = 'other';
@@ -255,7 +267,10 @@ async function authenticatesBinding() {
   const descriptor = await readFile(descriptorPath, 'utf8');
   await writeFile(descriptorPath, descriptor.replace('"attempt":"copy"', '"attempt":"other"'));
   const otherResult = await other.collect();
-  function swapped() { return decrypt(saved, [2, 'volume-export-only', 'aes-256-gcm', otherResult.binding, entry]); }
+  function swapped() {
+    const associated = [2, 'volume-export-only', 'aes-256-gcm', otherResult.binding, entry];
+    return decrypt(saved, associated);
+  }
   for (const refuses of [wrongCount, wrongHash, wrongKey, swapped]) expect(refuses).toThrow();
 }
 it('authenticates ownership, generation, archive, attempt, count and hash independently',
@@ -435,8 +450,12 @@ it.each([-1, 0, 1])('shares the exact aggregate byte boundary: %s', aggregateBou
 
 async function deadlineBoundary(elapsed: number) {
   let now = 0;
-  function clock() { return now; }
-  function advance(index: number) { now = index === 0 ? 30_000 : elapsed; }
+  function clock() {
+    return now;
+  }
+  function advance(index: number) {
+    now = index === 0 ? 30_000 : elapsed;
+  }
   const setup = await fixture('', 2, advance);
   vi.spyOn(performance, 'now').mockImplementation(clock);
   if (elapsed < 60_000) {
