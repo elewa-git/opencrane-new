@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import { once } from 'node:events';
 import { WebSocket } from 'ws';
+import { z } from 'zod';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { memoryContextRecordedEventSchema, parseEventByType } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -22,6 +23,7 @@ let link: Awaited<ReturnType<typeof connectBridge>>;
 let keys: ReturnType<typeof conversationKeys>;
 let processor: ReturnType<typeof assistantProcessor>;
 const sessions: AgentSession[] = [];
+const frameSchema = z.object({ type: z.string(), token: z.unknown().optional() });
 function forbiddenConnection(): Promise<never> { throw new Error('Must not open a computer'); }
 const opening = vi.fn(forbiddenConnection);
 const scopeId = memoryScopeId('test', 'person', 'alice');
@@ -389,7 +391,8 @@ async function completionBeforePoll(replace: boolean) {
   let stops = 0;
   function holdAcknowledgements(data: Parameters<typeof send>[0]) {
     if (typeof data === 'string') {
-      const frame = JSON.parse(data) as { type: string };
+      const decoded: unknown = JSON.parse(data);
+      const frame = frameSchema.parse(decoded);
       if (frame.type === 'ack' && !('token' in frame)) return;
       if (frame.type === 'stop') stops++;
     }
@@ -427,16 +430,18 @@ it.each([false, true])('clears withdrawn output when completion precedes polling
   completionBeforePoll);
 
 async function retriesUntilClearanceReceipt() {
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- Bind to each sending socket below.
   const send = WebSocket.prototype.send;
   let heldReceipt: string | undefined;
-  let peer: WebSocket | undefined;
+  let deliverReceipt: WebSocket['send'] | undefined;
   let stops = 0;
   function holdReceipt(this: WebSocket, data: Parameters<typeof send>[0]) {
     if (typeof data === 'string') {
-      const frame = JSON.parse(data) as { type: string };
+      const decoded: unknown = JSON.parse(data);
+      const frame = frameSchema.parse(decoded);
       if (frame.type === 'private_output_cleared') {
         heldReceipt = data;
-        peer = this;
+        deliverReceipt = send.bind(this);
         return;
       }
       if (frame.type === 'stop') stops++;
@@ -453,11 +458,11 @@ async function retriesUntilClearanceReceipt() {
   expect(heldReceipt).toBeDefined();
   const wrongThread = { type: 'private_output_cleared', conversationId: 'chat',
     turnId: 'turn', threadId: 'another-thread' };
-  send.call(peer!, JSON.stringify(wrongThread), {});
+  deliverReceipt!(JSON.stringify(wrongThread), {});
   await flush();
   await poll();
   expect(stops).toBe(2);
-  send.call(peer!, heldReceipt!, {});
+  deliverReceipt!(heldReceipt!, {});
   await flush();
   await poll();
   expect(stops).toBe(2);
