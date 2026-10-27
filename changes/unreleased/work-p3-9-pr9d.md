@@ -1,0 +1,1 @@
+- Explicit internal confirmation can save the first verified OAuth account generation from its exact private reply. Retries recover the original save without another exchange; public routes and tool access remain unavailable.

@@ -5,6 +5,7 @@ import { withConnectionStage } from './connection-stage-lock.ts';
 import type { Binding } from '@opencrane/authz';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { connectionCreatedDataSchema, connectionOperationClosedDataSchema,
+  connectionOAuthStartedDataSchema, connectionOAuthExchangeClaimedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import type { connectionCustody, ConnectionStage } from './connection-custody.ts';
 import { envelope, history } from './actor.ts';
@@ -56,6 +57,10 @@ export function foldConnection(rows: StoredEvent[]): State {
     }
     const first = previous.sequence === 0 && activation.generation === 1 &&
       row.event.type === 'connection.created' && activation.reason === 'bearer_create';
+    if (firstOAuth(rows, row, data)) {
+      state = { ...state, data, lastGeneration: 1 };
+      continue;
+    }
     const replacement = replacesSaved(previous, row, data, rows[0]?.event.silo);
     if (first || replacement) {
       state = { status: 'saved_unverified', sequence: row.sequence, data,
@@ -63,6 +68,52 @@ export function foldConnection(rows: StoredEvent[]): State {
     }
   }
   return state;
+}
+// Keep OAuth unavailable to bearer selection, rotation and release until their own checks exist.
+function firstOAuth(rows: StoredEvent[], row: StoredEvent, data: Saved) {
+  const start = rows[0];
+  const claim = rows[1];
+  if (!start || !claim || rows[2] !== row || row.event.type !== 'connection.created' ||
+      data.activation.reason !== 'oauth_confirmed' || data.activation.generation !== 1 ||
+      start.event.type !== 'connection.oauth_started' ||
+      claim.event.type !== 'connection.oauth_exchange_claimed') {
+    return false;
+  }
+  const started = connectionOAuthStartedDataSchema.safeParse(start.event.data);
+  const claimed = connectionOAuthExchangeClaimedDataSchema.safeParse(claim.event.data);
+  if (!started.success || !claimed.success) {
+    return false;
+  }
+  if (!sameOAuthProfile(start, started.data, row, data) ||
+      !sameOAuthProfile(claim, claimed.data, row, data)) {
+    return false;
+  }
+  return oauthOrder(start, claim, row, started.data, claimed.data, data);
+}
+function sameOAuthProfile(preceding: StoredEvent,
+  fields: { userId: string; serverId: string; profile: string; connectionId: string },
+  row: StoredEvent, data: Saved) {
+  return preceding.event.silo === row.event.silo &&
+    preceding.event.subject === row.event.subject &&
+    preceding.event.source === 'opencrane-server' &&
+    preceding.event.principal?.kind === 'human' && preceding.event.principal.id === data.userId &&
+    fields.userId === data.userId && fields.serverId === data.serverId &&
+    fields.profile === data.profile && fields.connectionId === data.activation.connectionId;
+}
+function oauthOrder(start: StoredEvent, claim: StoredEvent, row: StoredEvent,
+  attempt: z.infer<typeof connectionOAuthStartedDataSchema>,
+  exchange: z.infer<typeof connectionOAuthExchangeClaimedDataSchema>, data: Saved) {
+  const claimId = connectionOperationId(row.event.silo, row.event.subject,
+    `${attempt.attemptId}-exchange`);
+  const resultId = connectionOperationId(row.event.silo, row.event.subject, `${claimId}-result`);
+  const operationId = connectionOperationId(row.event.silo, row.event.subject, `${resultId}-confirm`);
+  return exchange.attemptId === attempt.attemptId && start.event.id === attempt.attemptId &&
+    claim.event.id === claimId && claim.event.commandId === claimId &&
+    exchange.expectedSequence === start.sequence && claim.sequence > start.sequence &&
+    row.sequence > claim.sequence && data.activation.expectedSequence === claim.sequence &&
+    data.activation.operationId === operationId && row.event.commandId === start.event.commandId &&
+    row.event.source === 'opencrane-server' &&
+    data.activation.appendUntil === attempt.appendUntil && exchange.appendUntil === attempt.appendUntil;
 }
 function applyClosure(previous: State, row: StoredEvent, silo?: string): State | undefined {
   const parsed = connectionOperationClosedDataSchema.safeParse(row.event.data);

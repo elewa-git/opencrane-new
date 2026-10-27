@@ -3004,7 +3004,8 @@ async function exchangeFixture(mode = 'valid', signed = false) {
     signedClaims.setExpirationTime('1m');
     const token = await signedClaims.sign(keys.privateKey);
     responseText = JSON.stringify({ access_token: 'result-canary', token_type: 'Bearer',
-      id_token: token, name: 'provider-name-canary' });
+      id_token: token, refresh_token: 'refresh-canary', name: 'provider-name-canary',
+      scope: 'read', expires_in: 3600 });
   }
   async function respond(request: IncomingMessage, response: ServerResponse) {
     const chunks: Buffer[] = [];
@@ -3416,3 +3417,170 @@ async function refusesChangedIdentitySession() {
   }
 }
 it('refuses saved OAuth identity from a changed session', refusesChangedIdentitySession);
+
+async function confirmAccount(test: Awaited<ReturnType<typeof exchangeFixture>>,
+  evidence: unknown, confirmed = true) {
+  const { confirmPersonalOAuth } = await import('../src/oauth-confirmation.ts');
+  return confirmPersonalOAuth(events.store, consentBinding, test.session, test.custody,
+    test.command, evidence, confirmed, pgDb(storage.queue));
+}
+
+async function confirmsOneGeneration() {
+  const test = await exchangeFixture('valid', true);
+  try {
+    const evidence = await test.run();
+    expect(await confirmAccount(test, evidence, false)).toEqual({ status: 'unknown' });
+    expect(await confirmAccount(test, structuredClone(evidence))).toEqual({ status: 'unknown' });
+    expect(test.store.creates).toBe(3);
+    const results = await Promise.all([
+      confirmAccount(test, evidence), confirmAccount(test, evidence),
+    ]);
+    expect(results[0]).toEqual(results[1]);
+    expect(results[0]).toMatchObject({ status: 'saved', generation: 1, callsAvailable: false });
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(3);
+    const folded = foldConnection(rows);
+    expect(folded.status).toBe('unavailable');
+    expect(folded.data?.activation).toMatchObject({ reason: 'oauth_confirmed', generation: 1,
+      account: { issuer: test.configuration.issuer, subject: 'account-123',
+        scopes: ['read'], expiresAt: Date.parse(rows[1]!.event.time) + 3600_000 } });
+    expect(folded.data?.secretRef).toBe(`secret:${test.store.secret.metadata.name}`);
+    expect(folded.data?.activation.uid).toBe(test.store.secret.metadata.uid);
+    expect(folded.data?.activation.resourceVersion).toBe(test.store.secret.metadata.resourceVersion);
+    expect(Buffer.from(test.store.secret.data.token, 'base64').toString()).toBe(test.responseText);
+    const stage = vi.spyOn(test.custody, 'stage');
+    const reads = vi.spyOn(test.custody, 'readAttempt');
+    vi.spyOn(Date, 'now').mockReturnValue(test.started.appendUntil + 1);
+    expect(await confirmAccount(test, undefined)).toEqual(results[0]);
+    expect(foldConnection(rows)).toEqual(folded);
+    expect(stage).not.toHaveBeenCalled();
+    expect(reads).not.toHaveBeenCalled();
+    expect(test.sends).toBe(1);
+    expect(test.store.creates).toBe(4);
+    const exposed = JSON.stringify({ results, rows });
+    const privateReply = z.object({ id_token: z.string() }).parse(JSON.parse(test.responseText));
+    const canaries = ['result-canary', 'refresh-canary', 'provider-name-canary',
+      privateReply.id_token, test.responseText];
+    for (const canary of canaries) {
+      const hash = createHash('sha256');
+      hash.update(canary);
+      const digest = hash.digest('hex');
+      expect(exposed).not.toContain(canary);
+      expect(exposed).not.toContain(digest);
+    }
+    const malformed = structuredClone(rows);
+    malformed[1]!.event.type = 'connection.revoked';
+    expect(foldConnection(malformed).data).toBeUndefined();
+    expect(foldConnection(rows.slice(2)).data).toBeUndefined();
+  } finally {
+    vi.restoreAllMocks();
+    await test.providerFixture.close();
+  }
+}
+it('confirms one exact OAuth generation and recovers its receipt after consent expiry',
+  confirmsOneGeneration);
+
+async function refusesConfirmation(change: string) {
+  const test = await exchangeFixture('valid', true);
+  try {
+    const original = await test.run();
+    let evidence: unknown = original;
+    if (change === 'account') {
+      evidence = { ...original,
+        verifiedIdentity: { issuer: test.configuration.issuer, subject: 'other-account' } };
+    } else if (change === 'profile') {
+      test.command.profileId = 'another-profile';
+    } else if (change === 'uid') {
+      test.store.secret.metadata.uid = 'replaced';
+    } else if (change === 'version') {
+      test.store.secret.metadata.resourceVersion = '2';
+    } else if (change === 'expiry') {
+      vi.spyOn(Date, 'now').mockReturnValue(test.started.appendUntil);
+    } else if (change === 'key') {
+      // Keep the key valid, so only the original configuration binding can refuse restart.
+      test.configuration.identityVerification!.publicKey += '\n';
+      expect(await test.run(true)).toEqual({ status: 'unknown' });
+    } else if (change === 'stage') {
+      vi.spyOn(test.custody, 'stage').mockRejectedValue(new Error('result-canary'));
+    } else {
+      await changeConsentAccess(test, change);
+    }
+    expect(await confirmAccount(test, evidence)).toEqual({ status: 'unknown' });
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(2);
+    expect(foldConnection(rows).data).toBeUndefined();
+    expect(test.sends).toBe(1);
+  } finally {
+    vi.restoreAllMocks();
+    await test.providerFixture.close();
+  }
+}
+it.each(['account', 'profile', 'uid', 'version', 'expiry', 'key', 'stage', 'removed',
+  'rejoined', 'configuration', 'disabled'])(
+  'refuses OAuth confirmation with changed %s', refusesConfirmation);
+
+async function refusesConfirmationPublication(change: string) {
+  const test = await exchangeFixture('valid', true);
+  try {
+    const evidence = await test.run();
+    const append = events.store.append.bind(events.store);
+    async function changed(command: AppendCommand) {
+      fault.mockRestore();
+      await changeConsentAccess(test, change);
+      return append(command);
+    }
+    const fault = vi.spyOn(events.store, 'append').mockImplementationOnce(changed);
+    expect(await confirmAccount(test, evidence)).toEqual({ status: 'unknown' });
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(2);
+    expect(foldConnection(rows).data).toBeUndefined();
+  } finally {
+    vi.restoreAllMocks();
+    await test.providerFixture.close();
+  }
+}
+it.each(['removed', 'rejoined', 'configuration', 'policy', 'disabled'])(
+  'refuses OAuth confirmation when %s changes at publication', refusesConfirmationPublication);
+
+async function recoversConfirmationReply() {
+  const test = await exchangeFixture('valid', true);
+  try {
+    const evidence = await test.run();
+    const append = events.store.append.bind(events.store);
+    async function loseReply(command: AppendCommand): Promise<never> {
+      await append(command);
+      throw new Error('result-canary');
+    }
+    vi.spyOn(events.store, 'append').mockImplementationOnce(loseReply);
+    expect(await confirmAccount(test, evidence)).toEqual({ status: 'unknown' });
+    expect(await confirmAccount(test, undefined)).toMatchObject({
+      status: 'saved', generation: 1, callsAvailable: false,
+    });
+    expect(test.store.creates).toBe(4);
+    expect(test.sends).toBe(1);
+    expect(await history(events.store, test.subject, 'test')).toHaveLength(3);
+  } finally {
+    vi.restoreAllMocks();
+    await test.providerFixture.close();
+  }
+}
+it('recovers a lost OAuth activation reply without staging or exchanging again',
+  recoversConfirmationReply);
+
+async function refusesUnsignedAndForeignEvidence() {
+  const unsigned = await exchangeFixture();
+  const verified = await exchangeFixture('valid', true);
+  try {
+    const unsignedEvidence = await unsigned.run();
+    const foreignEvidence = await verified.run();
+    expect(await confirmAccount(unsigned, unsignedEvidence)).toEqual({ status: 'unknown' });
+    expect(await confirmAccount(unsigned, foreignEvidence)).toEqual({ status: 'unknown' });
+    expect(await history(events.store, unsigned.subject, 'test')).toHaveLength(2);
+    expect(unsigned.store.creates).toBe(3);
+  } finally {
+    await unsigned.providerFixture.close();
+    await verified.providerFixture.close();
+  }
+}
+it('refuses unsigned and another original attempt as OAuth confirmation evidence',
+  refusesUnsignedAndForeignEvidence);
