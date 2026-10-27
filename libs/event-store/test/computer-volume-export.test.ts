@@ -98,8 +98,8 @@ async function fixture(fault = '', homes = 1,
     pods: { metadata: { resourceVersion: '10' }, items: [] } };
   const { sandbox: secondSandbox, home: secondHome, volume: secondVolume } = homeResources('two');
   if (homes === 2) {
-    resources.sandboxes = { metadata: { resourceVersion: '10' }, items: [sandbox, secondSandbox] };
-    resources.persistentvolumeclaims = { metadata: { resourceVersion: '10' },
+    resources['sandboxes'] = { metadata: { resourceVersion: '10' }, items: [sandbox, secondSandbox] };
+    resources['persistentvolumeclaims'] = { metadata: { resourceVersion: '10' },
       items: [home, secondHome] };
   }
   const streams: Readable[] = [];
@@ -480,7 +480,7 @@ it.each(copyChanges)('refuses identity or writer changes during copy %s: %s', re
 
 async function missingRetainedHome(state: string) {
   const setup = await fixture(state, 2);
-  setup.resources.persistentvolumeclaims = { metadata: { resourceVersion: '10' },
+  setup.resources['persistentvolumeclaims'] = { metadata: { resourceVersion: '10' },
     items: [setup.home] };
   await expect(setup.collect()).rejects.toThrow('Computer volume export refused');
   expect(fs.existsSync(setup.options.destination)).toBe(false);
