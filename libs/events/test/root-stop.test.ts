@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { budgetRootStoppedDataSchema } from '../src/index.ts';
 
-const reasons = ['requester_stop', 'turn_ended', 'access_revoked'] as const;
+const reasons = ['requester_stop', 'turn_ended', 'access_revoked', 'routine_stop'] as const;
 function acceptsSource(reason: typeof reasons[number]) {
   const stop = { rootId: 'root', reason, sourceSubject: 'conversation-chat',
     sourcePosition: 3, sourceEventId: 'event' };

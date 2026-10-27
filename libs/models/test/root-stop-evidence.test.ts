@@ -1,8 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { replayBudgets } from '../src/accounting.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { jetstreamManager } from '@nats-io/jetstream';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { parseEventByType } from '@opencrane/events';
+import { foldRoutine, getEventDefinition, routineDefinitionSchema, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { databases } from '@opencrane/authz/testing';
 import { pgDb, ProjectionRunner } from '@opencrane/projections';
@@ -12,7 +13,7 @@ import { BudgetActor, budgetSummary, budgets, envelope, history, priceTableId,
 import { type BudgetState } from '../src/state.ts';
 import { rootTotals } from '../src/root-budget.ts';
 
-type Reason = 'requester_stop' | 'turn_ended' | 'access_revoked';
+type Reason = 'requester_stop' | 'turn_ended' | 'access_revoked' | 'routine_stop';
 type Evidence = { reason: Reason; type: string; subject: string; data: Record<string, unknown> };
 const binding = { requesterId: 'alice', conversationId: 'conversation', turnId: 'turn',
   threadId: 'thread', assistantId: 'assistant', computerId: 'computer', generation: 1,
@@ -53,8 +54,19 @@ async function setup() {
 async function close() { await nats.close(); }
 beforeEach(setup);
 afterEach(close);
+function routineRecord(source: Evidence, silo: string): EventEnvelope {
+  const actorId = source.data['actorId'];
+  const principal: EventEnvelope['principal'] = typeof actorId === 'string'
+    ? { kind: 'human', id: actorId } : { kind: 'system', id: 'opencrane-server' };
+  const id = randomUUID();
+  return { id, commandId: id, type: source.type, subject: source.subject, silo,
+    data: source.data, source: 'opencrane-server', time: clock.toISOString(), principal,
+    correlation: {} };
+}
 async function save(source: Evidence, silo = 'test') {
-  const event = envelope(silo, source.subject, source.type, source.data);
+  const event = source.type.startsWith('routine.') ? routineRecord(source, silo)
+    : envelope(silo, source.subject, source.type, source.data);
+  expect(parseEventByType(event).success).toBe(true);
   const expectedSequence = await nats.store.head(source.subject);
   const result = await nats.store.append({ event, expectedSequence });
   if (result.status !== 'appended') throw new Error('Evidence fixture append failed');
@@ -243,10 +255,9 @@ async function keepsFirstStop() {
   expect(await nats.store.head()).toBe(before + 1);
 }
 it('serialises repeats and returns the first reason when Stop is followed by close', keepsFirstStop);
-async function recoversLostReply() {
+async function recoversLostReply(source = evidence[0]!) {
   const manager = await jetstreamManager(nats.connection);
   await manager.streams.update('EVENTS', { duplicate_window: 1_000_000_000 });
-  const source = evidence[0]!;
   const saved = await save(source);
   const before = await nats.store.head();
   const append = nats.store.append.bind(nats.store);
@@ -267,7 +278,8 @@ async function recoversLostReply() {
   expect(await stop(source, saved.position)).toMatchObject({ sourceEventId: saved.event.id });
   expect(await nats.store.head()).toBe(recovered);
 }
-it('recovers a lost reply and redelivery beyond the NATS duplicate window', recoversLostReply);
+async function recoversMemberReply() { await recoversLostReply(); }
+it('recovers a lost reply and redelivery beyond the NATS duplicate window', recoversMemberReply);
 async function refusesOldLeader() {
   const source = evidence[0]!;
   const saved = await save(source);
@@ -330,3 +342,173 @@ async function replaysStop(source: Evidence) {
 it.each([evidence[0]!, evidence[1]!, evidence[4]!])(
   'keeps $reason and late cost through raised caps, rollover, restart and PostgreSQL replay',
   replaysStop);
+
+
+function routineExample(type: string): Record<string, unknown> {
+  return { ...getEventDefinition(type)!.example as Record<string, unknown> };
+}
+function routineEvidence(type: string, data: Record<string, unknown>): Evidence {
+  return { reason: 'routine_stop', subject: 'routine-orders', type, data };
+}
+async function prepareRoutine(source = 'owner', changedDefinition = {}, legacy = false) {
+  const due = routineExample('routine.due');
+  const definition = routineDefinitionSchema.parse(due['definition']);
+  const frozen = { ...definition, assistantId: binding.assistantId,
+    payingGroupId: binding.payingGroupId, assistantPayingGroupId: binding.payingGroupId,
+    ...changedDefinition };
+  due['definition'] = frozen;
+  due['conversationId'] = binding.conversationId;
+  due['turnId'] = binding.turnId;
+  const created = { ...routineExample('routine.created'), status: 'active',
+    definition: due['definition'], actorId: frozen.ownerId };
+  if (legacy) {
+    await save(routineEvidence('routine.created', { routineId: 'orders',
+      assistantId: 'assistant', schedule: '0 9 * * *', createdBy: 'alice' }));
+    await save(routineEvidence('routine.due', { routineId: 'orders', firedAt: due['firedAt'] }));
+  } else {
+    await save(routineEvidence('routine.created', created));
+    await save(routineEvidence('routine.due', due));
+  }
+  const data = { ...routineExample('routine.run_stop_requested'), source,
+    actorId: source === 'admin' ? 'admin' : 'alice', conversationId: binding.conversationId,
+    turnId: binding.turnId };
+  return routineEvidence('routine.run_stop_requested', data);
+}
+async function acceptsRoutine(sourceKind: string) {
+  const source = await prepareRoutine(sourceKind);
+  await acceptsEvidence(source);
+  const saved = await nats.store.head(source.subject);
+  await refuses({ ...source, reason: 'requester_stop' }, saved);
+  async function fresh() {}
+  const dispatch = { callId: 'free', decisionId: 'decision', bodyDigest: '0'.repeat(64),
+    rootId, modelCall: call };
+  await expect(actor.admitDispatch(dispatch, fresh)).rejects.toMatchObject({ reason: 'routine_stop' });
+  expect(actor.state.dispatches).toHaveLength(0);
+}
+it.each(['owner', 'admin'])('stops only the allocated routine root for %s', acceptsRoutine);
+
+async function routineRacesAndReasons() {
+  const source = await prepareRoutine();
+  const saved = await save(source);
+  const later = await save(evidence[5]!);
+  const before = await nats.store.head();
+  const receipts = await Promise.all([stop(source, saved.position), stop(source, saved.position)]);
+  expect(receipts[0]).toEqual(receipts[1]);
+  expect(await stop(evidence[5]!, later.position)).toEqual(receipts[0]);
+  expect(await nats.store.head()).toBe(before + 1);
+  const replacement = await actor.setRootAllowance({ ...binding, turnId: 'replacement' }, 1);
+  await refuses(source, saved.position, replacement.rootId);
+  await actor.reserve({ ...call, turnId: 'replacement' }, 1, undefined, undefined,
+    replacement.rootId);
+}
+it('keeps the first routine Stop through races and refuses an old Stop for a replacement',
+  routineRacesAndReasons);
+async function routineAfterMemberStop() {
+  const source = await prepareRoutine('admin');
+  const member = await save(evidence[0]!);
+  const first = await stop(evidence[0]!, member.position);
+  const saved = await save(source);
+  const before = await nats.store.head();
+  expect(await stop(source, saved.position)).toEqual(first);
+  expect(await nats.store.head()).toBe(before);
+}
+it('does not replace an earlier member reason with a valid routine Stop', routineAfterMemberStop);
+async function routineLostReply() {
+  const source = await prepareRoutine();
+  await recoversLostReply(source);
+}
+it('recovers the original routine receipt after a lost reply and actor restart', routineLostReply);
+async function routineReplay() {
+  const source = await prepareRoutine('admin');
+  await replaysStop(source);
+  let state;
+  const rows = await history(nats.store, source.subject, 'test');
+  const before = await nats.store.head();
+  for (const row of rows) state = foldRoutine(state, row.event);
+  expect(state).toMatchObject({ stopRequested: true, executionAvailable: false });
+  expect(await nats.store.head()).toBe(before);
+}
+it('rebuilds routine Stop and budgets without effects or execution permission', routineReplay);
+async function routineUnknownCost() {
+  const source = await prepareRoutine();
+  const held = await reserve();
+  await actor.uncertain(held, 'settle_timeout');
+  const saved = await save(source);
+  const receipt = await stop(source, saved.position);
+  expect(rootTotals(actor.state, rootId).heldCents).toBe(1);
+  await settle(held, 1234);
+  expect(rootTotals(actor.state, rootId)).toEqual({
+    settledCents: 1234, heldCents: 0, availableCents: 0 });
+  expect(await stop(source, saved.position)).toEqual(receipt);
+  await expect(reserve()).rejects.toMatchObject({ reason: 'routine_stop' });
+}
+it('keeps uncertain routine holds and records full late integer cents without reopening',
+  routineUnknownCost);
+async function routineWrongBinding(field: string) {
+  const source = await prepareRoutine();
+  const value = source.data[field];
+  const changed = { ...source, data: { ...source.data,
+    [field]: typeof value === 'number' ? value + 1 : 'another' } };
+  const saved = await save(changed);
+  await refuses(changed, saved.position);
+}
+it.each(['occurrenceId', 'rootId', 'conversationId', 'messageId', 'turnId',
+  'definitionRevision', 'scheduleRevision', 'controlRevision'])(
+  'refuses a routine Stop with a forged %s and no budget append', routineWrongBinding);
+async function routineWrongDefinition(field: string) {
+  const changed: Record<string, string> = { [field]: 'another' };
+  if (field === 'payingGroupId') changed['assistantPayingGroupId'] = 'another';
+  const source = await prepareRoutine('admin', changed);
+  const saved = await save(source);
+  await refuses(source, saved.position);
+}
+it.each(['ownerId', 'assistantId', 'payingGroupId'])(
+  'refuses a saved due whose frozen %s differs from the allocation', routineWrongDefinition);
+async function routineBadSources() {
+  const source = await prepareRoutine();
+  const rows = await history(nats.store, source.subject, 'test');
+  const foreign = await save(source, 'other-silo');
+  await refuses(source, foreign.position);
+  const saved = await save(source);
+  await refuses({ ...source, subject: 'routine-other' }, saved.position);
+  await refuses(source, saved.position + 1000);
+  await refuses(source, rows[1]!.sequence);
+}
+it('refuses foreign, wrong stream, wrong type and unsaved routine sources', routineBadSources);
+async function routineLegacy() {
+  const source = await prepareRoutine('owner', {}, true);
+  const saved = await save(source);
+  await refuses(source, saved.position);
+}
+it('refuses legacy routine history as Stop evidence', routineLegacy);
+async function routineReadFailure(mode: string) {
+  const source = await prepareRoutine();
+  const saved = await save(source);
+  const readStream = nats.store.readStream.bind(nats.store);
+  const gate = Promise.withResolvers<void>();
+  let historyStarted = false;
+  async function* unavailable(subject: string, position = 1, deadline = Infinity) {
+    if (subject === source.subject && position === 1) {
+      historyStarted = true;
+      expect(deadline - performance.now()).toBeGreaterThan(0);
+      expect(deadline - performance.now()).toBeLessThanOrEqual(10_000);
+      if (mode === 'stalled') await gate.promise;
+      throw new Error('private fixture failure');
+    }
+    yield* readStream(subject, position, deadline);
+  }
+  nats.store.readStream = unavailable;
+  const before = performance.now();
+  try {
+    const pending = refuses(source, saved.position);
+    await pending;
+    expect(historyStarted).toBe(true);
+    expect(performance.now() - before).toBeLessThan(11_000);
+  } finally {
+    gate.resolve();
+    nats.store.readStream = readStream;
+  }
+  await stop(source, saved.position);
+}
+it.each(['missing', 'stalled'])('refuses %s routine history within its read deadline',
+  routineReadFailure);
