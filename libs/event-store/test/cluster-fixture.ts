@@ -243,6 +243,7 @@ export async function metadataReady(peer: Peer, peers: Peer[] = [peer]) {
   const deadline = performance.now() + 20_000;
   let actual: unknown;
   let health = 0;
+  let lastRequest = 'completed';
   while (performance.now() < deadline) {
     const remaining = deadline - performance.now();
     const timeout = Math.min(1000, Math.ceil(remaining));
@@ -273,10 +274,13 @@ export async function metadataReady(peer: Peer, peers: Peer[] = [peer]) {
         return;
       }
     } catch (error) {
-      if (performance.now() < deadline) {
+      const timedOut = error instanceof Error && error.name === 'TimeoutError';
+      if (!timedOut && performance.now() < deadline) {
         throw error;
       }
-      break;
+      if (error instanceof Error) {
+        lastRequest = error.name;
+      }
     }
     const pollRemaining = deadline - performance.now();
     if (pollRemaining > 0) {
@@ -284,8 +288,8 @@ export async function metadataReady(peer: Peer, peers: Peer[] = [peer]) {
     }
   }
   const expected = { health: 200, metadata: 'named leader, three current peers and storage statistics' };
-  expect(actual, `Metadata for ${peer.name} did not become ready within 20000 ms (health ${health})`)
-    .toEqual(expected);
+  const message = `Metadata for ${peer.name} did not become ready within 20000 ms`;
+  expect(actual, `${message} (health ${health}, last request ${lastRequest})`).toEqual(expected);
 }
 
 async function releaseReservations(reservations: PortReservation[]) {
