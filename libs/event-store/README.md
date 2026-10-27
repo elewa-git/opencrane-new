@@ -69,8 +69,14 @@ reserved until each server is ready to start, so other tests cannot take them
 during certificate setup. Tests reuse certificates to reduce
 setup time. A separate cluster test checks authenticated connections between
 three NATS servers, conditional writes and rebuilding a PostgreSQL read table.
-It waits for every route and three current event copies before checking which
-connections and writes the cluster refuses. Another test stops the server leading
+It checks each server’s routes until every required connection is present,
+then waits for a named JetStream metadata leader and current peers with storage
+statistics. It waits for three current event copies before checking which connections and
+writes the cluster refuses. If routes stay missing, it reports the routes it saw
+and the full list it needed. A timed-out monitoring request retries within the
+same time limit. If metadata stays unready, the error includes both the queried
+server's report and the leader's report, with their names.
+Another test stops the server leading
 the saved event log, checks that the other two can still save changes, then starts
 the same server with its original files. It compares saved records, their order
 and the returning server’s copy.

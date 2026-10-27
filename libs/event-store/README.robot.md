@@ -294,19 +294,41 @@ its release. The ordinary `freePort()` API still releases its port before return
 Setup waits for all three pooled routes and the dedicated
 `$SYS` route between each pair of servers. Seeing both peer names is not enough:
 the system route carries cluster information and the pooled routes carry requests.
-It waits for the built-in metadata health check on each server, then creates `EVENTS`.
-This checks contact with a metadata leader and current local metadata without
-requiring repeated detailed cluster reports.
+It polls the built-in metadata health check and `/jsz` on each server for at most
+20 seconds. Every server must report storage statistics and a named metadata leader.
+The leader's own report must list all three distinct fixture peers as current and online.
+Followers only track their link to the leader, so their reports cannot establish
+whether the other follower is current. Expiry reports both the queried server's last
+metadata and the leader's last metadata, with each server's name.
+Each HTTP request shares a one-second limit with the other requests in that poll,
+or the time left before the deadline, whichever is shorter.
 NATS can report metadata readiness before receiving the peer statistics needed for
-stream placement. `cluster-stream.ts` polls creation only for API error 10005, status
+stream placement. The HTTP reports do not expose the leader's cached placement statistics for other
+servers. `cluster-stream.ts` therefore polls real creation only for API error 10005, status
 400, with the exact description `no suitable peers for placement, peer offline`.
+The placement wait lasts at most 20 seconds and reports the last typed refusal.
+An unanswered creation request also stops at that deadline; its result stays unknown.
 Other errors, including timeouts with an unknown creation result, throw immediately.
 After creation, setup waits for the stream leader and two current, online replicas
 before any route probe. `cluster-stream.test.ts` checks the selective wait and
 immediate propagation of other errors, including an incompatible replica count.
-The first test checks routes and stream copies without polling.
-Setup waits at most ten seconds each for complete routes and healthy metadata,
-and five seconds each for placement and current stream copies. These waits poll real state and finish
+The first test repeats the route and stream-copy checks before a route probe.
+`completeRoutes` polls each server's real `/routez` response every 25 ms for at most
+20 seconds. Each response must contain exactly three pooled routes and one `$SYS`
+route for each of the other two peers. It compares sorted lists, so repeated pooled
+routes remain required. Missing, extra and wrong-account routes fail with the last
+actual list and the complete expected list. A complete first response returns at once.
+Each HTTP request is limited to one second or the remaining route deadline.
+Request timeouts retry within that same deadline and retain the last route list.
+Other request errors still fail immediately before the deadline.
+`route-readiness.test.ts` advances a controlled clock to check a late eighth route,
+a route arriving after ten seconds, the exact deadline, missing pooled or system
+routes, extra routes and wrong accounts. It also checks that a monitoring request
+which expires at the route deadline reports the last actual and expected lists.
+`ready()` gives each peer its own route wait, followed by its metadata health wait.
+The earlier shared ten-second retry could expire while a later peer was still connecting.
+Setup waits at most twenty seconds per peer for complete routes and twenty for metadata,
+then twenty seconds for placement and five for current stream copies. These waits poll real state and finish
 as soon as it is ready; they do not add a fixed startup delay.
 Failed peer startup waits for process output to close before classifying a missing
 trust file. A process exit can arrive before its final error output under load.

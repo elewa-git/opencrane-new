@@ -2,10 +2,10 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { JetStreamApiError } from '@nats-io/jetstream';
+import { isDeepStrictEqual } from 'node:util';
 import type { NatsConnection } from '@nats-io/transport-node';
 import { expect, vi } from 'vitest';
-import { connectNats, type EventStore } from '../src/index.ts';
+import { connectNats } from '../src/index.ts';
 import { certificates, issueCertificate, sharedCertificates } from './certificates.ts';
 import { reservePort } from './ports.ts';
 
@@ -37,13 +37,10 @@ export async function clusterFixture(missingTrust = false, children: ChildProces
     owned.child = await startPeer(directory, owned.env, children);
   }
   async function ready() {
-    async function allReady() {
-      for (const peer of peers) {
-        await completeRoutes(peer);
-        await metadataReady(peer);
-      }
+    for (const peer of peers) {
+      await completeRoutes(peer);
+      await metadataReady(peer, peers);
     }
-    await vi.waitFor(allReady, { timeout: 10_000 });
   }
   async function close() {
     try {
@@ -142,14 +139,7 @@ export async function clusterFixture(missingTrust = false, children: ChildProces
   }
 }
 
-async function completeRoutes(peer: Peer) {
-  const response = await fetch(`http://127.0.0.1:${peer.monitor}/routez`,
-    { signal: AbortSignal.timeout(1000) });
-  const result: unknown = await response.json();
-  if (!result || typeof result !== 'object' || !('routes' in result) ||
-    !Array.isArray(result.routes)) {
-    throw new Error('Invalid route monitoring response');
-  }
+export async function completeRoutes(peer: Peer) {
   const expected: string[] = [];
   for (let index = 1; index <= 3; index++) {
     const peerName = `peer-${index}`;
@@ -159,11 +149,49 @@ async function completeRoutes(peer: Peer) {
       expected.push(`${peerName}/$SYS`);
     }
   }
+  expected.sort();
+  const deadline = performance.now() + 20_000;
+  let actual: string[] = [];
+  // Allow each peer's pooled connections to finish without accepting a partial route list.
+  while (true) {
+    const requestRemaining = deadline - performance.now();
+    if (requestRemaining <= 0) {
+      break;
+    }
+    const requestTimeout = Math.min(1000, Math.ceil(requestRemaining));
+    try {
+      actual = await currentRoutes(peer, requestTimeout);
+    } catch (error) {
+      const timedOut = error instanceof Error && error.name === 'TimeoutError';
+      if (!timedOut && performance.now() < deadline) {
+        throw error;
+      }
+    }
+    if (isDeepStrictEqual(actual, expected)) {
+      return;
+    }
+    const remaining = deadline - performance.now();
+    if (remaining > 0) {
+      await delay(Math.min(25, remaining));
+    }
+  }
+  expect(actual, `Routes for ${peer.name} did not become complete within 20000 ms`)
+    .toEqual(expected);
+}
+
+async function currentRoutes(peer: Peer, timeout: number) {
+  const response = await fetch(`http://127.0.0.1:${peer.monitor}/routez`,
+    { signal: AbortSignal.timeout(timeout) });
+  const result: unknown = await response.json();
+  if (!result || typeof result !== 'object' || !('routes' in result) ||
+    !Array.isArray(result.routes)) {
+    throw new Error('Invalid route monitoring response');
+  }
   const actual: string[] = [];
   for (const route of result.routes) {
     actual.push(routeDescription(route));
   }
-  expect(actual.sort()).toEqual(expected.sort());
+  return actual.sort();
 }
 
 function routeDescription(route: unknown) {
@@ -179,11 +207,98 @@ function routeDescription(route: unknown) {
   return `${route.remote_name}/${account}`;
 }
 
-async function metadataReady(peer: Peer) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
+function hasPlacementStatistics(value: unknown) {
+  return isRecord(value) && value['disabled'] !== true && isRecord(value['config']) &&
+    typeof value['config']['max_storage'] === 'number' &&
+    typeof value['memory'] === 'number' && typeof value['storage'] === 'number';
+}
+
+function metadataIsReady(value: unknown) {
+  if (!isRecord(value) || !hasPlacementStatistics(value)) {
+    return false;
+  }
+  const metadata = value['meta_cluster'];
+  if (!isRecord(metadata) || typeof metadata['leader'] !== 'string' ||
+    !/^peer-[123]$/u.test(metadata['leader']) || !Array.isArray(metadata['replicas'])) {
+    return false;
+  }
+  const names = new Set([metadata['leader']]);
+  for (const replica of metadata['replicas']) {
+    if (!isRecord(replica) || typeof replica['name'] !== 'string' ||
+      !/^peer-[123]$/u.test(replica['name']) || replica['current'] !== true ||
+      replica['offline'] === true) {
+      return false;
+    }
+    names.add(replica['name']);
+  }
+  return names.size === 3;
+}
+
+export async function metadataReady(peer: Peer, peers: Peer[] = [peer]) {
   const address = `http://127.0.0.1:${peer.monitor}`;
-  const response = await fetch(`${address}/healthz?js-meta-only=true`,
-    { signal: AbortSignal.timeout(1000) });
-  expect(response.status).toBe(200);
+  const deadline = performance.now() + 20_000;
+  let actual: unknown;
+  let health = 0;
+  let lastRequest = 'completed';
+  let leaderObservation: { name: string; report: unknown } | undefined;
+  while (performance.now() < deadline) {
+    const remaining = deadline - performance.now();
+    const timeout = Math.min(1000, Math.ceil(remaining));
+    try {
+      const options = { signal: AbortSignal.timeout(timeout) };
+      const response = await fetch(`${address}/healthz?js-meta-only=true`, options);
+      health = response.status;
+      const report = await fetch(`${address}/jsz`, options);
+      expect(report.status).toBe(200);
+      actual = await report.json();
+      let leaderReport = actual;
+      if (isRecord(actual) && isRecord(actual['meta_cluster'])) {
+        const leaderName = actual['meta_cluster']['leader'];
+        function isLeader(candidate: Peer) {
+          return candidate.name === leaderName;
+        }
+        const leader = peers.find(isLeader);
+        if (leader && leader !== peer) {
+          const leaderAddress = `http://127.0.0.1:${leader.monitor}/jsz`;
+          const leaderResponse = await fetch(leaderAddress, options);
+          expect(leaderResponse.status).toBe(200);
+          leaderReport = await leaderResponse.json();
+          leaderObservation = { name: leader.name, report: leaderReport };
+        } else if (leader === peer) {
+          leaderObservation = { name: peer.name, report: actual };
+        }
+      }
+      // Read current flags on the leader: followers only track their own link to it.
+      if (health === 200 && hasPlacementStatistics(actual) && metadataIsReady(leaderReport) &&
+        performance.now() < deadline) {
+        return;
+      }
+    } catch (error) {
+      const timedOut = error instanceof Error && error.name === 'TimeoutError';
+      if (!timedOut && performance.now() < deadline) {
+        throw error;
+      }
+      if (error instanceof Error) {
+        lastRequest = error.name;
+      }
+    }
+    const pollRemaining = deadline - performance.now();
+    if (pollRemaining > 0) {
+      await delay(Math.min(25, pollRemaining));
+    }
+  }
+  const expected = { health: 200, metadata: 'named leader, three current peers and storage statistics' };
+  const message = `Metadata for ${peer.name} did not become ready within 20000 ms`;
+  const observations = {
+    peer: { name: peer.name, report: actual },
+    leader: leaderObservation,
+  };
+  const details = `${message} (health ${health}, last request ${lastRequest})`;
+  expect(actual, `${details} ${JSON.stringify(observations)}`).toEqual(expected);
 }
 
 async function releaseReservations(reservations: PortReservation[]) {
@@ -244,20 +359,4 @@ async function stopChild(child: ChildProcess) {
   await vi.waitFor(hasStopped, { timeout: 5000, interval: 25 });
 }
 
-export async function waitForClusterStream(store: Pick<EventStore, 'ensureStream'>) {
-  async function placementReady() {
-    try {
-      await store.ensureStream({ replicas: 3 });
-      return true;
-    } catch (error) {
-      // Wait only after an explicit placement refusal, never a timeout or lost reply.
-      if (error instanceof JetStreamApiError && error.status === 400 &&
-        error.code === 10005 &&
-        error.apiError().description === 'no suitable peers for placement, peer offline') {
-        return false;
-      }
-      throw error;
-    }
-  }
-  await vi.waitUntil(placementReady, { timeout: 5000 });
-}
+export { waitForClusterStream } from './cluster-stream.ts';

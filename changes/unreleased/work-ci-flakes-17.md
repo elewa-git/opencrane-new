@@ -1,0 +1,3 @@
+- Wait for every required NATS cluster route before starting fixture checks, and report the actual and expected routes if the wait expires.
+- Wait for a named JetStream metadata leader, current peers and storage statistics in cluster fixtures. Bootstrap tests prepare real placement before replacing replies or clocks, and expired waits report the last observed state.
+- Retry route monitoring timeouts within the fixture deadline, include both peer and leader reports on readiness expiry, and wait for the deleted bootstrap setup stream to disappear.
