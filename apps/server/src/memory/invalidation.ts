@@ -53,8 +53,9 @@ function affected(options: Options, rows: StoredEvent[], request: Request,
   const cause = checkedCause(rows, request, saved);
   const beforeRows = rows.slice(0, cause.index);
   const afterRows = rows.slice(0, cause.index + 1);
+  // Compare at the saved cause's time so delayed processing cannot change its effect.
   // Use the same time on both sides so expiry cannot impersonate a saved correction.
-  const checkedAt = Date.now();
+  const checkedAt = Date.parse(cause.row.event.time);
   const before = memoryReferences(beforeRows, options.silo, scopeId, 'event-only', checkedAt);
   const after = memoryReferences(afterRows, options.silo, scopeId, 'event-only', checkedAt);
   const target = { scopeId, memoryId: cause.data.memoryId, revision: cause.data.expectedRevision };
@@ -82,10 +83,6 @@ async function recordInvalidation(options: Options, request: Request): Promise<R
     request.conversationId, request.turnId);
   const saved = savedBinding(chat, request);
   const state = chat.memoryContext!;
-  const scopeId = memoryScopeId(options.silo, 'person', saved.requesterId);
-  const rows = await history(options.store, `scope-${scopeId}`, options.silo,
-    performance.now() + 10_000);
-  const cause = affected(options, rows, request, saved, chat, scopeId);
   const id = invalidationId(state.binding, request.causeId);
   const receipt: Receipt = { status: 'invalidated', eventId: id,
     inputGeneration: saved.inputGeneration };
@@ -93,7 +90,8 @@ async function recordInvalidation(options: Options, request: Request): Promise<R
   if (recorded !== undefined) {
     const decoded: unknown = JSON.parse(recorded);
     const recovered = memoryContextRecordedEventSchema.parse(decoded);
-    if (recovered.data.action !== 'invalidated' || !cause.changed) {
+    if (recovered.data.action !== 'invalidated' ||
+        recovered.data.reason !== 'content_changed' || recovered.commandId !== id) {
       return { status: 'refused' };
     }
     return receipt;
@@ -101,6 +99,10 @@ async function recordInvalidation(options: Options, request: Request): Promise<R
   if (state.status !== 'loaded' || chat.turnEnded || chat.conversationClosed) {
     return { status: 'refused' };
   }
+  const scopeId = memoryScopeId(options.silo, 'person', saved.requesterId);
+  const rows = await history(options.store, `scope-${scopeId}`, options.silo,
+    performance.now() + 10_000);
+  const cause = affected(options, rows, request, saved, chat, scopeId);
   if (!cause.changed) return { status: 'unchanged' };
 
   const current = await readChatFacts(options.store, options.silo,
