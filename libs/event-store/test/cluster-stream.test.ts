@@ -100,3 +100,25 @@ async function reportsPlacementRefusalAtDeadline() {
 }
 it('reports the last observed placement refusal at the bounded fixture deadline',
   reportsPlacementRefusalAtDeadline);
+
+async function boundsAnUnansweredPlacementRequest() {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+  const unresolved = Promise.withResolvers<void>();
+  const ensureStream = vi.fn();
+  ensureStream.mockReturnValue(unresolved.promise);
+  let failure: unknown;
+  function recordFailure(error: unknown) {
+    failure = error;
+  }
+  const pending = waitForClusterStream({ ensureStream }).catch(recordFailure);
+  await vi.advanceTimersByTimeAsync(19_999);
+  expect(failure).toBeUndefined();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(failure).toBeInstanceOf(Error);
+  expect(failure).toHaveProperty('message', expect.stringContaining('20000 ms'));
+  expect(ensureStream).toHaveBeenCalledTimes(1);
+  unresolved.resolve();
+  await pending;
+}
+it('bounds an unanswered placement request without retrying an unknown result',
+  boundsAnUnansweredPlacementRequest);
