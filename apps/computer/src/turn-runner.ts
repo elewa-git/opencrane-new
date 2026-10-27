@@ -96,6 +96,8 @@ class TurnRunner {
   private readonly stoppedTurns = new Set<string>();
   private readonly turnModels = new Map<string, string>();
   private readonly renewals = new Map<string, Promise<void>>();
+  private readonly stopRemovals = new WeakMap<Turn, Promise<void>>();
+  private readonly interrupts = new WeakMap<Turn, Promise<void>>();
   private readonly grantInstalls = new Map<string, { pending: number; terminal: boolean }>();
   private readonly driver: TurnDriver;
   private readonly approvals: Pick<ReturnType<typeof approvalHolds>, 'endThread'>
@@ -591,8 +593,8 @@ class TurnRunner {
       return;
     }
     try {
-      const interruptParams = { threadId, turnId: codexTurnId };
-      await this.rpcFor(input)('turn/interrupt', interruptParams);
+      const stop = { threadId, turnId: input.id, conversationId: input.conversationId };
+      await this.interrupt(stop);
     } catch {
       if (input.executionMode === 'restricted') {
         this.state.sessions.get(input.id)?.close();
@@ -645,12 +647,9 @@ class TurnRunner {
     }
     this.cancelTurn(input);
     const heldThread = this.findRunningThread(turnId);
-    const endHolds = this.endTurnHolds.bind(this, heldThread);
     if (!this.gate.closed) {
-      const revoke = this.dropStoppedAccess.bind(this, input, heldThread);
-      await revokeTurnAccess(turnId, this.state.waiting,
-        this.journal.reports, revoke, endHolds);
-    } else endHolds();
+      await this.removeStoppedAccess(input, heldThread);
+    } else this.endTurnHolds(heldThread);
     const codexTurnId = this.state.codexTurns.get(turnId);
     if (!codexTurnId) {
       return;
@@ -659,7 +658,42 @@ class TurnRunner {
     if (!threadId) {
       return;
     }
-    // Leave the turn in the running map if interrupt fails so a reconnect can retry Stop.
+    await this.interruptOnce(input, threadId, codexTurnId);
+  }
+
+  private removeStoppedAccess(input: Turn, threadId: string | undefined) {
+    const existing = this.stopRemovals.get(input);
+    if (existing) return existing;
+    const revoke = this.dropStoppedAccess.bind(this, input, threadId);
+    const endHolds = this.endTurnHolds.bind(this, threadId);
+    const pending = revokeTurnAccess(input.id, this.state.waiting,
+      this.journal.reports, revoke, endHolds);
+    const removals = this.stopRemovals;
+    function failed(error: unknown): never {
+      removals.delete(input);
+      throw error;
+    }
+    const removal = pending.catch(failed);
+    removals.set(input, removal);
+    return removal;
+  }
+
+  private async interruptOnce(input: Turn, threadId: string, codexTurnId: string) {
+    const existing = this.interrupts.get(input);
+    if (existing) return existing;
+    // Share pending and successful work for this exact turn, including a late start reply.
+    // Forget failures so an ordinary turn can retry after its connection recovers.
+    const pending = this.interruptNative(input, threadId, codexTurnId);
+    this.interrupts.set(input, pending);
+    try {
+      await pending;
+    } catch (error) {
+      this.interrupts.delete(input);
+      throw error;
+    }
+  }
+
+  private async interruptNative(input: Turn, threadId: string, codexTurnId: string) {
     const interruptParams = { threadId, turnId: codexTurnId };
     try {
       await this.rpcFor(input)('turn/interrupt', interruptParams);

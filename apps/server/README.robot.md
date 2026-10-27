@@ -6139,8 +6139,13 @@ Each private generation uses a fresh thread, including after replacement.
 Saved invalidation already prevents dispatch and renewal while interruption is pending.
 
 Results are `sent`, `ignored` or `unavailable`. Sent means a frame was handed to the
-connection, not that interruption finished. Repeated delivery is safe and may repeat
-Stop. Transport/history failure returns no error detail and creates no authority.
+connection, not that interruption finished. Repeated delivery may repeat Stop.
+The computer shares access removal and interruption for that exact turn, including
+when the native start reply is delayed.
+It also clears the saved private reply if completion races with Stop delivery.
+A failed ordinary interruption remains retryable; a failed private interruption
+closes the private session. Transport/history failure returns no error detail and
+creates no authority.
 No subscription or production caller is connected. Admission stays disabled. Volatile
 server/browser delivery, native calls and fresh-install disk isolation remain unqualified.
 

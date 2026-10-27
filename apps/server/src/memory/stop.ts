@@ -65,6 +65,7 @@ export async function stopInvalidatedMemory(options: Options, input: unknown)
     if (!active || !matches(active, options.silo, saved)) return 'ignored';
     // Send without yielding after checking the live binding. Saved invalidation
     // already refuses dispatch and renewal while the computer clears its buffers.
+    // Allow resending after uncertain delivery; the computer shares work for duplicate Stops.
     const frame = { type: 'stop', conversationId: saved.conversationId,
       turnId: saved.turnId, threadId: saved.threadId };
     active.socket.send(JSON.stringify(frame));
