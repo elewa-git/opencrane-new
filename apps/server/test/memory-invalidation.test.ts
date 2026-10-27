@@ -100,6 +100,92 @@ async function exactInvalidation(kind: 'corrected' | 'forgotten') {
 it.each(['corrected', 'forgotten'] as const)(
   'records one exact invalidation after a loaded fact is %s', exactInvalidation);
 
+async function loadExpiringFact() {
+  const expiresAt = Date.now() + 60_000;
+  const data = { ...memoryWrittenExample, scopeId, memoryId: 'expiring',
+    expiresAt: new Date(expiresAt).toISOString() };
+  await append(`scope-${scopeId}`, 'memory.written', data);
+  const expiring = { ...reference, memoryId: 'expiring' };
+  const recall = { callDigest: 'c'.repeat(64), dispatchDigest: 'd'.repeat(64) };
+  await load([expiring], recall);
+  return { expiresAt, expiring };
+}
+
+async function recoverAfterExpiry(offset: number) {
+  const { expiresAt } = await loadExpiringFact();
+  await change('forgotten', 'expiring');
+  const receipt = await invalidate();
+  expect(receipt).toMatchObject({ status: 'invalidated', inputGeneration: 'input' });
+  const position = await setup.store.head('conversation-chat');
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(expiresAt + offset);
+  try {
+    expect(await invalidate()).toEqual(receipt);
+    expect(await setup.store.head('conversation-chat')).toBe(position);
+  } finally {
+    clock.mockRestore();
+  }
+}
+it.each([0, 60_000])(
+  'recovers the exact receipt %i ms after the old fact expires', recoverAfterExpiry);
+
+async function delayedInvalidation(kind: 'corrected' | 'forgotten', offset: number) {
+  const { expiresAt, expiring } = await loadExpiringFact();
+  await change(kind, 'expiring');
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(expiresAt + offset);
+  try {
+    const receipt = await invalidate();
+    expect(receipt).toMatchObject({ status: 'invalidated', inputGeneration: 'input' });
+    const facts = await readChatFacts(setup.store, 'test', 'chat', 'turn');
+    expect(facts.memoryContext).toMatchObject({ status: 'invalidated',
+      references: [reference, expiring], executionAvailable: false });
+    expect(facts.memoryContext?.events.size).toBe(4);
+    expect(await invalidate()).toEqual(receipt);
+  } finally {
+    clock.mockRestore();
+  }
+}
+const delayedChanges = [
+  ['corrected', 0], ['corrected', 60_000], ['forgotten', 0], ['forgotten', 60_000],
+] as const;
+it.each(delayedChanges)(
+  'records a saved %s cause first processed %i ms after expiry', delayedInvalidation);
+
+async function lostReplyAfterExpiry() {
+  const { expiresAt } = await loadExpiringFact();
+  await change('forgotten', 'expiring');
+  const appendSaved = setup.store.append.bind(setup.store);
+  async function loseReply(command: Parameters<typeof appendSaved>[0]) {
+    appendSpy.mockRestore();
+    const result = await appendSaved(command);
+    expect(result.status).toBe('appended');
+    throw new Error('Private error canary');
+  }
+  const appendSpy = vi.spyOn(setup.store, 'append').mockImplementationOnce(loseReply);
+  expect(await invalidate()).toEqual({ status: 'unavailable' });
+  const rows = await history(setup.store, 'conversation-chat', 'test');
+  const saved = memoryContextRecordedEventSchema.parse(rows.at(-1)!.event);
+  expect(saved.data.action).toBe('invalidated');
+  const receipt = { status: 'invalidated', eventId: saved.id, inputGeneration: 'input' };
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(expiresAt + 60_000);
+  const read = setup.store.readStream.bind(setup.store);
+  async function* unavailableMemoryHistory(...args: Parameters<typeof read>) {
+    if (args[0] === `scope-${scopeId}`) throw new Error('Memory history unavailable');
+    yield* read(...args);
+  }
+  const readSpy = vi.spyOn(setup.store, 'readStream').mockImplementation(unavailableMemoryHistory);
+  try {
+    expect(await invalidate()).toEqual(receipt);
+    expect(await invalidate()).toEqual(receipt);
+    expect(await setup.store.head('conversation-chat')).toBe(rows.at(-1)!.sequence);
+    const facts = await readChatFacts(setup.store, 'test', 'chat', 'turn');
+    expect(facts.memoryContext?.events.size).toBe(4);
+  } finally {
+    readSpy.mockRestore();
+    clock.mockRestore();
+  }
+}
+it('recovers one lost append receipt after expiry without rereading memory', lostReplyAfterExpiry);
+
 async function dependencyInvalidation(kind: 'corrected' | 'forgotten') {
   await append(`scope-${scopeId}`, 'memory.written', { ...memoryWrittenExample,
     scopeId, memoryId: 'derived', dependsOn: [reference] });
