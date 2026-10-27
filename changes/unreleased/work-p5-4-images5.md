@@ -1,0 +1,2 @@
+- Record the candidate Node notice declarations with individual licence reasons and checksums; keep unresolved references and image promotion blocked.
+- Reject missing or substituted Node grants and unresolved references, including blanket ICU terms and either missing preamble grant.

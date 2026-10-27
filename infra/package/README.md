@@ -18,7 +18,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, setup and installs"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, licences and installs"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
@@ -98,7 +98,9 @@ with made-up services and settings. This checks that the packaged code loads and
 finishes the fixture; a running installation needs its own checks.
 A separate candidate record checks the proposed package list, saved image bytes
 and Debian main package versions. It keeps checksums for the shipped notices.
-Detailed bundled licence review still needs work, so this record cannot approve an install.
+A separate Node record lists the shipped notice's declarations and individual
+acceptance reasons. References without enough terms stay blocked. This checks only
+that notice; other bundled licences and installation approval still need work.
 Three-peer installation also needs an exact source revision in its compatibility
 review. The current image has no such approval.
 

@@ -237,9 +237,27 @@ nice -n 10 python3 docs/process/p5-4-images4/check-candidate.py /tmp/p5-4-images
 ```
 
 The directory must contain the files named in `candidate.json`. Missing or altered
-bytes refuse with fixed error text. `notices.json` lists all 43 Node notice sections
-by checksum; each still needs its detailed declaration review and acceptance reason.
-Other bundled declarations also remain outstanding. A passing inventory comparison
+bytes refuse with fixed error text. The original `notices.json` retains all 43
+Node section checksums and their earlier NOT RUN status.
+The [Node declaration record](../../docs/process/p5-4-images5/node-notices.json)
+adds individual reasons against those same checksums, without changing the original.
+Its checker first runs the candidate check, then checks the full notice, sections,
+licences and reasons. Fixed component and licence pairs identify every grant under
+its reviewed notice checksum, including both preamble grants. All ten unresolved
+section and name pairs must appear exactly once with BLOCKED status and a reason.
+The compressed `node-LICENSE.gz` beside it contains the actual
+archived notice bytes for licence fixtures; it is not shipped in the runtime image.
+
+```sh
+nice -n 10 python3 docs/process/p5-4-images5/check-node-notices.py /tmp/p5-4-images4
+```
+
+This record checks Node declarations only. Unresolved references remain BLOCKED;
+a passing check does not approve their licences or prove they are absent at runtime.
+NAIST dictionary and HPND sell-variant terms are accepted only for the exact ICU
+section and named components. Application and general bundled checks are unchanged.
+Other bundled declarations, including Go, kubectl, agentgateway and Corepack's own
+bundled dependencies, remain outstanding. A passing inventory or Node comparison
 is only part of image review. Approved pins and licence rules are unchanged.
 Registry publication, promotion, vulnerability clearance and fresh R3 installation
 remain NOT RUN.
