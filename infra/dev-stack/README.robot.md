@@ -2089,3 +2089,41 @@ keys, role seeds and connection settings. The NATS configuration must match the
 shipped storage, TLS and account policy. These checks apply to one and three peers.
 Route preparation uses the connection helper's separate arguments and environment,
 so the private kubeconfig filename remains outside child command arguments.
+
+## Backup reference checks behind the install gate
+
+Part of #15, P5-3 PR 3c. `cnpg-backup.ts` extends the existing CNPG checker.
+`preflight.mjs` still refuses every backup and recovery property before Helm,
+including disabled and null settings. The helper does not enable installation.
+Suspending ScheduledBackup does not stop WAL archiving.
+
+The helper uses the callback from `packaged.ts`, which checks the captured context,
+namespace UID and worktree ownership before each Kubernetes request. It reads the
+actual Namespace and named Service. The Service must be ClusterIP, have a selector
+and the requested TCP port, and have exactly one owner reference to that Namespace.
+External names and external IPs refuse. Each referenced Secret must have exactly
+one owner reference to that Service, including its UID. Labels alone do not pass.
+These are required fixture ownership links; this change creates no fixture resources.
+
+The returned kind, API version, name, namespace, UID and resource version must match
+or be present as appropriate. Each object is read again after the initial reads;
+changed UIDs or versions refuse. Reads use one 30-second deadline, cancellation and
+a 1 MiB output limit. The package passes the same cancellation signal and remaining
+time through namespace ownership and target checks, including Docker inspection and
+target-node reads. Each child command stops on cancellation or its remaining deadline.
+Completed checks do not reset the deadline. Entries use strict base64 and valid UTF-8,
+with at most 64 KiB decoded per entry. Credentials must be non-empty printable ASCII
+without spaces.
+The CA entry must contain one current, self-signed CA certificate with no extra data.
+All data stays in memory. No private files or resources need cleanup. Errors discard
+parser details, cancellation reasons and nested dependency or cleanup failures.
+
+`cnpg-backup.test.ts` uses synthetic Kubernetes replies and real Helm rendering.
+`infra/package/chart.test.mjs` cancels and times out real stalled child processes
+during namespace and target-node ownership reads. It checks child termination,
+the remaining time for each command, private connection paths and no later work.
+`cnpg-install.test.mjs` still checks refusal before Helm with synthetic image approval.
+Live checks are NOT RUN. Endpoint TLS identity, storage permissions and identity,
+image/helper approval, real base backup/WAL and recovery of `projections`, `handlers`
+and `openfga` remain required before enablement. A valid CA entry does not prove
+that the endpoint serves a certificate signed by it or accepts the credentials.

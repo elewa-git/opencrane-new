@@ -1,9 +1,12 @@
+import { checkCnpgBackupReferences } from './cnpg-backup.ts';
+
 type Settings = {
   secrets: Record<string, string>;
   postgres?: { mode: string; operatorContract: string;
-    superuserSecret: string; applicationSecret: string };
+    superuserSecret: string; applicationSecret: string;
+    backup?: Parameters<typeof checkCnpgBackupReferences>[0] };
 };
-type Kubectl = (args: string[]) => Promise<string>;
+type Kubectl = Parameters<typeof checkCnpgBackupReferences>[2];
 type Secret = { type?: string; data?: Record<string, string> };
 type Api = { groupVersion?: string; resources?: Array<{
   name: string; kind: string; namespaced: boolean; verbs: string[];
@@ -115,6 +118,9 @@ export async function checkCnpgInstallation(values: Settings, namespace: string,
   try {
     await checkOperator(kubectl);
     await checkCredentials(values, namespace, kubectl);
+    if (values.postgres.backup) {
+      await checkCnpgBackupReferences(values.postgres.backup, namespace, kubectl);
+    }
   } catch {
     // Discard dependency output and parser errors; either can include private values.
     throw new Error('CNPG installation inputs are incomplete or incompatible');

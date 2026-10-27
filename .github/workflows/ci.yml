@@ -167,6 +167,7 @@ jobs:
           infra/package/nats-placement-collect.test.ts
           infra/package/chart-render.test.mjs
           infra/package/prepare-nats-routes.test.mjs infra/package/cnpg-install.test.mjs
+          infra/dev-stack/cnpg-backup.test.ts
           infra/package/preflight.test.mjs infra/package/chart.test.mjs
 
       - name: Check the budget editor and ownership controls in Chromium
