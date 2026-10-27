@@ -34,6 +34,7 @@ import { prepareRoutineSession } from '../src/routine-session.ts';
 import { assistantSnapshot, processConversation } from '../src/chat/bridge-conversation.ts';
 import { agentSession } from '../src/chat/reports.ts';
 import { prepareRoutineInput } from '../src/routine-input.ts';
+import { admitRoutineActivation } from '../src/routine-activation.ts';
 import { allocateRoutineRoot } from '../src/routine-root.ts';
 import { BudgetActor, budgets, history, priceTableId, readBudget, rootTotals } from '@opencrane/models';
 import { grantStream } from '@opencrane/authz';
@@ -50,6 +51,7 @@ let encryption: MockInstance<typeof keys.encrypt>;
 let decryption: MockInstance<typeof keys.decrypt>;
 let inputMode = false;
 let rootMode = false;
+let activationMode = false;
 let actor: BudgetActor;
 const selection = { threadId: 'prepared-thread', computerId: 'computer', generation: 1 };
 let instructions: ReturnType<typeof keys.encrypt>;
@@ -104,6 +106,7 @@ async function setup() {
   keys = conversationKeys(directory);
   inputMode = false;
   rootMode = false;
+  activationMode = false;
   keys.provision('test', 'routine-orders');
   instructions = keys.encrypt('test', 'routine-orders', privateText);
   now = Date.parse('2026-10-11T07:00:00Z');
@@ -138,6 +141,9 @@ beforeEach(setup, 30_000);
 afterEach(cleanup);
 function prepare(store = nats.store, request: unknown = input, workerId = 'routine-worker') {
   const worker = { silo: 'test', binding, workerId, checkCurrent, now: clock };
+  if (activationMode) {
+    return admitRoutineActivation(store, keys, worker, request, selection, 'sender-attempt');
+  }
   if (rootMode) return allocateRoutineRoot(store, keys, worker, request, actor, selection);
   if (inputMode) return prepareRoutineInput(store, keys, worker, request);
   return prepareRoutineSession(store, keys, worker, request);
@@ -150,6 +156,7 @@ async function rows() {
   return saved;
 }
 function refusal() {
+  if (activationMode) return 'Routine activation refused';
   if (rootMode) return 'Routine root refused';
   if (inputMode) return 'Routine input refused';
   return 'Routine session refused';
@@ -377,6 +384,11 @@ async function changesAtAppend(kind: string) {
   await expect(prepare()).rejects.toThrow(refusal());
   expect(await rows()).toEqual(original);
   if (rootMode) expect(await nats.store.head('budget-test')).toBe(budgetPosition);
+  if (activationMode) {
+    for (const row of await history(nats.store, 'routine-orders', 'test')) {
+      expect(row.event.type).not.toBe('routine.run_activation_admitted');
+    }
+  }
 }
 it.each([...controls, 'member', 'worker', 'expiry'])('rechecks %s at append', changesAtAppend);
 async function changesAfterAppend(kind: string) {
@@ -851,6 +863,7 @@ describe('routine input', routineInputTests);
 
 function routineRootTests() {
   let expectedHolds: BudgetActor['state']['reservations'] = [];
+  let expectedStop: EventEnvelope | undefined;
   async function preparedInput() {
     encryption.mockRestore();
     decryption.mockRestore();
@@ -873,6 +886,7 @@ function routineRootTests() {
     await actor.start(10_000, 10_000, 'sales');
     rootMode = true;
     expectedHolds = [];
+    expectedStop = undefined;
     const fetch = globalThis.fetch;
     function permissionsOnly(url: Parameters<typeof fetch>[0], options?: RequestInit) {
       const address = url instanceof Request ? url.url : url.toString();
@@ -1157,13 +1171,29 @@ function routineRootTests() {
       duringCheck = appendDuringCheck;
       return root;
     }
-    vi.spyOn(actor, 'setRootAllowance').mockImplementationOnce(afterAllocation);
+    if (activationMode) {
+      duringCheck = appendDuringCheck;
+      const append = nats.store.append.bind(nats.store);
+      async function publish(command: AppendCommand) {
+        // Keep injected traffic in confirmation. Writing on every ownership check inside
+        // publication would force a global append conflict on every retry.
+        const action = duringCheck;
+        duringCheck = undefined;
+        try {
+          return await append(command);
+        } finally {
+          duringCheck = action;
+        }
+      }
+      vi.spyOn(nats.store, 'append').mockImplementation(publish);
+    } else {
+      vi.spyOn(actor, 'setRootAllowance').mockImplementationOnce(afterAllocation);
+    }
     if (revocation === 'none') {
       const receipt = await prepare();
-      expect(receipt).toMatchObject({ status: 'confirmed', allowanceCents: 1000,
-        executionAvailable: false });
+      expect(receipt).toMatchObject({ status: 'confirmed', executionAvailable: false });
     } else {
-      await expect(prepare()).rejects.toThrow('Routine root refused');
+      await expect(prepare()).rejects.toThrow(refusal());
     }
     expect(appended).toBeGreaterThanOrEqual(2);
     expect(actor.state.roots).toHaveLength(1);
@@ -1182,9 +1212,228 @@ function routineRootTests() {
   }
   it('confirms through sustained activity in another computer thread', otherThreadDuringConfirmation);
 
+  function activationTests() {
+    async function allocated() {
+      await prepare();
+      activationMode = true;
+    }
+    beforeEach(allocated);
+    async function admitOnce() {
+      const before = await nats.store.head();
+      const results = await Promise.all([prepare(), prepare()]);
+      expect(results[0]).toEqual(results[1]);
+      expect(results[0]).toMatchObject({ status: 'confirmed', executionAvailable: false });
+      expect(await prepare()).toEqual(results[0]);
+      expect(await nats.store.head()).toBe(before + 1);
+      const saved = await history(nats.store, 'routine-orders', 'test');
+      expect(saved.at(-1)!.event).toMatchObject({ type: 'routine.run_activation_admitted',
+        data: { senderAttemptId: 'sender-attempt', occurrenceId: 'occurrence' } });
+      expect(actor.state.roots).toHaveLength(1);
+      const worker = { silo: 'test', binding, workerId: 'routine-worker', checkCurrent, now: clock };
+      await expect(admitRoutineActivation(nats.store, keys, worker, input, selection, 'other'))
+        .rejects.toThrow('Routine activation refused');
+      expect(await nats.store.head()).toBe(before + 1);
+    }
+    it('two workers recover one exact admission without granting another sender', admitOnce);
+    it('recovers only the receipt after a lost reply and broker restart', recovers);
+    it.each(lostAccess)('refuses activation after losing %s', losesAccess);
+    it.each(lostAccess)('withholds activation receipts after losing %s', losesReceiptAccess);
+    it.each(controls)('refuses activation after %s', changedControl);
+    it.each([...controls, 'member', 'worker', 'expiry'])(
+      'refuses %s before admission append', changesAtAppend);
+    it.each([...controls, 'member', 'worker', 'expiry'])(
+      'withholds the admission after %s while awaiting append', changesAfterAppend);
+    it.each(['member', 'assistant'])('refuses lost %s model grants', revokedModel);
+    it.each(['conversation.created', 'message.posted', 'foreign', 'replaced'])(
+      'refuses changed prepared input: %s', changedRecord);
+    it.each(['none', 'member', 'payer', 'grant'])(
+      'admits through sustained traffic unless access changes: %s', confirmationRevocation);
+    it('admits through sustained activity in another thread', otherThreadDuringConfirmation);
+    it('keeps the original access deadline', expiredWrite);
+    it('refuses expired admission receipts', expires);
+    it('replays the admission without effects', replay, 30_000);
+    it.each(['computer.suspended', 'computer.ready'])(
+      'keeps admitted input idle with %s', noDelivery);
+
+    async function changedAllocation(field: string) {
+      const read = nats.store.readStream.bind(nats.store);
+      async function* altered(...args: Parameters<typeof read>) {
+        for await (const row of read(...args)) {
+          if (row.event.type !== 'budget.root_allowance_set') {
+            yield row;
+            continue;
+          }
+          if (field === 'missing') continue;
+          const data = z.record(z.string(), z.unknown()).parse(row.event.data);
+          let value: string | number = 'forged';
+          if (field === 'generation') value = 2;
+          if (field === 'preparationDigest') value = '0'.repeat(64);
+          yield { ...row, event: { ...row.event, data: { ...data, [field]: value } } };
+        }
+      }
+      vi.spyOn(nats.store, 'readStream').mockImplementation(altered);
+      await refuses();
+    }
+    it.each(['missing', 'rootId', 'preparationDigest', 'requesterId', 'turnId',
+      'payingGroupId', 'generation', 'threadId'])(
+      'refuses missing or forged allocation binding: %s', changedAllocation);
+
+    async function changedChoice(kind: string, late: boolean) {
+      async function change() {
+        if (kind === 'provider' || kind === 'tariff') {
+          await provider(kind === 'tariff' ? 'unpriced-model' : 'gpt-6.1-sol');
+        } else {
+          const ready = record('replaced-computer', 'computer-sales-assistant', 'computer.ready',
+            { assistantId: 'sales-assistant', computerId: 'computer', generation: 2 });
+          await nats.seed([ready]);
+        }
+      }
+      const before = await nats.store.head('routine-orders');
+      if (late) duringCheck = change;
+      else await change();
+      await expect(prepare()).rejects.toThrow(refusal());
+      expect(await nats.store.head('routine-orders')).toBe(before);
+    }
+    const choices: [string, boolean][] = [['provider', false], ['tariff', false],
+      ['generation', false], ['provider', true], ['tariff', true], ['generation', true]];
+    it.each(choices)('refuses changed %s, after awaited checks: %s', changedChoice);
+
+    async function delayedPreparation(revoked: boolean) {
+      const read = nats.store.readStream.bind(nats.store);
+      const originalNow = performance.now.bind(performance);
+      let elapsed = 0;
+      function delayedClock() { return originalNow() + elapsed; }
+      async function* delayed(...args: Parameters<typeof read>) {
+        yield* read(...args);
+        if (args[0] === 'budget-test' && args[1] === 1) {
+          elapsed += 14_000;
+          now += 14_000;
+          if (revoked) await removeMember();
+        }
+      }
+      vi.spyOn(performance, 'now').mockImplementation(delayedClock);
+      vi.spyOn(nats.store, 'readStream').mockImplementation(delayed);
+      const before = await nats.store.head('routine-orders');
+      if (revoked) {
+        await expect(prepare()).rejects.toThrow(refusal());
+        expect(await nats.store.head('routine-orders')).toBe(before);
+      } else {
+        expect(await prepare()).toMatchObject({ executionAvailable: false });
+      }
+    }
+    it.each([false, true])('waits 14 seconds outside access, then revoked: %s', delayedPreparation);
+
+    async function uncertainHold() {
+      const root = actor.state.roots[0]!;
+      const call = { requesterId: 'alice', conversationId, turnId: root.turnId,
+        assistantId: 'sales-assistant', payingGroupId: 'sales', ...selection,
+        model: 'gpt-6.1-sol', priceTableId, contextDigest: '0'.repeat(64) };
+      const hold = await actor.reserve(call, 100, undefined, undefined, root.rootId);
+      await actor.uncertain(hold, 'settle_timeout');
+      expectedHolds = structuredClone(actor.state.reservations);
+      const receipt = await prepare();
+      expect(await prepare()).toEqual(receipt);
+      expect(rootTotals(actor.state, root.rootId).heldCents).toBe(100);
+      await control('routine.run_stop_requested');
+      await refuses();
+      expect(rootTotals(actor.state, root.rootId).heldCents).toBe(100);
+    }
+    it('recovers only a receipt while preserving uncertain money and sender state', uncertainHold);
+    async function lastAwaitRevocation() {
+      const read = nats.store.readStream.bind(nats.store);
+      let removed = false;
+      async function* revoke(...args: Parameters<typeof read>) {
+        yield* read(...args);
+        if (!removed && args[0] === 'budget-test' && args[1]! > 1) {
+          removed = true;
+          await removeMember();
+        }
+      }
+      vi.spyOn(nats.store, 'readStream').mockImplementation(revoke);
+      const before = await nats.store.head('routine-orders');
+      await expect(prepare()).rejects.toThrow(refusal());
+      expect(removed).toBe(true);
+      expect(await nats.store.head('routine-orders')).toBe(before);
+    }
+    it('refuses revocation after the last authority check while reading budget changes',
+      lastAwaitRevocation);
+
+    async function budgetStop(timing: string, ownRoot: boolean) {
+      let rootId = actor.state.roots[0]!.rootId;
+      if (!ownRoot) {
+        const binding = { requesterId: 'alice', conversationId: 'other-conversation',
+          turnId: 'other-turn', assistantId: 'sales-assistant', payingGroupId: 'sales',
+          ...selection, allowanceCents: 100 };
+        const otherRoot = await actor.setRootAllowance(binding, 1);
+        rootId = otherRoot.rootId;
+      }
+      const append = nats.store.append.bind(nats.store);
+      const read = nats.store.readStream.bind(nats.store);
+      const head = nats.store.head.bind(nats.store);
+      const before = await head('routine-orders');
+      const beforePublication = await head();
+      let admitted = false;
+      let checkedBudget = false;
+      let stopped = false;
+      async function stop() {
+        stopped = true;
+        const saved = record('late-budget-stop', 'budget-test', 'budget.root_stopped', {
+          rootId, reason: 'allowance_exhausted', attemptedBoundCents: 1, availableCents: 0,
+        });
+        saved.source = 'models';
+        saved.principal = { kind: 'system', id: 'models' };
+        expectedStop = saved;
+        await nats.seed([saved]);
+      }
+      async function publish(command: AppendCommand) {
+        if (timing === 'before publication') await stop();
+        const result = await append(command);
+        admitted = result.status === 'appended';
+        return result;
+      }
+      async function* readBudget(...args: Parameters<typeof read>) {
+        yield* read(...args);
+        // Insert Stop after the bounded admission read, not a provider summary read.
+        if (admitted && args[0] === 'budget-test' && args[2]! <= performance.now() + 2000) {
+          checkedBudget = true;
+        }
+      }
+      async function stopDuringReceipt(...args: Parameters<typeof head>) {
+        if (checkedBudget && !stopped && args[0] === 'member-alice') await stop();
+        return head(...args);
+      }
+      vi.spyOn(nats.store, 'append').mockImplementationOnce(publish);
+      vi.spyOn(nats.store, 'readStream').mockImplementation(readBudget);
+      vi.spyOn(nats.store, 'head').mockImplementation(stopDuringReceipt);
+      const outcomes = await Promise.allSettled([prepare()]);
+      expect(stopped).toBe(true);
+      const budget = await history(nats.store, 'budget-test', 'test');
+      expect(budget.at(-1)!.event).toEqual(expectedStop);
+      if (ownRoot) {
+        expect(outcomes[0]).toMatchObject({ status: 'rejected', reason: new Error(refusal()) });
+      } else {
+        expect(outcomes[0]).toMatchObject({ status: 'fulfilled',
+          value: { status: 'confirmed', executionAvailable: false } });
+      }
+      const expectedPosition = timing === 'before publication' ? before : beforePublication + 1;
+      expect(await head('routine-orders')).toBe(expectedPosition);
+    }
+    const stopCases: [string, boolean][] = [
+      ['before publication', true], ['during receipt confirmation', true],
+      ['during receipt confirmation', false],
+    ];
+    it.each(stopCases)('checks budget Stop %s for its own root: %s', budgetStop);
+
+  }
+  describe('routine activation', activationTests);
+
   async function noEffects() {
     const saved = await history(nats.store, 'budget-test', 'test');
     for (const row of saved) {
+      if (row.event.type === 'budget.root_stopped') {
+        expect(row.event).toEqual(expectedStop);
+        continue;
+      }
       expect(row.event.type).toMatch(/^(budget\.(ceiling_set|period_started|root_allowance_set|reserved)|provider\.managed_calls_enabled)$/u);
     }
     expect(actor.state.reservations).toEqual(expectedHolds);

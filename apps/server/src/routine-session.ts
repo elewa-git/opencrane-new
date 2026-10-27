@@ -22,10 +22,17 @@ const inputSchema = z.strictObject({ routineId: z.string().regex(/^[\w-]{1,200}$
 const assistantSchema = z.object({ kind: z.literal('team'), payingGroupId: z.string() });
 const settingsSchema = z.object({ active: z.boolean().optional() });
 
-function requireRun(state: RoutineState | undefined, occurrenceId: string) {
+function requireUnsent(state: RoutineState | undefined, allowActivation: boolean) {
+  if (state?.activation && !allowActivation) {
+    throw new Error('Routine session refused');
+  }
+}
+
+function requireRun(state: RoutineState | undefined, occurrenceId: string, allowActivation = false) {
+  requireUnsent(state, allowActivation);
   const run = state?.activeRun;
   const saved = state?.definition;
-  if (!run || !saved || state.status !== 'active' || state.stopRequested || state.activation ||
+  if (!run || !saved || state.status !== 'active' || state.stopRequested ||
       run.occurrenceId !== occurrenceId ||
       saved.definitionRevision !== run.definitionRevision ||
       saved.scheduleRevision !== run.scheduleRevision ||
@@ -38,7 +45,7 @@ function requireRun(state: RoutineState | undefined, occurrenceId: string) {
   return run;
 }
 
-function foldPreparation(rows: StoredEvent[], occurrenceId: string) {
+function foldPreparation(rows: StoredEvent[], occurrenceId: string, allowActivation = false) {
   let state: RoutineState | undefined;
   let claim: StoredEvent | undefined;
   const completed = new Map<string, Run>();
@@ -48,7 +55,7 @@ function foldPreparation(rows: StoredEvent[], occurrenceId: string) {
       claim = row;
     }
   }
-  const run = requireRun(state, occurrenceId);
+  const run = requireRun(state, occurrenceId, allowActivation);
   if (!claim || !isDeepStrictEqual(claim.event.data, run)) {
     throw new Error('Routine session refused');
   }
@@ -56,7 +63,7 @@ function foldPreparation(rows: StoredEvent[], occurrenceId: string) {
 }
 
 async function loadPreparation(store: EventStore, worker: Worker,
-  input: z.infer<typeof inputSchema>) {
+  input: z.infer<typeof inputSchema>, allowActivation: boolean) {
   if (worker.binding.silo !== worker.silo) {
     throw new Error('Routine session refused');
   }
@@ -65,7 +72,7 @@ async function loadPreparation(store: EventStore, worker: Worker,
   if (rows[0]?.event.type !== 'routine.created') {
     throw new Error('Routine session refused');
   }
-  const { state, completed, claim, run } = foldPreparation(rows, input.occurrenceId);
+  const { state, completed, claim, run } = foldPreparation(rows, input.occurrenceId, allowActivation);
   const ownerId = run.definition.ownerId;
   const auth = memberAuthorisation(worker.binding, store);
   const access = await auth.loadRoutineAccess(ownerId, input.routineId);
@@ -82,7 +89,7 @@ async function loadPreparation(store: EventStore, worker: Worker,
       throw new Error('Routine session refused');
     }
   }
-  return { run, claim, state, completed, access, positions, position: rows.at(-1)!.sequence };
+  return { rows, run, claim, state, completed, access, positions, position: rows.at(-1)!.sequence };
 }
 
 async function loadOwnerMembership(store: EventStore, worker: Worker, run: Run) {
@@ -153,11 +160,11 @@ export async function prepareRoutineSession(store: EventStore,
 }
 
 export async function loadRoutinePreparation(store: EventStore,
-  keys: ReturnType<typeof conversationKeys>, worker: Worker, raw: unknown) {
+  keys: ReturnType<typeof conversationKeys>, worker: Worker, raw: unknown, allowActivation = false) {
   try {
     const input = inputSchema.parse(raw);
     const workerId = z.string().regex(/^[\w-]{1,200}$/u).parse(worker.workerId);
-    const saved = await loadPreparation(store, worker, input);
+    const saved = await loadPreparation(store, worker, input, allowActivation);
     const run = saved.run;
     const ownerId = run.definition.ownerId;
     const options = { silo: worker.silo, binding: worker.binding, store };
@@ -173,12 +180,15 @@ export async function loadRoutinePreparation(store: EventStore,
         saved.state = foldRoutineHistory(saved.state, row.event, saved.completed);
         saved.position = row.sequence;
       }
-      const current = requireRun(saved.state, input.occurrenceId);
+      const current = requireRun(saved.state, input.occurrenceId, allowActivation);
       if (!isDeepStrictEqual(current, run) ||
           !(await worker.checkCurrent(fresh.deadline))) {
         throw new Error('Routine session refused');
       }
       await fresh();
+      checkTime();
+    }
+    function checkTime() {
       if (now() < Date.parse(run.firedAt) || now() >= Date.parse(run.startBy)) {
         throw new Error('Routine session refused');
       }
@@ -237,8 +247,8 @@ export async function loadRoutinePreparation(store: EventStore,
         yield row;
       }
     }
-    return { run, readStream, context, command, expectedCreation, position: saved.position,
-      checkAccess, checkFresh, checkOwner, checkCurrent, checkModel, accessSubjects };
+    return { run, routineRows: saved.rows, readStream, context, command, expectedCreation, position: saved.position,
+      checkAccess, checkFresh, checkOwner, checkCurrent, checkModel, accessSubjects, checkTime };
   } catch {
     // Keep missing access and private history or custody failures indistinguishable.
     throw new Error('Routine session refused');

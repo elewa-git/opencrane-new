@@ -53,9 +53,40 @@ async function allocate(store: Arguments[0], keys: Arguments[1], worker: Argumen
   if (actor.store !== store || actor.silo !== worker.silo) {
     throw new Error('Routine root refused');
   }
+  const checked = await loadRoutineRootPreparation(store, keys, worker, raw, selection);
+  const { binding, firstCallBoundCents, deadline, run } = checked;
+  async function confirmAllocation() {
+    await checked.confirmPreparation();
+    // Recover the immutable amount from the actor's serial queue.
+    for (const root of actor.state.roots) {
+      if (root.conversationId === run.conversationId && root.turnId === run.turnId) {
+        binding.allowanceCents = root.allowanceCents;
+      }
+    }
+  }
+  let root;
+  try {
+    root = await actor.setRootAllowance(binding, firstCallBoundCents, confirmAllocation, deadline);
+  } catch (error) {
+    if (!(error instanceof RootBudgetRefused) || error.reason !== 'allowance_unavailable' ||
+        error.availableCents < firstCallBoundCents || error.availableCents >= binding.allowanceCents) {
+      throw error;
+    }
+    // Use the actor's checked remaining capacity; the retry still checks every ceiling and right.
+    binding.allowanceCents = error.availableCents;
+    root = await actor.setRootAllowance(binding, firstCallBoundCents, confirmAllocation, deadline);
+  }
+  await checked.confirmReceipt();
+  return { status: 'confirmed' as const, occurrenceId: run.occurrenceId,
+    conversationId: run.conversationId, rootId: root.rootId, allowanceCents: root.allowanceCents,
+    startBy: run.startBy, executionAvailable: false as const };
+}
+
+export async function loadRoutineRootPreparation(store: Arguments[0], keys: Arguments[1],
+  worker: Arguments[2], raw: unknown, selection: Selection, allowActivation = false) {
   const selected = { threadId: selection.threadId, computerId: selection.computerId,
     generation: selection.generation };
-  const input = await loadRoutineInput(store, keys, worker, raw);
+  const input = await loadRoutineInput(store, keys, worker, raw, allowActivation);
   const { preparation, previous, rows } = input;
   if (!previous) {
     throw new Error('Routine root refused');
@@ -104,24 +135,6 @@ async function allocate(store: Arguments[0], keys: Arguments[1], worker: Argumen
     }
     await preparation.checkCurrent();
     input.verify(previous!);
-    // Read the actor's recovered state inside its queue; never resize an existing root.
-    for (const root of actor.state.roots) {
-      if (root.conversationId === run.conversationId && root.turnId === run.turnId) {
-        binding.allowanceCents = root.allowanceCents;
-      }
-    }
-  }
-  let root;
-  try {
-    root = await actor.setRootAllowance(binding, firstCallBoundCents, confirmPreparation, deadline);
-  } catch (error) {
-    if (!(error instanceof RootBudgetRefused) || error.reason !== 'allowance_unavailable' ||
-        error.availableCents < firstCallBoundCents || error.availableCents >= binding.allowanceCents) {
-      throw error;
-    }
-    // Use the actor's checked remaining capacity; the retry still checks every ceiling and right.
-    binding.allowanceCents = error.availableCents;
-    root = await actor.setRootAllowance(binding, firstCallBoundCents, confirmPreparation, deadline);
   }
   const receiptSubjects = preparation.accessSubjects();
   const preparationPositions = new Map<string, number>([
@@ -159,16 +172,17 @@ async function allocate(store: Arguments[0], keys: Arguments[1], worker: Argumen
     return { positions, preparationChangePosition,
       enabled: current.enabled, draining: current.draining, choice: current.choice };
   }
-  // Repeat only for changes to this allocation's access, preparation or provider settings.
-  // Keep every pass within the original access deadline.
-  let before: Awaited<ReturnType<typeof receiptState>>;
-  let after: Awaited<ReturnType<typeof receiptState>>;
-  do {
-    before = await receiptState();
-    await confirmPreparation();
-    after = await receiptState();
-  } while (!isDeepStrictEqual(before, after));
-  return { status: 'confirmed' as const, occurrenceId: run.occurrenceId,
-    conversationId: run.conversationId, rootId: root.rootId, allowanceCents: root.allowanceCents,
-    startBy: run.startBy, executionAvailable: false as const };
+  async function confirmReceipt() {
+    // Repeat only for changes to this allocation's access, preparation or provider settings.
+    // Keep every pass within the original access deadline.
+    let before: Awaited<ReturnType<typeof receiptState>>;
+    let after: Awaited<ReturnType<typeof receiptState>>;
+    do {
+      before = await receiptState();
+      await confirmPreparation();
+      after = await receiptState();
+    } while (!isDeepStrictEqual(before, after));
+  }
+  return { preparation, binding, run, firstCallBoundCents, deadline,
+    confirmPreparation, confirmReceipt, receiptState };
 }

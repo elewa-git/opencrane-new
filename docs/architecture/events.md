@@ -682,9 +682,20 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 | `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` / `routine.reassigned` | server for checked actor | routine facts | `update-openfga` applies creation, reassignment and retirement permissions and receipts; no execution |
 | `routine.due` | server system | frozen occurrence facts (pure fold only) | none; no input or root is started |
 | `routine.occurrence_skipped` / `routine.occurrences_missed` | server system | saved cursor/next facts | none |
-| `routine.run_activation_admitted` / `routine.run_finished` | server system | saved run facts | none; records grant no authority |
+| `routine.run_activation_admitted` | internal server conditional command | saved exact admission and sender attempt | none; receipt only, execution remains disabled |
+| `routine.run_finished` | server system | saved run facts | none; records grant no authority |
 | `routine.run_stop_requested` | server for checked owner/admin | saved Stop intent | none; execution integration is not built |
 | `delegation.started` / `delegation.completed` | server; legacy computer records are replay-only | delegations and computer-root read indexes | no effect reaction; shared native starts retain the admission’s `sharingClass`; native execution remains disabled |
+
+The activation command requires an existing checked allocation. Its `admission` reference
+names the exact `budget.root_allowance_set` event and position. That record's root id and
+preparation digest bind the owner admission, payer, encrypted input, provider choice, model,
+tariff, computer and thread generation. The activation's `rootId` retains the due record's
+routine root reference; the referenced allocation supplies the budget actor's root id.
+The deterministic activation id permits one saved `senderAttemptId`. Recovery compares the
+whole record and returns only its receipt. It neither allocates again nor grants another
+sender. Access, Stop, current preparation and `startBy` are checked before publication and
+receipt return. No production caller, wake, send or Ask bypass is enabled.
 
 Routine version 1 stores a full encrypted request, one member owner, a team assistant,
 its fixed payer, explicit company connection/profile/account and daily/weekly schedule.
