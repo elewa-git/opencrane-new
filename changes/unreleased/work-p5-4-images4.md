@@ -1,0 +1,1 @@
+- Candidate package inventories now bind checked image and notice bytes to authenticated Debian main versions. Approved images stay unchanged; complete bundled licence approval remains outstanding.
