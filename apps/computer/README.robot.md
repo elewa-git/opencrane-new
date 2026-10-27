@@ -1636,3 +1636,24 @@ The approval tests separately cover changed supplied identities, changed current
 approval inputs, copied lists, altered definitions and missing callers or grants.
 Loader tests also cover a grant approved again during discovery, replacement of a
 registration with the same caller, and cancellation or revocation during native start.
+
+## Thread identity on memory Stop
+
+A Stop frame may carry `threadId`. `turn-runner.ts` compares it to the running thread
+or, after completion, the saved turn-start report before clearing reply buffers or
+removing access. A mismatch has no effect, including when an old Stop arrives after
+thread replacement. Ordinary Stop frames still clear private replies without
+requiring a thread ID. The server confirms saved memory invalidation before sending this
+frame. `apps/server/test/memory-stop.test.ts` exercises the real bridge and proxy path.
+The existing cancellation, grant/catalogue removal, late-output refusal and disconnect
+clearance remain shared. Native admission stays off; disk isolation is unqualified.
+
+Repeated Stops share access removal and interruption for the same turn object. This
+includes a native start reply that arrives while Stop is still removing access.
+Budget, member and memory Stops use this same rule. Different turns keep separate
+interruption work; neither a shared payer nor a shared computer combines their Stops.
+Successful interruption stays remembered for that turn object; failed ordinary
+interruption can retry, while failed private interruption closes its private session.
+The maps use weak keys, so finished turn objects are not retained for deduplication.
+The server may resend Stop after uncertain delivery. No server receipt claims that
+interruption has completed.

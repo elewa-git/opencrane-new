@@ -19,7 +19,7 @@ flowchart LR
   apps --> ops["apps/ops<br/>background workers"]
   apps --> server["apps/server<br/>back end"]
   ops -->|starts and pauses| computer
-  server -->|messages, internal routine turns, files and Stop| computer
+  server -->|messages, internal routine turns, files and Stop for one turn| computer
   computer -->|progress and results| server
   computer -.->|records private thread before tool approval| server
   computer -->|checks command ownership| executor["socket-denied executor"]
@@ -29,6 +29,11 @@ flowchart LR
 ```
 
 ## What it is responsible for
+
+A Stop can name the expected thread. The computer checks it before clearing any
+private reply or removing access, so a delayed Stop cannot affect a replacement.
+It also clears an unacknowledged reply when the target has just finished. Repeated
+Stops share the same access removal and interruption.
 
 - Builds the computer image with [Codex](../../GLOSSARY.md#codex), the AI agent,
   a browser, a remote desktop and document tools.

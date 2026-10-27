@@ -3610,6 +3610,11 @@ approval-history delays of zero and 300 ms in all four combinations.
 
 P3-14 PR 4b tests use real NATS, PostgreSQL and OpenFGA, plus the real computer
 channel for different saved payers on one team computer.
+Repeated budget Stop frames share one successful native interruption for the exact
+turn. Different turns keep separate interruption work, even on the same computer.
+The channel test waits for the repeated frame to be processed and requires exactly
+one interruption. It also checks that the other payer keeps its grant and tool list,
+can renew its grant and can complete without a saved Stop.
 
 P3-14 PR 4c keeps one conversation delivery pass running while the main watcher
 continues polling every 250 ms. During an unfinished pass it reads saved Stops
@@ -6119,3 +6124,41 @@ also failed before its fix. An earlier setup run lacked the pinned test gateway;
 `npm run pretest` supplied it. Fixture parsing was corrected before the passing runs.
 All suites used `nice -n 10`, one worker and disposable services. No full root suite,
 dev stack or model call ran. Live qualification: NOT RUN.
+
+## Stop after saved memory invalidation (P4-15 PR 3e)
+
+`memory/stop.ts` consumes `agent.memory_context_recorded` with `action=invalidated`.
+It confirms the complete event against `readChatFacts`, including the silo, and
+requires the saved personal session and invalidated status. It derives all target
+fields from that saved record. No former-user permission check is needed to withdraw use.
+The existing `invalidateMemoryContext` command remains the only decision/writer here.
+
+The internal caller supplies `current(binding)`: a synchronous lookup of an already
+connected turn, from trusted server state. It must return no turn once that turn ends.
+It must never open a connection, start work or reconstruct usable authority from replay.
+The reaction reads it after history and compares conversation, turn, requester, assistant,
+computer, computer generation, thread and input generation. It sends without another wait.
+The Stop frame carries the saved conversation, turn and thread. The computer checks the
+thread before its existing synchronous cancellation and private-buffer clearance.
+Each private generation uses a fresh thread, including after replacement.
+Saved invalidation already prevents dispatch and renewal while interruption is pending.
+
+Results are `sent`, `ignored` or `unavailable`. Sent means a frame was handed to the
+connection, not that interruption finished. Repeated delivery may repeat Stop.
+The computer shares access removal and interruption for that exact turn, including
+when the native start reply is delayed.
+It also clears the saved private reply if completion races with Stop delivery.
+A failed ordinary interruption remains retryable; a failed private interruption
+closes the private session. Transport/history failure returns no error detail and
+creates no authority.
+No subscription or production caller is connected. Admission stays disabled. Volatile
+server/browser delivery, native calls and fresh-install disk isolation remain unqualified.
+
+Prerequisite merges: #762 `b35059f91ea080e18541f2fa40cd13388a60a0d5`;
+PR #770 `807079af02bee23341762d47f41921f96a6e2a81`.
+Tests were committed first in `03ef3a157`. A temporary no-op reaction and the unchanged
+computer Stop produced six expected assertion failures; the temporary reaction was replaced.
+`test/memory-stop.test.ts` uses the real invalidation writer, NATS, computer bridge and
+proxy controls. It checks isolated Stop, buffer clearance before cleanup, late output,
+renewal, duplicate delivery, stale identity, disconnection and replay without execution.
+Live qualification: NOT RUN. Own check results are recorded in the pull request.

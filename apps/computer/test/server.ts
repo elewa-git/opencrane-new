@@ -5,6 +5,7 @@ export { memoryFreeConfig, privateConfig, privateEnvironments } from '../src/cod
 export { codexConnection } from '../src/codex-connection.ts';
 export { privateCodexLaunch } from '../src/private-codex.ts';
 export { proxy } from '../src/proxy.ts';
+export { proxyControl } from '../src/proxy-control.ts';
 export { reportJournal, type BridgeReport } from '../src/report-journal.ts';
 export { PRIVATE_TURN_NOTE, CONTEXT_PREAMBLE, privateTurnInput, turnInput }
   from '../src/turn-input.ts';
