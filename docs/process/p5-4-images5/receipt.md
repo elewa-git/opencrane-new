@@ -48,8 +48,8 @@ reference to another licence file cannot approve an unknown component.
 Environment: existing Linux host and tools, fresh `npm ci`, linked NATS and Lychee.
 Tests, lint and typecheck use `nice -n 10`. The selected security suite uses the
 requested `PG_TEST_URL`; it needs no projection database. No dev stack or model runs.
-Tests were committed first in `49fb2e218`: the five new cases failed because the
-Node checker and records did not exist yet. A second test commit, `38d181d49`,
+Tests were committed first in `56d986117`: the five new cases failed because the
+Node checker and records did not exist yet. A second test commit, `4e21f8c44`,
 exposed six cases where one blanket grant replaced separately printed grants under
 valid section hashes. The checker now requires those grants separately.
 
@@ -69,3 +69,30 @@ The [operator notes](../../../infra/package/README.robot.md#package-image-promot
 give the check command. Local logs are under `/tmp/p5-4-images5/`; original evidence
 stays under `/tmp/p5-4-images4/`. No approved inventory, image/index/binary pin,
 licence rule, recovery helper, cluster file or event/API contract changes.
+
+## Exact grant and reference checks
+
+Date: 27 October 2026. Source: test commit `be4d56c67` plus the checker and
+notes in this change. Environment: existing Linux host, existing dependencies
+and saved candidate evidence; no fresh installation.
+
+The checker now requires the exact component and licence pairs under each
+reviewed section checksum. The full notice checksum binds both preamble grants.
+It also requires all ten unresolved section and name pairs exactly once. Reasons
+and BLOCKED status remain required. Counts alone no longer accept substitutions.
+
+The test-only commit ran before the fix. Its four new tests exposed 135 failed
+subcases: deleted, duplicated or substituted references; changed component or
+licence pairs; blanket MIT entries; and missing or changed preamble grants.
+The corrected checker refuses every one of these edits.
+
+| Own check | Result | Observation |
+| --- | --- | --- |
+| Licence and promotion fixtures, twice | PASS | 39 Python cases and 41 preflight cases per run, with the requested PG_TEST_URL and nice priority. |
+| Saved candidate and Node checks, twice | PASS | Both full candidate checks and all 43 Node sections pass; complete image review remains PARTIAL. |
+| Actual promotion, twice | FAIL | Both attempts exit 1; missing source-bound R3 approval still refuses. |
+| Lint, typecheck, events, Knip and changelog | PASS | Required source checks run with nice priority. |
+| Full root suite and live qualification | NOT RUN | Excluded from this correction. |
+
+Logs are `/tmp/p5-4-images5-review-*.log` on this host. Promotion stays blocked.
+No approved pin, registry publication or runtime behaviour changes.

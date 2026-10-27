@@ -242,7 +242,10 @@ Node section checksums and their earlier NOT RUN status.
 The [Node declaration record](../../docs/process/p5-4-images5/node-notices.json)
 adds individual reasons against those same checksums, without changing the original.
 Its checker first runs the candidate check, then checks the full notice, sections,
-licences and reasons. The compressed `node-LICENSE.gz` beside it contains the actual
+licences and reasons. Fixed component and licence pairs identify every grant under
+its reviewed notice checksum, including both preamble grants. All ten unresolved
+section and name pairs must appear exactly once with BLOCKED status and a reason.
+The compressed `node-LICENSE.gz` beside it contains the actual
 archived notice bytes for licence fixtures; it is not shipped in the runtime image.
 
 ```sh
