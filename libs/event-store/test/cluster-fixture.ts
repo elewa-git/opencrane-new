@@ -3,10 +3,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { isDeepStrictEqual } from 'node:util';
-import { JetStreamApiError } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/transport-node';
 import { expect, vi } from 'vitest';
-import { connectNats, type EventStore } from '../src/index.ts';
+import { connectNats } from '../src/index.ts';
 import { certificates, issueCertificate, sharedCertificates } from './certificates.ts';
 import { reservePort } from './ports.ts';
 
@@ -40,7 +39,7 @@ export async function clusterFixture(missingTrust = false, children: ChildProces
   async function ready() {
     for (const peer of peers) {
       await completeRoutes(peer);
-      await metadataReady(peer);
+      await metadataReady(peer, peers);
     }
   }
   async function close() {
@@ -235,7 +234,7 @@ function metadataIsReady(value: unknown) {
   return names.size === 3;
 }
 
-export async function metadataReady(peer: Peer) {
+export async function metadataReady(peer: Peer, peers: Peer[] = [peer]) {
   const address = `http://127.0.0.1:${peer.monitor}`;
   const deadline = performance.now() + 20_000;
   let actual: unknown;
@@ -250,7 +249,22 @@ export async function metadataReady(peer: Peer) {
       const report = await fetch(`${address}/jsz`, options);
       expect(report.status).toBe(200);
       actual = await report.json();
-      if (health === 200 && metadataIsReady(actual) && performance.now() < deadline) {
+      let leaderReport = actual;
+      if (isRecord(actual) && isRecord(actual['meta_cluster'])) {
+        const leaderName = actual['meta_cluster']['leader'];
+        function isLeader(candidate: Peer) {
+          return candidate.name === leaderName;
+        }
+        const leader = peers.find(isLeader);
+        if (leader && leader !== peer) {
+          const leaderAddress = `http://127.0.0.1:${leader.monitor}/jsz`;
+          const leaderResponse = await fetch(leaderAddress, options);
+          expect(leaderResponse.status).toBe(200);
+          leaderReport = await leaderResponse.json();
+        }
+      }
+      // Read current flags on the leader: followers only track their own link to it.
+      if (health === 200 && metadataIsReady(leaderReport) && performance.now() < deadline) {
         return;
       }
     } catch (error) {
@@ -327,20 +341,4 @@ async function stopChild(child: ChildProcess) {
   await vi.waitFor(hasStopped, { timeout: 5000, interval: 25 });
 }
 
-export async function waitForClusterStream(store: Pick<EventStore, 'ensureStream'>) {
-  async function placementReady() {
-    try {
-      await store.ensureStream({ replicas: 3 });
-      return true;
-    } catch (error) {
-      // Wait only after an explicit placement refusal, never a timeout or lost reply.
-      if (error instanceof JetStreamApiError && error.status === 400 &&
-        error.code === 10005 &&
-        error.apiError().description === 'no suitable peers for placement, peer offline') {
-        return false;
-      }
-      throw error;
-    }
-  }
-  await vi.waitUntil(placementReady, { timeout: 5000 });
-}
+export { waitForClusterStream } from './cluster-stream.ts';
