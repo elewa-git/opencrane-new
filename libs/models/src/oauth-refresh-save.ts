@@ -47,9 +47,10 @@ export async function savePersonalOAuthRefresh(store: EventStore, binding: Bindi
             !attempt.success || attempt.data.expectedSequence !== input.expectedSequence) {
           continue;
         }
-        // A receipt confirms the past save. Check membership once; never read expired replies.
-        await readActiveMember(store, binding, input.userId);
+        // Authorise deletion from the saved replacement, even after the member leaves.
         await retirePrevious(custody, rows.slice(0, index), binding.silo);
+        // Check current membership before returning the receipt; deletion grants no access.
+        await readActiveMember(store, binding, input.userId);
         return { status: 'saved' as const, sequence: row.sequence,
           generation: saved.activation.generation, callsAvailable: false as const };
       }

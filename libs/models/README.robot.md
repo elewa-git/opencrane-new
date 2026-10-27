@@ -18,15 +18,25 @@ current membership once and returns the original sequence and generation. It nev
 After a confirmed save, custody removes the prior generation and its earlier reply using
 exact UID/version preconditions. Deletion markers refuse further private reads, including
 while deletion is interrupted. Retries finish removal without saving again. A failed
-removal returns `unknown`; the saved event remains the truth. Revoke, governed use, routes
-and scheduling remain out of scope. Fresh-install live qualification: NOT RUN.
+removal returns `unknown`; the saved event remains the truth. Recovery completes retirement
+before checking current membership for the receipt. The saved replacement alone authorises
+deletion, so removing the member cannot leave the old copies readable. Removed members
+still receive `unknown` and cannot start an attempt or save a new generation.
+Revoke, governed use, routes and scheduling remain out of scope.
+Fresh-install live qualification: NOT RUN.
 
-Own checks: PASS lint (including Knip), typecheck, catalogue and changelog. PASS 435
-custody tests twice and 822 bearer/event tests, including unchanged security rules.
-Tests used disposable PostgreSQL, NATS, OpenFGA, private custody and a local TLS provider,
-with `nice -n 10` and one worker. The first test-only commit failed on the missing save function.
-The first broad run was FAIL: one fixed-delay broker duplicate check. These checks now
-wait for the broker to accept the probe; all seven cases also passed separately.
+Own checks after the member-removal fix: PASS lint (including Knip), typecheck,
+catalogue and changelog. The first broad run was FAIL: 988 tests passed and one existing
+refresh-start test timed out waiting for broker duplicate expiry. That case passed on an
+isolated rerun without changes. The second broad run was PASS: all 529 custody, bearer,
+OAuth transport and identity tests. The unchanged 460 security-rules tests passed once.
+Both broad runs include refresh saving and connection reconciliation.
+
+Test-only commit `e71e8ea23` first reproduced both old copies remaining after a lost save
+reply and member removal. The companion access test passed. Both new tests passed after
+the fix and in both broad runs. Tests used the supplied PostgreSQL test service with
+isolated databases, disposable NATS and OpenFGA, private custody and a local TLS provider,
+with `nice -n 10` and one worker.
 The full root suite and fresh-install live qualification were NOT RUN.
 
 ## One private OAuth refresh send (Part of #50)
