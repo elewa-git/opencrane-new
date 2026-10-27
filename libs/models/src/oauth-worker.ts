@@ -11,6 +11,7 @@ import { withConnectionStage } from './connection-stage-lock.ts';
 import { oauthConsentUrl } from './oauth-attempt.ts';
 import { takePersonalOAuthClaim } from './oauth-callback.ts';
 import { oauthProviderTransport } from './oauth-exchange.ts';
+import { verifyOAuthIdentity } from './oauth-identity.ts';
 import { checkPersonalOAuthStart, inputSchema, sessionSchema } from './oauth-start.ts';
 import type { RemoteNetwork } from './remote-https.ts';
 
@@ -76,13 +77,24 @@ export async function exchangePersonalOAuth(store: EventStore, binding: Binding,
       return { saved, claimed, resultStage, identity: staged.identity };
     }
     const result = await withConnectionStage(db, profile, exchange);
+    const prepared = result.saved.prepared;
+    const attemptContents = await custody.readAttempt(prepared.stage, prepared.identity);
+    if (attemptContents === undefined) {
+      throw new Error('OAuth attempt unavailable');
+    }
     const contents = await custody.readAttempt(result.resultStage, result.identity);
     if (contents === undefined) {
       throw new Error('OAuth result unavailable');
     }
+    const verified = await verifyOAuthIdentity(result.saved.configuration,
+      contents, attemptContents);
     await result.saved.checkCurrent(result.claimed.sequence);
+    if (verified && Date.now() >= verified.expiresAt) {
+      throw new Error('OAuth identity expired');
+    }
+    const verifiedIdentity = verified?.identity;
     return { status: 'unconfirmed' as const, changeRef: result.resultStage.operationId,
-      sequence: result.claimed.sequence, reference: result.identity.reference };
+      sequence: result.claimed.sequence, reference: result.identity.reference, verifiedIdentity };
   } catch {
     // Keep provider replies, custody failures and their causes out of returned status.
     return { status: 'unknown' as const };
