@@ -656,3 +656,22 @@ async function refusesBackupWithOrdinaryImageApproval() {
 }
 test('backup refuses before Helm even with ordinary CNPG image approval',
   refusesBackupWithOrdinaryImageApproval);
+
+async function refusesRecoveryWithOrdinaryImageApproval() {
+  const fixture = validFixture();
+  fixture.values.postgres.recovery = {
+    enabled: true, renderOnly: true, method: 'barmanObjectStore',
+    source: 'recorded-origin', serverName: 'postgres',
+    recoveryTarget: { backupID: '20261026T120000', targetLSN: '0/7000028', targetTLI: '2' },
+    destinationPath: 's3://database-backups/local-check',
+    endpointURL: 'https://backup-store.opencrane-package-1.svc:9000',
+    endpointCA: { name: 'backup-trust', key: 'ca.crt' },
+    s3Credentials: {
+      accessKeyId: { name: 'backup-identity', key: 'ACCESS_KEY_ID' },
+      secretAccessKey: { name: 'backup-identity', key: 'ACCESS_SECRET_KEY' },
+    },
+  };
+  await runFixture(fixture, 'Package command failed');
+}
+test('recovery refuses before Helm even with ordinary CNPG image approval',
+  refusesRecoveryWithOrdinaryImageApproval);

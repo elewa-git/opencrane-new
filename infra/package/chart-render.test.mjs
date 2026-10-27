@@ -595,3 +595,129 @@ for (const contract of ['', '1.28', '1.32', 'unknown']) {
   }
   test(`Helm refuses backup with operator contract ${contract}`, refusesBackupOperator);
 }
+
+function recoveryValues() {
+  const values = backupValues();
+  values.postgres.recovery = {
+    ...values.postgres.backup,
+    source: 'recorded-origin',
+    serverName: 'postgres',
+    recoveryTarget: { backupID: '20261026T120000', targetLSN: '0/7000028', targetTLI: '2' },
+  };
+  delete values.postgres.backup;
+  return values;
+}
+
+function rendersExactRecovery() {
+  const values = recoveryValues();
+  const resources = renderedResources(values);
+  const cluster = resources.get('Cluster/postgres');
+  assert.deepEqual(cluster.spec.bootstrap, {
+    recovery: {
+      source: 'recorded-origin',
+      database: 'projections', owner: 'projection', secret: { name: 'cnpg-projection' },
+      recoveryTarget: { backupID: '20261026T120000', targetLSN: '0/7000028', targetTLI: '2' },
+    },
+  });
+  assert.deepEqual(cluster.spec.superuserSecret, { name: 'cnpg-superuser' });
+  const source = values.postgres.recovery;
+  assert.deepEqual(cluster.spec.externalClusters, [{
+    name: 'recorded-origin',
+    barmanObjectStore: {
+      serverName: 'postgres', destinationPath: source.destinationPath,
+      endpointURL: source.endpointURL, endpointCA: source.endpointCA,
+      s3Credentials: source.s3Credentials,
+    },
+  }]);
+  assert.equal(cluster.spec.backup, undefined);
+  for (const resource of resources.values()) {
+    for (const forbidden of ['Secret', 'ScheduledBackup', 'Backup', 'CronJob', 'ObjectStore']) {
+      assert.notEqual(resource.kind, forbidden);
+    }
+  }
+  const ordinary = renderedResources(cnpgValues());
+  ordinary.delete('Cluster/postgres');
+  resources.delete('Cluster/postgres');
+  assert.deepEqual(resources, ordinary);
+  const rendered = renderChart(values);
+  assert.doesNotMatch(rendered.stdout, /password:|secretAccessKey: [^\n]|latest|private-backup-value/u);
+}
+test('CNPG recovery renders one exact source and WAL target without an archive writer',
+  rendersExactRecovery);
+
+const recoveryRefusals = [
+  ['missing source binding', ['recovery', 'source'], undefined],
+  ['missing server name', ['recovery', 'serverName'], undefined],
+  ['missing recovery target', ['recovery', 'recoveryTarget'], undefined],
+  ['null recovery target', ['recovery', 'recoveryTarget'], null],
+  ['array recovery target', ['recovery', 'recoveryTarget'], []],
+  ['initdb alongside recovery', ['initdb'], {}],
+  ['nested initdb', ['recovery', 'initdb'], {}],
+  ['bootstrap override', ['bootstrap'], { initdb: {} }],
+  ['external cluster override', ['externalClusters'], []],
+  ['source backup writer', ['backup'], backupValues().postgres.backup],
+  ['disabled backup writer', ['backup'], { enabled: false }],
+  ['null backup writer', ['backup'], null],
+  ['different operator', ['operatorContract'], '1.31'],
+];
+for (const field of ['source', 'serverName']) {
+  for (const value of ['', 42, '../source', 'a'.repeat(64)]) {
+    recoveryRefusals.push([`invalid ${field}: ${value}`, ['recovery', field], value]);
+  }
+}
+const invalidTargets = {
+  backupID: [undefined, '', 42, 'latest', '20261326T120000', '20261026T250000',
+    '20260231T120000', '../backup'],
+  targetLSN: [undefined, '', 42, 'latest', '0/XYZ', '100000000/1', '0/123456789', '0/1/2'],
+  targetTLI: [undefined, '', 2, 'latest', 'current', '0', '-1', '1.5', '4294967296'],
+};
+for (const [field, invalidValues] of Object.entries(invalidTargets)) {
+  for (const value of invalidValues) {
+    recoveryRefusals.push([`invalid ${field}: ${value}`,
+      ['recovery', 'recoveryTarget', field], value]);
+  }
+}
+for (const field of ['targetTime', 'targetName', 'targetXID', 'targetImmediate', 'exclusive']) {
+  recoveryRefusals.push([`extra target ${field}`, ['recovery', 'recoveryTarget', field], true]);
+}
+for (const [name, path, value] of backupRefusals) {
+  const recoveryPath = [...path];
+  if (recoveryPath[0] === 'backup') {
+    recoveryPath[0] = 'recovery';
+  }
+  recoveryRefusals.push([name, recoveryPath, value]);
+}
+for (const [name, path, value] of recoveryRefusals) {
+  function refusesRecovery() {
+    const values = recoveryValues();
+    let parent = values.postgres;
+    for (const key of path.slice(0, -1)) {
+      parent = parent[key];
+    }
+    parent[path.at(-1)] = value;
+    const result = renderChart(values);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /CNPG|PostgreSQL/u);
+    assert.equal(result.stdout, '');
+    assert.ok(!result.stderr.includes(privateBackupCanary));
+  }
+  test(`Helm refuses recovery with ${name}`, refusesRecovery);
+}
+
+function preservesOtherExactRecoveryValues() {
+  const values = recoveryValues();
+  const recovery = values.postgres.recovery;
+  recovery.source = 'another-origin';
+  recovery.serverName = 'archived-postgres';
+  recovery.recoveryTarget = {
+    backupID: '20240229T235959', targetLSN: 'aB12/ffffffff', targetTLI: '4294967295',
+  };
+  const resources = renderedResources(values);
+  const cluster = resources.get('Cluster/postgres');
+  assert.equal(cluster.spec.bootstrap.recovery.source, recovery.source);
+  assert.deepEqual(cluster.spec.bootstrap.recovery.recoveryTarget, recovery.recoveryTarget);
+  assert.equal(cluster.spec.externalClusters[0].name, recovery.source);
+  assert.equal(cluster.spec.externalClusters[0].barmanObjectStore.serverName, recovery.serverName);
+}
+test('CNPG recovery preserves other recorded names and target values',
+  preservesOtherExactRecoveryValues);

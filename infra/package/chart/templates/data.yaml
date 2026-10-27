@@ -36,10 +36,37 @@ spec:
   enableSuperuserAccess: true
   superuserSecret: { name: {{ .Values.postgres.superuserSecret | quote }} }
   bootstrap:
+{{- with .Values.postgres.recovery }}
+    recovery:
+      source: {{ .source | quote }}
+      recoveryTarget:
+        backupID: {{ .recoveryTarget.backupID | quote }}
+        targetLSN: {{ .recoveryTarget.targetLSN | quote }}
+        targetTLI: {{ .recoveryTarget.targetTLI | quote }}
+{{- else }}
     initdb:
+{{- end }}
       database: projections
       owner: projection
       secret: { name: {{ .Values.postgres.applicationSecret | quote }} }
+{{- with .Values.postgres.recovery }}
+  externalClusters:
+    - name: {{ .source | quote }}
+      barmanObjectStore:
+        serverName: {{ .serverName | quote }}
+        destinationPath: {{ .destinationPath | quote }}
+        endpointURL: {{ .endpointURL | quote }}
+        endpointCA:
+          name: {{ .endpointCA.name | quote }}
+          key: {{ .endpointCA.key | quote }}
+        s3Credentials:
+          accessKeyId:
+            name: {{ .s3Credentials.accessKeyId.name | quote }}
+            key: {{ .s3Credentials.accessKeyId.key | quote }}
+          secretAccessKey:
+            name: {{ .s3Credentials.secretAccessKey.name | quote }}
+            key: {{ .s3Credentials.secretAccessKey.key | quote }}
+{{- end }}
   storage:
     size: 1Gi
     pvcTemplate:
