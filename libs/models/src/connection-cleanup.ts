@@ -26,6 +26,9 @@ function confirmedChange(rows: StoredEvent[], trigger: EventEnvelope) {
     return foldConnection(throughChange).data?.activation.operationId === trigger.id;
   }
   const parsed = connectionRevokedDataSchema.safeParse(trigger.data);
+  if (parsed.success && previous.data?.activation.reason === 'oauth_confirmed') {
+    return 'oauth_revoke';
+  }
   return parsed.success && previous.status === 'saved_unverified' &&
     parsed.data.expectedSequence === previous.sequence &&
     parsed.data.reason === 'owner_requested' && parsed.data.revokedBy === parsed.data.userId &&
@@ -73,7 +76,12 @@ export function connectionCleanupHandler(store: EventStore, db: Pick<Db, 'lock'>
         return;
       }
       const rows = await history(store, subject, silo, performance.now() + 10_000);
-      if (!confirmedChange(rows, trigger)) {
+      const confirmed = confirmedChange(rows, trigger);
+      // Keep OAuth material for the separate provider revocation and retirement worker.
+      if (confirmed === 'oauth_revoke') {
+        return;
+      }
+      if (!confirmed) {
         throw new Error('Connection cleanup unavailable');
       }
       const current = foldConnection(rows).data?.activation.operationId;

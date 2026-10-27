@@ -1,0 +1,1 @@
+- An internal command lets the owning member revoke a personal OAuth generation locally once, including competing requests and lost save replies. Waiting refresh workers cannot send after that save. Provider revocation, token retirement, company handling and public routes remain later work.
