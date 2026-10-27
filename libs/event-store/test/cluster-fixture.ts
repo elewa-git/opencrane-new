@@ -163,7 +163,14 @@ export async function completeRoutes(peer: Peer) {
       break;
     }
     const requestTimeout = Math.min(1000, Math.ceil(requestRemaining));
-    actual = await currentRoutes(peer, requestTimeout);
+    try {
+      actual = await currentRoutes(peer, requestTimeout);
+    } catch (error) {
+      if (performance.now() < deadline) {
+        throw error;
+      }
+      break;
+    }
     if (isDeepStrictEqual(actual, expected)) {
       return;
     }

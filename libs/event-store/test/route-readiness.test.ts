@@ -34,12 +34,13 @@ afterEach(restoreMonitoring);
 
 function monitoringReplies(replies: unknown[][]) {
   let index = 0;
-  async function fetchRoutes(address: string, options: RequestInit) {
+  function fetchRoutes(address: string, options: RequestInit) {
     expect(address).toBe('http://127.0.0.1:3/routez');
     expect(options.signal).toBeInstanceOf(AbortSignal);
     const routes = replies[Math.min(index, replies.length - 1)];
     index += 1;
-    return Response.json({ routes });
+    const response = Response.json({ routes });
+    return Promise.resolve(response);
   }
   vi.stubGlobal('fetch', fetchRoutes);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
@@ -94,9 +95,8 @@ async function refusesRoutesThatNeverMatch(scenario: typeof incompleteRoutes[num
   await vi.advanceTimersByTimeAsync(1);
   await pending;
   expect(failure).toBeInstanceOf(Error);
-  const comparison = failure as Error & { actual: string[]; expected: string[] };
-  expect(comparison.message).toContain('peer-1');
-  expect(comparison.expected).toEqual(expected);
+  expect(failure).toHaveProperty('message', expect.stringContaining('peer-1'));
+  expect(failure).toHaveProperty('expected', expected);
   const actual = [...expected];
   if (scenario.missing) {
     actual.splice(actual.indexOf(scenario.missing), 1);
@@ -104,7 +104,7 @@ async function refusesRoutesThatNeverMatch(scenario: typeof incompleteRoutes[num
   if (scenario.extra) {
     actual.push(scenario.extra);
   }
-  expect(comparison.actual).toEqual(actual.sort());
+  expect(failure).toHaveProperty('actual', actual.sort());
 }
 it.each(incompleteRoutes)('reports actual and expected routes at the deadline: $name',
   refusesRoutesThatNeverMatch);
@@ -136,3 +136,33 @@ async function allowsRoutesToFinishAfterTheOldSharedDeadline() {
 }
 it('allows a pooled route to finish after the former shared ten-second deadline',
   allowsRoutesToFinishAfterTheOldSharedDeadline);
+
+async function reportsRoutesWhenTheLastMonitoringRequestExpires() {
+  monitoringReplies([missingPooled]);
+  const fetchRoutes = globalThis.fetch;
+  const stalled = Promise.withResolvers<Response>();
+  function pauseFinalRequest(...args: Parameters<typeof fetch>) {
+    if (performance.now() >= 19_975) {
+      return stalled.promise;
+    }
+    return fetchRoutes(...args);
+  }
+  vi.stubGlobal('fetch', pauseFinalRequest);
+  let failure: unknown;
+  function recordFailure(error: unknown) {
+    failure = error;
+  }
+  const pending = completeRoutes(peer).catch(recordFailure);
+  await vi.advanceTimersByTimeAsync(19_975);
+  expect(failure).toBeUndefined();
+  await vi.advanceTimersByTimeAsync(25);
+  stalled.reject(new Error('Monitoring request expired'));
+  await pending;
+  expect(failure).toHaveProperty('message', expect.stringContaining('peer-1'));
+  expect(failure).toHaveProperty('expected', expected);
+  const actual = [...expected];
+  actual.splice(actual.indexOf('peer-2/pooled'), 1);
+  expect(failure).toHaveProperty('actual', actual);
+}
+it('reports the last routes when a monitoring request expires at the deadline',
+  reportsRoutesWhenTheLastMonitoringRequestExpires);

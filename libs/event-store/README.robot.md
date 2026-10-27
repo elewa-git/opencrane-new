@@ -313,7 +313,8 @@ actual list and the complete expected list. A complete first response returns at
 Each HTTP request is limited to one second or the remaining route deadline.
 `route-readiness.test.ts` advances a controlled clock to check a late eighth route,
 a route arriving after ten seconds, the exact deadline, missing pooled or system
-routes, extra routes and wrong accounts.
+routes, extra routes and wrong accounts. It also checks that a monitoring request
+which expires at the route deadline reports the last actual and expected lists.
 `ready()` gives each peer its own route wait, followed by its metadata health wait.
 The earlier shared ten-second retry could expire while a later peer was still connecting.
 Setup waits at most twenty seconds per peer for complete routes and ten for healthy metadata,
