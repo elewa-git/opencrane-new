@@ -722,11 +722,21 @@ async function stopsOwnershipChild(kind, cancellation, dispatchDelayMs = 0) {
     assert.ok(lastCall.args.includes(kind));
     assert.ok(lastCall.options.timeout > 0 && lastCall.options.timeout <= options.timeoutMs);
     assert.equal(lastCall.options.signal.aborted, true);
+    const firstCall = calls[0];
+    assert.equal(firstCall.startedAt - firstCall.timeoutSampledAt, 10);
+    assert.equal(firstCall.options.timeout, 500);
+    let previousTimeout = options.timeoutMs;
     for (const call of calls) {
       assert.equal(call.options.signal, lastCall.options.signal);
-      assert.ok(call.options.timeout <= deadline - call.startedAt + 2,
+      // Compare at the calculation time; starting the child can be delayed by scheduling.
+      assert.ok(call.options.timeout > 0);
+      assert.ok(call.options.timeout <= deadline - call.timeoutSampledAt,
         'Each child must use the remaining time, including earlier ownership checks');
+      assert.ok(call.options.timeout <= previousTimeout, 'Child timeouts must never increase');
+      previousTimeout = call.options.timeout;
     }
+    assert.equal(lastCall.options.timeout, 440,
+      'Later children must lose the 10 ms pause and the 50 ms ownership check');
     const count = calls.length;
     await delay(25);
     assert.equal(calls.length, count, 'No further ownership or backup work may start');
