@@ -599,3 +599,114 @@ async function wrongComputerLink() {
   } finally { await computer.close(); }
 }
 it('keeps routine instructions off a connection for another computer', wrongComputerLink);
+
+async function refusesLateChange(kind: string) {
+  const computer = await recordingComputer();
+  const append = nats.store.append.bind(nats.store);
+  let injected = false;
+  async function changed(...args: Parameters<typeof append>) {
+    const result = await append(...args);
+    const proposed = proposedEvent.parse(args[0].event);
+    if (!injected && proposed.type === 'computer.turn_started' && result.status === 'appended') {
+      injected = true;
+      if (kind === 'Stop') {
+        const stopped = record('review-stop', 'budget-test', 'budget.root_stopped', {
+          rootId: actor.state.roots[0]!.rootId, reason: 'allowance_exhausted',
+          attemptedBoundCents: 1, availableCents: 0 });
+        stopped.source = 'models';
+        stopped.principal = { kind: 'system', id: 'models' };
+        await nats.seed([stopped]);
+      } else if (kind === 'payer') {
+        await nats.seed([record('review-payer', 'team-sales', 'team.member_removed',
+          { teamId: 'sales', memberId: 'alice', removedBy: 'admin' })]);
+      } else await changes(kind);
+    }
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changed);
+  try {
+    await sender().send(computer.wake);
+    const link = await computer.wake();
+    function completed() {
+      return computer.starts > 0 || link.socket.readyState === link.socket.CLOSED;
+    }
+    await until(completed);
+    expect(injected).toBe(true);
+    expect(computer.starts).toBe(0);
+    expect(await savedStarts()).toHaveLength(1);
+  } finally { await computer.close(); }
+}
+it.each(['Stop', 'grant', 'payer', 'worker', 'routine.paused', 'member', 'computer'])(
+  'refuses late %s after saving the start and before releasing credentials', refusesLateChange);
+
+async function acceptsOtherThread() {
+  const computer = await recordingComputer();
+  const append = nats.store.append.bind(nats.store);
+  let injected = false;
+  async function changed(...args: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(args[0].event);
+    if (!injected && proposed.type === 'computer.turn_started') {
+      injected = true;
+      await nats.seed([record('review-other-turn', 'computer-sales-assistant', 'computer.turn_started',
+        { assistantId: 'sales-assistant', computerId: 'computer', conversationId: 'another-chat',
+          turnId: 'another-turn', threadId: 'another-thread', requesterId: 'alice',
+          task: 'chat_turn', executionMode: 'restricted' })]);
+    }
+    return append(...args);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changed);
+  try {
+    await sender().send(computer.wake);
+    const link = await computer.wake();
+    function completed() {
+      return computer.starts > 0 || link.socket.readyState === link.socket.CLOSED;
+    }
+    await until(completed);
+    expect(injected).toBe(true);
+    expect(computer.starts).toBe(1);
+    expect(await savedStarts()).toHaveLength(2);
+  } finally { await computer.close(); }
+}
+it('retries an unsaved start after another computer thread advances its stream', acceptsOtherThread);
+
+
+async function refusesRelevantComputerChange(kind: string) {
+  const computer = await recordingComputer();
+  const append = nats.store.append.bind(nats.store);
+  let injected = false;
+  async function changeBeforeAppend(...args: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(args[0].event);
+    if (!injected && proposed.type === 'computer.turn_started') {
+      injected = true;
+      if (kind === 'replacement') {
+        await changes('computer');
+      } else {
+        const competing = record('competing-start', 'computer-sales-assistant',
+          'computer.turn_started', { assistantId: 'sales-assistant', computerId: 'computer',
+            conversationId, turnId: 'competing-turn', threadId: selection.threadId,
+            requesterId: 'alice', task: 'chat_turn', executionMode: 'restricted' });
+        await nats.seed([competing]);
+      }
+    }
+    return append(...args);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changeBeforeAppend);
+  try {
+    await sender().send(computer.wake);
+    const link = await computer.wake();
+    function completed() {
+      return computer.starts > 0 || link.socket.readyState === link.socket.CLOSED;
+    }
+    await until(completed);
+    expect(injected).toBe(true);
+    expect(computer.starts).toBe(0);
+    const starts = await savedStarts();
+    for (const start of starts) {
+      expect(start.event.data).not.toMatchObject({ turnId });
+    }
+  } finally {
+    await computer.close();
+  }
+}
+it.each(['replacement', 'selected thread'])(
+  'refuses %s activity while saving the computer start', refusesRelevantComputerChange);
