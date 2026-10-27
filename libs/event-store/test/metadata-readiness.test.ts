@@ -85,3 +85,37 @@ async function reportsIncompleteMetadataAtTheDeadline() {
 }
 it('reports the observed metadata when the bounded wait expires',
   reportsIncompleteMetadataAtTheDeadline);
+
+async function readsCurrentPeersFromTheLeader() {
+  monitoringReplies([ready]);
+  const follower = structuredClone(ready);
+  follower.meta_cluster.leader = 'peer-2';
+  follower.meta_cluster.replicas = [
+    { name: 'peer-2', current: true }, { name: 'peer-3', current: false },
+  ];
+  const leader = structuredClone(ready);
+  leader.meta_cluster.leader = 'peer-2';
+  leader.meta_cluster.replicas[0]!.name = 'peer-1';
+  const leaderPeer = { ...peer, name: 'peer-2', monitor: 4 };
+  function fetchMetadata(address: string) {
+    if (address.endsWith('/healthz?js-meta-only=true')) {
+      return Promise.resolve(new Response('ok'));
+    }
+    if (address === 'http://127.0.0.1:4/jsz') {
+      return Promise.resolve(Response.json(leader));
+    }
+    return Promise.resolve(Response.json(follower));
+  }
+  vi.stubGlobal('fetch', fetchMetadata);
+  const pending = metadataReady(peer, [peer, leaderPeer]);
+  const result = pending.then(markFinished);
+  let finished = false;
+  function markFinished() {
+    finished = true;
+  }
+  await vi.advanceTimersByTimeAsync(0);
+  expect(finished).toBe(true);
+  await result;
+}
+it('reads current peer flags from the metadata leader, since followers only track their leader',
+  readsCurrentPeersFromTheLeader);
