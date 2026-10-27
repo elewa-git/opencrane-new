@@ -30,6 +30,7 @@ import { shortDuplicateWindowFixture, waitForDuplicateWindow }
 import { calculateRoutineOccurrence } from '@opencrane/events/routine-schedule';
 import { claimScheduledRoutine } from '../../ops/test/support/routine-claim.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
+import { requestRoutineStop } from '../src/routine-stop.ts';
 import { prepareRoutineSession } from '../src/routine-session.ts';
 import { assistantSnapshot, processConversation } from '../src/chat/bridge-conversation.ts';
 import { agentSession } from '../src/chat/reports.ts';
@@ -860,6 +861,33 @@ function routineInputTests() {
     'never wakes or delivers the saved input when %s', noDelivery);
 }
 describe('routine input', routineInputTests);
+
+async function stopRequest() {
+  return { ...input, changeId: 'orders:stop-1',
+    expectedPosition: await nats.store.head('routine-orders'),
+    expectedDefinitionRevision: 1, expectedScheduleRevision: 1, expectedControlRevision: 1 };
+}
+async function ownerStopsPreparation() {
+  const request = await stopRequest();
+  const before = await nats.store.head();
+  const receipt = await requestRoutineStop(nats.store, binding, 'alice', request);
+  expect(receipt).toMatchObject({ status: 'confirmed', changeId: request.changeId,
+    position: before + 1 });
+  expect(await requestRoutineStop(nats.store, binding, 'alice', request)).toEqual(receipt);
+  const saved = await history(nats.store, 'routine-orders', 'test');
+  let state;
+  for (const row of saved) state = foldRoutine(state, row.event);
+  expect(state).toMatchObject({ status: 'active', stopRequested: true,
+    activeRun: { occurrenceId: 'occurrence' }, lastRun: null, executionAvailable: false });
+  expect(state?.definition?.next).toEqual(definition().next);
+  expect(saved.at(-1)?.event.data).toMatchObject({ source: 'owner', actorId: 'alice',
+    reason: 'owner_requested', definitionRevision: 1, controlRevision: 1,
+    affectedRun: 'occurrence', rootId: 'routine-root-occurrence' });
+  await refuses();
+  expect(await nats.store.head()).toBe(before + 1);
+}
+it('owner Stop saves one intent and prevents preparation without finishing the run',
+  ownerStopsPreparation);
 
 function routineRootTests() {
   let expectedHolds: BudgetActor['state']['reservations'] = [];
