@@ -1,0 +1,1 @@
+- Record one checked routine activation admission against its existing spending allowance. Retries recover the same receipt without allocating again or granting another sender. Routine execution remains disabled.

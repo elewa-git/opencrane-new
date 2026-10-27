@@ -824,3 +824,12 @@ Old conversations remain readable but cannot be recovered as worker preparations
 Only the server preparation append supplies the binding after checking the saved claim
 and current worker ownership. Public chat input cannot supply it. The binding grants no
 execution permission and adds no reaction or event type.
+
+## Checked routine activation receipts
+
+`routineActivationSchema` is exported for the internal admission command. The existing
+strict event fields are unchanged. `admission` references the exact budget allocation;
+its preparation digest binds the frozen run and prepared input. `rootId` remains the due
+record's routine reference, while the allocation contains the actual budget root id.
+A saved `senderAttemptId` can recover only the same receipt. No reaction or replay sends
+work. See the [catalogue](../../docs/architecture/events.md#routines-and-delegation).

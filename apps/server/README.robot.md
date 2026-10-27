@@ -5311,12 +5311,37 @@ deadline. Recovery uses the actor's saved amount and refuses changed bindings. I
 increase an allowance, release a hold, reopen a stopped root or start a call.
 
 `executionAvailable` remains false. The bridge exclusion and public reader exclusions stay in
-place. Wake, grants, activation, dispatch and company Ask decision/use remain later work.
+place. Wake, grants, dispatch and company Ask decision/use remain later work.
+Admission recording is described below.
 Ask has no approval or bypass in this operation. Fresh-install qualification: NOT RUN.
 Prerequisite #747 merged at `54cb4ff7535c0bd16a6bcab16403eac66848548c`, including its
 WebSocket/history fix. Part of #106, P4-24 row 10 allocation only.
 `test/routine-session.test.ts` reuses preparation refusal cases for root allocation and covers
 concurrency, lost replies, broker/actor restart, capped immutable allowances and changed choices.
+
+### Checked routine activation admission
+
+`routine-activation.ts` exports internal `admitRoutineActivation(store, keys, worker,
+input, selection, senderAttemptId)`. Input accepts only routineId and occurrenceId.
+The trusted worker supplies the prepared computer/thread/generation and stable sender
+attempt separately. There is no production caller. One conditional append records the
+existing `routine.run_activation_admitted` event on the routine stream. Its allocation
+reference binds the exact encrypted input, frozen owner admission and payer, selected
+provider/model/tariff and prepared computer. A missing or changed allocation refuses.
+Retries compare the entire saved admission, including sender attempt. They return only
+its receipt with `executionAvailable: false`; they allocate nothing and grant no sender.
+
+Budget and preparation histories load before the original two-second access deadline.
+The command shares routine preparation, child computer checks and exact saved-record
+comparison. Small access streams and relevant incremental changes guard publication
+and receipt return. Unrelated chat activity and other computer threads remain allowed.
+Lost replies and restart recover only the receipt. Allowances and uncertain holds remain
+unchanged. Bridge delivery, wake, reconciliation and bound owner Ask decision/use remain
+later work. Ask still refuses; live qualification is NOT RUN.
+
+Prerequisite #756 merged at `6ae020ae2a06dbd542f3d3e0e7ff814131055c1f`.
+Part of #106, P4-24 row 10, admission recording only. Tests are in
+`test/routine-session.test.ts` under `routine activation`.
 
 ## Routine metadata reads
 

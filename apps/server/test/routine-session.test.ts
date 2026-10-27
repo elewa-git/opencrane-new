@@ -384,6 +384,11 @@ async function changesAtAppend(kind: string) {
   await expect(prepare()).rejects.toThrow(refusal());
   expect(await rows()).toEqual(original);
   if (rootMode) expect(await nats.store.head('budget-test')).toBe(budgetPosition);
+  if (activationMode) {
+    for (const row of await history(nats.store, 'routine-orders', 'test')) {
+      expect(row.event.type).not.toBe('routine.run_activation_admitted');
+    }
+  }
 }
 it.each([...controls, 'member', 'worker', 'expiry'])('rechecks %s at append', changesAtAppend);
 async function changesAfterAppend(kind: string) {
@@ -1164,13 +1169,16 @@ function routineRootTests() {
       duringCheck = appendDuringCheck;
       return root;
     }
-    vi.spyOn(actor, 'setRootAllowance').mockImplementationOnce(afterAllocation);
+    if (activationMode) {
+      duringCheck = appendDuringCheck;
+    } else {
+      vi.spyOn(actor, 'setRootAllowance').mockImplementationOnce(afterAllocation);
+    }
     if (revocation === 'none') {
       const receipt = await prepare();
-      expect(receipt).toMatchObject({ status: 'confirmed', allowanceCents: 1000,
-        executionAvailable: false });
+      expect(receipt).toMatchObject({ status: 'confirmed', executionAvailable: false });
     } else {
-      await expect(prepare()).rejects.toThrow('Routine root refused');
+      await expect(prepare()).rejects.toThrow(refusal());
     }
     expect(appended).toBeGreaterThanOrEqual(2);
     expect(actor.state.roots).toHaveLength(1);
@@ -1212,6 +1220,130 @@ function routineRootTests() {
       expect(await nats.store.head()).toBe(before + 1);
     }
     it('two workers recover one exact admission without granting another sender', admitOnce);
+    it('recovers only the receipt after a lost reply and broker restart', recovers);
+    it.each(lostAccess)('refuses activation after losing %s', losesAccess);
+    it.each(lostAccess)('withholds activation receipts after losing %s', losesReceiptAccess);
+    it.each(controls)('refuses activation after %s', changedControl);
+    it.each([...controls, 'member', 'expiry'])(
+      'refuses %s before admission append', changesAtAppend);
+    it.each([...controls, 'member', 'worker', 'expiry'])(
+      'withholds the admission after %s while awaiting append', changesAfterAppend);
+    it.each(['member', 'assistant'])('refuses lost %s model grants', revokedModel);
+    it.each(['conversation.created', 'message.posted', 'foreign', 'replaced'])(
+      'refuses changed prepared input: %s', changedRecord);
+    it.each(['none', 'member', 'payer', 'grant'])(
+      'admits through sustained traffic unless access changes: %s', confirmationRevocation);
+    it('admits through sustained activity in another thread', otherThreadDuringConfirmation);
+    it('keeps the original access deadline', expiredWrite);
+    it('refuses expired admission receipts', expires);
+    it('replays the admission without effects', replay, 30_000);
+    it.each(['computer.suspended', 'computer.ready'])(
+      'keeps admitted input idle with %s', noDelivery);
+
+    async function changedAllocation(field: string) {
+      const read = nats.store.readStream.bind(nats.store);
+      async function* altered(...args: Parameters<typeof read>) {
+        for await (const row of read(...args)) {
+          if (row.event.type !== 'budget.root_allowance_set') {
+            yield row;
+            continue;
+          }
+          if (field === 'missing') continue;
+          const data = z.record(z.string(), z.unknown()).parse(row.event.data);
+          let value: string | number = 'forged';
+          if (field === 'generation') value = 2;
+          if (field === 'preparationDigest') value = '0'.repeat(64);
+          yield { ...row, event: { ...row.event, data: { ...data, [field]: value } } };
+        }
+      }
+      vi.spyOn(nats.store, 'readStream').mockImplementation(altered);
+      await refuses();
+    }
+    it.each(['missing', 'rootId', 'preparationDigest', 'requesterId', 'turnId',
+      'payingGroupId', 'generation', 'threadId'])(
+      'refuses missing or forged allocation binding: %s', changedAllocation);
+
+    async function changedChoice(kind: string, late: boolean) {
+      async function change() {
+        if (kind === 'provider' || kind === 'tariff') {
+          await provider(kind === 'tariff' ? 'unpriced-model' : 'gpt-6.1-sol');
+        } else {
+          const ready = record('replaced-computer', 'computer-sales-assistant', 'computer.ready',
+            { assistantId: 'sales-assistant', computerId: 'computer', generation: 2 });
+          await nats.seed([ready]);
+        }
+      }
+      const before = await nats.store.head('routine-orders');
+      if (late) duringCheck = change;
+      else await change();
+      await expect(prepare()).rejects.toThrow(refusal());
+      expect(await nats.store.head('routine-orders')).toBe(before);
+    }
+    const choices: [string, boolean][] = [['provider', false], ['tariff', false],
+      ['generation', false], ['provider', true], ['tariff', true], ['generation', true]];
+    it.each(choices)('refuses changed %s, after awaited checks: %s', changedChoice);
+
+    async function delayedPreparation(revoked: boolean) {
+      const read = nats.store.readStream.bind(nats.store);
+      const originalNow = performance.now.bind(performance);
+      let elapsed = 0;
+      function delayedClock() { return originalNow() + elapsed; }
+      async function* delayed(...args: Parameters<typeof read>) {
+        yield* read(...args);
+        if (args[0] === 'budget-test' && args[1] === 1) {
+          elapsed += 14_000;
+          now += 14_000;
+          if (revoked) await removeMember();
+        }
+      }
+      vi.spyOn(performance, 'now').mockImplementation(delayedClock);
+      vi.spyOn(nats.store, 'readStream').mockImplementation(delayed);
+      const before = await nats.store.head('routine-orders');
+      if (revoked) {
+        await expect(prepare()).rejects.toThrow(refusal());
+        expect(await nats.store.head('routine-orders')).toBe(before);
+      } else {
+        expect(await prepare()).toMatchObject({ executionAvailable: false });
+      }
+    }
+    it.each([false, true])('waits 14 seconds outside access, then revoked: %s', delayedPreparation);
+
+    async function uncertainHold() {
+      const root = actor.state.roots[0]!;
+      const call = { requesterId: 'alice', conversationId, turnId: root.turnId,
+        assistantId: 'sales-assistant', payingGroupId: 'sales', ...selection,
+        model: 'gpt-6.1-sol', priceTableId, contextDigest: '0'.repeat(64) };
+      const hold = await actor.reserve(call, 100, undefined, undefined, root.rootId);
+      await actor.uncertain(hold, 'settle_timeout');
+      expectedHolds = structuredClone(actor.state.reservations);
+      const receipt = await prepare();
+      expect(await prepare()).toEqual(receipt);
+      expect(rootTotals(actor.state, root.rootId).heldCents).toBe(100);
+      await control('routine.run_stop_requested');
+      await refuses();
+      expect(rootTotals(actor.state, root.rootId).heldCents).toBe(100);
+    }
+    it('recovers only a receipt while preserving uncertain money and sender state', uncertainHold);
+    async function lastAwaitRevocation() {
+      const read = nats.store.readStream.bind(nats.store);
+      let removed = false;
+      async function* revoke(...args: Parameters<typeof read>) {
+        yield* read(...args);
+        if (!removed && args[0] === 'budget-test' && args[1]! > 1) {
+          removed = true;
+          await removeMember();
+        }
+      }
+      vi.spyOn(nats.store, 'readStream').mockImplementation(revoke);
+      const before = await nats.store.head('routine-orders');
+      await expect(prepare()).rejects.toThrow(refusal());
+      expect(removed).toBe(true);
+      expect(await nats.store.head('routine-orders')).toBe(before);
+    }
+    it('refuses revocation after the last authority check while reading budget changes',
+      lastAwaitRevocation);
+
+
   }
   describe('routine activation', activationTests);
 

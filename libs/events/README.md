@@ -6,7 +6,8 @@ The list of every kind of event OpenCrane records, and the exact data each one c
 An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened, such as a member joining or a message being sent. This package says which event types exist and what information each one carries. It checks event data, including new memory text, and still accepts older encrypted events for replay. It does not save events or decide whether a person may act. It also defines private turn records that contain memory reference ids, counts and fixed reasons, without saved fact text. Native spending holds can keep their original access expiry after a restart. The package can preview routine dates without starting work.
 
 A routine spending allowance can keep a fingerprint of its checked preparation.
-Retries must match it before they can recover that allowance.
+Retries must match it before they can recover that allowance. A routine activation
+receipt names that allocation and one sender attempt. Reading or replaying it starts no work.
 
 Control refusals record the attempt, the person who made it, its conversation, a
 fingerprint of the checked request and a fixed reason. They contain no computer or private turn details.
@@ -27,7 +28,7 @@ Allow, Ask or Block choice for a tool.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions"]
-  server["apps/server<br/>back end"] -.->|checks routine allowance fingerprints, session creation, pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
+  server["apps/server<br/>back end"] -.->|checks routine allowance fingerprints and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
