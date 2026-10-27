@@ -13,6 +13,8 @@ import { collectEventBackup, descriptorSchema, infoSchema } from './event-backup
 import * as custody from './memory-restore-check.ts';
 import * as homes from './computer-volume-check.ts';
 import * as recovery from './recovery-restore.ts';
+import * as capture from './backup-capture.ts';
+import { volumeExportDescriptorSchema } from './computer-volume-export.ts';
 import { collectUpgradeRecovery } from './upgrade-recovery.ts';
 import { checkUpgradeRecovery } from './upgrade-recovery-check.ts';
 import * as models from '@opencrane/models';
@@ -104,6 +106,7 @@ async function recoversAfterInterruptedUpgrade(fault: string) {
     await externalEffect();
     expect(calls).toBe(1);
     calls = 0;
+    const coordinated = vi.spyOn(capture, 'collectBackupCapture');
     const fileFixture = await recoveryFiles(source, directory, fault);
     const captured = await captureBeforeUpgrade(source, directory);
     await fileFixture.capture(captured.destination);
@@ -141,6 +144,23 @@ async function recoversAfterInterruptedUpgrade(fault: string) {
         { mode: 0o600 });
     } else {
       await fileFixture.restore(target);
+      expect(coordinated).toHaveBeenCalledOnce();
+      const captureOptions = coordinated.mock.calls[0]![4];
+      const restoreOptions = checkedRecovery.mock.calls[0]![4];
+      expect(restoreOptions.eventDirectory).toBe(join(captureOptions.destination, 'events'));
+      expect(restoreOptions.directory).toBe(join(captureOptions.destination, 'objects'));
+      expect(restoreOptions.volumeDirectory).toBe(join(captureOptions.destination, 'homes'));
+      const savedHomes = await readFile(join(restoreOptions.volumeDirectory, 'descriptor.json'));
+      const homeDescriptor = volumeExportDescriptorSchema.parse(JSON.parse(savedHomes.toString()));
+      expect(homeDescriptor.exports).toHaveLength(2);
+      expect(homeDescriptor.binding.volumes).toHaveLength(2);
+      const homeHashes = new Set<string>();
+      for (const home of homeDescriptor.exports) {
+        expect(home.byteCount).toBeGreaterThan(0);
+        homeHashes.add(home.sha256);
+      }
+      expect(homeHashes.size).toBe(2);
+      await expect(checkedHomes.mock.results[0]!.value).resolves.toBeUndefined();
       expect(observed.transfers).toBe(1);
       const budgetRebuilds = [];
       const fileRebuilds = [];
