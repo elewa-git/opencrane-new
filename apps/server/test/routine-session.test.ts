@@ -1224,7 +1224,7 @@ function routineRootTests() {
     it.each(lostAccess)('refuses activation after losing %s', losesAccess);
     it.each(lostAccess)('withholds activation receipts after losing %s', losesReceiptAccess);
     it.each(controls)('refuses activation after %s', changedControl);
-    it.each([...controls, 'member', 'expiry'])(
+    it.each([...controls, 'member', 'worker', 'expiry'])(
       'refuses %s before admission append', changesAtAppend);
     it.each([...controls, 'member', 'worker', 'expiry'])(
       'withholds the admission after %s while awaiting append', changesAfterAppend);
