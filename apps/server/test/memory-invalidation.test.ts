@@ -303,6 +303,36 @@ async function racingAppend(kind: 'recall' | 'closed' | 'lost') {
 it.each(['recall', 'closed', 'lost'] as const)(
   'reloads and reconciles after a %s append race', racingAppend);
 
+async function laterRecallRace(kind: 'corrected' | 'forgotten') {
+  await change(kind);
+  const later = { ...reference, memoryId: 'later' };
+  const appendSaved = setup.store.append.bind(setup.store);
+  async function recallDuringAppend(command: Parameters<typeof appendSaved>[0]) {
+    spy.mockRestore();
+    const data = { ...memoryWrittenExample, scopeId, memoryId: later.memoryId };
+    await append(`scope-${scopeId}`, 'memory.written', data);
+    const recall = { callDigest: 'c'.repeat(64), dispatchDigest: 'd'.repeat(64) };
+    await load([later], recall);
+    return appendSaved(command);
+  }
+  const spy = vi.spyOn(setup.store, 'append').mockImplementationOnce(recallDuringAppend);
+  expect(await invalidate()).toEqual({ status: 'reload_required' });
+  const receipt = await invalidate();
+  expect(receipt).toMatchObject({ status: 'invalidated', inputGeneration: 'input' });
+  const position = await setup.store.head('conversation-chat');
+  expect(await invalidate()).toEqual(receipt);
+  expect(await setup.store.head('conversation-chat')).toBe(position);
+  const scopePosition = await setup.store.head(`scope-${scopeId}`);
+  const cold = { readStream: setup.store.readStream.bind(setup.store) };
+  const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
+  expect(facts.memoryContext).toMatchObject({ status: 'invalidated',
+    references: [reference, later], executionAvailable: false, recallCalls: 2,
+    scopePositions: [{ scopeId, position: scopePosition }] });
+  expect(facts.memoryContext?.events.size).toBe(4);
+}
+it.each(['corrected', 'forgotten'] as const)(
+  'reconciles a recall of a fact written after the loaded fact was %s', laterRecallRace);
+
 async function unrelatedActivity() {
   await append('conversation-chat', 'message.posted', { conversationId: 'chat',
     authorKind: 'human', authorId: 'alice', contentType: 'text',
