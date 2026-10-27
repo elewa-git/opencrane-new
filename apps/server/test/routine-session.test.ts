@@ -34,6 +34,7 @@ import { prepareRoutineSession } from '../src/routine-session.ts';
 import { assistantSnapshot, processConversation } from '../src/chat/bridge-conversation.ts';
 import { agentSession } from '../src/chat/reports.ts';
 import { prepareRoutineInput } from '../src/routine-input.ts';
+import { admitRoutineActivation } from '../src/routine-activation.ts';
 import { allocateRoutineRoot } from '../src/routine-root.ts';
 import { BudgetActor, budgets, history, priceTableId, readBudget, rootTotals } from '@opencrane/models';
 import { grantStream } from '@opencrane/authz';
@@ -50,6 +51,7 @@ let encryption: MockInstance<typeof keys.encrypt>;
 let decryption: MockInstance<typeof keys.decrypt>;
 let inputMode = false;
 let rootMode = false;
+let activationMode = false;
 let actor: BudgetActor;
 const selection = { threadId: 'prepared-thread', computerId: 'computer', generation: 1 };
 let instructions: ReturnType<typeof keys.encrypt>;
@@ -104,6 +106,7 @@ async function setup() {
   keys = conversationKeys(directory);
   inputMode = false;
   rootMode = false;
+  activationMode = false;
   keys.provision('test', 'routine-orders');
   instructions = keys.encrypt('test', 'routine-orders', privateText);
   now = Date.parse('2026-10-11T07:00:00Z');
@@ -138,6 +141,9 @@ beforeEach(setup, 30_000);
 afterEach(cleanup);
 function prepare(store = nats.store, request: unknown = input, workerId = 'routine-worker') {
   const worker = { silo: 'test', binding, workerId, checkCurrent, now: clock };
+  if (activationMode) {
+    return admitRoutineActivation(store, keys, worker, request, selection, 'sender-attempt');
+  }
   if (rootMode) return allocateRoutineRoot(store, keys, worker, request, actor, selection);
   if (inputMode) return prepareRoutineInput(store, keys, worker, request);
   return prepareRoutineSession(store, keys, worker, request);
@@ -150,6 +156,7 @@ async function rows() {
   return saved;
 }
 function refusal() {
+  if (activationMode) return 'Routine activation refused';
   if (rootMode) return 'Routine root refused';
   if (inputMode) return 'Routine input refused';
   return 'Routine session refused';
@@ -1181,6 +1188,32 @@ function routineRootTests() {
     await trafficDuringConfirmation('none', true);
   }
   it('confirms through sustained activity in another computer thread', otherThreadDuringConfirmation);
+
+  function activationTests() {
+    async function allocated() {
+      await prepare();
+      activationMode = true;
+    }
+    beforeEach(allocated);
+    async function admitOnce() {
+      const before = await nats.store.head();
+      const results = await Promise.all([prepare(), prepare()]);
+      expect(results[0]).toEqual(results[1]);
+      expect(results[0]).toMatchObject({ status: 'confirmed', executionAvailable: false });
+      expect(await prepare()).toEqual(results[0]);
+      expect(await nats.store.head()).toBe(before + 1);
+      const saved = await history(nats.store, 'routine-orders', 'test');
+      expect(saved.at(-1)!.event).toMatchObject({ type: 'routine.run_activation_admitted',
+        data: { senderAttemptId: 'sender-attempt', occurrenceId: 'occurrence' } });
+      expect(actor.state.roots).toHaveLength(1);
+      const worker = { silo: 'test', binding, workerId: 'routine-worker', checkCurrent, now: clock };
+      await expect(admitRoutineActivation(nats.store, keys, worker, input, selection, 'other'))
+        .rejects.toThrow('Routine activation refused');
+      expect(await nats.store.head()).toBe(before + 1);
+    }
+    it('two workers recover one exact admission without granting another sender', admitOnce);
+  }
+  describe('routine activation', activationTests);
 
   async function noEffects() {
     const saved = await history(nats.store, 'budget-test', 'test');
