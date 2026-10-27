@@ -1,0 +1,176 @@
+{
+  "status": "PARTIAL",
+  "scope": "Node notice declarations only",
+  "candidateSha256": "365bc4d4c4039ba62a6ce982aaae68508b2986df5edb7605355b92055457a2da",
+  "sourceRevision": "0ba702c6e3ed062e7ff812875f9de873d41da4b3",
+  "configurationDigest": "sha256:9a6bd564f72ff4e708289f11db14ceff4e93e00cf7d7ce2e0c172fb6085fbbc5",
+  "localIndexDigest": "sha256:835a2664d9cc10647c5f5da587cdb1326fb9e3bbf08c458e93d17dcb7af116ac",
+  "nodeNoticeSha256": "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4",
+  "node": [["Node.js contributors", ["MIT"], "/usr/local/LICENSE", "The current contributor grant is OSI MIT; retain its copyright and permission notice."], ["Node.js Joyent portions", ["MIT"], "/usr/local/LICENSE", "The separate Joyent grant is OSI MIT; retain its attribution. Neither preamble grant overrides external library terms."]],
+  "sections": [
+    ["Acorn, located at deps/acorn, is licensed as follows:", "f450db307b369d9c8dec54e73aba64fc118368339abafa1295c273d5df9838e4", [
+      ["Acorn", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["c-ares, located at deps/cares, is licensed as follows:", "9f9f46cc5cafff2a8787695016826ae700bcf5480358271f4b19a6e2b188f140", [
+      ["c-ares", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["cjs-module-lexer, located at deps/cjs-module-lexer, is licensed as follows:", "b75dd307e28e49af66fff72e697d53f1421efc718dd671504ef012fc21859eb7", [
+      ["cjs-module-lexer", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["ittapi, located at deps/v8/third_party/ittapi, is licensed as follows:", "554acb02510019f8de13c39fa3642c8b19b0878f3f978a8100034ae4994b7931", [
+      ["ittapi", ["BSD-3-Clause"], "/usr/local/LICENSE", "OSI BSD-3-Clause permits source and binary redistribution with notices and no endorsement; these terms remain here."]
+    ]],
+    ["amaro, located at deps/amaro, is licensed as follows:", "5c0fbbf576681fabcfe33e09323a0b284e13269eb85d33387d773fe7f8626d97", [
+      ["amaro", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["swc, located at deps/amaro/dist, is licensed as follows:", "407584f8622b528db99b12ffca23929991c90494cbe6f602a0cd9763bb55ee14", [
+      ["swc", ["Apache-2.0"], "/usr/local/LICENSE", "OSI Apache-2.0 grants copyright and patent rights; the shipped declaration keeps its terms and attribution."]
+    ]],
+    ["ICU, located at deps/icu-small, is licensed as follows:", "1dcebd6ab53b3562845796912ab65afb45186883808e692d8d38a87631ed9d48", [
+      ["ICU", ["Unicode-3.0"], "/usr/local/LICENSE", "OSI Unicode-3.0 permits software and data use, changes and redistribution with its retained notice."],
+      ["ICU legacy 1.8.1 to 57.1", ["ICU"], "/usr/local/LICENSE", "OSI ICU permits changes and redistribution; retain copyright, permission, supporting documentation and non-endorsement terms."],
+      ["ICU cjdict Google word list", ["BSD-3-Clause"], "/usr/local/LICENSE", "OSI BSD-3-Clause covers the combined word list; preserve the Google notice and no-endorsement condition."],
+      ["ICU libtabe TaBE Project and Pai-Hsiang Hsiao", ["BSD-3-Clause"], "/usr/local/LICENSE", "OSI BSD-3-Clause permits redistribution and changes; retain TaBE attribution and no-endorsement terms."],
+      ["ICU libtabe Academia Sinica", ["BSD-3-Clause"], "/usr/local/LICENSE", "OSI BSD-3-Clause permits source and binary redistribution; retain this separate laboratory notice and disclaimer."],
+      ["ICU IPADIC and ICOT dictionary", ["NAIST-2003"], "/usr/local/LICENSE", "Bundled DFSG-free dictionary terms permit use, modified copies and redistribution with notices and no warranty. The ICOT paragraph preserves applicable law, without a field-of-use restriction. Accept only this exact ICU section under AGENTS.md."],
+      ["ICU Lao Unicode and IBM notice", ["Unicode-3.0", "ICU"], "/usr/local/LICENSE", "Retain both the Unicode terms and earlier IBM attribution; both named licences permit software and data redistribution."],
+      ["ICU Lao Wilson and Campbell dictionary", ["BSD-2-Clause"], "/usr/local/LICENSE", "OSI BSD-2-Clause permits source and binary redistribution with the retained dictionary notice and disclaimer."],
+      ["ICU Burmese IBM notice", ["ICU"], "/usr/local/LICENSE", "Retain the IBM attribution under the enclosing OSI ICU terms; the separate dictionary grant follows below."],
+      ["ICU Burmese LeRoy Benjamin Sharon dictionary", ["BSD-3-Clause"], "/usr/local/LICENSE", "OSI BSD-3-Clause permits changes and redistribution; retain the dictionary notice and no-endorsement condition."],
+      ["ICU time zone database", ["LicenseRef-Public-Domain"], "/usr/local/LICENSE", "The notice explicitly identifies public-domain code and data and contribution waivers in BCP 175 section 7. Accept this bundled DFSG-free data under AGENTS.md."],
+      ["ICU Google double-conversion", ["BSD-3-Clause"], "/usr/local/LICENSE", "OSI BSD-3-Clause permits source and binary redistribution; retain this V8 attribution and disclaimer."],
+      ["ICU nlohmann/json", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits changes and redistribution; retain the separate Niels Lohmann notice."],
+      ["ICU aclocal.m4 pkg.m4", ["GPL-2.0-or-later"], "/usr/local/LICENSE", "Record GPL-2.0-or-later WITH Autoconf-exception-generic. GPL is OSI-approved; the retained exception allows distribution with the generated configure script under the enclosing terms, as the notice expressly confirms."],
+      ["ICU config.guess", ["GPL-3.0-or-later"], "/usr/local/LICENSE", "Record GPL-3.0-or-later with the printed Autoconf generic exception and section 7 additional permission. The notice confirms configure meets its condition; this does not relicense other GPL code."],
+      ["ICU install-sh", ["HPND-sell-variant"], "/usr/local/LICENSE", "The MIT 1991 grant permits use, copying, changes, distribution and sale with attribution, documentation and no advertising use of its name. AGENTS.md accepts HPND variants; retain these exact terms."],
+      ["ICU4J sorttable.js", ["MIT-0"], "/usr/local/LICENSE", "The printed MIT grant omits the attribution condition: OSI MIT-0. Record even this ICU4J-only notice; retain the Stuart Langridge attribution."]
+    ]],
+    ["libuv, located at deps/uv, is licensed as follows:", "6c08071181ee450f8e662712690466ed17a41f1c3e7fc384fc5c63914894b7bf", [
+      ["libuv", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."],
+      ["libuv Joyent portions", ["MIT"], "/usr/local/LICENSE", "Retain the separate OSI MIT Joyent grant as well as the current contributor grant."],
+      ["libuv FreeBSD tree.h", ["BSD-2-Clause"], "/usr/local/LICENSE", "The notice expressly names the two-clause BSD grant and Niels Provos; retain that attribution for this bundled header."],
+      ["libuv inet_pton and inet_ntop", ["ISC"], "/usr/local/LICENSE", "The notice expressly names ISC for these implementations; retain its separate Internet Systems Consortium attribution."]
+    ]],
+    ["llhttp, located at deps/llhttp, is licensed as follows:", "f35205cd55dda169372e3b8f8c947d11559f18bbed2cfab29adfb29e3689cd37", [
+      ["llhttp", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["corepack, located at deps/corepack, is licensed as follows:", "b4b9cd50b7273b6df53db54c35ae4f4aa78edf9ffee89efb17fbea0caa98e21a", [
+      ["corepack", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["undici, located at deps/undici, is licensed as follows:", "19af144436151452a03185fdb4aa30fc5bbf1597d4a16b59fda6898a09cec2b6", [
+      ["undici", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["postject, located at test/fixtures/postject-copy, is licensed as follows:", "d2dcfa7ad443209d83e2b999c5a70e039e161a21989f48d797b4caea6d5b4365", [
+      ["postject", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."],
+      ["Postject LIEF", ["Apache-2.0"], "/usr/local/LICENSE", "Retain the nested OSI Apache-2.0 terms and the R. Thomas and Quarkslab attribution; the Postject MIT grant does not replace them."]
+    ]],
+    ["OpenSSL, located at deps/openssl, is licensed as follows:", "c7d8114e5eedd040105876ac4a4ebb26d77be63f798209e2c0e6ae8b55a962fd", [
+      ["OpenSSL", ["Apache-2.0"], "/usr/local/LICENSE", "OSI Apache-2.0 grants copyright and patent rights; the shipped declaration keeps its terms and attribution."]
+    ]],
+    ["Punycode.js, located at lib/punycode.js, is licensed as follows:", "f42dacb38773d598413dfdf1d77478fcc1c0be48ac96b80c881b8ce93d590cc8", [
+      ["Punycode.js", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["V8, located at deps/v8, is licensed as follows:", "105920c94ff5a834680e7e6d4ed5b666df185d6dc04ce7d7992b947b9916299f", [
+      ["V8", ["BSD-3-Clause"], "/usr/local/LICENSE", "OSI BSD-3-Clause permits source and binary redistribution with notices and no endorsement; these terms remain here."],
+      ["V8 WebKit layout tests", ["BSD-3-Clause"], "/usr/local/LICENSE", "The notice expressly names BSD-3-Clause and Apple attribution; retain it even though it describes source tests."],
+      ["V8 Strongtalk assembler", ["BSD-3-Clause"], "/usr/local/LICENSE", "The notice expressly names BSD-3-Clause and Sun Microsystems attribution for the assembler-derived files; retain both."]
+    ]],
+    ["SipHash, located at deps/v8/src/third_party/siphash, is licensed as follows:", "9ef24eb957886240edd7e07572314de122f6b150cffabcda218906880112e62a", [
+      ["SipHash", ["LicenseRef-Public-Domain"], "/usr/local/LICENSE", "SipHash explicitly dedicates copyright and related rights worldwide to the public domain; accepted bundled DFSG-free code under AGENTS.md."]
+    ]],
+    ["zlib, located at deps/zlib, is licensed as follows:", "cc7dbacc765234a4c4671d9f0c1fdf97581df100a5814ef37886b2da409b1e24", [
+      ["zlib", ["Zlib"], "/usr/local/LICENSE", "OSI Zlib permits commercial use, changes and redistribution while preserving origin and this notice."]
+    ]],
+    ["simdjson, located at deps/simdjson, is licensed as follows:", "25e070f387d4e7563977b49f830380d147266569d189c1204feea514c76776b6", [
+      ["simdjson", ["Apache-2.0"], "/usr/local/LICENSE", "OSI Apache-2.0 grants copyright and patent rights; the shipped declaration keeps its terms and attribution."]
+    ]],
+    ["simdutf, located at deps/simdutf, is licensed as follows:", "5802fa4a075902d8dfebe1e1e7a604ef4d522a8760c1568dd159fb773bb5b919", [
+      ["simdutf", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["ada, located at deps/ada, is licensed as follows:", "c2a8a3cc177d50c9d17641655e3e0383a6a45701c40f6252e367d201c987c361", [
+      ["ada", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["minimatch, located at deps/minimatch, is licensed as follows:", "3cf470e673bdf7e3fce8d0874991b91fa3b3169a49db4073b486839ce2fad3c8", [
+      ["minimatch", ["BlueOak-1.0.0"], "/usr/local/LICENSE", "OSI BlueOak-1.0.0 grants copyright and patent rights; its notice and compliance conditions remain in the shipped text."]
+    ]],
+    ["npm, located at deps/npm, is licensed as follows:", "3b6f5654a4834f406d2c374a2cafffe9de5d45cdb28cdc808e6c7e73ffc0700d", [
+      ["npm", ["Artistic-2.0"], "/usr/local/LICENSE", "OSI Artistic-2.0 terms are retained. This is the npm application declaration only; dependency and artwork references below grant no approval."]
+    ]],
+    ["GYP, located at tools/gyp, is licensed as follows:", "14964b42797f4b3141be5c07197b8e705a45b2678489e5cd8c4da5bb1f1ec06a", [
+      ["GYP", ["BSD-3-Clause"], "/usr/local/LICENSE", "OSI BSD-3-Clause permits source and binary redistribution with notices and no endorsement; these terms remain here."]
+    ]],
+    ["inspector_protocol, located at deps/inspector_protocol, is licensed as follows:", "44c96610ce075356c167db58100e2e2ebbc7873403240a5b9d255c94cd5fed96", [
+      ["inspector_protocol", ["BSD-3-Clause"], "/usr/local/LICENSE", "OSI BSD-3-Clause permits source and binary redistribution with notices and no endorsement; these terms remain here."]
+    ]],
+    ["jinja2, located at tools/inspector_protocol/jinja2, is licensed as follows:", "96f2faa737fc17c237172df255964c842ada17e4ca9932e254dbf664281d9c2a", [
+      ["jinja2", ["BSD-3-Clause"], "/usr/local/LICENSE", "OSI BSD-3-Clause permits source and binary redistribution with notices and no endorsement; these terms remain here."]
+    ]],
+    ["markupsafe, located at tools/inspector_protocol/markupsafe, is licensed as follows:", "a297771f4702bd7472c7300fb9b3aa845aead52e52d8f8502cc1f9fcbbe30560", [
+      ["markupsafe", ["BSD-3-Clause"], "/usr/local/LICENSE", "OSI BSD-3-Clause permits source and binary redistribution with notices and no endorsement; these terms remain here."]
+    ]],
+    ["cpplint.py, located at tools/cpplint.py, is licensed as follows:", "fa3c4bd4baf04cef56fc373d3adf3546f62d6b26fe4d4517699e56235c31c6c6", [
+      ["cpplint.py", ["BSD-3-Clause"], "/usr/local/LICENSE", "OSI BSD-3-Clause permits source and binary redistribution with notices and no endorsement; these terms remain here."]
+    ]],
+    ["gypi_to_gn.py, located at tools/gypi_to_gn.py, is licensed as follows:", "b3a92fef01934924e0346ce98f69f50f562d1e608c35ccda51479ca40d0cd7d5", [
+      ["gypi_to_gn.py", ["BSD-3-Clause"], "/usr/local/LICENSE", "OSI BSD-3-Clause permits source and binary redistribution with notices and no endorsement; these terms remain here."]
+    ]],
+    ["gtest, located at deps/googletest, is licensed as follows:", "66d76edc549caf4b12ff3e511dbd2d22490a5b06e0d4a592b44ca3c66c50333c", [
+      ["gtest", ["BSD-3-Clause"], "/usr/local/LICENSE", "OSI BSD-3-Clause permits source and binary redistribution with notices and no endorsement; these terms remain here."]
+    ]],
+    ["nghttp2, located at deps/nghttp2, is licensed as follows:", "de5d94dfba86eeea1b9269a64607a410520407536c837ee399a6aaa62dc2c9e7", [
+      ["nghttp2", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["large_pages, located at src/large_pages, is licensed as follows:", "26ca634af3f195bb1b87944108636948617a6ed430e72cb00abbc2489a13e109", [
+      ["large_pages", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["caja, located at lib/internal/freeze_intrinsics.js, is licensed as follows:", "0aa2a69d9104ae2882631ec0a8f871a1349cb99ebe8139f09abb011fef6b8726", [
+      ["caja", ["Apache-2.0"], "/usr/local/LICENSE", "OSI Apache-2.0 grants copyright and patent rights; the shipped declaration keeps its terms and attribution."]
+    ]],
+    ["brotli, located at deps/brotli, is licensed as follows:", "eccb964d0bc2aeb4106ea2a7582ee8ec40e79e4b7c974288c744262f59fd27ba", [
+      ["brotli", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["zstd, located at deps/zstd, is licensed as follows:", "be61d48919a4bcafa4b0a75054cc48dece1f9f13706b7712d800bba0088ba8f3", [
+      ["zstd", ["BSD-3-Clause"], "/usr/local/LICENSE", "OSI BSD-3-Clause permits source and binary redistribution with notices and no endorsement; these terms remain here."]
+    ]],
+    ["HdrHistogram, located at deps/histogram, is licensed as follows:", "9b6b741731e3416ab59cc7b963707dc22f791e4521e9130db7e0d3154a9db57a", [
+      ["HdrHistogram", ["BSD-2-Clause"], "/usr/local/LICENSE", "Choose the explicit OSI BSD-2-Clause option; retain its notice. The same text also offers public domain/CC0-1.0, without requiring that option."]
+    ]],
+    ["node-heapdump, located at src/heap_utils.cc, is licensed as follows:", "174b99cbc86fddc9ee70abaaf5796dc990879b4a49a4a4a145daa089f32a51a4", [
+      ["node-heapdump", ["ISC"], "/usr/local/LICENSE", "OSI ISC permits use, copying, changes and distribution for any purpose with its retained copyright and permission notice."],
+      ["node-heapdump compat.h and compat-inl.h", ["ISC"], "/usr/local/LICENSE", "Retain the second OSI ISC grant and the StrongLoop attribution separately from Ben Noordhuis."]
+    ]],
+    ["rimraf, located at lib/internal/fs/rimraf.js, is licensed as follows:", "84c3034ee9c3038981eaab5cf1306930a7082a0cf057c624f36fc9f86b980ff8", [
+      ["rimraf", ["ISC"], "/usr/local/LICENSE", "OSI ISC permits use, copying, changes and distribution for any purpose with its retained copyright and permission notice."]
+    ]],
+    ["uvwasi, located at deps/uvwasi, is licensed as follows:", "ff034819bc1f32c8bd2d0ee1cd2e3956140f6fd4a2d3dfafc2587457a107e332", [
+      ["uvwasi", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["ngtcp2, located at deps/ngtcp2/ngtcp2/, is licensed as follows:", "c1c36eee17c21729dba3aaf6976f4537b24e1ea2543dbb10754e096d80fcd254", [
+      ["ngtcp2", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["nghttp3, located at deps/ngtcp2/nghttp3/, is licensed as follows:", "e9a6f2185bc089126659a30267860e1c125e3f454b020501b91b65aeec742b20", [
+      ["nghttp3", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["node-fs-extra, located at lib/internal/fs/cp, is licensed as follows:", "8822f5b0fce3d4ee3a983b520ef2dbfdebb540a81c9a1ecc65d5c44a472900a4", [
+      ["node-fs-extra", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["on-exit-leak-free, located at lib/internal/process/finalization, is licensed as follows:", "bab282545179adaae81e43e4af606badda918a8e278bb6a907dead69a8f539e7", [
+      ["on-exit-leak-free", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]],
+    ["sonic-boom, located at lib/internal/streams/fast-utf8-stream.js, is licensed as follows:", "02545de96b9ba48e4fb2dbbf0d10fee7fc9ab439aea356482dc8e8efdad91e85", [
+      ["sonic-boom", ["MIT"], "/usr/local/LICENSE", "OSI MIT permits use, changes and redistribution; the shipped notice keeps attribution and warranty terms."]
+    ]]
+  ],
+  "blockedReferences": [
+    ["1dcebd6ab53b3562845796912ab65afb45186883808e692d8d38a87631ed9d48", "libtabe Chih-Hao Tsai attribution", "Copyright and contact details only; no separate grant is printed.", "BLOCKED"],
+    ["105920c94ff5a834680e7e6d4ed5b666df185d6dc04ce7d7992b947b9916299f", "V8 PCRE test suite", "Points to an embedded licence in regexp-pcre.js; no terms are printed here.", "BLOCKED"],
+    ["105920c94ff5a834680e7e6d4ed5b666df185d6dc04ce7d7992b947b9916299f", "V8 Valgrind client API", "Says BSD without its variant or full terms; this reference cannot approve it.", "BLOCKED"],
+    ["105920c94ff5a834680e7e6d4ed5b666df185d6dc04ce7d7992b947b9916299f", "V8 Wasm C/C++ API", "Says Apache without a version or full terms; this reference cannot approve it.", "BLOCKED"],
+    ["105920c94ff5a834680e7e6d4ed5b666df185d6dc04ce7d7992b947b9916299f", "V8 other subdirectory licences", "Points to other LICENSE files; unlisted components still require their own review.", "BLOCKED"],
+    ["3b6f5654a4834f406d2c374a2cafffe9de5d45cdb28cdc808e6c7e73ffc0700d", "npm package dependencies", "Refers to their respective terms without enumerating them; no blanket dependency approval.", "BLOCKED"],
+    ["3b6f5654a4834f406d2c374a2cafffe9de5d45cdb28cdc808e6c7e73ffc0700d", "npm registry and website terms", "External service terms, not a software grant; this record grants no service rights.", "BLOCKED"],
+    ["3b6f5654a4834f406d2c374a2cafffe9de5d45cdb28cdc808e6c7e73ffc0700d", "npm logo", "Copyright attribution alone does not establish a free redistribution grant.", "BLOCKED"],
+    ["3b6f5654a4834f406d2c374a2cafffe9de5d45cdb28cdc808e6c7e73ffc0700d", "Gubblebum Blocky typeface", "Used with permission does not establish a free redistribution grant.", "BLOCKED"],
+    ["3b6f5654a4834f406d2c374a2cafffe9de5d45cdb28cdc808e6c7e73ffc0700d", "Node.js trademark and project references", "Trademark and affiliation statements grant no separate software rights.", "BLOCKED"]
+  ]
+}

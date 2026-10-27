@@ -1,0 +1,1 @@
+- Record the candidate Node notice declarations with individual licence reasons and checksums; keep unresolved references and image promotion blocked.
