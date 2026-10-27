@@ -9,6 +9,7 @@ import { privateCodexLaunch } from '../../computer/test/server.ts';
 const disablesToolsAndPersistentHistoryInThePrivate = () => {
   const config = privateConfig('test-model');
   const required = ['model = "test-model"', 'model_provider = "local"',
+    'thread_unload_delay_secs = 0',
     'approval_policy = "never"', 'sandbox_mode = "read-only"', 'web_search = "disabled"',
     'tool_output_token_limit = 2000', 'project_doc_max_bytes = 0', '[model_providers.local]',
     'name = "local authenticated proxy"', 'base_url = "http://127.0.0.1:8080/v1"',
