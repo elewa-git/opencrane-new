@@ -21,10 +21,11 @@ flowchart LR
   ops -->|starts and pauses| computer
   server -->|messages, files, Stop and disconnect| computer
   computer -->|progress and results| server
+  computer -.->|records private thread before tool approval| server
   computer -->|checks command ownership| executor["socket-denied executor"]
   computer -->|runs| desktop["Codex, browser and desktop"]
   computer -->|checks callers and passes for AI and MCP calls| gateway["agentgateway<br/>AI gateway"]
-  computer -.->|shares private caller checks with the server| models["libs/models<br/>AI access checks"]
+  computer -.->|checks private callers and catalogue loads| models["libs/models<br/>AI access checks"]
 ```
 
 ## What it is responsible for
@@ -42,6 +43,12 @@ flowchart LR
   still need to be connected to these checks before they provide isolation.
   Each tool call checks the caller against the pass it will send, including after
   approval. Ordinary and private turns cannot share a bound thread.
+  An internal loader can discover a reviewed memory tool list for one fresh private turn.
+  It starts the native thread first, so the server can record its real ID and approve
+  the tools for that thread. It then loads the approved list on the same thread.
+  It checks the same caller, thread, requester, assistant and grant after waiting.
+  Copied tool lists have no approval. The private configuration selects the protocol
+  that the proxy accepts. Cancellation removes the list. Discovery reads no facts and gives no permission to call tools.
   The server and computer use the same private caller checks from the models library.
   The image includes this small shared file, which uses only Node's built-in functions.
 - Checks fixed package and Git requests against the supervisor's record of the tool call.

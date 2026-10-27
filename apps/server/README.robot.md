@@ -5954,3 +5954,16 @@ Prerequisite merge SHAs: #737 `6cc9d0e87b9c1952e6115fc3d8349cf037f252ca`;
 PR #744 `c0829cd0a2827439c796f9f909958633e2211ad3`.
 Failing-first test commit: `eabb7f4ae`; 59 expected failures and one passing
 production-disabled regression before implementation.
+
+## Private catalogue approval during loading
+
+`checkPrivateTurnTools` checks the exact list returned by the recall or remember
+assembler. A WeakMap keeps its approval in RAM. Copying or serialising the list
+does not transfer approval, and no caller or grant is added to the tool frame.
+The saved approval includes the caller and every recorded grant field, including
+the requester, assistant, thread and expiry. Each use repeats the privacy
+qualification and recorded turn checks. Changes during assembly or discovery
+refuse the list. The computer starts the native thread first. After the trusted caller records and
+binds its real ID, assembly approves the list for that ID. The loader uses that
+same bound thread for registry checks and native discovery. It refuses any mismatch. Production has no caller
+for this preparation path, and native memory admission remains disabled.

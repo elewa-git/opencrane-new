@@ -90,27 +90,61 @@ type QualifiedPrivateMemoryInput = PrivateMemoryInput & {
   qualification?: unknown;
 };
 
+interface PrivateToolIdentity {
+  caller: string;
+  grant: PrivateMemoryGrant;
+}
+
+const privateCatalogues = new WeakMap<object, {
+  identity: string;
+  definitions: string;
+  input: QualifiedPrivateMemoryInput;
+}>();
+
+function privateToolIdentity(identity: PrivateToolIdentity) {
+  const grant = identity.grant;
+  return JSON.stringify([identity.caller, grant.silo, grant.requesterId, grant.assistantId,
+    grant.computerId, grant.turnId, grant.conversation, grant.thread,
+    grant.generation, grant.inputGeneration, grant.expires]);
+}
+
+// Keep approval in RAM on the exact assembled list, never on a copied public frame.
+export function checkPrivateTurnTools(tools: object, identity: PrivateToolIdentity) {
+  const approved = privateCatalogues.get(tools);
+  if (!approved || approved.identity !== privateToolIdentity(identity)
+    || approved.definitions !== JSON.stringify(tools)) {
+    return false;
+  }
+  const input = approved.input;
+  if (!input.caller || !input.grant) return false;
+  const current = { caller: input.caller, grant: input.grant };
+  return approved.identity === privateToolIdentity(current)
+    && personalRecallQualified(input.runtime, input.qualification) && hasPrivateBinding(input);
+}
+
 export async function buildPrivateTurnRecallTools(input: QualifiedPrivateMemoryInput) {
-  if (!personalRecallQualified(input.runtime, input.qualification) || !hasPrivateBinding(input)) {
-    return [];
-  }
-  const tools = await buildPersonalMemoryTools(input, recallTool);
-  // Refuse a caller that ended while the catalogue or access checks were waiting.
-  if (!personalRecallQualified(input.runtime, input.qualification) || !hasPrivateBinding(input)) {
-    return [];
-  }
-  return tools;
+  return buildPrivateMemoryTools(input, recallTool);
 }
 
 // Prepare definitions only. Recall qualification does not approve native writes.
 export async function buildPrivateTurnRememberTools(input: QualifiedPrivateMemoryInput) {
-  if (!personalRecallQualified(input.runtime, input.qualification) || !hasPrivateBinding(input)) {
+  return buildPrivateMemoryTools(input, rememberTool);
+}
+
+async function buildPrivateMemoryTools(input: QualifiedPrivateMemoryInput, tool: MemoryTool) {
+  if (!personalRecallQualified(input.runtime, input.qualification) || !hasPrivateBinding(input)
+    || !input.caller || !input.grant) {
     return [];
   }
-  const tools = await buildPersonalMemoryTools(input, rememberTool);
-  if (!personalRecallQualified(input.runtime, input.qualification) || !hasPrivateBinding(input)) {
-    return [];
-  }
+  const original = { caller: input.caller, grant: input.grant };
+  const identity = privateToolIdentity(original);
+  const tools = await buildPersonalMemoryTools(input, tool);
+  const approved = { identity, definitions: JSON.stringify(tools), input };
+  privateCatalogues.set(tools, approved);
+  // Repeat qualification and recorded identity checks after catalogue and access reads.
+  if (!input.caller || !input.grant) return [];
+  const current = { caller: input.caller, grant: input.grant };
+  if (!checkPrivateTurnTools(tools, current)) return [];
   return tools;
 }
 

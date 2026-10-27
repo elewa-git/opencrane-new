@@ -98,6 +98,7 @@ flowchart LR
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
   server -->|chat work, connections, checked reports and unavailable replies| computer["apps/computer<br/>assistant computers"]
+  computer -.->|records private thread before tool approval| server
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime
   runtime -->|checks memory access and privacy evidence before preparing private tool definitions| server
@@ -112,6 +113,11 @@ Agent correction and forget requests need a signed proof of a loaded, current pe
 A correction names every other loaded fact as a dependency, with no revision of its own target.
 Both operations remain disabled after these checks and create no fact, key or command file.
 Discovery still lists recall alone.
+Private tool approval follows native thread creation. The server checks the recorded
+ID before the computer loads tools on that same thread.
+Private tool preparation keeps approval on the exact list in RAM. The computer
+checks that list against the same caller, thread, requester, assistant and grant
+throughout discovery. A copied list or changed approval is refused. Memory stays disabled.
 A separate tool-list builder requires a saved private turn, its matching requester
 and grant, and a live registered caller. It accepts only that exact reviewed recall
 definition for the requester's personal scope. It requires passing privacy checks for
