@@ -9,7 +9,7 @@ import { members, ProjectionRunner } from '@opencrane/projections';
 import { database } from '@opencrane/projections/testing';
 import { registerHandler } from '@opencrane/handlers';
 import { fixture, logger } from '../../libs/handlers/test/helpers.ts';
-import { collectEventBackup, descriptorSchema, infoSchema } from './event-backup.ts';
+import { infoSchema } from './event-backup.ts';
 import * as custody from './memory-restore-check.ts';
 import * as homes from './computer-volume-check.ts';
 import * as recovery from './recovery-restore.ts';
@@ -25,7 +25,7 @@ import { collectBudgetRecovery, checkBudgetRecovery } from './upgrade-recovery-b
 
 type SourceFixture = Awaited<ReturnType<typeof fixture>>;
 
-async function captureBeforeUpgrade(source: SourceFixture, directory: string) {
+async function prepareBeforeUpgrade(source: SourceFixture) {
   await source.append('joined');
   await source.append('other', 'member-bob');
   const history = [];
@@ -47,12 +47,7 @@ async function captureBeforeUpgrade(source: SourceFixture, directory: string) {
   await runner.initialise(members);
   await runner.run(members);
   const before = await collectUpgradeRecovery(source.nats.reader, source.db);
-  const destination = join(directory, 'before-upgrade');
-  const backupOptions = { silo: 'test', attempt: 'before-upgrade', destination };
-  await collectEventBackup(source.nats.connection, backupOptions);
-  const descriptorPath = join(destination, 'descriptor.json');
-  const descriptor = descriptorSchema.parse(JSON.parse(await readFile(descriptorPath, 'utf8')));
-  return { before, destination, descriptor, previous, budgetBefore, budgetIds };
+  return { before, previous, budgetBefore, budgetIds };
 }
 
 function observeRestore(target: Awaited<ReturnType<typeof recoveryTarget>>, lostCompletion: boolean) {
@@ -108,22 +103,39 @@ async function recoversAfterInterruptedUpgrade(fault: string) {
     calls = 0;
     const coordinated = vi.spyOn(capture, 'collectBackupCapture');
     const fileFixture = await recoveryFiles(source, directory, fault);
-    const captured = await captureBeforeUpgrade(source, directory);
-    await fileFixture.capture(captured.destination);
-    const { before, descriptor, previous, budgetBefore, budgetIds } = captured;
+    const prepared = await prepareBeforeUpgrade(source);
+    const { before, previous, budgetBefore, budgetIds } = prepared;
     const actorStart = vi.spyOn(models.BudgetActor.prototype, 'start');
     const targetAppend = vi.spyOn(target.store, 'append');
     const budgetReplay = vi.spyOn(models, 'rebuildBudgetProjection');
     const checkedRecovery = vi.spyOn(recovery, 'restoreRecoveryBackup');
     const checkedCustody = vi.spyOn(custody, 'checkMemoryRestore');
+    const observed = observeRestore(target, fault === 'events');
+    if (['copy-corrupt', 'writer-resumed', 'capture-deadline', 'capture-cancelled'].includes(fault)) {
+      await expect(fileFixture.capture()).rejects.toEqual(
+        new Error('Backup capture refused; completion unknown; keep targets isolated'));
+      expect(coordinated).toHaveBeenCalledOnce();
+      expect(checkedRecovery).not.toHaveBeenCalled();
+      expect(checkedCustody).not.toHaveBeenCalled();
+      expect(budgetReplay).not.toHaveBeenCalled();
+      expect(actorStart).not.toHaveBeenCalled();
+      expect(targetAppend).not.toHaveBeenCalled();
+      expect(observed.transfers).toBe(0);
+      const reply = await target.connection.request('$JS.API.STREAM.NAMES', '{}');
+      expect(reply.json()).toMatchObject({ total: 0 });
+      await fileFixture.expectIsolated(restored.db);
+      expect(calls).toBe(0);
+      return;
+    }
+    const { descriptor } = await fileFixture.capture();
     const checkedHomes = vi.spyOn(homes, 'checkComputerVolumeBackup');
     const { progress, parked } = await interruptAndRefuse(source, runtime, effectUrl, previous,
       descriptor.lastSequence);
-    const observed = observeRestore(target, fault === 'events');
     if (fault !== 'none') {
       await expect(fileFixture.restore(target))
         .rejects.toEqual(new Error('Recovery restore refused; keep both targets isolated'));
-      const preflightFault = ['corrupt', 'mixed', 'incomplete-homes'].includes(fault);
+      const preflightFault = ['corrupt', 'mixed', 'incomplete-homes',
+        'home-one', 'home-two'].includes(fault);
       expect(observed.transfers).toBe(preflightFault ? 0 : 1);
       expect(budgetReplay).not.toHaveBeenCalled();
       // Inspect the populated target without retrying restoration or starting a projection.
@@ -218,5 +230,7 @@ async function recoversAfterInterruptedUpgrade(fault: string) {
   }
 }
 it.each(['none', 'events', 'objects', 'missing-custody', 'resurrected', 'inventory',
-  'incomplete-homes', 'corrupt', 'mixed'])('recovers from the pre-upgrade export (fault: %s)',
+  'incomplete-homes', 'corrupt', 'mixed', 'home-one', 'home-two',
+  'copy-corrupt', 'writer-resumed', 'capture-deadline', 'capture-cancelled'])
+  ('recovers from the coordinated pre-upgrade capture (fault: %s)',
   recoversAfterInterruptedUpgrade, 180_000);

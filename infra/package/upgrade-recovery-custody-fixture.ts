@@ -5,7 +5,6 @@ import { expect, onTestFinished, vi } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import type { MemoryIdentity } from '@opencrane/events';
 import * as projections from '@opencrane/projections';
-import { recoveryHomes } from '../../apps/server/test/support/recovery-homes.ts';
 
 type Nats = Awaited<ReturnType<typeof natsFixture>>;
 const memoryKeys = projections.memoryKeys;
@@ -39,28 +38,9 @@ export async function recoveryCustody(source: Nats, directory: string, fault: st
       type: 'memory.written', data };
     await source.seed([written]);
   }
-  const names: string[] = [];
-  if (fault === 'incomplete-homes') {
-    names.push('retained');
-  }
-  const collectHomes = await recoveryHomes(source, names);
-  const volumeDirectory = join(directory, 'homes');
   const memory = { source: current.connection, sourceDirectory, candidateDirectory };
 
-  async function capture(eventDirectory: string, backupKeyFile: string) {
-    const options = { eventDirectory, volumeDirectory, backupKeyFile,
-      silo: 'test', attempt: 'before-upgrade' };
-    const homes = await collectHomes(options);
-    expect(homes.binding.volumes).toHaveLength(names.length);
-    expect(homes.exports).toHaveLength(names.length);
-    if (fault === 'incomplete-homes') {
-      for (const entry of homes.exports) {
-        await rm(join(volumeDirectory, entry.file));
-      }
-      homes.binding.volumes = [];
-      homes.exports = [];
-      await writeFile(join(volumeDirectory, 'descriptor.json'), JSON.stringify(homes));
-    }
+  async function capture() {
     const archivedPosition = await source.reader.head();
     for (let sequence = 1; sequence <= archivedPosition; sequence++) {
       const stored = await source.reader.readEvent(sequence);
@@ -107,5 +87,5 @@ export async function recoveryCustody(source: Nats, directory: string, fault: st
     expect(memoryKeys(sourceDirectory).status(forgotten)).toBe('destroyed');
     expect(memoryKeys(candidateDirectory).status(forgotten)).toBe('destroyed');
   }
-  return { capture, memory, volumeDirectory, expectDeleted };
+  return { capture, memory, expectDeleted };
 }

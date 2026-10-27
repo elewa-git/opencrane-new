@@ -1,6 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { expect, onTestFinished, vi } from 'vitest';
 import { envelope } from '@opencrane/models';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -9,10 +7,9 @@ import { rebuildMembers } from '@opencrane/authz';
 import { openfga } from '@opencrane/authz/testing';
 import { fixture, logger } from '../../libs/handlers/test/helpers.ts';
 import { restoreStorage } from '../../apps/server/test/support/restore-storage.ts';
-import { collectObjectBackup } from './object-backup.ts';
+import { recoveryCapture } from './upgrade-recovery-capture-fixture.ts';
 import { restoreRecoveryBackup } from './recovery-restore.ts';
 import { recoveryCustody } from './upgrade-recovery-custody-fixture.ts';
-import { descriptorSchema } from './event-backup.ts';
 import { provisionDisposableObjectTarget } from './disposable-object-target.ts';
 import { collectFileRecovery, checkFileRecovery } from './upgrade-recovery-files.ts';
 import { recoveryEffectProbes } from './upgrade-recovery-files-effects.ts';
@@ -64,23 +61,17 @@ export async function recoveryFiles(source: Awaited<ReturnType<typeof fixture>>,
   const put = targetObjects.client.putObject.bind(targetObjects.client);
   const writes = vi.spyOn(targetObjects.client, 'putObject');
   const buckets = vi.spyOn(targetObjects.client, 'makeBucket');
-  const copied = await natsFixture({ provision: false });
-  onTestFinished(copied.close);
   const fga = await openfga();
   onTestFinished(fga.close);
   await seedRecoveryReader(source.nats);
   const uploads = await seedRecoveryFiles(source.nats, objects.client);
-  const backupKeyFile = join(directory, 'file-key');
-  await writeFile(backupKeyFile, randomBytes(32), { mode: 0o600 });
-  const destination = join(directory, 'objects');
+  const captureFixture = await recoveryCapture(source.nats, objects.client, directory, fault);
   let before: Awaited<ReturnType<typeof collectFileRecovery>>;
   let rights: Awaited<ReturnType<typeof rebuildMembers>>;
-  let eventDirectory = '';
   let replayCount = 0;
   let readCount = 0;
   const effects = recoveryEffectProbes();
-  async function capture(events: string) {
-    eventDirectory = events;
+  async function capture() {
     const runner = new ProjectionRunner(source.db, source.nats.reader, logger);
     for (const projection of [members, conversations, files]) {
       await runner.initialise(projection);
@@ -88,21 +79,9 @@ export async function recoveryFiles(source: Awaited<ReturnType<typeof fixture>>,
     }
     before = await collectFileRecovery(source.db, objects.client);
     rights = await rebuildMembers(fga.apiUrl, 'test', source.nats.reader);
-    await collectObjectBackup(source.nats.connection, copied.connection, objects.client,
-      { directory: events, destination, backupKeyFile, silo: 'test', attempt: 'before-upgrade',
-        writersStopped: true, disposable: true });
-    await custody.capture(events, backupKeyFile);
-    if (fault === 'corrupt') {
-      const archivePath = join(events, 'events.snapshot');
-      const archive = await readFile(archivePath);
-      await writeFile(archivePath, archive.subarray(0, -1));
-    }
-    if (fault === 'mixed') {
-      const path = join(events, 'descriptor.json');
-      const descriptor = descriptorSchema.parse(JSON.parse(await readFile(path, 'utf8')));
-      descriptor.attempt = 'different-attempt';
-      await writeFile(path, JSON.stringify(descriptor));
-    }
+    const captured = await captureFixture.collect();
+    await custody.capture();
+    return captured;
   }
   async function restore(target: Nats) {
     async function loseReply(...args: Parameters<typeof put>): Promise<never> {
@@ -112,10 +91,9 @@ export async function recoveryFiles(source: Awaited<ReturnType<typeof fixture>>,
     if (fault === 'objects') {
       writes.mockImplementation(loseReply);
     }
-    const options = { directory: destination, eventDirectory, backupKeyFile, silo: 'test',
+    const options = { ...captureFixture.directories, silo: 'test',
       attempt: 'before-upgrade', targetSilo: 'test', stopped: true, exclusive: true,
-      disposable: true, effectsDisabled: true, memory: custody.memory,
-      volumeDirectory: custody.volumeDirectory };
+      disposable: true, effectsDisabled: true, memory: custody.memory };
     const result = await restoreRecoveryBackup(source.nats.connection, target.connection,
       objects.client, targetObjects.client, options);
     expect(result).toEqual({ kind: 'events-objects-and-custody-only' });

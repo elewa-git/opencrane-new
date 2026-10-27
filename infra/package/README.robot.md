@@ -1085,7 +1085,7 @@ restore helper checks archive bytes; the comparison does not authenticate an arc
 refuses a different manifest without changing parked jobs, then restores the earlier
 export through `restoreRecoveryBackup` into privately provisioned disposable NATS
 and object storage. Current events and memory keys are checked separately from the
-frozen archive. The home exporter proves an empty inventory. Only after these checks
+frozen archive. Coordinated capture includes two distinct non-empty homes. Only after these checks
 does the fixture rebuild disposable projections and rights in a separate database.
 No dispatcher, reaction worker or scheduler starts during recovery. A tested local
 recording endpoint guards reaction callbacks in both processes and receives zero calls.
@@ -1161,9 +1161,9 @@ Two rebuilds compare event order, full rows, rights, file bytes and exact cents.
 The recorded memory deletion never enters the archived event comparison.
 
 The home exporter checks synthetic Kubernetes replies and the actual event history.
-Success has no computer claims and an explicitly empty export. A separate case saves
-one retained computer, removes its home export, and refuses before either target
-changes. This validates the saved inventory; it does not restore a mounted home.
+The next fixture increment below captures two homes. Removing a retained home
+from both the saved inventory and its files refuses before either target changes.
+This validates the saved inventory; it does not restore a mounted home.
 Missing custody, recreated material in both key folders, a changing inventory,
 corrupt bytes and mixed attempts refuse. Lost event/object completion preserves
 saved bytes, starts no replay or read server and never retries restoration.
@@ -1173,6 +1173,35 @@ checks remain in place. All effect probes are exercised before their counts rese
 The [receipt](../../docs/process/p5-9-pr4a/receipt.md) records the fixture checks.
 Recovery remains PARTIAL. CNPG/WAL, mounted restore, credential renewal, reopening
 and a pinned-package upgrade remain NOT RUN. There is no new CLI or runtime API.
+
+### Coordinated capture before fixture interruption
+
+P5-9 PR 4b starts from #772, merged as
+`6077ef801cd23bb8b21a1424ded2cd348e1ce813`. The fixture replaces its separate
+collectors with `collectBackupCapture`. It seeds two distinct non-empty homes
+through `recovery-homes.ts`, reuses that helper's synthetic readers, and gives
+capture two separate empty NATS readers. Checked recovery receives the exact
+`events`, `objects` and `homes` directories from that capture. Its registered
+restore target is separate from both capture readers.
+
+Both home archives must authenticate before recovery writes to its targets.
+Changing either home's authentication tag refuses. Removing a home from the
+saved inventory and files, or mixing attempts, also prevents comparisons.
+Changing the first saved home while the second is copied refuses the capture.
+Writer resumption, cancellation and expiry of the original capture deadline
+stop before restore or comparisons. The time test spends 40 seconds in the
+object stage, then passes the original 60-second limit in the home stage.
+Readers close and their cancellation signals are aborted after capture stops.
+
+The existing 256-event interruption, parked jobs, current deletion history,
+revoked-reader refusals and two matching rebuilds remain covered. Lost restore
+completion leaves targets isolated without erase or resend. Exercised effect
+entry points observe zero replay calls. No production restore or export changes.
+
+The [receipt](../../docs/process/p5-9-pr4b/receipt.md) records this fixture's checks.
+Recovery remains PARTIAL: validating homes does not restore mounted volumes.
+CNPG/WAL, the full manifest, live quiescence, credential renewal, reopening and
+pinned-package upgrade remain NOT RUN.
 
 ## Memory restore preflight
 
