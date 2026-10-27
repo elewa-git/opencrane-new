@@ -18,7 +18,8 @@ function digest(input: Buffer) {
   hash.update(input);
   return hash.digest('hex');
 }
-async function fixture(fault = '') {
+type Inventory = Parameters<Parameters<typeof collectComputerVolumeExport>[3]>[0];
+async function fixture(fault = '', homes = 1) {
   const source = await natsFixture();
   const target = await natsFixture({ provision: false });
   const directory = await mkdtemp(join(tmpdir(), 'home-export-'));
@@ -41,6 +42,12 @@ async function fixture(fault = '') {
     { type: 'computer.ready', subject: 'computer-assistant-one',
       data: { ...identity, sandboxUid: 'sandbox-uid' } },
   ];
+  if (homes === 2) {
+    const second = JSON.stringify(records).replaceAll('one', 'two').replaceAll('sandbox-uid',
+      'sandbox-two-uid');
+    records.push(...JSON.parse(second) as typeof records);
+  }
+  if (homes === 0) records.splice(1);
   for (const record of records) {
     const previous = await source.store.head(record.subject);
     const envelope = { ...event(record.type, record.subject, record.type), data: record.data };
@@ -74,8 +81,24 @@ async function fixture(fault = '') {
     sandboxes: { metadata: { resourceVersion: '10' }, items: [sandbox] },
     persistentvolumeclaims: { metadata: { resourceVersion: '10' }, items: [home] },
     pods: { metadata: { resourceVersion: '10' }, items: [] } };
+  const secondSandbox = structuredClone(sandbox);
+  const secondHome = structuredClone(home);
+  const secondVolume = structuredClone(volume);
+  function secondIdentity<Value>(value: Value): Value {
+    const text = JSON.stringify(value).replaceAll('one', 'two').replaceAll('-uid', '-two-uid');
+    return JSON.parse(text) as Value;
+  }
+  Object.assign(secondSandbox, secondIdentity(sandbox));
+  Object.assign(secondHome, secondIdentity(home));
+  Object.assign(secondVolume, secondIdentity(volume));
+  if (homes === 2) {
+    resources.sandboxes = { metadata: { resourceVersion: '10' }, items: [sandbox, secondSandbox] };
+    resources.persistentvolumeclaims = { metadata: { resourceVersion: '10' },
+      items: [home, secondHome] };
+  }
+  const streams: Readable[] = [];
   let opened = false;
-  async function read(request: { resource: string }) {
+  async function read(request: { resource: string; name?: string }) {
     if (opened && request.resource === 'namespace') {
       if (fault === 'late-namespace') namespace.metadata.uid = 'changed';
       if (fault === 'late-sandbox') sandbox.metadata.uid = 'changed';
@@ -94,6 +117,7 @@ async function fixture(fault = '') {
         await writeFile(path, text.replace('"attempt":"copy"', '"attempt":"other"'));
       }
     }
+    if (request.name === 'volume-two') return JSON.stringify(secondVolume);
     return JSON.stringify(resources[request.resource]);
   }
   function cancel() { controller.abort(new Error(canary)); }
@@ -113,18 +137,26 @@ async function fixture(fault = '') {
     stream = new Readable({ read: idle, destroy });
   }
   const controller = new AbortController();
-  function readExport() {
+  function readExport(_binding: Inventory, _signal: AbortSignal,
+    home: Inventory['volumes'][number]) {
     opened = true;
     if (fault === 'missing') throw new Error(canary);
     if (fault === 'cancel' || fault === 'destroy-error') controller.abort(new Error(canary));
     const byteCount = fault === 'size-limit' ? 64 * 1024 * 1024 + 1 : bytes.length;
-    return Promise.resolve({ stream, byteCount, sha256: digest(bytes) });
+    let content = bytes;
+    if (home.computerId === 'computer-two') {
+      content = Buffer.from('second-private-home');
+      stream = Readable.from([content]);
+    }
+    streams.push(stream);
+    return Promise.resolve({ home, stream, byteCount: content.length === bytes.length
+      ? byteCount : content.length, sha256: digest(content) });
   }
   async function collect() {
     const settings = Object.assign(options, { signal: controller.signal });
     return collectComputerVolumeExport(source.connection, target.connection, settings, readExport, read);
   }
-  return { options, collect, stream, resources, namespace, sandbox, home, volume };
+  return { options, collect, stream, streams, resources, namespace, sandbox, home, volume };
 }
 function decrypt(saved: Buffer, associated: unknown, material = key) {
   const decipher = createDecipheriv('aes-256-gcm', material, saved.subarray(0, 12));
@@ -255,3 +287,20 @@ async function refusesFault(fault: string) {
   if (fs.existsSync(foreign)) expect(await readFile(join(foreign, 'keep'), 'utf8')).toBe(canary);
 }
 it.each(faults)('withholds completion and private diagnostics: %s', refusesFault);
+
+async function roundTripsTwoHomes() {
+  const setup = await fixture('', 2);
+  const result = await setup.collect();
+  expect(result.version).toBe(2);
+  expect(result.exports).toHaveLength(2);
+  const expected = [bytes, Buffer.from('second-private-home')];
+  for (let index = 0; index < 2; index++) {
+    const entry = result.exports[index]!;
+    const saved = await readFile(join(setup.options.destination, entry.file));
+    const associated = [2, 'volume-export-only', 'aes-256-gcm', result.binding, entry];
+    expect(decrypt(saved, associated)).toEqual(expected[index]);
+    for (const plaintext of expected) expect(saved.includes(plaintext)).toBe(false);
+  }
+  for (const stream of setup.streams) expect(stream.destroyed).toBe(true);
+}
+it('encrypts every checked home in one set and independently recovers both', roundTripsTwoHomes);
