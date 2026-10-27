@@ -635,7 +635,7 @@ class TurnRunner {
     }
   }
 
-  async interrupt(value: Record<string, unknown>) {
+  async interrupt(value: Record<string, unknown>, cleared?: () => void) {
     const turnId = requiredString(value, 'turnId');
     const conversationId = requiredString(value, 'conversationId');
     // Ignore delayed withdrawal for a thread that has already been replaced.
@@ -650,6 +650,7 @@ class TurnRunner {
     this.journal.forgetTurnText(conversationId, turnId);
     const input = findTurn(this.state, turnId, conversationId);
     if (!input) {
+      this.confirmPrivateClearance(turnId, cleared);
       return;
     }
 
@@ -657,6 +658,7 @@ class TurnRunner {
       this.stoppedTurns.add(turnId);
     }
     this.cancelTurn(input);
+    this.confirmPrivateClearance(turnId, cleared);
     const heldThread = this.findRunningThread(turnId);
     if (!this.gate.closed) {
       await this.removeStoppedAccess(input, heldThread);
@@ -670,6 +672,11 @@ class TurnRunner {
       return;
     }
     await this.interruptOnce(input, threadId, codexTurnId);
+  }
+
+  private confirmPrivateClearance(turnId: string, cleared: (() => void) | undefined) {
+    const started = this.lastStartedReport(turnId);
+    if (started?.executionMode === 'restricted' && !started.sharingClass) cleared?.();
   }
 
   private removeStoppedAccess(input: Turn, threadId: string | undefined) {

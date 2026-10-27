@@ -18,7 +18,7 @@ interface TurnRunnerPort {
     accept: (value: Record<string, unknown>) => void): Promise<Record<string, unknown>>;
   start(turn: ReturnType<typeof parseTurn>): Promise<void>;
   prepareRoutine(value: Record<string, unknown>): Promise<Record<string, unknown>>;
-  interrupt(value: Record<string, unknown>): Promise<void>;
+  interrupt(value: Record<string, unknown>, cleared?: () => void): Promise<void>;
   connectionLost(): void;
   acknowledge(sequence: unknown, value?: Record<string, unknown>): void;
 }
@@ -94,7 +94,13 @@ async function interruptTurn(
   next: WebSocket,
 ) {
   try {
-    await runner.interrupt(input);
+    function cleared() {
+      if (typeof input['threadId'] !== 'string') return;
+      const receipt = { type: 'private_output_cleared', conversationId: input['conversationId'],
+        turnId: input['turnId'], threadId: input['threadId'] };
+      sendFileReceipt(next, receipt);
+    }
+    await runner.interrupt(input, cleared);
   } catch {
     next.close(1011, 'Interrupt unavailable');
   }

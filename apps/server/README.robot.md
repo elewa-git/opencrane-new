@@ -6142,7 +6142,10 @@ fields from that saved record. No former-user permission check is needed to with
 The existing `invalidateMemoryContext` command remains the only decision/writer here.
 
 The internal caller supplies `current(binding)`: a synchronous lookup of an already
-connected turn, from trusted server state. It must return no turn once that turn ends.
+connected turn, from trusted server state. Ordinary callers must return no turn once
+that turn ends. The live bridge may set `pendingClearance` for an accepted private turn
+whose computer has not yet confirmed reply removal. This permits withdrawal after
+completion, but gives no permission to read memory, dispatch work or renew access.
 It must never open a connection, start work or reconstruct usable authority from replay.
 The reaction reads it after history and compares conversation, turn, requester, assistant,
 computer, computer generation, thread and input generation. It sends without another wait.
@@ -6159,7 +6162,7 @@ It also clears the saved private reply if completion races with Stop delivery.
 A failed ordinary interruption remains retryable; a failed private interruption
 closes the private session. Transport/history failure returns no error detail and
 creates no authority.
-No subscription or production caller is connected. Admission stays disabled. Volatile
+The live bridge caller is described below. Admission stays disabled. Volatile
 server/browser delivery, native calls and fresh-install disk isolation remain unqualified.
 
 Prerequisite merges: #762 `b35059f91ea080e18541f2fa40cd13388a60a0d5`;
@@ -6170,3 +6173,48 @@ computer Stop produced six expected assertion failures; the temporary reaction w
 proxy controls. It checks isolated Stop, buffer clearance before cleanup, late output,
 renewal, duplicate delivery, stale identity, disconnection and replay without execution.
 Live qualification: NOT RUN. Own check results are recorded in the pull request.
+
+## Saved memory delivery through the bridge (P4-15 PR 3f)
+
+`memory/bridge.ts` tracks accepted restricted private starts on each connected socket.
+The requester and native thread come from `turnCommand`, not from report claims.
+Completion does not prove that the computer has cleared an unacknowledged reply.
+Each accepted turn keeps its own tracking, including after a replacement starts in the
+same conversation. Duplicate report replay cannot create tracking. Closing the socket
+clears it. No read restores execution.
+
+`watchBridges` calls `assistantProcessor.pollMemory` every bounded poll, including when
+ordinary work is unchanged or blocked. The lookup uses existing connected sockets only.
+Each tracked session has at most one pending check. Conversation summaries have their own
+ten-second deadline and retain only saved metadata. The input generation comes from the
+validated memory history, which permits only one identity per turn. No facts are decrypted.
+
+`stopInvalidatedMemory` accepts an optional `refresh` step after confirming conversation
+history. The bridge uses it to check the current computer generation. A saved turn closure
+does not cancel pending buffer clearance.
+Its synchronous `current` lookup then checks the live tracked turn and socket. There is no
+wait between that lookup and sending Stop. The reaction compares all eight identity fields.
+A send never records termination. Later polls retry until the matching computer sends
+`private_output_cleared`, or the socket closes. This text-free socket receipt names the
+conversation, turn and thread; it is never saved as an event. It confirms that the reply
+buffer was cleared and later private output was refused, not that interruption finished.
+A receipt for another thread cannot discard tracking. The computer coalesces duplicate Stops.
+Pending memory reads are not awaited by connection shutdown and cannot send after closure.
+Dispatch, tool and renewal refusal remain decisive while Stop delivery is pending.
+
+Prerequisite merges: PR #773, including fix2,
+`6001ff63de066b8c464a7173493781e73f59c587`; PR #779,
+`4a0fac39c6c42d23bdc0defb570c5c956c99ae75`.
+Tests were committed first in `169b74d82`; the three initial delivery tests failed before
+implementation. `test/memory-delivery.test.ts` uses the real recording bridge, computer
+channel, NATS and invalidation writer. It covers delivery, isolated sessions, retry,
+concurrent polls, replacement generations, history races, delayed Stop, replay and shutdown.
+The completion-before-poll regression holds report acknowledgements, saves a real forget
+invalidation and completes the turn before polling. It checks one Stop and no private text
+on same-connection replay, both with and without a replacement turn. A delayed receipt
+check keeps retrying until the exact thread confirms clearance. The original completion
+regression failed before the fix: zero Stops and private text replayed on the same connection.
+No event or HTTP API field was added; the event security naming rule is unchanged.
+Admission remains disabled. Detecting correction/forget causes, access/expiry invalidation,
+volatile server/browser replies and native enablement remain later work.
+Fresh-install live qualification: NOT RUN.
