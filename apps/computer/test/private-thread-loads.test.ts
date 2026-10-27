@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import { expect, it, vi } from 'vitest';
@@ -124,6 +125,7 @@ async function fixture(assembled = true) {
       if (method === 'thread/loaded/list') return { data: [] };
       if (method === 'thread/unsubscribe') return {};
       expect(method).toBe('thread/start');
+      thread['id'] = randomUUID();
       startParams = params;
       const servers = record(record(params['config'])['mcp_servers']);
       const endpoint = String(record(servers[toolKey])['url']);
