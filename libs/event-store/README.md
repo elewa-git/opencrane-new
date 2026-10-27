@@ -81,6 +81,7 @@ keeping each request’s original id. It checks each returning server’s stored
 A lost reply must not save a second event.
 
 The operator backup tests restore native event bytes on a fresh NATS server.
+They also check that every required computer home is saved in one encrypted set.
 They compare saved event identities and positions, check private file permissions,
 and confirm that a repeated command still returns its earlier result. Restore tests
 also check that existing streams survive refusals and that uncertain transfers are
