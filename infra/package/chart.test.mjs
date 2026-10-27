@@ -11,7 +11,6 @@ import { createRequire } from 'node:module';
 import ts from 'typescript';
 import { parseAllDocuments } from 'yaml';
 import { setTimeout as delay } from 'node:timers/promises';
-import { checkCnpgBackupReferences } from '../dev-stack/cnpg-backup.ts';
 
 const reviewed = JSON.parse(readFileSync('infra/package/reviewed-images.json', 'utf8'));
 const values = {
@@ -80,7 +79,8 @@ function privateFileImport(source) {
   return source.secretRef.name === 'runtime-files';
 }
 
-function loadPrivateFunction(file, name, replacements, fixtureProcess = process) {
+function loadPrivateFunction(file, name, replacements, fixtureProcess = process,
+  globals = {}) {
   const source = readFileSync(file, 'utf8');
   const startOfMain = source.indexOf('await main().catch(');
   const body = startOfMain < 0 ? source : source.slice(0, startOfMain);
@@ -95,6 +95,7 @@ function loadPrivateFunction(file, name, replacements, fixtureProcess = process)
   }
   runInNewContext(compiled.outputText, {
     exports: moduleExports, require: fixtureRequire, Buffer, URL, process: fixtureProcess, console,
+    ...globals,
   }, { filename: file });
   assert.equal(typeof moduleExports[name], 'function');
   return moduleExports[name];
@@ -580,6 +581,18 @@ test('preparation and forwarding refuse a replacement namespace despite an updat
   refusesReplacedPackageNamespace);
 
 async function stopsOwnershipChild(kind, cancellation, dispatchDelayMs = 0) {
+  let now = 1000;
+  let sampledAt = now;
+  function readTime() {
+    sampledAt = now;
+    return now;
+  }
+  const clock = { now: readTime };
+  const globals = { Date: clock, AbortSignal };
+  const commandTimeout = loadPrivateFunction('infra/dev-stack/command-limits.ts',
+    'commandTimeout', {}, process, globals);
+  const checkCnpgBackupReferences = loadPrivateFunction('infra/dev-stack/cnpg-backup.ts',
+    'checkCnpgBackupReferences', {}, process, globals);
   const owner = { worktree: process.cwd(), slot: '1', context: 'k3d-opencrane-target-1',
     namespace: 'opencrane-package-1', namespaceUid: 'owned', release: 'opencrane-package-1' };
   const target = { worktree: owner.worktree, slot: '1', context: owner.context,
@@ -604,7 +617,13 @@ async function stopsOwnershipChild(kind, cancellation, dispatchDelayMs = 0) {
     return owner;
   }
   function executeFixture(program, args, options, callback) {
-    calls.push({ program, args, options, startedAt: Date.now() });
+    const timeoutSampledAt = sampledAt;
+    if (calls.length === 0) {
+      // Reproduce a scheduling pause after the timeout calculation, before the child starts.
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+      now += 10;
+    }
+    calls.push({ program, args, options, startedAt: now, timeoutSampledAt });
     assert.ok(!args.join(' ').includes('/private/slot'));
     if (program === 'docker') {
       let output = target.containers.join('\n');
@@ -621,6 +640,9 @@ async function stopsOwnershipChild(kind, cancellation, dispatchDelayMs = 0) {
         output = JSON.stringify(containers);
       }
       function dockerFinished() {
+        if (calls.length === 1) {
+          now += 50;
+        }
         callback(null, { stdout: output, stderr: '' });
       }
       if (calls.length === 1) setTimeout(dockerFinished, 50);
@@ -658,12 +680,13 @@ async function stopsOwnershipChild(kind, cancellation, dispatchDelayMs = 0) {
     './bounded-input.ts': { readBoundedText: readClaim, readBoundedJson: readRecord },
     './config.ts': { directory: '/private/slot', root: owner.worktree },
     './identity.ts': { secondary: true, stackId: '1' },
+    './command-limits.ts': { commandTimeout },
   };
   const targetConnection = loadPrivateFunction('infra/dev-stack/target.ts',
-    'targetConnection', replacements);
+    'targetConnection', replacements, process, globals);
   replacements['./target.ts'] = { targetConnection };
   const ownedKubectl = loadPrivateFunction('infra/dev-stack/packaged.ts',
-    'ownedKubectl', replacements);
+    'ownedKubectl', replacements, process, globals);
   async function checkedKubectl(args, timeoutMs, signal, deadline) {
     if (dispatchDelayMs > 0) {
       await delay(dispatchDelayMs);
@@ -677,7 +700,7 @@ async function stopsOwnershipChild(kind, cancellation, dispatchDelayMs = 0) {
     } };
   const controller = new AbortController();
   const options = { timeoutMs: 500, signal: controller.signal };
-  const deadline = Date.now() + options.timeoutMs;
+  const deadline = now + options.timeoutMs;
   const request = checkCnpgBackupReferences(backup, owner.namespace, checkedKubectl, options);
   function fixedError(error) {
     assert.equal(error.message, 'CNPG backup references are incomplete or incompatible');
@@ -699,11 +722,21 @@ async function stopsOwnershipChild(kind, cancellation, dispatchDelayMs = 0) {
     assert.ok(lastCall.args.includes(kind));
     assert.ok(lastCall.options.timeout > 0 && lastCall.options.timeout <= options.timeoutMs);
     assert.equal(lastCall.options.signal.aborted, true);
+    const firstCall = calls[0];
+    assert.equal(firstCall.startedAt - firstCall.timeoutSampledAt, 10);
+    assert.equal(firstCall.options.timeout, 500);
+    let previousTimeout = options.timeoutMs;
     for (const call of calls) {
       assert.equal(call.options.signal, lastCall.options.signal);
-      assert.ok(call.options.timeout <= deadline - call.startedAt + 2,
+      // Compare at the calculation time; starting the child can be delayed by scheduling.
+      assert.ok(call.options.timeout > 0);
+      assert.ok(call.options.timeout <= deadline - call.timeoutSampledAt,
         'Each child must use the remaining time, including earlier ownership checks');
+      assert.ok(call.options.timeout <= previousTimeout, 'Child timeouts must never increase');
+      previousTimeout = call.options.timeout;
     }
+    assert.equal(lastCall.options.timeout, 440,
+      'Later children must lose the 10 ms pause and the 50 ms ownership check');
     const count = calls.length;
     await delay(25);
     assert.equal(calls.length, count, 'No further ownership or backup work may start');

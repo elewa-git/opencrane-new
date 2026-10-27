@@ -143,6 +143,14 @@ backup still need work. Live checks of stopped writers and mounted home files re
 
 ## How to run or test it
 
+The chart tests check that backup cancellation stops a real child process.
+A controlled clock also checks that earlier ownership checks reduce the time
+allowed for later commands. These checks run without a development stack:
+
+```sh
+nice -n 10 node --experimental-strip-types --test infra/package/chart.test.mjs
+```
+
 The development owner email is configured in a private file outside the repository.
 The [operator notes](README.robot.md#private-owner-email) explain that setting.
 

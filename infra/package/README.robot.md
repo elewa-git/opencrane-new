@@ -416,6 +416,25 @@ missing WAL, denied storage access, encryption, standby promotion and fresh-inst
 backup work remain **NOT RUN**. Local S3 would prove local recovery only. The
 matched event/database/object/volume set in the accepted design remains later work.
 
+### Ownership timeout tests
+
+`chart.test.mjs` checks cancellation and deadline expiry while a real child process
+stands in for a stalled namespace or node query. Docker and Kubernetes replies are
+test fixtures. The tests do not contact an installed stack.
+
+The backup checker, ownership checks and real `commandTimeout` function share a
+controlled clock. The fixture records the time read when a timeout is calculated.
+It then adds a 10 ms scheduling pause before the first child starts, followed by
+50 ms for its ownership reply. Real timers still stop the stalled child.
+Each child timeout must be positive and no greater than the time remaining at its
+calculation. Timeouts must never increase. The first timeout must be 500 ms and
+the last must be 440 ms. These comparisons have no tolerance.
+
+Comparing against the later child start time previously allowed only 2 ms for
+scheduling. That comparison rejected a valid timeout whenever the delay exceeded
+2 ms. The controlled pause reproduces that failure without depending on how busy
+the runner happens to be.
+
 ## Exact database recovery preview
 
 P5-3 PR 3b builds on PR 3a, merged as PR #749 at
