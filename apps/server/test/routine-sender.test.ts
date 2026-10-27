@@ -298,9 +298,11 @@ async function recordingComputer(computerId = 'computer') {
   const server = createServer();
   let starts = 0;
   let sends = 0;
+  let nativeStarts = 0;
   function rpc(method: string) {
+    if (method === 'thread/start') nativeStarts++;
     if (method === 'turn/start') starts++;
-    return Promise.resolve({ thread: { id: selection.threadId, ephemeral: true, path: null },
+    return Promise.resolve({ thread: { id: `native-thread-${nativeStarts}`, ephemeral: true, path: null },
       turn: { id: 'recorded-turn' } });
   }
   async function grant() {}
