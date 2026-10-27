@@ -410,3 +410,95 @@ async function refusesChangedSubject(subject: 'requesterId' | 'assistantId') {
 }
 it.each(['requesterId', 'assistantId'] as const)(
   'refuses changed %s during discovery', refusesChangedSubject);
+
+async function refusesDetachedApproval(change: 'tools' | 'registration' | 'grant') {
+  const test = await fixture();
+  try {
+    const turn = await test.turn();
+    if (change === 'tools') turn.binding.tools = structuredClone(turn.binding.tools);
+    if (change === 'registration') {
+      const other = await test.turn('B');
+      turn.binding.registration = other.binding.registration;
+    }
+    if (change === 'grant') turn.binding.grant.requesterId = 'bob';
+    await expect(turn.load()).rejects.toThrow('Private tools could not be loaded');
+    expect(turn.calls).toEqual([]);
+    expect(test.mcp.size).toBe(0);
+    expect(test.grants.size).toBe(0);
+  } finally { await test.close(); }
+}
+it.each(['tools', 'registration', 'grant'] as const)(
+  'refuses detached %s even with a bound caller', refusesDetachedApproval);
+
+const changedApproval = ['requester', 'assistant', 'grant expiry', 'grant computer',
+  'grant silo', 'qualification', 'runtime', 'recorded turn', 'copied tools'] as const;
+async function refusesChangedApproval(change: typeof changedApproval[number]) {
+  const test = await fixture();
+  try {
+    const turn = await test.turn();
+    test.pause('discovery');
+    const loading = turn.load();
+    const refused = expect(loading).rejects.toThrow('Private tools could not be loaded');
+    await test.reached.promise;
+    const approval = turn.approval!.input;
+    if (change === 'requester') approval.requesterId = 'bob';
+    if (change === 'assistant') approval.assistantId = 'another-assistant';
+    if (change === 'grant expiry') turn.binding.grant.expires += 1000;
+    if (change === 'grant computer') turn.binding.grant.computerId = 'another-computer';
+    if (change === 'grant silo') turn.binding.grant.silo = 'another-silo';
+    if (change === 'qualification') approval.qualification.checks.persistence = 'FAIL';
+    if (change === 'runtime') approval.runtime.imageDigest = `sha256:${'c'.repeat(64)}`;
+    if (change === 'recorded turn') approval.turn.firstClose = { sequence: 2, status: 'completed' };
+    if (change === 'copied tools') turn.binding.tools = structuredClone(turn.binding.tools);
+    test.release.resolve();
+    await refused;
+    expect(test.mcp.size).toBe(0);
+    expect(test.loads.size).toBe(0);
+    expect(test.grants.size).toBe(0);
+    expect(turn.close).toHaveBeenCalled();
+  } finally { await test.close(); }
+}
+it.each(changedApproval)('refuses changed assembly %s during discovery', refusesChangedApproval);
+
+async function preservesOtherRegistration(change: 'registration' | 'session') {
+  const test = await fixture();
+  try {
+    const first = await test.turn();
+    const second = await test.turn('B');
+    await second.load();
+    test.pause('discovery');
+    const loading = first.load();
+    const refused = expect(loading).rejects.toThrow('Private tools could not be loaded');
+    await test.reached.promise;
+    if (change === 'registration') first.binding.registration = second.binding.registration;
+    if (change === 'session') first.binding.session = second.binding.session;
+    test.release.resolve();
+    await refused;
+    expect(test.authority.identify(`Bearer ${first.binding.caller}`)).toBeUndefined();
+    expect(test.authority.identify(`Bearer ${second.binding.caller}`)).toBe('B');
+    expect(test.mcp.size).toBe(1);
+    expect(second.close).not.toHaveBeenCalled();
+    expect(record(await test.send(second.key, second.binding.caller))['result'])
+      .toEqual({ tools: [definition] });
+  } finally { await test.close(); }
+}
+it.each(['registration', 'session'] as const)(
+  'cleans up the original caller when its %s is replaced during discovery',
+  preservesOtherRegistration);
+
+async function refusesForeignRegistrationWithoutClosingIt() {
+  const test = await fixture();
+  try {
+    const first = await test.turn();
+    const second = await test.turn('B');
+    await second.load();
+    first.binding.registration = second.binding.registration;
+    await expect(first.load()).rejects.toThrow('Private tools could not be loaded');
+    expect(first.calls).toEqual([]);
+    expect(test.authority.identify(`Bearer ${second.binding.caller}`)).toBe('B');
+    expect(test.mcp.size).toBe(1);
+    expect(second.close).not.toHaveBeenCalled();
+  } finally { await test.close(); }
+}
+it('refuses a foreign registration without closing its loaded catalogue',
+  refusesForeignRegistrationWithoutClosingIt);
