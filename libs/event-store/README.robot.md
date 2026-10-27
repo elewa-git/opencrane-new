@@ -298,7 +298,8 @@ It polls the built-in metadata health check and `/jsz` on each server for at mos
 20 seconds. Every server must report storage statistics and a named metadata leader.
 The leader's own report must list all three distinct fixture peers as current and online.
 Followers only track their link to the leader, so their reports cannot establish
-whether the other follower is current. Expiry reports the last observed metadata.
+whether the other follower is current. Expiry reports both the queried server's last
+metadata and the leader's last metadata, with each server's name.
 Each HTTP request shares a one-second limit with the other requests in that poll,
 or the time left before the deadline, whichever is shorter.
 NATS can report metadata readiness before receiving the peer statistics needed for
@@ -318,6 +319,8 @@ route for each of the other two peers. It compares sorted lists, so repeated poo
 routes remain required. Missing, extra and wrong-account routes fail with the last
 actual list and the complete expected list. A complete first response returns at once.
 Each HTTP request is limited to one second or the remaining route deadline.
+Request timeouts retry within that same deadline and retain the last route list.
+Other request errors still fail immediately before the deadline.
 `route-readiness.test.ts` advances a controlled clock to check a late eighth route,
 a route arriving after ten seconds, the exact deadline, missing pooled or system
 routes, extra routes and wrong accounts. It also checks that a monitoring request

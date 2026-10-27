@@ -643,7 +643,10 @@ requests receive the decreasing time left. A late placement refusal checks that
 bootstrap neither waits again nor creates a stream or consumer.
 Every clustered bootstrap test prepares real NATS placement statistics and removes
 the empty R3 setup stream before replacing replies or clocks. It still requires
-zero streams before provisioning. The ordinary R3 test uses real time.
+zero streams before provisioning. It polls the real account count for at most
+20 seconds after deletion and reports the last count on expiry. This allows the
+account report to catch up without adding a fixed wait.
+The ordinary R3 test uses real time.
 These are source checks. Images, controller and storage prerequisites, and
 live Kubernetes placement are NOT RUN. The
 [receipt](../../docs/process/p5-4-pr5a/receipt.md) records the checks.

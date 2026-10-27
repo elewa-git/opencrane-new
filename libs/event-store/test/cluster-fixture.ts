@@ -162,10 +162,10 @@ export async function completeRoutes(peer: Peer) {
     try {
       actual = await currentRoutes(peer, requestTimeout);
     } catch (error) {
-      if (performance.now() < deadline) {
+      const timedOut = error instanceof Error && error.name === 'TimeoutError';
+      if (!timedOut && performance.now() < deadline) {
         throw error;
       }
-      break;
     }
     if (isDeepStrictEqual(actual, expected)) {
       return;
@@ -244,6 +244,7 @@ export async function metadataReady(peer: Peer, peers: Peer[] = [peer]) {
   let actual: unknown;
   let health = 0;
   let lastRequest = 'completed';
+  let leaderObservation: { name: string; report: unknown } | undefined;
   while (performance.now() < deadline) {
     const remaining = deadline - performance.now();
     const timeout = Math.min(1000, Math.ceil(remaining));
@@ -266,6 +267,9 @@ export async function metadataReady(peer: Peer, peers: Peer[] = [peer]) {
           const leaderResponse = await fetch(leaderAddress, options);
           expect(leaderResponse.status).toBe(200);
           leaderReport = await leaderResponse.json();
+          leaderObservation = { name: leader.name, report: leaderReport };
+        } else if (leader === peer) {
+          leaderObservation = { name: peer.name, report: actual };
         }
       }
       // Read current flags on the leader: followers only track their own link to it.
@@ -289,7 +293,12 @@ export async function metadataReady(peer: Peer, peers: Peer[] = [peer]) {
   }
   const expected = { health: 200, metadata: 'named leader, three current peers and storage statistics' };
   const message = `Metadata for ${peer.name} did not become ready within 20000 ms`;
-  expect(actual, `${message} (health ${health}, last request ${lastRequest})`).toEqual(expected);
+  const observations = {
+    peer: { name: peer.name, report: actual },
+    leader: leaderObservation,
+  };
+  const details = `${message} (health ${health}, last request ${lastRequest})`;
+  expect(actual, `${details} ${JSON.stringify(observations)}`).toEqual(expected);
 }
 
 async function releaseReservations(reservations: PortReservation[]) {

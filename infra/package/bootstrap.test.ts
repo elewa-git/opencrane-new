@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
 import { dirname, posix, resolve } from 'node:path';
@@ -268,8 +269,22 @@ async function preparePlacementStatistics(cluster: Awaited<ReturnType<typeof clu
   await waitForClusterStream(store);
   const manager = await jetstreamManager(connection);
   await manager.streams.delete('EVENTS');
-  const reply = await connection.request('$JS.API.INFO');
-  expect(reply.json<{ streams: number }>().streams).toBe(0);
+  const deadline = performance.now() + 20_000;
+  let streams: number | undefined;
+  while (performance.now() < deadline) {
+    const remaining = deadline - performance.now();
+    const timeout = Math.min(1000, Math.ceil(remaining));
+    const reply = await connection.request('$JS.API.INFO', undefined, { timeout });
+    streams = reply.json<{ streams: number }>().streams;
+    if (streams === 0) {
+      break;
+    }
+    const pollRemaining = deadline - performance.now();
+    if (pollRemaining > 0) {
+      await delay(Math.min(25, pollRemaining));
+    }
+  }
+  expect(streams, `Setup stream deletion expired; last stream count: ${streams}`).toBe(0);
 }
 
 async function bootstrapClusterFixture() {
