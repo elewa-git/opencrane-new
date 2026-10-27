@@ -5382,8 +5382,14 @@ bridge keeps refusing prepared sessions, and no one-second resend loop is used.
 
 The computer journal keeps the distinct ids on its start report and records execution
 before `turn/start`. The server saves messageId and rootId on the computer start.
-A proven unsaved computer append may retry within the same deadline after unrelated
-traffic wins publication. A lost reply never qualifies for that retry.
+A proven unsaved computer append rereads new computer events and retries with their
+latest position within the original deadline. Current preparation checks still refuse
+computer replacement, control changes and activity on the selected thread.
+A lost or uncertain reply never qualifies for that retry.
+After the start is saved, admission checks the small access streams, worker ownership,
+routine state and the allocated root's Stop again before releasing credentials.
+Only the exact start event just saved is exempt from the computer change check.
+History is loaded before the short access check; later checks read only new events.
 A repeated start after lost acknowledgement cannot obtain another execution grant.
 This conservative path does not recover uncertain work or renew a routine turn.
 Allowances and uncertain holds remain unchanged. Company dispatch, lifecycle Stop
@@ -5392,8 +5398,25 @@ reactions and bound Ask (design rows 11–13) must precede automatic enablement.
 Part of #106, P4-24 PR 10d. `test/routine-sender.test.ts` uses real NATS/OpenFGA,
 the WebSocket bridge and computer journal with a local recording execution driver.
 It covers duplicate senders, lost replies, restart and a controlled fourteen-second
-wake followed by changed authority. No model service or dev stack is called.
-Fresh-install live qualification: NOT RUN.
+wake followed by changed authority. It also holds the saved start reply while Stop,
+model grant loss, payer membership loss, worker ownership loss or routine pause occurs.
+Each must leave zero driver `turn/start` calls. Another thread's computer activity must
+allow exactly one execution; replacement and selected-thread activity must refuse it.
+No model service or dev stack is called. Fresh-install live qualification: NOT RUN.
+
+The success fixture supplies the allocated thread id. It proves admission and transport
+behaviour only. A driver-generated private thread id still fails the exact identity check.
+This is the remaining third finding for #775, deferred under the requested rework size limit.
+The native-thread probe reproduces zero executions where one is required.
+The follow-up must prepare an ephemeral native thread before root allocation, return its
+actual id with the computer generation, and retain that same private session for delivery.
+It must reuse the native-thread-first ordering from #762 and the private routine session
+rules from #735. Bind preparation to the occurrence and live connection, consume it once,
+and close it on refusal, disconnect, Stop or lost ownership. Replace the selected-id success
+fixture with generated native ids and test expiry, replacement, duplicate delivery and
+lost replies. Keep exact thread, access, money and memory checks and automatic execution
+disabled throughout. Connecting this exchange and its runner lifecycle with the race tests
+would exceed about 600 changed lines in this rework.
 
 ## Routine metadata reads
 

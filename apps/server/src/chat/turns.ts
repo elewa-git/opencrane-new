@@ -15,7 +15,7 @@ import {
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { readStreamSummary, readEventAt, WrongSiloError, type AppendCommand, type EventStore,
-  type StoredEvent } from '@opencrane/event-store';
+  type StoredEvent, type AppendResult } from '@opencrane/event-store';
 import { chatMembership } from './participation.ts';
 import { readChatFacts, type ChatFacts } from './chat-summary.ts';
 import { creationEvent } from './private-session.ts';
@@ -55,7 +55,8 @@ type TurnInput = {
 type TurnContext = {
   silo: string; computerId: string; assistantId: string; binding?: Binding;
   routineStart?: ((input: TurnInput) => Promise<{ payer: string; fresh: WriteAuthority;
-    deadline: number; provider: Awaited<ReturnType<typeof providerTurnAdmission>> }>) | undefined;
+    deadline: number; confirmStarted: (saved: StoredEvent | undefined) => Promise<void>;
+    provider: Awaited<ReturnType<typeof providerTurnAdmission>> }>) | undefined;
 };
 export class TurnAdmissionRejected extends ReportRejected {}
 export class BudgetAdmissionRejected extends TurnAdmissionRejected {
@@ -80,7 +81,7 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   if (!data) return;
   let fresh: WriteAuthority | undefined;
   let routineDeadline: number | undefined;
-  let confirmBudget: WriteAuthority | undefined;
+  let confirmBudget: ((saved: StoredEvent | undefined) => Promise<void>) | undefined;
   let status = input.status;
   let refusal: TurnAdmissionRejected | undefined;
   requireThreadOwner(facts, data);
@@ -122,10 +123,10 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   };
   addLifecycleDetails(eventData, status, executionMode);
   await fresh?.();
-  await saveTurn(store, facts, event, data, routineDeadline, fresh);
+  const saved = await saveTurn(store, facts, event, data, routineDeadline, fresh);
   if (refusal) throw refusal;
-  // Check stops saved while the separate computer append was waiting before returning a pass.
-  await confirmBudget?.();
+  // Check authority and stops again after the separate computer append finishes.
+  await confirmBudget?.(saved);
   if (input.status === 'started') return admittedTurn(data, executionMode);
   return undefined;
 }
@@ -150,7 +151,7 @@ async function startAuthority(store: EventStore, context: TurnContext, conversat
     }
     const admission = await context.routineStart(input);
     applyProviderChoice(data, admission.provider);
-    return { ...admission, confirmBudget: undefined };
+    return { ...admission, confirmBudget: admission.confirmStarted };
   }
   if (input.messageId !== undefined || input.rootId !== undefined ||
       input.senderAttemptId !== undefined) throw new ReportRejected('Unexpected routine binding');
@@ -193,15 +194,31 @@ async function saveTurn(store: EventStore, facts: ComputerFacts,
     };
     let result = await store.append(command);
     // Retry only a proven unsaved routine start, within its original access deadline.
-    while (deadline !== undefined && performance.now() < deadline && result.status === 'conflict'
-      && result.outcome?.kind === 'conditional_rejection_unchanged'
-      && !result.outcome.possiblyPublished) {
+    while (deadline !== undefined && performance.now() < deadline && canRetryRoutineStart(result)) {
+      let sequence = command.expectedSequence;
+      for await (const row of store.readStream(subject, sequence + 1, deadline)) {
+        sequence = row.sequence;
+      }
+      // Validate changes after reading the new position, before retrying publication.
+      // The routine check rejects lifecycle changes and activity on the selected thread.
+      await checkAccess?.();
+      command.expectedSequence = sequence;
       result = await store.append(command);
     }
     if (result.status !== 'appended') throw new Error('Turn append conflict or unavailable');
     const saved = await readEventAt(store, subject, result.sequence, performance.now() + 10_000);
     verifyBinding(saved?.event.id === id ? saved : undefined, data);
+    return saved;
   }
+  return undefined;
+}
+
+function canRetryRoutineStart(result: AppendResult) {
+  if (result.status !== 'conflict') return false;
+  const outcome = result.outcome;
+  if (outcome?.kind !== 'conditional_rejection_unchanged' &&
+      outcome?.kind !== 'conditional_rejection_changed') return false;
+  return !outcome.possiblyPublished;
 }
 
 type ComputerFacts = {

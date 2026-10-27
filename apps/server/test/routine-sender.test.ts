@@ -610,16 +610,19 @@ async function refusesLateChange(kind: string) {
     if (!injected && proposed.type === 'computer.turn_started' && result.status === 'appended') {
       injected = true;
       if (kind === 'Stop') {
-        const stopped = record('review-stop', 'budget-test', 'budget.root_stopped', {
-          rootId: actor.state.roots[0]!.rootId, reason: 'allowance_exhausted',
-          attemptedBoundCents: 1, availableCents: 0 });
+        const stoppedData = { rootId: actor.state.roots[0]!.rootId,
+          reason: 'allowance_exhausted', attemptedBoundCents: 1, availableCents: 0 };
+        const stopped = record('late-stop', 'budget-test', 'budget.root_stopped', stoppedData);
         stopped.source = 'models';
         stopped.principal = { kind: 'system', id: 'models' };
         await nats.seed([stopped]);
       } else if (kind === 'payer') {
-        await nats.seed([record('review-payer', 'team-sales', 'team.member_removed',
-          { teamId: 'sales', memberId: 'alice', removedBy: 'admin' })]);
-      } else await changes(kind);
+        const removed = { teamId: 'sales', memberId: 'alice', removedBy: 'admin' };
+        const removal = record('late-payer', 'team-sales', 'team.member_removed', removed);
+        await nats.seed([removal]);
+      } else {
+        await changes(kind);
+      }
     }
     return result;
   }
@@ -634,7 +637,9 @@ async function refusesLateChange(kind: string) {
     expect(injected).toBe(true);
     expect(computer.starts).toBe(0);
     expect(await savedStarts()).toHaveLength(1);
-  } finally { await computer.close(); }
+  } finally {
+    await computer.close();
+  }
 }
 it.each(['Stop', 'grant', 'payer', 'worker', 'routine.paused', 'member', 'computer'])(
   'refuses late %s after saving the start and before releasing credentials', refusesLateChange);
@@ -647,10 +652,12 @@ async function acceptsOtherThread() {
     const proposed = proposedEvent.parse(args[0].event);
     if (!injected && proposed.type === 'computer.turn_started') {
       injected = true;
-      await nats.seed([record('review-other-turn', 'computer-sales-assistant', 'computer.turn_started',
-        { assistantId: 'sales-assistant', computerId: 'computer', conversationId: 'another-chat',
-          turnId: 'another-turn', threadId: 'another-thread', requesterId: 'alice',
-          task: 'chat_turn', executionMode: 'restricted' })]);
+      const otherStart = { assistantId: 'sales-assistant', computerId: 'computer',
+        conversationId: 'another-chat', turnId: 'another-turn', threadId: 'another-thread',
+        requesterId: 'alice', task: 'chat_turn', executionMode: 'restricted' };
+      const started = record('other-start', 'computer-sales-assistant',
+        'computer.turn_started', otherStart);
+      await nats.seed([started]);
     }
     return append(...args);
   }
@@ -665,7 +672,9 @@ async function acceptsOtherThread() {
     expect(injected).toBe(true);
     expect(computer.starts).toBe(1);
     expect(await savedStarts()).toHaveLength(2);
-  } finally { await computer.close(); }
+  } finally {
+    await computer.close();
+  }
 }
 it('retries an unsaved start after another computer thread advances its stream', acceptsOtherThread);
 
@@ -681,10 +690,11 @@ async function refusesRelevantComputerChange(kind: string) {
       if (kind === 'replacement') {
         await changes('computer');
       } else {
+        const competingStart = { assistantId: 'sales-assistant', computerId: 'computer',
+          conversationId, turnId: 'competing-turn', threadId: selection.threadId,
+          requesterId: 'alice', task: 'chat_turn', executionMode: 'restricted' };
         const competing = record('competing-start', 'computer-sales-assistant',
-          'computer.turn_started', { assistantId: 'sales-assistant', computerId: 'computer',
-            conversationId, turnId: 'competing-turn', threadId: selection.threadId,
-            requesterId: 'alice', task: 'chat_turn', executionMode: 'restricted' });
+          'computer.turn_started', competingStart);
         await nats.seed([competing]);
       }
     }

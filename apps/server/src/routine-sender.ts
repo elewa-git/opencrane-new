@@ -77,7 +77,7 @@ export function createRoutineSender(options: { enabled?: boolean; replay?: boole
         throw new Error('Routine start unavailable');
       }
       return { payer: checked.run.definition.payingGroupId, fresh: checked.fresh,
-        deadline: checked.deadline, provider: checked.provider };
+        deadline: checked.deadline, provider: checked.provider, confirmStarted: checked.confirmStarted };
     } catch {
       throw new Error('Routine start unavailable');
     }

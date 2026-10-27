@@ -31,8 +31,10 @@ An internal preparation check can recover the original routine admission and sen
 identifiers after checking current access. It saves nothing. Delivery remains unknown;
 the check cannot wake a computer or authorise another send.
 A separate internal sender can hand a newly admitted routine to the computer once.
-It checks access after wake and just before sending. A lost reply never permits another
-send. This path is disabled by default; automatic routines remain unavailable.
+It checks access after wake, just before sending, and after saving the turn start.
+A lost reply never permits another send. Preparing the computer's real private thread
+before allocating its budget is still missing. This path is disabled by default;
+automatic routines remain unavailable.
 
 Owners and admins can read, save or remove company account opt-in for a tool installation.
 Re-registering the server clears the effective choice. Saving opt-in grants no tool access.

@@ -102,21 +102,21 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
     await readBudgetChanges();
     for await (const row of store.readStream(subject, position + 1, deadline)) checkRoutine(row);
   }
-  async function receiptState() {
-    const state = await checked.receiptState();
+  async function receiptState(started?: StoredEvent) {
+    const state = await checked.receiptState(started);
     // Check this root's Stop after the awaited access and provider reads.
     // Read only new events; unrelated spending must not repeat confirmation.
     await readBudgetChanges();
     return state;
   }
-  async function confirm() {
+  async function confirm(started?: StoredEvent) {
     let before: Awaited<ReturnType<typeof receiptState>>;
     let after: typeof before;
     do {
-      before = await receiptState();
-      await checked.confirmPreparation();
+      before = await receiptState(started);
+      await checked.confirmPreparation(started);
       await readChanges();
-      after = await receiptState();
+      after = await receiptState(started);
     } while (!isDeepStrictEqual(before, after));
     preparation.checkTime();
     if (performance.now() >= deadline) throw new Error('Routine activation refused');
@@ -152,6 +152,10 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
   async function fresh() {
     await confirm();
   }
+  async function confirmStarted(started: StoredEvent | undefined) {
+    if (!started) throw new Error('Routine activation refused');
+    await confirm(started);
+  }
   return { receipt, messageId: run.messageId, turnId: run.turnId, rootId, senderAttemptId,
-    published, run, fresh, deadline, provider: checked.provider };
+    published, run, fresh, confirmStarted, deadline, provider: checked.provider };
 }

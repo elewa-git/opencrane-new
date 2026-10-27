@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
+import type { StoredEvent } from '@opencrane/event-store';
 import { isDeepStrictEqual } from 'node:util';
 import { isComputerLifecycle } from '@opencrane/auth';
-import { computerTurnStartedDataSchema, computerTurnClosedDataSchema,
-  type EventEnvelope } from '@opencrane/events';
+import { computerTurnStartedDataSchema, computerTurnClosedDataSchema } from '@opencrane/events';
 import { priceTableId, providerTurnAdmission, reservationCents,
   RootBudgetRefused, type BudgetActor } from '@opencrane/models';
 import { loadRootPreparation, requireRootComputer, rootPreparationModel }
@@ -13,7 +13,11 @@ type Arguments = Parameters<typeof loadRoutineInput>;
 type Selection = Parameters<typeof requireRootComputer>[2];
 const inputChangeTypes = ['conversation.created', 'conversation.closed', 'message.posted'];
 
-function changesComputerPreparation(event: EventEnvelope, selected: Selection) {
+function changesComputerPreparation(row: StoredEvent, selected: Selection,
+  started?: StoredEvent) {
+  // Exempt only the exact start just saved by this caller, never other work on its thread.
+  if (started && isDeepStrictEqual(row, started)) return false;
+  const event = row.event;
   const type = event.type;
   if (isComputerLifecycle(type) || type.startsWith('takeover.')) {
     return true;
@@ -28,9 +32,9 @@ function changesComputerPreparation(event: EventEnvelope, selected: Selection) {
 }
 
 async function checkComputerChanges(store: Arguments[0], assistantId: string,
-  position: number, selected: Selection, deadline: number) {
+  position: number, selected: Selection, deadline: number, started?: StoredEvent) {
   for await (const row of store.readStream(`computer-${assistantId}`, position + 1, deadline)) {
-    if (changesComputerPreparation(row.event, selected)) {
+    if (changesComputerPreparation(row, selected, started)) {
       throw new Error('Routine root refused');
     }
     position = row.sequence;
@@ -116,7 +120,7 @@ export async function loadRoutineRootPreparation(store: Arguments[0], keys: Argu
   await preparation.checkModel(model, rows);
   let position = rows.at(-1)!.sequence;
   let computerPosition = prepared.computer.sequence;
-  async function confirmPreparation() {
+  async function confirmPreparation(started?: StoredEvent) {
     await preparation.checkOwner();
     const current = await providerTurnAdmission(store, worker.silo, assistantId, deadline);
     if (current.enabled !== admission.enabled || current.draining !== admission.draining ||
@@ -124,7 +128,7 @@ export async function loadRoutineRootPreparation(store: Arguments[0], keys: Argu
       throw new Error('Routine root refused');
     }
     computerPosition = await checkComputerChanges(store, assistantId,
-      computerPosition, selected, deadline);
+      computerPosition, selected, deadline, started);
     // Reject later input or closure while allowing unrelated chat activity.
     for await (const row of store.readStream(`conversation-${run.conversationId}`,
       position + 1, deadline)) {
@@ -143,24 +147,24 @@ export async function loadRoutineRootPreparation(store: Arguments[0], keys: Argu
     [`computer-${assistantId}`, computerPosition],
   ]);
   let preparationChangePosition = 0;
-  function changesPreparation(subject: string, event: EventEnvelope) {
+  function changesPreparation(subject: string, row: StoredEvent, started?: StoredEvent) {
     if (subject === `computer-${assistantId}`) {
-      return changesComputerPreparation(event, selected);
+      return changesComputerPreparation(row, selected, started);
     }
     if (subject === `conversation-${run.conversationId}`) {
-      return inputChangeTypes.includes(event.type);
+      return inputChangeTypes.includes(row.event.type);
     }
     return true;
   }
   async function readReceiptSubject(subject: string) {
     return store.head(subject, deadline);
   }
-  async function receiptState() {
+  async function receiptState(started?: StoredEvent) {
     // Read only new preparation events. Keep growing histories out of the access watch.
     for (const [subject, position] of preparationPositions) {
       for await (const row of store.readStream(subject, position + 1, deadline)) {
         preparationPositions.set(subject, row.sequence);
-        if (changesPreparation(subject, row.event)) {
+        if (changesPreparation(subject, row, started)) {
           preparationChangePosition = Math.max(preparationChangePosition, row.sequence);
         }
       }
