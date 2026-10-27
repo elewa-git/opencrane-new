@@ -22,11 +22,14 @@ export const oauthConfigurationSchema = z.strictObject({
   issuer: z.string().max(2048), consentEndpoint: z.string().max(2048),
   redirectUri: z.string().max(2048), clientId: id,
   tokenEndpoint: z.string().max(2048).optional(),
+  identityVerification: z.strictObject({ algorithm: z.literal('RS256'),
+    publicKey: z.string().min(1).max(8192) }).optional(),
   protocolScopes: scopes, toolScopes: z.record(toolName, scopes),
 });
 const privateSchema = z.strictObject({
   state: z.string().regex(/^[A-Za-z0-9_-]{43}$/u),
   verifier: z.string().regex(/^[A-Za-z0-9_-]{43}$/u),
+  nonce: z.string().regex(/^[A-Za-z0-9_-]{43}$/u).optional(),
 });
 
 function digest(value: string, encoding: 'hex' | 'base64url' = 'hex') {
@@ -37,7 +40,8 @@ function digest(value: string, encoding: 'hex' | 'base64url' = 'hex') {
 function privateMaterial() {
   const state = randomBytes(32).toString('base64url');
   const verifier = randomBytes(32).toString('base64url');
-  return JSON.stringify({ state, verifier });
+  const nonce = randomBytes(32).toString('base64url');
+  return JSON.stringify({ state, verifier, nonce });
 }
 function exactHttps(value: string) {
   const parsed = remoteEndpoint(value);
@@ -120,6 +124,10 @@ export function oauthConsentUrl(configuration: z.infer<typeof oauthConfiguration
   const parameters = { response_type: 'code', client_id: configuration.clientId,
     redirect_uri: configuration.redirectUri, scope: prepared.requestedScopes.join(' '),
     state: material.state, code_challenge: prepared.challenge, code_challenge_method: 'S256' };
-  url.search = new URLSearchParams(parameters).toString();
+  const query = new URLSearchParams(parameters);
+  if (material.nonce) {
+    query.set('nonce', material.nonce);
+  }
+  url.search = query.toString();
   return url.href;
 }

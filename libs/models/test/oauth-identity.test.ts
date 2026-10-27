@@ -1,5 +1,5 @@
 import { exportSPKI, generateKeyPair, SignJWT, type JWTPayload } from 'jose';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { verifyOAuthIdentity } from '../src/oauth-identity.ts';
 
 const keys = await generateKeyPair('RS256');
@@ -23,11 +23,18 @@ async function reply(payload: JWTPayload, algorithm = 'RS256', signingKey = keys
 
 async function verifiesIdentity() {
   const contents = await reply(claims);
-  expect(await verifyOAuthIdentity(configuration, contents, attempt)).toEqual({
-    issuer: configuration.issuer, subject: 'account-123',
-  });
+  const fetch = vi.spyOn(globalThis, 'fetch');
+  try {
+    expect(await verifyOAuthIdentity(configuration, contents, attempt)).toEqual({
+      identity: { issuer: configuration.issuer, subject: 'account-123' },
+      expiresAt: (now + 300) * 1000,
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  } finally {
+    fetch.mockRestore();
+  }
 }
-it('returns only signed issuer and subject from private OAuth evidence', verifiesIdentity);
+it('returns safe signed identity evidence without fetching provider URLs', verifiesIdentity);
 
 const invalidClaims = [
   { iss: 'https://wrong.example.test/' }, { aud: 'wrong-client' }, { nonce: 'wrong-canary' },
@@ -64,7 +71,8 @@ it.each(['signature', 'algorithm', 'missing', 'malformed'])(
 async function requiresAuthorisedParty() {
   const contents = await reply({ ...claims, aud: ['fixture', 'other'], azp: 'fixture' });
   expect(await verifyOAuthIdentity(configuration, contents, attempt)).toEqual({
-    issuer: configuration.issuer, subject: 'account-123',
+    identity: { issuer: configuration.issuer, subject: 'account-123' },
+    expiresAt: (now + 300) * 1000,
   });
 }
 it('accepts multiple audiences only with the configured authorised party', requiresAuthorisedParty);

@@ -2,6 +2,40 @@
 
 For people, read [README.md](README.md) first.
 
+## Signed identity from private custody (P3-9 PR 9c; Part of #50)
+
+`oauth-identity.ts` verifies the identity in the exact saved response using installed
+MIT-licensed `jose`. Trusted operator configuration may supply `identityVerification`:
+`algorithm: RS256` and `publicKey`, a PEM SPKI public key of at most 8,192 characters.
+The full configuration already enters the consent attempt digest. Changing the key,
+algorithm or another setting invalidates that attempt. No discovery or key URL is fetched.
+There is no new runtime setting loader, route, store, event or package export.
+
+New private attempts contain a separate random 32-byte nonce. The approved consent URL
+includes it; events and status replies do not. Recovery reads the original nonce and
+response with their exact UID/version. The verifier requires the signed issuer, client
+audience, matching nonce, non-empty printable ASCII subject (at most 255 characters),
+issued-at and expiry. It rejects future issued-at/not-before and expired identities.
+Multiple audiences require the configured client as authorised party; any supplied
+party must match. Only RS256 is supported. Returned names and URLs are never trusted.
+
+The internal worker returns `unconfirmed` with optional `verifiedIdentity: { issuer, subject }`.
+This is evidence for later confirmation, not permission to activate or use an account.
+Older attempts without a nonce or verification configuration remain unconfirmed without
+identity evidence. Invalid or missing identity with both requirements present returns
+only `unknown`. Raw replies remain unchanged in custody. Verification and dependency
+errors discard private values and attached causes. Access, configuration and attempt
+expiry are checked again after verification. Identity expiry is checked once more
+after those waits, before returning evidence. Restart verifies the same saved response
+without another provider send. Uncertain custody stays unknown.
+
+`oauth-identity.test.ts` covers signatures, claims, algorithms, authorised party, legacy
+attempts and safe errors. `connection-custody.test.ts` uses the real callback/exchange
+with a signed local provider, exact recovery, nonce privacy and final-read faults.
+Each consent test uses a separate server record so its history does not include earlier cases.
+Confirmation, activation, selection, reconnect, refresh, revoke and governed use remain
+later work. Live provider and fresh-install qualification: NOT RUN.
+
 ## Private provider transport (P3-9 PR 9a, first part; Part of #50)
 
 Base includes PR 8c merge `a7fd07f60b21d3b0c584dff4490ca058f6dd90e3`.
@@ -52,8 +86,8 @@ Exact UID/version and authenticated material protect code, verifier and reply. T
 journal flushes an exclusive send marker before transport. Access/configuration/expiry checks
 run after private reads, marker flush and DNS lookup, before staging and after final recovery.
 History loads precede short access checks. Restart only recovers; missing results stay unknown.
-The exact reply is immutable private custody. `unconfirmed` returns changeRef, sequence and
-reference only. Neither status nor custody grants identity confirmation or tool access.
+The exact reply is immutable private custody. `unconfirmed` returns changeRef, sequence,
+reference and optional verified identity as described above. Neither status nor custody grants identity confirmation or tool access.
 Changed objects, failed flushes and lost replies are covered with real fixture services.
 Valid JSON passes at 8,192 bytes and fails above it. Production guards stay unchanged.
 Routes, activation, refresh and revoke remain later work. Live qualification: NOT RUN.
@@ -97,7 +131,7 @@ queries, fragments or URL normalisation. No provider request or DNS lookup runs 
 Required scopes come from the configured map for enabled reviewed tools, plus disclosed
 protocol scopes. Blocked tools contribute nothing. Missing enabled-tool mappings refuse.
 
-State and PKCE S256 verifier each use 32 random bytes. The existing path-loaded custody
+State, PKCE S256 verifier and nonce each use 32 random bytes. The existing path-loaded custody
 stores them privately. The attempt digest binds the silo, member, session digest, installed
 server, profile, operation, expected sequence, configuration and scopes. Attempt names
 are separate from bearer generation names. The journal fixes the ten-minute expiry before

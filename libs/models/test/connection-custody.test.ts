@@ -255,8 +255,8 @@ async function recoversRecordedCreate() {
 }
 it('recovers one recorded private generation across restart and retries', recoversRecordedCreate);
 
-function oauthFixture(withTools = false) {
-  const context = { siloId: 'silo-a', userId: 'member-a', serverId: 'server-a',
+function oauthFixture(withTools = false, serverId = 'server-a') {
+  const context = { siloId: 'silo-a', userId: 'member-a', serverId,
     connectionId: 'install-a', profileId: 'profile-a', changeRef: 'consent-a',
     sessionDigest: 'b'.repeat(64), expectedSequence: 0 };
   const locator = 'https://tools.example.test/mcp';
@@ -309,15 +309,17 @@ type IdentityVerification = { algorithm: 'RS256'; publicKey: string };
 
 async function consentStartFixture(identityVerification?: IdentityVerification) {
   const store = await fixture();
-  const input = oauthFixture(true);
+  candidateCount += 1;
+  const userId = `consent${candidateCount}`;
+  const serverId = `consent-server-${candidateCount}`;
+  // Keep each case's server history independent of earlier consent tests.
+  const input = oauthFixture(true, serverId);
   const configuration: typeof input.configuration & {
     identityVerification?: IdentityVerification;
   } = { ...input.configuration };
   if (identityVerification) {
     configuration.identityVerification = identityVerification;
   }
-  candidateCount += 1;
-  const userId = `consent${candidateCount}`;
   const context = { ...input.context, siloId: 'test', userId };
   const joined = envelope('test', `member-${userId}`, 'member.joined', {
     memberId: userId, role: 'member', email: `${userId}@example.test`, displayName: userId,
@@ -333,7 +335,7 @@ async function consentStartFixture(identityVerification?: IdentityVerification) 
     }
     await events.seed([row.event]);
   }
-  const rows = await history(events.store, 'mcp-server-a', 'test');
+  const rows = await history(events.store, `mcp-${serverId}`, 'test');
   configuration.policyRevision = toolPolicyFromRows(rows).policyRevision;
   const session = { siloId: 'test', userId, sessionDigest: context.sessionDigest, memberRevision };
   const command = { userId, serverId: context.serverId, connectionId: context.connectionId,
@@ -352,7 +354,7 @@ async function consentStartFixture(identityVerification?: IdentityVerification) 
     return startPersonalOAuth(events.store, consentBinding, session, custody,
       raw, loader.loadConfiguration, db);
   }
-  const subject = `connection-${userId}-server-a-${context.profileId}`;
+  const subject = `connection-${userId}-${serverId}-${context.profileId}`;
   return { store, configuration, session, command, start, subject, custody, loader };
 }
 
@@ -624,17 +626,22 @@ async function startsPrivateConsent() {
   expect(url.origin + url.pathname).toBe('https://identity.example.test/consent');
   const state = url.searchParams.get('state');
   const challenge = url.searchParams.get('code_challenge');
+  const nonce = url.searchParams.get('nonce');
+  expect(nonce).toMatch(/^[A-Za-z0-9_-]{43}$/u);
   expect(state).toMatch(/^[A-Za-z0-9_-]{43}$/u);
   expect(challenge).toMatch(/^[A-Za-z0-9_-]{43}$/u);
   expect(Object.fromEntries(url.searchParams)).toEqual({ response_type: 'code',
     client_id: 'fixture', redirect_uri: 'https://app.example.test/api/my/tools/oauth/callback',
-    scope: 'openid read', state, code_challenge: challenge, code_challenge_method: 'S256' });
+    scope: 'openid read', state, nonce, code_challenge: challenge, code_challenge_method: 'S256' });
   expect(started.changeRef).toBe(test.command.changeRef);
   const rows = await history(events.store, test.subject, 'test');
   expect(rows).toHaveLength(1);
   expect(rows[0]!.event.type).toBe('connection.oauth_started');
   const privateData = Buffer.from(test.store.secret.data.token, 'base64').toString();
-  const saved = z.object({ state: z.string(), verifier: z.string() }).parse(JSON.parse(privateData));
+  const saved = z.object({ state: z.string(), verifier: z.string(), nonce: z.string() })
+    .parse(JSON.parse(privateData));
+  expect(nonce).toBe(saved.nonce);
+  expect(JSON.stringify(rows)).not.toContain(saved.nonce);
   expect(url.searchParams.get('state')).toBe(saved.state);
   expect(JSON.stringify({ started, rows })).not.toContain(saved.verifier);
   expect(JSON.stringify(rows)).not.toContain(saved.state);
@@ -647,6 +654,7 @@ it('records private consent before returning only its approved URL', startsPriva
 async function changeConsentAccess(test: Awaited<ReturnType<typeof consentStartFixture>>,
   change: string) {
   const userId = test.session.userId;
+  const serverId = test.command.serverId;
   if (change === 'configuration') {
     test.configuration.clientId = 'changed';
     return;
@@ -655,20 +663,20 @@ async function changeConsentAccess(test: Awaited<ReturnType<typeof consentStartF
   let type = 'member.removed';
   let data: unknown = { memberId: userId, removedBy: 'admin' };
   if (change === 'disabled') {
-    subject = `connection-control-${userId}-server-a`;
+    subject = `connection-control-${userId}-${serverId}`;
     type = 'connection.disabled';
-    data = { userId, serverId: 'server-a', profile: 'old-profile', disabledBy: 'admin',
+    data = { userId, serverId, profile: 'old-profile', disabledBy: 'admin',
       expectedSequence: 0, reason: 'admin_disabled' };
   }
   if (change === 'policy') {
-    subject = 'mcp-server-a';
+    subject = `mcp-${serverId}`;
     type = 'mcp.server_unpublished';
-    data = { serverId: 'server-a', unpublishedBy: 'admin' };
+    data = { serverId, unpublishedBy: 'admin' };
   }
   if (change === 'profile') {
     subject = test.subject;
     type = 'connection.revoked';
-    data = { userId, serverId: 'server-a', profile: test.command.profileId, revokedBy: userId };
+    data = { userId, serverId, profile: test.command.profileId, revokedBy: userId };
   }
   await events.seed([envelope('test', subject, type, data)]);
   if (change === 'rejoined') {
@@ -728,7 +736,8 @@ async function refusesChangedStart(change: string) {
   }
   expect(await test.start(command)).toEqual({ status: 'unknown' });
   expect(await events.store.head(test.subject)).toBe(sequence);
-  expect(await events.store.head(`connection-${test.session.userId}-server-a-another-profile`))
+  const changedSubject = `connection-${test.session.userId}-${test.command.serverId}-another-profile`;
+  expect(await events.store.head(changedSubject))
     .toBe(0);
   expect(test.store.creates).toBe(1);
 }
@@ -2985,13 +2994,14 @@ async function exchangeFixture(mode = 'valid', signed = false) {
   let beforeReply: (() => Promise<void>) | undefined;
   let responseText = ' {"access_token":"result-canary","token_type":"Bearer"}\n';
   if (signed && mode !== 'missing') {
-    const nonce = new URL(test.started.consentUrl).searchParams.get('nonce');
+    const consentUrl = new URL(test.started.consentUrl);
+    const nonce = consentUrl.searchParams.get('nonce');
     const claims = { iss: test.configuration.issuer, aud: test.configuration.clientId,
       sub: 'account-123', nonce, name: 'provider-name-canary' };
     const signedClaims = new SignJWT(claims);
     signedClaims.setProtectedHeader({ alg: 'RS256' });
     signedClaims.setIssuedAt();
-    signedClaims.setExpirationTime('5m');
+    signedClaims.setExpirationTime('1m');
     const token = await signedClaims.sign(keys.privateKey);
     responseText = JSON.stringify({ access_token: 'result-canary', token_type: 'Bearer',
       id_token: token, name: 'provider-name-canary' });
@@ -3303,13 +3313,15 @@ it('rechecks OAuth permission after provider address lookup and before sending',
 async function verifiesSavedIdentity() {
   const test = await exchangeFixture('valid', true);
   try {
-    const nonce = new URL(test.started.consentUrl).searchParams.get('nonce');
+    const consentUrl = new URL(test.started.consentUrl);
+    const nonce = consentUrl.searchParams.get('nonce');
     expect(nonce).toMatch(/^[A-Za-z0-9_-]{43}$/u);
     const result = await test.run();
     expect(result).toMatchObject({ status: 'unconfirmed',
       verifiedIdentity: { issuer: test.configuration.issuer, subject: 'account-123' } });
     const stored = test.store.secret;
-    expect(Buffer.from(stored.data.token, 'base64').toString()).toBe(test.responseText);
+    const rawReply = Buffer.from(stored.data.token, 'base64');
+    expect(rawReply.toString()).toBe(test.responseText);
     expect(await test.run(true)).toEqual(result);
     expect(test.sends).toBe(1);
     const rows = await history(events.store, test.subject, 'test');
@@ -3332,7 +3344,8 @@ async function refusesMissingSavedIdentity() {
     expect(await test.run()).toEqual({ status: 'unknown' });
     expect(await test.run(true)).toEqual({ status: 'unknown' });
     expect(test.sends).toBe(1);
-    expect(Buffer.from(test.store.secret.data.token, 'base64').toString()).toBe(test.responseText);
+    const rawReply = Buffer.from(test.store.secret.data.token, 'base64');
+    expect(rawReply.toString()).toBe(test.responseText);
   } finally {
     await test.providerFixture.close();
   }
@@ -3345,7 +3358,7 @@ async function refusesFinalIdentityChange(change: string) {
   const read = test.custody.readAttempt.bind(test.custody);
   let changed = false;
   async function changedRead(...args: Parameters<typeof read>) {
-    if (test.store.creates !== 3 || changed) {
+    if (test.store.creates !== 3 || args[0].expectedSequence === 0 || changed) {
       return read(...args);
     }
     changed = true;
@@ -3362,12 +3375,21 @@ async function refusesFinalIdentityChange(change: string) {
       vi.spyOn(Date, 'now').mockReturnValue(test.started.appendUntil);
     } else if (change === 'key') {
       test.configuration.identityVerification!.publicKey += 'changed';
-    } else if (!['uid', 'version'].includes(change)) {
+    } else if (!['uid', 'version', 'identity-expiry'].includes(change)) {
       await changeConsentAccess(test, change);
     }
     return result;
   }
   vi.spyOn(test.custody, 'readAttempt').mockImplementation(changedRead);
+  const load = test.loader.loadConfiguration;
+  const identityExpiredAt = Date.now() + 90_000;
+  async function expireDuringAccessCheck() {
+    if (changed && change === 'identity-expiry') {
+      vi.spyOn(Date, 'now').mockReturnValue(identityExpiredAt);
+    }
+    return load();
+  }
+  vi.spyOn(test.loader, 'loadConfiguration').mockImplementation(expireDuringAccessCheck);
   try {
     expect(await test.run()).toEqual({ status: 'unknown' });
     expect(changed).toBe(true);
@@ -3378,13 +3400,14 @@ async function refusesFinalIdentityChange(change: string) {
   }
 }
 it.each(['removed', 'rejoined', 'disabled', 'configuration', 'key', 'expiry', 'uid',
-  'version', 'dependency'])(
+  'version', 'dependency', 'identity-expiry'])(
   'refuses OAuth identity when final recovery changes %s', refusesFinalIdentityChange);
 
 async function refusesChangedIdentitySession() {
   const test = await exchangeFixture('valid', true);
   try {
-    expect((await test.run()).status).toBe('unconfirmed');
+    const result = await test.run();
+    expect(result.status).toBe('unconfirmed');
     test.session.sessionDigest = 'c'.repeat(64);
     expect(await test.run(true)).toEqual({ status: 'unknown' });
     expect(test.sends).toBe(1);

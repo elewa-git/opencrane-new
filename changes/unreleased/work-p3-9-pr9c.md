@@ -1,0 +1,1 @@
+- Private OAuth recovery can verify a signed account against the original consent nonce and operator-provided public key. It returns only issuer and account identifier, keeps the reply unconfirmed, and never repeats the provider send.
