@@ -628,8 +628,11 @@ class TurnRunner {
     const conversationId = requiredString(value, 'conversationId');
     // Ignore delayed withdrawal for a thread that has already been replaced.
     const expectedThread = value['threadId'];
-    if (expectedThread !== undefined &&
-        expectedThread !== this.findRunningThread(turnId)) return;
+    if (expectedThread !== undefined) {
+      const started = this.lastStartedReport(turnId);
+      const threadId = this.findRunningThread(turnId) ?? started?.threadId;
+      if (expectedThread !== threadId || started?.conversationId !== conversationId) return;
+    }
     // Clear queued and replayable private text before any asynchronous cleanup.
     this.journal.forgetTurnText(conversationId, turnId);
     const input = findTurn(this.state, turnId, conversationId);
