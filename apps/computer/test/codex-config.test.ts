@@ -37,14 +37,17 @@ async function loadsNativePrivateCatalogue(name: 'recall' | 'remember') {
   expect(observed['version']).toBe('codex-cli 0.159.2');
   expect(observed['methods']).toContain('server/discover');
   expect(observed['methods']).toContain('tools/list');
-  expect(new Set(observed['protocols'] as string[])).toEqual(new Set(['2026-07-28']));
+  const protocols = array(observed['protocols']);
+  expect(new Set(protocols)).toEqual(new Set(['2026-07-28']));
+  expect(observed['unapprovedDiscoveries']).toBe(1);
   expect(observed['beforeApproval']).toBe(0);
   expect(observed['approvedId']).toBe(observed['startedId']);
   expect(record(observed['thread'])['id']).toBe(observed['startedId']);
   const listing = record(observed['listing']);
-  const servers = listing['data'] as Record<string, unknown>[];
+  const servers = array(listing['data']);
   expect(servers).toHaveLength(1);
-  const tools = record(servers[0]!['tools']);
+  const server = record(servers[0]);
+  const tools = record(server['tools']);
   expect(Object.keys(tools)).toEqual([name]);
   expect(observed['discovered']).toBe(true);
   expect(observed['thread']).toMatchObject({ ephemeral: true, path: null, environments: [] });
@@ -52,3 +55,8 @@ async function loadsNativePrivateCatalogue(name: 'recall' | 'remember') {
 }
 it.each(['recall', 'remember'] as const)(
   'loads approved %s on the same native ephemeral thread', loadsNativePrivateCatalogue);
+
+function array(value: unknown): unknown[] {
+  if (!Array.isArray(value)) throw new Error('Expected an array');
+  return value;
+}

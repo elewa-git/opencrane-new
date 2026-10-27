@@ -3,7 +3,6 @@ import { once } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { setTimeout as pause } from 'node:timers/promises';
 import { privateCallers } from '@opencrane/models/private-callers';
 import { privateCatalogue, privateToolOffer, checkPrivateTurnTools }
   from '../../server/test/support/private-catalogue.ts';
@@ -22,6 +21,8 @@ const approvals = approvalHolds({ waiting, renew });
 const mcp = mcpProxy('http://127.0.0.1:1', grants, approvals);
 const methods = [];
 const protocols = [];
+const initialDiscovery = Promise.withResolvers();
+let unapprovedDiscoveries = 0;
 function dropped(turnId) { mcp.dropTurn(turnId); }
 const authority = privateCallers(dropped);
 async function handle(request, response) {
@@ -30,7 +31,12 @@ async function handle(request, response) {
   try {
     const caller = authority.identify(request.headers.authorization ?? '');
     function permits(turnId, thread) { return authority.permits(caller, turnId, thread); }
+    const unapproved = mcp.size === 0;
     await mcp.handle(request, response, permits);
+    if (unapproved && request.headers['mcp-method'] === 'server/discover') {
+      unapprovedDiscoveries++;
+      initialDiscovery.resolve();
+    }
   } catch {
     response.writeHead(400);
     response.end('{}');
@@ -81,7 +87,7 @@ try {
   const owner = { ...identity, caller: registration.caller, authority, registration, session };
   const started = await loads.startPrivate(input, owner);
   // Let the initial unapproved discovery fail before recording and binding the real id.
-  await pause(200);
+  await initialDiscovery.promise;
   const beforeApproval = mcp.size;
   const grant = { ...identity, silo: 'test', requesterId: input.requesterId,
     assistantId: input.assistantId, computerId: 'computer', thread: started.thread.id };
@@ -91,7 +97,7 @@ try {
   const response = await loads.loadPrivate(input, binding);
   const listing = await connection.rpc('mcpServerStatus/list', { threadId: grant.thread });
   const result = { version, discovered: true, methods, protocols, thread: response.thread,
-    startedId: started.thread.id, approvedId: grant.thread, beforeApproval,
+    startedId: started.thread.id, approvedId: grant.thread, beforeApproval, unapprovedDiscoveries,
     listing, grants: grants.size };
   await loads.stop();
   process.stdout.write(JSON.stringify(result));
