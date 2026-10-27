@@ -68,6 +68,7 @@ persistence = "none"
 [skills]
 include_instructions = false
 [features]
+mcp_2026_07_28 = true
 multi_agent = false
 memories = false
 apps = false

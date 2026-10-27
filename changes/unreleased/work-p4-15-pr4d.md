@@ -1,1 +1,1 @@
-- Prepare private memory tool discovery for one fresh turn, with caller and generation checks and cleanup on cancellation. Native memory remains disabled.
+- Prepare private memory tool discovery for one fresh turn, with the same approved caller, thread, requester, assistant and grant throughout discovery, the required native protocol and cleanup on cancellation. Native memory remains disabled.

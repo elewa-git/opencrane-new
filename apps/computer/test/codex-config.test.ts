@@ -10,9 +10,9 @@ async function usesNativePrivateProtocol() {
   const source = resolve('apps/computer/src');
   const fixture = resolve('apps/computer/test/private-config-native.mjs');
   const argumentsList = ['run', '--rm', '--network=none', '--cap-drop=ALL',
-    '--security-opt=no-new-privileges', '--entrypoint=node',
+    '--security-opt=no-new-privileges', '--entrypoint=nice',
     '-v', `${source}:/app/src:ro`, '-v', `${fixture}:/app/test/private-config-native.mjs:ro`,
-    image, '--experimental-strip-types', '/app/test/private-config-native.mjs'];
+    image, '-n', '10', 'node', '--experimental-strip-types', '/app/test/private-config-native.mjs'];
   const result = await execute('docker', argumentsList, { timeout: 25_000 });
   const observed = record(JSON.parse(result.stdout));
   expect(observed['version']).toBe('codex-cli 0.159.2');

@@ -39,6 +39,8 @@ export interface PrivateThreadBinding {
 
 interface PrivateLoad {
   binding: PrivateThreadBinding;
+  registration: PrivateThreadBinding['registration'];
+  session: PrivateThreadBinding['session'];
   loadKey: string;
   turnId: string;
   identity: string;
@@ -65,6 +67,21 @@ function privateTools(input: Turn, binding: PrivateThreadBinding) {
   if ((name !== 'recall' && name !== 'remember') || server.modes[name] !== 'allow'
     || Object.keys(server.modes).length !== 1) throw new Error('Private tool list refused');
   return tools;
+}
+
+function checkedPrivateGrant(input: Turn, binding: PrivateThreadBinding) {
+  const grant = binding.grant;
+  if (!grant || grant.turnId !== binding.turnId || grant.conversation !== binding.conversation
+    || grant.generation !== binding.generation || grant.inputGeneration !== binding.inputGeneration
+    || grant.requesterId !== input.requesterId || grant.assistantId !== input.assistantId
+    || !isThreadId(grant.thread) || binding.registration.caller !== binding.caller) {
+    throw new Error('Private binding refused');
+  }
+  const approvedIdentity = { caller: binding.caller, grant };
+  if (!binding.checkTools(binding.tools, approvedIdentity)) {
+    throw new Error('Private binding refused');
+  }
+  return grant;
 }
 
 function ignorePrivateCleanupFailure() { /* Keep upstream errors out of private load failures. */ }
@@ -225,22 +242,13 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
     const binding = entry.binding;
     if (stopped || entry.ended || cancelled.has(entry.turnId)
       || privateLoads.get(entry.turnId) !== entry || privateIdentity(binding) !== entry.identity
+      || binding.registration !== entry.registration || binding.session !== entry.session
       || input.executionMode !== 'restricted' || input.id !== binding.turnId
       || input.conversationId !== binding.conversation
       || JSON.stringify(privateTools(input, binding)) !== entry.tools) {
       throw new Error('Private binding refused');
     }
-    const grant = binding.grant;
-    if (!grant || grant.turnId !== binding.turnId || grant.conversation !== binding.conversation
-      || grant.generation !== binding.generation || grant.inputGeneration !== binding.inputGeneration
-      || grant.requesterId !== input.requesterId || grant.assistantId !== input.assistantId
-      || !isThreadId(grant.thread) || binding.registration.caller !== binding.caller) {
-      throw new Error('Private binding refused');
-    }
-    const approvedIdentity = { caller: binding.caller, grant };
-    if (!binding.checkTools(binding.tools, approvedIdentity)) {
-      throw new Error('Private binding refused');
-    }
+    const grant = checkedPrivateGrant(input, binding);
     const callerTurn = binding.authority.identify(`Bearer ${binding.caller}`);
     const identity = { turnId: binding.turnId, conversation: binding.conversation,
       generation: binding.generation, inputGeneration: binding.inputGeneration,
@@ -268,9 +276,9 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
       await drop(entry.loadKey);
     } finally {
       try {
-        if (entry.thread) await unload(entry.binding.session, entry.thread);
+        if (entry.thread) await unload(entry.session, entry.thread);
       } finally {
-        entry.binding.session.close();
+        entry.session.close();
       }
     }
   }
@@ -279,7 +287,7 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
     if (entry.ended) return;
     // Revoke the caller before waiting for catalogue removal or native cleanup.
     entry.ended = true;
-    entry.binding.registration.close();
+    entry.registration.close();
     privateLoads.delete(entry.turnId);
     try {
       await abandonPrivate(entry);
@@ -289,17 +297,19 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
   }
 
   async function loadPrivate(input: Turn, binding: PrivateThreadBinding) {
-    if (stopped || privateLoads.has(input.id)) {
+    if (stopped || privateLoads.has(input.id)
+      || binding.registration.caller !== binding.caller) {
       throw new ThreadLoadFailed('Private tools could not be loaded');
     }
-    const entry: PrivateLoad = { binding, loadKey: randomBytes(16).toString('hex'),
+    const entry: PrivateLoad = { binding, registration: binding.registration,
+      session: binding.session, loadKey: randomBytes(16).toString('hex'),
       turnId: input.id, identity: privateIdentity(binding),
       tools: JSON.stringify(parseTools(binding.tools)), ended: false };
     privateLoads.set(input.id, entry);
     function closed() {
       void removePrivate(entry).catch(ignorePrivateCleanupFailure);
     }
-    void binding.session.closed.then(closed, closed);
+    void entry.session.closed.then(closed, closed);
     let newThread: string | undefined;
     try {
       await registerPrivate(entry, input);
@@ -308,11 +318,10 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
       const config = threadToolsConfig(tools, entry.loadKey);
       const params = { model: modelForTask(input.taskKind), approvalPolicy: 'never',
         sandbox: 'read-only', ephemeral: true, environments: [], config };
-      const response = record(await binding.session.rpc('thread/start', params));
+      const response = record(await entry.session.rpc('thread/start', params));
       const thread = record(response['thread']);
       if (isThreadId(thread['id'])) newThread = thread['id'];
-      if (!newThread || thread['ephemeral'] !== true || thread['path'] !== null
-        || !Array.isArray(thread['environments']) || thread['environments'].length !== 0) {
+      if (!newThread || !isEphemeralThread(thread)) {
         throw new Error('Private thread refused');
       }
       checkPrivate(entry, input);
@@ -407,4 +416,10 @@ function beforeDeadline(operation: Promise<unknown>, deadline: number) {
 
 function isThreadId(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
+}
+
+function isEphemeralThread(thread: Record<string, unknown>) {
+  const environments = thread['environments'];
+  return thread['ephemeral'] === true && thread['path'] === null
+    && Array.isArray(environments) && environments.length === 0;
 }

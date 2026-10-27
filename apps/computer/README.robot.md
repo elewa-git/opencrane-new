@@ -1572,28 +1572,39 @@ Prerequisite #745 merged as `d35b7957ff85fcc826a8ae6f1b7fbf020191ef94`.
 `threadLoads.loadPrivate` is an internal preparation method with no production caller.
 It takes a restricted turn and a separate trusted `PrivateThreadBinding`: the live
 caller registry, registration, private RPC session, computer/input generations and
-exact tool list approved by server assembly. The binding must never come from a
+exact tool list approved by server assembly, its recorded grant and the server's
+`checkPrivateTurnTools` function. The binding must never come from a
 model, desktop process or public request. The loader compares the turn's tools with
 that reviewed list and accepts only one Allow recall or remember definition from
 `memory/server`. It does not replace the server's definition or qualification checks.
 
 Each load gets a fresh random address and always calls private `thread/start`.
 It requires `ephemeral: true`, `path: null`, an empty `environments` array and a thread
-that the caller can bind. Catalogue registration carries both generations through
-the existing driver. The loader checks identity and tools after every wait and
-requires proxy discovery within ten seconds. It never installs a grant, resumes a
-private thread or changes restricted notification admission. Discovery reads no facts.
+that matches the already bound, recorded grant. The initial registry and catalogue
+checks use that same thread, never an absent thread. Catalogue registration carries
+both generations through the existing driver. The loader checks identity and tools after every wait and
+requires proxy discovery within ten seconds. It also checks the requester and
+assistant against the approved grant. The assembler keeps approval on the original
+tool list in RAM; a copied list has no approval. Each check repeats privacy
+qualification and the saved turn and grant checks. Changed or detached approvals
+refuse loading. It never installs a grant, resumes a private thread or changes restricted notification admission. Discovery reads no facts.
 
 The trusted owner calls `cancel` for Stop, `stop` for disconnect and `forget` when
 releasing a thread. Private process closure also removes the load. Cleanup revokes
 the caller before waiting, drops the address, unloads through that private session
-and closes it. A delayed registration or start is cleaned up again. Errors have
+and closes it. Cleanup keeps the original registration and session even if the
+supplied binding changes while waiting. A foreign registration is refused before
+loading can take ownership of it. A delayed registration or start is cleaned up again. Errors have
 fixed text and retain no underlying error or caller bytes.
 
 `test/private-thread-loads.test.ts` uses native-protocol RPC stand-ins and the real
-loopback MCP proxy and caller registry. It checks matching discovery, same-requester
-concurrency, changed bindings, refused tools, failed discovery, timeout, cancellation
+loopback MCP proxy, caller registry and real server assembly for recall and remember.
+It checks matching discovery, same-requester concurrency, changed bindings, refused tools, failed discovery, timeout, cancellation
 at each wait and process closure. It asserts that the upstream receives no request.
-These synthetic checks do not qualify a host or prove native disk isolation.
+`test/codex-config.test.ts` also starts pinned Codex 0.159.2 in a disposable image
+with the generated private configuration. The configuration enables
+`mcp_2026_07_28`; the fixture supplies no protocol header. Native discovery reaches
+the real proxy without a model turn or grant. This test runs in CI's image group.
+These checks do not qualify a host or prove native disk isolation.
 Production stays disabled. Private launch wiring, call forwarding, volatile delivery,
 invalidation and live disk proof remain separate work. Ordinary loading is unchanged.
