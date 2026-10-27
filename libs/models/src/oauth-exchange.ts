@@ -7,11 +7,12 @@ const configurationSchema = z.strictObject({
   clientId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u),
   redirectUri: z.string().max(2048),
 });
-const materialSchema = z.strictObject({
+const consentMaterialSchema = z.strictObject({
   code: z.string().regex(/^[\x21-\x7e]{1,4096}$/u),
   verifier: z.string().regex(/^[A-Za-z0-9_-]{43}$/u),
 });
 const token = z.string().regex(/^[\x21-\x7e]{1,4096}$/u);
+const materialSchema = z.union([consentMaterialSchema, z.strictObject({ refreshToken: token })]);
 const replySchema = z.looseObject({
   access_token: token,
   token_type: z.string().regex(/^Bearer$/iu),
@@ -52,9 +53,7 @@ export function oauthProviderTransport(rawConfiguration: unknown, network: Remot
       const boundedSignal = AbortSignal.any([signal, controller.signal]);
       boundedSignal.throwIfAborted();
       const material = materialSchema.parse(rawMaterial);
-      const parameters = { grant_type: 'authorization_code', client_id: configuration.clientId,
-        redirect_uri: configuration.redirectUri, code: material.code,
-        code_verifier: material.verifier };
+      const parameters = grantParameters(configuration, material);
       const form = new URLSearchParams(parameters);
       const body = form.toString();
       if (Buffer.byteLength(body) > 20_000) {
@@ -84,4 +83,14 @@ export function oauthProviderTransport(rawConfiguration: unknown, network: Remot
   }
   // A later worker must durably claim each attempt before invoking this one-request adapter.
   return exchange;
+}
+
+function grantParameters(configuration: z.infer<typeof configurationSchema>,
+  material: z.infer<typeof materialSchema>) {
+  if ('refreshToken' in material) {
+    return { grant_type: 'refresh_token', client_id: configuration.clientId,
+      refresh_token: material.refreshToken };
+  }
+  return { grant_type: 'authorization_code', client_id: configuration.clientId,
+    redirect_uri: configuration.redirectUri, code: material.code, code_verifier: material.verifier };
 }

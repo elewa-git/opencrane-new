@@ -2992,6 +2992,39 @@ async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) 
   const claim = await test.callback();
   const custody = test.store.restart();
   let sends = 0;
+  let refreshSends = 0;
+  let refreshMode = 'valid';
+  function setRefreshMode(value: string) {
+    refreshMode = value;
+  }
+  async function refreshResponse(parameters: URLSearchParams, response: ServerResponse) {
+    refreshSends++;
+    response.setHeader('content-type', 'application/json');
+    expect(Object.fromEntries(parameters)).toEqual({ grant_type: 'refresh_token',
+      client_id: test.configuration.clientId, refresh_token: 'refresh-canary' });
+    await beforeReply?.();
+    if (refreshMode === 'lost') {
+      response.destroy();
+      return;
+    }
+    if (refreshMode === 'revoked') {
+      response.end(JSON.stringify({ error: 'invalid_grant' }));
+      return;
+    }
+    const now = Math.floor(Date.now() / 1000);
+    const audience = refreshMode === 'audience' ? 'another-client' : test.configuration.clientId;
+    const subject = refreshMode === 'account' ? 'another-account' : 'account-123';
+    const claims = { iss: test.configuration.issuer, aud: audience, sub: subject, iat: now,
+      exp: refreshMode === 'expired' ? now - 1 : now + 300 };
+    const signedClaims = new SignJWT(claims);
+    signedClaims.setProtectedHeader({ alg: 'RS256' });
+    const idToken = await signedClaims.sign(keys.privateKey);
+    const reply = { access_token: 'next-access-canary', token_type: 'Bearer',
+      refresh_token: refreshMode === 'unrotated' ? 'refresh-canary' : 'next-refresh-canary',
+      id_token: idToken, scope: refreshMode === 'scopes' ? 'write' : 'read',
+      expires_in: refreshMode === 'lifetime' ? 86_401 : 300 };
+    response.end(JSON.stringify(reply));
+  }
   let beforeReply: (() => Promise<void>) | undefined;
   let responseText = ' {"access_token":"result-canary","token_type":"Bearer"}\n';
   if (signed && mode !== 'missing') {
@@ -3018,6 +3051,10 @@ async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) 
       chunks.push(chunk);
     }
     const parameters = new URLSearchParams(Buffer.concat(chunks).toString());
+    if (parameters.get('grant_type') === 'refresh_token') {
+      await refreshResponse(parameters, response);
+      return;
+    }
     const hash = createHash('sha256');
     hash.update(parameters.get('code_verifier') ?? '');
     expect(hash.digest('base64url')).toBe(
@@ -3050,7 +3087,8 @@ async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) 
   function before(action: () => Promise<void>) {
     beforeReply = action;
   }
-  return { ...test, claim, custody, run, before, responseText, providerFixture,
+  return { ...test, claim, custody, run, before, responseText, providerFixture, setRefreshMode,
+    get refreshSends() { return refreshSends; },
     get sends() { return sends; } };
 }
 
@@ -3611,6 +3649,7 @@ async function refreshFixture(mode = 'valid') {
     await test.providerFixture.close();
   }
   return { ...test, input, start, close, generation, dueAt,
+    get refreshSends() { return test.refreshSends; },
     get sends() { return test.sends; } };
 }
 
@@ -4082,3 +4121,175 @@ async function checksRefreshClaimReplay() {
 }
 it('retains refresh claims without rereading consent and refuses altered replay bindings',
   checksRefreshClaimReplay);
+
+async function sendRefresh(test: Awaited<ReturnType<typeof refreshFixture>>,
+  live?: unknown, restart = false, network = test.providerFixture.network) {
+  const { exchangePersonalOAuthRefresh } = await import('../src/oauth-refresh-worker.ts');
+  const custody = restart ? test.store.restart() : test.custody;
+  return exchangePersonalOAuthRefresh(events.store, consentBinding, test.session, custody,
+    test.input, test.loader.loadConfiguration, pgDb(storage.queue), live, network);
+}
+
+async function sendsClaimedRefreshOnce() {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    expect(await sendRefresh(test, { ...claim })).toEqual({ status: 'unknown' });
+    expect(test.refreshSends).toBe(0);
+    const results = await Promise.all([sendRefresh(test, claim), sendRefresh(test, claim)]);
+    expect(results[0]).toMatchObject({ status: 'verified', callsAvailable: false });
+    // Allow a recovery caller to reach the lock before the live sender has saved its reply.
+    const safeResults = [results[0], { status: 'unknown' }];
+    expect(safeResults).toContainEqual(results[1]);
+    expect(await sendRefresh(test, undefined, true)).toEqual(results[0]);
+    expect(test.refreshSends).toBe(1);
+    expect(test.sends).toBe(1);
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(5);
+    expect(foldConnection(rows).lastGeneration).toBe(1);
+    const publicValues = JSON.stringify({ rows, results });
+    for (const canary of ['next-access-canary', 'next-refresh-canary', 'refresh-canary']) {
+      const hash = createHash('sha256');
+      hash.update(canary);
+      expect(publicValues).not.toContain(canary);
+      expect(publicValues).not.toContain(hash.digest('hex'));
+    }
+  } finally {
+    await test.close();
+  }
+}
+it('sends a claimed refresh once under racing callers and recovers after restart',
+  sendsClaimedRefreshOnce);
+
+async function refusesRefreshReply(mode: string) {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    test.setRefreshMode(mode);
+    expect(await sendRefresh(test, claim)).toEqual({ status: 'unknown' });
+    expect(await sendRefresh(test, undefined, true)).toEqual({ status: 'unknown' });
+    expect(test.refreshSends).toBe(1);
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(5);
+    expect(foldConnection(rows).data).toEqual(test.generation);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['expired', 'revoked', 'audience', 'account', 'unrotated', 'scopes', 'lifetime', 'lost'])(
+  'refuses a claimed refresh reply with %s without resending or replacing the account',
+  refusesRefreshReply);
+
+async function recoversLostRefreshResult() {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    const stage = test.custody.stage.bind(test.custody);
+    async function loseReply(...args: Parameters<typeof stage>): Promise<never> {
+      await stage(...args);
+      throw new Error('next-access-canary', { cause: new Error('next-refresh-canary') });
+    }
+    vi.spyOn(test.custody, 'stage').mockImplementationOnce(loseReply);
+    expect(await sendRefresh(test, claim)).toEqual({ status: 'unknown' });
+    expect(await sendRefresh(test, undefined, true)).toMatchObject({ status: 'verified' });
+    expect(test.refreshSends).toBe(1);
+    expect(test.store.creates).toBe(5);
+    expect(await history(events.store, test.subject, 'test')).toHaveLength(5);
+  } finally {
+    await test.close();
+  }
+}
+it('recovers a claimed refresh result after losing its private save reply',
+  recoversLostRefreshResult);
+
+async function checksRefreshSendAccess(point: string, change: string) {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    const network = { ...test.providerFixture.network };
+    async function changeAccess() {
+      await changeConsentAccess(test, change);
+    }
+    if (point === 'dns') {
+      const resolve = network.resolve!;
+      async function changedDns(host: string) {
+        const addresses = await resolve(host);
+        await changeAccess();
+        return addresses;
+      }
+      network.resolve = changedDns;
+    } else if (point === 'reply') {
+      test.before(changeAccess);
+    } else if (point === 'result-read') {
+      const read = test.custody.readAttempt.bind(test.custody);
+      async function changedResult(...args: Parameters<typeof read>) {
+        const result = await read(...args);
+        await changeAccess();
+        return result;
+      }
+      vi.spyOn(test.custody, 'readAttempt').mockImplementationOnce(changedResult);
+    } else if (point === 'marker') {
+      const claimSend = test.custody.claimSend.bind(test.custody);
+      async function changedMarker(...args: Parameters<typeof claimSend>) {
+        const result = await claimSend(...args);
+        await changeAccess();
+        return result;
+      }
+      vi.spyOn(test.custody, 'claimSend').mockImplementationOnce(changedMarker);
+    } else {
+      const read = test.custody.readRefreshMaterial.bind(test.custody);
+      async function changedRead(...args: Parameters<typeof read>) {
+        const result = await read(...args);
+        await changeAccess();
+        return result;
+      }
+      vi.spyOn(test.custody, 'readRefreshMaterial').mockImplementationOnce(changedRead);
+    }
+    expect(await sendRefresh(test, claim, false, network)).toEqual({ status: 'unknown' });
+    expect(await sendRefresh(test, undefined, true)).toEqual({ status: 'unknown' });
+    const sent = point === 'reply' || point === 'result-read';
+    expect(test.refreshSends).toBe(sent ? 1 : 0);
+    expect(await history(events.store, test.subject, 'test')).toHaveLength(5);
+  } finally {
+    await test.close();
+  }
+}
+const refreshSendAccessCases: [string, string][] = [];
+for (const point of ['private-read', 'marker', 'dns', 'reply', 'result-read']) {
+  for (const change of ['removed', 'policy', 'disabled', 'configuration']) {
+    refreshSendAccessCases.push([point, change]);
+  }
+}
+it.each(refreshSendAccessCases)(
+  'refuses a claimed refresh when %s waits for %s', checksRefreshSendAccess);
+
+async function refusesChangedRefreshCustody(change: string) {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    const recovered = change.startsWith('result-');
+    if (recovered) {
+      expect((await sendRefresh(test, claim)).status).toBe('verified');
+    }
+    if (change.endsWith('uid')) {
+      test.store.secret.metadata.uid = 'replaced';
+    } else if (change.endsWith('version')) {
+      test.store.secret.metadata.resourceVersion = '2';
+    } else {
+      vi.spyOn(Date, 'now').mockReturnValue(test.dueAt + 60_001);
+    }
+    expect(await sendRefresh(test, claim)).toEqual({ status: 'unknown' });
+    expect(await sendRefresh(test, undefined, true)).toEqual({ status: 'unknown' });
+    expect(test.refreshSends).toBe(recovered ? 1 : 0);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['generation-uid', 'generation-version', 'result-uid', 'result-version',
+  'claim-expired', 'result-expired'])(
+  'refuses a claimed refresh with changed %s', refusesChangedRefreshCustody);

@@ -243,15 +243,22 @@ class ConnectionCustody {
   }
   /** Check private refresh availability without returning any material to the command. */
   async hasRefreshMaterial(input: ConnectionStage, expected: ConnectionIdentity) {
+    return await this.readRefreshMaterial(input, expected) !== undefined;
+  }
+  /** Read an exact generation only for the private refresh worker. */
+  async readRefreshMaterial(input: ConnectionStage, expected: ConnectionIdentity) {
     try {
       if (input.attemptId) {
-        return false;
+        return undefined;
       }
       const contents = await this.readMaterial(input, expected, false);
-      const schema = z.object({ refresh_token: z.string().min(1).max(8192) });
-      return contents !== undefined && schema.safeParse(JSON.parse(contents)).success;
+      const schema = z.object({ refresh_token: z.string().regex(/^[\x21-\x7e]{1,4096}$/u) });
+      if (contents === undefined) {
+        return undefined;
+      }
+      return schema.parse(JSON.parse(contents)).refresh_token;
     } catch {
-      return false;
+      return undefined;
     }
   }
   private async readMaterial(input: ConnectionStage, expected: ConnectionIdentity,

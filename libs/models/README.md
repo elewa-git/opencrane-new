@@ -43,7 +43,10 @@ permissions again before sending.
 An internal command can start or join one account refresh attempt when renewal is due.
 It saves a reference without contacting the provider or enabling tool use.
 A separate internal command records which live worker claimed that attempt once.
-A copied receipt or restart cannot claim it again. Refresh requests are not sent yet.
+A copied receipt or restart cannot claim it again. An internal worker sends one refresh
+request and keeps the reply privately. It checks the signed account, scopes, expiry and
+replacement refresh token. Restart can recover a saved reply without sending again.
+Saving the replacement generation and removing the old token are not built yet.
 
 ## Where it fits
 
@@ -73,10 +76,10 @@ built-in functions.
 flowchart LR
   models -.->|replay tests use the database helper| store
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal account choices and owner revocation from HTTP, admin company opt-in, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
-  models -->|tests private sign-in requests; checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
+  models -->|tests private sign-in and refresh requests; checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models and checks private callers; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
-  models -->|stages credentials, callback codes and replies, confirms first accounts, starts, joins and claims refresh attempts, recovers attempts and checks signed accounts, shares a database lock for personal saves and cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
+  models -->|stages credentials, callback codes and replies, confirms first accounts, starts, joins, claims and sends refresh attempts, recovers replies and checks signed accounts, shares a database lock for personal saves and cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|saves events, remote starts and unsent proof; recovers budgets in order and checks saved routine Stops; reads spending and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
