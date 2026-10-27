@@ -112,7 +112,7 @@ class LicenceTests(unittest.TestCase):
         candidate = self.candidate_checker()
         index = lzma.compress(b"Package: example\nVersion: 1.0\n\n")
         digest = hashlib.sha256(index).hexdigest()
-        release = f"SHA256:\n {digest} {len(index)} main/binary-amd64/Packages.xz\n"
+        release = f"SHA256:\n {digest}   {len(index)} main/binary-amd64/Packages.xz\n"
         packages = candidate.main_packages(release, index)
         candidate.check_installed("example\t1.0\n", packages, {("example", "1.0")})
         with self.assertRaises(ValueError):
@@ -121,6 +121,36 @@ class LicenceTests(unittest.TestCase):
             candidate.check_installed("example\t2.0\n", packages, {("example", "1.0")})
         with self.assertRaises(ValueError):
             candidate.check_installed("example\t1.0\n", set(), {("example", "1.0")})
+
+    def test_candidate_requires_notice_and_signed_index_evidence(self):
+        candidate = self.candidate_checker()
+        record = checker.read_json(candidate.RECORD)
+        for filename in ("node-LICENSE", "bookworm-InRelease", "scan.json"):
+            with self.subTest(filename=filename):
+                changed = json.loads(json.dumps(record))
+                del changed["files"][filename]
+                with self.assertRaisesRegex(ValueError, "evidence list is incomplete"):
+                    candidate.check_evidence(changed, Path("unused"))
+
+    def test_candidate_node_notice_sections_cannot_be_omitted_or_relabelled(self):
+        candidate = self.candidate_checker()
+        contents = b"Node notice\n- Library, located at deps/library:\nMIT text\n"
+        section = contents.split(b"- ", 1)[1]
+        digest = hashlib.sha256(b"- " + section).hexdigest()
+        row = ["Library, located at deps/library:", digest, "NOT RUN"]
+        notices = {"nodeSections": [row]}
+        candidate.check_node_sections(notices, contents)
+        for case in ("missing", "digest", "unreviewed approval"):
+            with self.subTest(case=case):
+                changed = json.loads(json.dumps(notices))
+                if case == "missing":
+                    changed["nodeSections"].clear()
+                elif case == "digest":
+                    changed["nodeSections"][0][1] = "0" * 64
+                else:
+                    changed["nodeSections"][0][2] = "APPROVED"
+                with self.assertRaises(ValueError):
+                    candidate.check_node_sections(changed, contents)
 
     def test_runtime_image_labels_its_source_revision(self):
         dockerfile = source.with_name("Dockerfile").read_text(encoding="utf-8")
