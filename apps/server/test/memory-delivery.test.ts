@@ -378,3 +378,40 @@ async function boundsHistory() {
   await vi.waitFor(interrupted);
 }
 it('bounds a stalled history read and retries it on a later poll', boundsHistory, 15_000);
+
+async function completionBeforePoll() {
+  const send = link.socket.send.bind(link.socket);
+  let stops = 0;
+  function holdAcknowledgements(data: Parameters<typeof send>[0]) {
+    if (typeof data === 'string') {
+      const frame = JSON.parse(data) as { type: string };
+      if (frame.type === 'ack') return;
+      if (frame.type === 'stop') stops++;
+    }
+    send(data);
+  }
+  vi.spyOn(link.socket, 'send').mockImplementation(holdAcknowledgements);
+  computer.channel.notification({ method: 'item/agentMessage/delta',
+    params: { threadId: 'thread-1', itemId: 'reply', delta: 'completed-private-canary' } });
+  await flush();
+  await link.settled();
+  await invalidated();
+  computer.finish('thread-1');
+  await flush();
+  await link.settled();
+  await poll();
+  let replayed = false;
+  function inspect(raw: Buffer) {
+    if (raw.toString().includes('completed-private-canary')) replayed = true;
+  }
+  link.socket.on('message', inspect);
+  send(JSON.stringify({ type: 'resume', since: 0 }));
+  await flush();
+  await link.settled();
+  await poll();
+  expect(link.rejection).toBeUndefined();
+  expect({ stops, privateTextReplayedAfterInvalidation: replayed })
+    .toEqual({ stops: 1, privateTextReplayedAfterInvalidation: false });
+}
+it('clears withdrawn output when completion precedes the first poll',
+  completionBeforePoll);
