@@ -24,6 +24,7 @@ import { agentSessionData, ReportRejected } from './reports.ts';
 const bindingFields = optionalProviderTurnBindingSchema.safeExtend({
   conversationId: z.string(), turnId: z.string(), threadId: z.string().optional(),
   requesterId: z.string(), task: z.literal('chat_turn'), payingGroupId: z.string().optional(),
+  messageId: z.string().optional(), rootId: z.string().optional(),
   model: z.string().optional(), sharingClass: z.literal('shared_only').optional(),
 });
 const binding = bindingFields.strip();
@@ -46,11 +47,15 @@ export function requiredExecutionMode(assistantKind: string, requested: unknown)
 
 type TurnInput = {
   executionMode?: ExecutionMode | undefined;
+  messageId?: string | undefined; rootId?: string | undefined;
+  senderAttemptId?: string | undefined;
   conversationId: string; turnId: string; threadId?: string | undefined;
   status: 'started' | 'completed' | 'failed'; replay?: boolean;
 };
 type TurnContext = {
   silo: string; computerId: string; assistantId: string; binding?: Binding;
+  routineStart?: ((input: TurnInput) => Promise<{ payer: string; fresh: WriteAuthority;
+    deadline: number; provider: Awaited<ReturnType<typeof providerTurnAdmission>> }>) | undefined;
 };
 export class TurnAdmissionRejected extends ReportRejected {}
 export class BudgetAdmissionRejected extends TurnAdmissionRejected {
@@ -74,6 +79,7 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
     requested.requesterId, requested.sharingClass);
   if (!data) return;
   let fresh: WriteAuthority | undefined;
+  let routineDeadline: number | undefined;
   let confirmBudget: WriteAuthority | undefined;
   let status = input.status;
   let refusal: TurnAdmissionRejected | undefined;
@@ -87,7 +93,8 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
       }
       executionMode = startExecutionMode(facts, input);
       const admission = await startAuthority(store, context, conversation, facts, data,
-        requested.executionMode, executionMode);
+        requested.executionMode, executionMode, input);
+      routineDeadline = admission.deadline;
       if (admission.payer) data.payingGroupId = admission.payer;
       fresh = admission.fresh;
       confirmBudget = admission.confirmBudget;
@@ -115,7 +122,7 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   };
   addLifecycleDetails(eventData, status, executionMode);
   await fresh?.();
-  await saveTurn(store, facts, event, data);
+  await saveTurn(store, facts, event, data, routineDeadline, fresh);
   if (refusal) throw refusal;
   // Check stops saved while the separate computer append was waiting before returning a pass.
   await confirmBudget?.();
@@ -135,7 +142,18 @@ function startExecutionMode(facts: ComputerFacts, input: TurnInput) {
 }
 
 async function startAuthority(store: EventStore, context: TurnContext, conversation: ChatFacts,
-  facts: ComputerFacts, data: TurnBinding, requested: unknown, mode: ExecutionMode) {
+  facts: ComputerFacts, data: TurnBinding, requested: unknown, mode: ExecutionMode,
+  input: TurnInput) {
+  if (conversation.created?.['routinePreparation'] !== undefined) {
+    if (!context.routineStart || facts.turn?.hasStart) {
+      throw new TurnAdmissionRejected('Routine start unavailable');
+    }
+    const admission = await context.routineStart(input);
+    applyProviderChoice(data, admission.provider);
+    return { ...admission, confirmBudget: undefined };
+  }
+  if (input.messageId !== undefined || input.rootId !== undefined ||
+      input.senderAttemptId !== undefined) throw new ReportRejected('Unexpected routine binding');
   const started = facts.turn?.firstStart;
   if (started) {
     const work = { ...data, assistantId: context.assistantId };
@@ -152,9 +170,10 @@ async function startAuthority(store: EventStore, context: TurnContext, conversat
       await authority();
       requireNoBudgetStop(currentStop);
     }
-    return { fresh, payer: undefined, confirmBudget: fresh };
+    return { fresh, payer: undefined, confirmBudget: fresh, deadline: undefined };
   }
-  return admitTurn(store, context, conversation, facts, data, requested, mode);
+  const admission = await admitTurn(store, context, conversation, facts, data, requested, mode);
+  return { ...admission, deadline: undefined };
 }
 
 function requireNoBudgetStop(stop: string | undefined) {
@@ -162,7 +181,7 @@ function requireNoBudgetStop(stop: string | undefined) {
 }
 
 async function saveTurn(store: EventStore, facts: ComputerFacts,
-  event: EventEnvelope, data: TurnBinding) {
+  event: EventEnvelope, data: TurnBinding, deadline?: number, checkAccess?: WriteAuthority) {
   const id = event.id;
   const subject = event.subject;
   // Check repeats before skipping the store's search, even after NATS dedupe expires.
@@ -170,8 +189,15 @@ async function saveTurn(store: EventStore, facts: ComputerFacts,
   if (!facts.turn?.startCommandKeys?.has(commandKey)) {
     const command: AppendCommand = {
       expectedSequence: facts.sequence, historyChecked: true, event,
+      ...(deadline === undefined || !checkAccess ? {} : { deadline, checkAccess }),
     };
-    const result = await store.append(command);
+    let result = await store.append(command);
+    // Retry only a proven unsaved routine start, within its original access deadline.
+    while (deadline !== undefined && performance.now() < deadline && result.status === 'conflict'
+      && result.outcome?.kind === 'conditional_rejection_unchanged'
+      && !result.outcome.possiblyPublished) {
+      result = await store.append(command);
+    }
     if (result.status !== 'appended') throw new Error('Turn append conflict or unavailable');
     const saved = await readEventAt(store, subject, result.sequence, performance.now() + 10_000);
     verifyBinding(saved?.event.id === id ? saved : undefined, data);

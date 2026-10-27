@@ -6,6 +6,15 @@ Repository CI builds the upload test image in one fixture job. Its base and runt
 use separate caches, written only by main pushes. See the
 [CI test contracts](../../scripts/ci/README.robot.md) for file coverage and reports.
 
+## Routine start identity
+
+The internal routine frame carries messageId, rootId and senderAttemptId beside
+id (the turn id). The journal retains these on agent.turn_started, including reload.
+Execution still records the turn id in the existing execution journal before calling
+the driver. The server requires its live sender and exact saved admission before
+returning a start grant. No retry or routine enablement is added to the computer.
+The server routine-sender suite exercises the real channel with a recording driver.
+
 ## Test dependencies
 
 The test helper re-exports only the computer modules used by server integration tests.

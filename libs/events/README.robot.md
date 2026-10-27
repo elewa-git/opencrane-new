@@ -35,6 +35,14 @@ the same writer.
 The package exports `mcpToolModeSetDataSchema` so receipt recovery validates the
 saved choice with the same schema as the event registry. No event fields change.
 
+## Routine computer starts
+
+The existing computer.turn_started and computer.turn_closed chat variants accept
+optional messageId and rootId. They identify the saved routine input and actual
+allocated budget root while turnId remains the execution identity. The internal
+server sender validates them against admission; these fields grant no send authority.
+No event type or live reaction is added. Older chat records keep their existing shape.
+
 ## Routine allowance preparation
 
 `budget.root_allowance_set` accepts optional `preparationDigest`, a lowercase SHA-256

@@ -652,6 +652,7 @@ export const securityAlertRaisedDataSchema = z
 // claim this authority.
 const computerTurnStartedFieldsSchema = optionalProviderTurnBindingSchema.safeExtend({
   assistantId: id, computerId: id, conversationId: id, turnId: id, threadId: id,
+  messageId: id.optional(), rootId: id.optional(),
   requesterId: id, task: z.literal('chat_turn'), payingGroupId: id.optional(),
   executionMode: z.enum(['restricted', 'memory_free']).optional(),
   sharingClass: z.literal('shared_only').optional(),

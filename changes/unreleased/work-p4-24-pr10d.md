@@ -1,0 +1,1 @@
+An internal routine sender can hand a newly admitted run to the computer once, preserving its input, turn and spending root. It rechecks access after wake and before send, and never redelivers after an uncertain reply or restart. Automatic execution remains disabled.

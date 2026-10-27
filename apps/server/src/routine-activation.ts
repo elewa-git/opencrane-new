@@ -26,6 +26,11 @@ export async function readRoutineActivation(store: Arguments[0], keys: Arguments
   return admit(store, keys, worker, raw, selection, senderAttemptId, false);
 }
 
+// Retain publication proof only in the live caller. Reading a receipt cannot recreate it.
+export async function claimRoutineActivation(...args: Parameters<typeof readRoutineActivation>) {
+  return admit(...args, true);
+}
+
 async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[2],
   raw: unknown, selection: Arguments[4], senderAttemptId: string, recordAdmission: boolean) {
   z.string().regex(/^[\w-]{1,200}$/u).parse(senderAttemptId);
@@ -117,6 +122,7 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
     if (performance.now() >= deadline) throw new Error('Routine activation refused');
     return after;
   }
+  let published = false;
   let confirmed = await confirm();
   while (!saved) {
     const before = confirmed;
@@ -134,6 +140,7 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
     const command = { event, expectedSequence: position, historyChecked: true as const,
       deadline, checkAccess };
     const result = await store.append(command);
+    published = result.outcome?.kind === 'appended';
     confirmed = await confirm();
     if (!saved && result.status !== 'appended' && result.status !== 'conflict') {
       throw new Error('Routine activation refused');
@@ -142,5 +149,9 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
   const receipt = { status: 'confirmed' as const, occurrenceId: run.occurrenceId,
     conversationId: run.conversationId, eventId: saved.event.id, position: saved.sequence,
     startBy: run.startBy, executionAvailable: false as const };
-  return { receipt, messageId: run.messageId, turnId: run.turnId, rootId, senderAttemptId };
+  async function fresh() {
+    await confirm();
+  }
+  return { receipt, messageId: run.messageId, turnId: run.turnId, rootId, senderAttemptId,
+    published, run, fresh, deadline, provider: checked.provider };
 }

@@ -30,6 +30,9 @@ the prepared input private without decrypting it.
 An internal preparation check can recover the original routine admission and sender
 identifiers after checking current access. It saves nothing. Delivery remains unknown;
 the check cannot wake a computer or authorise another send.
+A separate internal sender can hand a newly admitted routine to the computer once.
+It checks access after wake and just before sending. A lost reply never permits another
+send. This path is disabled by default; automatic routines remain unavailable.
 
 Owners and admins can read, save or remove company account opt-in for a tool installation.
 Re-registering the server clears the effective choice. Saving opt-in grants no tool access.
@@ -105,7 +108,7 @@ flowchart LR
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
-  server -->|chat work, connections, checked reports and unavailable replies| computer["apps/computer<br/>assistant computers"]
+  server -->|chat work, one internal routine hand-off, connections and checked reports| computer["apps/computer<br/>assistant computers"]
   computer -.->|records private thread before tool approval| server
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime

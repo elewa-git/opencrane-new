@@ -201,7 +201,15 @@ export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo:
   deadline = performance.now() + 10_000) {
   function take(summary: ChatSummary): ChatFacts {
     if (summary.memoryFailure !== undefined) throw new Error(summary.memoryFailure);
-    const message = summary.messages.get(turnId);
+    let messageId = turnId;
+    const preparation = summary.created?.['routinePreparation'];
+    if (preparation !== undefined) {
+      const saved = z.object({ occurrenceId: z.string() }).parse(preparation);
+      if (turnId === `routine-turn-${saved.occurrenceId}`) {
+        messageId = `routine-input-${saved.occurrenceId}`;
+      }
+    }
+    const message = summary.messages.get(messageId);
     const reports = computerId === undefined ? undefined : summary.reports.get(computerId);
     let reportPosition: number | undefined;
     if (reportSequence !== undefined) reportPosition = reports?.positions.get(reportSequence);
