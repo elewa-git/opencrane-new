@@ -27,6 +27,9 @@ It uses the recorded owner's instructions as user data. The bridge leaves these 
 idle: saving the input does not wake a computer, start a turn or reserve money.
 Public chat subscriptions refuse these sessions. History, display and chat lists keep
 the prepared input private without decrypting it.
+An internal preparation check can recover the original routine admission and sender
+identifiers after checking current access. It saves nothing. Delivery remains unknown;
+the check cannot wake a computer or authorise another send.
 
 Owners and admins can read, save or remove company account opt-in for a tool installation.
 Re-registering the server clears the effective choice. Saving opt-in grants no tool access.
@@ -92,7 +95,7 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks private callers, reads original tool reviews, checks access before history errors, prepares and allocates child and routine allowances, and shares types| libs["libs/*<br/>shared code and chat keys"]
+  server -.->|checks private callers, reads original tool reviews, checks access before history errors, prepares and allocates child and routine allowances, checks saved routine admission, and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; records personal account revocations, choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, encrypted inputs and checked admission receipts, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]

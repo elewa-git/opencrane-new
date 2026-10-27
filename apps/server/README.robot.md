@@ -5347,6 +5347,36 @@ Prerequisite #756 merged at `6ae020ae2a06dbd542f3d3e0e7ff814131055c1f`.
 Part of #106, P4-24 row 10, admission recording only. Tests are in
 `test/routine-session.test.ts` under `routine activation`.
 
+### Read-only routine sender preparation
+
+`routine-sender.ts` provides internal `inspectRoutineSender` with the same arguments
+as `admitRoutineActivation`. It requires the saved admission and exact sender attempt.
+The shared admission checks verify the original input, owner admission, payer, root
+allocation, provider choice, computer generation, current access, Stop and expiry.
+Growing histories load before the existing short preparation check. No admission is
+created when one is missing. Existing admission-writing behaviour is unchanged.
+
+The result contains identifiers only. It preserves the separate message and turn ids
+and returns the actual budget root id, plus the admission event id and saved position.
+It always returns `status: unknown` and `executionAvailable: false`. These mean delivery
+has not been established by this helper. An admission receipt is not proof of an unsent
+attempt. This is preparation for a future sender operation, not a public status route
+or a permission to dispatch. There is no production caller or bridge hook.
+
+This is the first part of P4-24 PR 10c, Part of #106. The remaining part needs the actual
+bridge/journal hand-off, positive unsent proof, wake, fresh company prerequisites and
+recording-computer turn-start tests. The current bridge identifies turns by message id;
+routine admissions retain separate ids. That binding must be carried through report
+admission before enabling delivery. Bound owner Ask, company calls, full reconciliation
+and production enablement remain later work. No fresh-install journey has run.
+Prerequisite #763 merged at `db34b24dffe0699bfcc24eaaa3d3ffb294481239`.
+
+`test/routine-sender.test.ts` checks missing and changed admission, duplicate inspection,
+lost admission replies, restart, changed access and controls after fourteen seconds of
+simulated preparation time, long histories, unrelated traffic and uncertain holds.
+It does not simulate wake or claim a recorded computer start. The existing routine
+session suite covers the unchanged production bridge exclusion and replay guards.
+
 ## Routine metadata reads
 
 `GET /api/routines/:routineId` uses the existing `memberReads` store, member lookup
