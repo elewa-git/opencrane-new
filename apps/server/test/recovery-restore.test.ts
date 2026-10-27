@@ -135,6 +135,14 @@ async function restoresOnce() {
 }
 it('restores original event identities and file bytes once with no activity', restoresOnce);
 
+async function missingHomeExport() {
+  const setup = await fixture();
+  const volumeDirectory = join(directory, 'missing-home-export');
+  await expect(setup.restore({ volumeDirectory })).rejects.toEqual(new Error(refusal));
+  await setup.untouched();
+}
+it('refuses a missing home export before either target changes', missingHomeExport);
+
 const faults = ['missing-events', 'missing-objects', 'corrupt-events', 'corrupt-objects',
   'archive', 'missing-archive', 'missing-ciphertext', 'mixed-events', 'mixed-objects', 'mode', 'ciphertext', 'source', 'target',
   'stopped', 'effectsDisabled', 'disposable', 'exclusive', 'occupied-events',
