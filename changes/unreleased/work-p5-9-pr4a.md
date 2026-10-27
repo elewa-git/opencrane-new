@@ -1,0 +1,1 @@
+- Check current memory keys and complete home archives before interrupted-upgrade tests rebuild events, rights, files and spending. Uncertain recovery stays isolated; mounted restoration and live recovery remain untested.

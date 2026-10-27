@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, onTestFinished, vi } from 'vitest';
 import { envelope } from '@opencrane/models';
@@ -10,14 +10,16 @@ import { openfga } from '@opencrane/authz/testing';
 import { fixture, logger } from '../../libs/handlers/test/helpers.ts';
 import { restoreStorage } from '../../apps/server/test/support/restore-storage.ts';
 import { collectObjectBackup } from './object-backup.ts';
-import { restoreObjectBackup } from './object-restore.ts';
-import type { restoreEventBackup } from './event-restore.ts';
+import { restoreRecoveryBackup } from './recovery-restore.ts';
+import { recoveryCustody } from './upgrade-recovery-custody-fixture.ts';
+import { descriptorSchema } from './event-backup.ts';
 import { provisionDisposableObjectTarget } from './disposable-object-target.ts';
 import { collectFileRecovery, checkFileRecovery } from './upgrade-recovery-files.ts';
 import { recoveryEffectProbes } from './upgrade-recovery-files-effects.ts';
 import { checkRecoveryReads, seedRecoveryReader } from './upgrade-recovery-files-reads.ts';
 
-type Nats = Awaited<ReturnType<typeof natsFixture>>;
+type Nats = Pick<Awaited<ReturnType<typeof natsFixture>>,
+  'connection' | 'store' | 'reader' | 'seed'>;
 type Storage = Awaited<ReturnType<typeof restoreStorage>>['client'];
 
 export async function seedRecoveryFiles(nats: Nats, objects: Storage) {
@@ -53,10 +55,15 @@ export async function seedRecoveryFiles(nats: Nats, objects: Storage) {
   return uploads;
 }
 
-export async function recoveryFiles(source: Awaited<ReturnType<typeof fixture>>, directory: string) {
+export async function recoveryFiles(source: Awaited<ReturnType<typeof fixture>>,
+  directory: string, fault: string) {
+  const custody = await recoveryCustody(source.nats, directory, fault);
   const objects = await restoreStorage(onTestFinished);
   const targetObjects = await provisionDisposableObjectTarget('test');
   onTestFinished(targetObjects.close);
+  const put = targetObjects.client.putObject.bind(targetObjects.client);
+  const writes = vi.spyOn(targetObjects.client, 'putObject');
+  const buckets = vi.spyOn(targetObjects.client, 'makeBucket');
   const copied = await natsFixture({ provision: false });
   onTestFinished(copied.close);
   const fga = await openfga();
@@ -84,19 +91,35 @@ export async function recoveryFiles(source: Awaited<ReturnType<typeof fixture>>,
     await collectObjectBackup(source.nats.connection, copied.connection, objects.client,
       { directory: events, destination, backupKeyFile, silo: 'test', attempt: 'before-upgrade',
         writersStopped: true, disposable: true });
+    await custody.capture(events, backupKeyFile);
+    if (fault === 'corrupt') {
+      const archivePath = join(events, 'events.snapshot');
+      const archive = await readFile(archivePath);
+      await writeFile(archivePath, archive.subarray(0, -1));
+    }
+    if (fault === 'mixed') {
+      const path = join(events, 'descriptor.json');
+      const descriptor = descriptorSchema.parse(JSON.parse(await readFile(path, 'utf8')));
+      descriptor.attempt = 'different-attempt';
+      await writeFile(path, JSON.stringify(descriptor));
+    }
   }
-  async function restore(target: Nats, proof: Awaited<ReturnType<typeof restoreEventBackup>>,
-    uncertain = false) {
-    const put = targetObjects.client.putObject.bind(targetObjects.client);
+  async function restore(target: Nats) {
     async function loseReply(...args: Parameters<typeof put>): Promise<never> {
       await put(...args);
       throw new Error('private-file-completion-canary');
     }
-    if (uncertain) vi.spyOn(targetObjects.client, 'putObject').mockImplementation(loseReply);
-    await restoreObjectBackup(target.connection, objects.client, targetObjects.client,
-      { directory: destination, eventDirectory, backupKeyFile, silo: 'test',
-        attempt: 'before-upgrade', targetSilo: 'test', stopped: true, exclusive: true,
-        disposable: true, proof });
+    if (fault === 'objects') {
+      writes.mockImplementation(loseReply);
+    }
+    const options = { directory: destination, eventDirectory, backupKeyFile, silo: 'test',
+      attempt: 'before-upgrade', targetSilo: 'test', stopped: true, exclusive: true,
+      disposable: true, effectsDisabled: true, memory: custody.memory,
+      volumeDirectory: custody.volumeDirectory };
+    const result = await restoreRecoveryBackup(source.nats.connection, target.connection,
+      objects.client, targetObjects.client, options);
+    expect(result).toEqual({ kind: 'events-objects-and-custody-only' });
+    custody.expectDeleted();
   }
   async function rebuild(target: Nats, db: Db) {
     replayCount++;
@@ -113,13 +136,24 @@ export async function recoveryFiles(source: Awaited<ReturnType<typeof fixture>>,
     checkFileRecovery(before, after, await target.reader.head());
     readCount++;
     await checkRecoveryReads(target, db, targetObjects.client, rebuilt.binding, uploads);
-    return { ...after, rightsSequence: rebuilt.sequence, replayCount, readCount, effects: effects() };
+    expect(readCount).toBe(replayCount);
+    return { ...after, rightsSequence: rebuilt.sequence, effects: effects() };
   }
   async function expectIsolated(db: Db) {
     effects();
     expect({ replayCount, readCount }).toEqual({ replayCount: 0, readCount: 0 });
     const tables = await db.query("SELECT to_regclass('conversation_files') AS name");
     expect(tables.rows).toEqual([{ name: null }]);
+    let expectedWrites = 0;
+    if (fault === 'objects') {
+      expectedWrites = 1;
+    }
+    if (['missing-custody', 'resurrected', 'inventory'].includes(fault)) {
+      expectedWrites = 2;
+    }
+    expect(writes).toHaveBeenCalledTimes(expectedWrites);
+    expect(buckets).toHaveBeenCalledTimes(expectedWrites > 0 ? 1 : 0);
+    expect(await targetObjects.client.bucketExists('files')).toBe(expectedWrites > 0);
   }
   async function transitions(target: Nats, db: Db) {
     await checkRecoveryReads(target, db, targetObjects.client, rights.binding, uploads, true);

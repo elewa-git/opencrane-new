@@ -1083,11 +1083,14 @@ restore helper checks archive bytes; the comparison does not authenticate an arc
 `upgrade-recovery.test.ts` uses the existing SIGKILL fixture after a committed
 256-event scan chunk. It retains the failed attempt's previous/target manifests,
 refuses a different manifest without changing parked jobs, then restores the earlier
-export into empty standalone NATS. It rebuilds disposable members and budget projections in a separate database.
+export through `restoreRecoveryBackup` into privately provisioned disposable NATS
+and object storage. Current events and memory keys are checked separately from the
+frozen archive. The home exporter proves an empty inventory. Only after these checks
+does the fixture rebuild disposable projections and rights in a separate database.
 No dispatcher, reaction worker or scheduler starts during recovery. A tested local
 recording endpoint guards reaction callbacks in both processes and receives zero calls.
 A lost restore completion remains uncertain; that target gets no projection, retry
-or stream deletion. Truncated bytes refuse before transfer. The source stays reachable
+or stream deletion. Truncated bytes and mixed attempts refuse before transfer. The source stays reachable
 and unchanged, as required by the event restore contract.
 
 Run the `infra/package/upgrade-recovery*.test.ts` files with Vitest and
@@ -1096,8 +1099,8 @@ The root Vitest file list includes them in CI. Safe fixture results go to
 `.tools/upgrade-recovery-proof.json` and `.tools/upgrade-recovery-uncertain.json`.
 See the [receipt](../../docs/process/p5-9-pr1/receipt.md). Handler manifests describe
 subscriptions only; they cannot establish package/schema rollback compatibility.
-Coordinated databases/WAL, objects, volumes, custody, rights, pinned-release
-upgrade and full P5-9 remain NOT RUN.
+Coordinated databases/WAL, mounted volumes, pinned-release upgrade and full P5-9
+remain NOT RUN. Later fixture increments below cover objects, custody and rights.
 
 ### Budget comparison after interruption
 
@@ -1146,6 +1149,30 @@ requires zero calls. Uncertain event or object restoration starts neither replay
 nor the read server. The [receipt](../../docs/process/p5-9-pr3/receipt.md) stays PARTIAL:
 volumes, CNPG/WAL, coordinated backup, pinned package rollback and live recovery
 remain NOT RUN. The HTTP fixture does not qualify admission reopening.
+
+### Checked recovery before fixture replay
+
+P5-9 PR 4a replaces both manual restore calls with the combined helper after the
+same HandlerRuntime interruption. The fixture supplies two distinct event sources:
+the unchanged archived history and a current copy with a later memory deletion.
+Both current key folders carry the deletion markers. A surviving fact still has
+usable material. The helper completes custody checks before either rebuild starts.
+Two rebuilds compare event order, full rows, rights, file bytes and exact cents.
+The recorded memory deletion never enters the archived event comparison.
+
+The home exporter checks synthetic Kubernetes replies and the actual event history.
+Success has no computer claims and an explicitly empty export. A separate case saves
+one retained computer, removes its home export, and refuses before either target
+changes. This validates the saved inventory; it does not restore a mounted home.
+Missing custody, recreated material in both key folders, a changing inventory,
+corrupt bytes and mixed attempts refuse. Lost event/object completion preserves
+saved bytes, starts no replay or read server and never retries restoration.
+Existing ahead-checkpoint comparison tests and later reader revocation/activity
+checks remain in place. All effect probes are exercised before their counts reset.
+
+The [receipt](../../docs/process/p5-9-pr4a/receipt.md) records the fixture checks.
+Recovery remains PARTIAL. CNPG/WAL, mounted restore, credential renewal, reopening
+and a pinned-package upgrade remain NOT RUN. There is no new CLI or runtime API.
 
 ## Memory restore preflight
 

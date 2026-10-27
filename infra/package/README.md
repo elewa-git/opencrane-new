@@ -238,10 +238,13 @@ The [combined restore notes](README.robot.md#combined-event-and-file-restore) ex
 what still blocks reopening.
 
 A separate test interrupts a change to the events that background handlers receive.
-It restores the earlier event copy and rebuilds membership and spending tables with
-reactions stopped. Reservations keep their original identities and exact cents.
-Unresolved work keeps its hold after two rebuilds. This checks event-to-projection
-recovery only. It does not qualify a package upgrade.
+It uses the combined restore helper before rebuilding membership, rights, spending
+and file tables twice with reactions stopped. The helper checks current deletion
+records separately from the old archive and proves that this fixture has no homes
+to restore. Missing custody or omitted homes prevent replay and file reads.
+Reservations keep their original identities and exact cents. Unresolved work keeps
+its hold. This tests recovery with disposable services; it does not qualify a
+package upgrade or reopen an installation.
 The [recovery notes](README.robot.md#interrupted-handler-upgrade-check) explain the proof.
 The memory recovery command compares a proposed key folder with the stopped, trusted
 source and its current events. It refuses stale keys, missing deletion markers and
