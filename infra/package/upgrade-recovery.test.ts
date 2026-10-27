@@ -11,6 +11,7 @@ import { registerHandler } from '@opencrane/handlers';
 import { fixture, logger } from '../../libs/handlers/test/helpers.ts';
 import { collectEventBackup, descriptorSchema, infoSchema } from './event-backup.ts';
 import { restoreEventBackup } from './event-restore.ts';
+import * as recovery from './recovery-restore.ts';
 import { collectUpgradeRecovery } from './upgrade-recovery.ts';
 import { checkUpgradeRecovery } from './upgrade-recovery-check.ts';
 import * as models from '@opencrane/models';
@@ -109,6 +110,7 @@ async function recoversAfterInterruptedUpgrade(fault: string) {
     const actorStart = vi.spyOn(models.BudgetActor.prototype, 'start');
     const targetAppend = vi.spyOn(target.store, 'append');
     const budgetReplay = vi.spyOn(models, 'rebuildBudgetProjection');
+    const checkedRecovery = vi.spyOn(recovery, 'restoreRecoveryBackup');
     const { progress, parked } = await interruptAndRefuse(source, runtime, effectUrl, previous,
       descriptor.lastSequence);
     const restoreOptions = { silo: 'test', directory: destination, disposable: true };
@@ -147,6 +149,7 @@ async function recoversAfterInterruptedUpgrade(fault: string) {
         await fileFixture.expectIsolated(restored.db);
       } else {
         await fileFixture.restore(target, restoredEvents);
+        expect(checkedRecovery).toHaveBeenCalledOnce();
         expect(observed.transfers).toBe(1);
         const budgetRebuilds = [];
         const fileRebuilds = [];
