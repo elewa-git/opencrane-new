@@ -6,7 +6,8 @@ import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { collectEventBackup } from '../../../infra/package/event-backup.ts';
-import { collectComputerVolumeExport, volumeExportDescriptorSchema } from '../../../infra/package/computer-volume-export.ts';
+import { collectComputerVolumeExport, volumeExportDescriptorSchema }
+  from '../../../infra/package/computer-volume-export.ts';
 import { event, natsFixture } from './testing.ts';
 
 vi.mock('node:fs', { spy: true });
@@ -17,6 +18,25 @@ function digest(input: Buffer) {
   const hash = createHash('sha256');
   hash.update(input);
   return hash.digest('hex');
+}
+function homeResources(name: string) {
+  const suffix = name === 'one' ? '' : '-two';
+  const labels = { 'sandbox.users.io/computer': `computer-${name}`,
+    'sandbox.users.io/assistant': `assistant-${name}` };
+  const sandbox = { kind: 'Sandbox', metadata: { name: `computer-${name}`, uid: `sandbox${suffix}-uid`,
+    namespace: 'owned', generation: 3, resourceVersion: '11' },
+    spec: { operatingMode: 'Suspended', podTemplate: { metadata: { labels } } },
+    status: { conditions: [{ type: 'Suspended', status: 'True', reason: 'PodTerminated',
+      observedGeneration: 3 }] } };
+  const home = { kind: 'PersistentVolumeClaim', metadata: { name: `home-computer-${name}`,
+    namespace: 'owned', uid: `home${suffix}-uid`, resourceVersion: '12', labels,
+    ownerReferences: [{ kind: 'Sandbox', name: `computer-${name}`, uid: `sandbox${suffix}-uid`,
+      controller: true }] }, spec: { volumeName: `volume-${name}` }, status: { phase: 'Bound' } };
+  const volume = { kind: 'PersistentVolume', metadata: {
+    name: `volume-${name}`, uid: `volume${suffix}-uid`, resourceVersion: '13' },
+    spec: { claimRef: { namespace: 'owned', name: `home-computer-${name}`, uid: `home${suffix}-uid` } },
+    status: { phase: 'Bound' } };
+  return { sandbox, home, volume };
 }
 type Inventory = Parameters<Parameters<typeof collectComputerVolumeExport>[3]>[0];
 async function fixture(fault = '', homes = 1,
@@ -34,32 +54,33 @@ async function fixture(fault = '', homes = 1,
     await rm(directory, { recursive: true, force: true });
   }
   onTestFinished(close);
-  const identity = { assistantId: 'assistant-one', computerId: 'computer-one', generation: 1 };
-  const records = [
-    { type: 'assistant.created', subject: 'assistant-assistant-one',
-      data: { assistantId: 'assistant-one', ownerId: 'alice', kind: 'personal' } },
-    { type: 'computer.claimed', subject: 'computer-assistant-one',
-      data: { ...identity, tokenId: 'token:one' } },
-    { type: 'computer.ready', subject: 'computer-assistant-one',
-      data: { ...identity, sandboxUid: 'sandbox-uid' } },
-  ];
-  if (homes === 2) {
-    const second = JSON.stringify(records).replaceAll('one', 'two').replaceAll('sandbox-uid',
-      'sandbox-two-uid');
-    records.push(...JSON.parse(second) as typeof records);
-  }
-  if (homes === 0) records.splice(1);
-  if (fault === 'lost' || fault === 'retired') {
-    for (const name of ['one', 'two']) {
+  function recordsFor(name: string) {
+    const identity = { assistantId: `assistant-${name}`, computerId: `computer-${name}`,
+      generation: 1 };
+    const sandboxUid = name === 'one' ? 'sandbox-uid' : 'sandbox-two-uid';
+    const records: { type: string; subject: string; data: Record<string, unknown> }[] = [
+      { type: 'assistant.created', subject: `assistant-assistant-${name}`,
+        data: { assistantId: identity.assistantId, ownerId: 'alice', kind: 'personal' } },
+      { type: 'computer.claimed', subject: `computer-assistant-${name}`,
+        data: { ...identity, tokenId: `token:${name}` } },
+      { type: 'computer.ready', subject: `computer-assistant-${name}`,
+        data: { ...identity, sandboxUid } },
+    ];
+    if (fault === 'lost' || fault === 'retired') {
       records.push({ type: `computer.${fault}`, subject: `computer-assistant-${name}`,
-        data: { ...identity, assistantId: `assistant-${name}`, computerId: `computer-${name}`,
-          reason: 'fixture' } } as typeof records[number]);
+        data: { assistantId: identity.assistantId, computerId: identity.computerId } });
     }
+    return records;
   }
+  const records = recordsFor('one');
+  if (homes === 2) records.push(...recordsFor('two'));
+  if (homes === 0) records.splice(1);
   for (const record of records) {
     const previous = await source.store.head(record.subject);
-    const envelope = { ...event(`${record.type}-${record.subject}`, record.subject, record.type), data: record.data };
-    await source.store.append({ event: envelope, expectedSequence: previous });
+    const id = `${record.type}-${record.subject}`;
+    const envelope = { ...event(id, record.subject, record.type), data: record.data };
+    const appended = await source.store.append({ event: envelope, expectedSequence: previous });
+    expect(appended.status).toBe('appended');
   }
   const archive = join(directory, 'events');
   await collectEventBackup(source.connection, { silo: 'test', attempt: 'copy', destination: archive });
@@ -70,35 +91,12 @@ async function fixture(fault = '', homes = 1,
   await writeFile(options.backupKeyFile, key, { mode: 0o600 });
   const namespace = { kind: 'Namespace', metadata: {
     name: 'owned', uid: 'namespace-uid', resourceVersion: '10' } };
-  const labels = { 'sandbox.users.io/computer': 'computer-one',
-    'sandbox.users.io/assistant': 'assistant-one' };
-  const sandbox = { kind: 'Sandbox', metadata: { name: 'computer-one', uid: 'sandbox-uid',
-    namespace: 'owned', generation: 3, resourceVersion: '11' },
-    spec: { operatingMode: 'Suspended', podTemplate: { metadata: { labels } } },
-    status: { conditions: [{ type: 'Suspended', status: 'True', reason: 'PodTerminated',
-      observedGeneration: 3 }] } };
-  const home = { kind: 'PersistentVolumeClaim', metadata: { name: 'home-computer-one',
-    namespace: 'owned', uid: 'home-uid', resourceVersion: '12', labels,
-    ownerReferences: [{ kind: 'Sandbox', name: 'computer-one', uid: 'sandbox-uid',
-      controller: true }] }, spec: { volumeName: 'volume-one' }, status: { phase: 'Bound' } };
-  const volume = { kind: 'PersistentVolume', metadata: {
-    name: 'volume-one', uid: 'volume-uid', resourceVersion: '13' },
-    spec: { claimRef: { namespace: 'owned', name: 'home-computer-one', uid: 'home-uid' } },
-    status: { phase: 'Bound' } };
+  const { sandbox, home, volume } = homeResources('one');
   const resources: Record<string, object> = { namespace, persistentvolumes: volume,
     sandboxes: { metadata: { resourceVersion: '10' }, items: [sandbox] },
     persistentvolumeclaims: { metadata: { resourceVersion: '10' }, items: [home] },
     pods: { metadata: { resourceVersion: '10' }, items: [] } };
-  const secondSandbox = structuredClone(sandbox);
-  const secondHome = structuredClone(home);
-  const secondVolume = structuredClone(volume);
-  function secondIdentity<Value>(value: Value): Value {
-    const text = JSON.stringify(value).replaceAll('one', 'two').replaceAll('-uid', '-two-uid');
-    return JSON.parse(text) as Value;
-  }
-  Object.assign(secondSandbox, secondIdentity(sandbox));
-  Object.assign(secondHome, secondIdentity(home));
-  Object.assign(secondVolume, secondIdentity(volume));
+  const { sandbox: secondSandbox, home: secondHome, volume: secondVolume } = homeResources('two');
   if (homes === 2) {
     resources.sandboxes = { metadata: { resourceVersion: '10' }, items: [sandbox, secondSandbox] };
     resources.persistentvolumeclaims = { metadata: { resourceVersion: '10' },
@@ -176,6 +174,10 @@ async function fixture(fault = '', homes = 1,
       content = Buffer.alloc(size, 97);
       byteCount = content.length;
       stream = Readable.from([content]);
+    }
+    if (fault === 'reordered') {
+      home = { volume: home.volume, home: home.home, sandbox: home.sandbox,
+        generation: home.generation, computerId: home.computerId, assistantId: home.assistantId };
     }
     streams.push(stream);
     return { home, stream, byteCount, sha256: digest(content) };
@@ -318,8 +320,8 @@ async function refusesFault(fault: string) {
 }
 it.each(faults)('withholds completion and private diagnostics: %s', refusesFault);
 
-async function roundTripsTwoHomes() {
-  const setup = await fixture('', 2);
+async function roundTripsTwoHomes(fault = '') {
+  const setup = await fixture(fault, 2);
   const result = await setup.collect();
   expect(result.version).toBe(2);
   expect(result.exports).toHaveLength(2);
@@ -331,9 +333,19 @@ async function roundTripsTwoHomes() {
     expect(decrypt(saved, associated)).toEqual(expected[index]);
     for (const plaintext of expected) expect(saved.includes(plaintext)).toBe(false);
   }
+  const files = fs.readdirSync(setup.options.destination);
+  expect(files.sort()).toEqual(['descriptor.json', 'home-0000.enc', 'home-0001.enc']);
+  for (const file of files) {
+    const path = join(setup.options.destination, file);
+    const saved = await readFile(path);
+    for (const plaintext of expected) expect(saved.includes(plaintext)).toBe(false);
+    expect(saved.includes(key)).toBe(false);
+    expect(fs.statSync(path).mode & 0o777).toBe(0o600);
+  }
   for (const stream of setup.streams) expect(stream.destroyed).toBe(true);
 }
-it('encrypts every checked home in one set and independently recovers both', roundTripsTwoHomes);
+it.each(['', 'reordered'])('encrypts every checked home and recovers both: %s',
+  roundTripsTwoHomes);
 
 async function refusesSecondHome(fault: string) {
   const setup = await fixture(fault, 2);
@@ -353,9 +365,10 @@ async function refusesSecondHome(fault: string) {
   expect(setup.streams.length).toBe(fault === 'second-missing' ? 1 : 2);
   for (const stream of setup.streams) expect(stream.destroyed).toBe(true);
 }
-it.each(['second-missing', 'second-duplicate', 'second-substituted', 'second-generation',
-  'second-truncated', 'second-overflow', 'second-stall', 'second-cancel', 'second-flush'])
-  ('withholds the whole set and closes readers: %s', refusesSecondHome);
+const secondFaults = ['second-missing', 'second-duplicate', 'second-substituted',
+  'second-generation', 'second-truncated', 'second-overflow', 'second-stall',
+  'second-cancel', 'second-flush'];
+it.each(secondFaults)('withholds the whole set and closes readers: %s', refusesSecondHome);
 
 async function checksDescriptor() {
   const setup = await fixture('', 2);
@@ -410,6 +423,7 @@ async function aggregateBoundary(extra: number) {
   if (extra > 0) {
     await expect(setup.collect()).rejects.toThrow('Computer volume export refused');
     expect(fs.existsSync(setup.options.destination)).toBe(false);
+    expect(setup.streams[1]!.readableDidRead).toBe(false);
   } else {
     const result = await setup.collect();
     expect(result.exports[0]!.byteCount + result.exports[1]!.byteCount)
@@ -459,5 +473,17 @@ for (const index of [0, 1]) {
     copyChanges.push([index, fault]);
   }
 }
-it.each(copyChanges)('refuses identity or writer changes during copy %s: %s',
-  async function refusesChange(index, fault) { await changesDuringCopy([index, fault]); });
+async function refusesChange(index: number, fault: string) {
+  await changesDuringCopy([index, fault]);
+}
+it.each(copyChanges)('refuses identity or writer changes during copy %s: %s', refusesChange);
+
+async function missingRetainedHome(state: string) {
+  const setup = await fixture(state, 2);
+  setup.resources.persistentvolumeclaims = { metadata: { resourceVersion: '10' },
+    items: [setup.home] };
+  await expect(setup.collect()).rejects.toThrow('Computer volume export refused');
+  expect(fs.existsSync(setup.options.destination)).toBe(false);
+  expect(setup.streams).toHaveLength(0);
+}
+it.each(['lost', 'retired'])('refuses a missing retained home after %s', missingRetainedHome);
