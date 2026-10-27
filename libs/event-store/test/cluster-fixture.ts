@@ -40,10 +40,7 @@ export async function clusterFixture(missingTrust = false, children: ChildProces
   async function ready() {
     for (const peer of peers) {
       await completeRoutes(peer);
-      async function currentMetadataReady() {
-        await metadataReady(peer);
-      }
-      await vi.waitFor(currentMetadataReady, { timeout: 10_000 });
+      await metadataReady(peer);
     }
   }
   async function close() {
@@ -211,11 +208,65 @@ function routeDescription(route: unknown) {
   return `${route.remote_name}/${account}`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
+function metadataIsReady(value: unknown) {
+  if (!isRecord(value) || value['disabled'] === true || !isRecord(value['config']) ||
+    typeof value['config']['max_storage'] !== 'number' ||
+    typeof value['memory'] !== 'number' || typeof value['storage'] !== 'number') {
+    return false;
+  }
+  const metadata = value['meta_cluster'];
+  if (!isRecord(metadata) || typeof metadata['leader'] !== 'string' ||
+    !/^peer-[123]$/u.test(metadata['leader']) || !Array.isArray(metadata['replicas'])) {
+    return false;
+  }
+  const names = new Set([metadata['leader']]);
+  for (const replica of metadata['replicas']) {
+    if (!isRecord(replica) || typeof replica['name'] !== 'string' ||
+      !/^peer-[123]$/u.test(replica['name']) || replica['current'] !== true ||
+      replica['offline'] === true) {
+      return false;
+    }
+    names.add(replica['name']);
+  }
+  return names.size === 3;
+}
+
 export async function metadataReady(peer: Peer) {
   const address = `http://127.0.0.1:${peer.monitor}`;
-  const response = await fetch(`${address}/healthz?js-meta-only=true`,
-    { signal: AbortSignal.timeout(1000) });
-  expect(response.status).toBe(200);
+  const deadline = performance.now() + 20_000;
+  let actual: unknown;
+  let health = 0;
+  while (performance.now() < deadline) {
+    const remaining = deadline - performance.now();
+    const timeout = Math.min(1000, Math.ceil(remaining));
+    try {
+      const options = { signal: AbortSignal.timeout(timeout) };
+      const response = await fetch(`${address}/healthz?js-meta-only=true`, options);
+      health = response.status;
+      const report = await fetch(`${address}/jsz`, options);
+      expect(report.status).toBe(200);
+      actual = await report.json();
+      if (health === 200 && metadataIsReady(actual) && performance.now() < deadline) {
+        return;
+      }
+    } catch (error) {
+      if (performance.now() < deadline) {
+        throw error;
+      }
+      break;
+    }
+    const pollRemaining = deadline - performance.now();
+    if (pollRemaining > 0) {
+      await delay(Math.min(25, pollRemaining));
+    }
+  }
+  const expected = { health: 200, metadata: 'named leader, three current peers and storage statistics' };
+  expect(actual, `Metadata for ${peer.name} did not become ready within 20000 ms (health ${health})`)
+    .toEqual(expected);
 }
 
 async function releaseReservations(reservations: PortReservation[]) {
