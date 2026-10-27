@@ -787,8 +787,18 @@ it('retains the first native session when another start returns a distinct id', 
 
 async function refusesSecondPreparation() {
   const link = await preparedComputer.wake();
-  await expect(link.prepareRoutineThread(preparationIdentity())).rejects.toThrow(
-    'Routine thread unavailable');
+  let refusal: unknown;
+  function rememberRefusal(error: unknown) {
+    refusal = error;
+  }
+  const preparation = link.prepareRoutineThread(preparationIdentity());
+  const settled = preparation.catch(rememberRefusal);
+  function promptlyRefused() {
+    expect(refusal).toEqual(new Error('Routine thread unavailable'));
+  }
+  await vi.waitFor(promptlyRefused);
+  await settled;
+  expect(link.socket.readyState).toBe(link.socket.OPEN);
   expect(preparedComputer.nativeStarts).toBe(1);
   expect(preparedComputer.starts).toBe(0);
   function released() {
