@@ -5335,6 +5335,10 @@ Budget and preparation histories load before the original two-second access dead
 The command shares routine preparation, child computer checks and exact saved-record
 comparison. Small access streams and relevant incremental changes guard publication
 and receipt return. Unrelated chat activity and other computer threads remain allowed.
+Publication checks worker ownership again before saving the admission. Each final
+receipt check reads new budget events after checking access and provider settings,
+and refuses a Stop for the allocated root. A Stop for another root does not refuse
+this admission or repeat its confirmation.
 Lost replies and restart recover only the receipt. Allowances and uncertain holds remain
 unchanged. Bridge delivery, wake, reconciliation and bound owner Ask decision/use remain
 later work. Ask still refuses; live qualification is NOT RUN.

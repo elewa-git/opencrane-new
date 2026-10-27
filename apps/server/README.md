@@ -151,6 +151,8 @@ Other conversations can keep saving activity while the allowance is confirmed.
 Losing access during confirmation still refuses the receipt. A following internal operation
 can record one checked activation admission against that allowance. Repeated requests
 recover its receipt and cannot grant another sender. Execution remains unavailable.
+Losing worker ownership prevents admission. A Stop for that spending allowance
+also prevents confirmation, including when it arrives during the final checks.
 
 An internal operation checks a child's saved activation and asks the budget actor
 to record its reviewed spending allowance. It prices the first call using the saved

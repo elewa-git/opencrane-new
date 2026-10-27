@@ -1,1 +1,2 @@
 - Record one checked routine activation admission against its existing spending allowance. Retries recover the same receipt without allocating again or granting another sender. Routine execution remains disabled.
+- Refuse routine admission when the worker loses ownership before publication, and withhold confirmation if its spending allowance is stopped during the final checks.

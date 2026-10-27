@@ -79,21 +79,31 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
     saved = row;
   }
   for (const row of preparation.routineRows) checkRoutine(row);
-  async function readChanges() {
+  async function readBudgetChanges() {
     for await (const row of store.readStream(budgetSubject, budgetPosition + 1, deadline)) {
       checkBudget(row);
       budgetPosition = row.sequence;
     }
+  }
+  async function readChanges() {
+    await readBudgetChanges();
     for await (const row of store.readStream(subject, position + 1, deadline)) checkRoutine(row);
   }
+  async function receiptState() {
+    const state = await checked.receiptState();
+    // Check this root's Stop after the awaited access and provider reads.
+    // Read only new events; unrelated spending must not repeat confirmation.
+    await readBudgetChanges();
+    return state;
+  }
   async function confirm() {
-    let before: Awaited<ReturnType<typeof checked.receiptState>>;
+    let before: Awaited<ReturnType<typeof receiptState>>;
     let after: typeof before;
     do {
-      before = await checked.receiptState();
+      before = await receiptState();
       await checked.confirmPreparation();
       await readChanges();
-      after = await checked.receiptState();
+      after = await receiptState();
     } while (!isDeepStrictEqual(before, after));
     preparation.checkTime();
     if (performance.now() >= deadline) throw new Error('Routine activation refused');
@@ -103,9 +113,11 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
   while (!saved) {
     const before = confirmed;
     async function checkAccess() {
-      if (!await worker.checkCurrent()) throw new Error('Routine activation refused');
+      if (!await worker.checkCurrent(deadline)) {
+        throw new Error('Routine activation refused');
+      }
       await readChanges();
-      const after = await checked.receiptState();
+      const after = await receiptState();
       preparation.checkTime();
       if (!isDeepStrictEqual(before, after)) throw new Error('Routine activation refused');
     }
