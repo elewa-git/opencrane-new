@@ -14,6 +14,14 @@ export interface ThreadLoadDriver {
   discovered?(loadKey: string): Promise<void>;
 }
 
+type PrivateGrant = Parameters<ReturnType<typeof privateCallers>['register']>[0] & {
+  silo: string;
+  requesterId: string;
+  assistantId: string;
+  computerId: string;
+  thread: string;
+};
+
 // Supply this binding only from the trusted caller registry and reviewed server assembly.
 export interface PrivateThreadBinding {
   turnId: string;
@@ -22,6 +30,8 @@ export interface PrivateThreadBinding {
   inputGeneration: number;
   caller: string;
   tools: NonNullable<Turn['tools']>;
+  grant: PrivateGrant;
+  checkTools(tools: object, identity: { caller: string; grant: PrivateGrant }): boolean;
   authority: Pick<ReturnType<typeof privateCallers>, 'identify' | 'permits' | 'check'>;
   registration: ReturnType<ReturnType<typeof privateCallers>['register']>;
   session: Pick<ThreadLoadDriver, 'rpc'> & { close(): void; closed: Promise<void> };
@@ -39,7 +49,7 @@ interface PrivateLoad {
 
 function privateIdentity(binding: PrivateThreadBinding) {
   return JSON.stringify([binding.turnId, binding.conversation,
-    binding.generation, binding.inputGeneration, binding.caller]);
+    binding.generation, binding.inputGeneration, binding.caller, binding.grant]);
 }
 
 function privateTools(input: Turn, binding: PrivateThreadBinding) {
@@ -220,12 +230,23 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
       || JSON.stringify(privateTools(input, binding)) !== entry.tools) {
       throw new Error('Private binding refused');
     }
+    const grant = binding.grant;
+    if (!grant || grant.turnId !== binding.turnId || grant.conversation !== binding.conversation
+      || grant.generation !== binding.generation || grant.inputGeneration !== binding.inputGeneration
+      || grant.requesterId !== input.requesterId || grant.assistantId !== input.assistantId
+      || !isThreadId(grant.thread) || binding.registration.caller !== binding.caller) {
+      throw new Error('Private binding refused');
+    }
+    const approvedIdentity = { caller: binding.caller, grant };
+    if (!binding.checkTools(binding.tools, approvedIdentity)) {
+      throw new Error('Private binding refused');
+    }
     const callerTurn = binding.authority.identify(`Bearer ${binding.caller}`);
     const identity = { turnId: binding.turnId, conversation: binding.conversation,
       generation: binding.generation, inputGeneration: binding.inputGeneration,
-      thread: entry.thread };
+      thread: grant.thread };
     if (callerTurn !== entry.turnId
-      || !binding.authority.permits(callerTurn, entry.turnId, entry.thread)
+      || !binding.authority.permits(callerTurn, entry.turnId, grant.thread)
       || !binding.authority.check(identity)) throw new Error('Private binding refused');
   }
 
@@ -238,7 +259,7 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
     const generations = { generation: entry.binding.generation,
       inputGeneration: entry.binding.inputGeneration };
     await driver.catalogue(entry.loadKey, input.conversationId, tools,
-      entry.thread, entry.turnId, generations);
+      entry.binding.grant.thread, entry.turnId, generations);
     checkPrivate(entry, input);
   }
 
@@ -295,7 +316,7 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
         throw new Error('Private thread refused');
       }
       checkPrivate(entry, input);
-      binding.registration.bind(newThread);
+      if (newThread !== binding.grant.thread) throw new Error('Private thread refused');
       entry.thread = newThread;
       await registerPrivate(entry, input);
       checkPrivate(entry, input);

@@ -19,7 +19,7 @@ const reviewed: ToolServer[] = [{ key: 'oc_0123456789', serverId: 'memory', conn
   serverInfo: { name: 'OpenCrane memory', version: '1' },
   definitions: [JSON.stringify(definition)], modes: { recall: 'allow' } }];
 
-async function fixture(assembled = false) {
+async function fixture(assembled = true) {
   const grants = new Map<string, ProxyGrant>();
   const approvals = approvalHolds({ waiting, renew });
   function waiting() { return false; }
@@ -232,7 +232,7 @@ async function refusesBinding(change: string) {
     if (change === 'turn') turn.binding.turnId = 'foreign';
     if (change === 'conversation') turn.binding.conversation = 'foreign';
     if (change === 'ordinary') turn.input.executionMode = 'memory_free';
-    if (change === 'bound') turn.binding.registration.bind('old-thread');
+    if (change === 'bound') turn.binding.grant.thread = 'old-thread';
     await expect(turn.load()).rejects.toThrow('Private tools could not be loaded');
     expect(turn.calls).toEqual([]);
     expect(test.mcp.size).toBe(0);
@@ -286,9 +286,8 @@ async function refusesLate(stage: string, ending: string) {
     if (ending === 'generation') turn.binding.inputGeneration++;
     if (ending === 'ended') turn.binding.registration.close();
     if (ending === 'thread') {
-      if (stage === 'catalogue' || stage === 'start') {
-        turn.binding.registration.bind('unexpected-thread');
-      } else turn.thread['id'] = 'unexpected-thread';
+      if (stage === 'catalogue') turn.binding.grant.thread = 'unexpected-thread';
+      else turn.thread['id'] = 'unexpected-thread';
     }
     test.release.resolve();
     await refused;
@@ -382,7 +381,7 @@ it.each(['recall', 'remember'] as const)(
   'loads %s from the real assembler with its bound caller and recorded grant', loadsRealAssembly);
 
 async function refusesDetachedTools() {
-  const test = await fixture();
+  const test = await fixture(false);
   try {
     const turn = await test.turn();
     await expect(turn.load()).rejects.toThrow('Private tools could not be loaded');
