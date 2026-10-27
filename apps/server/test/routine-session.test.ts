@@ -1173,6 +1173,19 @@ function routineRootTests() {
     }
     if (activationMode) {
       duringCheck = appendDuringCheck;
+      const append = nats.store.append.bind(nats.store);
+      async function publish(command: AppendCommand) {
+        // Keep injected traffic in confirmation. Writing on every ownership check inside
+        // publication would force a global append conflict on every retry.
+        const action = duringCheck;
+        duringCheck = undefined;
+        try {
+          return await append(command);
+        } finally {
+          duringCheck = action;
+        }
+      }
+      vi.spyOn(nats.store, 'append').mockImplementation(publish);
     } else {
       vi.spyOn(actor, 'setRootAllowance').mockImplementationOnce(afterAllocation);
     }
