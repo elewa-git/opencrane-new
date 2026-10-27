@@ -1,1 +1,2 @@
 - Check current memory keys and complete home archives before interrupted-upgrade tests rebuild events, rights, files and spending. Uncertain recovery stays isolated; mounted restoration and live recovery remain untested.
+- Keep database backup ownership checks within the original deadline when command dispatch is delayed, carrying cancellation through every child process.

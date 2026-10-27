@@ -218,9 +218,9 @@ export async function packageConnectionArgs(owner: PackageOwner, limits: Command
 }
 
 async function ownedKubectl(owner: PackageOwner, args: string[], timeoutMs?: number,
-  signal?: AbortSignal) {
-  // Include ownership and target checks in the caller's time limit.
-  const limits: CommandLimits = { deadline: Date.now() + (timeoutMs ?? 120_000) };
+  signal?: AbortSignal, deadline?: number) {
+  // Keep dispatch delays and ownership checks inside the caller's original time limit.
+  const limits: CommandLimits = { deadline: deadline ?? Date.now() + (timeoutMs ?? 120_000) };
   if (signal) {
     limits.signal = signal;
   }
@@ -461,8 +461,9 @@ export async function installPackage(valuesFile: string) {
   const { values, review } = await readReviewedValues(valuesFile);
   const owner = await verifyPackageOwner();
   const context = owner.context;
-  function checkedKubectl(args: string[], timeoutMs?: number, signal?: AbortSignal) {
-    return ownedKubectl(owner, args, timeoutMs, signal);
+  function checkedKubectl(args: string[], timeoutMs?: number, signal?: AbortSignal,
+    deadline?: number) {
+    return ownedKubectl(owner, args, timeoutMs, signal, deadline);
   }
   await checkCnpgInstallation(values, namespace, checkedKubectl);
   const secrets = await checkNamedSecrets(values, review, owner);
