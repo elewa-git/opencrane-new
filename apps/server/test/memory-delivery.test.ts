@@ -441,7 +441,7 @@ async function retriesUntilClearanceReceipt() {
       }
       if (frame.type === 'stop') stops++;
     }
-    send.call(this, data);
+    send.call(this, data, {});
   }
   vi.spyOn(WebSocket.prototype, 'send').mockImplementation(holdReceipt);
   await invalidated();
@@ -453,11 +453,11 @@ async function retriesUntilClearanceReceipt() {
   expect(heldReceipt).toBeDefined();
   const wrongThread = { type: 'private_output_cleared', conversationId: 'chat',
     turnId: 'turn', threadId: 'another-thread' };
-  send.call(peer!, JSON.stringify(wrongThread));
+  send.call(peer!, JSON.stringify(wrongThread), {});
   await flush();
   await poll();
   expect(stops).toBe(2);
-  send.call(peer!, heldReceipt!);
+  send.call(peer!, heldReceipt!, {});
   await flush();
   await poll();
   expect(stops).toBe(2);
