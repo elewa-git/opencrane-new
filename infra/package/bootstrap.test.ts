@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
-import { resolve } from 'node:path';
+import { dirname, posix, resolve } from 'node:path';
 import ts from 'typescript';
 import { JetStreamApiError, jetstreamManager } from '@nats-io/jetstream';
 import { expect, it, vi } from 'vitest';
@@ -538,3 +538,32 @@ async function refusesLatePlacementWithoutBackoff() {
 }
 it('bootstrap refuses a late placement refusal without another wait or request',
   refusesLatePlacementWithoutBackoff);
+
+async function checksBootstrapContextImports() {
+  const ignore = await readFile('.dockerignore', 'utf8');
+  const rules = new Set(ignore.split('\n'));
+  const pending = ['infra/package/bootstrap.ts', 'infra/dev-stack/owner-bootstrap.ts'];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const file = pending.pop()!;
+    if (visited.has(file)) {
+      continue;
+    }
+    visited.add(file);
+    if (file.startsWith('infra/dev-stack/')) {
+      assert.ok(rules.has(`!${file}`), 'Bootstrap runtime import is outside the Docker context');
+    }
+    const source = await readFile(file, 'utf8');
+    const options = { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ESNext };
+    const compiled = ts.transpileModule(source, { compilerOptions: options });
+    const imports = ts.preProcessFile(compiled.outputText, true, true);
+    for (const imported of imports.importedFiles) {
+      if (imported.fileName.startsWith('.')) {
+        pending.push(posix.join(dirname(file), imported.fileName));
+      }
+    }
+  }
+}
+
+it('includes every relative bootstrap runtime import in the narrow Docker context',
+  checksBootstrapContextImports);
