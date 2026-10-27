@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import * as crypto from 'node:crypto';
 import { test } from 'node:test';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync,
@@ -10,6 +10,8 @@ import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
 import { parseAllDocuments } from 'yaml';
+import { setTimeout as delay } from 'node:timers/promises';
+import { checkCnpgBackupReferences } from '../dev-stack/cnpg-backup.ts';
 
 const reviewed = JSON.parse(readFileSync('infra/package/reviewed-images.json', 'utf8'));
 const values = {
@@ -576,6 +578,148 @@ async function refusesReplacedPackageNamespace() {
 }
 test('preparation and forwarding refuse a replacement namespace despite an updated owner record',
   refusesReplacedPackageNamespace);
+
+async function stopsOwnershipChild(kind, cancellation) {
+  const owner = { worktree: process.cwd(), slot: '1', context: 'k3d-opencrane-target-1',
+    namespace: 'opencrane-package-1', namespaceUid: 'owned', release: 'opencrane-package-1' };
+  const target = { worktree: owner.worktree, slot: '1', context: owner.context,
+    name: 'opencrane-target-1', id: '11111111-1111-1111-1111-111111111111',
+    containers: ['server', 'agent-0', 'agent-1'], network: 'network',
+    nodes: { server: 'server-uid', 'agent-0': 'agent-0-uid', 'agent-1': 'agent-1-uid' } };
+  const labels = { 'opencrane.dev/target-id': target.id };
+  const calls = [];
+  let child;
+  let closed;
+  let reportStarted;
+  function waitForStart(resolve) {
+    reportStarted = resolve;
+  }
+  const started = new Promise(waitForStart);
+  async function accessFixture() {}
+  async function readClaim() {
+    return `worktree=${owner.worktree}\n`;
+  }
+  async function readRecord(path) {
+    if (path.endsWith('/target-owner.json')) return target;
+    return owner;
+  }
+  function executeFixture(program, args, options, callback) {
+    calls.push({ program, args, options, startedAt: Date.now() });
+    assert.ok(!args.join(' ').includes('/private/slot'));
+    if (program === 'docker') {
+      let output = target.containers.join('\n');
+      if (args[0] === 'network') {
+        output = target.network;
+        if (args[1] === 'inspect') {
+          output = JSON.stringify([{ Id: target.network, Labels: labels }]);
+        }
+      } else if (args[0] === 'inspect') {
+        const containers = [];
+        for (const Id of target.containers) {
+          containers.push({ Id, Config: { Labels: labels }, Mounts: [] });
+        }
+        output = JSON.stringify(containers);
+      }
+      function dockerFinished() {
+        callback(null, { stdout: output, stderr: '' });
+      }
+      if (calls.length === 1) setTimeout(dockerFinished, 50);
+      else dockerFinished();
+      return;
+    }
+    assert.equal(program, 'kubectl');
+    assert.equal(options.env.KUBECONFIG, '/private/slot/target.kubeconfig');
+    if (args.includes(kind)) {
+      function finished(error, stdout, stderr) {
+        callback(error, { stdout, stderr });
+      }
+      child = execFile(process.execPath, ['-e', 'setInterval(() => {}, 1000)'],
+        options, finished);
+      function waitForClose(resolve) {
+        function childClosed(code, signal) {
+          resolve([code, signal]);
+        }
+        child.once('close', childClosed);
+      }
+      closed = new Promise(waitForClose);
+      child.once('spawn', reportStarted);
+      return child;
+    }
+    assert.ok(args.includes('nodes'));
+    const items = [];
+    for (const [name, uid] of Object.entries(target.nodes)) {
+      items.push({ metadata: { name, uid, labels } });
+    }
+    callback(null, { stdout: JSON.stringify({ items }), stderr: '' });
+  }
+  const replacements = {
+    'node:child_process': { execFile: executeFixture },
+    'node:fs/promises': { access: accessFixture },
+    './bounded-input.ts': { readBoundedText: readClaim, readBoundedJson: readRecord },
+    './config.ts': { directory: '/private/slot', root: owner.worktree },
+    './identity.ts': { secondary: true, stackId: '1' },
+  };
+  const targetConnection = loadPrivateFunction('infra/dev-stack/target.ts',
+    'targetConnection', replacements);
+  replacements['./target.ts'] = { targetConnection };
+  const ownedKubectl = loadPrivateFunction('infra/dev-stack/packaged.ts',
+    'ownedKubectl', replacements);
+  function checkedKubectl(args, timeoutMs, signal) {
+    return ownedKubectl(owner, args, timeoutMs, signal);
+  }
+  const backup = { endpointURL: 'https://backup-store.opencrane-package-1.svc:9000',
+    endpointCA: { name: 'trust', key: 'ca.crt' }, s3Credentials: {
+      accessKeyId: { name: 'identity', key: 'access' },
+      secretAccessKey: { name: 'identity', key: 'secret' },
+    } };
+  const controller = new AbortController();
+  const options = { timeoutMs: 500, signal: controller.signal };
+  const deadline = Date.now() + options.timeoutMs;
+  const request = checkCnpgBackupReferences(backup, owner.namespace, checkedKubectl, options);
+  function fixedError(error) {
+    assert.equal(error.message, 'CNPG backup references are incomplete or incompatible');
+    assert.equal(error.cause, undefined);
+    assert.doesNotMatch(error.stack, /private/u);
+    return true;
+  }
+  const rejected = assert.rejects(request, fixedError);
+  try {
+    await started;
+    if (cancellation) controller.abort(new Error('/private/cancellation-reason'));
+    await rejected;
+    const exited = await Promise.race([closed, delay(1000, false)]);
+    assert.notEqual(exited, false, 'The stalled ownership child must terminate');
+    assert.equal(child.killed, true);
+    assert.deepEqual(exited, [null, 'SIGTERM']);
+    const lastCall = calls.at(-1);
+    assert.equal(lastCall.program, 'kubectl');
+    assert.ok(lastCall.args.includes(kind));
+    assert.ok(lastCall.options.timeout > 0 && lastCall.options.timeout <= options.timeoutMs);
+    assert.equal(lastCall.options.signal.aborted, true);
+    for (const call of calls) {
+      assert.equal(call.options.signal, lastCall.options.signal);
+      assert.ok(call.options.timeout <= deadline - call.startedAt + 2,
+        'Each child must use the remaining time, including earlier ownership checks');
+    }
+    const count = calls.length;
+    await delay(25);
+    assert.equal(calls.length, count, 'No further ownership or backup work may start');
+  } finally {
+    if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    if (closed) await closed;
+    await rejected;
+  }
+}
+
+for (const kind of ['namespace', 'nodes']) {
+  for (const cancellation of [true, false]) {
+    async function stopsStalledOwnership() {
+      await stopsOwnershipChild(kind, cancellation);
+    }
+    const reason = cancellation ? 'cancellation' : 'deadline';
+    test(`backup ${reason} terminates a stalled ownership ${kind} child`, stopsStalledOwnership);
+  }
+}
 
 async function prepareThreeReplicas() {
   const packageValues = { natsCluster: { enabled: true, renderOnly: false } };
