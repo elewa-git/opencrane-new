@@ -1,4 +1,5 @@
 import importlib.util
+import gzip
 import hashlib
 import json
 import shutil
@@ -22,6 +23,90 @@ class LicenceTests(unittest.TestCase):
         candidate = importlib.util.module_from_spec(module_spec)
         module_spec.loader.exec_module(candidate)
         return candidate
+
+    def node_review_fixture(self):
+        path = source.parents[2] / "docs/process/p5-4-images5/check-node-notices.py"
+        module_spec = importlib.util.spec_from_file_location("node_notices", path)
+        node_review = importlib.util.module_from_spec(module_spec)
+        module_spec.loader.exec_module(node_review)
+        review = checker.read_json(path.with_name("node-notices.json"))
+        contents = gzip.decompress(path.with_name("node-LICENSE.gz").read_bytes())
+        return node_review, review, contents
+
+    def test_complete_node_review_passes_only_its_bounded_check(self):
+        node_review, review, contents = self.node_review_fixture()
+        self.assertEqual(node_review.check_review(review, contents), 43)
+        self.assertEqual(review["status"], "PARTIAL")
+        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
+        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        with self.assertRaisesRegex(ValueError, "exact source revision"):
+            checker.check_package_review(reviewed, inventory)
+
+    def test_node_review_refuses_missing_duplicate_or_changed_sections(self):
+        node_review, original, contents = self.node_review_fixture()
+        for case in ("missing", "duplicate", "hash", "heading", "blanket"):
+            with self.subTest(case=case):
+                review = json.loads(json.dumps(original))
+                if case == "missing":
+                    review["sections"].pop()
+                elif case == "duplicate":
+                    review["sections"].append(review["sections"][0])
+                elif case == "hash":
+                    review["sections"][0][1] = "0" * 64
+                elif case == "heading":
+                    review["sections"][0][0] = "Other component"
+                else:
+                    review["sections"][0][2] = "APPROVED"
+                with self.assertRaises(ValueError):
+                    node_review.check_review(review, contents)
+
+    def test_node_review_requires_full_notice_and_exact_candidate(self):
+        node_review, original, contents = self.node_review_fixture()
+        for field in ("candidateSha256", "sourceRevision", "configurationDigest",
+                      "localIndexDigest", "nodeNoticeSha256", "status"):
+            with self.subTest(field=field):
+                review = json.loads(json.dumps(original))
+                review[field] = "changed"
+                with self.assertRaises(ValueError):
+                    node_review.check_review(review, contents)
+        with self.assertRaises(ValueError):
+            node_review.check_review(original, contents + b"changed")
+        with self.assertRaises(ValueError):
+            node_review.check_review(original, contents.replace(b"Node.js", b"Other", 1))
+
+    def test_node_review_requires_individual_declarations_and_reasons(self):
+        node_review, original, contents = self.node_review_fixture()
+        for case in ("empty", "spaces", "unknown", "non-free", "missing", "source"):
+            with self.subTest(case=case):
+                review = json.loads(json.dumps(original))
+                declaration = review["sections"][0][2][0]
+                if case == "empty":
+                    declaration[3] = ""
+                elif case == "spaces":
+                    declaration[3] = "   "
+                elif case == "unknown":
+                    declaration[1] = ["LicenseRef-Unknown"]
+                elif case == "non-free":
+                    declaration[1] = ["BUSL-1.1"]
+                elif case == "source":
+                    declaration[2] = "/other/notice"
+                else:
+                    review["sections"][0][2] = []
+                with self.assertRaises(ValueError):
+                    node_review.check_review(review, contents)
+
+    def test_node_review_does_not_extend_application_or_other_bundle_rules(self):
+        node_review, review, contents = self.node_review_fixture()
+        node_review.check_review(review, contents)
+        notice = ["other library", ["NAIST-2003"], "/usr/local/LICENSE", "free dictionary"]
+        with self.assertRaises(ValueError):
+            checker.check_bundled_notice(notice, node_review.candidate.OSI)
+        entry = ["npm", "other", "1.0", "NAIST-2003", "example"]
+        with self.assertRaises(ValueError):
+            checker.check_entry(entry, node_review.candidate.OSI, set())
+        review["sections"][0][2][0][1] = ["NAIST-2003"]
+        with self.assertRaises(ValueError):
+            node_review.check_review(review, contents)
 
     def test_candidate_inventory_uses_a_checked_baseline(self):
         candidate = self.candidate_checker()
