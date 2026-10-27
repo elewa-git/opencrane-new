@@ -121,6 +121,74 @@ class LicenceTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     node_review.check_review(review, contents)
 
+    def test_node_unresolved_references_require_each_expected_identity_once(self):
+        node_review, original, contents = self.node_review_fixture()
+        for index in range(len(original["blockedReferences"])):
+            for case in ("deletion", "duplication", "name", "section"):
+                with self.subTest(index=index, case=case):
+                    review = json.loads(json.dumps(original))
+                    references = review["blockedReferences"]
+                    if case == "deletion":
+                        references.pop(index)
+                    elif case == "duplication":
+                        references[index] = references[(index + 1) % len(references)]
+                    elif case == "name":
+                        references[index][1] = "Other unresolved reference"
+                    else:
+                        references[index][0] = review["sections"][0][1]
+                    with self.assertRaises(ValueError):
+                        node_review.check_review(review, contents)
+
+    def test_node_grants_require_the_reviewed_component_and_licence_pairs(self):
+        node_review, original, contents = self.node_review_fixture()
+        for section_index in range(len(original["sections"])):
+            for grant_index in range(len(original["sections"][section_index][2])):
+                for case in ("component", "licence"):
+                    with self.subTest(section=section_index, grant=grant_index, case=case):
+                        review = json.loads(json.dumps(original))
+                        grant = review["sections"][section_index][2][grant_index]
+                        if case == "component":
+                            grant[0] = "Other component"
+                        elif grant[1] == ["MIT"]:
+                            grant[1] = ["ISC"]
+                        else:
+                            grant[1] = ["MIT"]
+                        with self.assertRaises(ValueError):
+                            node_review.check_review(review, contents)
+
+    def test_node_grants_refuse_count_preserving_blanket_mit_entries(self):
+        node_review, original, contents = self.node_review_fixture()
+        for case in ("all licences", "ICU nested entries"):
+            with self.subTest(case=case):
+                review = json.loads(json.dumps(original))
+                for heading, _, declarations in review["sections"]:
+                    for index, grant in enumerate(declarations):
+                        if case == "all licences":
+                            grant[1] = ["MIT"]
+                        elif heading.startswith("ICU, located at ") and index > 0:
+                            grant[0] = f"ICU blanket grant {index}"
+                            grant[1] = ["MIT"]
+                with self.assertRaises(ValueError):
+                    node_review.check_review(review, contents)
+
+    def test_node_preamble_requires_both_reviewed_grants(self):
+        node_review, original, contents = self.node_review_fixture()
+        for index in range(len(original["node"])):
+            for case in ("deletion", "duplication", "component", "licence"):
+                with self.subTest(index=index, case=case):
+                    review = json.loads(json.dumps(original))
+                    grants = review["node"]
+                    if case == "deletion":
+                        grants.pop(index)
+                    elif case == "duplication":
+                        grants[index] = grants[1 - index]
+                    elif case == "component":
+                        grants[index][0] = "Other preamble component"
+                    else:
+                        grants[index][1] = ["ISC"]
+                    with self.assertRaises(ValueError):
+                        node_review.check_review(review, contents)
+
     def test_node_unresolved_references_cannot_be_approved(self):
         node_review, original, contents = self.node_review_fixture()
         for index in range(len(original["blockedReferences"])):
