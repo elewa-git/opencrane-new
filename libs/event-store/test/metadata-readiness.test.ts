@@ -119,3 +119,55 @@ async function readsCurrentPeersFromTheLeader() {
 }
 it('reads current peer flags from the metadata leader, since followers only track their leader',
   readsCurrentPeersFromTheLeader);
+
+async function retriesAnExpiredMonitoringRequest() {
+  monitoringReplies([ready]);
+  const fetchMetadata = globalThis.fetch;
+  let first = true;
+  function fetchWithFirstTimeout(...args: Parameters<typeof fetch>) {
+    if (first) {
+      first = false;
+      return Promise.reject(new DOMException('Monitoring request expired', 'TimeoutError'));
+    }
+    return fetchMetadata(...args);
+  }
+  vi.stubGlobal('fetch', fetchWithFirstTimeout);
+  let failure: unknown;
+  function recordFailure(error: unknown) {
+    failure = error;
+  }
+  const pending = metadataReady(peer).catch(recordFailure);
+  await vi.advanceTimersByTimeAsync(25);
+  await pending;
+  expect(failure).toBeUndefined();
+}
+it('retries an expired monitoring request within the original metadata deadline',
+  retriesAnExpiredMonitoringRequest);
+
+async function retainsMetadataWhenLaterRequestsExpire() {
+  const incomplete = { ...ready, meta_cluster: { replicas: [] } };
+  monitoringReplies([incomplete]);
+  const fetchMetadata = globalThis.fetch;
+  let replies = 0;
+  function expireLaterRequests(...args: Parameters<typeof fetch>) {
+    replies += 1;
+    if (replies > 2) {
+      return Promise.reject(new DOMException('Monitoring request expired', 'TimeoutError'));
+    }
+    return fetchMetadata(...args);
+  }
+  vi.stubGlobal('fetch', expireLaterRequests);
+  let failure: unknown;
+  function recordFailure(error: unknown) {
+    failure = error;
+  }
+  const pending = metadataReady(peer).catch(recordFailure);
+  await vi.advanceTimersByTimeAsync(19_999);
+  expect(failure).toBeUndefined();
+  await vi.advanceTimersByTimeAsync(1);
+  await pending;
+  expect(failure).toHaveProperty('actual', incomplete);
+  expect(failure).toHaveProperty('message', expect.stringContaining('TimeoutError'));
+}
+it('retains observed metadata and request timeout details at the original deadline',
+  retainsMetadataWhenLaterRequestsExpire);
