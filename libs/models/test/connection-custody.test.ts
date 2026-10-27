@@ -2982,6 +2982,16 @@ async function clearsUnknownAfterSuccess() {
 it('scan clears consecutive unknown state after a successful page', clearsUnknownAfterSuccess);
 
 
+function refreshLifetime(mode: string) {
+  if (mode === 'short') {
+    return 1;
+  }
+  if (mode === 'lifetime') {
+    return 86_401;
+  }
+  return 300;
+}
+
 async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) {
   let identityVerification: IdentityVerification | undefined;
   const keys = await generateKeyPair('RS256');
@@ -3022,7 +3032,7 @@ async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) 
     const reply = { access_token: 'next-access-canary', token_type: 'Bearer',
       refresh_token: refreshMode === 'unrotated' ? 'refresh-canary' : 'next-refresh-canary',
       id_token: idToken, scope: refreshMode === 'scopes' ? 'write' : 'read',
-      expires_in: refreshMode === 'lifetime' ? 86_401 : 300 };
+      expires_in: refreshLifetime(refreshMode) };
     response.end(JSON.stringify(reply));
   }
   let beforeReply: (() => Promise<void>) | undefined;
@@ -4293,3 +4303,106 @@ async function refusesChangedRefreshCustody(change: string) {
 it.each(['generation-uid', 'generation-version', 'result-uid', 'result-version',
   'claim-expired', 'result-expired'])(
   'refuses a claimed refresh with changed %s', refusesChangedRefreshCustody);
+
+async function saveRefresh(test: Awaited<ReturnType<typeof refreshFixture>>, live?: unknown,
+  restart = false) {
+  const { savePersonalOAuthRefresh } = await import('../src/oauth-refresh-save.ts');
+  const custody = restart ? test.store.restart() : test.custody;
+  return savePersonalOAuthRefresh(events.store, consentBinding, test.session, custody,
+    test.input, test.loader.loadConfiguration, pgDb(storage.queue), live,
+    test.providerFixture.network);
+}
+
+async function savesRefreshOnce(fault: string) {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    const append = events.store.append.bind(events.store);
+    async function lostReply(command: AppendCommand): Promise<never> {
+      await append(command);
+      throw new Error('next-refresh-canary');
+    }
+    if (fault === 'append') {
+      vi.spyOn(events.store, 'append').mockImplementationOnce(lostReply);
+    } else if (fault === 'delete') {
+      test.store.failDeletes(true);
+    }
+    const results = await Promise.all([saveRefresh(test, claim), saveRefresh(test, claim)]);
+    test.store.failDeletes(false);
+    const saved = await saveRefresh(test, undefined, true);
+    expect(saved).toMatchObject({ status: 'saved', generation: 2, callsAvailable: false });
+    vi.spyOn(Date, 'now').mockReturnValue(test.dueAt + 600_000);
+    expect(await saveRefresh(test, undefined, true)).toEqual(saved);
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(6);
+    expect(rows[5]!.event.type).toBe('connection.refreshed');
+    const rebuilt = foldConnection(structuredClone(rows));
+    expect(rebuilt.lastGeneration).toBe(2);
+    expect(rebuilt.status).toBe('unavailable');
+    expect(rebuilt.data?.activation).toMatchObject({ reason: 'oauth_confirmed', generation: 2,
+      account: { subject: 'account-123', scopes: ['read'] } });
+    expect(test.refreshSends).toBe(1);
+    expect(test.store.creates).toBe(6);
+    expect(test.store.secrets.has(test.generation.secretRef.slice(7))).toBe(false);
+    for (const secret of test.store.secrets.values()) {
+      const contents = Buffer.from(secret.data.token, 'base64').toString();
+      expect(contents).not.toContain('"refresh_token":"refresh-canary"');
+    }
+    expect(await sendRefresh(test, claim)).toEqual({ status: 'unknown' });
+    const publicValues = JSON.stringify({ rows, results, saved });
+    expect(publicValues).not.toMatch(/next-access-canary|next-refresh-canary|refresh-canary/);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['none', 'append', 'delete'])(
+  'saves the next OAuth generation once and retires old copies after %s failure', savesRefreshOnce);
+
+async function refusesRefreshSave(mode: string) {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    test.setRefreshMode(mode);
+    expect(await saveRefresh(test, claim)).toEqual({ status: 'unknown' });
+    expect(await saveRefresh(test, undefined, true)).toEqual({ status: 'unknown' });
+    expect(await history(events.store, test.subject, 'test')).toHaveLength(5);
+    expect(test.refreshSends).toBe(1);
+    expect(test.store.deletes).toBe(0);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['expired', 'revoked', 'audience'])(
+  'refuses to save an OAuth refresh reply with %s', refusesRefreshSave);
+
+async function refusesRefreshSaveAtPublication(change: string) {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    const append = events.store.append.bind(events.store);
+    async function changedAccess(command: AppendCommand) {
+      fault.mockRestore();
+      if (change === 'expiry') {
+        vi.spyOn(Date, 'now').mockReturnValue(test.dueAt + 2000);
+      } else {
+        await changeConsentAccess(test, change);
+      }
+      return append(command);
+    }
+    if (change === 'expiry') {
+      test.setRefreshMode('short');
+    }
+    const fault = vi.spyOn(events.store, 'append').mockImplementationOnce(changedAccess);
+    expect(await saveRefresh(test, claim)).toEqual({ status: 'unknown' });
+    expect(await history(events.store, test.subject, 'test')).toHaveLength(5);
+    expect(test.store.deletes).toBe(0);
+    expect(test.refreshSends).toBe(1);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['removed', 'policy', 'disabled', 'configuration', 'expiry'])(
+  'refuses saving the OAuth refresh after %s at publication', refusesRefreshSaveAtPublication);
