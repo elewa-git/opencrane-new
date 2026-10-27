@@ -23,7 +23,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
   package -->|uses local cluster| devbox
-  package -->|starts services and captures or restores data| apps["apps<br/>product services and replay"]
+  package -->|starts services and checks captured or restored data| apps["apps<br/>product services and replay"]
   package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
@@ -136,7 +136,9 @@ review. The current image has no such approval.
 
 An internal capture helper saves events, their files and every required computer home
 in sequence. The caller keeps writers stopped and supplies trusted readers. It returns
-partial evidence with matching archive hashes; database backups and a complete-system
+partial evidence only after comparing every saved archive with its original output
+and checking that encrypted files and homes open with their saved descriptions.
+These checks share the capture time limit. Database backups and a complete-system
 backup still need work. Live checks of stopped writers and mounted home files remain untested.
 
 ## How to run or test it

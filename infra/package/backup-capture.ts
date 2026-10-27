@@ -3,10 +3,12 @@ import { lstatSync, mkdirSync, readdirSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
+import { checkComputerVolumeBackup } from './computer-volume-check.ts';
 import { collectComputerVolumeExport } from './computer-volume-export.ts';
 import { captureBounds, collectEventBackup, descriptorSchema } from './event-backup.ts';
 import { checkHistory, readPrivateFile } from './event-restore.ts';
 import { collectObjectBackup } from './object-backup.ts';
+import { checkObjectBackup } from './object-restore.ts';
 
 type ExportArguments = Parameters<typeof collectComputerVolumeExport>;
 type Options = Omit<ExportArguments[2], 'directory'>;
@@ -79,9 +81,18 @@ export async function collectBackupCapture(source: ExportArguments[0],
     await collectEventBackup(source, eventOptions);
     const eventBytes = description(eventDirectory);
     const events = descriptorSchema.parse(JSON.parse(eventBytes.toString('utf8')));
-    const eventFiles = fingerprints(eventDirectory);
+    const eventFiles = { 'events.snapshot': events.sha256, 'descriptor.json': digest(eventBytes) };
+    const objectFiles: Record<string, string> = {};
+    const homeFiles: Record<string, string> = {};
+    // Keep hashes from encryption; reading them after a later copy could accept changed bytes.
+    function objectWritten(file: string, sha256: string) {
+      objectFiles[file] = sha256;
+    }
+    function homeWritten(file: string, sha256: string) {
+      homeFiles[file] = sha256;
+    }
     const objectOptions = { ...settings, destination: objectDirectory, timeoutMs: remaining() };
-    await collectObjectBackup(source, objectTarget, objects, objectOptions);
+    await collectObjectBackup(source, objectTarget, objects, objectOptions, objectWritten);
     const objectBytes = description(objectDirectory);
     const objectSchema = z.object({ kind: z.literal('event-referenced-objects-only'),
       silo: z.literal(settings.silo), attempt: z.literal(settings.attempt),
@@ -89,12 +100,19 @@ export async function collectBackupCapture(source: ExportArguments[0],
       eventDescriptorSha256: z.literal(digest(eventBytes)), objects: z.array(z.unknown()),
     });
     const objectProof = objectSchema.parse(JSON.parse(objectBytes.toString('utf8')));
-    const objectFiles = fingerprints(objectDirectory);
+    objectFiles['descriptor.json'] = digest(objectBytes);
     const homeOptions = { ...settings, destination: homeDirectory, timeoutMs: remaining(),
       get writersStopped() { return options.writersStopped; } };
     const homes = await collectComputerVolumeExport(source, homeTarget, homeOptions,
-      readExport, readKubernetes);
-    const homeFiles = fingerprints(homeDirectory);
+      readExport, readKubernetes, homeWritten);
+    const homeBytes = description(homeDirectory);
+    homeFiles['descriptor.json'] = digest(homeBytes);
+    const objectCheckOptions = { ...settings, directory: objectDirectory, eventDirectory,
+      targetSilo: settings.silo, stopped: true, exclusive: true, timeoutMs: remaining() };
+    await checkObjectBackup(source, objectCheckOptions);
+    const homeCheckOptions = { ...settings, eventDirectory, volumeDirectory: homeDirectory };
+    remaining();
+    await checkComputerVolumeBackup(source, homeCheckOptions, activeBounds);
     await checkHistory(activeBounds, events, maximumBytes);
     if (events.silo !== settings.silo || events.attempt !== settings.attempt ||
         homes.binding.silo !== settings.silo || homes.binding.attempt !== settings.attempt ||
@@ -103,7 +121,6 @@ export async function collectBackupCapture(source: ExportArguments[0],
         !isDeepStrictEqual(eventFiles, fingerprints(eventDirectory)) ||
         !isDeepStrictEqual(objectFiles, fingerprints(objectDirectory)) ||
         !isDeepStrictEqual(homeFiles, fingerprints(homeDirectory))) throw refusal();
-    const homeBytes = description(homeDirectory);
     remaining();
     // Return component evidence only. Do not publish a complete-system manifest or resume work.
     return { kind: 'capture-components-only' as const, silo: settings.silo, attempt: settings.attempt,
