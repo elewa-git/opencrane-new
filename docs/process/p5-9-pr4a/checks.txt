@@ -1,0 +1,21 @@
+Run from the worktree at source 581a907e9.
+PG_TEST_URL points to the disposable pgtest-p5-9-pr4a PostgreSQL 17.6 container.
+Every lint, typecheck and test command uses nice -n 10.
+
+npm ci
+nice -n 10 npm run lint
+nice -n 10 npm run typecheck
+nice -n 10 npm run check:events
+nice -n 10 npm run lint:changelog
+
+Expected failing-first command at b7c762527:
+nice -n 10 node_modules/.bin/vitest run infra/package/upgrade-recovery.test.ts -t 'fault: none' --maxWorkers=1 --no-file-parallelism
+Observed: expected restoreRecoveryBackup once; observed zero calls.
+
+Regression command:
+nice -n 10 node_modules/.bin/vitest run infra/package/upgrade-recovery.test.ts infra/package/upgrade-recovery-check.test.ts infra/package/upgrade-recovery-budget.test.ts infra/package/upgrade-recovery-files.test.ts apps/server/test/recovery-restore.test.ts apps/server/test/recovery-custody.test.ts libs/events/test/security-rules.test.ts --maxWorkers=1 --no-file-parallelism --reporter=verbose
+
+Repeat changed tests:
+nice -n 10 node_modules/.bin/vitest run infra/package/upgrade-recovery.test.ts --maxWorkers=1 --no-file-parallelism --reporter=verbose
+
+No full root suite or live journey.

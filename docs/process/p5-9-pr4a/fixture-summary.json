@@ -1,0 +1,38 @@
+{
+  "sourceRevision": "581a907e9fb33e3749f0e64f883fdf30817b3a98",
+  "archivedEvents": 281,
+  "originalEvents": 281,
+  "recoveredEvents": 281,
+  "eventAndMemberComparisonsMatch": true,
+  "memberCheckpoint": 281,
+  "budgetRebuilds": [
+    {
+      "checkpoint": 281,
+      "rowsDigest": "d3fa75a70c038e947b3f4c06471a91ec59f82d8d5e1714b7a309a442e0d4da46"
+    },
+    {
+      "checkpoint": 281,
+      "rowsDigest": "d3fa75a70c038e947b3f4c06471a91ec59f82d8d5e1714b7a309a442e0d4da46"
+    }
+  ],
+  "budgetComparisonsMatch": true,
+  "fileRebuildsMatch": true,
+  "files": {
+    "checkpoint": 281,
+    "rowCount": 2,
+    "byteCount": 92,
+    "rowsDigest": "97ee0fa23f49cec913541accb456068d681a091caff887f22b9adbcf3b15aa70",
+    "objectsDigest": "37051e11ae4020c36797d6514a3c8ef1bbc649ba3f93fe2aa37ab40e2e758fb1",
+    "rightsSequence": 281,
+    "effects": {
+      "upload": 0,
+      "scan": 0,
+      "delivery": 0,
+      "scheduler": 0,
+      "credential": 0,
+      "model": 0,
+      "tool": 0
+    }
+  },
+  "recordingCalls": 0
+}
