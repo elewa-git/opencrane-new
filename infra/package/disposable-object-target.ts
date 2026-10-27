@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, type ExecFileOptions } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -21,8 +21,9 @@ interface Target {
 // Accept only instances created here, with fresh credentials unavailable to product processes.
 const targets = new WeakMap<Storage, Target>();
 
-async function docker(args: string[], signal?: AbortSignal) {
-  const result = await execute('docker', args, { timeout: 30_000, maxBuffer: 64 * 1024, signal });
+async function docker(args: string[], options: Pick<ExecFileOptions, 'signal' | 'cwd'> = {}) {
+  const executionOptions = { timeout: 30_000, maxBuffer: 64 * 1024, ...options };
+  const result = await execute('docker', args, executionOptions);
   return result.stdout.trim();
 }
 
@@ -50,7 +51,7 @@ async function issueLease(endpoint: string, accessKey: string, secretKey: string
 /** Create storage for one local recovery attempt, without mounting or starting a product stack. */
 export async function provisionDisposableObjectTarget(silo: string) {
   if (!silo || silo.length > 256) throw new Error('Invalid disposable storage owner');
-  const directory = await mkdtemp(`${tmpdir()}/object-target-`);
+  let directory: string | undefined;
   const name = `restore-minio-${randomUUID()}`;
   const marker = Buffer.from(JSON.stringify({ silo, instance: randomUUID() }));
   const state: Target = { silo, name, marker, claimed: false, closed: false };
@@ -59,19 +60,28 @@ export async function provisionDisposableObjectTarget(silo: string) {
     if (state.closed) return;
     state.closed = true;
     try {
-      if (created) await docker(['rm', '-f', '-v', name]);
-    } finally {
-      await rm(directory, { recursive: true, force: true });
+      try {
+        if (created) await docker(['rm', '-f', '-v', name]);
+      } finally {
+        if (directory) {
+          await rm(directory, { recursive: true, force: true });
+        }
+      }
+    } catch {
+      throw new Error('Disposable storage cleanup refused');
     }
   }
   try {
+    directory = await mkdtemp(`${tmpdir()}/object-target-`);
     const accessKey = randomBytes(24).toString('hex');
     const secretKey = randomBytes(32).toString('hex');
     const environment = `MINIO_ROOT_USER=${accessKey}\nMINIO_ROOT_PASSWORD=${secretKey}\n`;
     const environmentFile = `${directory}/environment`;
     await writeFile(environmentFile, environment, { mode: 0o600 });
+    // Keep the private directory out of command arguments, which local observers can read.
+    const launchOptions = { cwd: directory };
     await docker(['run', '-d', '--user', '0:0', '--name', name, '-p', '127.0.0.1::9000',
-      '--env-file', environmentFile, image, 'server', '/data']);
+      '--env-file', 'environment', image, 'server', '/data'], launchOptions);
     created = true;
     await rm(environmentFile);
     const address = await docker(['port', name, '9000/tcp']);
@@ -87,10 +97,13 @@ export async function provisionDisposableObjectTarget(silo: string) {
     targets.set(client, state);
     return { client, close, name };
   } catch {
-    await close();
+    // Attempt both cleanup steps without replacing the original fixed refusal.
+    await close().catch(ignoreFailure);
     throw new Error('Disposable storage provisioning refused');
   }
 }
+
+function ignoreFailure() {}
 
 /** Reserve this instance once and verify its destination before any restored bytes are sent. */
 export function claimDisposableObjectTarget(client: Storage, silo: string, signal: AbortSignal) {
@@ -110,12 +123,13 @@ export function inspectDisposableObjectTarget(client: Storage, silo: string, sig
     signal.throwIfAborted();
     if (target.closed) throw new Error('Disposable storage closed');
     // Check the real container, not a caller's assertion that product processes are stopped.
-    const processes = await docker(['top', target.name, '-eo', 'pid,comm'], signal);
+    const dockerOptions = { signal };
+    const processes = await docker(['top', target.name, '-eo', 'pid,comm'], dockerOptions);
     const rows = processes.split('\n');
     if (rows.length !== 2 || !/^\d+\s+minio$/.test(rows[1]?.trim() ?? '')) {
       throw new Error('Disposable storage has another running process');
     }
-    const address = await docker(['port', target.name, '9000/tcp'], signal);
+    const address = await docker(['port', target.name, '9000/tcp'], dockerOptions);
     if (`http://${address}` !== client.endpoint) throw new Error('Disposable storage moved');
     const response = await client.getObject('opencrane-restore', 'owner');
     const chunks: Buffer[] = [];

@@ -747,6 +747,17 @@ id into `opencrane-restore/owner`. It returns `client`, `name` and an explicit `
 operation. The caller retains the target for inspection until it chooses to close it.
 Only clients registered by that provisioner in this process can restore files.
 
+Docker starts from the private directory and receives only `environment` as the
+environment filename. No private directory or credential value enters its command
+arguments. Directory creation and every later setup failure return
+`Disposable storage provisioning refused`. Cleanup still attempts container and
+directory removal; cleanup failures cannot replace the provisioning refusal.
+Explicit `close` failures return `Disposable storage cleanup refused`.
+`apps/server/test/disposable-object-target.test.ts` observes the real Docker launch
+arguments and injects directory, file and Docker failures, including simultaneous
+setup and cleanup failures. It uses disposable MinIO and removes its containers
+and volumes even when the injected cleanup fails.
+
 Restore claims the registered instance once, including after a failed attempt.
 It refuses a foreign silo, an unmanaged client, a closed instance or a second claim.
 Before bucket creation, before each upload and after readback, it checks the actual

@@ -59,7 +59,7 @@ function filesystemFailure(code: string) {
   return Object.assign(error, { code });
 }
 
-function failDocker() {
+function failDocker(): never {
   throw filesystemFailure('EACCES');
 }
 

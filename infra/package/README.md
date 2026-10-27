@@ -80,8 +80,8 @@ rendering cannot prove that the saved data is readable.
 
 The recovery fixture compares restored files and spending, then checks who can read
 those files. It uses disposable services and does not reopen a running installation.
-The event target keeps private directory paths out of command arguments and errors,
-including when setup or cleanup fails.
+The event and file targets keep private directory paths out of command arguments
+and errors, including when setup or cleanup fails.
 
 ## Processes it handles
 
