@@ -23,7 +23,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
   package -->|uses local cluster| devbox
-  package -->|starts services, checks computer volume bindings, exports and checks encrypted homes, copies and restores files, checks current memory keys and replays memory| apps["apps<br/>product services and replay"]
+  package -->|starts services and captures or restores data| apps["apps<br/>product services and replay"]
   package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
@@ -71,6 +71,7 @@ rendering cannot prove that the saved data is readable.
 - Saves a bounded private copy of the event log and its referenced files for an operator.
 - Checks retained computer homes against saved events and current Kubernetes ownership.
 - Encrypts all required homes together while checking that their ownership stays unchanged.
+- Captures matching events, files and homes within one time limit while writers stay stopped.
 - Restores checked events and files in order into empty disposable targets.
 - Checks event and budget recovery after an interrupted change to handler subscriptions.
 - Checks current memory deletion records before replaying older events.
@@ -132,6 +133,11 @@ review. The current image has no such approval.
    check, including each screen state and inherited feature. A rejected install leaves
    its checks untested while the other install keeps its valid results.
    The checker cannot qualify the product from synthetic records.
+
+An internal capture helper saves events, their files and every required computer home
+in sequence. The caller keeps writers stopped and supplies trusted readers. It returns
+partial evidence with matching archive hashes; database backups and a complete-system
+backup still need work. Live checks of stopped writers and mounted home files remain untested.
 
 ## How to run or test it
 

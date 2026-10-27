@@ -1,0 +1,1 @@
+- Operators can capture matching events, files and all computer homes within one shared time limit. The result is partial component evidence; complete-system backup and live qualification remain unfinished.

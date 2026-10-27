@@ -910,6 +910,36 @@ strict descriptors, changes during either copy and shared size/deadline boundari
 The [local receipt](../../docs/process/p5-7-pr3c/receipt.md) records these checks.
 Live PVC capture, CSI, custody backup and coordinated recovery remain NOT RUN.
 
+## Matching component capture
+
+`collectBackupCapture` in `backup-capture.ts` composes the existing event, object and
+home collectors. Supply the source connection, two distinct owned disposable NATS
+connections, the existing storage client, export options, a trusted home reader and
+a Kubernetes reader (or `undefined` for the existing adapter). The namespace/context
+must already be checked. Both targets must be empty; they remain intact and isolated
+on success or failure. Lost completion is unknown and never triggers erase or resend.
+
+The absent destination is created under an owned private directory. Its `events`,
+`objects` and `homes` children retain the existing formats. One original deadline
+(at most 60 seconds) and cancellation cover the sequence, including final checks.
+Each stage receives only the remaining time. Keep `writersStopped` true throughout;
+the helper checks it between stages and during home copying. It does not stop or
+resume admission, and this assertion does not prove live quiescence.
+
+The helper checks silo, attempt, event archive and descriptor hashes across components.
+It checks source history again after copying and compares every saved file before
+returning counts and hashes labelled `capture-components-only`. No combined manifest
+is saved. Failed attempts may leave partial component evidence; it is not a usable
+system backup. Errors withhold dependency messages, private paths and content.
+
+`infra/package/backup-capture.test.ts` uses real disposable NATS and MinIO,
+synthetic Kubernetes records and two distinct home streams. It checks matching and
+empty-home results, refusals, original-deadline expiry, cancellation, lost completion
+and zero calls at actual replay, scheduler, model, tool and credential entry points.
+P5-7 PR 4a is partial component evidence. P5-3 remains required. CNPG/WAL, custody
+capture, live mounted-source proof, admission stop/resume and the final complete
+manifest remain later work. Live qualification: NOT RUN.
+
 ## Event-byte restore
 
 `event-restore-run.ts SILO DIRECTORY --disposable` restores the event-only export.
