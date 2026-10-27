@@ -950,7 +950,11 @@ message used by the live-view checks. This design filters unrelated events rathe
 than retrying a reservation or a single-use approval.
 
 `authorityFence` returns a freshness check with `include(...subjects)`, `head` and
-an absolute `deadline`. Decision policy, approval and access reads share the
+an absolute `deadline`. `ownershipWriteAccess` also supplies `subjects()`, which returns
+a copy of the watched stream names, including groups and grants added during access
+checks. Routine allocation uses those names to detect changes during receipt confirmation
+without depending on other conversations. Access rules and deadlines are unchanged.
+Decision policy, approval and access reads share the
 decision deadline. Store retries and budget-queue waits cannot reset it. Discovered
 subjects use the same starting position. Before reservation, approval use and
 final admission, a relevant change or an expired check refuses the call. A failure

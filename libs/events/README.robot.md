@@ -26,6 +26,14 @@ the same writer.
 The package exports `mcpToolModeSetDataSchema` so receipt recovery validates the
 saved choice with the same schema as the event registry. No event fields change.
 
+## Routine allowance preparation
+
+`budget.root_allowance_set` accepts optional `preparationDigest`, a lowercase SHA-256
+fingerprint. Routine allocation uses it to bind the frozen occurrence and owner admission,
+exact creation/input events and provider/model/tariff choice without saving private input.
+The budget actor's existing strict binding comparison makes this immutable across retries
+and replay. Older roots and child allocation omit it. No event type or reaction is added.
+
 ## Takeover approval cancellation
 
 The fixed `takeover` cancellation cause is shared by event and approval reply

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { foldRoutineHistory, memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { AppendCommand, EventStore, StoredEvent } from '@opencrane/event-store';
 import { parseEventByType, type RoutineState } from '@opencrane/events';
-import { currentMembership, history, ownershipWriteAccess } from '@opencrane/models';
+import { currentAuthority, currentMembership, history, ownershipWriteAccess } from '@opencrane/models';
 import { chatCommand } from './chat/commands.ts';
 import type { conversationKeys } from './chat/keys.ts';
 import { sharedAssistantAuthority } from './chat/private-session.ts';
@@ -197,6 +197,17 @@ export async function loadRoutinePreparation(store: EventStore,
       await checkOwner();
       return fresh.deadline;
     }
+    async function checkModel(model: string, rows: StoredEvent[]) {
+      if (!fresh) throw new Error('Routine session refused');
+      await currentAuthority(store, worker.binding, ownerId, run.definition.assistantId,
+        run.conversationId, 'model', model, fresh, rows);
+    }
+    function accessSubjects() {
+      if (!fresh) {
+        throw new Error('Routine session refused');
+      }
+      return fresh.subjects();
+    }
     async function checkFresh(operation: 'retry' | 'append') {
       const deadline = await checkAccess();
       if (operation === 'append') {
@@ -226,8 +237,8 @@ export async function loadRoutinePreparation(store: EventStore,
         yield row;
       }
     }
-    return { run, readStream, context, command, expectedCreation,
-      checkAccess, checkFresh, checkOwner, checkCurrent };
+    return { run, readStream, context, command, expectedCreation, position: saved.position,
+      checkAccess, checkFresh, checkOwner, checkCurrent, checkModel, accessSubjects };
   } catch {
     // Keep missing access and private history or custody failures indistinguishable.
     throw new Error('Routine session refused');
