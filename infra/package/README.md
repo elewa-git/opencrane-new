@@ -23,7 +23,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
   package -->|uses local cluster| devbox
-  package -->|starts services, checks computer volume bindings, exports homes, restores files and replays memory| apps["apps<br/>product services and replay"]
+  package -->|starts services, checks computer volume bindings, exports all homes, copies and restores files, checks current memory keys and replays memory| apps["apps<br/>product services and replay"]
   package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
@@ -215,8 +215,10 @@ processes. This does not restore or reopen a working installation.
 The [restore notes](README.robot.md#event-byte-restore) explain the requirements.
 
 The combined restore helper checks both copies before changing either target. It
-restores events first, then files, under one time limit. Only privately provisioned
-local targets can be used. Failed or cancelled work leaves both targets isolated
+restores events first, then files, and checks current memory keys under one time limit.
+The current deletion evidence comes from a trusted source, separately from the old archive.
+The proposed key folder must already be prepared; the helper copies no keys. Only privately
+provisioned local targets can be used. Failed or cancelled work leaves both targets isolated
 and never deletes or resends bytes. It starts no product readers or background work.
 The [combined restore notes](README.robot.md#combined-event-and-file-restore) explain
 what still blocks reopening.

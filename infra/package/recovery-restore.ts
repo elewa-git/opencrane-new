@@ -6,13 +6,19 @@ import { restoreEventBackup } from './event-restore.ts';
 import { checkObjectBackup, restoreObjectBackup } from './object-restore.ts';
 import { inspectDisposableObjectTarget } from './disposable-object-target.ts';
 import { claimRecoveryEventTarget } from './recovery-event-target.ts';
+import { checkMemoryRestore } from './memory-restore-check.ts';
 
 type Storage = ReturnType<typeof storageClient>;
 type Options = Omit<Parameters<typeof restoreObjectBackup>[3], 'proof'> & {
   effectsDisabled: boolean;
+  memory: {
+    source: NatsConnection;
+    sourceDirectory: string;
+    candidateDirectory: string;
+  };
 };
 
-/** Restore bytes only. Keep both targets isolated until separate recovery checks permit reads. */
+/** Check current memory keys after restoring bytes. Keep both targets isolated. */
 export async function restoreRecoveryBackup(source: NatsConnection, target: NatsConnection,
   sourceObjects: Storage, targetObjects: Storage, options: Options) {
   const controller = new AbortController();
@@ -63,7 +69,13 @@ export async function restoreRecoveryBackup(source: NatsConnection, target: Nats
     await restoreObjectBackup(target, sourceObjects, targetObjects, objectOptions);
     checkEvents();
     bounds.check();
-    return { kind: 'events-and-objects-only' as const };
+    // Check deletion against the trusted current source independently of the archived event source.
+    const memoryOptions = { silo: options.silo, sourceDirectory: options.memory.sourceDirectory,
+      candidateDirectory: options.memory.candidateDirectory, stopped: options.stopped, signal };
+    await bounds.bounded(checkMemoryRestore(options.memory.source, target, memoryOptions));
+    checkEvents();
+    bounds.check();
+    return { kind: 'events-objects-and-custody-only' as const };
   } catch {
     // Never erase or resend: either service may have saved bytes before losing its reply.
     throw new Error('Recovery restore refused; keep both targets isolated');

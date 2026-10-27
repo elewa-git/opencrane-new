@@ -1,0 +1,1 @@
+- Offline event and file restore now checks current memory keys and permanent deletion markers before any replay or reads. Stale or incomplete custody refuses with both targets isolated. Admission stays closed; coordinated recovery remains incomplete.

@@ -1,4 +1,5 @@
-import { randomBytes } from 'node:crypto';
+import { z } from 'zod';
+import { createHash, randomBytes } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -41,7 +42,9 @@ function fact(memoryId: string, dependsOn: string[] = []): EventEnvelope {
   references.set(memoryId, store.provision(identity).slice(4));
   const encrypted = store.encrypt(identity, `Synthetic private ${memoryId}`);
   values.set(memoryId, encrypted);
-  function dependency(id: string) { return { scopeId, memoryId: id, revision: 1 }; }
+  function dependency(id: string) {
+    return { scopeId, memoryId: id, revision: 1 };
+  }
   const dependencies = dependsOn.map(dependency);
   const data = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
     memoryId, revision: 1, kind: 'fact', pinned: false, expiresAt: null,
@@ -61,7 +64,7 @@ async function prepare() {
   await cp(join(directory, 'original'), join(directory, 'stale'), { recursive: true });
   for (let sequence = 1; sequence <= await frozen.reader.head(); sequence++) {
     const stored = await frozen.reader.readEvent(sequence);
-    await current.seed([stored!.event]);
+    await current.seed([stored.event]);
   }
   const root = identities.get('forgotten')!;
   const { silo: _silo, ...fields } = root;
@@ -102,15 +105,25 @@ async function cleanup() {
   await current?.close();
   await frozen?.close();
   await storage?.close();
-  if (directory) await rm(directory, { recursive: true, force: true });
+  if (directory) {
+    await rm(directory, { recursive: true, force: true });
+  }
 }
 afterAll(cleanup);
 
 async function inventory(path: string) {
   const result: Record<string, string> = {};
   const names = await readdir(path);
-  for (const name of names) result[name] = (await readFile(join(path, name))).toString('hex');
+  for (const name of names) {
+    result[name] = digest(await readFile(join(path, name)));
+  }
   return result;
+}
+
+function digest(bytes: Buffer) {
+  const hash = createHash('sha256');
+  hash.update(bytes);
+  return hash.digest('hex');
 }
 
 async function fixture(fault?: string) {
@@ -130,10 +143,14 @@ async function fixture(fault?: string) {
   const probes = [vi.spyOn(projections, 'connectProjectionDb'),
     vi.spyOn(projections.ProjectionRunner.prototype, 'run'),
     vi.spyOn(HandlerRuntime.prototype, 'start')];
-  function forbidden(): never { throw new Error('Offline activity probe'); }
+  function forbidden(): never {
+    throw new Error('Offline activity probe');
+  }
   for (const probe of probes) {
     probe.mockImplementation(forbidden);
-    function exercise() { Reflect.apply(probe, undefined, []); }
+    function exercise() {
+      Reflect.apply(probe, undefined, []);
+    }
     expect(exercise).toThrow('Offline activity probe');
     expect(probe).toHaveBeenCalledTimes(1);
     probe.mockClear();
@@ -159,7 +176,9 @@ async function fixture(fault?: string) {
   vi.spyOn(projections, 'memoryKeys').mockImplementation(guardedKeys);
   function quiet() {
     effects();
-    for (const probe of probes) expect(probe).not.toHaveBeenCalled();
+    for (const probe of probes) {
+      expect(probe).not.toHaveBeenCalled();
+    }
     expect(mutate).not.toHaveBeenCalled();
   }
   onTestFinished(quiet);
@@ -174,7 +193,9 @@ async function fixture(fault?: string) {
   return { target, objectTarget, memory, decrypt, checked, eventRestore, objectRestore,
     request, restore };
 }
-function restoreMocks() { vi.restoreAllMocks(); }
+function restoreMocks() {
+  vi.restoreAllMocks();
+}
 
 async function oldArchive() {
   const setup = await fixture();
@@ -200,50 +221,95 @@ it('checks current custody after restoring an old archive without reviving forgo
 
 const faults = ['stale', 'missing-folder', 'empty', 'missing', 'next-marker', 'orphan-marker',
   'inventory', 'wrong-silo', 'wrong-source', 'non-prefix', 'source-movement'] as const;
-async function invalid(fault: typeof faults[number]) {
-  const setup = await fixture(fault);
+type Fault = typeof faults[number];
+async function damageCustody(setup: Awaited<ReturnType<typeof fixture>>, fault: Fault) {
   const { sourceDirectory, candidateDirectory } = setup.memory;
   if (fault === 'stale') {
     await rm(candidateDirectory, { recursive: true });
     await cp(join(directory, 'stale'), candidateDirectory, { recursive: true });
   }
-  if (fault === 'missing-folder') setup.memory.candidateDirectory = join(directory, 'absent');
-  for (const path of [sourceDirectory, candidateDirectory]) {
-    if (fault === 'empty') await writeFile(join(path, references.get('survivor')!), Buffer.alloc(0));
-    if (fault === 'missing') await rm(join(path, references.get('survivor')!));
-    if (fault === 'next-marker') await rm(join(path, references.get('forgotten-next')!));
+  if (fault === 'missing-folder') {
+    setup.memory.candidateDirectory = join(directory, 'absent');
   }
-  if (fault === 'orphan-marker') await rm(join(candidateDirectory, references.get('orphan')!));
-  if (fault === 'wrong-source') setup.memory.source = setup.target.connection;
+  for (const path of [sourceDirectory, candidateDirectory]) {
+    if (fault === 'empty') {
+      await writeFile(join(path, references.get('survivor')!), Buffer.alloc(0));
+    }
+    if (fault === 'missing') {
+      await rm(join(path, references.get('survivor')!));
+    }
+    if (fault === 'next-marker') {
+      await rm(join(path, references.get('forgotten-next')!));
+    }
+  }
+  if (fault === 'orphan-marker') {
+    await rm(join(candidateDirectory, references.get('orphan')!));
+  }
+  if (fault === 'wrong-source') {
+    setup.memory.source = setup.target.connection;
+  }
+}
+
+function changeHistory(fault: Fault) {
   const originalRequest = current.connection.request.bind(current.connection);
   let reads = 0;
+  let injected = 0;
   async function changed(...args: Parameters<typeof originalRequest>) {
     const reply = await originalRequest(...args);
-    if (args[0] === '$JS.API.STREAM.INFO.EVENTS') reads++;
-    const saved = reply.json<Record<string, unknown>>();
-    if (fault === 'source-movement' && reads === 2) saved['created'] = '2000-01-01T00:00:00.000Z';
+    if (args[0] === '$JS.API.STREAM.INFO.EVENTS') {
+      reads++;
+    }
+    const saved = z.record(z.string(), z.unknown()).parse(reply.json());
+    if (fault === 'source-movement' && reads === 2) {
+      saved['created'] = '2000-01-01T00:00:00.000Z';
+      injected++;
+    }
     if ((fault === 'wrong-silo' || fault === 'non-prefix') &&
         args[0] === '$JS.API.STREAM.MSG.GET.EVENTS') {
-      const message = saved['message'] as { data: string };
-      const envelope = JSON.parse(Buffer.from(message.data, 'base64').toString()) as EventEnvelope;
-      if (fault === 'wrong-silo') envelope.silo = 'foreign';
-      else envelope.id = 'different';
+      const message = z.object({ data: z.string() }).passthrough().parse(saved['message']);
+      const raw: unknown = JSON.parse(Buffer.from(message.data, 'base64').toString());
+      const envelope = z.record(z.string(), z.unknown()).parse(raw);
+      if (fault === 'wrong-silo') {
+        envelope['silo'] = 'foreign';
+      } else {
+        envelope['id'] = 'different';
+      }
       message.data = Buffer.from(JSON.stringify(envelope)).toString('base64');
+      saved['message'] = message;
+      injected++;
     }
-    function json<T>() { return saved as T; }
-    return { ...reply, json };
+    vi.spyOn(reply, 'json').mockReturnValue(saved);
+    return reply;
   }
   vi.spyOn(current.connection, 'request').mockImplementation(changed);
+  function assertInjection() {
+    if (['wrong-silo', 'non-prefix', 'source-movement'].includes(fault)) {
+      expect(injected).toBeGreaterThan(0);
+    }
+  }
+  return assertInjection;
+}
+
+async function invalid(fault: Fault) {
+  const setup = await fixture(fault);
+  const { sourceDirectory, candidateDirectory } = setup.memory;
+  await damageCustody(setup, fault);
+  const assertInjection = changeHistory(fault);
   const before = await inventory(sourceDirectory);
   const candidateBefore = await inventory(candidateDirectory);
-  if (fault === 'inventory') candidateBefore['f'.repeat(64)] = '';
+  if (fault === 'inventory') {
+    candidateBefore['f'.repeat(64)] = digest(Buffer.alloc(0));
+  }
   await expect(setup.restore()).rejects.toEqual(refused);
   expect(setup.checked).toHaveBeenCalledOnce();
+  assertInjection();
   expect(setup.decrypt).not.toHaveBeenCalled();
   expect(await inventory(sourceDirectory)).toEqual(before);
   expect(await inventory(candidateDirectory)).toEqual(candidateBefore);
   expect(await setup.objectTarget.client.bucketExists('files')).toBe(true);
-  for (const [subject] of setup.request.mock.calls) expect(subject).not.toMatch(/DELETE|PURGE/);
+  for (const [subject] of setup.request.mock.calls) {
+    expect(subject).not.toMatch(/DELETE|PURGE/);
+  }
   await expect(setup.restore()).rejects.toEqual(refused);
   expect(setup.checked).toHaveBeenCalledOnce();
   expect(setup.eventRestore).toHaveBeenCalledOnce();
@@ -263,27 +329,45 @@ it('keeps wrong-key authentication separate from custody refusals', wrongKey);
 
 async function cancel(deadline: boolean) {
   const setup = await fixture();
+  const before = await inventory(setup.memory.candidateDirectory);
   const controller = new AbortController();
   const blocked = Promise.withResolvers<never>();
-  function stalled() { return blocked.promise; }
+  function stalled() {
+    return blocked.promise;
+  }
   const request = vi.spyOn(current.connection, 'request').mockImplementation(stalled);
+  const started = performance.now();
   const pending = setup.restore({ signal: controller.signal, timeoutMs: 3_000 });
   const rejected = expect(pending).rejects.toEqual(refused);
   void rejected.catch(ignoreFailure);
   void blocked.promise.catch(ignoreFailure);
-  function entered() { return request.mock.calls.length > 0; }
+  function entered() {
+    return request.mock.calls.length > 0;
+  }
   try {
     await until(entered, 2_500);
-    if (!deadline) controller.abort();
+    if (!deadline) {
+      controller.abort();
+    }
     await rejected;
   } finally {
     blocked.reject(new Error('Private custody path canary'));
   }
+  expect(performance.now() - started).toBeLessThan(4_000);
   expect(setup.target.connection.isClosed()).toBe(true);
+  expect(await inventory(setup.memory.candidateDirectory)).toEqual(before);
+  expect(await inventory(setup.memory.sourceDirectory)).toEqual(before);
   expect(setup.decrypt).not.toHaveBeenCalled();
   expect(await setup.objectTarget.client.bucketExists('files')).toBe(true);
   expect(setup.checked.mock.calls[0]![2].signal)
     .toBe(setup.eventRestore.mock.calls[0]![2].signal);
+  await expect(setup.restore()).rejects.toEqual(refused);
+  expect(setup.checked).toHaveBeenCalledOnce();
+  expect(setup.eventRestore).toHaveBeenCalledOnce();
+  expect(setup.objectRestore).toHaveBeenCalledOnce();
+  for (const [subject] of setup.request.mock.calls) {
+    expect(subject).not.toMatch(/DELETE|PURGE/);
+  }
 }
 it.each([false, true])('cancels custody validation with shared deadline=%s', cancel);
 
