@@ -100,7 +100,7 @@ async function fixture(assembled = true) {
     const grant = { ...identity, silo: 'test', requesterId: input.requesterId!,
       assistantId: input.assistantId, computerId: 'computer', thread: `thread-${id}` };
     const registration = authority.register(identity);
-    let tools = privateToolOffer(name);
+    let tools: ToolServer[] = privateToolOffer(name);
     input.tools = structuredClone(tools);
     toolKey = tools[0]!.key;
     const ended = Promise.withResolvers<void>();
@@ -200,6 +200,7 @@ async function isolates(generation: number, inputGeneration: number) {
     const first = await test.turn();
     const second = await test.turn('B', generation, inputGeneration);
     await Promise.all([first.load(), second.load()]);
+    expect(first.thread['id']).not.toBe(second.thread['id']);
     expect(first.key).not.toBe(second.key);
     expect(first.binding.caller).not.toBe(second.binding.caller);
     expect(first.offered).toEqual(second.offered);
@@ -518,3 +519,87 @@ async function refusesForeignRegistrationWithoutClosingIt() {
 }
 it('refuses a foreign registration without closing its loaded catalogue',
   refusesForeignRegistrationWithoutClosingIt);
+
+function approvedElsewhere() { return true; }
+
+async function refusesOuterGrantMismatch(field: string) {
+  const test = await fixture();
+  try {
+    const turn = await test.turn();
+    // Isolate the loader's comparison from the assembler's separate approval checks.
+    turn.binding.checkTools = approvedElsewhere;
+    if (field === 'turn') turn.binding.grant.turnId = 'other-turn';
+    if (field === 'conversation') turn.binding.grant.conversation = 'other-chat';
+    if (field === 'generation') turn.binding.grant.generation++;
+    if (field === 'input generation') turn.binding.grant.inputGeneration++;
+    if (field === 'thread') turn.binding.grant.thread = '';
+    if (field === 'missing grant') Reflect.deleteProperty(turn.binding, 'grant');
+    await expect(turn.load()).rejects.toThrow('Private tools could not be loaded');
+    expect(turn.calls).toEqual(['thread/unsubscribe', 'thread/loaded/list']);
+    expect(test.mcp.size).toBe(0);
+    expect(test.authority.identify(`Bearer ${turn.binding.caller}`)).toBeUndefined();
+  } finally { await test.close(); }
+}
+it.each(['turn', 'conversation', 'generation', 'input generation', 'thread', 'missing grant'])(
+  'refuses a %s mismatch even when an approval checker accepts it', refusesOuterGrantMismatch);
+
+async function refusesReapprovedGrant() {
+  const test = await fixture();
+  try {
+    const turn = await test.turn();
+    test.pause('discovery');
+    const loading = turn.load();
+    const refused = expect(loading).rejects.toThrow('Private tools could not be loaded');
+    await test.reached.promise;
+    turn.binding.grant.expires += 1000;
+    const approval = await privateCatalogue(test.authority, turn.binding.caller, turn.binding.grant);
+    expect(approval.tools).toHaveLength(1);
+    turn.binding.tools = approval.tools;
+    test.release.resolve();
+    await refused;
+    expect(test.mcp.size).toBe(0);
+    expect(turn.close).toHaveBeenCalled();
+  } finally { await test.close(); }
+}
+it('refuses a replaced grant even if the assembler approves it again', refusesReapprovedGrant);
+
+async function refusesChangedRegistration(change: 'object' | 'caller') {
+  const test = await fixture();
+  try {
+    const turn = await test.turn();
+    test.pause('discovery');
+    const loading = turn.load();
+    const refused = expect(loading).rejects.toThrow('Private tools could not be loaded');
+    await test.reached.promise;
+    if (change === 'object') turn.binding.registration = { ...turn.binding.registration };
+    else turn.binding.registration.caller = 'another-caller';
+    test.release.resolve();
+    await refused;
+    expect(test.authority.identify(`Bearer ${turn.binding.caller}`)).toBeUndefined();
+    expect(test.mcp.size).toBe(0);
+    expect(turn.close).toHaveBeenCalled();
+  } finally { await test.close(); }
+}
+it.each(['object', 'caller'] as const)(
+  'refuses a changed registration %s with the original binding otherwise intact',
+  refusesChangedRegistration);
+
+async function closesDuringNativeStart(ending: 'cancel' | 'stop' | 'revoked') {
+  const test = await fixture();
+  try {
+    test.pause('native start');
+    const starting = test.turn();
+    const refused = expect(starting).rejects.toThrow('Private tools could not be loaded');
+    await test.reached.promise;
+    if (ending === 'cancel') await test.loads.cancel('A');
+    else if (ending === 'stop') await test.loads.stop();
+    else test.authority.remove('A');
+    test.release.resolve();
+    await refused;
+    expect(test.loads.size).toBe(0);
+    expect(test.mcp.size).toBe(0);
+    expect(test.grants.size).toBe(0);
+  } finally { await test.close(); }
+}
+it.each(['cancel', 'stop', 'revoked'] as const)(
+  'discards a delayed native start after %s before binding or approval', closesDuringNativeStart);
