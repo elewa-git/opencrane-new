@@ -166,3 +166,57 @@ async function reportsRoutesWhenTheLastMonitoringRequestExpires() {
 }
 it('reports the last routes when a monitoring request expires at the deadline',
   reportsRoutesWhenTheLastMonitoringRequestExpires);
+
+async function retriesRouteTimeoutBeforeTheDeadline() {
+  monitoringReplies([missingPooled, complete]);
+  const fetchRoutes = globalThis.fetch;
+  let requests = 0;
+  function timeoutSecondRequest(...args: Parameters<typeof fetch>) {
+    requests += 1;
+    if (requests === 2) {
+      return Promise.reject(new DOMException('Monitoring request expired', 'TimeoutError'));
+    }
+    return fetchRoutes(...args);
+  }
+  vi.stubGlobal('fetch', timeoutSecondRequest);
+  let failure: unknown;
+  function recordFailure(error: unknown) {
+    failure = error;
+  }
+  const pending = completeRoutes(peer).catch(recordFailure);
+  await vi.advanceTimersByTimeAsync(50);
+  await pending;
+  expect(failure).toBeUndefined();
+  expect(requests).toBe(3);
+}
+it('retries a route monitoring timeout within the original deadline',
+  retriesRouteTimeoutBeforeTheDeadline);
+
+async function retainsRoutesAcrossRequestTimeouts() {
+  monitoringReplies([missingPooled]);
+  const fetchRoutes = globalThis.fetch;
+  let requests = 0;
+  function timeoutLaterRequests(...args: Parameters<typeof fetch>) {
+    requests += 1;
+    if (requests > 1) {
+      return Promise.reject(new DOMException('Monitoring request expired', 'TimeoutError'));
+    }
+    return fetchRoutes(...args);
+  }
+  vi.stubGlobal('fetch', timeoutLaterRequests);
+  let failure: unknown;
+  function recordFailure(error: unknown) {
+    failure = error;
+  }
+  const pending = completeRoutes(peer).catch(recordFailure);
+  await vi.advanceTimersByTimeAsync(19_999);
+  expect(failure).toBeUndefined();
+  await vi.advanceTimersByTimeAsync(1);
+  await pending;
+  const actual = [...expected];
+  actual.splice(actual.indexOf('peer-2/pooled'), 1);
+  expect(failure).toHaveProperty('actual', actual);
+  expect(failure).toHaveProperty('expected', expected);
+}
+it('retains the last observed routes when later requests time out until expiry',
+  retainsRoutesAcrossRequestTimeouts);

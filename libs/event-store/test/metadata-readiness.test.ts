@@ -171,3 +171,50 @@ async function retainsMetadataWhenLaterRequestsExpire() {
 }
 it('retains observed metadata and request timeout details at the original deadline',
   retainsMetadataWhenLaterRequestsExpire);
+
+async function reportsBothPeerAndLeaderAtExpiry() {
+  monitoringReplies([ready]);
+  const follower = structuredClone(ready);
+  follower.meta_cluster.leader = 'peer-2';
+  const leader = structuredClone(ready);
+  leader.meta_cluster.leader = 'peer-2';
+  leader.meta_cluster.replicas[0]!.name = 'peer-1';
+  const offlineLeader = {
+    ...leader,
+    meta_cluster: {
+      ...leader.meta_cluster,
+      replicas: [
+        { name: 'peer-1', current: false, offline: true },
+        { name: 'peer-3', current: true },
+      ],
+    },
+  };
+  const leaderPeer = { ...peer, name: 'peer-2', monitor: 4 };
+  function fetchMetadata(address: string) {
+    if (address.endsWith('/healthz?js-meta-only=true')) {
+      return Promise.resolve(new Response('ok'));
+    }
+    if (address === 'http://127.0.0.1:4/jsz') {
+      return Promise.resolve(Response.json(offlineLeader));
+    }
+    return Promise.resolve(Response.json(follower));
+  }
+  vi.stubGlobal('fetch', fetchMetadata);
+  let failure: unknown;
+  function recordFailure(error: unknown) {
+    failure = error;
+  }
+  const pending = metadataReady(peer, [peer, leaderPeer]).catch(recordFailure);
+  await vi.advanceTimersByTimeAsync(19_999);
+  expect(failure).toBeUndefined();
+  await vi.advanceTimersByTimeAsync(1);
+  await pending;
+  const observations = {
+    peer: { name: 'peer-1', report: follower },
+    leader: { name: 'peer-2', report: offlineLeader },
+  };
+  expect(failure).toHaveProperty('message', expect.stringContaining(JSON.stringify(observations)));
+  expect(failure).toHaveProperty('actual', follower);
+}
+it('reports the queried peer and the leader with its offline peer when readiness expires',
+  reportsBothPeerAndLeaderAtExpiry);

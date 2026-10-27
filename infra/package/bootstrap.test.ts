@@ -575,3 +575,40 @@ async function checksBootstrapContextImports() {
 
 it('includes every relative bootstrap runtime import in the narrow Docker context',
   checksBootstrapContextImports);
+
+async function waitsForDeletedSetupStreamToDisappear() {
+  const cluster = await clusterFixture();
+  try {
+    const connection = await cluster.client(cluster.peers[0]!);
+    vi.spyOn(cluster, 'client').mockResolvedValue(connection);
+    const request = connection.request.bind(connection);
+    let accountReads = 0;
+    let deleted = false;
+    async function staleFirstAccountCount(...args: Parameters<typeof connection.request>) {
+      if (args[0] === '$JS.API.STREAM.DELETE.EVENTS') {
+        const reply = await request(...args);
+        deleted = true;
+        return reply;
+      }
+      if (deleted && args[0] === '$JS.API.INFO') {
+        accountReads += 1;
+        if (accountReads === 1) {
+          const reply = await request(...args);
+          const account = reply.json<Record<string, unknown>>();
+          const staleAccount = { ...account, streams: 1 };
+          vi.spyOn(reply, 'json').mockReturnValue(staleAccount);
+          return reply;
+        }
+      }
+      return request(...args);
+    }
+    vi.spyOn(connection, 'request').mockImplementation(staleFirstAccountCount);
+    await preparePlacementStatistics(cluster);
+    expect(accountReads).toBeGreaterThanOrEqual(2);
+  } finally {
+    vi.restoreAllMocks();
+    await cluster.close();
+  }
+}
+it('waits for the deleted setup stream to disappear from the real account count',
+  waitsForDeletedSetupStreamToDisappear);
