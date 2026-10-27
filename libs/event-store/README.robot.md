@@ -304,8 +304,19 @@ Other errors, including timeouts with an unknown creation result, throw immediat
 After creation, setup waits for the stream leader and two current, online replicas
 before any route probe. `cluster-stream.test.ts` checks the selective wait and
 immediate propagation of other errors, including an incompatible replica count.
-The first test checks routes and stream copies without polling.
-Setup waits at most ten seconds each for complete routes and healthy metadata,
+The first test repeats the route and stream-copy checks before a route probe.
+`completeRoutes` polls each server's real `/routez` response every 25 ms for at most
+20 seconds. Each response must contain exactly three pooled routes and one `$SYS`
+route for each of the other two peers. It compares sorted lists, so repeated pooled
+routes remain required. Missing, extra and wrong-account routes fail with the last
+actual list and the complete expected list. A complete first response returns at once.
+Each HTTP request is limited to one second or the remaining route deadline.
+`route-readiness.test.ts` advances a controlled clock to check a late eighth route,
+a route arriving after ten seconds, the exact deadline, missing pooled or system
+routes, extra routes and wrong accounts.
+`ready()` gives each peer its own route wait, followed by its metadata health wait.
+The earlier shared ten-second retry could expire while a later peer was still connecting.
+Setup waits at most twenty seconds per peer for complete routes and ten for healthy metadata,
 and five seconds each for placement and current stream copies. These waits poll real state and finish
 as soon as it is ready; they do not add a fixed startup delay.
 Failed peer startup waits for process output to close before classifying a missing

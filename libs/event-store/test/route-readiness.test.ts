@@ -65,3 +65,74 @@ async function waitsForTheLastPooledRoute() {
 }
 it('waits for the last pooled route before accepting all eight routes',
   waitsForTheLastPooledRoute);
+
+const expected = [
+  'peer-2/$SYS', 'peer-2/pooled', 'peer-2/pooled', 'peer-2/pooled',
+  'peer-3/$SYS', 'peer-3/pooled', 'peer-3/pooled', 'peer-3/pooled',
+];
+const extraPooled = [...complete, { remote_name: 'peer-2' }];
+const wrongAccount = [...missingPooled, { remote_name: 'peer-2', account: 'OTHER' }];
+const missingSystem = [...complete];
+missingSystem.splice(1, 1);
+const incompleteRoutes = [
+  { name: 'missing pooled route', routes: missingPooled, missing: 'peer-2/pooled' },
+  { name: 'missing system route', routes: missingSystem, missing: 'peer-2/$SYS' },
+  { name: 'extra pooled route', routes: extraPooled, extra: 'peer-2/pooled' },
+  { name: 'wrong account with eight routes', routes: wrongAccount,
+    missing: 'peer-2/pooled', extra: 'peer-2/OTHER' },
+];
+
+async function refusesRoutesThatNeverMatch(scenario: typeof incompleteRoutes[number]) {
+  monitoringReplies([scenario.routes]);
+  let failure: unknown;
+  function recordFailure(error: unknown) {
+    failure = error;
+  }
+  const pending = completeRoutes(peer).catch(recordFailure);
+  await vi.advanceTimersByTimeAsync(19_999);
+  expect(failure).toBeUndefined();
+  await vi.advanceTimersByTimeAsync(1);
+  await pending;
+  expect(failure).toBeInstanceOf(Error);
+  const comparison = failure as Error & { actual: string[]; expected: string[] };
+  expect(comparison.message).toContain('peer-1');
+  expect(comparison.expected).toEqual(expected);
+  const actual = [...expected];
+  if (scenario.missing) {
+    actual.splice(actual.indexOf(scenario.missing), 1);
+  }
+  if (scenario.extra) {
+    actual.push(scenario.extra);
+  }
+  expect(comparison.actual).toEqual(actual.sort());
+}
+it.each(incompleteRoutes)('reports actual and expected routes at the deadline: $name',
+  refusesRoutesThatNeverMatch);
+
+async function acceptsCompleteRoutesWithoutWaiting() {
+  monitoringReplies([complete]);
+  await completeRoutes(peer);
+  expect(performance.now()).toBe(0);
+}
+it('accepts every required route in any order without waiting', acceptsCompleteRoutesWithoutWaiting);
+
+async function allowsRoutesToFinishAfterTheOldSharedDeadline() {
+  const replies: unknown[][] = [];
+  for (let index = 0; index < 440; index++) {
+    replies.push(missingPooled);
+  }
+  replies.push(complete);
+  monitoringReplies(replies);
+  let finished = false;
+  function markFinished() {
+    finished = true;
+  }
+  const pending = completeRoutes(peer).then(markFinished);
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(finished).toBe(false);
+  await vi.advanceTimersByTimeAsync(1_000);
+  await pending;
+  expect(finished).toBe(true);
+}
+it('allows a pooled route to finish after the former shared ten-second deadline',
+  allowsRoutesToFinishAfterTheOldSharedDeadline);

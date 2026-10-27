@@ -1,0 +1,1 @@
+- Wait for every required NATS cluster route before starting fixture checks, and report the actual and expected routes if the wait expires.

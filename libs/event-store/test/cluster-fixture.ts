@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { isDeepStrictEqual } from 'node:util';
 import { JetStreamApiError } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/transport-node';
 import { expect, vi } from 'vitest';
@@ -37,13 +38,13 @@ export async function clusterFixture(missingTrust = false, children: ChildProces
     owned.child = await startPeer(directory, owned.env, children);
   }
   async function ready() {
-    async function allReady() {
-      for (const peer of peers) {
-        await completeRoutes(peer);
+    for (const peer of peers) {
+      await completeRoutes(peer);
+      async function currentMetadataReady() {
         await metadataReady(peer);
       }
+      await vi.waitFor(currentMetadataReady, { timeout: 10_000 });
     }
-    await vi.waitFor(allReady, { timeout: 10_000 });
   }
   async function close() {
     try {
@@ -143,13 +144,6 @@ export async function clusterFixture(missingTrust = false, children: ChildProces
 }
 
 export async function completeRoutes(peer: Peer) {
-  const response = await fetch(`http://127.0.0.1:${peer.monitor}/routez`,
-    { signal: AbortSignal.timeout(1000) });
-  const result: unknown = await response.json();
-  if (!result || typeof result !== 'object' || !('routes' in result) ||
-    !Array.isArray(result.routes)) {
-    throw new Error('Invalid route monitoring response');
-  }
   const expected: string[] = [];
   for (let index = 1; index <= 3; index++) {
     const peerName = `peer-${index}`;
@@ -159,11 +153,42 @@ export async function completeRoutes(peer: Peer) {
       expected.push(`${peerName}/$SYS`);
     }
   }
+  expected.sort();
+  const deadline = performance.now() + 20_000;
+  let actual: string[] = [];
+  // Allow each peer's pooled connections to finish without accepting a partial route list.
+  while (true) {
+    const requestRemaining = deadline - performance.now();
+    if (requestRemaining <= 0) {
+      break;
+    }
+    const requestTimeout = Math.min(1000, Math.ceil(requestRemaining));
+    actual = await currentRoutes(peer, requestTimeout);
+    if (isDeepStrictEqual(actual, expected)) {
+      return;
+    }
+    const remaining = deadline - performance.now();
+    if (remaining > 0) {
+      await delay(Math.min(25, remaining));
+    }
+  }
+  expect(actual, `Routes for ${peer.name} did not become complete within 20000 ms`)
+    .toEqual(expected);
+}
+
+async function currentRoutes(peer: Peer, timeout: number) {
+  const response = await fetch(`http://127.0.0.1:${peer.monitor}/routez`,
+    { signal: AbortSignal.timeout(timeout) });
+  const result: unknown = await response.json();
+  if (!result || typeof result !== 'object' || !('routes' in result) ||
+    !Array.isArray(result.routes)) {
+    throw new Error('Invalid route monitoring response');
+  }
   const actual: string[] = [];
   for (const route of result.routes) {
     actual.push(routeDescription(route));
   }
-  expect(actual.sort()).toEqual(expected.sort());
+  return actual.sort();
 }
 
 function routeDescription(route: unknown) {
