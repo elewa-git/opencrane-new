@@ -16,6 +16,7 @@ type Options = {
   store: EventStore;
   // Read the current connection after history, without opening or resuming a process.
   current(binding: Binding): ActiveTurn | undefined;
+  refresh?(): Promise<void>;
 };
 
 function matches(active: ActiveTurn, silo: string, saved: Binding) {
@@ -61,6 +62,7 @@ export async function stopInvalidatedMemory(options: Options, input: unknown)
       candidate.data.conversationId, candidate.data.turnId);
     const saved = confirmedBinding(chat, candidate);
     if (!saved) return 'ignored';
+    await options.refresh?.();
     const active = options.current(saved);
     if (!active || !matches(active, options.silo, saved)) return 'ignored';
     // Send without yielding after checking the live binding. Saved invalidation

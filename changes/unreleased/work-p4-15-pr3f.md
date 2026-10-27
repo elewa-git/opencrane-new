@@ -1,0 +1,1 @@
+Saved memory invalidations now reach the exact connected private turn through bridge polling. Failed delivery retries without waking a computer; other sessions and replacement turns keep running. Native memory admission remains disabled.

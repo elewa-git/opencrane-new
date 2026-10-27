@@ -78,7 +78,10 @@ after a saved correction or forget. It keeps every loaded reference for replay a
 returns a receipt without fact text. An internal reaction can send Stop after confirming
 that saved invalidation belongs to the connected private turn. The computer handles
 repeated Stops once and clears the reply even if the turn has just completed.
-The reaction needs no read access from the former user. Automatic detection and subscriptions remain planned.
+The bridge polls saved invalidations for its connected private turns and retries uncertain
+Stop delivery. It checks the current turn and computer after reading history, without
+waking a computer. One slow chat cannot delay another chat's check or connection shutdown.
+The reaction needs no read access from the former user. Detecting new causes remains planned.
 Retries recover the same saved receipt after the old fact expires. A competing recall
 keeps its added references when the server reloads and records the invalidation.
 After a restart, memory recovery uses the existing private keys and saved command records.
@@ -115,7 +118,7 @@ flowchart LR
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
-  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, Stop for one turn and checked reports| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, saved memory Stops and checked reports| computer["apps/computer<br/>assistant computers"]
   computer -.->|records private thread before tool approval| server
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime

@@ -1,3 +1,4 @@
+import { memoryBridge } from '../memory/bridge.ts';
 import { releaseTurnCredentials } from './turn-credentials.ts';
 import { prepareRoutineThread } from './routine-thread.ts';
 import { executorStop } from '../computers/stop-executor.ts';
@@ -32,7 +33,8 @@ type BridgeOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
   Partial<Pick<ChatOptions, 'binding'>> &
   Pick<Parameters<typeof bridgeControl>[0], 'stopExecution'>;
 type RoutineStart = NonNullable<Parameters<typeof turnCommand>[1]['routineStart']>;
-type ReportOptions = BridgeOptions & { routineStart: RoutineStart };
+type ReportOptions = BridgeOptions & { routineStart: RoutineStart;
+  memory: ReturnType<typeof memoryBridge> };
 type BridgeInput = { url: string; computerId: string; assistantId: string; bearer: string };
 type ReportBatch = { values: unknown[]; sequences: number[]; textLength: number;
   bytes: number; started: boolean };
@@ -111,6 +113,7 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
       acknowledgement.refused = error.message;
     }
     if (status === 'started' && binding) {
+      if (result !== 'duplicate') await options.memory.accept(report, binding);
       await releaseTurnCredentials(options, context, tokens, report, binding, acknowledgement);
     }
   }
@@ -182,6 +185,7 @@ function reportReceiver(options: ReportOptions, input: BridgeInput,
       if (receiptData.safeParse(value).success) return;
       if (approvals.receive(value)) return;
       const report = reportDetails.parse(value);
+      options.memory.observe(report);
       const queue: ReportQueue = queues.get(report.conversationId) ??
         { pending: Promise.resolve(), count: 0, bytes: 0 };
       const newQueueOverLimit = !queues.has(report.conversationId) && queues.size >= 64;
@@ -268,7 +272,8 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     routineStarts.clear();
   }
   socket.once('close', forgetRoutineStarts);
-  const reportOptions = { ...options, routineStart };
+  const memory = memoryBridge(options, input, socket);
+  const reportOptions = { ...options, routineStart, memory };
   const reports = reportReceiver(reportOptions, input, tokens, socket, refuse, approvals, control);
   socket.on('message', reports.receiveReport);
   try {
@@ -296,7 +301,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     return reportsDone;
   }
   return {
-    socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting, control,
+    socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting, control, memory,
     bindRoutineStart, computerId: input.computerId, assistantId: input.assistantId,
     prepareRoutineThread: prepareRoutineThread.bind(undefined, socket),
     get rejection() { return rejection; },
@@ -375,7 +380,15 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   function connectionId(assistantId: string) {
     return connectionIds.get(assistantId);
   }
-  const processor = assistantProcessor(options, tokens, refused, connection, connectionId, logger);
+  function connected(assistantId: string) {
+    if (signal.aborted) return undefined;
+    for (const link of links.values()) {
+      if (link.assistantId === assistantId && link.socket.readyState === WebSocket.OPEN) return link;
+    }
+    return undefined;
+  }
+  const processor = assistantProcessor(options, tokens, refused, connection, connectionId,
+    logger, connected);
   const controls = processor.watchControls(signal);
   async function refreshConversations(head: number) {
     // Reuse the chat list during delivery until events or projection catch-up change it.
@@ -393,6 +406,7 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
       try {
         const head = await options.store.head();
         for (const link of links.values()) link.approvals.poll(head);
+        groups.forEach(processor.pollMemory);
         if (head === previousHead && !pending && !processing) {
           await delay(250, undefined, { signal });
           continue;

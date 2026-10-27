@@ -1,3 +1,4 @@
+import type { memoryBridge } from '../memory/bridge.ts';
 import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
 import { readComputerControl } from '@opencrane/auth';
@@ -58,7 +59,8 @@ function pendingManualStops(rows: Awaited<ReturnType<typeof chatHistory>>,
 
 export function assistantProcessor(options: WatchOptions, tokens: Tokens, refused: Set<string>,
   connection: Connection,
-  connectionId: (assistantId: string) => number | undefined, logger: Logger) {
+  connectionId: (assistantId: string) => number | undefined, logger: Logger,
+  connected?: (assistantId: string) => { memory: ReturnType<typeof memoryBridge> } | undefined) {
   const seen = new Map<string, Progress>();
   const checkingStops = new Map<string, Promise<void>>();
   let watchedAssistants = new Set<string>();
@@ -227,6 +229,16 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     }
   }
 
+  function pollMemory(sessions: AgentSession[]) {
+    const pending: Promise<void>[] = [];
+    for (const session of sessions) {
+      if ('contextKind' in session && session.contextKind === 'shared_child') continue;
+      const link = connected?.(session.assistantId);
+      if (link) pending.push(link.memory.poll(session.conversationId));
+    }
+    return pending;
+  }
+
   function pollStops(sessions: AgentSession[]) {
     for (const conversation of sessions) {
       const conversationId = conversation.conversationId;
@@ -296,5 +308,5 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     }
   }
 
-  return { processAssistant, pollStops, settledStops, watchControls, forgetMissing };
+  return { processAssistant, pollStops, pollMemory, settledStops, watchControls, forgetMissing };
 }
