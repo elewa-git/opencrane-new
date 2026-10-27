@@ -933,7 +933,8 @@ A partial event archive cannot authorise a full restore; full P5-8 needs live P5
 
 `restoreRecoveryBackup` in `recovery-restore.ts` takes source and target NATS
 connections, source and target storage clients, and the file restore options without
-`proof`. It also requires `effectsDisabled: true` and `memory`, containing the trusted
+`proof`. It also requires `volumeDirectory`, `effectsDisabled: true` and `memory`,
+containing the trusted
 current NATS `source`, `sourceDirectory` and prepared `candidateDirectory`. These
 private connections and paths stay in memory; there is no new command-line argument.
 The archive source and current deletion evidence are separate inputs. The stopped,
@@ -962,6 +963,23 @@ private descriptors, matching silo/attempt/archive hashes, encrypted object chec
 and event-derived addresses and MIME types. It erases the checked plaintext.
 It checks that NATS contains no streams and storage contains only its owner-marker
 bucket. It verifies the actual storage owner and process list before native restore.
+Immediately before native restore, `checkComputerVolumeBackup` checks the version-2
+multi-home descriptor, both exact event archive hashes, silo and attempt. It reuses
+the inventory's event reader to require every retained computer and generation,
+including an explicitly empty export when events contain no computer claims.
+Every listed encrypted home must be present, with no extra files. The backup key
+comes from the same private `backupKeyFile` used by the object copy.
+
+Private files and directories must have their expected permissions, owner and real
+paths, without symlinks. Their identities and modification times must stay unchanged
+through validation. Private reads allow 1 MiB for the event descriptor, 2 MiB for
+the home descriptor and 64 MiB for the event archive.
+Each home is authenticated with the exporter's complete associated data. Decrypted
+chunks are counted, hashed and immediately erased; none are extracted or returned.
+All homes share the descriptor's 64 MiB allowance and the original recovery bounds.
+Cancellation and deadline checks continue between chunks. Source history and input
+files are checked again before returning. This checks saved bytes, not mounted ownership.
+
 Native restore then validates the reachable source again. Its exact result goes to
 object restore, which repeats validation against the restored events and reads back
 all uploaded bytes. Only confirmed completion of both stages calls `checkMemoryRestore`
@@ -979,10 +997,10 @@ only `{ kind: 'events-objects-and-custody-only' }`. Targets stay intact until th
 explicitly disposes of them; a second attempt with either claimed target refuses.
 There is no command-line wrapper or new archive format.
 
-P5-8 PR 3b is PARTIAL. This result never authorises replay, reads or reopening.
-Computer volumes, CNPG/WAL and database restore, full comparisons and credential
+P5-8 PR 3c is PARTIAL. This result never authorises replay, reads or reopening.
+Mounted computer-volume restoration, CNPG/WAL and database restore, full comparisons and credential
 renewal still block reopening. Coordinated live recovery is NOT RUN. The
-[receipt](../../docs/process/p5-8-pr3b/receipt.md) records local fixture checks.
+[receipt](../../docs/process/p5-8-pr3c/receipt.md) records local fixture checks.
 `recovery-custody.test.ts` restores real events and objects from an old archive, then
 checks current deletion markers. It refuses stale or missing custody, unavailable
 surviving keys, missing next-revision or orphan markers, changed inventories, wrong

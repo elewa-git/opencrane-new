@@ -23,7 +23,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
   package -->|uses local cluster| devbox
-  package -->|starts services, checks computer volume bindings, exports all homes, copies and restores files, checks current memory keys and replays memory| apps["apps<br/>product services and replay"]
+  package -->|starts services, checks computer volume bindings, exports and checks encrypted homes, copies and restores files, checks current memory keys and replays memory| apps["apps<br/>product services and replay"]
   package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
@@ -214,8 +214,11 @@ events and leaves uncertain results isolated for inspection. It starts no produc
 processes. This does not restore or reopen a working installation.
 The [restore notes](README.robot.md#event-byte-restore) explain the requirements.
 
-The combined restore helper checks both copies before changing either target. It
-restores events first, then files, and checks current memory keys under one time limit.
+The combined restore helper checks events, files and every encrypted computer home
+before changing either target. It refuses missing homes or a different saved computer
+generation. It checks each home without extracting or keeping its contents. It then
+restores events, restores files and checks current memory keys under one time limit.
+Restoring homes onto mounted volumes still needs work.
 The current deletion evidence comes from a trusted source, separately from the old archive.
 The proposed key folder must already be prepared; the helper copies no keys. Only privately
 provisioned local targets can be used. Failed or cancelled work leaves both targets isolated
