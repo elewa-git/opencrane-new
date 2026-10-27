@@ -20,7 +20,7 @@ flowchart LR
   apps --> server["apps/server<br/>back end"]
   ops -->|starts and pauses| computer
   server -->|messages, private routine preparation and turns, files and Stop for one turn| computer
-  computer -->|progress and results| server
+  computer -->|preparation replies, progress and results| server
   computer -.->|records private thread before tool approval| server
   computer -->|checks command ownership| executor["socket-denied executor"]
   computer -->|runs| desktop["Codex, browser and desktop"]
@@ -71,8 +71,9 @@ Stops share the same access removal and interruption.
 An internal routine turn keeps its saved input id separate from its execution id.
 The computer starts an empty private thread and returns its real id before the server
 records the routine's spending allowance. It keeps that process for one matching delivery.
-Expiry, Stop or disconnect closes an unused process. The journal returns the input id,
-turn id and spending root when asking the server to start.
+A refused or failed preparation leaves other conversations running.
+Expiry closes only the unused process. Stop or disconnect also removes unused preparations.
+The journal returns the input id, turn id and spending root when asking the server to start.
 Automatic routine execution remains disabled.
 
 ## Processes it handles

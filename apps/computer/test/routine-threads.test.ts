@@ -29,14 +29,15 @@ function isFailure(frame: Record<string, unknown>) {
   return frame['type'] === 'agent.turn_failed';
 }
 
-async function isolatesPreparationFailure(failure: Failure) {
+async function routineFixture(failure: Failure) {
   const sessions: { closed: boolean }[] = [];
   const nativeStart = Promise.withResolvers<void>();
   const releaseStart = Promise.withResolvers<void>();
   let failPreparation = false;
-  let computer: Computer;
-  async function privateSession() {
-    if (failPreparation && failure === 'open') throw new Error('private-startup-canary');
+  function privateSession() {
+    if (failPreparation && failure === 'open') {
+      return Promise.reject(new Error('private-startup-canary'));
+    }
     const lifetime = Promise.withResolvers<void>();
     const state = { closed: false };
     sessions.push(state);
@@ -54,9 +55,22 @@ async function isolatesPreparationFailure(failure: Failure) {
       }
       return computer.driver.rpc(method, params);
     }
-    return { rpc, close, closed: lifetime.promise };
+    return Promise.resolve({ rpc, close, closed: lifetime.promise });
   }
-  computer = await fixture(true, undefined, privateSession);
+  const computer: Computer = await fixture(true, undefined, privateSession);
+  function failNextPreparation() {
+    failPreparation = true;
+  }
+  return { computer, sessions, nativeStart, releaseStart, failNextPreparation };
+}
+
+function isPreparationRefusal(frame: Record<string, unknown>) {
+  return frame['type'] === 'routine_prepare_refused' && frame['id'] === 'routine-turn';
+}
+
+async function isolatesPreparationFailure(failure: Failure) {
+  const test = await routineFixture(failure);
+  const { computer, sessions, nativeStart, releaseStart } = test;
   try {
     await startPrivate(computer, 'alice', 'thread-1');
     const expectedGrants = ['thread-1'];
@@ -65,7 +79,7 @@ async function isolatesPreparationFailure(failure: Failure) {
       expectedGrants.push('thread-2');
     }
     expect([...computer.grants]).toEqual(expectedGrants);
-    failPreparation = true;
+    test.failNextPreparation();
     const request = preparation();
     if (failure === 'expired request') request.expiresAt = Date.now() - 1;
     if (failure === 'expiry during startup') {
@@ -81,11 +95,7 @@ async function isolatesPreparationFailure(failure: Failure) {
       vi.useRealTimers();
     }
     function preparationSettled() {
-      const refused = { type: 'routine_prepare_refused', id: 'routine-turn' };
-      const received = computer.frames.some(matchesRefusal);
-      function matchesRefusal(frame: Record<string, unknown>) {
-        return frame['type'] === refused.type && frame['id'] === refused.id;
-      }
+      const received = computer.frames.some(isPreparationRefusal);
       expect(received || computer.socket.readyState === computer.socket.CLOSED).toBe(true);
     }
     await vi.waitFor(preparationSettled);

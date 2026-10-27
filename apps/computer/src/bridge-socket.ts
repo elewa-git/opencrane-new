@@ -107,7 +107,9 @@ async function prepareRoutine(input: Record<string, unknown>, runner: TurnRunner
     const reply = await runner.prepareRoutine(input);
     sendFileReceipt(next, reply);
   } catch {
-    next.close(1008, 'Routine thread unavailable');
+    // Keep other conversations running when only this preparation fails.
+    const refusal = { type: 'routine_prepare_refused', id: input['id'] };
+    sendFileReceipt(next, refusal);
   }
 }
 

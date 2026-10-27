@@ -5415,7 +5415,11 @@ current checks through the existing commands after startup. The authenticated co
 returns the actual thread id. Allocation records that id with the computer generation;
 admission and delivery keep the same identity. No new event or budget writer is added.
 The `routine_prepare` request contains only identity and expiry, with no instructions.
-Its reply wait is limited to ten seconds. Failed preparation sends Stop for that turn.
+Its reply wait is limited to ten seconds. A matching `routine_prepare_refused` reply
+ends that wait immediately and sends Stop only for that turn. The report receiver
+recognises the refusal as a preparation reply and leaves the shared socket open.
+The routine-sender test checks prompt refusal, an open socket and cleanup of the
+repeated preparation's session. Missing replies still time out and cancel that turn.
 The sender includes the allocated thread id and cancels an unused preparation when a
 post-wake check refuses delivery. An unused preparation also expires within sixty seconds.
 

@@ -38,7 +38,8 @@ type ReportBatch = { values: unknown[]; sequences: number[]; textLength: number;
   bytes: number; started: boolean };
 type ReportQueue = { pending: Promise<void>; count: number; bytes: number;
   last?: ReportBatch };
-const receiptData = z.object({ type: z.enum(['file_received', 'routine_prepared']) });
+const receiptData = z.object({ type: z.enum(['file_received', 'routine_prepared',
+  'routine_prepare_refused']) });
 const reportDetails = z.object({
   sequence: z.int(), previousSequence: z.int().optional(), conversationId: z.string(),
   turnId: z.string(), type: z.string(), messageId: z.string().optional(),

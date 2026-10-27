@@ -3,9 +3,11 @@ import { z } from 'zod';
 
 type Identity = { id: string; conversationId: string; assistantId: string;
   requesterId: string; expiresAt: number };
-const replySchema = z.object({ type: z.literal('routine_prepared'), id: z.string(),
+const preparedSchema = z.object({ type: z.literal('routine_prepared'), id: z.string(),
   conversationId: z.string(), assistantId: z.string(), requesterId: z.string(),
   threadId: z.string().min(1).max(200) });
+const refusedSchema = z.object({ type: z.literal('routine_prepare_refused'), id: z.string() });
+const replySchema = z.discriminatedUnion('type', [preparedSchema, refusedSchema]);
 
 export function prepareRoutineThread(socket: WebSocket, input: Identity) {
   const identity = { ...input };
@@ -30,6 +32,10 @@ export function prepareRoutineThread(socket: WebSocket, input: Identity) {
         const parsed = replySchema.safeParse(JSON.parse(bytes.toString()));
         if (!parsed.success || parsed.data.id !== identity.id) return;
         const reply = parsed.data;
+        if (reply.type === 'routine_prepare_refused') {
+          refused();
+          return;
+        }
         if (reply.conversationId !== identity.conversationId
           || reply.assistantId !== identity.assistantId
           || reply.requesterId !== identity.requesterId || identity.expiresAt <= Date.now()) {
