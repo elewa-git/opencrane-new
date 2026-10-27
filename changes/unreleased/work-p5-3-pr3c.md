@@ -1,0 +1,1 @@
+Check local PostgreSQL backup Service ownership and named CA and credential entries through the owned Kubernetes connection. Refuse incomplete or changed objects without printing private data. Backup and recovery installation remain blocked; live backup and restore are not yet qualified.

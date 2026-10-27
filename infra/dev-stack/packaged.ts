@@ -79,7 +79,8 @@ type PackageReview = {
 type SecretData = { data?: Record<string, string> };
 type ReleaseSecret = { metadata: { uid: string; labels?: Record<string, string> } };
 
-async function command(program: string, args: string[], timeoutMs = 120_000, cwd = root) {
+async function command(program: string, args: string[], timeoutMs = 120_000, cwd = root,
+  signal?: AbortSignal) {
   if (program === 'helm' && args.includes('--kube-context')) {
     const connection = await targetConnection();
     const context = args[args.indexOf('--kube-context') + 1];
@@ -95,7 +96,8 @@ async function command(program: string, args: string[], timeoutMs = 120_000, cwd
     args = [...args.slice(0, configIndex), ...args.slice(configIndex + 2)];
   }
   try {
-    const result = await execute(program, args, { cwd, env, timeout: timeoutMs });
+    const options = { cwd, env, timeout: timeoutMs, signal, maxBuffer: 1_048_576 };
+    const result = await execute(program, args, options);
     return result.stdout.trim();
   } catch {
     // Discard dependency output because it may contain credentials.
@@ -113,9 +115,11 @@ async function connectionArgs(expectedContext?: string) {
   return options;
 }
 
-async function kubectl(args: string[], context?: string, timeoutMs = 120_000) {
+async function kubectl(args: string[], context?: string, timeoutMs = 120_000,
+  signal?: AbortSignal) {
   const options = await connectionArgs(context);
-  return command('kubectl', [...options, ...args], timeoutMs);
+  signal?.throwIfAborted();
+  return command('kubectl', [...options, ...args], timeoutMs, root, signal);
 }
 
 async function readOwner() {
@@ -210,9 +214,10 @@ export async function packageConnectionArgs(owner: PackageOwner) {
   return { args, environment };
 }
 
-async function ownedKubectl(owner: PackageOwner, args: string[], timeoutMs?: number) {
+async function ownedKubectl(owner: PackageOwner, args: string[], timeoutMs?: number,
+  signal?: AbortSignal) {
   await packageConnectionArgs(owner);
-  return kubectl(args, owner.context, timeoutMs);
+  return kubectl(args, owner.context, timeoutMs, signal);
 }
 
 function valuesLocation(valuesFile: string) {
@@ -448,8 +453,8 @@ export async function installPackage(valuesFile: string) {
   const { values, review } = await readReviewedValues(valuesFile);
   const owner = await verifyPackageOwner();
   const context = owner.context;
-  function checkedKubectl(args: string[], timeoutMs?: number) {
-    return ownedKubectl(owner, args, timeoutMs);
+  function checkedKubectl(args: string[], timeoutMs?: number, signal?: AbortSignal) {
+    return ownedKubectl(owner, args, timeoutMs, signal);
   }
   await checkCnpgInstallation(values, namespace, checkedKubectl);
   const secrets = await checkNamedSecrets(values, review, owner);

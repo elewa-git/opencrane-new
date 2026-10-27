@@ -8,6 +8,7 @@ const files = [
   'infra/package/check-nats-inputs.ts',
   'infra/dev-stack/bounded-input.ts',
   'infra/dev-stack/cnpg.ts',
+  'infra/dev-stack/cnpg-backup.ts',
   'infra/dev-stack/config.ts',
   'infra/dev-stack/identity.ts',
   'infra/dev-stack/packaged.ts',
