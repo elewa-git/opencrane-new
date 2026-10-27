@@ -39,6 +39,8 @@ Before renewing a turn pass, the server checks every loaded fact and its current
 
 A saved invalidation can send Stop to the matching connected private turn. This internal
 reaction confirms the saved event and the current turn identity before sending.
+The bridge keeps the exact turn tracked after completion until the computer confirms
+that its reply buffer is clear. A replacement turn keeps its own identity and access.
 It does not require the former user to retain read access. Automatic detection and
 subscriptions are still planned.
 

@@ -79,7 +79,8 @@ returns a receipt without fact text. An internal reaction can send Stop after co
 that saved invalidation belongs to the connected private turn. The computer handles
 repeated Stops once and clears the reply even if the turn has just completed.
 The bridge polls saved invalidations for its connected private turns and retries uncertain
-Stop delivery. It checks the current turn and computer after reading history, without
+Stop delivery. It keeps each turn tracked after completion until the computer confirms
+that its private reply has been cleared. It checks the turn and computer after reading history, without
 waking a computer. One slow chat cannot delay another chat's check or connection shutdown.
 The reaction needs no read access from the former user. Detecting new causes remains planned.
 Retries recover the same saved receipt after the old fact expires. A competing recall
@@ -118,7 +119,7 @@ flowchart LR
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
-  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, saved memory Stops and checked reports| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, saved memory Stops, reply removal receipts and checked reports| computer["apps/computer<br/>assistant computers"]
   computer -.->|records private thread before tool approval| server
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime

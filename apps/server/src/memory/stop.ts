@@ -8,6 +8,7 @@ const identityFields = ['conversationId', 'turnId', 'requesterId', 'assistantId'
 type Binding = Pick<MemoryContextRecord, typeof identityFields[number]>;
 type ActiveTurn = {
   silo: string;
+  pendingClearance?: boolean;
   binding: Binding;
   socket: Pick<WebSocket, 'send' | 'readyState'>;
 };
@@ -31,8 +32,7 @@ function confirmedBinding(chat: ChatFacts,
   candidate: ReturnType<typeof memoryContextRecordedEventSchema.parse>) {
   const context = chat.memoryContext;
   const encoded = context?.events.get(candidate.id);
-  if (encoded !== JSON.stringify(candidate) || context?.status !== 'invalidated' ||
-      chat.turnEnded || chat.conversationClosed) {
+  if (encoded !== JSON.stringify(candidate)) {
     return undefined;
   }
   const decoded: unknown = JSON.parse(encoded);
@@ -65,6 +65,10 @@ export async function stopInvalidatedMemory(options: Options, input: unknown)
     await options.refresh?.();
     const active = options.current(saved);
     if (!active || !matches(active, options.silo, saved)) return 'ignored';
+    // Retain the terminal refusal unless this connection still owes private buffer clearance.
+    // An exact saved invalidation remains withdrawal evidence after completion.
+    if ((chat.memoryContext?.status !== 'invalidated' || chat.turnEnded ||
+        chat.conversationClosed) && !active.pendingClearance) return 'ignored';
     // Send without yielding after checking the live binding. Saved invalidation
     // already refuses dispatch and renewal while the computer clears its buffers.
     // Allow resending after uncertain delivery; the computer shares work for duplicate Stops.

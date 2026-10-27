@@ -177,13 +177,17 @@ function reportReceiver(options: ReportOptions, input: BridgeInput,
   }
   let legacyPending = Promise.resolve();
   const queues = new Map<string, ReportQueue>();
+  function receiveReceipt(value: unknown) {
+    if (control.receive(value)) return true;
+    if (options.memory.receive(value)) return true;
+    if (receiptData.safeParse(value).success) return true;
+    return approvals.receive(value);
+  }
   function receiveReport(raw: RawData) {
     try {
       const bytes = messageBytes(raw);
       const value: unknown = JSON.parse(bytes.toString());
-      if (control.receive(value)) return;
-      if (receiptData.safeParse(value).success) return;
-      if (approvals.receive(value)) return;
+      if (receiveReceipt(value)) return;
       const report = reportDetails.parse(value);
       options.memory.observe(report);
       const queue: ReportQueue = queues.get(report.conversationId) ??

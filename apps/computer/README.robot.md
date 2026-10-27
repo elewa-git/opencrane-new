@@ -86,8 +86,14 @@ reports and reconnect replay send `agent.output_lost` after clearing. Reports al
 sent to a socket cannot be recalled by this step. Text-free completion and other
 metadata survive. Memory-free partial replies retain their existing behaviour.
 
-Stop also clears a completed turn's unacknowledged private text. Repeated Stop is
-harmless. A different conversation with the same requested turn id does not match.
+Stop also clears a completed turn's unacknowledged private text. After checking the
+thread and clearing the buffer, the computer answers a targeted Stop with
+`private_output_cleared` on the same socket. This receipt contains only conversation, turn and thread ids. For a
+running private turn, cancellation blocks later private content before the receipt
+is sent. The receipt does not claim that access removal or interruption has finished.
+A wrong-thread Stop sends no receipt. The server keeps completed withdrawal tracked
+until this receipt arrives; missing receipts can safely cause another Stop.
+Repeated Stop is harmless. A different conversation with the same requested turn id does not match.
 While a private turn is cancelled, later content notifications are ignored; terminal
 notifications still finish cleanup and report the saved stopping reason. Reconnect
 does not restart the work. A later explicit request starts a fresh private thread.
