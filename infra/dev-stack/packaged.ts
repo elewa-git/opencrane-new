@@ -7,6 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { directory, root } from './config.ts';
 import { readBoundedJson, readBoundedText } from './bounded-input.ts';
+import { commandTimeout, type CommandLimits } from './command-limits.ts';
 import { secondary, stackId } from './identity.ts';
 import { targetConnection, targetRecorded } from './target.ts';
 import { checkCnpgInstallation } from './cnpg.ts';
@@ -80,9 +81,9 @@ type SecretData = { data?: Record<string, string> };
 type ReleaseSecret = { metadata: { uid: string; labels?: Record<string, string> } };
 
 async function command(program: string, args: string[], timeoutMs = 120_000, cwd = root,
-  signal?: AbortSignal) {
+  limits: CommandLimits = {}) {
   if (program === 'helm' && args.includes('--kube-context')) {
-    const connection = await targetConnection();
+    const connection = await targetConnection(limits);
     const context = args[args.indexOf('--kube-context') + 1];
     if (connection.context !== context) {
       throw new Error('Package target changed');
@@ -96,8 +97,10 @@ async function command(program: string, args: string[], timeoutMs = 120_000, cwd
     args = [...args.slice(0, configIndex), ...args.slice(configIndex + 2)];
   }
   try {
-    const options = { cwd, env, timeout: timeoutMs, signal, maxBuffer: 1_048_576 };
+    const timeout = commandTimeout(timeoutMs, limits);
+    const options = { cwd, env, timeout, signal: limits.signal, maxBuffer: 1_048_576 };
     const result = await execute(program, args, options);
+    commandTimeout(timeoutMs, limits);
     return result.stdout.trim();
   } catch {
     // Discard dependency output because it may contain credentials.
@@ -105,8 +108,8 @@ async function command(program: string, args: string[], timeoutMs = 120_000, cwd
   }
 }
 
-async function connectionArgs(expectedContext?: string) {
-  const connection = await targetConnection();
+async function connectionArgs(expectedContext?: string, limits: CommandLimits = {}) {
+  const connection = await targetConnection(limits);
   if (expectedContext && connection.context !== expectedContext) {
     throw new Error('Package target changed');
   }
@@ -116,10 +119,9 @@ async function connectionArgs(expectedContext?: string) {
 }
 
 async function kubectl(args: string[], context?: string, timeoutMs = 120_000,
-  signal?: AbortSignal) {
-  const options = await connectionArgs(context);
-  signal?.throwIfAborted();
-  return command('kubectl', [...options, ...args], timeoutMs, root, signal);
+  limits: CommandLimits = {}) {
+  const options = await connectionArgs(context, limits);
+  return command('kubectl', [...options, ...args], timeoutMs, root, limits);
 }
 
 async function readOwner() {
@@ -131,9 +133,9 @@ async function readOwner() {
   }
 }
 
-async function getNamespace(context?: string) {
+async function getNamespace(context?: string, limits: CommandLimits = {}) {
   const output = await kubectl(['get', 'namespace', namespace, '--ignore-not-found', '-o', 'json'],
-    context);
+    context, 120_000, limits);
   if (!output) return undefined;
   return JSON.parse(output) as Namespace;
 }
@@ -186,27 +188,28 @@ export async function preparePackage() {
   await saveOwner(owner);
 }
 
-export async function verifyPackageOwner() {
+export async function verifyPackageOwner(limits: CommandLimits = {}) {
+  commandTimeout(120_000, limits);
   await requireOwner();
   const owner = await readOwner();
-  const { context } = await targetConnection();
+  const { context } = await targetConnection(limits);
   if (!owner || owner.worktree !== root || owner.slot !== stackId ||
       owner.context !== context || owner.namespace !== namespace || owner.release !== release) {
     throw new Error('Package ownership differs from the recorded namespace');
   }
-  const found = await getNamespace(context);
+  const found = await getNamespace(context, limits);
   if (!found || !ownedNamespace(found, owner)) {
     throw new Error('Package ownership differs from the recorded namespace');
   }
   return owner;
 }
 
-export async function packageConnectionArgs(owner: PackageOwner) {
-  const checked = await verifyPackageOwner();
+export async function packageConnectionArgs(owner: PackageOwner, limits: CommandLimits = {}) {
+  const checked = await verifyPackageOwner(limits);
   if (checked.context !== owner.context || checked.namespaceUid !== owner.namespaceUid) {
     throw new Error('Package target changed');
   }
-  const connection = await targetConnection();
+  const connection = await targetConnection(limits);
   if (connection.context !== owner.context) throw new Error('Package target changed');
   const args = [`--context=${connection.context}`];
   const environment = { ...process.env };
@@ -216,8 +219,13 @@ export async function packageConnectionArgs(owner: PackageOwner) {
 
 async function ownedKubectl(owner: PackageOwner, args: string[], timeoutMs?: number,
   signal?: AbortSignal) {
-  await packageConnectionArgs(owner);
-  return kubectl(args, owner.context, timeoutMs, signal);
+  // Include ownership and target checks in the caller's time limit.
+  const limits: CommandLimits = { deadline: Date.now() + (timeoutMs ?? 120_000) };
+  if (signal) {
+    limits.signal = signal;
+  }
+  await packageConnectionArgs(owner, limits);
+  return kubectl(args, owner.context, timeoutMs, limits);
 }
 
 function valuesLocation(valuesFile: string) {

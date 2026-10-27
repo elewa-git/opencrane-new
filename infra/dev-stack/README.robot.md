@@ -2108,13 +2108,20 @@ These are required fixture ownership links; this change creates no fixture resou
 The returned kind, API version, name, namespace, UID and resource version must match
 or be present as appropriate. Each object is read again after the initial reads;
 changed UIDs or versions refuse. Reads use one 30-second deadline, cancellation and
-a 1 MiB output limit. Entries use strict base64 and valid UTF-8, with at most 64 KiB
-decoded per entry. Credentials must be non-empty printable ASCII without spaces.
+a 1 MiB output limit. The package passes the same cancellation signal and remaining
+time through namespace ownership and target checks, including Docker inspection and
+target-node reads. Each child command stops on cancellation or its remaining deadline.
+Completed checks do not reset the deadline. Entries use strict base64 and valid UTF-8,
+with at most 64 KiB decoded per entry. Credentials must be non-empty printable ASCII
+without spaces.
 The CA entry must contain one current, self-signed CA certificate with no extra data.
 All data stays in memory. No private files or resources need cleanup. Errors discard
 parser details, cancellation reasons and nested dependency or cleanup failures.
 
 `cnpg-backup.test.ts` uses synthetic Kubernetes replies and real Helm rendering.
+`infra/package/chart.test.mjs` cancels and times out real stalled child processes
+during namespace and target-node ownership reads. It checks child termination,
+the remaining time for each command, private connection paths and no later work.
 `cnpg-install.test.mjs` still checks refusal before Helm with synthetic image approval.
 Live checks are NOT RUN. Endpoint TLS identity, storage permissions and identity,
 image/helper approval, real base backup/WAL and recovery of `projections`, `handlers`

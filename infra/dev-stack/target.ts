@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { directory, root } from './config.ts';
 import { readBoundedJson, readBoundedText } from './bounded-input.ts';
+import { commandTimeout, type CommandLimits } from './command-limits.ts';
 import { secondary, stackId } from './identity.ts';
 
 const execute = promisify(execFile);
@@ -37,14 +38,17 @@ type Target = {
 };
 
 async function command(program: string, args: string[], timeout = 10_000,
-  configPath?: string) {
+  configPath?: string, limits: CommandLimits = {}) {
   try {
     const env = { ...process.env };
     if (configPath) {
       env['KUBECONFIG'] = configPath;
     }
-    const result = await execute(program, args,
-      { cwd: root, env, timeout, maxBuffer: 1024 * 1024 });
+    const remainingMs = commandTimeout(timeout, limits);
+    const options = { cwd: root, env, timeout: remainingMs,
+      signal: limits.signal, maxBuffer: 1024 * 1024 };
+    const result = await execute(program, args, options);
+    commandTimeout(timeout, limits);
     return result.stdout.trim();
   } catch {
     // Discard command output: kubeconfig and upstream errors can contain credentials.
@@ -90,16 +94,16 @@ function ids(output: string) {
   return output.split(/\s+/u);
 }
 
-async function resources() {
+async function resources(limits: CommandLimits = {}) {
   const containers = ids(await command('docker', ['ps', '-a', '--quiet', '--no-trunc',
-    '--filter', `label=k3d.cluster=${name}`]));
+    '--filter', `label=k3d.cluster=${name}`], 10_000, undefined, limits));
   const named = ids(await command('docker', ['ps', '-a', '--quiet', '--no-trunc',
-    '--filter', `name=^/k3d-${name}-`]));
+    '--filter', `name=^/k3d-${name}-`], 10_000, undefined, limits));
   for (const container of named) {
     if (!containers.includes(container)) containers.push(container);
   }
   const networks = ids(await command('docker', ['network', 'ls', '--quiet', '--no-trunc',
-    '--filter', `name=^${name}$`]));
+    '--filter', `name=^${name}$`], 10_000, undefined, limits));
   return { containers, networks };
 }
 
@@ -107,13 +111,14 @@ function isVolume(mount: { Type: string }) {
   return mount.Type === 'volume';
 }
 
-async function inspect(record: Target) {
-  const found = await resources();
+async function inspect(record: Target, limits: CommandLimits = {}) {
+  const found = await resources(limits);
   if (found.networks.length > 1 || found.containers.length > 3) {
     throw new Error('Unexpected target resources');
   }
   if (found.networks.length) {
-    const output = await command('docker', ['network', 'inspect', ...found.networks]);
+    const output = await command('docker', ['network', 'inspect', ...found.networks],
+      10_000, undefined, limits);
     const [network] = JSON.parse(output) as Resource[];
     if (!network || network.Labels?.[label] !== record.id ||
         (record.network && record.network !== network.Id)) {
@@ -125,7 +130,8 @@ async function inspect(record: Target) {
     record.network = network.Id;
   }
   if (found.containers.length) {
-    const output = await command('docker', ['inspect', ...found.containers]);
+    const output = await command('docker', ['inspect', ...found.containers],
+      10_000, undefined, limits);
     const containers = JSON.parse(output) as Resource[];
     if (containers.length !== found.containers.length) throw new Error('Target inspection incomplete');
     for (const container of containers) {
@@ -139,9 +145,9 @@ async function inspect(record: Target) {
   return found;
 }
 
-async function readNodes(record: Target) {
+async function readNodes(record: Target, limits: CommandLimits = {}) {
   const output = await command('kubectl', ['--context', context,
-    '--request-timeout=8s', 'get', 'nodes', '-o', 'json'], 10_000, kubeconfig);
+    '--request-timeout=8s', 'get', 'nodes', '-o', 'json'], 10_000, kubeconfig, limits);
   const { items } = JSON.parse(output) as { items: Node[] };
   const nodes: Record<string, string> = {};
   for (const node of items) {
@@ -158,13 +164,16 @@ async function readNodes(record: Target) {
   return nodes;
 }
 
-export async function targetConnection() {
-  if (!await targetRecorded()) return { context: 'k3d-ocn', kubeconfig: undefined };
+export async function targetConnection(limits: CommandLimits = {}) {
+  commandTimeout(10_000, limits);
+  const recorded = await targetRecorded();
+  commandTimeout(10_000, limits);
+  if (!recorded) return { context: 'k3d-ocn', kubeconfig: undefined };
   const record = await readTarget();
-  const found = await inspect(record);
+  const found = await inspect(record, limits);
   if (found.containers.length !== 3 || found.networks.length !== 1 ||
       Object.keys(record.nodes).length !== 3) throw new Error('Target creation is incomplete');
-  await readNodes(record);
+  await readNodes(record, limits);
   return { context, kubeconfig };
 }
 
