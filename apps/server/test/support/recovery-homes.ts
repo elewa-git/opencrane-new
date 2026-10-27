@@ -79,5 +79,5 @@ export async function recoveryHomes(source: Source, names: string[]) {
       await scratch.close();
     }
   }
-  return collect;
+  return Object.assign(collect, { read, contents });
 }

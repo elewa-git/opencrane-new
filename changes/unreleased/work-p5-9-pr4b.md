@@ -1,0 +1,1 @@
+- The interrupted-upgrade fixture now recovers one coordinated capture of events, files and two non-empty computer homes. Damaged or incomplete homes, resumed writers and expired or cancelled captures prevent recovery comparisons. Mounted-home restoration and live recovery remain untested.

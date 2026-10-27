@@ -1,0 +1,28 @@
+npm ci
+# PRIMARY_WORKTREE names the existing checkout that supplies the tool binaries.
+ln -s $PRIMARY_WORKTREE/.tools/nats-server .tools/nats-server
+ln -s $PRIMARY_WORKTREE/.tools/lychee .tools/lychee
+
+docker run -d --name pgtest-p5-9-pr4b -p 127.0.0.1::5432 -e POSTGRES_PASSWORD=test-only postgres:17.6-alpine
+docker port pgtest-p5-9-pr4b 5432
+docker exec pgtest-p5-9-pr4b pg_isready -U postgres
+export PG_TEST_URL=postgres://postgres:test-only@127.0.0.1:52219/postgres
+
+# Expected failure before implementation, then one successful rerun.
+nice -n 10 node_modules/.bin/vitest run infra/package/upgrade-recovery.test.ts -t 'fault: none' --maxWorkers=1 --no-file-parallelism
+# Expected refusal assertion failure before adding fault injection.
+nice -n 10 node_modules/.bin/vitest run infra/package/upgrade-recovery.test.ts -t 'fault: copy-corrupt' --maxWorkers=1 --no-file-parallelism
+
+nice -n 10 npm run lint
+nice -n 10 npm run typecheck
+nice -n 10 npm run check:events
+nice -n 10 npm run lint:unused
+nice -n 10 npm run lint:changelog
+
+# Two runs.
+nice -n 10 node_modules/.bin/vitest run infra/package/upgrade-recovery.test.ts --maxWorkers=1 --no-file-parallelism --reporter=verbose
+# First regression run includes security rules. Repeat the other six files.
+nice -n 10 node_modules/.bin/vitest run infra/package/upgrade-recovery-budget.test.ts infra/package/upgrade-recovery-check.test.ts infra/package/upgrade-recovery-files.test.ts infra/package/backup-capture.test.ts apps/server/test/recovery-restore.test.ts apps/server/test/recovery-custody.test.ts libs/events/test/security-rules.test.ts --maxWorkers=1 --no-file-parallelism
+
+docker rm -f -v pgtest-p5-9-pr4b
+git diff --check
