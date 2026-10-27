@@ -60,10 +60,11 @@ async function waitsForLatePlacementStatistics() {
   const refusal = new JetStreamApiError({
     code: 400, err_code: 10005, description: peerOffline,
   });
-  async function ensureStream() {
+  function ensureStream() {
     if (performance.now() < 6000) {
-      throw refusal;
+      return Promise.reject(refusal);
     }
+    return Promise.resolve();
   }
   let failure: unknown;
   function recordFailure(error: unknown) {
