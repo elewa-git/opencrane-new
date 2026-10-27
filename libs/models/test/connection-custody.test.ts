@@ -4599,7 +4599,8 @@ async function waitForDuplicateExpiry(probe: ReturnType<typeof envelope>, sequen
 }
 
 async function revokeOAuth(test: Awaited<ReturnType<typeof refreshFixture>>,
-  input: unknown = test.input, actorId = test.session.userId, db = pgDb(storage.queue)) {
+  input: unknown = { ...test.input, changeRef: 'revoke-first' },
+  actorId = test.session.userId, db = pgDb(storage.queue)) {
   const { revokePersonalOAuth } = await import('../src/oauth-revoke.ts');
   return revokePersonalOAuth(events.store, consentBinding, actorId, input, db);
 }
@@ -4647,7 +4648,8 @@ async function cancelsClaimedOAuthRefresh() {
     const append = events.store.append.bind(events.store);
     let pending: ReturnType<typeof sendRefresh> | undefined;
     async function race(command: AppendCommand) {
-      if (command.event.type === 'connection.revoked') {
+      const event = z.object({ type: z.string() }).parse(command.event);
+      if (event.type === 'connection.revoked') {
         pending = sendRefresh(test, claim);
       }
       return append(command);
@@ -4765,7 +4767,8 @@ async function refusesOAuthRevoke(change: string) {
         yield* read(subject, from, deadline);
       }
       vi.spyOn(events.store, 'readStream').mockImplementation(unavailable);
-      async function failedRelease<Result>(_name: string, work: (db: Db) => Promise<Result>) {
+      async function failedRelease<Result>(_name: string,
+        work: (db: Db) => Promise<Result>): Promise<never> {
         await work(db);
         throw new Error('refresh-canary');
       }
@@ -4788,3 +4791,128 @@ async function refusesOAuthRevoke(change: string) {
 it.each(['removed', 'removed with failed history', 'another member', 'admin',
   'generation', 'installation', 'reused reference'])(
   'refuses OAuth revoke for %s without exposing the account', refusesOAuthRevoke);
+
+async function retainsOAuthForRevokeWorker() {
+  const test = await refreshFixture();
+  try {
+    await revokeOAuth(test);
+    const rows = await history(events.store, test.subject, 'test');
+    const db = pgDb(storage.queue);
+    const custody = test.store.restart();
+    const cleanup = connectionCleanupHandler(events.store, db, custody, 'test');
+    await expect(cleanup.handle(rows[3]!.event, db)).resolves.toBeUndefined();
+    const scanned = await reconcileConnectionPage(events.store, db, custody, 'test');
+    expect(scanned).toMatchObject({ status: 'scanned', deleted: 0 });
+    expect(test.store.deletes).toBe(0);
+    expect(test.store.secrets.size).toBe(4);
+    await changeConsentAccess(test, 'removed');
+    await expect(revokeOAuth(test)).rejects.toBeInstanceOf(MemberAccessRefused);
+    expect(await history(events.store, test.subject, 'test')).toEqual(rows);
+  } finally {
+    await test.close();
+  }
+}
+it('retains private OAuth copies for the separate provider revoke worker',
+  retainsOAuthForRevokeWorker);
+
+async function checksRevokePublication(change: string) {
+  const test = await refreshFixture();
+  try {
+    const append = events.store.append.bind(events.store);
+    async function beforeAppend(command: AppendCommand) {
+      if (change === 'membership') {
+        const removed = envelope('test', `member-${test.session.userId}`, 'member.removed', {
+          memberId: test.session.userId, removedBy: 'admin',
+        });
+        await append({ event: removed,
+          expectedSequence: await events.store.head(removed.subject) });
+      } else if (change === 'deadline') {
+        vi.spyOn(performance, 'now').mockReturnValue(command.deadline! + 1);
+      } else {
+        const activity = envelope('test', 'conversation-unrelated', 'conversation.created', {
+          conversationId: 'unrelated', assistantId: 'assistant', createdBy: test.session.userId,
+        });
+        await append({ event: activity, expectedSequence: 0 });
+      }
+      return append(command);
+    }
+    vi.spyOn(events.store, 'append').mockImplementationOnce(beforeAppend);
+    if (change === 'unrelated activity') {
+      expect(await revokeOAuth(test)).toMatchObject({ status: 'revoked' });
+    } else {
+      await expect(revokeOAuth(test)).rejects.toThrow(/^OAuth revoke unavailable$/u);
+      expect(await history(events.store, test.subject, 'test')).toHaveLength(3);
+    }
+  } finally {
+    await test.close();
+  }
+}
+it.each(['membership', 'deadline', 'unrelated activity'])(
+  'checks OAuth revoke publication after %s', checksRevokePublication);
+
+async function refusesChangedRevokeReadback(field: string) {
+  const test = await refreshFixture();
+  try {
+    await revokeOAuth(test);
+    const read = events.store.readStream.bind(events.store);
+    async function* altered(subject: string, from?: number, deadline?: number) {
+      for await (const row of read(subject, from, deadline)) {
+        if (subject !== test.subject || row.event.type !== 'connection.revoked') {
+          yield row;
+          continue;
+        }
+        const changed = structuredClone(row);
+        if (field === 'principal') {
+          changed.event.principal = { kind: 'human', id: 'another-member' };
+        } else if (field === 'payload') {
+          changed.event.data = { ...connectionRevokedDataSchema.parse(row.event.data),
+            expectedSequence: 0 };
+        } else {
+          changed.event.id = 'another-operation';
+        }
+        yield changed;
+      }
+    }
+    vi.spyOn(events.store, 'readStream').mockImplementation(altered);
+    const writes = vi.spyOn(events.store, 'append');
+    await expect(revokeOAuth(test)).rejects.toThrow(/^OAuth revoke unavailable$/u);
+    expect(writes).not.toHaveBeenCalled();
+  } finally {
+    await test.close();
+  }
+}
+it.each(['principal', 'payload', 'id'])(
+  'refuses OAuth revoke recovery with a changed %s', refusesChangedRevokeReadback);
+
+async function revokesAfterOAuthRefresh(progress: string) {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    if (progress === 'saved') {
+      expect(await saveRefresh(test, claim)).toMatchObject({ status: 'saved', generation: 2 });
+    } else {
+      expect(await sendRefresh(test, claim)).toMatchObject({ status: 'verified' });
+    }
+    const before = await history(events.store, test.subject, 'test');
+    const input = { ...test.input, changeRef: 'revoke-after-refresh' };
+    if (progress === 'saved') {
+      input.expectedSequence = before.at(-1)!.sequence;
+      input.expectedGeneration = 2;
+      await expect(revokeOAuth(test)).rejects.toThrow(/^OAuth revoke unavailable$/u);
+    }
+    const result = await revokeOAuth(test, input);
+    expect(result).toMatchObject({ status: 'revoked', generation: input.expectedGeneration });
+    expect(await revokeOAuth(test, input)).toEqual(result);
+    await saveRefresh(test, claim);
+    expect(await test.start(input)).toEqual({ status: 'unknown' });
+    const after = await history(events.store, test.subject, 'test');
+    expect(after).toHaveLength(before.length + 1);
+    expect(after.at(-1)!.event.type).toBe('connection.revoked');
+    expect(test.refreshSends).toBe(1);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['saved', 'verified'])(
+  'revokes the current OAuth generation after a refresh reply is %s', revokesAfterOAuthRefresh);

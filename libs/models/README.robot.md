@@ -2,6 +2,38 @@
 
 For people, read [README.md](README.md) first.
 
+## Local OAuth revocation (Part of #50)
+
+PR 11a is split at the saved local revocation to stay below about 600 changed lines.
+`revokePersonalOAuth` is internal, without a route, package export or replay reaction.
+The authenticated actor must own the personal profile; an admin cannot revoke another
+member's personal account. Company OAuth accounts and their admin command remain later work.
+
+Input names the user, server, installation, profile, change reference, saved generation
+and that generation's activation position. Refresh start and claim records may follow
+that position without making the request stale. A replacement generation does make it stale.
+The shared profile lock covers preparation, one current membership decision, conditional
+`connection.revoked` append and exact readback. Only small membership and ownership
+streams enter the two-second access check. Target failures wait until after that decision.
+An established `MemberAccessRefused` survives a later database release failure.
+
+The event id derives from the saved generation's operation id. Competing references,
+duplicates and recovery after a lost append reply return the original receipt, without
+another event. Recovery checks the preceding OAuth generation and exact revoke identity
+and payload. Receipts include only status, sequence, generation, original change reference
+and `callsAvailable: false`. Other errors use the fixed `OAuth revoke unavailable` message.
+
+The existing fold invalidates the account and its refresh claim. A worker waiting for the
+same lock sees the revoke before it can send or save a replacement. A provider request
+already sent before the revoke is not undone. The bearer cleanup handler acknowledges
+OAuth revocations without deleting; maintenance retains OAuth histories and attempts.
+This preserves private material needed by the future provider revocation worker.
+
+Provider revocation through the reviewed transport, its private lost-reply recovery,
+retirement of all token copies, company handling, HTTP and governed use are NOT IMPLEMENTED
+in this first part. Fresh-install qualification and the full root suite are NOT RUN.
+No claim of complete OAuth revocation is made.
+
 ## Saving an OAuth refresh (Part of #50)
 
 `savePersonalOAuthRefresh` is internal, with no route or package export. It calls the
@@ -2414,6 +2446,8 @@ The fixtures use real NATS, OpenFGA and PostgreSQL. Custody stays behind a test 
 It returns `retained`, `deleted`, or `absent` for a saved generation no longer in custody.
 The live connection cleanup reaction calls it. Replay never calls it, and it performs
 no provider call or release.
+OAuth histories and private attempts are retained for their separate workers, including
+after local revocation. Bearer cleanup cannot retire those copies.
 
 Saving and cleanup both use `withConnectionStage` with the same silo/member/server/profile
 lock name. The PostgreSQL advisory lock waits at most 1,000 ms for acquisition,

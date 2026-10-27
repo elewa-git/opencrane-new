@@ -53,6 +53,11 @@ member has since been removed. The saved replacement authorises that deletion. C
 membership is still required to receive the save receipt or save another generation.
 These internal commands do not enable tool use.
 
+The owning member can also save an internal account revocation once. Retries return
+the same saved result. A refresh waiting behind that save cannot send or replace the
+account. This currently records local revocation only. Private copies remain for a
+separate worker to revoke at the provider and retire them. Public routes remain unavailable.
+
 ## Where it fits
 
 This shared library is used by the server, background workers and personal computers.
@@ -87,7 +92,7 @@ flowchart LR
   models -->|stages credentials, callback codes and replies, confirms first accounts, starts, joins, claims and sends refresh attempts, saves replacements and removes old tokens even after member removal, recovers replies and checks signed accounts, shares a database lock for personal saves and cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves events, remote starts and unsent proof; recovers budgets in order and applies saved routine Stops; reads spending and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
+  models -->|saves events, local account revocations, remote starts and unsent proof; recovers budgets in order and applies saved routine Stops; reads spending and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -583,7 +588,7 @@ This adapter grants no tool access.
 Personal bearer commands save a staged reference or replace it at the expected version.
 The stream keeps only references and exact storage identities. Saved profiles remain
 unavailable for tool calls until their upstream account identity can be checked.
-Owners can revoke their own profiles through the server. The command returns the
+Owners can revoke their own bearer profiles through the server. The command returns the
 original receipt for an exact retry, without revoking anything at the provider.
 It checks current permission once after preparing the saved history, including when
 that history could not be loaded. A permission refusal takes precedence over a history error.
@@ -600,7 +605,7 @@ small page of private credentials. After restart, it can rebuild missing repair 
 from confirmed saved identities. It keeps uncertain stages and changed storage identities.
 Damaged credentials stay in storage while the scan checks healthy neighbours and later pages.
 Older credentials without discovery details stay in storage for individual checks.
-Configured workers clean old copies after a saved revoke or replacement.
+Configured workers clean old bearer copies after a saved revoke or replacement.
 The periodic scan can finish this cleanup after the reaction has used all its retries.
 The failed job stays available for inspection after the scan removes the old copy.
 The event store checks profile changes and admin blocks together when it saves a profile.
@@ -617,6 +622,7 @@ Configured workers check private token copies at startup and every 15 minutes.
 They remove only copies proven safe to delete, including abandoned saves and copies
 left after failed cleanup jobs. Each pass checks one small page at a time.
 Workers keep copies belonging to other silos without checking or changing them.
+They keep OAuth copies for the separate refresh or provider revocation worker.
 
 A member can read their own saved tool profile without using the private credential store.
 The reader loads exact history before checking current membership. Disabled profiles stay

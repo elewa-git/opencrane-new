@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import { connectionCreatedDataSchema } from '@opencrane/events';
 import type { Db } from '@opencrane/projections';
 import { envelope, history } from './actor.ts';
 import { foldConnection } from './bearer-connections.ts';
@@ -20,6 +21,10 @@ export async function reconcileConnectionStage(store: EventStore, db: Pick<Db, '
     // Read under the lock before rebuilding missing private records from saved identities.
     const subject = `connection-${stage.userId}-${stage.serverId}-${stage.profileId}`;
     let rows = await history(store, subject, stage.siloId, performance.now() + 10_000);
+    // Leave OAuth copies to their worker, which must contact the provider before retirement.
+    if (rows.some(isOAuthGeneration)) {
+      return retained;
+    }
     const original = savedIdentity(rows, stage);
     const recovered = await custody.recover(stage, original);
     if (recovered.status === 'not_found' && original) {
@@ -42,12 +47,7 @@ export async function reconcileConnectionStage(store: EventStore, db: Pick<Db, '
       state = foldConnection(rows);
     }
     // Require a saved conflict, not a timeout. It defeats even a publish still in flight.
-    if (state.sequence <= stage.expectedSequence) {
-      return retained;
-    }
-    const lastType = rows.at(-1)?.event.type;
-    if (state.status !== 'saved_unverified' && lastType !== 'connection.revoked' &&
-        !state.closedOperations.includes(stage.operationId)) {
+    if (!hasSavedConflict(state, rows, stage)) {
       return retained;
     }
     const removed = await custody.remove(stage, recovered.identity);
@@ -62,6 +62,21 @@ export async function reconcileConnectionStage(store: EventStore, db: Pick<Db, '
     // Keep material and hide dependency errors, which can contain private response bytes.
     return retained;
   }
+}
+
+function hasSavedConflict(state: ReturnType<typeof foldConnection>, rows: StoredEvent[],
+  stage: ConnectionStage) {
+  if (state.sequence <= stage.expectedSequence) {
+    return false;
+  }
+  const lastType = rows.at(-1)?.event.type;
+  return state.status === 'saved_unverified' || lastType === 'connection.revoked' ||
+    state.closedOperations.includes(stage.operationId);
+}
+
+function isOAuthGeneration(row: StoredEvent) {
+  const parsed = connectionCreatedDataSchema.safeParse(row.event.data);
+  return parsed.success && parsed.data.activation?.reason === 'oauth_confirmed';
 }
 
 function currentOrPending(state: ReturnType<typeof foldConnection>, reference: string,
