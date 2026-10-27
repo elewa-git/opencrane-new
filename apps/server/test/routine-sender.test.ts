@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { generateKeyPairSync } from 'node:crypto';
+import { tokenIssuer } from '@opencrane/auth';
+import { until } from '@opencrane/authz/testing';
+import { bridgeChannel } from '../../computer/test/server.ts';
+import { connectBridge } from '../src/chat/bridge.ts';
+import { createRoutineSender } from '../src/routine-sender.ts';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { natsFixture, event } from '@opencrane/event-store/testing';
 import { foldRoutine, routineActivationSchema, type EventEnvelope } from '@opencrane/events';
@@ -91,7 +99,9 @@ async function setup() {
   await prepareRoutineInput(nats.store, keys, worker(), input);
   const ready = record('ready', 'computer-sales-assistant', 'computer.ready',
     { assistantId: 'sales-assistant', computerId: 'computer', generation: 1 });
-  await nats.seed([ready]);
+  await nats.seed([record('claimed', 'computer-sales-assistant', 'computer.claimed',
+    { assistantId: 'sales-assistant', computerId: 'computer', generation: 1,
+      tokenId: 'token:fixture-computer' }), ready]);
   actor = new BudgetActor(nats.store, 'test');
   await actor.start(10_000, 10_000, 'sales');
   await allocateRoutineRoot(nats.store, keys, worker(), input, actor, selection);
@@ -275,3 +285,169 @@ async function unrelatedTraffic() {
   expect(count).toBeGreaterThan(1);
 }
 it('sustained unrelated activity does not prevent inspection', unrelatedTraffic);
+
+
+function sender(enabled = true, replay = false) {
+  return createRoutineSender({ enabled, replay }, nats.store, keys, worker(), input,
+    selection, 'sender-attempt');
+}
+async function recordingComputer(authority: ReturnType<typeof sender>) {
+  const server = createServer();
+  let starts = 0;
+  function rpc(method: string) {
+    if (method === 'turn/start') starts++;
+    return Promise.resolve({ thread: { id: selection.threadId, ephemeral: true, path: null },
+      turn: { id: 'recorded-turn' } });
+  }
+  async function grant() {}
+  function credential() {
+    return { value: 'fixture-bridge', expiresAt: Date.now() + 120_000 };
+  }
+  async function privateSession() {
+    function close() {}
+    function stayOpen() {}
+    return { rpc, close, closed: new Promise<void>(stayOpen) };
+  }
+  const driver = { rpc, grant, credential, privateSession, journal: `${directory}/journal` };
+  let channel = bridgeChannel(server, driver);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Fixture unavailable');
+  const pair = generateKeyPairSync('ec', { namedCurve: 'P-256',
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' } });
+  await writeFile(`${directory}/signing.pem`, pair.privateKey, { mode: 0o600 });
+  const tokens = await tokenIssuer({ privateKeyPath: `${directory}/signing.pem`,
+    issuer: 'https://routine.test/' });
+  const connection = { computerId: 'computer', assistantId: 'sales-assistant',
+    bearer: 'fixture-bridge', url: `ws://127.0.0.1:${address.port}/bridge` };
+  const options = { silo: 'test', store: nats.store, keys, binding,
+    routineStart: authority.checkStart };
+  let link = await connectBridge(options, connection, tokens);
+  async function wake() { return link; }
+  async function restart() {
+    link.socket.terminate();
+    await link.settled();
+    await channel.close();
+    channel = bridgeChannel(server, driver);
+    link = await connectBridge(options, connection, tokens);
+  }
+  async function close() {
+    link.socket.terminate();
+    await channel.close();
+    await link.settled();
+    server.close();
+  }
+  function executed() { return starts === 1; }
+  return { wake, restart, close, executed, get starts() { return starts; } };
+}
+async function savedStarts() {
+  const rows = await history(nats.store, 'computer-sales-assistant', 'test');
+  function started(row: typeof rows[number]) { return row.event.type === 'computer.turn_started'; }
+  return rows.filter(started);
+}
+async function handsOffOnce() {
+  const authority = sender();
+  const computer = await recordingComputer(authority);
+  try {
+    const results = await Promise.all([authority.send(computer.wake), sender().send(computer.wake)]);
+    expect(results).toContainEqual({ status: 'sent' });
+    await until(computer.executed);
+    const starts = await savedStarts();
+    expect(starts).toHaveLength(1);
+    expect(starts[0]!.event.data).toMatchObject({ turnId, messageId,
+      rootId: actor.state.roots[0]!.rootId, threadId: selection.threadId });
+    expect(await readFile(`${directory}/journal.executions`, 'utf8')).toBe(`${turnId}\n`);
+    expect(await authority.send(computer.wake)).toEqual({ status: 'unknown' });
+    await computer.restart();
+    expect(await sender().send(computer.wake)).toEqual({ status: 'unknown' });
+    expect(computer.starts).toBe(1);
+    expect(await savedStarts()).toHaveLength(1);
+    expect(actor.state.roots).toHaveLength(1);
+    const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
+    function isInput(row: typeof rows[number]) { return row.event.type === 'message.posted'; }
+    expect(rows.filter(isInput)).toHaveLength(1);
+  } finally { await computer.close(); }
+}
+it('hands an admitted routine to the real bridge and journal once with distinct ids', handsOffOnce);
+
+async function refusesAfterWake(kind: string) {
+  const authority = sender();
+  const computer = await recordingComputer(authority);
+  let wakes = 0;
+  async function wake() {
+    wakes++;
+    now += 14_000;
+    if (kind === 'Stop') {
+      const root = actor.state.roots[0]!;
+      const subject = `conversation-${conversationId}`;
+      await nats.seed([record('stop', subject, 'agent.turn_stop_requested',
+        { conversationId, turnId, requestedBy: 'alice' })]);
+      const position = await nats.store.head(subject);
+      await actor.stopRoot(root.rootId, 'requester_stop', subject, position);
+    } else await changes(kind);
+    return computer.wake();
+  }
+  try {
+    expect(await authority.send(wake)).toEqual({ status: 'unknown' });
+    expect(wakes).toBe(1);
+    expect(computer.starts).toBe(0);
+    expect(await savedStarts()).toEqual([]);
+    expect(await authority.send(computer.wake)).toEqual({ status: 'unknown' });
+  } finally { await computer.close(); }
+}
+it.each(['member', 'grant', 'expiry', 'routine.paused', 'computer', 'Stop'])(
+  'sends nothing after fourteen-second wake and %s', refusesAfterWake);
+
+async function inert(enabled: boolean, replay: boolean) {
+  const before = await nats.store.head();
+  const wake = vi.fn(forbidden);
+  const authority = sender(enabled, replay);
+  expect(await authority.send(wake)).toEqual({ status: 'unknown' });
+  expect(wake).not.toHaveBeenCalled();
+  expect(await nats.store.head()).toBe(before);
+}
+it.each([[false, false], [true, true]])('does not wake or send enabled=%s replay=%s', inert);
+
+async function losesReply(stage: string) {
+  const authority = sender();
+  const computer = await recordingComputer(authority);
+  const append = nats.store.append.bind(nats.store);
+  let lost = false;
+  async function loseStart(...args: Parameters<typeof append>) {
+    const result = await append(...args);
+    if (!lost && args[0].event.type === stage) {
+      lost = true;
+      forbidden();
+    }
+    return result;
+  }
+  async function wake() {
+    const link = await computer.wake();
+    if (stage === 'send') {
+      const send = link.socket.send.bind(link.socket);
+      function loseSend(bytes: Parameters<typeof send>[0]) {
+        send(bytes);
+        lost = true;
+        forbidden();
+      }
+      vi.spyOn(link.socket, 'send').mockImplementationOnce(loseSend);
+    }
+    return link;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(loseStart);
+  try {
+    await authority.send(wake);
+    function replyLost() { return lost; }
+    await until(replyLost);
+    expect(await authority.send(computer.wake)).toEqual({ status: 'unknown' });
+    await computer.restart();
+    expect(await sender().send(computer.wake)).toEqual({ status: 'unknown' });
+    expect(computer.starts).toBeLessThanOrEqual(1);
+    expect((await savedStarts()).length).toBeLessThanOrEqual(1);
+    expect(actor.state.roots).toHaveLength(1);
+  } finally { await computer.close(); }
+}
+it.each(['routine.run_activation_admitted', 'send', 'computer.turn_started'])(
+  'never redelivers after losing %s reply', losesReply);
