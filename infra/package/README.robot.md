@@ -641,9 +641,9 @@ Late-reply tests make metadata ready at 119,800 ms and receive a setup reply at
 consumer after late stream creation. Another test checks that all five SDK
 requests receive the decreasing time left. A late placement refusal checks that
 bootstrap neither waits again nor creates a stream or consumer.
-Tests that create streams with injected clocks prepare real NATS placement
-statistics and remove the setup stream before checking their exact timing. The ordinary
-R3 test uses real time and starts without this extra preparation.
+Every clustered bootstrap test prepares real NATS placement statistics and removes
+the empty R3 setup stream before replacing replies or clocks. It still requires
+zero streams before provisioning. The ordinary R3 test uses real time.
 These are source checks. Images, controller and storage prerequisites, and
 live Kubernetes placement are NOT RUN. The
 [receipt](../../docs/process/p5-4-pr5a/receipt.md) records the checks.
