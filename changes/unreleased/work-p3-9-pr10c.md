@@ -1,0 +1,1 @@
+An internal OAuth worker sends one claimed refresh, keeps its reply privately and verifies the replacement account and tokens. Duplicate calls and restart recover a saved reply without sending again; uncertain sends stay unavailable. Saving the next generation and retiring the old token remain deferred.

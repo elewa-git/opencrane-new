@@ -18,7 +18,7 @@ import { oauthConfigurationDigest, oauthConfigurationSchema } from './oauth-atte
 import { inputSchema, sessionSchema } from './oauth-start.ts';
 import { toolPolicyFromRows } from './tool-policy.ts';
 
-const refreshInput = inputSchema.extend({ expectedSequence: z.int().positive(),
+export const refreshInput = inputSchema.extend({ expectedSequence: z.int().positive(),
   expectedGeneration: z.int().positive() });
 type Custody = Pick<ReturnType<typeof connectionCustody>, 'hasRefreshMaterial'>;
 type LiveClaim = { status: 'claimed'; claimId: string; sequence: number; workerId: string };
@@ -151,7 +151,7 @@ type Session = z.infer<typeof sessionSchema>;
 type Loader = (serverId: string) => Promise<unknown>;
 type Prepared = Awaited<ReturnType<typeof prepareRefresh>>;
 
-async function prepareRefresh(store: EventStore, binding: Binding, session: Session,
+export async function prepareRefresh(store: EventStore, binding: Binding, session: Session,
   input: Input, loadConfiguration: Loader) {
   const subject = `connection-${input.userId}-${input.serverId}-${input.profileId}`;
   const historyDeadline = performance.now() + 10_000;
@@ -223,7 +223,7 @@ async function checkPrivateRefresh(custody: Custody, prepared: Prepared, siloId:
   }
 }
 
-async function refreshAccess(store: EventStore, binding: Binding, prepared: Prepared,
+export async function refreshAccess(store: EventStore, binding: Binding, prepared: Prepared,
   loadConfiguration: Loader, sequence = prepared.state.sequence) {
   const { input, subject, membership, configuration, server } = prepared;
   // Finish history and private reads before starting the original two-second access check.

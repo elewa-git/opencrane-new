@@ -2,6 +2,44 @@
 
 For people, read [README.md](README.md) first.
 
+## One private OAuth refresh send (Part of #50)
+
+PR 10c is split at verified private reply recovery to keep the change below about
+600 lines. `exchangePersonalOAuthRefresh` has no route, package export or replay
+reaction. It consumes the original live refresh claim once, takes the profile lock,
+reads the exact generation UID/version and checks current owner access and settings.
+The existing durable send marker and guarded HTTPS transport send one fixed refresh
+grant. Copies, duplicates, races and restart cannot grant another send.
+
+The worker retains a received reply in immutable private custody even if access changes
+while the provider is replying. Lost staging replies recover the pinned UID/version.
+A lost provider reply with no saved result stays unknown and never resends. The saved
+claim's 60-second deadline is never extended. History and private reads finish before
+short access checks. Checks repeat after marker flush, DNS and final private recovery.
+No conversation stream enters those checks.
+
+The shared RS256 verifier checks issuer, audience, authorised party and signed lifetime.
+Refresh does not read expired consent or require its nonce. The worker additionally
+requires the saved issuer/subject, identical scope list, a different refresh token and
+an explicit access lifetime from one second to one day. Lifetime counts from the saved
+claim, with signed expiry as an additional limit. Only `verified`, the claim sequence
+and `callsAvailable: false` leave the worker; failures return fixed `unknown`.
+
+N+1 staging/publication, replay of replacement generations and retirement of the old
+refresh token are deferred to the next PR. This worker appends no event and grants no
+credential use. Revoke, governed use and failure/reconsent workflows remain out of scope.
+Live provider and fresh-install qualification: NOT RUN.
+
+Own checks on 27 October 2026: PASS for lint (including Knip), typecheck, event catalogue
+and changelog. PASS for 930 tests across custody, provider transport, identity and unchanged
+security rules, then all 419 custody tests again. These include 36 new refresh cases.
+After allowing a recovery caller to reach the lock before the sender, the race case passed
+twice more and its file passed lint. Tests used disposable PostgreSQL, NATS, OpenFGA,
+private custody and a local TLS provider, with `nice -n 10` and one Vitest worker.
+The first test-only commit (`a4b3a1cce`) failed on the missing worker, as intended.
+The full root suite was NOT RUN. The complete refresh capability remains PARTIAL because
+N+1 saving and old-token retirement are deferred above.
+
 ## Internal OAuth refresh claim (Part of #50)
 
 This is the first part of PR 10b, split to stay below about 600 changed lines.
@@ -24,10 +62,10 @@ check. Membership, profile, configuration, policy and admin blocks are rechecked
 publication and before returning the live result. Unrelated activity does not refuse it.
 Replay retains the generation, attempt and claim without external effects.
 
-Refresh transport, durable send markers for refresh, response retention, replacement
-validation and N+1 publication remain for the next part. The existing consent worker
-cannot consume refresh claims. No refresh request is sent, and OAuth selection and
-release remain closed. Live refresh and fresh-install qualification: NOT RUN.
+The refresh worker above adds transport, durable send marking, response retention and
+replacement validation. N+1 publication remains deferred. The existing consent worker
+cannot consume refresh claims. OAuth selection and release remain closed.
+Live refresh and fresh-install qualification: NOT RUN.
 
 Own checks on 27 October 2026: PASS for lint, typecheck, catalogue, Knip and changelog.
 PASS for 1,205 custody, bearer and event-contract tests, including unchanged security
@@ -49,7 +87,7 @@ It has no route or package export. The shared profile lock covers history, priva
 availability, append and readback. One conditional `connection.refresh_started`
 append chooses the attempt. Its exact saved receipt serves competing change references
 and retries beyond broker deduplication, including a lost reply. Changed bindings refuse.
-The receipt grants no send or credential use. No scheduler or refresh exchange exists.
+The receipt grants no send or credential use and does not invoke the worker. No scheduler exists.
 
 Confirmation now saves a configuration digest from verified evidence. Old confirmations
 without it remain readable but cannot refresh. Custody checks exact generation UID/version
@@ -57,8 +95,8 @@ and private authentication, returning only refresh availability. History and pri
 finish before the original two-second access check. Membership, policy, configuration,
 profile position and admin block are checked again at publication. No conversation is watched.
 Replay retains account, generation and attempt; OAuth stays unavailable to bearer paths.
-The worker remains consent-only. Local fixtures send once to establish consent and zero
-additional requests for refresh. Live refresh and fresh-install qualification: NOT RUN.
+The consent worker remains separate. Start/join fixtures send once to establish consent
+and zero additional requests for refresh. Live refresh and fresh-install qualification: NOT RUN.
 
 Own checks: PASS for typecheck and catalogue; 848 targeted tests including unchanged
 security rules, then 390 custody/bearer tests and all 35 refresh cases again after the
@@ -88,7 +126,8 @@ selection, rotation and release closed. Existing bearer and legacy folds remain 
 Original receipts return `saved`, generation 1 and `callsAvailable: false`; current owner
 membership is checked once. Receipt recovery precedes expired consent reads and performs
 no staging or exchange. It confirms a past save, never present permission to use it.
-Refresh exchange, reconnect, OAuth revoke/use integration and UI remain later work. Live: NOT RUN.
+Refresh generation saving, reconnect, OAuth revoke/use integration and UI remain later work.
+Live: NOT RUN.
 
 ## Signed identity from private custody (P3-9 PR 9c; Part of #50)
 
@@ -121,8 +160,8 @@ without another provider send. Uncertain custody stays unknown.
 attempts and safe errors. `connection-custody.test.ts` uses the real callback/exchange
 with a signed local provider, exact recovery, nonce privacy and final-read faults.
 Each consent test uses a separate server record so its history does not include earlier cases.
-The confirmation above saves a first generation. Selection, reconnect, refresh exchange, revoke
-and governed use remain later work. Live provider and fresh-install qualification: NOT RUN.
+The confirmation above saves a first generation. Selection, reconnect, refresh generation saving,
+revoke and governed use remain later work. Live provider and fresh-install qualification: NOT RUN.
 
 ## Private provider transport (P3-9 PR 9a, first part; Part of #50)
 
@@ -133,8 +172,8 @@ or production caller. Replay cannot invoke it through an event registration.
 
 `oauthProviderTransport(configuration, network?)` copies trusted operator settings for
 one exact HTTPS token endpoint, client id and redirect URI. Its returned function accepts
-only private code/verifier material and a cancellation signal; request input cannot choose
-an endpoint or add form fields. The existing address policy checks every resolved address
+only private code/verifier or refresh-token material and a cancellation signal. Request input
+cannot choose an endpoint or add form fields. The existing address policy checks every resolved address
 and pins one to the socket. TLS verifies the configured hostname. Redirects, URL credentials,
 query strings, fragments, IP literals and non-exact URL spellings are refused.
 The optional network port follows the existing transport test contract; it is trusted code,
@@ -178,7 +217,8 @@ The exact reply is immutable private custody. `unconfirmed` returns changeRef, s
 reference and optional verified identity as described above. Neither status nor custody grants identity confirmation or tool access.
 Changed objects, failed flushes and lost replies are covered with real fixture services.
 Valid JSON passes at 8,192 bytes and fails above it. Production guards stay unchanged.
-Routes, refresh exchange and revoke remain later work; internal confirmation is described above. Live qualification: NOT RUN.
+Routes, refresh generation saving and revoke remain later work. Internal confirmation is
+described above. Live qualification: NOT RUN.
 
 ## Private callback claim (P3-9 PR 8c; Part of #50)
 
