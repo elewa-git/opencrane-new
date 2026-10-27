@@ -2664,8 +2664,10 @@ returns the fixed `Root stop evidence refused` error and appends nothing.
 The first saved stop is returned on valid retries, including a later different reason.
 Only member Stop counts as requester evidence; the budget Stop form is refused.
 Routine Stop reads and folds history only through the saved `routine.run_stop_requested`,
-within that same ten-second deadline and before entering the actor queue. `foldRoutine`
+within that same ten-second deadline and before entering the actor queue. `foldRoutineHistory`
 checks the source's occurrence, routine root, input, turn and revisions against its saved due.
+It retains each completed run while reading history. A repeated completion must match that
+original run before it is ignored, so it cannot replace or block Stop for the current run.
 The due's conversation, turn, frozen owner, assistant and payer must match the budget root.
 The due's `rootId` is a routine reference, not the allocated budget root id.
 Later edits or reassignment do not replace those frozen facts. Both owner and admin sources

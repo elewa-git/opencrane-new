@@ -6237,6 +6237,10 @@ allows effects. It verifies saved Stop evidence, actor/store/silo and the alloca
 conversation, turn and frozen people. It never uses the due's rootId as a budget id.
 Missing allocation returns pending without creating a root. Retry after allocation or a
 failed budget save uses the same reference. The first budget reason remains permanent.
+Cleanup uses the same validated history as the owner command. A correctly bound repeat
+completion for an older run cannot prevent Stop for the current run. The regression in
+`test/routine-session.test.ts` finishes two runs, claims a third, repeats the first completion,
+then saves the owner's Stop and checks the budget record and retry after actor recovery.
 Neither receipt proves termination. Routes, subscriptions, other lifecycle causes and
 running-turn interruption remain later work. Execution remains disabled.
 Tests in routine-session and routine-sender cover the real owner command, delayed cleanup,

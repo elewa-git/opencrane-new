@@ -29,7 +29,9 @@ function receipt(row: StoredEvent, changeId: string) {
 function stopData(state: RoutineState | undefined, input: Input, position: number) {
   const saved = state?.definition;
   const run = state?.activeRun;
-  if (!saved || !run) throw new StopRefused();
+  if (!saved || !run) {
+    throw new StopRefused();
+  }
   if (position !== input.expectedPosition || run.occurrenceId !== input.occurrenceId ||
       saved.definitionRevision !== input.expectedDefinitionRevision ||
       saved.scheduleRevision !== input.expectedScheduleRevision ||
@@ -94,9 +96,13 @@ export async function requestRoutineStop(store: EventStore, binding: Binding,
   try {
     const input = inputSchema.parse(raw);
     const saved = await ownerAccess(store, binding, memberId, input.routineId);
-    if (!input.changeId.startsWith(`${input.routineId}:`)) throw new StopConflict();
+    if (!input.changeId.startsWith(`${input.routineId}:`)) {
+      throw new StopConflict();
+    }
     const previous = previousStop(saved.rows, input, memberId);
-    if (previous) return previous;
+    if (previous) {
+      return previous;
+    }
     const position = saved.rows.at(-1)?.sequence ?? 0;
     const data = stopData(saved.state, input, position);
     const event: EventEnvelope = { id: randomUUID(), commandId: input.changeId,
@@ -105,17 +111,25 @@ export async function requestRoutineStop(store: EventStore, binding: Binding,
       time: new Date().toISOString(), correlation: {}, data };
     // Finish history before watching only the small membership and ownership streams.
     const fresh = await ownershipWriteAccess(store, saved.positions);
-    if (!(await saved.check('read_metadata')).allowed) throw new StopRefused();
+    if (!(await saved.check('read_metadata')).allowed) {
+      throw new StopRefused();
+    }
     const change = { event, expectedSequence: position, deadline: fresh.deadline,
       historyChecked: true as const, checkAccess: fresh };
     const result = await store.append(change);
-    if (result.status === 'conflict' || result.status === 'rejected') throw new StopConflict();
-    if (result.status !== 'appended') throw new Error('Append unavailable');
+    if (result.status === 'conflict' || result.status === 'rejected') {
+      throw new StopConflict();
+    }
+    if (result.status !== 'appended') {
+      throw new Error('Append unavailable');
+    }
     const row = await store.readEvent(result.sequence, performance.now() + 10_000);
     requireSame(row, input, memberId, data);
     return receipt(row, input.changeId);
   } catch (error) {
-    if (error instanceof StopConflict || error instanceof StopRefused) throw error;
+    if (error instanceof StopConflict || error instanceof StopRefused) {
+      throw error;
+    }
     // eslint-disable-next-line preserve-caught-error -- Keep private service details out of replies.
     throw new Error('Routine Stop unavailable');
   }

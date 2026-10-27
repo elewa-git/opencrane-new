@@ -255,6 +255,7 @@ while its full cost and an alert are saved. Other roots can still use the payer.
 An internal command also stops a root after its requester stops it, its turn ends,
 or its requester loses access. It also accepts a saved routine Stop from an owner or admin.
 It checks the routine's saved run against that root and keeps the original source reference.
+It validates repeated completions against their original runs before ignoring them.
 Reassignment leaves the stopped run's original owner, assistant and payer unchanged.
 Routine execution remains disabled.
 An earlier removal cannot stop a new root after the requester has been re-invited.

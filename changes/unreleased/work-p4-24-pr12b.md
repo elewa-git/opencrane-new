@@ -1,1 +1,2 @@
 - Routine owners can internally save Stop intent and recover its budget Stop without changing the schedule, releasing the active run or creating spending capacity. Automatic execution remains disabled.
+- A valid repeated completion for an older routine run no longer blocks saving the current run's budget Stop.

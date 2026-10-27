@@ -37,7 +37,8 @@ private thread first, then records its real id with the routine's spending allow
 Delivery uses that same private process once. If preparation fails, the server refuses
 that request and keeps the computer connection open for other conversations.
 An internal owner command saves Stop intent for the active run. A separate operation
-stops its existing spending allowance and can recover after a failed save. The run stays
+stops its existing spending allowance and can recover after a failed save. A repeated
+completion for an older run does not block Stop for the current run. The run stays
 occupied until termination is proved. Automatic routines remain unavailable.
 
 Owners and admins can read, save or remove company account opt-in for a tool installation.
