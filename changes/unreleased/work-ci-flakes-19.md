@@ -1,0 +1,1 @@
+- CI downloads pinned test images before tests and retries temporary registry failures, so a brief rate limit does not interrupt container startup. Missing images still fail immediately.

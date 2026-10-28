@@ -20,10 +20,12 @@ function writeFakeCommands(directory) {
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.CI_PULL_CALLS, JSON.stringify(args) + '\\n');
-const calls = fs.readFileSync(process.env.CI_PULL_CALLS, 'utf8').trim().split('\\n');
+const contents = fs.readFileSync(process.env.CI_PULL_CALLS, 'utf8');
+const trimmed = contents.trim();
+const calls = trimmed.split('\\n');
 if (calls.length <= Number(process.env.CI_PULL_FAILURES)) {
   console.error(process.env.CI_PULL_ERROR);
-  process.exit(1);
+  process.exit(Number(process.env.CI_PULL_STATUS));
 }
 `;
   const sleep = `#!/usr/bin/env node
@@ -48,7 +50,7 @@ function parseCall(line) {
   return JSON.parse(line);
 }
 
-function pullImages(error, failures) {
+function pullImages(error, failures, failureStatus = 1) {
   const directory = mkdtempSync(join(tmpdir(), 'ci-test-images-'));
   const callsFile = join(directory, 'calls');
   const sleepsFile = join(directory, 'sleeps');
@@ -57,7 +59,8 @@ function pullImages(error, failures) {
   writeFakeCommands(directory);
   const environment = { ...process.env, PATH: `${directory}:${process.env.PATH}`,
     CI_PULL_CALLS: callsFile, CI_PULL_SLEEPS: sleepsFile,
-    CI_PULL_ERROR: error, CI_PULL_FAILURES: String(failures) };
+    CI_PULL_ERROR: error, CI_PULL_FAILURES: String(failures),
+    CI_PULL_STATUS: String(failureStatus) };
   const options = { env: environment, encoding: 'utf8', timeout: 10_000 };
   try {
     const script = resolve('scripts/ci/pull-test-images.sh');
@@ -91,7 +94,7 @@ function retriesRateLimits() {
 }
 
 function refusesMissingDigest() {
-  const message = 'manifest unknown: unexpected status from HEAD request: 404 Not Found';
+  const message = 'unexpected status from HEAD request: 404 Not Found (upstream timeout)';
   const result = pullImages(message, 99);
   assert.equal(result.status, 1, result.stderr);
   assert.deepEqual(result.calls, [['pull', minio]]);
@@ -154,7 +157,8 @@ function usesHelperPins() {
       found.add(match[0]);
     }
   }
-  assert.deepEqual(found, new Set(images));
+  const expectedImages = new Set(images);
+  assert.deepEqual(found, expectedImages);
   const result = pullImages('', 0);
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(result.calls, expectedPulls());
@@ -167,3 +171,36 @@ test('stops after four failed pulls with bounded backoff', boundsRetries);
 test('retries registry server errors and timeouts', retriesTemporaryFailures);
 test('fails immediately for permanent and unrecognised errors', refusesOtherFailures);
 test('pulls each helper and Dockerfile pin once', usesHelperPins);
+
+function preparesEveryTestJob() {
+  const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
+  const jobs = ['test', 'fixtures-image', 'fixtures-browser'];
+  for (const job of jobs) {
+    const start = workflow.indexOf(`\n  ${job}:\n`);
+    const remaining = workflow.slice(start + 1);
+    const nextJob = remaining.search(/\n {2}[a-z][a-z-]*:\n/);
+    let block = remaining;
+    if (nextJob !== -1) {
+      block = remaining.slice(0, nextJob);
+    }
+    assert.notEqual(start, -1, job);
+    const pull = 'run: bash scripts/ci/pull-test-images.sh';
+    assert.equal(block.split(pull).length - 1, 1, job);
+    const pullsAt = block.indexOf(pull);
+    const testsAt = block.indexOf('node scripts/ci/run-tests.mjs');
+    assert.ok(pullsAt < testsAt, job);
+  }
+}
+
+test('prepares images once before tests in every test job', preparesEveryTestJob);
+
+function retriesCommandTimeouts() {
+  for (const status of [124, 137]) {
+    const result = pullImages('', 1, status);
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(result.calls, [['pull', minio], ...expectedPulls()]);
+    assert.deepEqual(result.sleeps, ['2']);
+  }
+}
+
+test('retries pulls stopped by the command time limit', retriesCommandTimeouts);

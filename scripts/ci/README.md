@@ -16,8 +16,8 @@ flowchart LR
   ci -->|prepares both fixture jobs| web["apps/web<br/>development build"]
   ci -->|runs files| vitest["Vitest<br/>root tests"]
   actions -->|builds for image, native configuration and demo read tests| computer["apps/computer<br/>test image"]
-  actions -->|checks guides and dev-stack test selection| guards["Repository checks"]
   ci -->|installs for browser use| chromium["Chromium<br/>test browser"]
+  ci -->|pulls pinned test images| docker["Docker<br/>test containers"]
   actions -->|restores system packages| cache["Actions cache<br/>downloaded packages"]
   cache -->|supplies saved packages| ci
 ```
@@ -26,6 +26,7 @@ flowchart LR
 
 - Run image and browser tests in parallel jobs.
 - Balance four test jobs, called shards, using saved test durations.
+- Download pinned test images before tests, retrying temporary registry failures.
 - Skip expensive jobs for documentation changes only when the base commit permits it.
 - Refuse a passing result if a root test file is missing or runs twice.
 - Require every dev-stack test to run in CI or have an exclusion with a reason.
@@ -46,6 +47,10 @@ it installs only the browser and avoids an apt update or package download.
 The browser job also runs the hosted integration-row journey regression.
 Fresh runners install missing packages from the Actions cache without downloading
 them again. A cache miss downloads and saves the packages, with a time limit.
+
+Each test job pulls the exact test images before tests start containers. Temporary
+registry failures get a few retries with increasing waits. Missing images and
+access refusals stop the job immediately and keep the registry message.
 
 Each test job saves a small list of its files. The final `ci-ok` job compares
 those lists with all the files Vitest finds. It follows local helper imports and
