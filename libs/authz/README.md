@@ -78,7 +78,8 @@ nice -n 10 npm test -- libs/authz
 nice -n 10 npm run typecheck -w libs/authz
 ```
 
-The tests start their own services, so Docker must be running.
+The tests start their own services and use an exact Linux amd64 OpenFGA image.
+Docker must be running.
 The [technical notes](README.robot.md#real-service-tests-and-licences) list what they need.
 
 This example checks whether a person is an admin. The store and model ids

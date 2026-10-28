@@ -547,6 +547,9 @@ settings, expired results and scanner outages leave uploads unavailable.
 
 ## How to run or test it
 
+The upload and file recovery tests use exact Linux amd64 container images.
+CI downloads them before tests start, with retries for temporary registry failures.
+
 The realtime tests start two server processes with shared disposable services.
 They check that a member-list connection resumes on the other server, and that
 saved access changes still refuse it when database and permission updates lag.

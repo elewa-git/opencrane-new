@@ -18,7 +18,7 @@ flowchart LR
   infra["infra<br/>infrastructure"] --> clamav["infra/clamav<br/>virus scanner"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> nats["infra/nats<br/>event log settings"]
-  stack -->|builds and starts| clamav
+  stack -->|builds and starts the Linux amd64 image| clamav
   server["apps/server<br/>file uploads"] -->|sends file bytes over HTTPS| launcher
   worker["image worker<br/>planned caller"] -.->|sends image parts| launcher
   packaging["packaging job"] -->|checks image databases| clamav
@@ -63,8 +63,9 @@ flowchart LR
 ## How to run or test it
 
 The development stack builds and starts the scanner. Upload tests use the same
-image in a temporary container. Refresh prepares files for review and does not change
-an already running scanner. Its `signatures.json` file records database versions,
+Linux amd64 image in a temporary container. The build downloads the exact image
+without attached build records that the registry mirror may lack. Refresh prepares
+files for review and does not change an already running scanner. Its `signatures.json` file records database versions,
 build dates, hashes and the successful update-check time. Unchanged files keep their
 original build dates. A failed refresh removes the previous candidate record.
 This file is evidence for review; it does not authorise uploads or image admission.

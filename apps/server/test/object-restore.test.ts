@@ -143,7 +143,7 @@ async function refusesPrivateFault(fault: typeof privateFaults[number]) {
     const execute = promisify(execFile);
     await execute('docker', ['run', '--rm', '--user', '0:0', '-v',
       `${setup.options.directory}:/fixture`, '--entrypoint', 'chown',
-      'mirror.gcr.io/alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4',
+      'mirror.gcr.io/alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:f93b327d2d9a81ef9d9a966d2c7fbe3ea4d657d23ed412566c20d488e9f73332',
       '65534', `/fixture/${setup.identity}`]);
   }
   if (fault === 'directory-link') {

@@ -867,7 +867,10 @@ instances. The caller supplies `directory` for objects, `eventDirectory`,
 `backupKeyFile`, `silo`, `attempt`, `targetSilo`, and true `stopped`, `exclusive`
 and `disposable` confirmations. These confirmations alone never authorise a target.
 `provisionDisposableObjectTarget(silo)` creates a fresh local MinIO container with
-new private credentials and no product processes or existing data mounts. It issues
+new private credentials and no product processes or existing data mounts. It uses
+the linux/amd64 image manifest listed in the
+[CI download notes](../../scripts/ci/README.robot.md#test-image-downloads), so it
+does not fetch the index's attached build records from the mirror. It issues
 one short-lived lease and writes an owner marker with the silo and a random instance
 id into `opencrane-restore/owner`. It returns `client`, `name` and an explicit `close`
 operation. The caller retains the target for inspection until it chooses to close it.
