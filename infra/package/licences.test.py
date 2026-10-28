@@ -21,6 +21,146 @@ specification.loader.exec_module(checker)
 
 
 class LicenceTests(unittest.TestCase):
+    def corepack_fixture(self):
+        path = source.parents[2] / "docs/process/p5-4-images9/check-corepack.py"
+        module_spec = importlib.util.spec_from_file_location("corepack", path)
+        corepack = importlib.util.module_from_spec(module_spec)
+        module_spec.loader.exec_module(corepack)
+        review = checker.read_json(path.with_name("inventory.json"))
+        with tarfile.open(path.with_name("corepack-source.tar.gz")) as archive:
+            rows, contents = corepack.scan(archive, "deps/", "lib/node_modules/")
+        return corepack, review, rows, contents
+
+    def test_corepack_authentic_inventory_preserves_blocked_grants_and_promotion(self):
+        corepack, review, rows, contents = self.corepack_fixture()
+        self.assertEqual(corepack.check_review(review, contents), 21)
+        corepack.check_files(rows, review, source_only=True)
+        self.assertEqual(len(contents[corepack.BUNDLE]), 967004)
+        self.assertEqual(len(review["regions"]), 175)
+        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
+        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        with self.assertRaisesRegex(ValueError, "exact source revision"):
+            checker.check_package_review(reviewed, inventory)
+
+    def test_corepack_refuses_missing_duplicate_substituted_or_approved_rows(self):
+        corepack, original, _, contents = self.corepack_fixture()
+        for field in ("files", "modules", "regions", "inlineGrants"):
+            for index in range(len(original[field])):
+                for case in ("missing", "duplicate", "substitute"):
+                    with self.subTest(field=field, index=index, case=case):
+                        review = json.loads(json.dumps(original))
+                        rows = review[field]
+                        if case == "missing":
+                            rows.pop(index)
+                        elif case == "duplicate":
+                            rows.append(rows[index])
+                        else:
+                            rows[index][-1] = "substituted"
+                        with self.assertRaises(ValueError):
+                            corepack.check_review(review, contents)
+        for field in ("status", "nodeCommit", "nodeFiles", "candidateSha256",
+                      "bundleSha256", "ancestry", "corepackVersion"):
+            review = dict(original)
+            review[field] = "complete"
+            with self.assertRaises(ValueError):
+                corepack.check_review(review, contents)
+        for index, row in enumerate(original["modules"]):
+            for column in range(len(row)):
+                review = json.loads(json.dumps(original))
+                review["modules"][index][column] = "changed version, patch, hash or approval"
+                with self.assertRaises(ValueError):
+                    corepack.check_review(review, contents)
+        for name in contents:
+            for replacement in (None, b"substituted"):
+                changed = dict(contents)
+                if replacement is None:
+                    del changed[name]
+                else:
+                    changed[name] = replacement
+                with self.assertRaises((ValueError, KeyError)):
+                    corepack.check_review(original, changed)
+        changed = dict(contents)
+        changed[corepack.BUNDLE] = contents[corepack.BUNDLE].split(b"/*! Bundled license")[0]
+        with self.assertRaises(ValueError):
+            corepack.check_review(original, changed)
+
+    def test_corepack_files_wrappers_links_and_extra_layer_copies_refuse(self):
+        corepack, review, rows, _ = self.corepack_fixture()
+        installed = json.loads(json.dumps(review["files"]))
+        corepack.check_files(installed, review)
+        for index in range(len(installed)):
+            for case in ("missing", "duplicate", "bytes or target", "type"):
+                with self.subTest(index=index, case=case):
+                    changed = json.loads(json.dumps(installed))
+                    if case == "missing":
+                        changed.pop(index)
+                    elif case == "duplicate":
+                        changed.append(changed[index])
+                    elif case == "type":
+                        changed[index][1] = "link"
+                    else:
+                        changed[index][-1] = "changed"
+                    with self.assertRaises(ValueError):
+                        corepack.check_files(changed, review)
+        with self.assertRaises(ValueError):
+            corepack.check_files(rows + rows, review, source_only=True)
+
+    def test_corepack_source_official_candidate_and_dependency_refusals_are_independent(self):
+        corepack, review, _, _ = self.corepack_fixture()
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            fixture = corepack.RECORD.with_name("corepack-source.tar.gz").read_bytes()
+            calls = {"source": fixture, "official": fixture, "candidate": fixture}
+            for stage in ("source", "official", "candidate", "signature", "git"):
+                with self.subTest(stage=stage):
+                    with contextlib.ExitStack() as stack:
+                        upstream = stack.enter_context(patch.object(corepack.pcre, "check_upstream"))
+                        git = stack.enter_context(patch.object(corepack.pcre, "run_checked",
+                                                              return_value=fixture))
+                        candidate = stack.enter_context(patch.object(corepack.pcre, "check_candidate"))
+                        scan = stack.enter_context(patch.object(corepack, "read_archive"))
+                        scan.return_value = (review["files"], {})
+                        stack.enter_context(patch.object(corepack, "check_review"))
+                        stack.enter_context(patch.object(corepack, "check_files"))
+                        if stage == "signature":
+                            upstream.side_effect = ValueError("private dependency output")
+                        elif stage == "git":
+                            git.side_effect = ValueError("private dependency output")
+                        elif stage == "candidate":
+                            candidate.side_effect = ValueError("private dependency output")
+                        else:
+                            calls[stage] = None
+                            scan.side_effect = ValueError("archive refuses")
+                        with self.assertRaises(ValueError):
+                            corepack.check_evidence(directory, directory)
+
+    def test_corepack_hostile_archives_and_cli_withhold_private_values(self):
+        corepack, _, _, _ = self.corepack_fixture()
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "private-fixture.tar"
+            for name, kind, target in (("../corepack/escape", tarfile.REGTYPE, ""),
+                                       ("/corepack/escape", tarfile.REGTYPE, ""),
+                                       ("lib/node_modules/corepack/a", tarfile.SYMTYPE, "/private"),
+                                       ("lib/node_modules/corepack/a", tarfile.LNKTYPE, "../private")):
+                with tarfile.open(path, "w") as archive:
+                    member = tarfile.TarInfo(name)
+                    member.type = kind
+                    member.linkname = target
+                    archive.addfile(member)
+                with self.assertRaises(ValueError):
+                    corepack.read_archive(path, "")
+            for failure in (ValueError("private output"), tarfile.ReadError(str(path)),
+                            OSError(str(path))):
+                output = io.StringIO()
+                with patch.object(corepack, "check_evidence", side_effect=failure):
+                    with contextlib.redirect_stderr(output):
+                        self.assertEqual(corepack.main([str(path), str(path)]), 1)
+                self.assertEqual(output.getvalue(), corepack.REFUSAL + "\n")
+            result = subprocess.run([sys.executable, str(corepack.RECORD.with_name(
+                "check-corepack.py")), str(path), str(path)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stderr, corepack.REFUSAL + "\n")
+
     def wasm_fixture(self):
         path = source.parents[2] / "docs/process/p5-4-images8/check-wasm.py"
         module_spec = importlib.util.spec_from_file_location("wasm", path)
