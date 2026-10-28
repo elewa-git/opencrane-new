@@ -6073,7 +6073,7 @@ production-disabled regression before implementation.
 
 ## Private catalogue approval during loading
 
-`checkPrivateTurnTools` checks the exact list returned by the recall or remember
+`checkPrivateTurnTools` checks the exact list returned by the recall, remember or Correct
 assembler. A WeakMap keeps its approval in RAM. Copying or serialising the list
 does not transfer approval, and no caller or grant is added to the tool frame.
 The saved approval includes the caller and every recorded grant field, including
@@ -6350,3 +6350,23 @@ Tests retain an addition saved at expiry, then forget an earlier loaded fact. Po
 records withdrawal and clears completed private output while preserving a replacement
 thread. Cold replay retains all references and grants no execution. A separate real recall
 test checks the one-millisecond boundary and refuses text after expiry.
+
+## Personal Correct preparation (P4-15 PR 4e)
+
+`buildPrivateTurnCorrectTools` shares the remember builder's saved requester, scope,
+turn, thread, caller and grant checks. It requires matching source/image/host privacy
+evidence before and after catalogue and permission waits. Only the exact built-in
+`correctTool` definition and one reviewed zero-cent Allow policy can be prepared.
+
+The definition matches `libs/models/src/mcp.ts`'s `correctInput`: target id and
+expected revision, full replacement fields, dependencies and recall proof. It has
+no sources override. Complete same-scope dependencies exclude the target itself;
+the existing target proof covers that revision separately. Preparing the definition
+reads no facts, appends nothing and gives no permission to execute Correct.
+`refuseAgentChange` still refuses execution, and public discovery lists recall alone.
+
+Tests: `personal-correct-tools.test.ts`, computer `private-thread-loads.test.ts` and
+`codex-config.test.ts`. The native test uses synthetic qualification and recorded-turn
+evidence, with real pinned Codex discovery and no model turn. Forget, execution,
+multiple-tool lists and production launch remain later work. Memory admission stays
+disabled. Fresh-install/live qualification: NOT RUN.

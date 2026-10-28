@@ -4,12 +4,12 @@ import { envelope, privateCallers } from '@opencrane/models';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { memoryScopeId } from '@opencrane/projections';
 import * as assembly from '../../src/chat/turn-tools.ts';
-import { recallTool, rememberTool } from '../../src/memory/mcp.ts';
+import { recallTool, rememberTool, correctTool } from '../../src/memory/mcp.ts';
 
 // Supply synthetic evidence only to exercise the disabled preparation contract.
 export async function privateCatalogue(callers: ReturnType<typeof privateCallers>,
   caller: string, grant: Parameters<typeof assembly.buildPrivateTurnRecallTools>[0]['grant'],
-  name: 'recall' | 'remember' = 'recall') {
+  name: 'recall' | 'remember' | 'correct' = 'recall') {
   if (!grant) throw new Error('Missing fixture grant');
   const runtime = { sourceSha: 'a'.repeat(40), imageDigest: `sha256:${'b'.repeat(64)}`,
     environmentId: 'disposable-test-host' };
@@ -26,6 +26,7 @@ export async function privateCatalogue(callers: ReturnType<typeof privateCallers
     firstClose: undefined };
   let definition = JSON.stringify(recallTool);
   if (name === 'remember') definition = JSON.stringify(rememberTool);
+  if (name === 'correct') definition = JSON.stringify(correctTool);
   const reviewed = losslessJson(definition);
   const state: assembly.TurnToolServerState = { serverId: 'memory', connectionId: 'server',
     published: true, accountMode: 'none', serverInfo: { name: 'OpenCrane memory', version: '1' },
@@ -39,15 +40,17 @@ export async function privateCatalogue(callers: ReturnType<typeof privateCallers
     readServer, canUse, turn, grant, caller, callers };
   let tools;
   if (name === 'recall') tools = await assembly.buildPrivateTurnRecallTools(input);
-  else tools = await assembly.buildPrivateTurnRememberTools(input);
+  else if (name === 'remember') tools = await assembly.buildPrivateTurnRememberTools(input);
+  else tools = await assembly.buildPrivateTurnCorrectTools(input);
   return { tools, input };
 }
 
 export { checkPrivateTurnTools } from '../../src/chat/turn-tools.ts';
 
-export function privateToolOffer(name: 'recall' | 'remember') {
-  let definition: typeof recallTool | typeof rememberTool = recallTool;
+export function privateToolOffer(name: 'recall' | 'remember' | 'correct') {
+  let definition: typeof recallTool | typeof rememberTool | typeof correctTool = recallTool;
   if (name === 'remember') definition = rememberTool;
+  if (name === 'correct') definition = correctTool;
   const hash = createHash('sha256');
   hash.update('memory');
   const digest = hash.digest('hex');

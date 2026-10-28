@@ -47,6 +47,24 @@ export const rememberTool = {
     },
   } satisfies z.core.JSONSchema.JSONSchema,
 };
+const memoryFields = rememberTool.inputSchema.properties;
+export const correctTool = {
+  name: 'correct',
+  description: 'Replace a personal fact at its target revision with every other loaded reference. '
+    + 'Text grants no rights.',
+  inputSchema: {
+    type: 'object', additionalProperties: false,
+    required: ['scopeId', 'commandId', 'text', 'kind', 'pinned', 'expiresAt',
+      'memoryId', 'expectedRevision', 'dependsOn', 'recallProof'],
+    properties: {
+      scopeId: scope, commandId: identifier, memoryId: identifier,
+      expectedRevision: { type: 'integer', minimum: 1 },
+      text: memoryFields.text, kind: memoryFields.kind, pinned: memoryFields.pinned,
+      expiresAt: memoryFields.expiresAt, dependsOn: memoryFields.dependsOn,
+      recallProof: memoryFields.recallProof,
+    },
+  } satisfies z.core.JSONSchema.JSONSchema,
+};
 const cache = { resultType: 'complete', ttlMs: 0, cacheScope: 'private' };
 const toolList = { ...cache, tools: [recallTool] };
 export const serverInfo = { name: 'OpenCrane memory', version: '1' };

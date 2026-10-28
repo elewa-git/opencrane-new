@@ -1,0 +1,1 @@
+- Prepare one reviewed personal Correct definition for discovery on its approved private native thread. Check privacy evidence and caller identity throughout loading; correction execution and production memory admission remain disabled.
