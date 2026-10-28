@@ -245,6 +245,118 @@ class LicenceTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertEqual(result.stderr, corepack.REFUSAL + "\n")
 
+    def assert_corepack_refusal(self, result):
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(result.stderr,
+                         "FAIL Corepack inventory evidence is missing, changed or unsupported\n")
+
+    def run_corepack_input_fixture(self, directory, stage):
+        checker_path = source.parents[2] / "docs/process/p5-4-images9/check-corepack.py"
+        script = """
+import gzip
+import hashlib
+import importlib.util
+import sys
+from pathlib import Path
+from unittest.mock import patch
+
+checker_path = Path(sys.argv[1])
+directory = Path(sys.argv[2])
+stage = sys.argv[3]
+specification = importlib.util.spec_from_file_location("corepack", checker_path)
+corepack = importlib.util.module_from_spec(specification)
+specification.loader.exec_module(corepack)
+
+def check_candidate_fixture(candidate_directory, upstream_directory):
+    corepack.check_candidate(candidate_directory, corepack.trusted_review())
+
+if stage in ("regions", "regions decoder"):
+    source_archive = checker_path.with_name("corepack-source.tar.gz").read_bytes()
+    git_archive = gzip.decompress(source_archive)
+    corepack.RECORD = directory / "inventory.json"
+    if stage == "regions decoder":
+        compressed = (directory / "regions.json.gz").read_bytes()
+        corepack.REGIONS_SHA256 = hashlib.sha256(compressed).hexdigest()
+    with patch.object(corepack.pcre, "check_upstream"):
+        with patch.object(corepack.pcre, "run_checked", return_value=git_archive):
+            sys.exit(corepack.main([str(directory), str(directory)]))
+else:
+    with patch.object(corepack.pcre, "check_candidate"):
+        with patch.object(corepack, "check_evidence", check_candidate_fixture):
+            sys.exit(corepack.main([str(directory), str(directory)]))
+"""
+        arguments = [sys.executable, "-c", script, str(checker_path), str(directory), stage]
+        return subprocess.run(arguments, capture_output=True, text=True, check=False)
+
+    def test_corepack_malformed_compression_withholds_paths_and_output(self):
+        corepack, _, _, _ = self.corepack_fixture()
+        original = corepack.RECORD.with_name("regions.json.gz").read_bytes()
+        corrupt = bytearray(original)
+        corrupt[10] = 0xff
+        for compressed in (bytes(corrupt), original[:-8], b"unsupported compression"):
+            with self.subTest(compressed=compressed[:11]):
+                with tempfile.TemporaryDirectory() as temporary:
+                    directory = Path(temporary)
+                    shutil.copyfile(corepack.RECORD, directory / "inventory.json")
+                    (directory / "regions.json.gz").write_bytes(compressed)
+                    for stage in ("regions", "regions decoder"):
+                        with self.subTest(stage=stage):
+                            result = self.run_corepack_input_fixture(directory, stage)
+                            self.assert_corepack_refusal(result)
+
+    def test_corepack_checks_compressed_checksum_before_decompressing(self):
+        corepack, review, _, contents = self.corepack_fixture()
+        compressed = bytearray(corepack.RECORD.with_name("regions.json.gz").read_bytes())
+        # Change only the gzip timestamp so decompression would still succeed.
+        compressed[4] ^= 1
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            shutil.copyfile(corepack.RECORD, directory / "inventory.json")
+            (directory / "regions.json.gz").write_bytes(compressed)
+            with patch.object(corepack, "RECORD", directory / "inventory.json"):
+                with patch.object(corepack.gzip, "decompress", wraps=gzip.decompress) as decoder:
+                    with self.assertRaises(ValueError):
+                        corepack.check_review(review, contents)
+                    decoder.assert_not_called()
+
+    def test_corepack_malformed_and_nested_json_withhold_paths_and_output(self):
+        nested_json = b"[" * 200000 + b"0" + b"]" * 200000
+        for manifest in (b"{", b"\xff", nested_json):
+            with self.subTest(manifest=manifest[:11]):
+                with tempfile.TemporaryDirectory() as temporary:
+                    directory = Path(temporary)
+                    entries = {"manifest.json": manifest}
+                    self.write_licence_tar(directory / "candidate.tar", entries)
+                    result = self.run_corepack_input_fixture(directory, "manifest")
+                    self.assert_corepack_refusal(result)
+
+    def test_corepack_symlink_loop_withholds_paths_and_output(self):
+        checker_path = source.parents[2] / "docs/process/p5-4-images9/check-corepack.py"
+        with tempfile.TemporaryDirectory() as temporary:
+            loop = Path(temporary) / "private-loop"
+            loop.symlink_to(loop.name)
+            arguments = [sys.executable, str(checker_path), str(loop), str(loop)]
+            result = subprocess.run(arguments, capture_output=True, text=True, check=False)
+            self.assert_corepack_refusal(result)
+
+    def test_corepack_dependency_json_failure_withholds_paths_and_output(self):
+        checker_path = source.parents[2] / "docs/process/p5-4-images9/check-corepack.py"
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            isolated = directory / "p5-4-images9/check-corepack.py"
+            isolated.parent.mkdir()
+            shutil.copyfile(checker_path, isolated)
+            dependency = directory / "p5-4-images6/check-pcre.py"
+            dependency.parent.mkdir()
+            dependency.write_text("import json\nfrom pathlib import Path\n"
+                                  "json.loads(Path(__file__).with_name('nested.json').read_bytes())\n")
+            nested_json = b"[" * 200000 + b"0" + b"]" * 200000
+            dependency.with_name("nested.json").write_bytes(nested_json)
+            arguments = [sys.executable, str(isolated), str(directory), str(directory)]
+            result = subprocess.run(arguments, capture_output=True, text=True, check=False)
+            self.assert_corepack_refusal(result)
+
     def wasm_fixture(self):
         path = source.parents[2] / "docs/process/p5-4-images8/check-wasm.py"
         module_spec = importlib.util.spec_from_file_location("wasm", path)
