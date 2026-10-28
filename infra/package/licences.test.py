@@ -1,10 +1,12 @@
 import importlib.util
+import io
 import gzip
 import hashlib
 import json
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -18,6 +20,227 @@ specification.loader.exec_module(checker)
 
 
 class LicenceTests(unittest.TestCase):
+    def valgrind_fixture(self):
+        path = source.parents[2] / "docs/process/p5-4-images7/check-valgrind.py"
+        module_spec = importlib.util.spec_from_file_location("valgrind", path)
+        valgrind = importlib.util.module_from_spec(module_spec)
+        module_spec.loader.exec_module(valgrind)
+        review = checker.read_json(path.with_name("valgrind.json"))
+        _, _, inputs = self.pcre_fixture()
+        for name in ("valgrind.h", "valgrind-LICENSE"):
+            inputs[name] = gzip.decompress(path.with_name(name + ".gz").read_bytes())
+        return valgrind, review, inputs
+
+    def test_valgrind_actual_full_terms_resolve_only_its_reference(self):
+        valgrind, review, inputs = self.valgrind_fixture()
+        self.assertEqual(valgrind.check_review(review, inputs), "V8 Valgrind client API")
+        self.assertIn(b"Copyright (C) 2000-2010 Julian Seward", inputs["valgrind.h"])
+        self.assertIn(b"4. The name of the author", inputs["valgrind-LICENSE"])
+        self.assertNotIn("bzip2-1.0.6", valgrind.candidate.OSI)
+        with self.assertRaisesRegex(ValueError, "Unknown or non-OSI"):
+            checker.check_entry(["npm", "other", "1", "bzip2-1.0.6", "terms"],
+                                valgrind.candidate.OSI, set())
+        node, historical, notice = self.node_review_fixture()
+        self.assertEqual(node.check_review(historical, notice), 43)
+        self.assertEqual(len(historical["blockedReferences"]), 10)
+        pcre, pcre_review, pcre_inputs = self.pcre_fixture()
+        self.assertEqual(pcre.check_review(pcre_review, pcre_inputs), "V8 PCRE test suite")
+
+    def test_valgrind_requires_exact_source_version_notice_and_build_inputs(self):
+        valgrind, original, inputs = self.valgrind_fixture()
+        for field in original:
+            for replacement in (None, "wrong"):
+                with self.subTest(field=field, replacement=replacement):
+                    review = json.loads(json.dumps(original))
+                    if replacement is None:
+                        del review[field]
+                    else:
+                        review[field] = replacement
+                    with self.assertRaises((ValueError, KeyError, TypeError)):
+                        valgrind.check_review(review, inputs)
+        for name in valgrind.INPUTS:
+            for replacement in (None, b"changed", b"MIT: Permission is hereby granted"):
+                with self.subTest(name=name, replacement=replacement):
+                    changed = dict(inputs)
+                    if replacement is None:
+                        del changed[name]
+                    else:
+                        changed[name] = replacement
+                    with self.assertRaises((ValueError, KeyError)):
+                        valgrind.check_review(original, changed)
+
+    def test_valgrind_refuses_missing_duplicate_substituted_grants_and_absence(self):
+        valgrind, original, inputs = self.valgrind_fixture()
+        for field in ("references", "declarations"):
+            for case in ("missing", "duplicate", "name", "terms", "location", "reason"):
+                with self.subTest(field=field, case=case):
+                    review = json.loads(json.dumps(original))
+                    rows = review[field]
+                    if case == "missing":
+                        rows.clear()
+                    elif case == "duplicate":
+                        rows.append(rows[0])
+                    elif case == "name":
+                        rows[0][0] = "another component or section"
+                    elif case == "terms":
+                        rows[0][1] = ["MIT"]
+                    elif field == "references":
+                        rows[0][1] = "V8 PCRE test suite"
+                    elif case == "location":
+                        rows[0][2] = "other/file.h"
+                    else:
+                        rows[0][3] = " "
+                    with self.assertRaises(ValueError):
+                        valgrind.check_review(review, inputs)
+        for method in ("filename absent", "source missing", "not compiled"):
+            review = dict(original, method=method)
+            with self.assertRaisesRegex(ValueError, "absence"):
+                valgrind.check_review(review, inputs)
+
+    def write_licence_tar(self, path, entries, mode="w"):
+        with tarfile.open(path, mode) as archive:
+            for name, contents in entries.items():
+                member = tarfile.TarInfo(name)
+                member.size = len(contents)
+                archive.addfile(member, io.BytesIO(contents))
+
+    def test_valgrind_reuses_verification_and_requires_git_release_source_equality(self):
+        valgrind, _, inputs = self.valgrind_fixture()
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            entries = {}
+            git_results = []
+            for name, location in valgrind.SOURCES.items():
+                entries["node-v22.23.1/" + location] = inputs[name]
+                git_results.append(inputs[name])
+            archive = directory / "node-v22.23.1.tar.xz"
+            for case in ("matching", "missing", "changed"):
+                changed = dict(entries)
+                first = next(iter(changed))
+                if case == "missing":
+                    del changed[first]
+                elif case == "changed":
+                    changed[first] += b"changed"
+                self.write_licence_tar(archive, changed, "w:xz")
+                with patch.object(valgrind.pcre, "check_upstream", return_value=dict(inputs)) as verify:
+                    with patch.object(valgrind.pcre, "run_checked", side_effect=git_results) as git:
+                        if case == "matching":
+                            self.assertEqual(valgrind.check_upstream(directory), inputs)
+                        else:
+                            with self.assertRaises(ValueError):
+                                valgrind.check_upstream(directory)
+                        verify.assert_called_once_with(directory)
+                        expected = []
+                        for location in valgrind.SOURCES.values():
+                            expected.append(unittest.mock.call([
+                                "git", "-C", str(directory / "upstream"), "show",
+                                f"{valgrind.pcre.COMMIT}:{location}"]))
+                        self.assertEqual(git.call_args_list, expected)
+            with patch.object(valgrind.pcre, "check_upstream", side_effect=ValueError("refused")):
+                with self.assertRaisesRegex(ValueError, "refused"):
+                    valgrind.check_upstream(directory)
+
+    def test_valgrind_inherited_signature_and_binary_comparison_wiring(self):
+        valgrind, review, inputs = self.valgrind_fixture()
+        pcre = valgrind.pcre
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            tag = f"object {pcre.COMMIT}\ntype commit\ntag v22.23.1\n".encode()
+            (directory / "node-tag").write_bytes(tag + b"-----BEGIN PGP SIGNATURE-----test")
+            entries = {"node-v22.23.1/src/node_version.h": inputs["node-version.h"],
+                       "node-v22.23.1/LICENSE": inputs["node-LICENSE"],
+                       "node-v22.23.1/README.md": b"890C08DB8579162FEE0DF9DB8BEAB4DFCF555EF4"}
+            self.write_licence_tar(directory / "node-v22.23.1.tar.xz", entries, "w:xz")
+            binary = {"node-v22.23.1-linux-x64/bin/node": b"binary harness only",
+                      "node-v22.23.1-linux-x64/LICENSE": inputs["node-LICENSE"]}
+            self.write_licence_tar(directory / "node-v22.23.1-linux-x64.tar.xz", binary, "w:xz")
+
+            def verified_command(arguments):
+                if arguments[0] == "gpgv":
+                    signatures.append(arguments)
+                    if len(signatures) == rejected_signature:
+                        raise ValueError("signature refused")
+                    if "--output" in arguments:
+                        sums = []
+                        for name in ("node-v22.23.1.tar.xz", "node-v22.23.1-linux-x64.tar.xz"):
+                            sums.append(f"{review['files'][name]} {name}\n")
+                        Path(arguments[arguments.index("--output") + 1]).write_text("".join(sums))
+                    return b""
+                return inputs[git_names.pop(0)]
+
+            for rejected_signature in (1, 2, 0):
+                signatures = []
+                git_names = ["regexp-pcre.js", "node-version.h", "node-LICENSE"]
+                with patch.object(pcre.candidate, "checked_bytes") as hashes:
+                    with patch.object(pcre, "run_checked", side_effect=verified_command):
+                        with patch.object(pcre, "check_shipped") as shipped:
+                            if rejected_signature:
+                                with self.assertRaisesRegex(ValueError, "signature refused"):
+                                    pcre.check_upstream(directory)
+                            else:
+                                pcre.check_upstream(directory)
+                                self.assertEqual(len(signatures), 2)
+                                copies = []
+                                for name, contents in binary.items():
+                                    location = name.replace("node-v22.23.1-linux-x64/", "usr/local/")
+                                    copies.append((location, hashlib.sha256(contents).hexdigest()))
+                                shipped.assert_called_once_with(copies)
+                            self.assertEqual(hashes.call_count, len(pcre.FILES))
+            with patch.object(pcre.subprocess, "run") as process:
+                process.return_value.returncode = 1
+                with self.assertRaises(ValueError):
+                    pcre.run_checked(["gpgv", "test"])
+
+    def test_valgrind_inherited_candidate_check_reads_every_layer_and_build_recipe(self):
+        valgrind, _, inputs = self.valgrind_fixture()
+        pcre = valgrind.pcre
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            first = directory / "first.tar"
+            second = directory / "second.tar"
+            self.write_licence_tar(first, {"usr/local/LICENSE": inputs["node-LICENSE"]})
+            self.write_licence_tar(second, {"usr/local/bin/node": b"changed binary"})
+            manifest = [{"Layers": ["first.tar", "second.tar"]}]
+            self.write_licence_tar(directory / "candidate.tar", {
+                "manifest.json": json.dumps(manifest).encode(),
+                "first.tar": first.read_bytes(), "second.tar": second.read_bytes()})
+            base = (b"FROM node:22.23.1-bookworm-slim@sha256:"
+                    b"6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3\n")
+            for recipe in (base * 2, b"FROM wrong\n"):
+                self.write_licence_tar(directory / "source.tar", {"infra/package/Dockerfile": recipe})
+                with patch.object(pcre.candidate, "check_evidence") as evidence:
+                    with patch.object(pcre, "check_shipped") as shipped:
+                        if recipe == base * 2:
+                            pcre.check_candidate({}, directory)
+                        else:
+                            with self.assertRaisesRegex(ValueError, "build inputs"):
+                                pcre.check_candidate({}, directory)
+                        evidence.assert_called_once_with({}, directory)
+                        shipped.assert_called_once_with([
+                            ("usr/local/LICENSE", pcre.node.NODE_NOTICE),
+                            ("usr/local/bin/node", hashlib.sha256(b"changed binary").hexdigest())])
+                with patch.object(pcre.candidate, "check_evidence"):
+                    with self.assertRaisesRegex(ValueError, "every layer"):
+                        pcre.check_candidate({}, directory)
+
+    def test_valgrind_checks_all_bound_inputs_before_reporting_resolution(self):
+        valgrind, review, inputs = self.valgrind_fixture()
+        for refused in ("upstream", "review", "candidate", None):
+            with self.subTest(refused=refused):
+                with patch.object(valgrind, "check_upstream", return_value=inputs) as upstream:
+                    with patch.object(valgrind, "check_review") as terms:
+                        with patch.object(valgrind.pcre, "check_candidate") as candidate:
+                            checks = {"upstream": upstream, "review": terms, "candidate": candidate}
+                            if refused:
+                                checks[refused].side_effect = ValueError("refused")
+                                with self.assertRaises(ValueError):
+                                    valgrind.check_evidence(Path("candidate"), Path("upstream"))
+                            else:
+                                valgrind.check_evidence(Path("candidate"), Path("upstream"))
+                                upstream.assert_called_once_with(Path("upstream"))
+                                terms.assert_called_once_with(review, inputs)
+                                candidate.assert_called_once()
+
     def pcre_fixture(self):
         path = source.parents[2] / "docs/process/p5-4-images6/check-pcre.py"
         module_spec = importlib.util.spec_from_file_location("pcre", path)
