@@ -6250,13 +6250,17 @@ Their `affectedRun` must match the run occupied before that event; current owner
 control revisions are checked against the preceding history. Sender admission reads the
 prohibition before budget cleanup. Neither receipt proves termination.
 `routine-bridge.ts` tracks routine starts accepted on each socket. The ordinary bridge poll
-checks saved owner Stop/Pause/Retire with `readRootStopEvidence`, shared with budget cleanup.
-It matches the allocated budget root, frozen people, accepted thread and current computer
-generation before sending the existing targeted Stop. Failed reads and sends retry.
-The two-second cancellation deadline starts when the poll sees a matching prohibition.
-Evidence validation and the computer check share that deadline. An expired read sends no
-late Stop; a later poll retries all checks. Unavailable evidence cannot guarantee interruption
-within two seconds, and never permits sending without validation.
+matches the allocated budget root and frozen people to the accepted turn, thread and
+computer generation before looking for saved owner Stop/Pause/Retire records.
+It then checks the record with `readRootStopEvidence`, shared with budget cleanup,
+and refreshes the computer's current generation before sending the existing targeted Stop.
+The two-second interruption limit starts when the poll sees a matching saved prohibition.
+Evidence validation and the computer check share a one-second deadline, leaving one second
+for delivery. A timeout or read error still sends Stop to the already accepted turn on its
+existing socket. This only withdraws execution; it grants no access or permission to resume.
+Successful reads still reject mismatched evidence or a replacement computer generation.
+The final send checks that the same turn remains tracked and the socket is open.
+Late evidence results cannot send another Stop. Later polls retry failed sends or cleanup.
 Completion keeps the accepted start details, turn and computer generation until the matching
 `private_output_cleared` receipt arrives. That receipt confirms reply removal, not termination.
 If clearance arrives first, tracking stays until an accepted terminal report arrives too.

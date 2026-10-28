@@ -1,5 +1,5 @@
 import { computerSummary, type ComputerSummary } from '@opencrane/auth';
-import { readStreamSummary, type EventStore } from '@opencrane/event-store';
+import { readStreamSummary, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { budgetRootAllowanceSetDataSchema, computerTurnStartedDataSchema,
   conversationCreatedDataSchema, routineControlSchema, routineStopSchema } from '@opencrane/events';
 import { history, readRootStopEvidence } from '@opencrane/models';
@@ -176,6 +176,41 @@ export function routineBridge(options: Options, computer: Computer, socket: WebS
     }
     return true;
   }
+  function stopTrackedTurn(tracked: TrackedTurn) {
+    const turn = tracked.turn;
+    if (turns.get(turn.turnId) !== tracked || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    const frame = { type: 'stop', conversationId: turn.conversationId,
+      turnId: turn.turnId, threadId: turn.threadId };
+    socket.send(JSON.stringify(frame));
+  }
+  async function stopAfterProhibition(tracked: TrackedTurn, root: Root,
+    subject: string, row: StoredEvent) {
+    // Reserve one second for Stop delivery within the two-second interruption limit.
+    const validationDeadline = performance.now() + 1000;
+    try {
+      const source = await readRootStopEvidence(options.store, subject,
+        row.sequence, validationDeadline);
+      if (!matchesSource(source, root, options.silo, row.event.id)) {
+        return;
+      }
+      function take(summary: ComputerSummary) {
+        return currentTurn(summary, root, tracked);
+      }
+      const current = await readStreamSummary(options.store, options.silo,
+        `computer-${computer.assistantId}`, computerSummary, validationDeadline, take);
+      if (!current) {
+        return;
+      }
+    } catch {
+      // Stop the accepted turn when evidence is unavailable after a saved prohibition.
+      // Grant no access or permission to resume through this cancellation path.
+      stopTrackedTurn(tracked);
+      return;
+    }
+    stopTrackedTurn(tracked);
+  }
   async function deliver(tracked: TrackedTurn) {
     const turn = tracked.turn;
     const chat = await readChatFacts(options.store, options.silo, turn.conversationId, turn.turnId);
@@ -195,24 +230,7 @@ export function routineBridge(options: Options, computer: Computer, socket: WebS
       if (occurrenceId !== preparation.occurrenceId) {
         continue;
       }
-      // Include evidence validation in the cancellation deadline without skipping its checks.
-      const sendBy = performance.now() + 2000;
-      const source = await readRootStopEvidence(options.store, subject, row.sequence, sendBy);
-      if (!matchesSource(source, root, options.silo, row.event.id)) {
-        return;
-      }
-      function take(summary: ComputerSummary) {
-        return currentTurn(summary, root!, tracked);
-      }
-      const current = await readStreamSummary(options.store, options.silo,
-        `computer-${computer.assistantId}`, computerSummary, sendBy, take);
-      if (!current || performance.now() >= sendBy || turns.get(turn.turnId) !== tracked ||
-          socket.readyState !== WebSocket.OPEN) {
-        return;
-      }
-      const frame = { type: 'stop', conversationId: turn.conversationId,
-        turnId: turn.turnId, threadId: turn.threadId };
-      socket.send(JSON.stringify(frame));
+      await stopAfterProhibition(tracked, root, subject, row);
       return;
     }
   }
