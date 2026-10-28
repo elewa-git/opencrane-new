@@ -20,7 +20,7 @@ import { toolPolicyFromRows } from '../src/tool-policy.ts';
 import { confirmCredentialRelease } from '../src/credential-release.ts';
 import { approvalActivity, requireActiveConversationTurn } from '../src/decision-activity.ts';
 import { authorityFence } from '../src/authority.ts';
-import { activeMember } from '../src/member-authority.ts';
+import { activeMember, MemberAccessRefused } from '../src/member-authority.ts';
 import { data as eventData } from '../src/state.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -1329,3 +1329,86 @@ async function releaseReplayAfterRestart() {
 }
 it('replay and a restarted store recover audit evidence without a sending capability',
   releaseReplayAfterRestart);
+
+async function releasePreparationRefusal(change: string, failedHistory: string) {
+  const test = await releaseFixture();
+  let event;
+  if (change === 'removed') {
+    event = envelope('test', `member-${test.userId}`, 'member.removed', {
+      memberId: test.userId, removedBy: 'owner',
+    });
+  } else {
+    event = envelope('test', `member-${test.userId}`, 'member.role_changed', {
+      memberId: test.userId, previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+    });
+  }
+  await nats.seed([event]);
+  const readStream = nats.store.readStream.bind(nats.store);
+  async function* read(subject: string, from?: number, deadline?: number) {
+    const failedSubject = failedHistory === 'decision' ? test.decision.subject : test.profileSubject;
+    if (failedHistory !== 'none' && subject === failedSubject) {
+      throw new Error('private-history-canary');
+    }
+    yield* readStream(subject, from, deadline);
+  }
+  let refusal: unknown;
+  async function prepareAccess() {
+    try {
+      await activeMember(nats.store, binding, test.userId, { requiredRole: 'admin' });
+    } catch (error) {
+      refusal = error;
+      throw error;
+    }
+    throw new Error('Expected access refusal');
+  }
+  const permission = vi.fn(prepareAccess);
+  const reads = vi.spyOn(nats.store, 'readStream');
+  reads.mockImplementation(read);
+  const writes = vi.spyOn(nats.store, 'append');
+  try {
+    const pending = confirmCredentialRelease(nats.store, 'test', test.userId,
+      test.decision.id, test.release, permission);
+    await expect(pending).rejects.toBeInstanceOf(MemberAccessRefused);
+    await expect(pending).rejects.toBe(refusal);
+    expect(permission).toHaveBeenCalledTimes(1);
+    expect(writes).not.toHaveBeenCalled();
+    expect(await nats.store.head(test.releaseSubject)).toBe(0);
+    expect(test.custody.stage).not.toHaveBeenCalled();
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each([
+  ['removed', 'none'], ['removed', 'decision'], ['removed', 'profile'],
+  ['demoted', 'none'], ['demoted', 'decision'], ['demoted', 'profile'],
+])('preserves release refusal for %s access with failed %s history', releasePreparationRefusal);
+
+async function releaseHistoryFailureAfterPermission(failedHistory: string) {
+  const test = await releaseFixture();
+  const readStream = nats.store.readStream.bind(nats.store);
+  async function* read(subject: string, from?: number, deadline?: number) {
+    const failedSubject = failedHistory === 'decision' ? test.decision.subject : test.profileSubject;
+    if (subject === failedSubject) {
+      throw new Error('private-history-canary');
+    }
+    yield* readStream(subject, from, deadline);
+  }
+  const reads = vi.spyOn(nats.store, 'readStream');
+  reads.mockImplementation(read);
+  const permission = vi.fn(test.prepareAccess);
+  const writes = vi.spyOn(nats.store, 'append');
+  try {
+    const pending = confirmCredentialRelease(nats.store, 'test', test.userId,
+      test.decision.id, test.release, permission);
+    await expect(pending).rejects.toThrow(/^Release unavailable$/u);
+    await expect(pending).rejects.not.toHaveProperty('cause');
+    expect(permission).toHaveBeenCalledTimes(1);
+    expect(writes).not.toHaveBeenCalled();
+    expect(await nats.store.head(test.releaseSubject)).toBe(0);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each(['decision', 'profile'])(
+  'sanitises failed %s release history after one permission decision',
+  releaseHistoryFailureAfterPermission);
