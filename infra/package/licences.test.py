@@ -1,4 +1,5 @@
 import importlib.util
+import contextlib
 import io
 import gzip
 import hashlib
@@ -48,6 +49,299 @@ class LicenceTests(unittest.TestCase):
         inventory = checker.read_json(source.with_name("licence-inventory.json"))
         with self.assertRaisesRegex(ValueError, "exact source revision"):
             checker.check_package_review(reviewed, inventory)
+
+    def test_wasm_requires_exact_source_version_notice_and_build_inputs(self):
+        wasm, original, inputs = self.wasm_fixture()
+        for field in original:
+            for replacement in (None, "wrong"):
+                with self.subTest(field=field, replacement=replacement):
+                    review = json.loads(json.dumps(original))
+                    if replacement is None:
+                        del review[field]
+                    else:
+                        review[field] = replacement
+                    with self.assertRaises((ValueError, KeyError, TypeError)):
+                        wasm.check_review(review, inputs)
+        for name in wasm.INPUTS:
+            for replacement in (None, b"changed", b"MIT: Permission is hereby granted"):
+                with self.subTest(name=name, replacement=replacement):
+                    changed = dict(inputs)
+                    if replacement is None:
+                        del changed[name]
+                    else:
+                        changed[name] = replacement
+                    with self.assertRaises((ValueError, KeyError)):
+                        wasm.check_review(original, changed)
+
+    def test_wasm_refuses_missing_duplicate_substituted_grants_and_absence(self):
+        wasm, original, inputs = self.wasm_fixture()
+        for field in ("references", "declarations"):
+            for case in ("missing", "duplicate", "name", "terms", "location", "reason"):
+                with self.subTest(field=field, case=case):
+                    review = json.loads(json.dumps(original))
+                    rows = review[field]
+                    if case == "missing":
+                        rows.clear()
+                    elif case == "duplicate":
+                        rows.append(rows[0])
+                    elif case == "name":
+                        rows[0][0] = "another component or section"
+                    elif case == "terms":
+                        rows[0][1] = ["MIT"]
+                    elif field == "references":
+                        rows[0][1] = "V8 Valgrind client API"
+                    elif case == "location":
+                        rows[0][2] = "other/file.h"
+                    else:
+                        rows[0][3] = " "
+                    with self.assertRaises(ValueError):
+                        wasm.check_review(review, inputs)
+        for method in ("filename absent", "source missing", "not compiled"):
+            review = dict(original, method=method)
+            with self.assertRaisesRegex(ValueError, "absence"):
+                wasm.check_review(review, inputs)
+
+    def test_wasm_reuses_verification_and_requires_git_release_source_equality(self):
+        wasm, _, inputs = self.wasm_fixture()
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            entries = {}
+            git_results = []
+            for name, location in wasm.SOURCES.items():
+                entries["node-v22.23.1/" + location] = inputs[name]
+                git_results.append(inputs[name])
+            archive = directory / "node-v22.23.1.tar.xz"
+            for case in ("matching", "missing", "changed"):
+                changed = dict(entries)
+                first = next(iter(changed))
+                if case == "missing":
+                    del changed[first]
+                elif case == "changed":
+                    changed[first] += b"changed"
+                self.write_licence_tar(archive, changed, "w:xz")
+                with patch.object(wasm.pcre, "check_upstream", return_value=dict(inputs)) as verify:
+                    with patch.object(wasm.pcre, "run_checked", side_effect=git_results) as git:
+                        if case == "matching":
+                            self.assertEqual(wasm.check_upstream(directory), inputs)
+                        else:
+                            with self.assertRaises(ValueError):
+                                wasm.check_upstream(directory)
+                        verify.assert_called_once_with(directory)
+                        expected = []
+                        for location in wasm.SOURCES.values():
+                            expected.append(unittest.mock.call([
+                                "git", "-C", str(directory / "upstream"), "show",
+                                f"{wasm.pcre.COMMIT}:{location}"]))
+                        self.assertEqual(git.call_args_list, expected)
+            with patch.object(wasm.pcre, "check_upstream", side_effect=ValueError("refused")):
+                with self.assertRaisesRegex(ValueError, "refused"):
+                    wasm.check_upstream(directory)
+
+    def test_wasm_inherited_signature_and_binary_comparison_wiring(self):
+        wasm, review, inputs = self.wasm_fixture()
+        pcre = wasm.pcre
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            tag = f"object {pcre.COMMIT}\ntype commit\ntag v22.23.1\n".encode()
+            (directory / "node-tag").write_bytes(tag + b"-----BEGIN PGP SIGNATURE-----test")
+            entries = {"node-v22.23.1/src/node_version.h": inputs["node-version.h"],
+                       "node-v22.23.1/LICENSE": inputs["node-LICENSE"],
+                       "node-v22.23.1/README.md": b"890C08DB8579162FEE0DF9DB8BEAB4DFCF555EF4"}
+            self.write_licence_tar(directory / "node-v22.23.1.tar.xz", entries, "w:xz")
+            binary = {"node-v22.23.1-linux-x64/bin/node": b"binary harness only",
+                      "node-v22.23.1-linux-x64/LICENSE": inputs["node-LICENSE"]}
+            self.write_licence_tar(directory / "node-v22.23.1-linux-x64.tar.xz", binary, "w:xz")
+
+            def verified_command(arguments):
+                if arguments[0] == "gpgv":
+                    signatures.append(arguments)
+                    if len(signatures) == rejected_signature:
+                        raise ValueError("signature refused")
+                    if "--output" in arguments:
+                        sums = []
+                        for name in ("node-v22.23.1.tar.xz", "node-v22.23.1-linux-x64.tar.xz"):
+                            digest = review["files"][name]
+                            if case == "checksum":
+                                digest = "0" * 64
+                            sums.append(f"{digest} {name}\n")
+                        Path(arguments[arguments.index("--output") + 1]).write_text("".join(sums))
+                    return b""
+                return inputs[git_names.pop(0)]
+
+            for case in ("release signature", "tag signature", "tag", "version", "commit",
+                         "signer", "checksum", "binary", "notice", "matching"):
+                rejected_signature = 0
+                if case == "release signature":
+                    rejected_signature = 1
+                elif case == "tag signature":
+                    rejected_signature = 2
+                changed_tag = tag
+                for field, original in (("tag", b"type commit"), ("version", b"v22.23.1"),
+                                        ("commit", pcre.COMMIT.encode())):
+                    if case == field:
+                        changed_tag = changed_tag.replace(original, b"changed")
+                (directory / "node-tag").write_bytes(
+                    changed_tag + b"-----BEGIN PGP SIGNATURE-----test")
+                changed_entries = dict(entries)
+                if case == "signer":
+                    changed_entries["node-v22.23.1/README.md"] = b"different signer"
+                self.write_licence_tar(directory / "node-v22.23.1.tar.xz", changed_entries, "w:xz")
+                self.write_licence_tar(
+                    directory / "node-v22.23.1-linux-x64.tar.xz", binary, "w:xz")
+                signatures = []
+                git_names = ["regexp-pcre.js", "node-version.h", "node-LICENSE"]
+                with patch.object(pcre.candidate, "checked_bytes") as hashes:
+                    with patch.object(pcre, "run_checked", side_effect=verified_command):
+                        binary_digest = hashlib.sha256(binary[
+                            "node-v22.23.1-linux-x64/bin/node"]).hexdigest()
+                        with patch.object(pcre, "BINARY", binary_digest):
+                            if case in ("binary", "notice"):
+                                changed = dict(binary)
+                                member = "bin/node"
+                                if case == "notice":
+                                    member = "LICENSE"
+                                changed["node-v22.23.1-linux-x64/" + member] = b"changed"
+                                self.write_licence_tar(
+                                    directory / "node-v22.23.1-linux-x64.tar.xz", changed, "w:xz")
+                                with self.assertRaises(ValueError):
+                                    pcre.check_upstream(directory)
+                            elif case != "matching":
+                                with self.assertRaises(ValueError):
+                                    pcre.check_upstream(directory)
+                            else:
+                                pcre.check_upstream(directory)
+                                self.assertEqual(len(signatures), 2)
+                            self.assertEqual(hashes.call_count, len(pcre.FILES))
+            with patch.object(pcre.subprocess, "run") as process:
+                process.return_value.returncode = 1
+                with self.assertRaises(ValueError):
+                    pcre.run_checked(["gpgv", "test"])
+
+    def test_wasm_inherited_candidate_check_reads_every_layer_and_build_recipe(self):
+        wasm, _, inputs = self.wasm_fixture()
+        pcre = wasm.pcre
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            first = directory / "first.tar"
+            second = directory / "second.tar"
+            first_entries = {"usr/local/LICENSE": inputs["node-LICENSE"]}
+            self.write_licence_tar(first, first_entries)
+            second_entries = {"usr/local/bin/node": b"changed binary"}
+            self.write_licence_tar(second, second_entries)
+            manifest = [{"Layers": ["first.tar", "second.tar"]}]
+            candidate_entries = {"manifest.json": json.dumps(manifest).encode(),
+                                 "first.tar": first.read_bytes(), "second.tar": second.read_bytes()}
+            self.write_licence_tar(directory / "candidate.tar", candidate_entries)
+            base = (b"FROM node:22.23.1-bookworm-slim@sha256:"
+                    b"6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3\n")
+            for recipe in (base * 2, b"FROM wrong\n"):
+                source_entries = {"infra/package/Dockerfile": recipe}
+                self.write_licence_tar(directory / "source.tar", source_entries)
+                with patch.object(pcre.candidate, "check_evidence") as evidence:
+                    with patch.object(pcre, "check_shipped") as shipped:
+                        if recipe == base * 2:
+                            pcre.check_candidate({}, directory)
+                        else:
+                            with self.assertRaisesRegex(ValueError, "build inputs"):
+                                pcre.check_candidate({}, directory)
+                        evidence.assert_called_once_with({}, directory)
+                        shipped.assert_called_once_with([
+                            ("usr/local/LICENSE", pcre.node.NODE_NOTICE),
+                            ("usr/local/bin/node", hashlib.sha256(b"changed binary").hexdigest())])
+                with patch.object(pcre.candidate, "check_evidence"):
+                    with self.assertRaisesRegex(ValueError, "every layer"):
+                        pcre.check_candidate({}, directory)
+
+            first_entries = {"usr/local/LICENSE": b"changed notice"}
+            self.write_licence_tar(first, first_entries)
+            candidate_entries = {"manifest.json": json.dumps(manifest).encode(),
+                                 "first.tar": first.read_bytes(), "second.tar": second.read_bytes()}
+            self.write_licence_tar(directory / "candidate.tar", candidate_entries)
+            source_entries = {"infra/package/Dockerfile": base * 2}
+            self.write_licence_tar(directory / "source.tar", source_entries)
+            with patch.object(pcre.candidate, "check_evidence"):
+                binary_digest = hashlib.sha256(b"changed binary").hexdigest()
+                with patch.object(pcre, "BINARY", binary_digest):
+                    with self.assertRaisesRegex(ValueError, "every layer"):
+                        pcre.check_candidate({}, directory)
+
+    def test_wasm_checks_all_bound_inputs_before_reporting_resolution(self):
+        wasm, review, inputs = self.wasm_fixture()
+        for refused in ("upstream", "review", "candidate", None):
+            with self.subTest(refused=refused):
+                with patch.object(wasm, "check_upstream", return_value=inputs) as upstream:
+                    with patch.object(wasm, "check_review") as terms:
+                        with patch.object(wasm.pcre, "check_candidate") as candidate:
+                            checks = {"upstream": upstream, "review": terms, "candidate": candidate}
+                            if refused:
+                                checks[refused].side_effect = ValueError("refused")
+                                with self.assertRaises(ValueError):
+                                    wasm.check_evidence(Path("candidate"), Path("upstream"))
+                            else:
+                                wasm.check_evidence(Path("candidate"), Path("upstream"))
+                                upstream.assert_called_once_with(Path("upstream"))
+                                terms.assert_called_once_with(review, inputs)
+                                record = checker.read_json(wasm.candidate.RECORD)
+                                candidate.assert_called_once_with(record, Path("candidate"))
+
+    def test_wasm_refuses_changed_or_missing_authenticated_inputs(self):
+        wasm, review, _ = self.wasm_fixture()
+        for name in review["files"]:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                with patch.object(wasm.pcre, "FILES", {name: review["files"][name]}):
+                    with self.assertRaises(OSError):
+                        wasm.check_upstream(directory)
+                    (directory / name).write_bytes(b"changed archive, signature or tag")
+                    with self.assertRaisesRegex(ValueError, "Evidence bytes changed"):
+                        wasm.check_upstream(directory)
+
+    def test_wasm_cli_withholds_paths_and_source_on_refusal(self):
+        path = source.parents[2] / "docs/process/p5-4-images8/check-wasm.py"
+        for arguments in ([], ["private-fixture-marker", "private-fixture-marker"]):
+            result = subprocess.run([sys.executable, str(path), *arguments],
+                                    capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr,
+                             "FAIL Wasm API source-bound evidence is missing, "
+                             "changed or unsupported\n")
+
+    def test_wasm_cli_withholds_malformed_archive_and_captured_dependency_output(self):
+        wasm, _, inputs = self.wasm_fixture()
+        for case in ("archive", "truncated", "dependency"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                archive = directory / "node-v22.23.1.tar.xz"
+                archive.write_bytes(b"private-archive-marker")
+                if case == "truncated":
+                    entries = {"node-v22.23.1/" + wasm.SOURCE_PATH: inputs["wasm-LICENSE"]}
+                    self.write_licence_tar(archive, entries, "w:xz")
+                    contents = archive.read_bytes()
+                    archive.write_bytes(contents[:len(contents) // 2])
+                with patch.object(wasm.pcre, "check_upstream", return_value=dict(inputs)):
+                    with patch.object(wasm.pcre.subprocess, "run") as dependency:
+                        dependency.return_value.returncode = 1
+                        dependency.return_value.stdout = b"private-output-marker"
+                        dependency.return_value.stderr = b"private-error-marker"
+                        stdout = io.StringIO()
+                        stderr = io.StringIO()
+                        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                            if case != "dependency":
+                                git_results = []
+                                for name in wasm.SOURCES:
+                                    git_results.append(inputs[name])
+                                git_patch = patch.object(
+                                    wasm.pcre, "run_checked", side_effect=git_results)
+                                with git_patch:
+                                    result = wasm.main([str(directory), str(directory)])
+                            else:
+                                result = wasm.main([str(directory), str(directory)])
+                        self.assertEqual(result, 1)
+                        self.assertEqual(stdout.getvalue(), "")
+                        self.assertEqual(stderr.getvalue(),
+                            "FAIL Wasm API source-bound evidence is missing, "
+                            "changed or unsupported\n")
 
     def valgrind_fixture(self):
         path = source.parents[2] / "docs/process/p5-4-images7/check-valgrind.py"

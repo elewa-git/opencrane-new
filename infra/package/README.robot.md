@@ -282,8 +282,8 @@ It compares the Git source, version header and notice with the reviewed bytes, t
 checks the official binary archive, candidate binary, all shipped layers and archived
 Dockerfile. The source tarball omits this test file; its absence grants no approval.
 The [receipt](../../docs/process/p5-4-images6/receipt.md) gives source links and limits.
-Only this source-bound reference is resolved. The other nine references, other
-bundles, vulnerability clearance, source-bound R3 approval and publication remain
+This check resolves only its named reference. Other references and bundles,
+vulnerability clearance, source-bound R3 approval and publication remain
 outstanding. No approved image, inventory or binary pin changes.
 
 The separate [Valgrind record](../../docs/process/p5-4-images7/valgrind.json) resolves
@@ -307,7 +307,26 @@ The compressed fixtures keep the complete header and licence text. The candidate
 check still reads every shipped layer and the archived Dockerfile. The
 [receipt](../../docs/process/p5-4-images7/receipt.md) records checks and remaining
 coverage limits. Historical records and PCRE's separate resolution are unchanged.
-Eight references, Corepack/Go/kubectl/agentgateway bundles, vulnerability clearance,
+
+The separate [Wasm API record](../../docs/process/p5-4-images8/wasm.json) resolves
+only `V8 Wasm C/C++ API` from the complete Apache-2.0 terms in
+`deps/v8/third_party/wasm-api/LICENSE`. Its two headers add no further grant or
+attribution. `README.v8` identifies Apache 2.0 and says it is shipped. The pinned
+API directory has no NOTICE file. The record retains the complete licence and
+headers in compressed fixtures; recipients of distributed code still need the
+full terms, marked changes, relevant source attribution and any supplied NOTICE.
+
+```sh
+nice -n 10 python3 docs/process/p5-4-images8/check-wasm.py \
+  /tmp/p5-4-images4 /tmp/p5-4-images6
+```
+
+This checker reuses the signed release/tag, official binary and all-layer checks.
+All four API files must agree between Git, authenticated release source and the
+reviewed checksums. Missing files prove no compiled absence. The
+[receipt](../../docs/process/p5-4-images8/receipt.md) records its own checks and limits.
+The historical ten-reference validation and PCRE/Valgrind records stay unchanged.
+Seven references, Corepack/Go/kubectl/agentgateway bundles, vulnerability clearance,
 exact-source R3 approval and publication remain outstanding.
 
 ## Private owner email
