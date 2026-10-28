@@ -1880,6 +1880,7 @@ function routineRootTests() {
       try {
         const model = await fixture.model();
         expect(model.status, await model.text()).toBe(200);
+        expect(actor.state.dispatches).toHaveLength(1);
         expect(batches).toBeGreaterThanOrEqual(2);
         const afterModel = batches;
         const tool = await fixture.tool();
@@ -1890,7 +1891,7 @@ function routineRootTests() {
         expect(sent.status, await sent.text()).toBe(200);
         expect(batches - afterTool).toBeGreaterThanOrEqual(2);
         expect(actor.state.reservations).toHaveLength(1);
-        expect(actor.state.dispatches).toHaveLength(1);
+        expect(actor.state.dispatches).toHaveLength(2);
         expect(fixture.received()).toBeGreaterThan(0);
       } finally {
         await fixture.close();
@@ -1949,6 +1950,7 @@ function routineRootTests() {
         const response = permit ? await fixture.send(permit) : await fixture.model();
         expect(saved).toBe(true);
         expect(response.status).toBe(403);
+        expect(response.headers.get('x-opencrane-decision')).toBe('refused');
         expect(response.headers.get('x-reservation-id')).toBeNull();
         expect(fixture.received()).toBe(0);
         expect(actor.state.roots[0]!.stop).toBeUndefined();
