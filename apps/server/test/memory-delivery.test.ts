@@ -7,6 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { memoryContextRecordedEventSchema, parseEventByType } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { history } from '@opencrane/models';
+import { grantStream, memberAuthorisation } from '@opencrane/authz';
 import { memoryScopeId } from '@opencrane/projections';
 import { fixture } from '../../computer/test/bridge-gate-fixture.ts';
 import { createLogger } from '@opencrane/observability';
@@ -94,7 +95,22 @@ async function setup() {
     threadId: 'thread-1', task: 'chat_turn', executionMode: 'restricted' });
   computer.socket.terminate();
   await once(computer.socket, 'close');
-  const options = { silo: 'test', store: nats.store, keys };
+  const iam = { silo: 'test', apiUrl: 'http://127.0.0.1:1',
+    storeId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', authorizationModelId: '01ARZ3NDEKTSV4RRFFQ69G5FAW' };
+  function applied() { return Promise.resolve(true); }
+  function allowed() { return Promise.resolve({ allowed: true, status: 'ok' as const }); }
+  vi.spyOn(memberAuthorisation(iam), 'applied').mockImplementation(applied);
+  vi.spyOn(memberAuthorisation(iam), 'check').mockImplementation(allowed);
+  vi.spyOn(memberAuthorisation(iam), 'actsFor').mockImplementation(allowed);
+  vi.spyOn(memberAuthorisation(iam), 'conversation').mockImplementation(allowed);
+  vi.spyOn(memberAuthorisation(iam), 'use').mockImplementation(allowed);
+  for (const [resourceType, resourceId] of [['mcp_server', 'memory'], ['memory_read', scopeId]]) {
+    for (const [granteeKind, granteeId] of [['member', 'alice'], ['assistant', 'assistant']]) {
+      await append(grantStream(resourceType!, resourceId!), 'grant.given',
+        { resourceType, resourceId, granteeKind, granteeId, grantedBy: 'alice' });
+    }
+  }
+  const options = { silo: 'test', store: nats.store, keys, binding: iam };
   const input = { url: computer.socket.url, computerId: 'computer',
     assistantId: 'assistant', bearer: 'test' };
   link = await connectBridge(options, input, computer.issuer);
@@ -887,3 +903,14 @@ async function expiredAdditionBeforeCompletedWithdrawal(replace: boolean) {
 it.each([false, true])(
   'a recall saved at expiry cannot block completed output clearance, replacement=%s',
   expiredAdditionBeforeCompletedWithdrawal);
+
+async function removesLoadedRequester() {
+  await append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'owner' });
+  await poll();
+  const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(facts.memoryContext).toMatchObject({ status: 'invalidated', reason: 'access_changed',
+    references: [{ scopeId, memoryId: 'fact', revision: 1 }], executionAvailable: false });
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(1);
+  expect(computer.grants.has('thread-1')).toBe(false);
+}
+it('withdraws loaded personal memory when its saved requester is removed', removesLoadedRequester);
