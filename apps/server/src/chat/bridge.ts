@@ -1,3 +1,4 @@
+import { routineBridge, routineStartRefusal } from '../routine-bridge.ts';
 import { memoryBridge } from '../memory/bridge.ts';
 import { releaseTurnCredentials } from './turn-credentials.ts';
 import { prepareRoutineThread } from './routine-thread.ts';
@@ -13,7 +14,7 @@ import { WebSocket, type RawData } from 'ws';
 import { readComputerControl, type tokenIssuer } from '@opencrane/auth';
 import type { WatchOptions, AgentSession } from './bridge-conversation.ts';
 import type { TurnDelivery } from './turn-tools.ts';
-import { assistantProcessor } from './bridge-poll.ts';
+import { assistantProcessor, groupSessions } from './bridge-poll.ts';
 import { listOpenConversations } from '@opencrane/projections';
 import { createLogger, type Logger } from '@opencrane/observability';
 import { z } from 'zod';
@@ -34,7 +35,7 @@ type BridgeOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
   Pick<Parameters<typeof bridgeControl>[0], 'stopExecution'>;
 type RoutineStart = NonNullable<Parameters<typeof turnCommand>[1]['routineStart']>;
 type ReportOptions = BridgeOptions & { routineStart: RoutineStart;
-  memory: ReturnType<typeof memoryBridge> };
+  memory: ReturnType<typeof memoryBridge>; routines: ReturnType<typeof routineBridge> };
 type BridgeInput = { url: string; computerId: string; assistantId: string; bearer: string };
 type ReportBatch = { values: unknown[]; sequences: number[]; textLength: number;
   bytes: number; started: boolean };
@@ -104,17 +105,25 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
       binding = await turnCommand(options.store, context,
         { ...report, status, replay: result === 'duplicate' });
     } catch (error) {
-      if (!(error instanceof TurnAdmissionRejected)) throw error;
       if (error instanceof BudgetAdmissionRejected) {
         const refused = { silo: options.silo, assistantId: input.assistantId,
           conversationId: report.conversationId, turnId: report.turnId, stopId: error.stopId };
         await recordBudgetRefusal(options.store, refused);
       }
-      acknowledgement.refused = error.message;
+      if (error instanceof TurnAdmissionRejected) {
+        acknowledgement.refused = error.message;
+      } else {
+        acknowledgement.refused = routineStartRefusal(report, error);
+      }
     }
     if (status === 'started' && binding) {
-      if (result !== 'duplicate') await options.memory.accept(report, binding);
+      if (result !== 'duplicate') {
+        await options.routines.accept(binding);
+        await options.memory.accept(report, binding);
+      }
       await releaseTurnCredentials(options, context, tokens, report, binding, acknowledgement);
+    } else if (status !== 'started') {
+      options.routines.ended(report.turnId);
     }
   }
   if (socket.readyState === socket.OPEN) {
@@ -179,7 +188,9 @@ function reportReceiver(options: ReportOptions, input: BridgeInput,
   const queues = new Map<string, ReportQueue>();
   function receiveReceipt(value: unknown) {
     if (control.receive(value)) return true;
-    if (options.memory.receive(value)) return true;
+    const memoryReceipt = options.memory.receive(value);
+    const routineReceipt = options.routines.receive(value);
+    if (memoryReceipt || routineReceipt) return true;
     if (receiptData.safeParse(value).success) return true;
     return approvals.receive(value);
   }
@@ -277,7 +288,8 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   }
   socket.once('close', forgetRoutineStarts);
   const memory = memoryBridge(options, input, socket);
-  const reportOptions = { ...options, routineStart, memory };
+  const routines = routineBridge(options, input, socket);
+  const reportOptions = { ...options, routineStart, memory, routines };
   const reports = reportReceiver(reportOptions, input, tokens, socket, refuse, approvals, control);
   socket.on('message', reports.receiveReport);
   try {
@@ -305,7 +317,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     return reportsDone;
   }
   return {
-    socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting, control, memory,
+    socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting, control, memory, routines,
     bindRoutineStart, computerId: input.computerId, assistantId: input.assistantId,
     prepareRoutineThread: prepareRoutineThread.bind(undefined, socket),
     get rejection() { return rejection; },
@@ -411,6 +423,7 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
         const head = await options.store.head();
         for (const link of links.values()) link.approvals.poll(head);
         groups.forEach(processor.pollMemory);
+        groups.forEach(processor.pollRoutines);
         if (head === previousHead && !pending && !processing) {
           await delay(250, undefined, { signal });
           continue;
@@ -499,19 +512,6 @@ function forgetMissingTurns(links: Map<string, Awaited<ReturnType<typeof connect
       if (!conversationIds.has(conversationId)) link.sentTurns.delete(conversationId);
     }
   }
-}
-
-function groupSessions(sessions: AgentSession[]) {
-  const groups = new Map<string, AgentSession[]>();
-  for (const session of sessions) {
-    let group = groups.get(session.assistantId);
-    if (!group) {
-      group = [];
-      groups.set(session.assistantId, group);
-    }
-    group.push(session);
-  }
-  return [...groups.values()];
 }
 
 async function conversationTableBehind(db: ChatOptions['db'], head: number) {

@@ -475,7 +475,10 @@ root reference differs from the allocated budget root id. Owner and admin source
 `routine_stop`; later valid evidence cannot replace the first reason or source.
 The first stop stays permanent and refunds nothing. Dispatch checks follow separately.
 Explicitly enabled internal cleanup applies these saved routine records to an existing
-allocation. There is no route or subscribed lifecycle reaction; execution remains disabled.
+allocation. The connected bridge polls verified owner Stop/Pause/Retire records and
+interrupts only the accepted private turn on the bound computer generation. Sent frames
+and reply-clearance receipts do not prove termination. There is no route or subscribed
+lifecycle reaction; execution remains disabled.
 
 The Phase 2 model actor records the global monthly `ceilingCents` and
 `dailyCeilingCents` together. Reservations include `modelCall`: model, pinned
@@ -695,12 +698,12 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` / `routine.reassigned` | server for checked actor | routine facts | `update-openfga` applies creation, reassignment and retirement permissions and receipts; explicitly enabled internal cleanup applies verified owner Pause/Retire evidence to the occupied run’s existing budget root; no execution |
+| `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` / `routine.reassigned` | server for checked actor | routine facts | `update-openfga` applies creation, reassignment and retirement permissions and receipts; explicitly enabled internal cleanup applies verified owner Pause/Retire evidence to the occupied run’s existing budget root; the connected bridge polls verified prohibitions to interrupt the accepted private turn; no execution |
 | `routine.due` | server system | frozen occurrence facts (pure fold only) | none; no input or root is started |
 | `routine.occurrence_skipped` / `routine.occurrences_missed` | server system | saved cursor/next facts | none |
 | `routine.run_activation_admitted` | internal server conditional command | saved exact admission and sender attempt | none; receipt only, execution remains disabled |
 | `routine.run_finished` | server system | saved run facts | none; records grant no authority |
-| `routine.run_stop_requested` | internal server command for the current owner | saved Stop intent | none subscribed; explicitly enabled internal cleanup applies verified evidence to an existing budget root; execution remains disabled |
+| `routine.run_stop_requested` | internal server command for the current owner | saved Stop intent | none subscribed; explicitly enabled internal cleanup applies verified evidence to an existing budget root; the connected bridge polls verified intent to interrupt the accepted private turn; execution remains disabled |
 | `delegation.started` / `delegation.completed` | server; legacy computer records are replay-only | delegations and computer-root read indexes | no effect reaction; shared native starts retain the admission’s `sharingClass`; native execution remains disabled |
 
 The activation command requires an existing checked allocation. Its `admission` reference

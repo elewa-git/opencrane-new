@@ -6252,8 +6252,26 @@ Pause and Retire each save one lifecycle event, without manufacturing an owner S
 Their `affectedRun` must match the run occupied before that event; current owner and
 control revisions are checked against the preceding history. Sender admission reads the
 prohibition before budget cleanup. Neither receipt proves termination.
-Routes, subscriptions, other lifecycle causes and
-running-turn interruption remain later work. Execution remains disabled.
+`routine-bridge.ts` tracks routine starts accepted on each socket. The ordinary bridge poll
+matches the allocated budget root and frozen people to the accepted turn, thread and
+computer generation before looking for saved owner Stop/Pause/Retire records.
+It then checks the record with `readRootStopEvidence`, shared with budget cleanup,
+and refreshes the computer's current generation before sending the existing targeted Stop.
+The two-second interruption limit starts when the poll sees a matching saved prohibition.
+Evidence validation and the computer check share a one-second deadline, leaving one second
+for delivery. A timeout or read error still sends Stop to the already accepted turn on its
+existing socket. This only withdraws execution; it grants no access or permission to resume.
+Successful reads still reject mismatched evidence or a replacement computer generation.
+The final send checks that the same turn remains tracked and the socket is open.
+Late evidence results cannot send another Stop. Later polls retry failed sends or cleanup.
+Completion keeps the accepted start details, turn and computer generation until the matching
+`private_output_cleared` receipt arrives. That receipt confirms reply removal, not termination.
+If clearance arrives first, tracking stays until an accepted terminal report arrives too.
+Failed interruption cleanup therefore remains retryable after the reply buffer is cleared.
+Receipts for another conversation, turn or thread cannot discard tracking. The same receipt
+reaches both routine and memory tracking. Closing the socket clears its tracked turns.
+Cold replay does not populate tracking or resend work. Execution remains disabled.
+Routes, subscriptions and other lifecycle causes remain later work.
 Tests in routine-session and routine-sender cover the real owner command, delayed cleanup,
 allocation races, privacy, frozen people, retained holds and late integer-cent settlement.
 Fresh-install/live qualification: NOT RUN. Part of #106, P4-24 PR 12b and PR 12c.

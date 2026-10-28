@@ -2797,8 +2797,10 @@ The due's `rootId` is a routine reference, not the allocated budget root id.
 Later edits or reassignment do not replace those frozen facts. Both owner and admin sources
 use `routine_stop`, retaining the exact source reference and the first saved budget reason.
 The server owner command saves intent. Its separate internal cleanup operation reuses
-exported `readRootStopEvidence` and calls `stopRoot` for an existing allocation. Routes,
-subscriptions and interruption remain later work; execution remains disabled.
+exported `readRootStopEvidence` and calls `stopRoot` for an existing allocation.
+The bridge supplies its two-second cancellation deadline to this reader, covering both
+source lookup and routine history validation. Other callers retain the ten-second default.
+Routes and subscriptions remain later work; execution remains disabled.
 Chat turn close, completion or failure counts as turn-end evidence. Requester removal
 or close on participation, or requester removal on member, counts as access loss.
 Access-loss evidence must not precede the root's saved admission position. An old
@@ -2808,7 +2810,7 @@ Parent removal and creator departure remain for activation reconciliation.
 ordering, lost replies, duplicate-window expiry, old writers and PostgreSQL replay.
 The internal routine cleanup caller is described in the server contract.
 Root grant/dispatch and retry checks are described below. The child
-dispatcher remains separate work. Running-turn interruption remains absent.
+dispatcher remains separate work. Access-loss and budget-root interruption remain later work.
 
 ## Hosted registration — first part of P3-6 PR 4
 

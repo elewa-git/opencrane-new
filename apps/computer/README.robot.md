@@ -32,6 +32,15 @@ and no extra turn execution through the real WebSocket channel.
 A reply from an old connection cannot be sent on a replacement connection.
 The request and reply contain no routine instructions. No production dispatcher is enabled.
 
+A targeted Stop for an accepted routine cancels output and removes access immediately.
+Access-removal failures leave the shared bridge open for another Stop to retry.
+A ten-second timer closes only that routine's private session if no terminal report arrives;
+repeated Stop and delayed native-start replies keep the first deadline. The existing
+private supervisor then handles process exit and bounded kill retries. The timer itself
+saves no terminal report. Routine Stop accepts only the matching native terminal id and
+terminal status, or the existing private-session closure evidence. Clearance is not exit.
+`apps/server/test/routine-sender.test.ts` exercises these paths through the recording bridge.
+
 ## Test dependencies
 
 The test helper re-exports only the computer modules used by server integration tests.

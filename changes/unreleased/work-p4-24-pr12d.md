@@ -1,0 +1,3 @@
+- Saved routine Stop, Pause and Retire now interrupt only the accepted private turn. Failed delivery and cleanup retry without closing other chats; unresponsive routine turns close their own private connection after ten seconds. Execution remains disabled.
+- Saved routine prohibitions clear buffered private replies even when the turn completes before the next check. Clearance retries until the exact private thread confirms removal.
+- A saved routine prohibition interrupts its accepted private turn within two seconds even when further evidence reads time out or fail.
