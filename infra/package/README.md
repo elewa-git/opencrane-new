@@ -18,7 +18,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, licences and installs"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, bundled terms and installs"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
@@ -146,9 +146,10 @@ and checking that encrypted files and homes open with their saved descriptions.
 These checks share the capture time limit. Database backups and a complete-system
 backup still need work. Live checks of stopped writers and mounted home files remain untested.
 
-Separate licence checks connect a regular-expression test library and a Valgrind
-client header to Node's signed source release and the exact binary in every saved
-image layer. They keep the full terms and explain why each bundled part is allowed.
+Separate licence checks connect a regular-expression test library, a Valgrind
+client header and the WebAssembly C/C++ API to Node's signed source release and
+the exact binary in every saved image layer. They keep the full terms and explain
+why each bundled part is allowed.
 They do not claim that this code is absent. The
 [operator notes](README.robot.md#package-image-promotion) explain the saved files
 needed to repeat these checks. Other licence reviews and installation approval

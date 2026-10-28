@@ -1,0 +1,39 @@
+{
+  "status": "PARTIAL",
+  "method": "reviewed embedded terms",
+  "references": [
+    [
+      "105920c94ff5a834680e7e6d4ed5b666df185d6dc04ce7d7992b947b9916299f",
+      "V8 Wasm C/C++ API"
+    ]
+  ],
+  "nodeVersion": "22.23.1",
+  "upstreamCommit": "bd96dfbf0361576724b65322046e2ca9f9609cb9",
+  "sourcePath": "deps/v8/third_party/wasm-api/LICENSE",
+  "candidateSha256": "365bc4d4c4039ba62a6ce982aaae68508b2986df5edb7605355b92055457a2da",
+  "nodeNoticesSha256": "f1782b5d555567bccf789e55ebb6bc3ade518e519ec988ba13049a47c4678bcc",
+  "nodeBinarySha256": "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068",
+  "files": {
+    "node-v22.23.1.tar.xz": "b27385d6845089bdb91285d94b06c2a5cf1c37f8173a3c4e10824cc1ffadeaba",
+    "node-v22.23.1-linux-x64.tar.xz": "9749e988f437343b7fa832c69ded82a312e41a03116d766797ac14f6f9eee578",
+    "SHASUMS256.txt.asc": "8bf8cd2085e1c25cc750386c2253715b13867c65e2fa9c9c4abc47967420ec28",
+    "node-release-keys.kbx": "610b8d249da3d5733f5a128def2dd0294dbbf5b5713e6ca2529db8db419dee00",
+    "node-tag": "970c701965a2487ccaa5978cd9d97d879fe7d51a0aab59fa5672210bab2254dd"
+  },
+  "declarations": [
+    [
+      "Wasm C/C++ API",
+      [
+        "Apache-2.0"
+      ],
+      "deps/v8/third_party/wasm-api/LICENSE",
+      "The complete Apache-2.0 licence grants copyright and patent rights. Give recipients the full licence; mark modified files; retain relevant source attribution and any supplied NOTICE attribution. Patent litigation ends the patent grant. No trademark permission is granted. The headers have no additional grant or attribution; README.v8 identifies Apache 2.0 and says Shipped: yes. No NOTICE file occurs in this pinned directory. Keep the complete licence with any distributed code; the short shipped reference alone is insufficient."
+    ]
+  ],
+  "sourceFiles": {
+    "deps/v8/third_party/wasm-api/LICENSE": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
+    "deps/v8/third_party/wasm-api/wasm.h": "a4690c2961e94259dc5020698b1bd03243315edac5afabe0806f14fd47f64007",
+    "deps/v8/third_party/wasm-api/wasm.hh": "cdc02e5a44a2b28e8f7941c0ea73f6c19532b5db83b399d3cea252ddfb740b91",
+    "deps/v8/third_party/wasm-api/README.v8": "04d6239b64c5ce5717a7045886f799fecef63d863ff79b29ecd208e26376812c"
+  }
+}
