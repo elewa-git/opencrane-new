@@ -333,6 +333,8 @@ The [Corepack inventory](../../docs/process/p5-4-images9/inventory.json) adds ex
 file and launcher-link comparisons for Corepack 0.34.6. Its compressed source
 fixture retains all 54 files. The compressed range list accounts for all 967,004
 bundle bytes, including generated helpers, dependency labels and inline attribution.
+The checker verifies the compressed range file's checksum before decompressing it.
+Loading, decompression and parsing failures return fixed error text without local paths.
 The [receipt](../../docs/process/p5-4-images9/receipt.md) explains every table column.
 
 ```sh

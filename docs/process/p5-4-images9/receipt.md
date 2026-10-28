@@ -78,3 +78,27 @@ labels/hashes, extra layer copies, wrappers/links and lost inline attribution.
 No complete guard-coverage or reproducible-build claim is made. Event/API/access
 code and both authority tests remain unchanged. Promotion still needs complete
 licence and vulnerability checks, publication, exact-source R3 and fresh journeys.
+
+## Fixed refusal for damaged inputs
+
+The compressed range file now has its own checksum, checked before decompression.
+The existing checksum of the decoded range list still applies. Loading and checking
+failures return the fixed refusal, including decoder errors, deeply nested JSON
+and input paths that contain a symlink loop. These failures cannot print a traceback
+with a local path. Dependency loading uses the same refusal when JSON parsing fails.
+
+Failing-first test commit: `8d8a5ee27`. PASS: the five new tests produced six failing
+cases before the fix. The fixtures use child processes and require exit 1, the exact
+fixed stderr and empty stdout. Cases include byte 10 changed to `0xff`, truncated
+gzip, unsupported compression, malformed JSON, invalid text encoding, deeply nested
+JSON during checking and dependency loading, and a symlink loop. A separate fixture
+requires the compressed checksum to be checked before the decoder runs. Decoder
+fixtures also use matching compressed checksums to exercise decoder refusal itself.
+
+Own checks for this fix: PASS — 77 licence fixtures twice, full lint, typecheck,
+the event catalogue, Knip, public documentation privacy and changelog checks.
+Checks use `nice -n 10`; tests use the requested `PG_TEST_URL`. Lint uses a 6 GB
+Node heap. No database or development stack was needed by these fixtures.
+The runtime pins, approved inventory, compressed evidence and historical licence
+records are unchanged. Promotion remains BLOCKED. Full root suite, rebuilds,
+registry operations and fresh/live qualification: NOT RUN.

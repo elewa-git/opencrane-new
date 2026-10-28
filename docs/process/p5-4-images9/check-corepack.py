@@ -19,11 +19,13 @@ try:
     pcre = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(pcre)
     candidate = pcre.candidate
-except (OSError, ImportError, SyntaxError, ValueError, TypeError, AttributeError, KeyError):
+except Exception:
+    # Withhold local paths when an imported checker cannot load or parse its inputs.
     print(REFUSAL, file=sys.stderr)
     sys.exit(1)
 BUNDLE = "lib/node_modules/corepack/dist/lib/corepack.cjs"
 INVENTORY = "076e9fb77d031a7a138c4e39c54299670ddc241fe4b43d600c84ed3b6a838f87"
+REGIONS_SHA256 = "4286a20cc5b9bf718f8c34071a88b29a1a75d49534673848f762b232ba406c96"
 
 
 def trusted_review():
@@ -39,7 +41,9 @@ def check_review(review, contents):
             data = contents[name]
             if len(data) != size or hashlib.sha256(data).hexdigest() != digest:
                 raise ValueError("Corepack source bytes changed")
-    regions = gzip.decompress(RECORD.with_name("regions.json.gz").read_bytes())
+    # Check compressed bytes before asking the decoder to read untrusted input.
+    compressed = candidate.checked_bytes(RECORD.with_name("regions.json.gz"), REGIONS_SHA256)
+    regions = gzip.decompress(compressed)
     if hashlib.sha256(regions).hexdigest() != review["regionsSha256"]:
         raise ValueError("Corepack byte ranges changed")
     check_regions(json.loads(regions), contents[BUNDLE])
@@ -156,9 +160,8 @@ def main(arguments):
             check_evidence(Path(arguments[0]).resolve(), Path(arguments[1]).resolve())
         print("PASS Corepack inventory: exact source, official files and every candidate layer")
         print("PARTIAL dependency ancestry and grants BLOCKED; exact-source R3 still required")
-    except (KeyError, ValueError, OSError, TypeError, IndexError, AttributeError,
-            candidate.lzma.LZMAError, tarfile.TarError, EOFError):
-        # Withhold private paths, archive text and captured dependency output.
+    except Exception:
+        # Refuse all failed checks without exposing paths, parser errors or dependency output.
         print(REFUSAL, file=sys.stderr)
         return 1
     return 0
