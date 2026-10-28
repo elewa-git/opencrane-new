@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { memberAuthorisation, type Binding } from '@opencrane/authz';
+import { foldRoutineHistory, memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { foldRoutine, routineControlSchema, type EventEnvelope,
+import { routineControlSchema, type EventEnvelope,
   type RoutineState } from '@opencrane/events';
 import { ownershipWriteAccess } from '@opencrane/models';
 
@@ -43,13 +43,13 @@ function requireRevisions(input: Input, state: RoutineState | undefined, positio
 
 function retirementData(state: RoutineState | undefined) {
   const saved = state?.definition;
-  if (!saved || state.status === 'retired' || state.activeRun) {
+  if (!saved || state.status === 'retired') {
     throw new RetirementRefused();
   }
   const data = { version: 1, routineId: state.routineId,
     definitionRevision: saved.definitionRevision, scheduleRevision: saved.scheduleRevision,
     controlRevision: saved.controlRevision + 1, actorId: saved.definition.ownerId,
-    source: 'owner', reason: 'owner_requested', affectedRun: null, next: null };
+    source: 'owner', reason: 'owner_requested', affectedRun: state.activeRun?.occurrenceId ?? null, next: null };
   return routineControlSchema.parse(data);
 }
 
@@ -68,13 +68,14 @@ function requireSameRetirement(event: EventEnvelope, input: Input, memberId: str
 function previousRetirement(rows: StoredEvent[], input: Input, memberId: string) {
   let state: RoutineState | undefined;
   let position = 0;
+  const completed = new Map<string, NonNullable<RoutineState['activeRun']>>();
   for (const row of rows) {
     if (row.event.commandId === input.changeId) {
       requireRevisions(input, state, position);
       requireSameRetirement(row.event, input, memberId, retirementData(state));
       return receipt(row, input.changeId);
     }
-    state = foldRoutine(state, row.event);
+    state = foldRoutineHistory(state, row.event, completed);
     position = row.sequence;
   }
   return undefined;
@@ -91,7 +92,7 @@ async function requireMetadataAccess(saved: RoutineAccess) {
   }
 }
 
-/** Save only the owner's retirement; active runs need the later Stop operation. */
+/** Save retirement and the occupied run; budget cleanup uses this event separately. */
 export async function retireRoutine(store: EventStore, binding: Binding,
   memberId: string, raw: unknown) {
   try {
@@ -104,6 +105,9 @@ export async function retireRoutine(store: EventStore, binding: Binding,
     const saved = await auth.loadRoutineAccess(memberId, input.routineId);
     // Check metadata access before revealing saved changes or revision conflicts.
     await requireMetadataAccess(saved);
+    if (saved.state?.definition?.definition.ownerId !== memberId) {
+      throw new RetirementRefused();
+    }
     const previous = previousRetirement(saved.rows, input, memberId);
     if (previous) {
       return previous;
