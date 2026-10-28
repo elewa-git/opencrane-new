@@ -1,3 +1,5 @@
+import { saveCompanyBearerConnection, foldCompanyConnection } from '../src/company-bearer.ts';
+import { changeCompanyOptIn } from '../src/company-opt-in.ts';
 import { exportSPKI, generateKeyPair, SignJWT } from 'jose';
 import { OpenFgaClient } from '@openfga/sdk';
 import { MemberAccessRefused } from '../src/member-authority.ts';
@@ -5273,3 +5275,83 @@ async function expiresRetainedAccess(removed: boolean) {
 it.each([false, true])(
   'automatically retires retained access at its exact expiry after restart, removed=%s',
   expiresRetainedAccess);
+
+async function companyFixture() {
+  const store = await fixture();
+  candidateCount += 1;
+  const userId = `custodian${candidateCount}`;
+  const serverId = `company${candidateCount}`;
+  const joined = envelope('test', `member-${userId}`, 'member.joined', {
+    memberId: userId, role: 'admin', email: `${userId}@example.test`, displayName: userId,
+  });
+  await events.seed([joined]);
+  await memberAuthorisation(consentBinding).handler.handle(joined, pgDb(storage.queue));
+  const setup = oauthFixture(false, serverId);
+  let registrationRevision = 0;
+  for (const row of setup.rows) {
+    row.event.silo = 'test';
+    const data = z.record(z.string(), z.unknown()).parse(row.event.data);
+    if (row.event.type === 'mcp.server_discovered' || row.event.type === 'mcp.server_reviewed') {
+      row.event.data = { ...data, accountMode: 'company' };
+    }
+    if (row.event.type === 'mcp.server_reviewed') {
+      row.event.data = { ...data, accountMode: 'company',
+        policyRevision: await events.store.head(row.event.subject) };
+    }
+    await events.seed([row.event]);
+    if (row.event.type === 'mcp.server_registered') {
+      registrationRevision = await events.store.head(row.event.subject);
+    }
+  }
+  const optIn = { serverId, connectionId: 'install-a', registrationRevision,
+    enabled: true, expectedSequence: 0, changeRef: 'enable' };
+  const choice = await changeCompanyOptIn(events.store, consentBinding, userId, optIn);
+  const input = { serverId, connectionId: 'install-a', profileId: 'company-profile',
+    registrationRevision, optInRevision: choice.sequence, changeRef: 'create',
+    expectedSequence: 0, appendUntil: Date.now() + 60_000 };
+  const subject = `connection-company:${serverId}:${input.profileId}`;
+  const database = pgDb(storage.queue);
+  function waitForLock<Result>(name: string, work: (db: Db) => Promise<Result>) {
+    return database.lock!(name, work);
+  }
+  const db = { ...database, lock: waitForLock };
+  async function save(raw: unknown = input, supplied = material, binding = consentBinding) {
+    return saveCompanyBearerConnection(events.store, binding, userId,
+      store.custody, raw, supplied, db);
+  }
+  async function rows() {
+    return history(events.store, subject, 'test');
+  }
+  async function disable() {
+    return changeCompanyOptIn(events.store, consentBinding, userId,
+      { ...optIn, enabled: false, expectedSequence: choice.sequence, changeRef: 'disable' });
+  }
+  async function removeAdmin() {
+    const removed = envelope('test', `member-${userId}`, 'member.removed', {
+      memberId: userId, removedBy: 'owner',
+    });
+    await events.seed([removed]);
+  }
+  return { store, userId, input, subject, save, rows, disable, removeAdmin, db };
+}
+async function savesCompany() {
+  const test = await companyFixture();
+  const before = await events.store.head();
+  const attempts = [test.save(), test.save()];
+  const saved = await Promise.all(attempts);
+  expect(saved[0]).toEqual(saved[1]);
+  expect(saved[0]).toMatchObject({ status: 'saved_unverified', generation: 1 });
+  expect(test.store.creates).toBe(1);
+  expect(await events.store.head()).toBe(before + 1);
+  const rows = await test.rows();
+  const rebuilt = foldCompanyConnection(rows);
+  expect(rebuilt).toMatchObject({ status: 'saved_unverified', data: {
+    siloId: 'test', custodianId: test.userId,
+    activation: { ownerKind: 'company', purpose: 'company', generation: 1 },
+  } });
+  expect(foldConnection(rows).status).toBe('unavailable');
+  expect(JSON.stringify([rows, saved]).includes(material)).toBe(false);
+  test.store.fail();
+  expect(foldCompanyConnection(rows)).toEqual(rebuilt);
+}
+it('saves one silo-owned company generation without granting or selecting it', savesCompany);
