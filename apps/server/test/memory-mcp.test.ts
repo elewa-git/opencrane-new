@@ -31,6 +31,7 @@ declare module 'vitest' {
   interface TaskMeta {
     teamAssistant?: boolean;
     correctionExpiry?: boolean;
+    correctionDependency?: boolean;
   }
 }
 
@@ -109,7 +110,7 @@ function mode(target: Awaited<ReturnType<typeof fixture>>, value: 'allow' | 'ask
     connectionId: 'server', toolName: 'recall', toolRevision: recallTool.revision,
     mode: value, setBy: 'alice' });
 }
-async function prepare(team = false, correctionExpiry = false) {
+async function prepare(team = false, correctionExpiry = false, correctionDependency = false) {
   setup = undefined!;
   app = undefined!;
   setup = await fixture(2000, 20000, false, 'gpt-6-luna', team, 'manual', 'sales',
@@ -135,12 +136,18 @@ async function prepare(team = false, correctionExpiry = false) {
     if (index === 21) text = 'Deliver exactly';
     const encrypted = keys.encrypt(identity, text);
     let expiresAt: string | null = null;
-    if (index === 21 && correctionExpiry) expiresAt = new Date(Date.now() + 100_000).toISOString();
+    if (index === 21 && correctionExpiry) {
+      expiresAt = new Date(Date.now() + 100_000).toISOString();
+    }
+    const dependsOn: Pick<MemoryIdentity, 'scopeId' | 'memoryId' | 'revision'>[] = [];
+    if (index === 22 && correctionDependency) {
+      dependsOn.push({ scopeId, memoryId: 'fact_21', revision: 1 });
+    }
     await setup.append(`scope-${scopeId}`, 'memory.written', {
       schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
       memoryId, revision: 1, kind: 'fact',
       pinned: index === 22, expiresAt,
-      sources: [{ memberId: 'alice', commandId: 'original-statement' }], dependsOn: [],
+      sources: [{ memberId: 'alice', commandId: 'original-statement' }], dependsOn,
       ...encrypted });
   }
   await setup.runner.run(projection);
@@ -222,7 +229,8 @@ async function renewGatewayCredentials() {
 }
 // Finish the chosen fixture before the test starts. Avoid a second startup outliving a timeout.
 async function prepareFixture(context: TestContext) {
-  await prepare(context.task.meta.teamAssistant === true, context.task.meta.correctionExpiry === true);
+  await prepare(context.task.meta.teamAssistant === true, context.task.meta.correctionExpiry === true,
+    context.task.meta.correctionDependency === true);
 }
 const teamFixture = { meta: { teamAssistant: true } };
 beforeEach(prepareFixture, 120_000);
@@ -3302,7 +3310,9 @@ async function savedAgentCorrection(lostReply: boolean) {
   async function append(command: Parameters<typeof original>[0]) {
     const result = await original(command);
     const event = z.object({ type: z.string() }).parse(command.event);
-    if (event.type === 'memory.corrected' && lostReply) throw new Error('Lost reply');
+    if (event.type === 'memory.corrected' && lostReply) {
+      throw new Error('Lost reply');
+    }
     return result;
   }
   const appends = vi.spyOn(setup.nats.store, 'append').mockImplementation(append);
@@ -3394,7 +3404,9 @@ it('refuses an agent correction revoked inside the append boundary', revokeCorre
 async function racedCorrection(changed: boolean) {
   const first = await changeRequest('correct', false);
   const second = structuredClone(first);
-  if (changed) second.body.params.arguments['text'] = 'Changed replacement';
+  if (changed) {
+    second.body.params.arguments['text'] = 'Changed replacement';
+  }
   const firstClaims = await preparedChangeClaims(first);
   const secondClaims = await preparedChangeClaims(second);
   const before = await setup.nats.store.head(`scope-${scopeId}`);
@@ -3403,15 +3415,21 @@ async function racedCorrection(changed: boolean) {
   const results = await Promise.all([sendChange(first, firstToken), sendChange(second, secondToken)]);
   const statuses = results.map(responseStatus);
   expect(statuses).toContain(200);
-  if (changed) expect(statuses).toContain(403);
+  if (changed) {
+    expect(statuses).toContain(403);
+  }
   const rows = await history(setup.nats.store, `scope-${scopeId}`, 'test');
   const additions = rows.filter(afterOriginal);
-  function afterOriginal(row: { sequence: number }) { return row.sequence > before; }
+  function afterOriginal(row: { sequence: number }) {
+    return row.sequence > before;
+  }
   expect(additions).toHaveLength(1);
   expect((await correctionStatus()).json()).toMatchObject({ outcome: 'accepted', revision: 2,
     changeId: additions[0]!.event.id });
 }
-function responseStatus(response: { statusCode: number }) { return response.statusCode; }
+function responseStatus(response: { statusCode: number }) {
+  return response.statusCode;
+}
 it.each([false, true])('saves one correction when command attempts race (changed=%s)', racedCorrection);
 
 const invalidCorrections = ['proof', 'requester', 'thread', 'generation', 'stale', 'expiry',
@@ -3419,8 +3437,12 @@ const invalidCorrections = ['proof', 'requester', 'thread', 'generation', 'stale
 async function invalidCorrection(change: typeof invalidCorrections[number]) {
   const request = await changeRequest('correct', false);
   const input = request.body.params.arguments;
-  if (change === 'proof') input['recallProof'] = 'forged-proof';
-  if (change === 'sources') input['sources'] = [];
+  if (change === 'proof') {
+    input['recallProof'] = 'forged-proof';
+  }
+  if (change === 'sources') {
+    input['sources'] = [];
+  }
   if (change === 'target revision') {
     input['dependsOn'] = [{ scopeId, memoryId: 'fact_21', revision: 2 }];
   }
@@ -3438,11 +3460,19 @@ async function invalidCorrection(change: typeof invalidCorrections[number]) {
     return;
   }
   const overrides: Record<string, unknown> = {};
-  if (change === 'requester') overrides['requester'] = 'bob';
-  if (change === 'thread') overrides['thread'] = 'other-thread';
-  if (change === 'generation') overrides['generation'] = 2;
+  if (change === 'requester') {
+    overrides['requester'] = 'bob';
+  }
+  if (change === 'thread') {
+    overrides['thread'] = 'other-thread';
+  }
+  if (change === 'generation') {
+    overrides['generation'] = 2;
+  }
   const token = await changeToken(request, overrides);
-  if (change === 'stale') await saveHumanCorrection('fact_21');
+  if (change === 'stale') {
+    await saveHumanCorrection('fact_21');
+  }
   if (change === 'lost access') {
     await setup.append(grantStream('memory_write', scopeId), 'grant.revoked', {
       resourceType: 'memory_write', resourceId: scopeId, granteeKind: 'member',
@@ -3450,7 +3480,9 @@ async function invalidCorrection(change: typeof invalidCorrections[number]) {
   }
   const before = await setup.nats.store.head(`scope-${scopeId}`);
   const clock = coldLookupClock();
-  if (change === 'expiry') clock.advance();
+  if (change === 'expiry') {
+    clock.advance();
+  }
   try {
     const response = await sendChange(request, token);
     expect(response.statusCode, response.body).toBe(403);
@@ -3513,7 +3545,9 @@ async function correctionExpiresAtAppend() {
   let expires = 0;
   for (const row of rows) {
     const fact = fields.parse(row.event.data);
-    if (fact.memoryId === 'fact_21') expires = Date.parse(fact.expiresAt!);
+    if (fact.memoryId === 'fact_21') {
+      expires = Date.parse(fact.expiresAt!);
+    }
   }
   expect(expires).toBeGreaterThan(Date.now());
   const before = await setup.nats.store.head(`scope-${scopeId}`);
@@ -3522,7 +3556,9 @@ async function correctionExpiresAtAppend() {
   const clock = vi.spyOn(Date, 'now');
   async function append(command: Parameters<typeof original>[0]) {
     const event = z.object({ type: z.string() }).parse(command.event);
-    if (event.type === 'memory.corrected') clock.mockReturnValue(expires);
+    if (event.type === 'memory.corrected') {
+      clock.mockReturnValue(expires);
+    }
     return original(command);
   }
   const appends = vi.spyOn(setup.nats.store, 'append');
@@ -3558,3 +3594,13 @@ async function changedPendingCorrection() {
   }
 }
 it('refuses changed input while an agent correction remains unknown', changedPendingCorrection);
+
+async function correctionInvalidatesDependency() {
+  const request = await changeRequest('correct', false);
+  const before = await setup.nats.store.head(`scope-${scopeId}`);
+  const response = await sendChange(request);
+  expect(response.statusCode, response.body).toBe(403);
+  expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(before);
+}
+it('refuses a correction that would invalidate another loaded dependency',
+  { meta: { correctionDependency: true } }, correctionInvalidatesDependency);
