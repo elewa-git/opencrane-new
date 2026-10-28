@@ -17,6 +17,124 @@ specification.loader.exec_module(checker)
 
 
 class LicenceTests(unittest.TestCase):
+    def pcre_fixture(self):
+        path = source.parents[2] / "docs/process/p5-4-images6/check-pcre.py"
+        module_spec = importlib.util.spec_from_file_location("pcre", path)
+        pcre = importlib.util.module_from_spec(module_spec)
+        module_spec.loader.exec_module(pcre)
+        review = checker.read_json(path.with_name("pcre.json"))
+        inputs = {}
+        for name in ("regexp-pcre.js", "node-version.h"):
+            inputs[name] = gzip.decompress(path.with_name(name + ".gz").read_bytes())
+        _, _, inputs["node-LICENSE"] = self.node_review_fixture()
+        return pcre, review, inputs
+
+    def test_pcre_actual_terms_resolve_only_the_exact_reference(self):
+        pcre, review, inputs = self.pcre_fixture()
+        self.assertEqual(pcre.check_review(review, inputs), "V8 PCRE test suite")
+        self.assertIn(b"Copyright (c) 1997-2007 University of Cambridge", inputs["regexp-pcre.js"])
+        self.assertIn(b"Copyright (c) 2007, Google Inc.", inputs["regexp-pcre.js"])
+        node, historical, notice = self.node_review_fixture()
+        self.assertEqual(node.check_review(historical, notice), 43)
+        self.assertEqual(len(historical["blockedReferences"]), 10)
+        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
+        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        with self.assertRaisesRegex(ValueError, "exact source revision"):
+            checker.check_package_review(reviewed, inventory)
+
+    def test_pcre_requires_exact_version_source_and_candidate_bindings(self):
+        pcre, original, inputs = self.pcre_fixture()
+        for field in ("nodeVersion", "upstreamCommit", "candidateSha256",
+                      "nodeNoticesSha256", "nodeBinarySha256", "sourcePath"):
+            for case in ("missing", "changed"):
+                with self.subTest(field=field, case=case):
+                    review = json.loads(json.dumps(original))
+                    if case == "missing":
+                        del review[field]
+                    else:
+                        review[field] = "wrong"
+                    with self.assertRaises((ValueError, KeyError)):
+                        pcre.check_review(review, inputs)
+
+    def test_pcre_refuses_missing_or_changed_actual_source_and_notice_bytes(self):
+        pcre, review, original = self.pcre_fixture()
+        for name in original:
+            for case in ("missing", "changed", "permissive replacement"):
+                with self.subTest(name=name, case=case):
+                    inputs = dict(original)
+                    if case == "missing":
+                        del inputs[name]
+                    elif case == "changed":
+                        inputs[name] += b"changed"
+                    else:
+                        inputs[name] = b"MIT: Permission is hereby granted to everyone."
+                    with self.assertRaises((ValueError, KeyError)):
+                        pcre.check_review(review, inputs)
+
+    def test_pcre_requires_the_reference_once_and_the_reviewed_grant_pairs(self):
+        pcre, original, inputs = self.pcre_fixture()
+        for case in ("deleted", "duplicated", "name", "section", "component",
+                     "licence", "missing grant", "duplicate grant", "blank reason",
+                     "unproved absence", "complete approval"):
+            with self.subTest(case=case):
+                review = json.loads(json.dumps(original))
+                if case == "deleted":
+                    review["references"].clear()
+                elif case == "duplicated":
+                    review["references"].append(review["references"][0])
+                elif case == "name":
+                    review["references"][0][1] = "V8 Valgrind client API"
+                elif case == "section":
+                    review["references"][0][0] = "0" * 64
+                elif case == "component":
+                    review["declarations"][0][0] = "All V8 code"
+                elif case == "licence":
+                    review["declarations"][0][1] = ["MIT"]
+                elif case == "missing grant":
+                    review["declarations"].pop()
+                elif case == "duplicate grant":
+                    review["declarations"][1] = review["declarations"][0]
+                elif case == "blank reason":
+                    review["declarations"][0][3] = " "
+                elif case == "unproved absence":
+                    review["method"] = "filename absent"
+                else:
+                    review["status"] = "APPROVED"
+                with self.assertRaises(ValueError):
+                    pcre.check_review(review, inputs)
+
+    def test_pcre_requires_exact_binary_and_notice_copies_from_all_layers(self):
+        pcre, review, inputs = self.pcre_fixture()
+        copies = [("usr/local/bin/node", review["nodeBinarySha256"]),
+                  ("usr/local/LICENSE", hashlib.sha256(inputs["node-LICENSE"]).hexdigest())]
+        pcre.check_shipped(copies)
+        for case in ("missing binary", "missing notice", "changed binary",
+                     "changed notice", "old layer binary"):
+            with self.subTest(case=case):
+                changed = list(copies)
+                if case == "missing binary":
+                    changed.pop(0)
+                elif case == "missing notice":
+                    changed.pop(1)
+                elif case == "old layer binary":
+                    changed.append(("usr/local/bin/node", "0" * 64))
+                else:
+                    index = 0 if case == "changed binary" else 1
+                    changed[index] = (changed[index][0], "0" * 64)
+                with self.assertRaises(ValueError):
+                    pcre.check_shipped(changed)
+
+    def test_pcre_requires_unchanged_upstream_and_candidate_archives(self):
+        pcre, review, _ = self.pcre_fixture()
+        for name, expected in review["files"].items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / name
+                with self.assertRaises(OSError):
+                    pcre.candidate.checked_bytes(path, expected)
+                path.write_bytes(b"changed archive or binary bytes")
+                with self.assertRaises(ValueError):
+                    pcre.candidate.checked_bytes(path, expected)
+
     def candidate_checker(self):
         path = source.parents[2] / "docs/process/p5-4-images4/check-candidate.py"
         module_spec = importlib.util.spec_from_file_location("candidate", path)
