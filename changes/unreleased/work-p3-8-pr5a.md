@@ -1,0 +1,1 @@
+- Record exact normal tool-call release audit bindings and confirm one saved audit before any future forwarding. Legacy evidence cannot confirm a release; credentialed routes remain closed.
