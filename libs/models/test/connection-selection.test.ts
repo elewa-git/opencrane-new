@@ -1371,6 +1371,58 @@ it.each(['decision', 'profile'])(
   'sanitises failed %s release history after one permission decision',
   releaseHistoryFailureAfterPermission);
 
+const invalidReleaseBindings = [{ generation: 0 }, { ownerId: 'other' }, { userId: 'other' }];
+
+async function releaseValidationRefusal(patch: Record<string, unknown>) {
+  const messages = ['Active silo membership required', 'Owner or Admin required'];
+  for (const message of messages) {
+    const test = await releaseFixture();
+    const refusal = new MemberAccessRefused(message);
+    async function prepareAccess(): Promise<never> {
+      throw refusal;
+    }
+    const permission = vi.fn(prepareAccess);
+    const writes = vi.spyOn(nats.store, 'append');
+    const raw = { ...test.release, ...patch };
+    try {
+      const pending = confirmCredentialRelease(nats.store, 'test', test.userId,
+        test.decision.id, raw, permission);
+      await expect(pending).rejects.toBe(refusal);
+      expect(permission).toHaveBeenCalledTimes(1);
+      expect(writes).not.toHaveBeenCalled();
+      expect(await nats.store.head(test.releaseSubject)).toBe(0);
+      expect(test.custody.stage).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  }
+}
+it.each(invalidReleaseBindings)(
+  'preserves removed and demoted release refusals with invalid binding %j',
+  releaseValidationRefusal);
+
+async function releaseValidationAfterPermission(patch: Record<string, unknown>) {
+  const test = await releaseFixture();
+  const permission = vi.fn(test.prepareAccess);
+  const writes = vi.spyOn(nats.store, 'append');
+  const raw = { ...test.release, ...patch };
+  try {
+    const pending = confirmCredentialRelease(nats.store, 'test', test.userId,
+      test.decision.id, raw, permission);
+    await expect(pending).rejects.toThrow(/^Release unavailable$/u);
+    await expect(pending).rejects.not.toHaveProperty('cause');
+    expect(permission).toHaveBeenCalledTimes(1);
+    expect(writes).not.toHaveBeenCalled();
+    expect(await nats.store.head(test.releaseSubject)).toBe(0);
+    expect(test.custody.stage).not.toHaveBeenCalled();
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each(invalidReleaseBindings)(
+  'sanitises invalid release binding %j after one permission decision',
+  releaseValidationAfterPermission);
+
 async function releaseAppendAccessRefusal(message: string, laterFailure: string) {
   const test = await releaseFixture();
   const refusal = new MemberAccessRefused(message);
