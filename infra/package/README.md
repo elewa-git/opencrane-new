@@ -18,7 +18,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, licences and installs"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, source licences and installs"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
@@ -145,6 +145,13 @@ partial evidence only after comparing every saved archive with its original outp
 and checking that encrypted files and homes open with their saved descriptions.
 These checks share the capture time limit. Database backups and a complete-system
 backup still need work. Live checks of stopped writers and mounted home files remain untested.
+
+A separate licence check connects one regular-expression test library's terms to
+Node's signed source release and the exact Node binary in every saved image layer.
+It records the Cambridge and Google BSD terms. It does not claim that test code is
+absent. The [operator notes](README.robot.md#package-image-promotion) explain the
+saved evidence needed to repeat this check. Other licence reviews and installation
+approval remain outstanding.
 
 ## How to run or test it
 
