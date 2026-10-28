@@ -3316,9 +3316,10 @@ async function savedAgentCorrection(lostReply: boolean) {
   const saved = rows.at(-1)!;
   expect(saved.sequence).toBeGreaterThan(before);
   expect(rows).toHaveLength(25);
+  const requestId = decodeJwt(capability)['requestId'];
   expect(saved.event).toMatchObject({ type: 'memory.corrected',
     principal: { kind: 'agent', id: 'alice' }, correlation: {
-      conversation: 'conversation', turn: 'turn', request: expect.any(String) },
+      conversation: 'conversation', turn: 'turn', request: requestId },
     data: { memoryId: 'fact_21', revision: 2, expectedRevision: 1,
       dependsOn: [{ scopeId, memoryId: 'fact_22', revision: 1 }],
       sources: [{ memberId: 'alice', commandId: 'original-statement' }] } });
@@ -3344,6 +3345,7 @@ async function savedAgentCorrection(lostReply: boolean) {
     commandId: 'human-correction', expectedRevision: 2, text: 'Later replacement',
     kind: 'fact', pinned: false, expiresAt: null });
   const decrypts = vi.spyOn(crypto, 'createDecipheriv');
+  decrypts.mockClear();
   expect((await correctionStatus()).json()).toMatchObject({ revision: 2,
     contentStatus: 'superseded' });
   const keysBefore = readdirSync(dirname(setup.options.configFile));
@@ -3351,8 +3353,10 @@ async function savedAgentCorrection(lostReply: boolean) {
   const erased = await correctionStatus();
   expect(erased.json()).toMatchObject({ outcome: 'accepted', revision: 2,
     contentStatus: 'erased' });
-  expect(decrypts).not.toHaveBeenCalled();
+  // Allow one session-cookie decryption per HTTP status read.
+  const decryptionCount = decrypts.mock.calls.length;
   decrypts.mockRestore();
+  expect(decryptionCount).toBe(2);
   expect(readdirSync(dirname(setup.options.configFile))).toEqual(keysBefore);
 }
 it.each([false, true])('saves one agent correction and recovers only its receipt (lost=%s)',
@@ -3534,3 +3538,23 @@ async function correctionExpiresAtAppend() {
 }
 it('refuses a correction whose loaded target expires inside append',
   { meta: { correctionExpiry: true } }, correctionExpiresAtAppend);
+
+async function changedPendingCorrection() {
+  const request = await changeRequest('correct', false);
+  const before = await setup.nats.store.head(`scope-${scopeId}`);
+  const appends = vi.spyOn(setup.nats.store, 'append');
+  appends.mockResolvedValueOnce({ status: 'unavailable', cause: new Error('Reply lost') });
+  try {
+    const first = await sendChange(request);
+    expect(first.json()).toMatchObject({ result: { structuredContent: { outcome: 'unknown' } } });
+    request.body.params.arguments['text'] = 'Changed replacement';
+    const changed = await sendChange(request);
+    expect(changed.statusCode, changed.body).toBe(403);
+    expect(appends.mock.calls.length).toBe(1);
+    expect((await correctionStatus()).json()).toEqual({ outcome: 'unknown' });
+    expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(before);
+  } finally {
+    appends.mockRestore();
+  }
+}
+it('refuses changed input while an agent correction remains unknown', changedPendingCorrection);
