@@ -5221,3 +5221,53 @@ async function refusesMissingUnexpiredAccess() {
 }
 it('refuses revoke completion when an unexpired older access token is missing',
   refusesMissingUnexpiredAccess);
+
+async function expiresRetainedAccess(removed: boolean) {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    expect(await saveRefresh(test, await claimRefresh(test)))
+      .toMatchObject({ status: 'saved', generation: 2 });
+    const rows = await history(events.store, test.subject, 'test');
+    test.input.expectedSequence = rows.at(-1)!.sequence;
+    test.input.expectedGeneration = 2;
+    test.input.changeRef = 'revoke-after-access-expiry';
+    await revokeOAuth(test);
+    if (removed) {
+      await changeConsentAccess(test, 'removed');
+    }
+    const custody = test.store.restart();
+    const db = pgDb(storage.queue);
+    const savedRows = await history(events.store, test.subject, 'test');
+    vi.spyOn(Date, 'now').mockReturnValue(test.dueAt + 29_999);
+    expect(await reconcileConnectionPage(events.store, db, custody, 'test'))
+      .toMatchObject({ status: 'scanned', deleted: 0 });
+    expect(test.store.secrets.size).toBe(5);
+    vi.spyOn(Date, 'now').mockReturnValue(test.dueAt + 30_000);
+    test.store.failDeletes(true);
+    expect(await reconcileConnectionPage(events.store, db, custody, 'test'))
+      .toMatchObject({ status: 'scanned', deleted: 0 });
+    expect(test.store.secrets.size).toBe(5);
+    test.store.failDeletes(false);
+    expect(await reconcileConnectionPage(events.store, db, test.store.restart(), 'test'))
+      .toMatchObject({ status: 'scanned', deleted: 1 });
+    expect(test.store.secrets.size).toBe(4);
+    expect(await reconcileConnectionPage(events.store, db, test.store.restart(), 'test'))
+      .toMatchObject({ status: 'scanned', deleted: 0 });
+    expect(test.revocations).toHaveLength(0);
+    expect(await history(events.store, test.subject, 'test')).toEqual(savedRows);
+    const { finishPersonalOAuthRevoke } = await import('../src/oauth-revoke-worker.ts');
+    expect(await finishPersonalOAuthRevoke(events.store, 'test', test.store.restart(), test.input,
+      test.loader.loadConfiguration, db, test.providerFixture.network))
+      .toEqual({ status: 'completed' });
+    expect(test.revocations).toHaveLength(2);
+    expect(test.revocations[0]!.get('token')).toBe('next-refresh-canary');
+    expect(test.revocations[1]!.get('token')).toBe('next-access-canary');
+    expect(test.store.secrets.size).toBe(0);
+  } finally {
+    await test.close();
+  }
+}
+it.each([false, true])(
+  'automatically retires retained access at its exact expiry after restart, removed=%s',
+  expiresRetainedAccess);
