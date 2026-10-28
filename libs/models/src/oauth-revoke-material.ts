@@ -5,6 +5,7 @@ import { connectionOperationId, foldConnection } from './bearer-connections.ts';
 import type { connectionCustody, ConnectionStage } from './connection-custody.ts';
 import type { oauthConfigurationSchema } from './oauth-attempt.ts';
 import { verifyRefreshResult } from './oauth-refresh-worker.ts';
+import { readRetainedAccess } from './oauth-retained-access.ts';
 
 type Custody = ReturnType<typeof connectionCustody>;
 type Configuration = z.infer<typeof oauthConfigurationSchema>;
@@ -87,12 +88,12 @@ async function previousAccessTokens(custody: Custody, rows: StoredEvent[],
       appendUntil: activation.appendUntil, endpointDigest: activation.endpointDigest };
     const identity = { reference: saved.secretRef.slice('secret:'.length),
       uid: activation.uid, resourceVersion: activation.resourceVersion };
-    const recovered = await custody.recover(stage, identity);
-    if (recovered.status === 'not_found') {
-      continue;
-    }
     // Revoke retained access tokens too: rotating refresh tokens need not invalidate them.
-    const material = tokens(await custody.readRevocationMaterial(stage, identity));
-    accessTokens.add(material.access_token);
+    const contents = await custody.readRevocationMaterial(stage, identity);
+    if (contents !== undefined) {
+      accessTokens.add(tokens(contents).access_token);
+    } else {
+      accessTokens.add(await readRetainedAccess(custody, stage, activation.account.expiresAt));
+    }
   }
 }
