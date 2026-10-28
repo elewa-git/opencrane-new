@@ -262,6 +262,30 @@ is only part of image review. Approved pins and licence rules are unchanged.
 Registry publication, promotion, vulnerability clearance and fresh R3 installation
 remain NOT RUN.
 
+The separate [PCRE record](../../docs/process/p5-4-images6/pcre.json) resolves only
+`V8 PCRE test suite` by reviewing the actual source file's embedded BSD-3-Clause
+terms for Cambridge and Google. It keeps the historical ten-reference checker and
+records unchanged. It makes no claim that source, compiled or bundled test copies
+are absent. The full source fixture keeps the actual attribution, conditions and
+disclaimer. Distribution materials must keep these terms if code is shipped.
+
+```sh
+nice -n 10 python3 docs/process/p5-4-images6/check-pcre.py \
+  /tmp/p5-4-images4 /tmp/p5-4-images6
+```
+
+The first directory contains the unchanged candidate evidence. The second contains
+the five upstream files named in `pcre.json` and an `upstream` Git repository with
+commit `bd96dfbf0361576724b65322046e2ca9f9609cb9`. The checker verifies the signed
+Node release checksums and Git tag using the recorded upstream release keyring.
+It compares the Git source, version header and notice with the reviewed bytes, then
+checks the official binary archive, candidate binary, all shipped layers and archived
+Dockerfile. The source tarball omits this test file; its absence grants no approval.
+The [receipt](../../docs/process/p5-4-images6/receipt.md) gives source links and limits.
+Only this source-bound reference is resolved. The other nine references, other
+bundles, vulnerability clearance, source-bound R3 approval and publication remain
+outstanding. No approved image, inventory or binary pin changes.
+
 ## Private owner email
 
 The development owner email uses the [private host file](../dev-stack/README.robot.md#private-owner-email)

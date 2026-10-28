@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 
@@ -45,7 +46,7 @@ class LicenceTests(unittest.TestCase):
     def test_pcre_requires_exact_version_source_and_candidate_bindings(self):
         pcre, original, inputs = self.pcre_fixture()
         for field in ("nodeVersion", "upstreamCommit", "candidateSha256",
-                      "nodeNoticesSha256", "nodeBinarySha256", "sourcePath"):
+                      "nodeNoticesSha256", "nodeBinarySha256", "sourcePath", "files"):
             for case in ("missing", "changed"):
                 with self.subTest(field=field, case=case):
                     review = json.loads(json.dumps(original))
@@ -75,7 +76,7 @@ class LicenceTests(unittest.TestCase):
         pcre, original, inputs = self.pcre_fixture()
         for case in ("deleted", "duplicated", "name", "section", "component",
                      "licence", "missing grant", "duplicate grant", "blank reason",
-                     "unproved absence", "complete approval"):
+                     "unproved absence", "complete approval", "notice location"):
             with self.subTest(case=case):
                 review = json.loads(json.dumps(original))
                 if case == "deleted":
@@ -94,6 +95,8 @@ class LicenceTests(unittest.TestCase):
                     review["declarations"].pop()
                 elif case == "duplicate grant":
                     review["declarations"][1] = review["declarations"][0]
+                elif case == "notice location":
+                    review["declarations"][0][2] = "other/source.js"
                 elif case == "blank reason":
                     review["declarations"][0][3] = " "
                 elif case == "unproved absence":
@@ -129,11 +132,35 @@ class LicenceTests(unittest.TestCase):
         for name, expected in review["files"].items():
             with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / name
-                with self.assertRaises(OSError):
-                    pcre.candidate.checked_bytes(path, expected)
-                path.write_bytes(b"changed archive or binary bytes")
-                with self.assertRaises(ValueError):
-                    pcre.candidate.checked_bytes(path, expected)
+                # Isolate each file check before signature and archive parsing.
+                with patch.object(pcre, "FILES", {name: expected}):
+                    with self.assertRaises(OSError):
+                        pcre.check_upstream(Path(directory))
+                    path.write_bytes(b"changed archive or signature bytes")
+                    with self.assertRaisesRegex(ValueError, "Evidence bytes changed"):
+                        pcre.check_upstream(Path(directory))
+        for name in ("candidate.tar", "source.tar"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                record = checker.read_json(pcre.candidate.RECORD)
+                record["files"] = {name: record["files"][name]}
+                path = Path(directory) / name
+                with patch.object(pcre.candidate, "FILES", {name}):
+                    with self.assertRaises(OSError):
+                        pcre.check_candidate(record, Path(directory))
+                    path.write_bytes(b"changed candidate archive bytes")
+                    with self.assertRaisesRegex(ValueError, "Evidence bytes changed"):
+                        pcre.check_candidate(record, Path(directory))
+
+    def test_pcre_cli_withholds_missing_input_paths(self):
+        path = source.parents[2] / "docs/process/p5-4-images6/check-pcre.py"
+        with tempfile.TemporaryDirectory() as directory:
+            missing = str(Path(directory) / "sensitive-fixture-marker")
+            result = subprocess.run([sys.executable, str(path), missing, missing],
+                                    capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr,
+                             "FAIL PCRE source-bound evidence is missing, changed or unsupported\n")
 
     def candidate_checker(self):
         path = source.parents[2] / "docs/process/p5-4-images4/check-candidate.py"
