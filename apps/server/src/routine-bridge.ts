@@ -9,7 +9,7 @@ import { readChatFacts } from './chat/chat-summary.ts';
 import type { turnCommand } from './chat/turns.ts';
 
 type Turn = NonNullable<Awaited<ReturnType<typeof turnCommand>>>;
-type TrackedTurn = { turn: Turn; generation: number;
+type TrackedTurn = { turn: Turn; generation: number; ended: boolean; outputCleared: boolean;
   started: z.infer<typeof computerTurnStartedDataSchema> };
 type Root = z.infer<typeof budgetRootAllowanceSetDataSchema>;
 type Options = { store: EventStore; silo: string };
@@ -68,6 +68,10 @@ function currentTurn(summary: ComputerSummary, root: Root, tracked: TrackedTurn)
   }
   // Retain the accepted start because the shared summary drops its details on completion.
   const started = computerTurnStartedDataSchema.parse(turn.firstStart?.event.data ?? tracked.started);
+  return matchesStartedTurn(root, started);
+}
+
+function matchesStartedTurn(root: Root, started: TrackedTurn['started']) {
   if (started.task !== 'chat_turn' || started.executionMode !== 'restricted') {
     return false;
   }
@@ -142,8 +146,21 @@ export function routineBridge(options: Options, computer: Computer, socket: WebS
       `computer-${computer.assistantId}`, computerSummary,
       performance.now() + 10_000, take);
     if (accepted && socket.readyState === WebSocket.OPEN) {
-      const tracked = { turn, ...accepted };
+      const tracked = { turn, ...accepted, ended: false, outputCleared: false };
       turns.set(turn.turnId, tracked);
+    }
+  }
+  function forgetFinished(tracked: TrackedTurn) {
+    // Keep retrying interruption after output clearance until termination is also confirmed.
+    if (tracked.ended && tracked.outputCleared) {
+      turns.delete(tracked.turn.turnId);
+    }
+  }
+  function ended(turnId: string) {
+    const tracked = turns.get(turnId);
+    if (tracked) {
+      tracked.ended = true;
+      forgetFinished(tracked);
     }
   }
   function receive(value: unknown) {
@@ -154,7 +171,8 @@ export function routineBridge(options: Options, computer: Computer, socket: WebS
     const { conversationId, turnId, threadId } = receipt.data;
     const tracked = turns.get(turnId);
     if (tracked?.turn.conversationId === conversationId && tracked.turn.threadId === threadId) {
-      turns.delete(turnId);
+      tracked.outputCleared = true;
+      forgetFinished(tracked);
     }
     return true;
   }
@@ -221,5 +239,5 @@ export function routineBridge(options: Options, computer: Computer, socket: WebS
     checking.set(conversationId, work);
     return work;
   }
-  return { accept, receive, poll };
+  return { accept, ended, receive, poll };
 }

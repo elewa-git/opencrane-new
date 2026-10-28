@@ -6259,6 +6259,8 @@ late Stop; a later poll retries all checks. Unavailable evidence cannot guarante
 within two seconds, and never permits sending without validation.
 Completion keeps the accepted turn and computer generation tracked until the matching
 `private_output_cleared` receipt arrives. That receipt confirms reply removal, not termination.
+If clearance arrives first, tracking stays until an accepted terminal report arrives too.
+Failed interruption cleanup therefore remains retryable after the reply buffer is cleared.
 Receipts for another conversation, turn or thread cannot discard tracking. The same receipt
 reaches both routine and memory tracking. Closing the socket clears its tracked turns.
 Cold replay does not populate tracking or resend work. Execution remains disabled.

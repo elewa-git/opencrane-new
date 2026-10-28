@@ -44,6 +44,7 @@ Pause and Retire records and cancels only the accepted private routine turn.
 It retries failed delivery and cleanup while other chats keep running.
 Completion does not prove that buffered private replies are gone. The bridge keeps
 checking until the computer confirms removal for that exact turn and private thread.
+If removal finishes first, failed interruption cleanup still retries until the turn ends.
 Automatic routines remain unavailable.
 
 Owners and admins can read, save or remove company account opt-in for a tool installation.

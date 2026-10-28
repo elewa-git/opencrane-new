@@ -122,6 +122,8 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
         await options.memory.accept(report, binding);
       }
       await releaseTurnCredentials(options, context, tokens, report, binding, acknowledgement);
+    } else if (status !== 'started') {
+      options.routines.ended(report.turnId);
     }
   }
   if (socket.readyState === socket.OPEN) {
