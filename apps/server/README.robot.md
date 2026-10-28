@@ -6093,7 +6093,10 @@ saved chat evidence. It accepts versioned personal correction/forget events only
 `memoryReferences` must show that this exact event changes a loaded reference or its
 dependency from current to unavailable. Both checks use the saved cause's timestamp,
 so processing the cause after the old fact expires still records the same change.
-Each addition must be valid at its saved load time and scope position. A later recall
+Each addition is checked at its saved load time and scope position. An addition already
+expired at that time needs no withdrawal and cannot block other loaded facts. This exception
+requires the same saved revision and all its dependencies to be valid without expiry checks;
+missing, changed or mismatched evidence still refuses. A later recall
 can add facts written after the cause; those additions remain in replay and do not
 need to exist before the cause. Unrelated changes save nothing.
 Missing or mismatched evidence refuses. It reads no keys, facts table or permissions.
@@ -6300,7 +6303,9 @@ Part of #97. Personal bridge polling now calls `invalidateMemoryContext` without
 optional correction/forget event id. Caller clocks, references and reasons are refused.
 The server derives `expired` from each saved load's scope position and event time.
 It uses `memoryReferences` on that same history at load time and at the current time.
-Every addition must have been valid when loaded. A later failure on the same history
+An addition already expired at load time needs no invalidation. Checking that same history
+without expiry must still prove its revision and dependencies; uncertain evidence refuses.
+For an addition valid when loaded, a later failure on the same history
 proves expiry of that revision or a transitive dependency. Later live recalls cannot
 hide older dependencies; pinned facts still obey an explicit expiry.
 
@@ -6320,3 +6325,10 @@ unrelated expiry, pins and completed output with a replacement thread. Existing 
 renewal, recall-release and history-failure tests cover refusal at use.
 No event field, dependency, scheduler, native tool or admission change is included.
 Fresh-install/live qualification: NOT RUN; memory admission remains disabled.
+
+Recall validates every addition and dependency with one clock reading and saves that
+time in its load event. It still checks again after the append before releasing any text.
+Tests retain an addition saved at expiry, then forget an earlier loaded fact. Polling
+records withdrawal and clears completed private output while preserving a replacement
+thread. Cold replay retains all references and grants no execution. A separate real recall
+test checks the one-millisecond boundary and refuses text after expiry.

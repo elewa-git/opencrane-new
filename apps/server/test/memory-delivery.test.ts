@@ -876,10 +876,13 @@ async function expiredAdditionBeforeCompletedWithdrawal(replace: boolean) {
   await poll();
   const cold = { readStream: nats.store.readStream.bind(nats.store) };
   const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
-  expect(facts.memoryContext).toMatchObject({ status: 'ended', reason: 'content_changed',
+  expect(facts.memoryContext).toMatchObject({ status: 'ended', reason: 'ended',
     references: [{ scopeId, memoryId: 'fact', revision: 1 }, addition],
     executionAvailable: false });
   expect(facts.memoryContext?.events.size).toBe(4);
+  const rows = await history(nats.store, 'conversation-chat', 'test');
+  const saved = memoryContextRecordedEventSchema.parse(rows.at(-1)!.event);
+  expect(saved.data).toMatchObject({ action: 'invalidated', reason: 'content_changed' });
 }
 it.each([false, true])(
   'a recall saved at expiry cannot block completed output clearance, replacement=%s',

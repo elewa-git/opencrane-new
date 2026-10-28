@@ -1995,6 +1995,10 @@ references that cannot be checked. Discovery offers recall only until trusted re
 every loaded memory reference.
 The optional `checkedAt` is a timestamp in milliseconds for nightly selection at its
 intended boundary. Other callers check the current time on each `current` call.
+`current(reference, at?)` also accepts one timestamp for an individual check, including
+all dependencies. Recall uses it to save the same time that it checked before appending.
+Withdrawal can exclude expiry while checking saved evidence; it still rejects missing
+revisions, replacements, tombstones and invalid dependencies.
 Revision selection uses the same `shouldReplaceMemoryRevision` rule as the projection
 and nightly scanner. The scanner supplies metadata-only custody because it opens no keys
 and dispatch stays disabled; live readers still use real key status.

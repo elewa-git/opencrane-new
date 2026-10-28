@@ -525,6 +525,7 @@ change the budget revision, so a refused save does not identify another editor.
 
 Saved memory corrections make older references unusable. The new revision remains
 usable when its sources are still current. These checks read no private text.
+Recall can check every fact and its supporting facts at one time, then save that time.
 A completed turn can retain later evidence that its pending reply must be removed.
 It stays ended and cannot load more memory or resume execution.
 

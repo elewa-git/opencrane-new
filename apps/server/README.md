@@ -84,6 +84,8 @@ repeated Stops once and clears the reply even if the turn has just completed.
 The bridge polls personal correction and forget events and checks expiry for its connected private turns.
 It saves the exact invalidation before sending Stop and retries uncertain delivery.
 Forgetting an unrelated expired fact does not delay checks for later changes.
+An expired recall whose text was refused cannot block clearing earlier private output.
+Recall saves the same time it used to check each fact and its supporting facts.
 It keeps each turn tracked after completion until the computer confirms that its private
 reply has been cleared. It checks the turn and computer after reading history, without
 waking a computer. One slow chat cannot delay another chat's check or connection shutdown.

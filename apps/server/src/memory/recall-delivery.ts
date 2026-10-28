@@ -53,12 +53,13 @@ function record(context: MemoryContext, state: Snapshot, inputGeneration: string
   return data;
 }
 async function appendRecord(options: MemoryOptions, context: MemoryContext,
-  data: MemoryContextRecord, previous: MemoryContextState | undefined, sequence: number) {
+  data: MemoryContextRecord, previous: MemoryContextState | undefined, sequence: number,
+  checkedAt: number) {
   const id = randomUUID();
   const input = { id, commandId: id,
     silo: options.silo, subject: `conversation-${context.conversation}`,
     type: 'agent.memory_context_recorded', source: 'opencrane-server',
-    principal: { kind: 'system', id: 'server' }, time: new Date().toISOString(),
+    principal: { kind: 'system', id: 'server' }, time: new Date(checkedAt).toISOString(),
     correlation: { conversation: context.conversation, turn: context.turn }, data };
   const event = memoryContextRecordedEventSchema.parse(input);
   const next = foldMemoryContext(previous, event);
@@ -107,29 +108,32 @@ export async function recordRecall(options: MemoryOptions, context: MemoryContex
   async function confirm() {
     await rights.confirm();
     const current = await memorySnapshot(options, rights.scope);
+    const checkedAt = Date.now();
     if (current.position !== snapshot.position || current.generation !== snapshot.generation ||
-        context.exp * 1000 <= Date.now()) {
+        context.exp * 1000 <= checkedAt) {
       throw new Error('Memory changed before delivery');
     }
     for (const reference of additions) {
-      if (references.current(reference) !== 'current') {
+      if (references.current(reference, checkedAt) !== 'current') {
         throw new Error('Memory reference unavailable');
       }
     }
+    return checkedAt;
   }
   let previous = chat.memoryContext;
   let sequence = chat.sequence;
   if (!previous) {
-    await confirm();
-    const prepared = await appendRecord(options, context, data, previous, sequence);
+    const checkedAt = await confirm();
+    const prepared = await appendRecord(options, context, data, previous, sequence, checkedAt);
     previous = prepared.state;
     sequence = prepared.sequence;
   }
   const loaded: MemoryContextRecord = { ...data, action: 'loaded', delivery: 'recall',
     callDigest: digest(context.callId), dispatchDigest: context.dispatch.permitDigest,
     additions, byteCount, hasOmissions };
-  await confirm();
-  await appendRecord(options, context, loaded, previous, sequence);
+  // Save the exact time used for every addition and dependency check.
+  const checkedAt = await confirm();
+  await appendRecord(options, context, loaded, previous, sequence, checkedAt);
   // Refuse delivery if the participation stream closed during the append.
   // Keep saved references as ended accounting when the summary reads that close.
   await confirm();

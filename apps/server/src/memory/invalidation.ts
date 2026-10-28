@@ -78,7 +78,15 @@ function checkLoadedReferences(options: Options, rows: StoredEvent[],
     const current = memoryReferences(loadedRows, options.silo, scopeId, 'event-only', checkedAt);
     // Check each addition where it was loaded; later recalls need not predate the cause.
     for (const reference of loaded.data.additions) {
-      if (reference.scopeId !== scopeId || references.current(reference) !== 'current') {
+      if (reference.scopeId !== scopeId) {
+        throw new Error('Memory evidence unavailable');
+      }
+      if (references.current(reference) !== 'current') {
+        // Prove that only expiry made this addition unusable at its saved load time.
+        // Keep refused delivery evidence from blocking withdrawal of earlier output.
+        if (references.current(reference, Number.NEGATIVE_INFINITY) === 'current') {
+          continue;
+        }
         throw new Error('Memory evidence unavailable');
       }
       // Compare the same saved revision and dependencies. Only time can change this result.

@@ -45,6 +45,8 @@ It does not require the former user to retain read access. Existing polling dete
 corrections, forgets and expiry. Expiry checks the revisions saved at each load and every
 supporting fact. An unrelated expired fact does not stop the turn. Access-loss detection
 remains planned.
+An addition saved at expiry cannot block clearing output from an earlier loaded fact.
+Recall saves the time used to check its facts and checks again before returning text.
 
 ## Main files
 
