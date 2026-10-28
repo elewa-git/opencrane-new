@@ -1288,48 +1288,6 @@ async function refusedInsideReleaseAppend() {
 }
 it('checks a saved Stop inside the conditional release append', refusedInsideReleaseAppend);
 
-async function releaseReplayAfterRestart() {
-  let upstreamBytes = 0;
-  function received(bytes: Buffer) {
-    upstreamBytes += bytes.length;
-  }
-  function connected(socket: Socket) {
-    socket.on('data', received);
-  }
-  const upstream = createServer(connected);
-  upstream.listen(0, '127.0.0.1');
-  await once(upstream, 'listening');
-  const address = upstream.address();
-  if (!address || typeof address === 'string') throw new Error('Missing fixture address');
-  await publishServer(`https://127.0.0.1:${address.port}/mcp`);
-  const test = await releaseFixture();
-  // Custody uses fetch; access checks use the real OpenFGA adapter separately.
-  const custodyReads = vi.spyOn(globalThis, 'fetch');
-  try {
-    const first = await test.confirm();
-    await nats.stop();
-    await nats.restart();
-    const restarted = await createEventStore(await nats.client('command'));
-    const rows = await history(restarted, test.releaseSubject, 'test');
-    expect(rows).toHaveLength(1);
-    const append = vi.spyOn(restarted, 'append');
-    const receipt = await confirmCredentialRelease(restarted, 'test', test.userId,
-      test.decision.id, test.release, test.prepareAccess);
-    expect(receipt).toEqual(first);
-    expect(Object.keys(receipt)).toEqual(['status', 'eventId', 'sequence']);
-    expect(append).not.toHaveBeenCalled();
-    expect(custodyReads).not.toHaveBeenCalled();
-    expect(upstreamBytes).toBe(0);
-    append.mockRestore();
-  } finally {
-    custodyReads.mockRestore();
-    upstream.close();
-    await once(upstream, 'close');
-  }
-}
-it('replay and a restarted store recover audit evidence without a sending capability',
-  releaseReplayAfterRestart);
-
 async function releasePreparationRefusal(change: string, failedHistory: string) {
   const test = await releaseFixture();
   let event;
@@ -1460,3 +1418,47 @@ it.each([
   ['Active silo membership required', 'throw'], ['Owner or Admin required', 'throw'],
   ['Active silo membership required', 'return'], ['Owner or Admin required', 'return'],
 ])('preserves release append refusal %s through a later %s failure', releaseAppendAccessRefusal);
+
+
+async function releaseReplayAfterRestart() {
+  let upstreamBytes = 0;
+  function received(bytes: Buffer) {
+    upstreamBytes += bytes.length;
+  }
+  function connected(socket: Socket) {
+    socket.on('data', received);
+  }
+  const upstream = createServer(connected);
+  upstream.listen(0, '127.0.0.1');
+  await once(upstream, 'listening');
+  const address = upstream.address();
+  if (!address || typeof address === 'string') throw new Error('Missing fixture address');
+  await publishServer(`https://127.0.0.1:${address.port}/mcp`);
+  const test = await releaseFixture();
+  // Custody uses fetch; access checks use the real OpenFGA adapter separately.
+  const custodyReads = vi.spyOn(globalThis, 'fetch');
+  try {
+    const first = await test.confirm();
+    await nats.stop();
+    await nats.restart();
+    const restarted = await createEventStore(await nats.client('command'));
+    const rows = await history(restarted, test.releaseSubject, 'test');
+    expect(rows).toHaveLength(1);
+    const append = vi.spyOn(restarted, 'append');
+    const receipt = await confirmCredentialRelease(restarted, 'test', test.userId,
+      test.decision.id, test.release, test.prepareAccess);
+    expect(receipt).toEqual(first);
+    expect(Object.keys(receipt)).toEqual(['status', 'eventId', 'sequence']);
+    expect(append).not.toHaveBeenCalled();
+    expect(custodyReads).not.toHaveBeenCalled();
+    expect(upstreamBytes).toBe(0);
+    append.mockRestore();
+  } finally {
+    custodyReads.mockRestore();
+    upstream.close();
+    await once(upstream, 'close');
+  }
+}
+// Run this case last because restarting closes the shared fixture's original store.
+it('replay and a restarted store recover audit evidence without a sending capability',
+  releaseReplayAfterRestart);
