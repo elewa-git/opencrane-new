@@ -8,7 +8,7 @@ This folder lets people review, save, correct and forget information the assista
 - Saves human facts, corrections and forget requests, with checks for lost replies.
 - Checks current access before reading private text or saving a change.
 - Records which facts an assistant loaded before returning their text.
-- Allows an assistant to save a personal fact only when all the facts it relied on are recorded.
+- Allows an assistant to save or correct a personal fact only when all loaded facts are recorded.
 - Previews eligible facts for a saved private turn without sending text to a computer.
 - Records choices and shows saved status for future nightly upkeep; running that upkeep remains disabled.
 
@@ -27,7 +27,7 @@ Changed definitions and Ask or Block choices cannot enter those lists. Public di
 still lists recall alone. Preparing a remember or Correct definition reads no facts and saves
 nothing. Live private tool delivery remains disabled.
 
-Recall, Correct and Forget load history before the gateway signs the short pass. The server keeps that data for one use and checks current access again. Correct and Forget check the loaded target and later revisions, then report that these tools are disabled.
+Recall, Correct and Forget load history before the gateway signs the short pass. The server keeps that data for one use and checks current access again. Correct saves one replacement with every other loaded fact as a dependency and preserves the original sources. Its receipt contains no text. A separate read checks the original agent receipt after a lost reply, without saving again. The next dispatch refuses the old loaded revision. Forget through the assistant remains disabled.
 
 Recall saves its references before returning fact text or signed proof of what was read. Failed or uncertain saves return neither. A lost reply keeps the references and cannot send the same recall again. If the conversation closes during saving, the references remain readable but the ended context returns no text or proof. References keep personal and shared facts separate and cannot restart a turn or grant access. Chat summaries rebuild them using the models library's shared memory reader without loading fact text.
 
@@ -59,7 +59,7 @@ Recall saves the time used to check its facts and checks again before returning 
 | [access.ts](access.ts), [admission.ts](admission.ts), [sources.ts](sources.ts) | Check scope permissions, share write places and validate supporting facts. |
 | [commands-routes.ts](commands-routes.ts), [commands.ts](commands.ts), [correct.ts](correct.ts), [forget.ts](forget.ts) | Save facts, corrections and forget requests, and recover original results. |
 | [command-history.ts](command-history.ts), [journal.ts](journal.ts) | Track unfinished writes so recovery keeps the right keys. |
-| [mcp.ts](mcp.ts), [recall-delivery.ts](recall-delivery.ts), [recall-proof.ts](recall-proof.ts), [agent-lineage.ts](agent-lineage.ts) | Serve assistant recall and remember tools with proof of loaded facts. |
+| [mcp.ts](mcp.ts), [recall-delivery.ts](recall-delivery.ts), [recall-proof.ts](recall-proof.ts), [agent-lineage.ts](agent-lineage.ts) | Serve assistant recall, remember and personal correction tools with proof of loaded facts. |
 | [invalidation.ts](invalidation.ts), [access-loss.ts](access-loss.ts), [stop.ts](stop.ts) | Record withdrawn memory context and stop its matching connected turn. |
 | [turn-preview.ts](turn-preview.ts), [maintenance.ts](maintenance.ts) | Preview private-turn memories and record future upkeep choices and history. |
 

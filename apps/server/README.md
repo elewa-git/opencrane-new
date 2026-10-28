@@ -86,7 +86,10 @@ cancellation, so a foreign approval stays unchanged.
 Recall, Correct and Forget load their history before the gateway signs the short pass.
 The server keeps that data briefly for one call and checks current access before use.
 Calls and turn renewal prepare access receipts for every memory scope already loaded.
-Correct and Forget validate their targets but remain disabled.
+Correct can save one checked personal replacement and return a receipt without text.
+Before saving, it checks for new loaded facts, an ended conversation and saved member removal.
+A later service error cannot turn a known removal into an uncertain save.
+Forget through the assistant remains disabled.
 An internal command can record that a personal turn's loaded memory became invalid
 after a saved correction, forget, expiry or loss of access. It keeps every loaded reference for replay and
 returns a receipt without fact text. An internal reaction can send Stop after confirming
@@ -144,7 +147,7 @@ flowchart LR
   computer -.->|records private thread before tool approval| server
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime
-  runtime -->|checks memory access and privacy evidence for recall, remember and Correct definitions| server
+  runtime -->|checks memory access for recall, remember and personal corrections| server
 ```
 
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) handles sign-in.
@@ -154,7 +157,9 @@ only after the models process allows them.
 
 Agent correction and forget requests need a signed proof of a loaded, current personal fact.
 A correction names every other loaded fact as a dependency, with no revision of its own target.
-Both operations remain disabled after these checks and create no fact, key or command file.
+It preserves the original sources. The requester can check its original receipt after a lost
+reply. That check saves nothing and never returns old text.
+Forget remains disabled after these checks and creates no fact, key or command file.
 Discovery still lists recall alone.
 Private tool approval follows native thread creation. The server checks the recorded
 ID before the computer loads tools on that same thread.

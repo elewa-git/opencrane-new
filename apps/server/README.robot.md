@@ -5101,8 +5101,8 @@ Correct and Forget use the same preparation store and load read/write grant rece
 Their prepared data contains scope events, with no decrypted fact text or permission result.
 The signed pass checks current permissions and reads only later scope events before
 validating the target and every loaded reference. It rechecks the original access
-streams after reading the conversation tail. Correct and Forget remain disabled;
-valid controls return `memory_tool_unavailable` and create no business event or file.
+streams after reading the conversation tail. Correct can append through the shared command
+below. Forget returns `memory_tool_unavailable` and creates no business event or file.
 Remember and discovery still use their existing paths. Fresh-install qualification: NOT RUN.
 
 ### Team memory test setup
@@ -6368,11 +6368,12 @@ expected revision, full replacement fields, dependencies and recall proof. It ha
 no sources override. Complete same-scope dependencies exclude the target itself;
 the existing target proof covers that revision separately. Preparing the definition
 reads no facts, appends nothing and gives no permission to execute Correct.
-`refuseAgentChange` still refuses execution, and public discovery lists recall alone.
+`checkAgentChange` validates this evidence; the personal Correct command below can save it.
+Public discovery lists recall alone.
 
 Tests: `personal-correct-tools.test.ts`, computer `private-thread-loads.test.ts` and
 `codex-config.test.ts`. The native test uses synthetic qualification and recorded-turn
-evidence, with real pinned Codex discovery and no model turn. Forget, execution,
+evidence, with real pinned Codex discovery and no model turn. Forget, native execution,
 multiple-tool lists and production launch remain later work. Memory admission stays
 disabled. Fresh-install/live qualification: NOT RUN.
 
@@ -6401,6 +6402,24 @@ retain the allocated root, held cents, late settlement and exact private-thread 
 Unavailable services alone are not removal evidence. Replay only rebuilds the paused state.
 No subscription, route, scheduler or automatic execution is enabled. Other access causes,
 company profiles and fresh-install live qualification remain NOT RUN in this slice.
+
+## Governed personal corrections (P4-15 PR 4f)
+
+Part of #97. Prepared Correct calls reuse `memory/correct.ts`, its journal, shared fact
+lock, key custody and conditional append. Keep the original signed write authority,
+target proof and every other loaded reference. Preserve sources. Before publication, check
+expiry, revision keys and the replacement's dependencies. The publication callback also checks
+only later conversation rows against the complete loaded evidence, using the original deadline.
+Saved membership is checked before fallible access reads and again if those reads fail.
+A saved removal keeps its `MemberAccessRefused` error through returned or thrown append failures;
+the failure path does not repeat the permission check. Events record agent/requester and
+conversation/turn/request with reason `contradiction`. Obsolete context refuses the next dispatch.
+`GET /api/memory/:scopeId/agent-changes/:commandId` reads only the owner's original agent
+correction receipt. It never searches human commands, resends work, creates keys or decrypts
+text. Uncertain agent commands refuse replacement bodies; recovery uses status reads.
+`test/memory-mcp.test.ts` covers real gateway/store execution, replay, races, recovery,
+prepared reads and refused evidence/access. Test-first commits: `9db1037f7`, `cb7e6b22d`,
+`62730876a`, `63fd022a4`. Native launch/admission and Forget stay disabled. Live qualification: NOT RUN.
 
 ## Personal memory access withdrawal (P4-15 PR 3i)
 
