@@ -728,11 +728,12 @@ async function refusesLateChange(kind: string) {
     await sender().send(computer.wake);
     const link = await computer.wake();
     function completed() {
-      return computer.starts > 0 || link.socket.readyState === link.socket.CLOSED;
+      return computer.starts > 0 || computer.closedSessions > 0;
     }
     await until(completed);
     expect(injected).toBe(true);
     expect(computer.starts).toBe(0);
+    expect(link.socket.readyState).toBe(link.socket.OPEN);
     expect(await savedStarts()).toHaveLength(1);
   } finally {
     await computer.close();
@@ -802,11 +803,12 @@ async function refusesRelevantComputerChange(kind: string) {
     await sender().send(computer.wake);
     const link = await computer.wake();
     function completed() {
-      return computer.starts > 0 || link.socket.readyState === link.socket.CLOSED;
+      return computer.starts > 0 || computer.closedSessions > 0;
     }
     await until(completed);
     expect(injected).toBe(true);
     expect(computer.starts).toBe(0);
+    expect(link.socket.readyState).toBe(link.socket.OPEN);
     const starts = await savedStarts();
     for (const start of starts) {
       expect(start.event.data).not.toMatchObject({ turnId });
