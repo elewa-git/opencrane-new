@@ -6257,7 +6257,7 @@ The two-second cancellation deadline starts when the poll sees a matching prohib
 Evidence validation and the computer check share that deadline. An expired read sends no
 late Stop; a later poll retries all checks. Unavailable evidence cannot guarantee interruption
 within two seconds, and never permits sending without validation.
-Completion keeps the accepted turn and computer generation tracked until the matching
+Completion keeps the accepted start details, turn and computer generation until the matching
 `private_output_cleared` receipt arrives. That receipt confirms reply removal, not termination.
 If clearance arrives first, tracking stays until an accepted terminal report arrives too.
 Failed interruption cleanup therefore remains retryable after the reply buffer is cleared.
