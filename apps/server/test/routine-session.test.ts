@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
-import { once } from 'node:events';
+import { once, once as onceEvent } from 'node:events';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { startDecision, readToolPolicy, reviewToolPolicy } from '@opencrane/models';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { losslessJson } from '@opencrane/events/lossless-json';
+import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { WebSocket } from 'ws';
-import { encodeSession } from '@opencrane/auth';
+import { encodeSession, computerCredentials, tokenVerifier } from '@opencrane/auth';
 import { createLogger } from '@opencrane/observability';
 import { connectMemberFeed, conversations, computers, ProjectionRunner, readConversation }
   from '@opencrane/projections';
@@ -1082,6 +1087,7 @@ function routineRootTests() {
   let expectedHolds: BudgetActor['state']['reservations'] = [];
   let expectedStop: EventEnvelope | undefined;
   let stopping = false;
+  let dispatchMode = false;
   async function preparedInput() {
     encryption.mockRestore();
     decryption.mockRestore();
@@ -1106,6 +1112,7 @@ function routineRootTests() {
     expectedHolds = [];
     expectedStop = undefined;
     stopping = false;
+    dispatchMode = false;
     const fetch = globalThis.fetch;
     function permissionsOnly(url: Parameters<typeof fetch>[0], options?: RequestInit) {
       const address = url instanceof Request ? url.url : url.toString();
@@ -1611,6 +1618,160 @@ function routineRootTests() {
       activationMode = true;
     }
     beforeEach(allocated);
+    async function routineTool() {
+      await apply([joinedMember('admin')]);
+      const definition = { name: 'read', inputSchema: { type: 'object' },
+        annotations: { readOnlyHint: true, destructiveHint: false } };
+      const parsed = losslessJson(JSON.stringify(definition));
+      const tool = { name: 'read', revision: parsed.digest, definition: parsed.canonical,
+        readOnly: true, reviewed: true, costCents: 0 };
+      const schemaDigest = catalogueDigest([tool]);
+      const checkedAt = new Date().toISOString();
+      const expiresAt = new Date(Date.now() + 300_000).toISOString();
+      const events = [
+        record('register-tool', 'mcp-fixture', 'mcp.server_registered',
+          { serverId: 'fixture', kind: 'remote', locator: 'https://fixture.example.test/mcp',
+            registeredBy: 'alice' }),
+        record('discover-tool', 'mcp-fixture', 'mcp.server_discovered',
+          { serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
+            tools: [tool], toolCount: 1, schemaDigest, checkedAt, expiresAt }),
+      ];
+      await nats.seed(events);
+      const policy = await readToolPolicy(nats.store, 'test', 'fixture');
+      const choice = { name: tool.name, revision: tool.revision,
+        reviewDigest: toolReviewDigest(tool), mode: 'allow' };
+      const command = { commandId: 'review-tool', expectedSequence: policy.sequence,
+        policyRevision: policy.policyRevision, catalogueDigest: schemaDigest,
+        connectionId: 'installed', accountMode: 'none', tools: [choice] };
+      await reviewToolPolicy(nats.store, binding, 'admin', 'fixture', command);
+      await nats.seed([record('publish-tool', 'mcp-fixture', 'mcp.server_published',
+        { serverId: 'fixture', publishedBy: 'alice' })]);
+      for (const [granteeKind, granteeId] of [['member', 'alice'], ['assistant', 'sales-assistant']]) {
+        await apply([record(`tool-grant-${granteeKind}`, grantStream('mcp_server', 'fixture'),
+          'grant.given', { resourceType: 'mcp_server', resourceId: 'fixture',
+            granteeKind, granteeId, grantedBy: 'alice' })]);
+      }
+      let bytes = 0;
+      function receive(request: IncomingMessage, response: ServerResponse) {
+        function collect(chunk: Buffer) { bytes += chunk.length; }
+        request.on('data', collect);
+        response.end('{}');
+      }
+      const server = createServer(receive);
+      server.listen(0, '127.0.0.1');
+      await onceEvent(server, 'listening');
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Fixture address unavailable');
+      const route = { serverId: 'fixture', connectionId: 'installed',
+        upstream: `127.0.0.1:${address.port}`, generation: 'fixture',
+        revisionHeader: 'x-opencrane-mcp-revision' as const };
+      async function requireLeader() {}
+      function received() { return bytes; }
+      function close() { server.closeAllConnections(); server.close(); }
+      return { options: { routes: [route], requireLeader }, received, close };
+    }
+    async function dispatchFixture() {
+      dispatchMode = true;
+      await prepare();
+      vi.mocked(globalThis.fetch).mockRestore();
+      const turnId = 'routine-turn-occurrence';
+      const assistantId = 'sales-assistant';
+      const claimed = record('dispatch-claim', `computer-${assistantId}`, 'computer.claimed',
+        { assistantId, computerId: 'computer', generation: 1, tokenId: 'token:dispatch' });
+      const ready = record('dispatch-ready', `computer-${assistantId}`, 'computer.ready',
+        { assistantId, computerId: 'computer', generation: 1 });
+      const started = record('dispatch-start', `computer-${assistantId}`, 'computer.turn_started',
+        { assistantId, computerId: 'computer', conversationId, turnId,
+          threadId: selection.threadId, requesterId: 'alice', task: 'chat_turn',
+          payingGroupId: 'sales' });
+      await nats.seed([claimed, ready, started]);
+      const { publicKey, privateKey } = await generateKeyPair('ES256');
+      const jwk = { ...await exportJWK(publicKey), kid: 'dispatch' };
+      const issuer = 'https://routine.test/';
+      async function sign(claims: Record<string, unknown>, audience: string) {
+        const jwt = new SignJWT(claims);
+        jwt.setProtectedHeader({ alg: 'ES256', kid: 'dispatch' });
+        jwt.setIssuer(issuer);
+        jwt.setAudience(audience);
+        jwt.setIssuedAt();
+        jwt.setExpirationTime('2m');
+        return jwt.sign(privateKey);
+      }
+      const common = { silo: 'test', assistant: assistantId };
+      const computer = await sign({ ...common, typ: 'computer', computer: 'computer',
+        generation: 1, jti: 'token:dispatch' }, 'agentgateway');
+      const turn = await sign({ ...common, typ: 'turn', jti: 'routine-turn', conversation: conversationId,
+        turn: turnId, thread: selection.threadId, task: 'chat_turn', model: 'gpt-6.1-sol',
+        requester: 'alice', computerTokenId: 'token:dispatch', delegation: ['alice'] },
+      'decision-service');
+      const identity = { jwks: { keys: [jwk] }, issuer };
+      const upstream = await routineTool();
+      const logger = createLogger('routine-decision-test', { level: 'silent' });
+      const decision = await startDecision(actor, identity, binding, 0, undefined,
+        undefined, upstream.options, undefined, logger);
+      const headers = { authorization: `Bearer ${computer}`, 'x-turn-token': turn,
+        'session-id': selection.threadId, 'content-type': 'application/json' };
+      const credentials = computerCredentials(nats.store, tokenVerifier(identity.jwks, issuer), 'test');
+      await credentials.check(headers);
+      async function model() {
+        const body = JSON.stringify({ model: 'gpt-6.1-sol', input: 'Fixture input',
+          max_output_tokens: 16, stream: true });
+        return fetch(`${decision.url}/authorize`, { method: 'POST', headers, body });
+      }
+      const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
+        params: { name: 'read', arguments: {}, _meta: { threadId: selection.threadId,
+          callId: 'routine-call', 'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+          'io.modelcontextprotocol/clientCapabilities': {} } } });
+      async function tool() {
+        const toolHeaders = { ...headers, 'mcp-protocol-version': '2026-07-28',
+          'mcp-method': 'tools/call', 'mcp-name': 'read' };
+        const request = { method: 'POST', headers: toolHeaders, body };
+        return fetch(`${decision.url}/authorize/mcp/fixture/installed`, request);
+      }
+      async function send(permit: string) {
+        const request = { method: 'POST', headers: { 'x-opencrane-mcp-permit': permit }, body };
+        return fetch(`${decision.url}/dispatch/mcp/fixture/installed`, request);
+      }
+      async function close() { await decision.close(); upstream.close(); }
+      return { model, tool, send, received: upstream.received, close };
+    }
+    async function refusesSavedProhibition(kind: string) {
+      const fixture = await dispatchFixture();
+      try {
+        await prohibit(kind, await stopRequest());
+        const response = await fixture.model();
+        expect(response.status, await response.text()).toBe(403);
+        expect(response.headers.get('x-reservation-id')).toBeNull();
+        expect(actor.state.reservations).toEqual([]);
+        expect(actor.state.dispatches).toEqual([]);
+        expect(actor.state.roots[0]!.stop).toBeUndefined();
+        const tool = await fixture.tool();
+        expect(tool.status, await tool.text()).toBe(403);
+        expect(tool.headers.get('x-opencrane-mcp-permit')).toBeNull();
+        expect(fixture.received()).toBe(0);
+      } finally {
+        await fixture.close();
+      }
+    }
+    it.each(['Stop', 'Pause', 'Retire'])(
+      'refuses paid routine dispatch after saved %s before cleanup', refusesSavedProhibition);
+    async function allowsAdmittedRoutine() {
+      const fixture = await dispatchFixture();
+      try {
+        const response = await fixture.model();
+        expect(response.status, await response.text()).toBe(200);
+        expect(actor.state.reservations).toHaveLength(1);
+        expect(actor.state.dispatches).toHaveLength(1);
+        const tool = await fixture.tool();
+        expect(tool.status, await tool.text()).toBe(200);
+        const sent = await fixture.send(tool.headers.get('x-opencrane-mcp-permit')!);
+        expect(sent.status, await sent.text()).toBe(200);
+        expect(fixture.received()).toBeGreaterThan(0);
+      } finally {
+        await fixture.close();
+      }
+    }
+    it('allows paid routine dispatch with the exact admitted run', allowsAdmittedRoutine);
     async function admitOnce() {
       const before = await nats.store.head();
       const results = await Promise.all([prepare(), prepare()]);
@@ -1821,6 +1982,7 @@ function routineRootTests() {
   describe('routine activation', activationTests);
 
   async function noEffects() {
+    if (dispatchMode) return;
     expect(actor.state.dispatches).toEqual([]);
     if (stopping) return;
     const saved = await history(nats.store, 'budget-test', 'test');
