@@ -1,0 +1,1 @@
+Owners can pause or retire an occupied routine through the internal commands. The saved change prevents further admission and lets budget cleanup recover the matching run’s Stop after delays or restart, while keeping uncertain holds and late costs. Scheduling and execution remain disabled.

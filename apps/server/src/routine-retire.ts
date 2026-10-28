@@ -49,7 +49,8 @@ function retirementData(state: RoutineState | undefined) {
   const data = { version: 1, routineId: state.routineId,
     definitionRevision: saved.definitionRevision, scheduleRevision: saved.scheduleRevision,
     controlRevision: saved.controlRevision + 1, actorId: saved.definition.ownerId,
-    source: 'owner', reason: 'owner_requested', affectedRun: state.activeRun?.occurrenceId ?? null, next: null };
+    source: 'owner', reason: 'owner_requested',
+    affectedRun: state.activeRun?.occurrenceId ?? null, next: null };
   return routineControlSchema.parse(data);
 }
 
@@ -81,13 +82,13 @@ function previousRetirement(rows: StoredEvent[], input: Input, memberId: string)
   return undefined;
 }
 
-async function requireMetadataAccess(saved: RoutineAccess) {
+async function requireOwnerAccess(saved: RoutineAccess, memberId: string) {
   const permission = await saved.check('read_metadata');
   if ('reason' in permission && permission.reason === 'history_unavailable') {
     // Report broken history only after the permission service confirms read access.
     throw new Error('Routine history unavailable');
   }
-  if (!permission.allowed) {
+  if (!permission.allowed || saved.state?.definition?.definition.ownerId !== memberId) {
     throw new RetirementRefused();
   }
 }
@@ -104,18 +105,12 @@ export async function retireRoutine(store: EventStore, binding: Binding,
     const auth = memberAuthorisation(binding, store);
     const saved = await auth.loadRoutineAccess(memberId, input.routineId);
     // Check metadata access before revealing saved changes or revision conflicts.
-    await requireMetadataAccess(saved);
-    if (saved.state?.definition?.definition.ownerId !== memberId) {
-      throw new RetirementRefused();
-    }
+    await requireOwnerAccess(saved, memberId);
     const previous = previousRetirement(saved.rows, input, memberId);
     if (previous) {
       return previous;
     }
     const data = retirementData(saved.state);
-    if (data.actorId !== memberId) {
-      throw new RetirementRefused();
-    }
     const position = saved.rows.at(-1)?.sequence ?? 0;
     requireRevisions(input, saved.state, position);
     const event: EventEnvelope = { id: randomUUID(), commandId: input.changeId,

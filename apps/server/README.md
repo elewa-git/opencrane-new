@@ -117,7 +117,7 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks private callers, reads original tool reviews, checks access before history errors, prepares and allocates child and routine allowances, checks saved routine admission, applies saved Stop intent, and shares types| libs["libs/*<br/>shared code and chat keys"]
+  server -.->|checks private callers, reads original tool reviews, checks access before history errors, prepares and allocates child and routine allowances, checks saved routine admission, applies saved Stop, Pause and Retire intent, and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; records invalid personal memory contexts and personal account revocations, choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, encrypted inputs and checked admission receipts, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
@@ -266,9 +266,11 @@ private chats, results and instructions stay outside these pages.
 Instructions and private run results stay private. Reading a routine starts no work;
 routine execution remains unavailable.
 
-An internal operation lets a routine's current owner save a pause when no run is active.
-It checks saved ownership and permissions, and recovers the original change after a lost
-reply. A separate internal operation lets the owner retire a routine with no active run.
+Internal operations let a routine's current owner pause or retire it, including while
+a run occupies its slot. They check saved ownership and permissions, and recover the
+original change after a lost reply. Each change names the affected run and keeps its
+original people and turn. Separate cleanup stops only that run's spending allowance.
+The saved change prevents further admission even while cleanup is delayed.
 Retirement clears its next scheduled time and keeps permitted history. The original
 owner can recover a lost retirement reply while they still have metadata access.
 The server checks that access before reporting a saved change or revision conflict.

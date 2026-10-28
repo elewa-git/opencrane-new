@@ -308,6 +308,7 @@ it('loads routine and member history before the short check and never reads it a
   loadsHistoryFirst);
 
 async function replaysSavedRetirement() {
+  const occupied = await occupy();
   await retire();
   await applyRetirement();
   const options = { verifyAgainst: binding };
@@ -337,7 +338,8 @@ async function replaysSavedRetirement() {
     expect(saved.rows[0]?.state.executionAvailable).toBe(false);
     expect(saved.rows[0]?.state.definition?.next).toBeNull();
     const runs = await storage.db.query('SELECT * FROM routine_occurrences');
-    expect(runs.rows).toEqual([]);
+    expect(runs.rows).toHaveLength(1);
+    expect(saved.rows[0]?.state.activeRun).toEqual(occupied.data);
     const jobs = await storage.db.query("SELECT tablename FROM pg_tables WHERE schemaname='pgboss'");
     expect(jobs.rows).toEqual([]);
     expect(await nats.store.head()).toBe(before);
@@ -484,6 +486,14 @@ async function occupiedRetirement() {
   }
   expect(state?.activeRun).toEqual(occupied.data);
   expect(state?.executionAvailable).toBe(false);
+  const changedRequests = [{ expectedPosition: 0 }, { expectedDefinitionRevision: 2 },
+    { expectedScheduleRevision: 2 }, { expectedControlRevision: 2 }];
+  await applyRetirement();
+  expect(await retire()).toEqual(results[0]);
+  for (const change of changedRequests) {
+    await expect(retire('alice', { ...input, ...change }))
+      .rejects.toThrow('Routine retirement conflict');
+  }
   for (const member of ['admin', 'bob', 'outsider']) {
     for (const change of [{}, { expectedPosition: 0 }, { changeId: 'orders:unknown' }]) {
       await expect(retire(member, { ...input, ...change }))

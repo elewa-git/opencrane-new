@@ -618,11 +618,12 @@ async function refusesLifecycle(type: string, field: string, value: unknown) {
   await reserve();
 }
 const invalidControls: [string, string, unknown][] = [];
+const controlChanges: [string, unknown][] = [['affectedRun', 'another'], ['affectedRun', null],
+  ['source', 'admin'], ['actorId', 'bob'], ['definitionRevision', 2],
+  ['scheduleRevision', 2], ['controlRevision', 1]];
 for (const type of ['routine.paused', 'routine.retired']) {
-  for (const [field, value] of [['affectedRun', 'another'], ['affectedRun', null],
-    ['source', 'admin'], ['actorId', 'bob'], ['definitionRevision', 2],
-    ['scheduleRevision', 2], ['controlRevision', 1]]) {
-    invalidControls.push([type, field as string, value]);
+  for (const [field, value] of controlChanges) {
+    invalidControls.push([type, field, value]);
   }
 }
 it.each(invalidControls)('refuses %s with forged %s=%s without a Stop', refusesLifecycle);

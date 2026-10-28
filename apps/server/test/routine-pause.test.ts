@@ -247,6 +247,7 @@ it('loads routine and member history before the short check and never reads it a
   loadsHistoryFirst);
 
 async function replaysSavedPause() {
+  const occupied = await occupy();
   await pause();
   const storage = await database('pg');
   try {
@@ -265,7 +266,8 @@ async function replaysSavedPause() {
     expect(saved.rows[0]?.state.status).toBe('paused');
     expect(saved.rows[0]?.state.executionAvailable).toBe(false);
     const runs = await storage.db.query('SELECT * FROM routine_occurrences');
-    expect(runs.rows).toEqual([]);
+    expect(runs.rows).toHaveLength(1);
+    expect(saved.rows[0]?.state.activeRun).toEqual(occupied.data);
     const jobs = await storage.db.query("SELECT tablename FROM pg_tables WHERE schemaname='pgboss'");
     expect(jobs.rows).toEqual([]);
     expect(await nats.store.head()).toBe(before);
@@ -301,6 +303,13 @@ async function occupiedPause() {
   }
   expect(state?.activeRun).toEqual(occupied.data);
   expect(state?.executionAvailable).toBe(false);
+  const changedRequests = [{ expectedPosition: 0 }, { expectedDefinitionRevision: 2 },
+    { expectedScheduleRevision: 2 }, { expectedControlRevision: 2 }];
+  expect(await pause()).toEqual(results[0]);
+  for (const change of changedRequests) {
+    await expect(pause('alice', { ...input, ...change }))
+      .rejects.toThrow('Routine pause conflict');
+  }
   for (const member of ['admin', 'bob', 'outsider']) {
     for (const change of [{}, { expectedPosition: 0 }, { changeId: 'orders:unknown' }]) {
       await expect(pause(member, { ...input, ...change }))

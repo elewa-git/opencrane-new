@@ -48,7 +48,8 @@ function pauseData(state: RoutineState | undefined) {
   const data = { version: 1, routineId: state.routineId,
     definitionRevision: saved.definitionRevision, scheduleRevision: saved.scheduleRevision,
     controlRevision: saved.controlRevision + 1, actorId: saved.definition.ownerId,
-    source: 'owner', reason: 'owner_requested', affectedRun: state.activeRun?.occurrenceId ?? null, next: saved.next };
+    source: 'owner', reason: 'owner_requested',
+    affectedRun: state.activeRun?.occurrenceId ?? null, next: saved.next };
   return routineControlSchema.parse(data);
 }
 
@@ -96,9 +97,6 @@ export async function pauseRoutine(store: EventStore, binding: Binding,
     }
     const previous = previousPause(saved.rows, input, memberId);
     if (previous) {
-      if (!(await saved.check('manage')).allowed) {
-        throw new PauseRefused();
-      }
       return previous;
     }
     const data = pauseData(saved.state);
