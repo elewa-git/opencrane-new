@@ -4606,7 +4606,11 @@ profile/selection/policy positions, endpoint and account/scope fingerprints. Cur
 bearer profiles remain saved_unverified. Their synthetic audit tests do not qualify
 account identity or make credentialed tools available. OAuth/company use stays closed.
 
-History loads before the live check. One conditional append uses the original decision
+History loads before the live check. Failed history waits for the single permission
+decision, so removed members and callers without the required role retain their
+`MemberAccessRefused`. The same refusal survives an append failure, including a later
+dependency error. Other failures return only `Release unavailable`, without a cause.
+One conditional append uses the original decision
 id with `:release`, on `credential-<requestId>`. Existing correlation.request links the
 decision; correlation.approval preserves approval identity. An ambiguous append returns
 only the fixed error. A later call with `action: recover` only reads the original record;

@@ -127,9 +127,32 @@ function confirmed(rows: StoredEvent[], expected: EventEnvelope) {
 export async function confirmCredentialRelease(store: EventStore, silo: string,
   requesterId: string, decisionId: string, raw: unknown,
   prepareAccess: () => Promise<Access>, action: 'append' | 'recover' = 'append') {
+  let refusal: MemberAccessRefused | undefined;
+  async function prepare() {
+    const access = await prepareAccess();
+    async function checkAccess() {
+      try {
+        await access.checkAccess();
+      } catch (error) {
+        if (error instanceof MemberAccessRefused) {
+          // Keep the access refusal if the store reports a later dependency failure.
+          refusal = error;
+        }
+        throw error;
+      }
+    }
+    return { deadline: access.deadline, checkAccess };
+  }
   try {
-    return await confirm(store, silo, requesterId, decisionId, raw, prepareAccess, action);
+    const receipt = await confirm(store, silo, requesterId, decisionId, raw, prepare, action);
+    if (refusal) {
+      throw refusal;
+    }
+    return receipt;
   } catch (error) {
+    if (refusal) {
+      throw refusal;
+    }
     if (error instanceof MemberAccessRefused) {
       throw error;
     }
@@ -189,7 +212,7 @@ async function confirm(store: EventStore, silo: string, requesterId: string,
     checkAccess, deadline };
   const result = await store.append(command);
   if (result.status === 'unavailable') {
-    refuse();
+    throw result.cause;
   }
   // An ambiguous append returns no receipt. A later invocation reads the original id.
   const rows = await history(store, event.subject, silo, deadline);
