@@ -1378,8 +1378,8 @@ async function releaseValidationRefusal(patch: Record<string, unknown>) {
   for (const message of messages) {
     const test = await releaseFixture();
     const refusal = new MemberAccessRefused(message);
-    async function prepareAccess(): Promise<never> {
-      throw refusal;
+    function prepareAccess(): Promise<never> {
+      return Promise.reject(refusal);
     }
     const permission = vi.fn(prepareAccess);
     const writes = vi.spyOn(nats.store, 'append');
