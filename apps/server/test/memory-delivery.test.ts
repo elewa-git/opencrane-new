@@ -44,7 +44,9 @@ async function append(subject: string, type: string, data: object, id: string = 
     principal: { kind: 'system' as const, id: 'server' } };
   expect(parseEventByType(event).success).toBe(true);
   const expectedSequence = await nats.store.head(subject);
-  expect(await nats.store.append({ event, expectedSequence })).toMatchObject({ status: 'appended' });
+  // Use each fixture id once, without rereading growing streams while seeding history.
+  const command = { event, expectedSequence, historyChecked: true as const };
+  expect(await nats.store.append(command)).toMatchObject({ status: 'appended' });
   return event;
 }
 async function startTurn(id = 'turn', conversationId = 'chat', requesterId = 'alice',
@@ -57,13 +59,13 @@ async function startTurn(id = 'turn', conversationId = 'chat', requesterId = 'al
   await flush();
 }
 async function writeFact(memoryId: string, dependsOn: { scopeId: string;
-  memoryId: string; revision: number }[] = [], ownerId = 'alice', expiresAt: string | null = null) {
+  memoryId: string; revision: number }[] = [], ownerId = 'alice', expiresAt: string | null = null, pinned = false) {
   const personalScope = memoryScopeId('test', 'person', ownerId);
   const hash = createHash('sha256');
   hash.update(JSON.stringify(['test', personalScope, 'person', ownerId, memoryId, 1]));
   await append(`scope-${personalScope}`, 'memory.written', { schemaVersion: 1,
     scopeId: personalScope, scopeKind: 'person', ownerId, memoryId, revision: 1, kind: 'fact',
-    pinned: false, expiresAt, sources: [], dependsOn,
+    pinned, expiresAt, sources: [], dependsOn,
     keyId: `key:${hash.digest('hex')}`, ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' });
   return { scopeId: personalScope, memoryId, revision: 1 };
 }
@@ -410,7 +412,7 @@ async function boundsHistory() {
 }
 it('bounds a stalled history read and retries it on a later poll', boundsHistory, 15_000);
 
-async function completionBeforePoll(replace: boolean, detect = false) {
+async function completionBeforePoll(replace: boolean, detect = false, expiresAt?: number) {
   const send = link.socket.send.bind(link.socket);
   let stops = 0;
   function holdAcknowledgements(data: Parameters<typeof send>[0]) {
@@ -427,12 +429,15 @@ async function completionBeforePoll(replace: boolean, detect = false) {
     params: { threadId: 'thread-1', itemId: 'reply', delta: 'completed-private-canary' } });
   await flush();
   await link.settled();
-  if (detect) await changed();
-  else await invalidated();
+  if (expiresAt === undefined) {
+    if (detect) await changed();
+    else await invalidated();
+  }
   computer.finish('thread-1');
   await flush();
   await link.settled();
   if (replace) await startReplacement();
+  if (expiresAt !== undefined) vi.spyOn(Date, 'now').mockReturnValue(expiresAt);
   await poll();
   let replayed = false;
   function inspect(raw: Buffer) {
@@ -451,8 +456,11 @@ async function completionBeforePoll(replace: boolean, detect = false) {
   expect({ stops, privateTextReplayedAfterInvalidation: replayed })
     .toEqual({ stops: 1, privateTextReplayedAfterInvalidation: false });
 }
+async function savedCompletionBeforePoll(replace: boolean) {
+  await completionBeforePoll(replace);
+}
 it.each([false, true])('clears withdrawn output when completion precedes polling, replacement=%s',
-  completionBeforePoll);
+  savedCompletionBeforePoll);
 
 async function retriesUntilClearanceReceipt() {
   // eslint-disable-next-line @typescript-eslint/unbound-method -- Bind to each sending socket below.
@@ -568,6 +576,8 @@ async function forgetUnloadedFact(expired: boolean) {
   await changed('forgotten', 'unloaded');
 }
 
+function afterInitialPosition(position: number) { return position > 1; }
+
 function observeScopeStarts() {
   const read = nats.store.readStream.bind(nats.store);
   const starts: number[] = [];
@@ -588,15 +598,15 @@ async function advancesPastUnloadedForget(expired: boolean) {
   const starts = observeScopeStarts();
   await poll();
   await poll();
-  expect(starts).toEqual([loadedPosition + 1, 1, forgottenPosition + 1]);
+  expect(starts.filter(afterInitialPosition)).toEqual([loadedPosition + 1, forgottenPosition + 1]);
   const unchanged = await readChatFacts(nats.store, 'test', 'chat', 'turn');
   expect(unchanged.memoryContext?.status).toBe('loaded');
   expect(unchanged.memoryContext?.events.size).toBe(2);
   expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
   expect(computer.grants.has('thread-1')).toBe(true);
   await detectsPersonalChange('forgotten');
-  expect(starts).toEqual([
-    loadedPosition + 1, 1, forgottenPosition + 1, 1, forgottenPosition + 1, 1,
+  expect(starts.filter(afterInitialPosition)).toEqual([
+    loadedPosition + 1, forgottenPosition + 1, forgottenPosition + 1,
   ]);
 }
 it.each([false, true])(
@@ -608,7 +618,7 @@ async function expiredForgetBeforeCompletedWithdrawal() {
   await forgetUnloadedFact(true);
   const starts = observeScopeStarts();
   await completionBeforeDetection(false);
-  expect(starts).toEqual([1, loadedPosition + 1, 1, 1]);
+  expect(starts.filter(afterInitialPosition)).toEqual([loadedPosition + 1]);
   const rows = await history(nats.store, 'conversation-chat', 'test');
   const saved = memoryContextRecordedEventSchema.parse(rows.at(-1)!.event);
   expect(saved.data).toEqual({ ...prepared, action: 'invalidated',
@@ -698,10 +708,10 @@ async function boundedCatchUp() {
   }
   vi.spyOn(nats.store, 'readStream').mockImplementation(observe);
   await poll();
-  expect(starts).toEqual([loadedPosition + 1]);
+  expect(starts.filter(afterInitialPosition)).toEqual([loadedPosition + 1]);
   expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
   await poll();
-  expect(starts).toEqual([loadedPosition + 1, pageEnd + 1, 1]);
+  expect(starts.filter(afterInitialPosition)).toEqual([loadedPosition + 1, pageEnd + 1]);
   expect(computer.calls.filter(targetInterrupt)).toHaveLength(1);
 }
 it('catches lost notifications in bounded pages from the saved load position', boundedCatchUp);
@@ -767,3 +777,81 @@ async function recallAfterEarlierPoll() {
   expect(facts.memoryContext?.references).toHaveLength(2);
 }
 it('rechecks an earlier cause when a competing recall saves more references', recallAfterEarlierPoll);
+
+async function loadExpiringReference(transitive = false) {
+  const expiresAt = Date.now() + 30_000;
+  let reference = await writeFact('expiring', [], 'alice', new Date(expiresAt).toISOString());
+  if (transitive) {
+    reference = await writeFact('middle', [reference]);
+    reference = await writeFact('leaf', [reference]);
+  }
+  await append('conversation-chat', 'agent.memory_context_recorded', { ...prepared,
+    action: 'loaded', delivery: 'recall', callDigest: 'a'.repeat(64),
+    dispatchDigest: 'b'.repeat(64), byteCount: 10, additions: [reference],
+    scopePositions: [{ scopeId, position: await nats.store.head(`scope-${scopeId}`) }] });
+  return expiresAt;
+}
+
+async function pollsExpiry(transitive: boolean) {
+  const expiresAt = await loadExpiringReference(transitive);
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(expiresAt - 1);
+  await poll();
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
+  expect(computer.grants.has('thread-1')).toBe(true);
+  clock.mockReturnValue(expiresAt);
+  await Promise.all([poll(), poll()]);
+  await poll();
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(1);
+  expect(computer.grants.has('thread-1')).toBe(false);
+  const cold = { readStream: nats.store.readStream.bind(nats.store) };
+  const before = [...computer.calls];
+  const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
+  expect(facts.memoryContext).toMatchObject({ status: 'invalidated', reason: 'expired',
+    executionAvailable: false });
+  expect(facts.memoryContext?.references).toHaveLength(2);
+  expect(facts.memoryContext?.events.size).toBe(4);
+  clock.mockReturnValue(expiresAt - 1000);
+  expect(await readChatFacts(cold, 'test', 'chat', 'turn')).toEqual(facts);
+  expect(computer.calls).toEqual(before);
+  expect(opening).not.toHaveBeenCalled();
+  let leaked = false;
+  function inspect(raw: Buffer) {
+    if (raw.toString().includes('expired-private-canary')) leaked = true;
+  }
+  link.socket.on('message', inspect);
+  computer.channel.notification({ method: 'item/agentMessage/delta',
+    params: { threadId: 'thread-1', itemId: 'late', delta: 'expired-private-canary' } });
+  link.socket.send(JSON.stringify({ type: 'resume', since: 0 }));
+  await flush();
+  expect(leaked).toBe(false);
+}
+it.each([false, true])('polls expiry at its exact boundary, transitive=%s', pollsExpiry);
+
+async function completesBeforeExpiry(replace: boolean) {
+  const expiresAt = await loadExpiringReference(true);
+  await completionBeforePoll(replace, false, expiresAt);
+  const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(facts.memoryContext).toMatchObject({ status: 'ended', executionAvailable: false });
+  expect(facts.memoryContext?.events.size).toBe(4);
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
+}
+it.each([false, true])('expiry clears completed private output, replacement=%s', completesBeforeExpiry);
+
+async function unrelatedExpiryAndPin() {
+  const expiresAt = Date.now() + 30_000;
+  await writeFact('unloaded', [], 'alice', new Date(expiresAt).toISOString());
+  const reference = await writeFact('pin', [], 'alice', null, true);
+  await append('conversation-chat', 'agent.memory_context_recorded', { ...prepared,
+    action: 'loaded', delivery: 'recall', callDigest: 'a'.repeat(64),
+    dispatchDigest: 'b'.repeat(64), byteCount: 10, additions: [reference],
+    scopePositions: [{ scopeId, position: await nats.store.head(`scope-${scopeId}`) }] });
+  vi.spyOn(Date, 'now').mockReturnValue(expiresAt);
+  await poll();
+  await poll();
+  expect(computer.grants.has('thread-1')).toBe(true);
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
+  const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(facts.memoryContext?.events.size).toBe(3);
+  expect(facts.memoryContext?.status).toBe('loaded');
+}
+it('an unrelated expiry and a pin without expiry leave the turn running', unrelatedExpiryAndPin);

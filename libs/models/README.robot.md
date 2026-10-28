@@ -4474,8 +4474,8 @@ followed by 24 `Connection server unavailable` failures. This draft is not sourc
 
 ## Memory withdrawal after completion (P4-15 PR 3g)
 
-`foldMemoryContext` accepts a later `invalidated/content_changed` record for an ended
-context. It retains the ended status, references and accounting. This records evidence
+`foldMemoryContext` accepts a later invalidation with reason `content_changed` or `expired`
+for an ended context. It retains the ended status, references and accounting. This records evidence
 for pending private reply removal only. Later loads remain refused; replay creates no
 execution permission. The server invalidation writer verifies the saved cause and permits
 one invalidation per context. Other terminal transitions retain their existing refusals.

@@ -1855,3 +1855,30 @@ async function refusesRecordedInvalidation() {
 }
 it('refuses model, tool and renewal after the command records invalidation',
   refusesRecordedInvalidation);
+
+async function factExpiresBeforeRecallRelease() {
+  const expiresAt = Date.now() + 60_000;
+  await seedRecallFact('private-fact', new Date(expiresAt).toISOString());
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(expiresAt - 1000);
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  async function expireAfterLoad(command: Parameters<typeof append>[0]) {
+    const saved = await append(command);
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    if (parsed.success && parsed.data.data.action === 'loaded') vi.setSystemTime(expiresAt);
+    return saved;
+  }
+  const spy = vi.spyOn(setup.nats.store, 'append').mockImplementation(expireAfterLoad);
+  try {
+    const response = await directRecall('expiry-release');
+    expect(response.statusCode).toBe(403);
+    expect(response.body).not.toContain('Private canary');
+    expect((await savedContext()).memoryContext?.references).toHaveLength(1);
+    expect(setup.received()).toBe(0);
+  } finally {
+    spy.mockRestore();
+    vi.useRealTimers();
+  }
+}
+it('withholds recalled bytes when the fact expires after loading but before release',
+  factExpiresBeforeRecallRelease);

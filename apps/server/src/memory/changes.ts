@@ -66,5 +66,9 @@ export function memoryChanges(options: Options) {
       }
       position = row.sequence;
     }
+    // Check time even when no scope event arrived and a completed reply still awaits clearance.
+    const request = { conversationId: saved.conversationId, turnId: saved.turnId,
+      threadId: saved.threadId, inputGeneration: saved.inputGeneration };
+    await invalidateMemoryContext(options, request);
   };
 }

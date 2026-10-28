@@ -6290,5 +6290,33 @@ independent requesters and sessions, completion with an unacknowledged reply, re
 paged catch-up, failed reads, append uncertainty, recall/closure races and replay.
 `memory-invalidation.test.ts` checks withdrawal after a competing completion.
 The clearance receipt tests remain in place. Admission stays disabled.
-Expiry/access loss, browser reply delivery and native launch remain later work.
+Access loss, browser reply delivery and native launch remain later work.
 Fresh-install live qualification: NOT RUN.
+
+## Withdraw expired loaded memory (P4-15 PR 3h)
+
+Part of #97. Personal bridge polling now calls `invalidateMemoryContext` without a
+`causeId` to check expiry. The strict input accepts only the saved turn identity and an
+optional correction/forget event id. Caller clocks, references and reasons are refused.
+The server derives `expired` from each saved load's scope position and event time.
+It uses `memoryReferences` on that same history at load time and at the current time.
+Every addition must have been valid when loaded. A later failure on the same history
+proves expiry of that revision or a transitive dependency. Later live recalls cannot
+hide older dependencies; pinned facts still obey an explicit expiry.
+
+History has a separate ten-second deadline before the conditional append. A deterministic
+invalidation id recovers a lost append acknowledgement before reading memory history.
+Only one durable invalidation can withdraw a generation; competing recalls or completions
+require reconciliation. The first saved correction or expiry remains authoritative.
+Completion retains its ended status and full reference set. Pending private output still
+receives the existing exact-thread Stop and clearance checks. A timeout never confirms
+clearance. Offline replay reads saved evidence without consulting the clock or starting work.
+
+The initial boundary regression failed before implementation. The bridge regressions also
+failed before polling was added: no Stop arrived and completed private text replayed.
+Controlled clocks cover direct and transitive expiry at the exact boundary, delayed detection,
+clock rollback, lost append acknowledgement, restart, competing correction and recall,
+unrelated expiry, pins and completed output with a replacement thread. Existing dispatch,
+renewal, recall-release and history-failure tests cover refusal at use.
+No event field, dependency, scheduler, native tool or admission change is included.
+Fresh-install/live qualification: NOT RUN; memory admission remains disabled.

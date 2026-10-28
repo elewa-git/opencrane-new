@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { memoryContextRecordedEventSchema, memoryWrittenDataSchema, parseEventByType } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
+import { createEventStore } from '@opencrane/event-store';
 import { history } from '@opencrane/models';
 import { memoryScopeId } from '@opencrane/projections';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
@@ -63,6 +64,7 @@ async function start() {
   await load();
 }
 async function close() {
+  vi.restoreAllMocks();
   await setup?.close();
 }
 beforeEach(start);
@@ -100,12 +102,19 @@ async function exactInvalidation(kind: 'corrected' | 'forgotten') {
 it.each(['corrected', 'forgotten'] as const)(
   'records one exact invalidation after a loaded fact is %s', exactInvalidation);
 
-async function loadExpiringFact() {
+async function loadExpiringFact(transitive = false) {
   const expiresAt = Date.now() + 60_000;
-  const data = { ...memoryWrittenExample, scopeId, memoryId: 'expiring',
+  const data = { ...memoryWrittenExample, scopeId, memoryId: 'expiring', pinned: true,
     expiresAt: new Date(expiresAt).toISOString() };
   await append(`scope-${scopeId}`, 'memory.written', data);
-  const expiring = { ...reference, memoryId: 'expiring' };
+  let expiring = { ...reference, memoryId: 'expiring' };
+  if (transitive) {
+    for (const memoryId of ['middle', 'leaf']) {
+      await append(`scope-${scopeId}`, 'memory.written', { ...memoryWrittenExample,
+        scopeId, memoryId, dependsOn: [expiring] });
+      expiring = { ...reference, memoryId };
+    }
+  }
   const recall = { callDigest: 'c'.repeat(64), dispatchDigest: 'd'.repeat(64) };
   await load([expiring], recall);
   return { expiresAt, expiring };
@@ -425,8 +434,8 @@ async function anotherCauseAfterCompletion() {
 }
 it('keeps one invalidation when a different cause arrives after completion', anotherCauseAfterCompletion);
 
-async function expiryBoundary() {
-  const { expiresAt, expiring } = await loadExpiringFact();
+async function expiryBoundary(transitive: boolean) {
+  const { expiresAt, expiring } = await loadExpiringFact(transitive);
   const clock = vi.spyOn(Date, 'now').mockReturnValue(expiresAt - 1);
   try {
     expect(await invalidate({ causeId: undefined })).toEqual({ status: 'unchanged' });
@@ -442,4 +451,108 @@ async function expiryBoundary() {
     clock.mockRestore();
   }
 }
-it('withdraws loaded memory exactly at expiry without a mutation event', expiryBoundary);
+it.each([false, true])('withdraws loaded memory exactly at expiry, transitive=%s', expiryBoundary);
+
+async function delayedExpiryRecovery(lost: boolean) {
+  const { expiresAt, expiring } = await loadExpiringFact(true);
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(expiresAt + 60_000);
+  const appendSaved = setup.store.append.bind(setup.store);
+  async function loseReply(command: Parameters<typeof appendSaved>[0]): Promise<never> {
+    const result = await appendSaved(command);
+    throw new Error(`Private append canary: ${result.status}`);
+  }
+  if (lost) vi.spyOn(setup.store, 'append').mockImplementationOnce(loseReply);
+  const first = await invalidate({ causeId: undefined });
+  expect(first.status).toBe(lost ? 'unavailable' : 'invalidated');
+  const cold = await createEventStore(setup.connection);
+  const options = { silo: 'test', store: cold };
+  const request = { ...input, causeId: undefined };
+  const receipt = await invalidateMemoryContext(options, request);
+  expect(receipt).toMatchObject({ status: 'invalidated' });
+  const read = setup.store.readStream.bind(setup.store);
+  async function* refuseHistory(...args: Parameters<typeof read>) {
+    if (args[0] === `scope-${scopeId}`) throw new Error('Private history canary');
+    yield* read(...args);
+  }
+  cold.readStream = refuseHistory;
+  clock.mockReturnValue(expiresAt - 1000);
+  expect(await invalidateMemoryContext(options, request)).toEqual(receipt);
+  const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
+  expect(facts.memoryContext).toMatchObject({ status: 'invalidated', reason: 'expired',
+    references: [reference, expiring], executionAvailable: false });
+  expect(facts.memoryContext?.events.size).toBe(4);
+}
+it.each([false, true])('recovers delayed expiry after restart and clock rollback, lost=%s',
+  delayedExpiryRecovery);
+
+async function expiryRecallRace() {
+  const { expiresAt, expiring } = await loadExpiringFact(true);
+  vi.spyOn(Date, 'now').mockReturnValue(expiresAt);
+  const later = { ...reference, memoryId: 'later' };
+  const appendSaved = setup.store.append.bind(setup.store);
+  async function recall(command: Parameters<typeof appendSaved>[0]) {
+    spy.mockRestore();
+    await append(`scope-${scopeId}`, 'memory.written', { ...memoryWrittenExample,
+      scopeId, memoryId: later.memoryId });
+    await load([later], { callDigest: 'e'.repeat(64), dispatchDigest: 'f'.repeat(64) });
+    return appendSaved(command);
+  }
+  const spy = vi.spyOn(setup.store, 'append').mockImplementationOnce(recall);
+  expect(await invalidate({ causeId: undefined })).toEqual({ status: 'reload_required' });
+  const receipt = await invalidate({ causeId: undefined });
+  expect(receipt).toMatchObject({ status: 'invalidated' });
+  const facts = await readChatFacts(setup.store, 'test', 'chat', 'turn');
+  expect(facts.memoryContext).toMatchObject({ reason: 'expired',
+    references: [reference, expiring, later], recallCalls: 3 });
+  expect(facts.memoryContext?.events.size).toBe(5);
+}
+it('a later live recall cannot hide an older expired dependency', expiryRecallRace);
+
+async function correctionRacesExpiry(expiryFirst: boolean) {
+  const { expiresAt, expiring } = await loadExpiringFact();
+  await change('corrected', 'expiring');
+  vi.spyOn(Date, 'now').mockReturnValue(expiresAt);
+  const appendSaved = setup.store.append.bind(setup.store);
+  let accepted: Awaited<ReturnType<typeof invalidate>> | undefined;
+  async function race(command: Parameters<typeof appendSaved>[0]) {
+    spy.mockRestore();
+    const causeId = expiryFirst ? undefined : 'cause';
+    accepted = await invalidate({ causeId });
+    return appendSaved(command);
+  }
+  const spy = vi.spyOn(setup.store, 'append').mockImplementationOnce(race);
+  const secondCause = expiryFirst ? 'cause' : undefined;
+  expect(await invalidate({ causeId: secondCause })).toEqual({ status: 'reload_required' });
+  expect(accepted).toMatchObject({ status: 'invalidated' });
+  expect(await invalidate({ causeId: secondCause })).toEqual({ status: 'refused' });
+  const facts = await readChatFacts(setup.store, 'test', 'chat', 'turn');
+  expect(facts.memoryContext).toMatchObject({ references: [reference, expiring],
+    reason: expiryFirst ? 'expired' : 'content_changed' });
+  expect(facts.memoryContext?.events.size).toBe(4);
+}
+it.each([false, true])('keeps the first durable invalidation, expiry first=%s', correctionRacesExpiry);
+
+async function refusesExpiryProof(patch: object) {
+  await loadExpiringFact();
+  expect(await invalidate({ causeId: undefined, ...patch })).toEqual({ status: 'refused' });
+  const facts = await readChatFacts(setup.store, 'test', 'chat', 'turn');
+  expect(facts.memoryContext?.status).toBe('loaded');
+}
+it.each([{ checkedAt: 9999999999999 }, { references: [reference] }, { reason: 'expired' }])(
+  'refuses caller expiry proof %j', refusesExpiryProof);
+
+async function unavailableExpiryHistory() {
+  const { expiresAt } = await loadExpiringFact();
+  vi.spyOn(Date, 'now').mockReturnValue(expiresAt);
+  const read = setup.store.readStream.bind(setup.store);
+  async function* unavailable(...args: Parameters<typeof read>) {
+    if (args[0] === `scope-${scopeId}`) throw new Error('Private history canary');
+    yield* read(...args);
+  }
+  vi.spyOn(setup.store, 'readStream').mockImplementation(unavailable);
+  expect(await invalidate({ causeId: undefined })).toEqual({ status: 'refused' });
+  const facts = await readChatFacts(setup.store, 'test', 'chat', 'turn');
+  expect(facts.memoryContext?.events.size).toBe(3);
+  expect(facts.memoryContext?.status).toBe('loaded');
+}
+it('does not claim proven expiry when history is unavailable', unavailableExpiryHistory);
