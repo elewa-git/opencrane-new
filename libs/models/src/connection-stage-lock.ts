@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import type { Db } from '@opencrane/projections';
-import type { ConnectionStage } from './connection-custody.ts';
+import type { ConnectionStage, CompanyConnectionStage } from './connection-custody.ts';
 
-type Profile = Pick<ConnectionStage, 'siloId' | 'userId' | 'serverId' | 'profileId'>;
+type Profile = Pick<ConnectionStage, 'siloId' | 'userId' | 'serverId' | 'profileId'> |
+  Pick<CompanyConnectionStage, 'siloId' | 'ownerKind' | 'serverId' | 'profileId'>;
 
 /** Hold the same database lock across staging, append recovery and cleanup. */
 export async function withConnectionStage<Result>(db: Pick<Db, 'lock'>,
@@ -10,7 +11,11 @@ export async function withConnectionStage<Result>(db: Pick<Db, 'lock'>,
   if (!db.lock) {
     throw new Error('Connection coordination unavailable');
   }
-  const coordinates = [profile.siloId, profile.userId, profile.serverId, profile.profileId];
+  let owner = 'company:';
+  if ('userId' in profile) {
+    owner = profile.userId;
+  }
+  const coordinates = [profile.siloId, owner, profile.serverId, profile.profileId];
   const hash = createHash('sha256');
   hash.update(JSON.stringify(coordinates));
   const name = `connection-stage:${hash.digest('hex')}`;

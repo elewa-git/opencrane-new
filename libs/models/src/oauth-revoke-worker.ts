@@ -79,9 +79,10 @@ async function retireCopies(custody: Custody, generation: ConnectionStage, revok
     }
     complete = complete && page.complete;
     for (const stage of page.stages) {
-      if (stage.siloId !== generation.siloId || stage.userId !== generation.userId ||
+      if (stage.purpose !== 'personal' || stage.siloId !== generation.siloId ||
+          stage.userId !== generation.userId ||
           stage.serverId !== generation.serverId || stage.profileId !== generation.profileId ||
-          stage.purpose !== 'personal' || stage.expectedSequence >= revokedAt) {
+          stage.expectedSequence >= revokedAt) {
         continue;
       }
       const recovered = await custody.recover(stage);

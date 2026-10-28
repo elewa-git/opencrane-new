@@ -3,8 +3,9 @@ import { z } from 'zod';
 import type { StoredEvent } from '@opencrane/event-store';
 import { toolPolicyFromRows } from './tool-policy.ts';
 
-/** Require an accepted review of the latest catalogue before using a personal connection. */
-export function connectionServer(rows: StoredEvent[], connectionId: string) {
+/** Require an accepted review of the latest catalogue before saving a connection. */
+export function connectionServer(rows: StoredEvent[], connectionId: string,
+  accountMode: 'personal' | 'company' = 'personal') {
   const policy = toolPolicyFromRows(rows);
   function registered(row: StoredEvent) {
     return row.event.type === 'mcp.server_registered';
@@ -23,9 +24,10 @@ export function connectionServer(rows: StoredEvent[], connectionId: string) {
     hash.update(JSON.stringify(remote.data.locator));
     endpointDigest = hash.digest('hex');
   }
-  const available = policy.published && policy.accountMode === 'personal' &&
+  const available = policy.published && policy.accountMode === accountMode &&
     policy.connectionId === connectionId &&
     (policy.reviewRevision ?? 0) > (catalogue?.sequence ?? 0) && remote.success;
   return { available, endpointDigest, sequence: policy.sequence,
-    connectionId: policy.connectionId, expiresAt: Date.parse(policy.expiresAt ?? '') };
+    registrationRevision: registration?.sequence, connectionId: policy.connectionId,
+    expiresAt: Date.parse(policy.expiresAt ?? '') };
 }

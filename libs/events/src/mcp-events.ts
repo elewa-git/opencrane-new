@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { hostedImageCheckedSchema, hostedImageCheckRequestedSchema } from './hosted-image.ts';
 import { event } from './definition.ts';
 import * as data from './data.ts';
@@ -148,8 +149,8 @@ export const mcpEvents = [
   event(
     'connection.created',
     'connection',
-    'A person saved a staged connection reference; account identity may remain unverified.',
-    data.connectionCreatedDataSchema,
+    'A person or company saved a staged connection reference; identity may remain unverified.',
+    z.union([data.connectionCreatedDataSchema, data.companyConnectionCreatedDataSchema]),
     { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', secretRef: 'secret:1' },
   ),
   event(

@@ -1,0 +1,1 @@
+An admin can internally save the first silo-owned bearer account after explicit opt-in for the reviewed installation. Exact retries recover one private generation. The account remains unverified and unavailable for tool use.

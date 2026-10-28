@@ -46,6 +46,9 @@ flowchart LR
 
 ## What it is responsible for
 
+Company-account creation has its own strict record. It names the owning silo and
+admin custodian without changing existing personal records. Saving grants no access.
+
 - List every event type and the data it holds, from membership and chat to tools,
   spending and memory.
 - Define the details shared by events: an id, type, subject, source and time,

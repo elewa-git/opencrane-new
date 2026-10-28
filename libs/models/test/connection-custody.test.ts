@@ -27,7 +27,7 @@ import { databases, openfga, until } from '@opencrane/authz/testing';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { type Db, type Query, pgDb } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
-import { foldConnection } from '../src/bearer-connections.ts';
+import { foldConnection, saveBearerConnection } from '../src/bearer-connections.ts';
 import { reconcileConnectionPage, reconcileConnectionStage } from '../src/connection-reconciliation.ts';
 import { withConnectionStage } from '../src/connection-stage-lock.ts';
 import { z } from 'zod';
@@ -2097,7 +2097,7 @@ it('never adopts a listed UID without independent journal or event evidence', sc
 async function scanNonPersonal() {
   const test = await candidateFixture();
   test.store.finishDeletion();
-  const other = { ...test.input, purpose: 'company' as const, operationId: 'company',
+  const other = { ...test.input, purpose: 'validation' as const, operationId: 'validation',
     generation: 2 };
   await test.store.custody.stage(other, material);
   await test.invalidate();
@@ -5276,7 +5276,7 @@ it.each([false, true])(
   'automatically retires retained access at its exact expiry after restart, removed=%s',
   expiresRetainedAccess);
 
-async function companyFixture() {
+async function companyFixture(enable = true, accountMode = 'company') {
   const store = await fixture();
   candidateCount += 1;
   const userId = `custodian${candidateCount}`;
@@ -5292,10 +5292,10 @@ async function companyFixture() {
     row.event.silo = 'test';
     const data = z.record(z.string(), z.unknown()).parse(row.event.data);
     if (row.event.type === 'mcp.server_discovered' || row.event.type === 'mcp.server_reviewed') {
-      row.event.data = { ...data, accountMode: 'company' };
+      row.event.data = { ...data, accountMode };
     }
     if (row.event.type === 'mcp.server_reviewed') {
-      row.event.data = { ...data, accountMode: 'company',
+      row.event.data = { ...data, accountMode,
         policyRevision: await events.store.head(row.event.subject) };
     }
     await events.seed([row.event]);
@@ -5305,7 +5305,10 @@ async function companyFixture() {
   }
   const optIn = { serverId, connectionId: 'install-a', registrationRevision,
     enabled: true, expectedSequence: 0, changeRef: 'enable' };
-  const choice = await changeCompanyOptIn(events.store, consentBinding, userId, optIn);
+  let choice = { sequence: 1 };
+  if (enable) {
+    choice = await changeCompanyOptIn(events.store, consentBinding, userId, optIn);
+  }
   const input = { serverId, connectionId: 'install-a', profileId: 'company-profile',
     registrationRevision, optInRevision: choice.sequence, changeRef: 'create',
     expectedSequence: 0, appendUntil: Date.now() + 60_000 };
@@ -5350,8 +5353,201 @@ async function savesCompany() {
     activation: { ownerKind: 'company', purpose: 'company', generation: 1 },
   } });
   expect(foldConnection(rows).status).toBe('unavailable');
+  const personal = { action: 'rotate', serverId: test.input.serverId,
+    connectionId: test.input.connectionId, profileId: test.input.profileId,
+    changeRef: 'adopt', expectedSequence: rows[0]!.sequence, expectedGeneration: 1,
+    appendUntil: test.input.appendUntil };
+  await expect(saveBearerConnection(events.store, consentBinding, test.userId,
+    test.store.custody, personal, material, test.db)).rejects.toThrow();
+  const page = await test.store.custody.candidates();
+  const candidate = page.stages![0]!;
+  const stored = await test.store.custody.recover(candidate);
+  expect(await test.store.custody.readRefreshMaterial(candidate, stored.identity!)).toBeUndefined();
+  expect(await test.store.custody.readRevocationMaterial(candidate, stored.identity!)).toBeUndefined();
+  expect(await reconcileConnectionStage(events.store, test.db, test.store.custody, candidate))
+    .toEqual({ status: 'retained' });
   expect(JSON.stringify([rows, saved]).includes(material)).toBe(false);
   test.store.fail();
   expect(foldCompanyConnection(rows)).toEqual(rebuilt);
 }
 it('saves one silo-owned company generation without granting or selecting it', savesCompany);
+
+async function refusesCompanyBeforeStage(kind: string) {
+  const mode = kind === 'mode' ? 'personal' : 'company';
+  const test = await companyFixture(kind !== 'absent', mode);
+  let input: unknown = test.input;
+  let binding = consentBinding;
+  if (kind === 'disabled') {
+    await test.disable();
+  } else if (kind === 'removed') {
+    await test.removeAdmin();
+  } else if (kind === 'non-admin') {
+    const demoted = envelope('test', `member-${test.userId}`, 'member.role_changed', {
+      memberId: test.userId, previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+    });
+    await events.seed([demoted]);
+  } else if (kind === 'silo') {
+    binding = { ...binding, silo: 'foreign' };
+  } else if (kind !== 'absent') {
+    const patches: Record<string, object> = {
+      owner: { siloId: 'forged', custodianId: 'forged' }, purpose: { purpose: 'personal' },
+      installation: { connectionId: 'wrong' }, server: { serverId: 'wrong' },
+      registration: { registrationRevision: 1 }, stale: { optInRevision: 1 },
+    };
+    input = { ...test.input, ...patches[kind] };
+  }
+  await expect(test.save(input, material, binding)).rejects.toThrow('Company connection unavailable');
+  expect(test.store.creates).toBe(0);
+  expect(await test.rows()).toHaveLength(0);
+}
+it.each(['mode', 'absent', 'disabled', 'stale', 'non-admin', 'removed', 'silo', 'server',
+  'installation', 'registration', 'purpose', 'owner'])(
+  'refuses company %s before staging', refusesCompanyBeforeStage);
+
+async function companyStageRace(kind: 'admin' | 'opt-in') {
+  const test = await companyFixture();
+  const stage = test.store.custody.stage.bind(test.store.custody);
+  async function changeDuringStage(...args: Parameters<typeof stage>) {
+    const result = await stage(...args);
+    if (kind === 'admin') {
+      await test.removeAdmin();
+    } else {
+      await test.disable();
+    }
+    return result;
+  }
+  const fault = vi.spyOn(test.store.custody, 'stage');
+  fault.mockImplementationOnce(changeDuringStage);
+  await expect(test.save()).rejects.toThrow('Company connection unavailable');
+  expect(await test.rows()).toHaveLength(0);
+  expect(test.store.creates).toBe(1);
+  expect(test.store.deletes).toBe(0);
+}
+it.each(['admin', 'opt-in'] as const)('refuses company %s loss while staging', companyStageRace);
+
+async function companyRecovery(kind: string) {
+  const test = await companyFixture();
+  const append = events.store.append.bind(events.store);
+  async function loseReply(command: AppendCommand) {
+    if (kind !== 'unknown') {
+      await append(command);
+    }
+    return { status: 'unavailable' as const, cause: new Error(material) };
+  }
+  const fault = vi.spyOn(events.store, 'append');
+  fault.mockImplementationOnce(loseReply);
+  await expect(test.save()).rejects.toThrow('Company connection unavailable');
+  fault.mockRestore();
+  expect(test.store.creates).toBe(1);
+  expect(test.store.deletes).toBe(0);
+  if (kind === 'unknown') {
+    expect(foldCompanyConnection(await test.rows()).status).toBe('unavailable');
+    return;
+  }
+  if (kind === 'reply') {
+    const clock = vi.spyOn(Date, 'now');
+    clock.mockReturnValue(test.input.appendUntil + 1);
+    try {
+      const receipt = await test.save();
+      expect(await test.save()).toEqual(receipt);
+    } finally {
+      clock.mockRestore();
+    }
+  } else {
+    let input = test.input;
+    let supplied = material;
+    if (kind === 'reference') {
+      input = { ...input, changeRef: 'changed' };
+    }
+    if (kind === 'material') {
+      supplied = 'changed-material';
+    }
+    if (kind === 'uid') {
+      test.store.secret.metadata.uid = 'replacement';
+    }
+    if (kind === 'version') {
+      test.store.secret.metadata.resourceVersion = '2';
+    }
+    await expect(test.save(input, supplied)).rejects.toThrow('Company connection unavailable');
+  }
+  expect(await test.rows()).toHaveLength(1);
+  expect(test.store.creates).toBe(1);
+}
+it.each(['reply', 'unknown', 'reference', 'material', 'uid', 'version'])(
+  'recovers or refuses the exact company generation after %s', companyRecovery);
+
+async function companyCommitRace() {
+  const test = await companyFixture();
+  const append = events.store.append.bind(events.store);
+  async function changeAfterCheck(command: AppendCommand) {
+    async function checkAccess() {
+      await command.checkAccess!();
+      await test.removeAdmin();
+    }
+    return append({ ...command, checkAccess });
+  }
+  const fault = vi.spyOn(events.store, 'append');
+  fault.mockImplementationOnce(changeAfterCheck);
+  try {
+    await expect(test.save()).rejects.toThrow('Company connection unavailable');
+  } finally {
+    fault.mockRestore();
+  }
+  expect(await test.rows()).toHaveLength(0);
+}
+it('refuses company authority loss between the final check and publication', companyCommitRace);
+
+async function companyReplayTampering(field: string) {
+  const test = await companyFixture();
+  await test.save();
+  const rows = await test.rows();
+  const row = rows[0]!;
+  const data = z.record(z.string(), z.unknown()).parse(row.event.data);
+  if (field === 'subject' || field === 'silo' || field === 'source') {
+    row.event[field] = 'forged';
+  } else {
+    row.event.data = { ...data, [field]: 'forged' };
+  }
+  expect(foldCompanyConnection(rows).status).toBe('unavailable');
+  expect(foldConnection(rows).status).toBe('unavailable');
+}
+it.each(['siloId', 'custodianId', 'subject', 'silo', 'source', 'userId'])(
+  'refuses company replay with forged %s', companyReplayTampering);
+
+async function companyHistoryDeadline() {
+  const test = await companyFixture();
+  const read = events.store.readStream.bind(events.store);
+  async function* slowHistory(subject: string, from?: number, deadline?: number) {
+    if (subject === test.subject) {
+      expect(deadline! - performance.now()).toBeGreaterThan(8000);
+      await delay(2100);
+    }
+    yield* read(subject, from, deadline);
+  }
+  const fault = vi.spyOn(events.store, 'readStream');
+  fault.mockImplementation(slowHistory);
+  try {
+    expect(await test.save()).toMatchObject({ status: 'saved_unverified' });
+  } finally {
+    fault.mockRestore();
+  }
+}
+it('loads company history before the short authority check', companyHistoryDeadline);
+
+async function companyApprovalReuse() {
+  const test = await companyFixture();
+  const append = vi.spyOn(events.store, 'append');
+  append.mockResolvedValueOnce({ status: 'unavailable', cause: new Error(material) });
+  await expect(test.save()).rejects.toThrow('Company connection unavailable');
+  append.mockRestore();
+  const disabled = await test.disable();
+  const choice = { serverId: test.input.serverId, connectionId: test.input.connectionId,
+    registrationRevision: test.input.registrationRevision, enabled: true,
+    expectedSequence: disabled.sequence, changeRef: 'enable-again' };
+  const enabled = await changeCompanyOptIn(events.store, consentBinding, test.userId, choice);
+  const changed = { ...test.input, optInRevision: enabled.sequence };
+  await expect(test.save(changed)).rejects.toThrow('Company connection unavailable');
+  expect(test.store.creates).toBe(1);
+  expect(await test.rows()).toHaveLength(0);
+}
+it('refuses reusing a pending company operation with changed approval', companyApprovalReuse);

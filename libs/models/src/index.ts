@@ -107,3 +107,4 @@ export { changeCompanyOptIn, foldCompanyOptIn, CompanyOptInConflict,
   CompanyOptInInputInvalid } from './company-opt-in.ts';
 
 export { providerRoutinePresence } from './provider-routine-presence.ts';
+export { saveCompanyBearerConnection, foldCompanyConnection } from './company-bearer.ts';
