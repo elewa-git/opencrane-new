@@ -36,6 +36,8 @@ import { calculateRoutineOccurrence } from '@opencrane/events/routine-schedule';
 import { claimScheduledRoutine } from '../../ops/test/support/routine-claim.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { applyRoutineStop } from '../src/routine-stop-budget.ts';
+import { routineAsk } from './support/routine-ask.ts';
+import { stopRoutineAfterApproval } from '../src/routine-approval-stop.ts';
 import { pauseRoutineAfterRemoval } from '../src/routine-access-pause.ts';
 import { pauseRoutine } from '../src/routine-pause.ts';
 import { retireRoutine } from '../src/routine-retire.ts';
@@ -978,6 +980,11 @@ function finishedStopRun(occurrenceId: string) {
 }
 async function prohibit(kind: string, request: Awaited<ReturnType<typeof stopRequest>>,
   memberId = 'alice') {
+  if (kind === 'Denied' || kind === 'Expired') {
+    const cause = await routineAsk(nats.store, kind);
+    const { changeId: _change, ...expected } = request;
+    return stopRoutineAfterApproval(nats.store, 'test', { ...expected, cause });
+  }
   if (kind === 'Access') {
     const removed = event('removed-alice', 'member-alice', 'member.removed');
     await nats.seed([removed]);
@@ -1771,7 +1778,9 @@ function routineRootTests() {
     }
     it.each([
       ['Stop', 'model'], ['Pause', 'model'], ['Retire', 'model'], ['Access', 'model'],
+      ['Denied', 'model'], ['Expired', 'model'],
       ['Stop', 'free tool'], ['Pause', 'free tool'], ['Retire', 'free tool'], ['Access', 'free tool'],
+      ['Denied', 'free tool'], ['Expired', 'free tool'],
     ])('refuses routine dispatch after saved %s before cleanup: %s', refusesSavedProhibition);
     async function preservesRefusalAfterAuditFailure(route: string) {
       const fixture = await dispatchFixture();
