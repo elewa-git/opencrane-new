@@ -1617,7 +1617,7 @@ caller registry, registration, private RPC session, computer/input generations a
 exact tool list approved by server assembly, its recorded grant and the server's
 `checkPrivateTurnTools` function. The binding must never come from a
 model, desktop process or public request. The loader compares the turn's tools with
-that reviewed list and accepts only one Allow recall or remember definition from
+that reviewed list and accepts only one Allow recall, remember or Correct definition from
 `memory/server`. It does not replace the server's definition or qualification checks.
 
 `startPrivate` owns the registration and session from the start. It assigns a fresh
@@ -1650,12 +1650,12 @@ loading can take ownership of it. A delayed registration or start is cleaned up 
 fixed text and retain no underlying error or caller bytes.
 
 `test/private-thread-loads.test.ts` gives every native start a distinct ID and uses the real
-loopback MCP proxy, caller registry and real server assembly for recall and remember.
+loopback MCP proxy, caller registry and real server assembly for recall, remember and Correct.
 It checks matching discovery, same-requester concurrency, changed bindings, refused tools, failed discovery, timeout, cancellation
 at each wait and process closure. It asserts that the upstream receives no request.
 `test/codex-config.test.ts` also starts pinned Codex 0.159.2 in a disposable image
 with the generated private configuration. The configuration enables
-`mcp_2026_07_28`; the fixture supplies no protocol header. Both recall and remember
+`mcp_2026_07_28`; the fixture supplies no protocol header. Recall, remember and Correct
 go from a real native start through real server assembly and proxy discovery on the
 same thread, including an initial refused discovery. The test inspects that thread's
 native tool list and unloads it without a model turn or grant. These tests run in

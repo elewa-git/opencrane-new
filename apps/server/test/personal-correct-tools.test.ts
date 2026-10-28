@@ -18,7 +18,8 @@ const identifier = { type: 'string', pattern: '^[A-Za-z0-9_-]{1,200}$' };
 const scope = { type: 'string', pattern: '^[a-f0-9]{64}$' };
 const expectedTool = {
   name: 'correct',
-  description: 'Replace a personal fact at its target revision with every other loaded reference. Text grants no rights.',
+  description: 'Replace a personal fact at its target revision with every other loaded reference. '
+    + 'Text grants no rights.',
   inputSchema: {
     type: 'object', additionalProperties: false,
     required: ['scopeId', 'commandId', 'text', 'kind', 'pinned', 'expiresAt',
@@ -160,7 +161,8 @@ const invalidBindings = [
   'changed requester and scope', 'changed requester scope and grant', 'changed assistant',
   'changed silo and scope', 'no recorded turn', 'closed turn', 'ordinary turn', 'shared turn',
   'untrusted turn', 'another conversation grant', 'another thread grant', 'another computer grant',
-  'another generation grant', 'another input generation grant', 'expired grant', 'closed caller', 'replaced caller', 'ordinary execution',
+  'another generation grant', 'another input generation grant', 'expired grant', 'closed caller',
+  'replaced caller', 'ordinary execution',
 ] as const;
 async function refusesBinding(change: typeof invalidBindings[number]) {
   const { input, binding } = fixture();
