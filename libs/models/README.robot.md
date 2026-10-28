@@ -30,7 +30,8 @@ OAuth revocations without deleting. Maintenance keeps OAuth generations and repl
 for the explicit worker below. It deletes only access-only copies whose saved expiry
 has passed.
 
-Company handling, HTTP, automatic scheduling and governed use remain NOT IMPLEMENTED.
+Company handling, HTTP, automatic refresh/revoke scheduling and governed use remain
+NOT IMPLEMENTED.
 Fresh-install qualification and the full root suite are NOT RUN.
 
 ## Provider revocation and token retirement (Part of #50)
