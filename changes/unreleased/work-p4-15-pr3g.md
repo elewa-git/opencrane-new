@@ -1,1 +1,2 @@
 - Detect saved personal corrections and forgets while polling private turns, record the exact affected context and clear only its thread. Pending replies can still be withdrawn after completion; memory admission remains disabled.
+- Keep checking loaded memory after an unrelated expired fact is forgotten, so later changes still clear the affected private reply.

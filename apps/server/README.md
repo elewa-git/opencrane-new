@@ -83,6 +83,7 @@ that saved invalidation belongs to the connected private turn. The computer hand
 repeated Stops once and clears the reply even if the turn has just completed.
 The bridge polls personal correction and forget events for its connected private turns.
 It saves the exact invalidation before sending Stop and retries uncertain delivery.
+Forgetting an unrelated expired fact does not delay checks for later changes.
 It keeps each turn tracked after completion until the computer confirms that its private
 reply has been cleared. It checks the turn and computer after reading history, without
 waking a computer. One slow chat cannot delay another chat's check or connection shutdown.

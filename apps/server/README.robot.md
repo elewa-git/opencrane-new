@@ -6270,6 +6270,14 @@ An unchanged result advances the cursor. Failed reads, uncertain appends and com
 writes retry on later polls. The bridge rereads saved evidence before delivering Stop.
 The existing exact generation checks and clearance receipts remain decisive.
 
+An unrelated forget returns `unchanged` even if its target had already expired.
+The writer validates saved history and every addition at its load time before deciding
+whether the cause changes any loaded reference. A change that needs invalidation still
+requires its target to have been current immediately before the cause. Refusals do not
+advance the cursor. The delivery regression checks an expired unrelated forget followed
+by a loaded fact's forget, cursor progress, one saved invalidation and Stop, and removal
+of completed private output before replay.
+
 The writer now also permits withdrawal after completion or conversation closure.
 It retains all references and the ended status. Replay accepts the saved withdrawal but
 cannot load more memory, restore execution or produce a Stop. Another invalidation cause

@@ -89,14 +89,18 @@ function affected(options: Options, rows: StoredEvent[], request: Request,
   const checkedAt = Date.parse(cause.row.event.time);
   const before = memoryReferences(beforeRows, options.silo, scopeId, 'event-only', checkedAt);
   const after = memoryReferences(afterRows, options.silo, scopeId, 'event-only', checkedAt);
-  const target = { scopeId, memoryId: cause.data.memoryId, revision: cause.data.expectedRevision };
-  if (before.current(target) !== 'current') throw new Error('Memory change unavailable');
   checkLoadedReferences(options, rows, state, scopeId);
   let changed = false;
   for (const reference of state.references) {
     if (before.current(reference) === 'current' && after.current(reference) !== 'current') {
       changed = true;
     }
+  }
+  // Let polling pass an unrelated forget even when its target had already expired.
+  // Still require a current target before recording any change to loaded memory.
+  const target = { scopeId, memoryId: cause.data.memoryId, revision: cause.data.expectedRevision };
+  if (changed && before.current(target) !== 'current') {
+    throw new Error('Memory change unavailable');
   }
   return { changed, position: cause.row.sequence };
 }
