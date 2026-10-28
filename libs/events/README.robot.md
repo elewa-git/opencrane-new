@@ -891,3 +891,10 @@ actorId/system principal `opencrane-server`; that combination requires the refer
 The system command and Stop reader verify member.removed, the occupied occurrence and
 its frozen membership admission. Schema acceptance alone proves no saved removal.
 The pure fold retains the occupied run, pauses scheduling and enables no execution.
+
+## Routine approval Stop cause
+
+`routine.run_stop_requested` also accepts source `approval` with actorId/system principal
+`opencrane-server` and required `cause: { eventId, position }`. The command and Stop reader
+verify `approval_denied` or `approval_expired` against exact saved approval evidence.
+The fold keeps the schedule and occupied run, sets stopRequested, and performs no effects.

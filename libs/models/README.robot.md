@@ -4547,6 +4547,19 @@ so the same removal cannot replace that refusal with an ambiguous model retry er
 Budget cleanup and the bridge share this check. The bridge retains its existing
 two-second observation limit, including slow evidence reads and completed pending output.
 
+## Routine approval termination evidence
+
+`readRoutineApproval` validates saved evidence only. The original request must precede
+its first terminal event and follow the trusted preparation and allocation. Owner rejection
+must name the frozen owner; an expiry record must be at or after the saved expiresAt. The
+request can be stamped just after the hold starts; at most 15 minutes may remain.
+Clock passage alone proves nothing. A saved expiry can follow approval if the card was
+never used. Requested, approved or used records alone, foreign people, requests, turns,
+routines and silos refuse.
+`readRootStopEvidence` repeats these checks before budget or bridge cleanup. No approval
+read mutates state, opens review ciphertext, reads credentials, wakes or sends work.
+Existing routine dispatch checks refuse the saved Stop before cleanup, including free calls.
+
 ## Typed memory access refusals (P4-15 PR 3i)
 
 `currentAuthority` reports a confirmed permission denial or a saved inactive assistant
@@ -4558,3 +4571,16 @@ The server shares this check and `prepareMemoryReceipts` for personal withdrawal
 History and receipt preparation finish before the two-second access deadline.
 No conversation stream enters that access check. Replay retains ended status and
 loaded references after an `access_changed` withdrawal, without granting execution.
+=======
+## Routine approval termination evidence
+
+`readRoutineApproval` validates saved evidence only. The original request must precede
+its first terminal event and follow the trusted preparation and allocation. Owner rejection
+must name the frozen owner; an expiry record must be at or after the saved expiresAt. The
+request can be stamped just after the hold starts; at most 15 minutes may remain.
+Clock passage alone proves nothing. A saved expiry can follow approval if the card was
+never used. Requested, approved or used records alone, foreign people, requests, turns,
+routines and silos refuse.
+`readRootStopEvidence` repeats these checks before budget or bridge cleanup. No approval
+read mutates state, opens review ciphertext, reads credentials, wakes or sends work.
+Existing routine dispatch checks refuse the saved Stop before cleanup, including free calls.
