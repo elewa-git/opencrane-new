@@ -286,6 +286,30 @@ Only this source-bound reference is resolved. The other nine references, other
 bundles, vulnerability clearance, source-bound R3 approval and publication remain
 outstanding. No approved image, inventory or binary pin changes.
 
+The separate [Valgrind record](../../docs/process/p5-4-images7/valgrind.json) resolves
+only `V8 Valgrind client API`. It reviews the full header and adjacent `LICENSE`
+from that same signed Node release and Git commit. Both files contain the same
+Julian Seward grant. Its BSD-style four conditions match SPDX `bzip2-1.0.6`.
+This DFSG-free term is accepted only for the exact header bundled inside Node/V8;
+it is not added to the OSI list or general bundled allowances. The record gives
+the full reason, including attribution, honest origin, marked changes and no
+endorsement. The GPL notice explicitly describes the rest of Valgrind.
+
+```sh
+nice -n 10 python3 docs/process/p5-4-images7/check-valgrind.py \
+  /tmp/p5-4-images4 /tmp/p5-4-images6
+```
+
+The checker reuses the signed release/tag and official binary checks above. It
+also requires both Valgrind files in the release archive to match Git and the
+reviewed checksums. Missing source cannot prove compiled or bundled absence.
+The compressed fixtures keep the complete header and licence text. The candidate
+check still reads every shipped layer and the archived Dockerfile. The
+[receipt](../../docs/process/p5-4-images7/receipt.md) records checks and remaining
+coverage limits. Historical records and PCRE's separate resolution are unchanged.
+Eight references, Corepack/Go/kubectl/agentgateway bundles, vulnerability clearance,
+exact-source R3 approval and publication remain outstanding.
+
 ## Private owner email
 
 The development owner email uses the [private host file](../dev-stack/README.robot.md#private-owner-email)
