@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
-import { once } from 'node:events';
+import { once, once as onceEvent } from 'node:events';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { startDecision, readToolPolicy, reviewToolPolicy } from '@opencrane/models';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { losslessJson } from '@opencrane/events/lossless-json';
+import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { WebSocket } from 'ws';
-import { encodeSession } from '@opencrane/auth';
+import { encodeSession, computerCredentials, tokenVerifier } from '@opencrane/auth';
 import { createLogger } from '@opencrane/observability';
 import { connectMemberFeed, conversations, computers, ProjectionRunner, readConversation }
   from '@opencrane/projections';
@@ -1082,6 +1087,7 @@ function routineRootTests() {
   let expectedHolds: BudgetActor['state']['reservations'] = [];
   let expectedStop: EventEnvelope | undefined;
   let stopping = false;
+  let dispatchMode = false;
   async function preparedInput() {
     encryption.mockRestore();
     decryption.mockRestore();
@@ -1106,6 +1112,7 @@ function routineRootTests() {
     expectedHolds = [];
     expectedStop = undefined;
     stopping = false;
+    dispatchMode = false;
     const fetch = globalThis.fetch;
     function permissionsOnly(url: Parameters<typeof fetch>[0], options?: RequestInit) {
       const address = url instanceof Request ? url.url : url.toString();
@@ -1611,6 +1618,432 @@ function routineRootTests() {
       activationMode = true;
     }
     beforeEach(allocated);
+    async function routineTool() {
+      await apply([joinedMember('admin')]);
+      const definition = { name: 'read', inputSchema: { type: 'object' },
+        annotations: { readOnlyHint: true, destructiveHint: false } };
+      const parsed = losslessJson(JSON.stringify(definition));
+      const review = { action: 'Read fixture', consequence: 'Returns fixture data',
+        targetArgument: 'id', fields: ['id'], stepUp: false };
+      const tool = { name: 'read', revision: parsed.digest, definition: parsed.canonical,
+        readOnly: true, reviewed: true, costCents: 0, review };
+      const schemaDigest = catalogueDigest([tool]);
+      const checkedAt = new Date().toISOString();
+      const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
+      const events = [
+        record('register-tool', 'mcp-fixture', 'mcp.server_registered',
+          { serverId: 'fixture', kind: 'remote', locator: 'https://fixture.example.test/mcp',
+            registeredBy: 'alice' }),
+        record('discover-tool', 'mcp-fixture', 'mcp.server_discovered',
+          { serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
+            tools: [tool], toolCount: 1, schemaDigest, checkedAt, expiresAt }),
+      ];
+      await nats.seed(events);
+      const policy = await readToolPolicy(nats.store, 'test', 'fixture');
+      const choice = { name: tool.name, revision: tool.revision,
+        reviewDigest: toolReviewDigest(tool), mode: 'allow' };
+      const command = { commandId: 'review-tool', expectedSequence: policy.sequence,
+        policyRevision: policy.policyRevision, catalogueDigest: schemaDigest,
+        connectionId: 'installed', accountMode: 'none', tools: [choice] };
+      const reviewed = await reviewToolPolicy(nats.store, binding, 'admin', 'fixture', command);
+      expect(reviewed.status).toBe('appended');
+      await nats.seed([record('publish-tool', 'mcp-fixture', 'mcp.server_published',
+        { serverId: 'fixture', publishedBy: 'alice' })]);
+      for (const [granteeKind, granteeId] of [['member', 'alice'], ['assistant', 'sales-assistant']]) {
+        await apply([record(`tool-grant-${granteeKind}`, grantStream('mcp_server', 'fixture'),
+          'grant.given', { resourceType: 'mcp_server', resourceId: 'fixture',
+            granteeKind, granteeId, grantedBy: 'alice' })]);
+      }
+      let bytes = 0;
+      function receive(request: IncomingMessage, response: ServerResponse) {
+        function collect(chunk: Buffer) { bytes += chunk.length; }
+        request.on('data', collect);
+        response.end('{}');
+      }
+      const server = createServer(receive);
+      server.listen(0, '127.0.0.1');
+      await onceEvent(server, 'listening');
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Fixture address unavailable');
+      const route = { serverId: 'fixture', connectionId: 'installed',
+        upstream: `127.0.0.1:${address.port}`, generation: 'fixture',
+        revisionHeader: 'x-opencrane-mcp-revision' as const };
+      async function requireLeader() {}
+      function received() { return bytes; }
+      function close() { server.closeAllConnections(); server.close(); }
+      return { options: { routes: [route], requireLeader }, received, close };
+    }
+    async function dispatchFixture() {
+      dispatchMode = true;
+      await prepare();
+      vi.mocked(globalThis.fetch).mockRestore();
+      const turnId = 'routine-turn-occurrence';
+      const assistantId = 'sales-assistant';
+      const claimed = record('dispatch-claim', `computer-${assistantId}`, 'computer.claimed',
+        { assistantId, computerId: 'computer', generation: 1, tokenId: 'token:dispatch' });
+      const ready = record('dispatch-ready', `computer-${assistantId}`, 'computer.ready',
+        { assistantId, computerId: 'computer', generation: 1 });
+      const started = record('dispatch-start', `computer-${assistantId}`, 'computer.turn_started',
+        { assistantId, computerId: 'computer', conversationId, turnId,
+          threadId: selection.threadId, requesterId: 'alice', task: 'chat_turn',
+          payingGroupId: 'sales', rootId: actor.state.roots[0]!.rootId,
+          messageId: 'routine-input-occurrence', executionMode: 'restricted' });
+      await nats.seed([claimed, ready, started]);
+      const { publicKey, privateKey } = await generateKeyPair('ES256');
+      const jwk = { ...await exportJWK(publicKey), kid: 'dispatch' };
+      const issuer = 'https://routine.test/';
+      async function sign(claims: Record<string, unknown>, audience: string) {
+        const jwt = new SignJWT(claims);
+        jwt.setProtectedHeader({ alg: 'ES256', kid: 'dispatch' });
+        jwt.setIssuer(issuer);
+        jwt.setAudience(audience);
+        jwt.setIssuedAt();
+        jwt.setExpirationTime('2m');
+        return jwt.sign(privateKey);
+      }
+      const common = { silo: 'test', assistant: assistantId };
+      const computer = await sign({ ...common, typ: 'computer', computer: 'computer',
+        generation: 1, jti: 'token:dispatch' }, 'agentgateway');
+      const turn = await sign({ ...common, typ: 'turn', jti: 'routine-turn', conversation: conversationId,
+        turn: turnId, thread: selection.threadId, task: 'chat_turn', model: 'gpt-6.1-sol',
+        requester: 'alice', computerTokenId: 'token:dispatch', delegation: ['alice'] },
+      'decision-service');
+      const identity = { jwks: { keys: [jwk] }, issuer };
+      const upstream = await routineTool();
+      const logger = createLogger('routine-decision-test', { level: 'silent' });
+      const decision = await startDecision(actor, identity, binding, 0, undefined,
+        undefined, upstream.options, undefined, logger);
+      const headers = { authorization: `Bearer ${computer}`, 'x-turn-token': turn,
+        'session-id': selection.threadId, 'content-type': 'application/json' };
+      const credentials = computerCredentials(nats.store, tokenVerifier(identity.jwks, issuer), 'test');
+      await credentials.check(headers);
+      async function model() {
+        const body = JSON.stringify({ model: 'gpt-6.1-sol', input: 'Fixture input',
+          max_output_tokens: 16, stream: true });
+        return fetch(`${decision.url}/authorize`, { method: 'POST', headers, body });
+      }
+      const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
+        params: { name: 'read', arguments: {}, _meta: { threadId: selection.threadId,
+          callId: 'routine-call', 'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+          'io.modelcontextprotocol/clientCapabilities': {} } } });
+      async function tool() {
+        const toolHeaders = { ...headers, 'mcp-protocol-version': '2026-07-28',
+          'mcp-method': 'tools/call', 'mcp-name': 'read' };
+        const request = { method: 'POST', headers: toolHeaders, body };
+        return fetch(`${decision.url}/authorize/mcp/fixture/installed`, request);
+      }
+      async function send(permit: string) {
+        const request = { method: 'POST', headers: { 'x-opencrane-mcp-permit': permit }, body };
+        return fetch(`${decision.url}/dispatch/mcp/fixture/installed`, request);
+      }
+      async function close() { await decision.close(); upstream.close(); }
+      return { model, tool, send, received: upstream.received, close };
+    }
+    async function refusesSavedProhibition(kind: string, route: string) {
+      const fixture = await dispatchFixture();
+      try {
+        await prohibit(kind, await stopRequest());
+        const response = route === 'model' ? await fixture.model() : await fixture.tool();
+        expect(response.status, await response.text()).toBe(403);
+        expect(response.headers.get('x-reservation-id')).toBeNull();
+        expect(response.headers.get('x-opencrane-mcp-permit')).toBeNull();
+        expect(actor.state.reservations).toEqual([]);
+        expect(actor.state.dispatches).toEqual([]);
+        expect(actor.state.roots[0]!.stop).toBeUndefined();
+        expect(fixture.received()).toBe(0);
+      } finally {
+        await fixture.close();
+      }
+    }
+    it.each([
+      ['Stop', 'model'], ['Pause', 'model'], ['Retire', 'model'],
+      ['Stop', 'free tool'], ['Pause', 'free tool'], ['Retire', 'free tool'],
+    ])('refuses routine dispatch after saved %s before cleanup: %s', refusesSavedProhibition);
+    async function preservesRefusalAfterAuditFailure(route: string) {
+      const fixture = await dispatchFixture();
+      try {
+        await prohibit('Stop', await stopRequest());
+        const append = nats.store.append.bind(nats.store);
+        let auditFailed = false;
+        async function failDenyAudit(command: AppendCommand) {
+          const event = z.object({ type: z.string(), data: z.unknown() }).parse(command.event);
+          if (event.type === 'decision.recorded') {
+            expect(event.data).toMatchObject({ outcome: 'deny', reason: 'request_refused' });
+            auditFailed = true;
+            throw new Error('private-audit-canary');
+          }
+          return append(command);
+        }
+        vi.spyOn(nats.store, 'append').mockImplementation(failDenyAudit);
+        const response = route === 'model' ? await fixture.model() : await fixture.tool();
+        const body = await response.text();
+        expect(auditFailed).toBe(true);
+        expect(response.status, body).toBe(403);
+        expect(response.headers.get('x-opencrane-decision')).toBe('refused');
+        expect(JSON.parse(body)).toMatchObject({ error: 'Routine dispatch refused' });
+        expect(body).not.toContain('private-audit-canary');
+        expect(response.headers.get('x-reservation-id')).toBeNull();
+        expect(response.headers.get('x-opencrane-mcp-permit')).toBeNull();
+        expect(actor.state.reservations).toEqual([]);
+        expect(actor.state.dispatches).toEqual([]);
+        expect(actor.state.roots[0]!.stop).toBeUndefined();
+        expect(fixture.received()).toBe(0);
+      } finally {
+        await fixture.close();
+      }
+    }
+    it.each(['model', 'free tool'])(
+      'preserves routine refusal when the deny audit fails: %s', preservesRefusalAfterAuditFailure);
+    async function refusesStalledRoutineHistory() {
+      const fixture = await dispatchFixture();
+      const release = Promise.withResolvers<void>();
+      const read = nats.store.readStream.bind(nats.store);
+      let readDeadline: number | undefined;
+      let readFinished = false;
+      async function* stallHistory(target: string, from?: number, deadline?: number) {
+        if (target === 'routine-orders') {
+          readDeadline = deadline;
+          await release.promise;
+          readFinished = true;
+          return;
+        }
+        yield* read(target, from, deadline);
+      }
+      vi.spyOn(nats.store, 'readStream').mockImplementation(stallHistory);
+      let response: Response | undefined;
+      function receive(result: Response) {
+        response = result;
+      }
+      function refusedWithinDeadline() {
+        expect(response).toBeDefined();
+      }
+      const request = fixture.model().then(receive);
+      try {
+        await vi.waitFor(refusedWithinDeadline, { timeout: 11_000, interval: 20 });
+        expect(readDeadline).toBeDefined();
+        expect(performance.now()).toBeLessThan(readDeadline! + 1000);
+        expect(readFinished).toBe(false);
+        expect(response!.status, await response!.text()).toBe(403);
+        expect(response!.headers.get('x-opencrane-decision')).toBe('refused');
+        expect(response!.headers.get('x-reservation-id')).toBeNull();
+        expect(actor.state.reservations).toEqual([]);
+        expect(actor.state.dispatches).toEqual([]);
+        expect(fixture.received()).toBe(0);
+      } finally {
+        release.resolve();
+        await fixture.close();
+        await request;
+      }
+    }
+    it('refuses a stalled routine history read within its deadline', refusesStalledRoutineHistory);
+
+    async function allowsSustainedUnrelatedActivity() {
+      const fixture = await dispatchFixture();
+      const head = nats.store.head.bind(nats.store);
+      const append = nats.store.append.bind(nats.store);
+      const encrypted = keys.encrypt('test', conversationId, 'Unrelated fixture input');
+      let batches = 0;
+      let publishing = false;
+      async function publish(command: AppendCommand) {
+        // Keep activity between writes. Injecting inside every conditional append
+        // would force a global write conflict on every retry.
+        publishing = true;
+        try {
+          return await append(command);
+        } finally {
+          publishing = false;
+        }
+      }
+      async function addActivity(...args: Parameters<typeof head>) {
+        if (args[0] === 'routine-orders' && !publishing) {
+          batches += 1;
+          const otherId = `other-routine-${batches}`;
+          const other = routine('routine.created', 'alice', otherId);
+          const definition = z.record(z.string(), z.unknown()).parse(other.data);
+          const otherRoutine = { ...other, subject: `routine-${otherId}`,
+            data: { ...definition, routineId: otherId } };
+          const turn = { conversationId, turnId: `other-turn-${batches}`,
+            assistantId: 'sales-assistant' };
+          const started = record(`other-start-${batches}`, subject, 'agent.turn_started', turn);
+          const message = record(`other-message-${batches}`, subject, 'message.posted',
+            { conversationId, authorId: 'alice', authorKind: 'human', contentType: 'text',
+              ...encrypted });
+          const computer = record(`other-computer-${batches}`, 'computer-sales-assistant',
+            'computer.turn_started', { ...turn, computerId: 'computer', threadId: 'other-thread',
+              requesterId: 'alice', task: 'chat_turn', executionMode: 'restricted' });
+          await nats.seed([otherRoutine, started, message, computer]);
+        }
+        return head(...args);
+      }
+      vi.spyOn(nats.store, 'append').mockImplementation(publish);
+      vi.spyOn(nats.store, 'head').mockImplementation(addActivity);
+      try {
+        const model = await fixture.model();
+        expect(model.status, await model.text()).toBe(200);
+        expect(actor.state.dispatches).toHaveLength(1);
+        expect(batches).toBeGreaterThanOrEqual(2);
+        const afterModel = batches;
+        const tool = await fixture.tool();
+        expect(tool.status, await tool.text()).toBe(200);
+        expect(batches - afterModel).toBeGreaterThanOrEqual(2);
+        const afterTool = batches;
+        const sent = await fixture.send(tool.headers.get('x-opencrane-mcp-permit')!);
+        expect(sent.status, await sent.text()).toBe(200);
+        expect(batches - afterTool).toBeGreaterThanOrEqual(2);
+        expect(actor.state.reservations).toHaveLength(1);
+        expect(actor.state.dispatches).toHaveLength(2);
+        expect(fixture.received()).toBeGreaterThan(0);
+      } finally {
+        await fixture.close();
+      }
+    }
+    it('allows routine dispatch through sustained unrelated activity', allowsSustainedUnrelatedActivity);
+    async function allowsAdmittedRoutine() {
+      const fixture = await dispatchFixture();
+      try {
+        const other = routine('routine.created', 'alice', 'other-routine');
+        const definition = z.record(z.string(), z.unknown()).parse(other.data);
+        await nats.seed([{ ...other, subject: 'routine-other',
+          data: { ...definition, routineId: 'other' } }]);
+        const unrelated = { conversationId, turnId: 'other-turn', assistantId: 'sales-assistant' };
+        await nats.seed([record('other-turn', subject, 'agent.turn_started', unrelated)]);
+        const encrypted = keys.encrypt('test', conversationId, 'Unrelated fixture input');
+        await nats.seed([record('other-message', subject, 'message.posted',
+          { conversationId, authorId: 'alice', authorKind: 'human', contentType: 'text',
+            ...encrypted })]);
+        const response = await fixture.model();
+        expect(response.status, await response.text()).toBe(200);
+        expect(actor.state.reservations).toHaveLength(1);
+        expect(actor.state.dispatches).toHaveLength(1);
+        const tool = await fixture.tool();
+        expect(tool.status, await tool.text()).toBe(200);
+        const sent = await fixture.send(tool.headers.get('x-opencrane-mcp-permit')!);
+        expect(sent.status, await sent.text()).toBe(200);
+        expect(fixture.received()).toBeGreaterThan(0);
+      } finally {
+        await fixture.close();
+      }
+    }
+    it('allows paid routine dispatch with the exact admitted run', allowsAdmittedRoutine);
+    async function prohibitionDuringDispatch(kind: string, boundary: string) {
+      const fixture = await dispatchFixture();
+      try {
+        const request = await stopRequest();
+        const append = nats.store.append.bind(nats.store);
+        let saved = false;
+        async function intercept(change: AppendCommand) {
+          const result = await append(change);
+          const event = z.object({ type: z.string() }).parse(change.event);
+          if (!saved && event.type === boundary) {
+            saved = true;
+            await prohibit(kind, request);
+          }
+          return result;
+        }
+        let permit: string | null = null;
+        if (boundary === 'mcp.dispatch_admitted') {
+          const response = await fixture.tool();
+          expect(response.status, await response.text()).toBe(200);
+          permit = response.headers.get('x-opencrane-mcp-permit');
+        }
+        vi.spyOn(nats.store, 'append').mockImplementation(intercept);
+        const response = permit ? await fixture.send(permit) : await fixture.model();
+        expect(saved).toBe(true);
+        expect(response.status).toBe(403);
+        expect(response.headers.get('x-opencrane-decision')).toBe('refused');
+        expect(response.headers.get('x-reservation-id')).toBeNull();
+        expect(fixture.received()).toBe(0);
+        expect(actor.state.roots[0]!.stop).toBeUndefined();
+      } finally {
+        await fixture.close();
+      }
+    }
+    it.each([
+      ['Stop', 'decision.recorded'], ['Pause', 'decision.recorded'],
+      ['Retire', 'decision.recorded'], ['Stop', 'mcp.dispatch_admitted'],
+      ['Pause', 'mcp.dispatch_admitted'], ['Retire', 'mcp.dispatch_admitted'],
+    ])('refuses routine dispatch when %s is saved after %s', prohibitionDuringDispatch);
+
+    async function changedDispatchEvidence(kind: string) {
+      const fixture = await dispatchFixture();
+      const read = nats.store.readStream.bind(nats.store);
+      async function* substitute(target: string, from?: number, deadline?: number) {
+        if (target === 'routine-orders' && kind === 'lost read') throw new Error('private-canary');
+        for await (const original of read(target, from, deadline)) {
+          const row = structuredClone(original);
+          const data = z.record(z.string(), z.unknown()).parse(row.event.data);
+          if (row.event.type === 'conversation.created' && kind === 'preparation') {
+            row.event.source = 'untrusted';
+          }
+          if (row.event.type === 'routine.due') {
+            if (kind === 'claim') row.event.id = 'forged-claim';
+            if (kind === 'occurrence') data['occurrenceId'] = 'other-occurrence';
+            const definition = z.record(z.string(), z.unknown()).parse(data['definition']);
+            if (kind === 'owner') definition['ownerId'] = 'bob';
+            if (kind === 'payer') definition['payingGroupId'] = 'billing';
+            data['definition'] = definition;
+          }
+          row.event.data = data;
+          yield row;
+        }
+      }
+      vi.spyOn(nats.store, 'readStream').mockImplementation(substitute);
+      try {
+        const response = await fixture.model();
+        expect(response.status, await response.text()).toBe(403);
+        const tool = await fixture.tool();
+        expect(tool.status, await tool.text()).toBe(403);
+        expect(tool.headers.get('x-opencrane-mcp-permit')).toBeNull();
+        expect(actor.state.reservations).toEqual([]);
+        expect(actor.state.dispatches).toEqual([]);
+        expect(fixture.received()).toBe(0);
+      } finally {
+        await fixture.close();
+      }
+    }
+    it.each(['preparation', 'claim', 'occurrence', 'owner', 'payer', 'lost read'])(
+      'refuses routine dispatch with changed %s evidence', changedDispatchEvidence);
+
+    async function oldPermit(kind: string) {
+      const fixture = await dispatchFixture();
+      try {
+        const response = await fixture.tool();
+        expect(response.status, await response.text()).toBe(200);
+        const permit = response.headers.get('x-opencrane-mcp-permit')!;
+        if (kind === 'replacement') {
+          await nats.seed([record('replacement', 'computer-sales-assistant', 'computer.ready',
+            { assistantId: 'sales-assistant', computerId: 'replacement', generation: 2 })]);
+        } else {
+          const request = await stopRequest();
+          if (kind === 'lost acknowledgement') {
+            const append = nats.store.append.bind(nats.store);
+            async function loseReply(change: AppendCommand): Promise<never> {
+              await append(change);
+              throw new Error('private-canary');
+            }
+            vi.spyOn(nats.store, 'append').mockImplementationOnce(loseReply);
+            await expect(prohibit('Stop', request)).rejects.toThrow('Routine Stop unavailable');
+          } else {
+            await prohibit('Stop', request);
+          }
+          if (kind === 'restart') {
+            await nats.stop();
+            await nats.restart();
+          }
+        }
+        const sent = await fixture.send(permit);
+        expect(sent.status).toBe(403);
+        const replay = await fixture.send(permit);
+        expect(replay.status).toBe(403);
+        expect(actor.state.reservations).toEqual([]);
+        expect(actor.state.dispatches).toEqual([]);
+        expect(fixture.received()).toBe(0);
+      } finally {
+        await fixture.close();
+      }
+    }
+    it.each(['Stop', 'replacement', 'restart', 'lost acknowledgement'])(
+      'refuses an old routine dispatch permit after %s', oldPermit);
     async function admitOnce() {
       const before = await nats.store.head();
       const results = await Promise.all([prepare(), prepare()]);
@@ -1821,6 +2254,7 @@ function routineRootTests() {
   describe('routine activation', activationTests);
 
   async function noEffects() {
+    if (dispatchMode) return;
     expect(actor.state.dispatches).toEqual([]);
     if (stopping) return;
     const saved = await history(nats.store, 'budget-test', 'test');

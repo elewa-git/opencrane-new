@@ -1,0 +1,2 @@
+- Routine model and free tool calls refuse as soon as owner Stop, Pause or Retire is saved, even while spending cleanup is delayed. Missing run evidence also refuses. Automatic routines remain disabled.
+- Routine refusals keep their refused response even when saving the deny audit fails.

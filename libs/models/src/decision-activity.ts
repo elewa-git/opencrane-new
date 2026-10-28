@@ -137,8 +137,9 @@ function changesDecisionActivity(event: EventEnvelope, turnId: string, needsAppr
   return !olderTurnEnded;
 }
 
-export function decisionHistoryDeadline(managedRoute: boolean, decisionDeadline: number) {
-  if (managedRoute) {
+export function decisionHistoryDeadline(managedRoute: boolean, decisionDeadline: number,
+  routineSession = false) {
+  if (managedRoute || routineSession) {
     return performance.now() + 10_000;
   }
   return decisionDeadline;

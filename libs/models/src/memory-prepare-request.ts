@@ -62,6 +62,6 @@ export async function prepareMemoryDecision(memoryRoute: boolean, store: EventSt
 }
 
 export function memoryAccessStarted(managedRoute: boolean, loaded: boolean, started: number,
-  preparation: Awaited<ReturnType<typeof requestMemoryPreparation>>) {
-  return decisionAccessStarted(managedRoute || preparation !== undefined, loaded, started);
+  preparation: Awaited<ReturnType<typeof requestMemoryPreparation>>, routine = false) {
+  return decisionAccessStarted(managedRoute || preparation !== undefined || routine, loaded, started);
 }

@@ -65,6 +65,11 @@ access-only copies after their saved expiry, including after restart or member r
 It can finish deletion after the member leaves. A lost reply never grants another
 provider call. Public routes remain unavailable.
 
+Routine calls check saved owner Stop, Pause and Retire before holding money or granting
+a tool permit, and again before sending. They refuse even when spending cleanup is delayed.
+An established refusal still reaches the caller if saving its audit record fails.
+Missing or mismatched run evidence refuses the call. Automatic routines remain unavailable.
+
 ## Where it fits
 
 This shared library is used by the server, background workers and personal computers.
@@ -93,7 +98,7 @@ built-in functions.
 flowchart LR
   models -.->|replay tests use the database helper| store
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal account choices and owner revocation from HTTP, admin company opt-in, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
-  models -->|tests private sign-in, refresh and revocation requests, revokes refresh and access tokens; checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains expired reply withdrawal; checks memory targets, reloads, spending, expiry, holds, root stops and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
+  models -->|tests private sign-in, refresh and revocation requests, revokes refresh and access tokens; checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains expired reply withdrawal; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models and checks private callers; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|stages credentials, callback codes and replies, confirms first accounts, starts, joins, claims and sends refresh attempts, saves replacements, retains old access tokens until expiry and removes revoked tokens even after member removal, recovers replies and checks signed accounts, shares a database lock for personal and company saves and personal cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]

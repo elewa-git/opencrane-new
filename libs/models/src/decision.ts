@@ -1,5 +1,6 @@
 import { createLogger, type Logger } from '@opencrane/observability';
-import { privateDecisionReason } from './decision-refusal.ts';
+import { prepareRoutineDispatch, RoutineDispatchRefused } from './routine-dispatch.ts';
+import { privateDecisionReason, decisionError } from './decision-refusal.ts';
 import { prepareMemoryDecision, memoryAccessStarted } from './memory-prepare-request.ts';
 import { requestSchema } from './model-request.ts';
 import { authoriseEgress } from './egress-admission.ts';
@@ -8,12 +9,12 @@ import { refuseCallRetry, grantModelCall } from './call-retry.ts';
 import { turnRootBinding } from './root-budget.ts';
 import { modelPermission } from './decision-provider.ts';
 import { LoadedMemoryRefused, prepareLoadedMemory } from './loaded-memory.ts';
-import { checkNativeCall, NativeDelegationDisabled } from './native-call-check.ts';
+import { checkNativeCall } from './native-call-check.ts';
 import { mcpDispatch, type McpDispatchOptions } from './mcp-dispatch.ts';
 import { admitProviderVerification, runProviderVerification, verifyProviderCapability,
   type ProviderVerificationOptions } from './provider-verification.ts';
 import { ProviderConflict, ProviderRefused, ProviderUnpriced } from './providers.ts';
-import { groupMembership, PayingGroupRefused, AuthorityApplying } from './paying-group.ts';
+import { groupMembership } from './paying-group.ts';
 import { configureBudget } from './budget-config.ts';
 import { respondBudgetRefusal } from './budget-scope.ts';
 import { approvalDecision, type ReviewKeys } from './approvals.ts';
@@ -26,7 +27,8 @@ import { confirmDecisionAccess, decisionActivity, decisionHistoryDeadline,
   from './decision-activity.ts';
 import { requireCurrentComputer, requireRecordedActiveTurn, requireSharedTurnTools }
   from './turn-binding-check.ts';
-import { legacyTurnSchema, parseTurnToken, requireManagedTurnClaims }
+import { legacyTurnSchema, parseTurnToken, requireManagedTurnClaims,
+  requireModelRoute, knownDecisionRoute }
   from './decision-turn-token.ts';
 import { mcpPolicy, parseMcpCall, requireMcpThread } from './mcp.ts';
 import { MemoryToolRefused, prepareMemoryContext, prepareMemorySend } from './memory-context.ts';
@@ -40,16 +42,6 @@ import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { StoredEvent } from '@opencrane/event-store';
 import { BudgetActor, BudgetRefused, envelope, history } from './actor.ts';
 import { requestReservationCents, ModelRequestRefused as RequestRefused, data, models, priceTableId, type ModelCall } from './state.ts';
-
-function decisionError(error: unknown) {
-  if (error instanceof BudgetRefused || error instanceof RequestRefused ||
-      error instanceof LoadedMemoryRefused || error instanceof MemoryToolRefused ||
-      error instanceof PayingGroupRefused ||
-      error instanceof AuthorityApplying || error instanceof NativeDelegationDisabled) {
-    return error.message;
-  }
-  return 'Request refused or decision service unavailable';
-}
 
 const id = z.string().regex(/^[\w-]+$/u).max(200);
 const common = { silo: id, assistant: id, exp: z.int(), iat: z.int() };
@@ -137,20 +129,6 @@ function queuedPosition(conversation: StoredEvent[], turn: StoredEvent) {
 }
 
 
-function requireModelRoute(turnToken: z.infer<typeof legacyTurnSchema>,
-  managedRoute: boolean, enabled: boolean) {
-  if (managedRoute) {
-    if (!enabled) throw new Error('Managed calls are not enabled');
-  } else if (turnToken.providerId !== undefined) {
-    throw new RequestRefused('Managed provider calls are not available yet');
-  }
-}
-
-function knownDecisionRoute(url: string | undefined) {
-  return url === '/authorize/models/managed' || url === '/authorize' ||
-    url?.startsWith('/authorize/mcp/');
-}
-
 function requireConnectedClient(req: IncomingMessage, res: ServerResponse) {
   // Refuse before holding money when the gateway or another client has hung up.
   if (req.socket.destroyed || res.destroyed) {
@@ -231,7 +209,9 @@ export async function startDecision(
         checked.sequence, started, decisionDeadline);
       const managedTurn = requireManagedTurnClaims(checked.turn, managedRoute);
       // Read managed history before starting the short access check.
-      const historyDeadline = decisionHistoryDeadline(managedRoute || memoryRoute, decisionDeadline);
+      const routineSession = turnToken.conversation.startsWith('routine-session-');
+      const historyDeadline = decisionHistoryDeadline(
+        managedRoute || memoryRoute, decisionDeadline, routineSession);
       stage = 'turn_history';
       const activity = await decisionActivity(actor.store, actor.silo,
         computer.assistant, turnToken.conversation, turnToken.turn, historyDeadline, managedTurn);
@@ -247,6 +227,7 @@ export async function startDecision(
       const memoryClaims = { silo: actor.silo, requester: turnToken.requester,
         assistant: computer.assistant, computer: computer.computer, generation: computer.generation,
         conversation: turnToken.conversation, turn: turnToken.turn, thread: turnToken.thread };
+      const routine = await prepareRoutineDispatch(actor, memoryClaims, conversation, turn);
       stage = 'memory';
       const memory = await prepareLoadedMemory(actor.store, binding, memoryClaims,
         conversation, performance.now() + 10_000);
@@ -255,13 +236,17 @@ export async function startDecision(
         memoryClaims, raw, req.headers, requestId, dispatchOptions, identity);
       const { preparation, reads: memoryReads } = preparedMemory;
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
-      const accessStarted = memoryAccessStarted(managedRoute, memory.loaded, started, preparation);
+      const accessStarted = memoryAccessStarted(managedRoute, memory.loaded, started, preparation, routine !== undefined);
       stage = 'authority';
       const authority = await decisionAuthorityFence(actor.store, accessStarted,
         subjects, turnToken.requester, computer.assistant, grants);
+      async function confirmRoutine() {
+        await routine?.confirm(authority.deadline);
+      }
       let needsApproval = false;
       async function confirmAccess() {
         await confirmDecisionAccess(activity, authority, needsApproval, true);
+        await confirmRoutine();
       }
       const snapshot = { include: authority.include, head: authority.head,
         deadline: authority.deadline };
@@ -290,7 +275,7 @@ export async function startDecision(
           payingGroupId: z.string().min(1).parse(data(turn.event)['payingGroupId']), contextDigest };
         await actor.checkBudget(modelCall, fresh, admittedAt, root.rootId);
         const decisionId = await audit('allow', 'memory_read_allowed');
-        const budget = { modelCall, decisionId, admittedAt, ...root };
+        const budget = { modelCall, decisionId, admittedAt, ...root, confirmRoutine };
         await fresh();
         const preparedPayload = { ...memory.payload, ...preparation };
         const memorySend = prepareMemorySend(preparedPayload, identity.memory.memoryContext);
@@ -339,7 +324,7 @@ export async function startDecision(
         linkApprovalAttempt(toolFacts, approvalId);
         const decisionId = await audit(outcome, reason,
           approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
-        const budget = { modelCall, decisionId, admittedAt, ...root };
+        const budget = { modelCall, decisionId, admittedAt, ...root, confirmRoutine };
         const serverId = match[1]!;
         async function confirmToolAccess() {
           // Reuse the earlier chat history and original deadline. Event positions alone
@@ -369,6 +354,7 @@ export async function startDecision(
       requireConnectedClient(req, res);
       const granted = await grantModelCall(actor, modelCall, amountCents, raw,
         fresh, admittedAt, allowModel);
+      await confirmRoutine();
       const reservation = granted.reservationId;
       requestId = granted.requestId;
       res.setHeader('x-request-id', requestId);
@@ -377,19 +363,27 @@ export async function startDecision(
     })().catch(async (error: unknown) => {
       if (refuseCallRetry(error, res, auditAttempted)) return;
       const capped = error instanceof BudgetRefused;
+      const routineRefused = error instanceof RoutineDispatchRefused;
       const reason = capped ? 'budget_exhausted' : privateDecisionReason(error);
       const elapsedMs = Math.round(performance.now() - started);
       const diagnostic = { requestId, route, stage, reason, elapsedMs };
       logger.warn(diagnostic, 'Gateway request refused');
       try {
         if (!auditAttempted) await audit('deny', capped ? 'budget_exhausted' : 'request_refused');
-        else if (!(error instanceof LoadedMemoryRefused)) {
+        else if (!(error instanceof LoadedMemoryRefused) && !routineRefused) {
           res.writeHead(503);
           res.end('{"error":"Decision audit unavailable"}');
           return;
         }
       }
-      catch { res.writeHead(503); res.end('{"error":"Decision audit unavailable"}'); return; }
+      catch {
+        // Preserve the routine refusal even when its deny audit cannot be saved.
+        if (!routineRefused) {
+          res.writeHead(503);
+          res.end('{"error":"Decision audit unavailable"}');
+          return;
+        }
+      }
       res.setHeader('x-request-id', requestId);
       res.setHeader('x-opencrane-decision', 'refused');
       res.writeHead(capped ? 402 : 403);
