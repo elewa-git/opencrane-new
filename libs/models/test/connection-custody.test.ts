@@ -267,6 +267,7 @@ function oauthFixture(withTools = false, serverId = 'server-a') {
   const configuration = { serverId: context.serverId, connectionId: context.connectionId,
     endpointDigest: endpointHash.digest('hex'), policyRevision: 4,
     tokenEndpoint: 'https://mcp.example.test/token',
+    revocationEndpoint: 'https://mcp.example.test/revoke',
     issuer: 'https://identity.example.test/', consentEndpoint: 'https://identity.example.test/consent',
     redirectUri: 'https://app.example.test/api/my/tools/oauth/callback', clientId: 'fixture',
     protocolScopes: ['openid'], toolScopes: { 'data.read': ['read'], 'data.write': ['write'] } };
@@ -3006,6 +3007,11 @@ async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) 
   const custody = test.store.restart();
   let sends = 0;
   let refreshSends = 0;
+  const revocations: URLSearchParams[] = [];
+  let loseRevocation = false;
+  function loseRevokeReply() {
+    loseRevocation = true;
+  }
   let refreshMode = 'valid';
   function setRefreshMode(value: string) {
     refreshMode = value;
@@ -3071,6 +3077,15 @@ async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) 
       chunks.push(chunk);
     }
     const parameters = new URLSearchParams(Buffer.concat(chunks).toString());
+    if (request.url === '/revoke') {
+      revocations.push(parameters);
+      if (loseRevocation) {
+        response.destroy();
+      } else {
+        response.writeHead(200).end();
+      }
+      return;
+    }
     if (parameters.get('grant_type') === 'refresh_token') {
       await refreshResponse(parameters, response);
       return;
@@ -3108,6 +3123,7 @@ async function exchangeFixture(mode = 'valid', signed = false, lifetime = 3600) 
     beforeReply = action;
   }
   return { ...test, claim, custody, run, before, responseText, providerFixture, setRefreshMode,
+    revocations, loseRevokeReply,
     get refreshSends() { return refreshSends; },
     get sends() { return sends; } };
 }
@@ -4916,3 +4932,31 @@ async function revokesAfterOAuthRefresh(progress: string) {
 }
 it.each(['saved', 'verified'])(
   'revokes the current OAuth generation after a refresh reply is %s', revokesAfterOAuthRefresh);
+
+
+async function finishesProviderRevoke() {
+  const { finishPersonalOAuthRevoke } = await import('../src/oauth-revoke-worker.ts');
+  const test = await refreshFixture();
+  try {
+    await revokeOAuth(test);
+    async function finish() {
+      return finishPersonalOAuthRevoke(events.store, 'test', test.store.restart(), test.input,
+        test.loader.loadConfiguration, pgDb(storage.queue), test.providerFixture.network);
+    }
+    const results = await Promise.all([finish(), finish()]);
+    expect(results).toEqual([{ status: 'completed' }, { status: 'completed' }]);
+    expect(await finish()).toEqual({ status: 'completed' });
+    expect(test.revocations).toHaveLength(1);
+    expect(Object.fromEntries(test.revocations[0]!)).toEqual({ client_id: 'fixture',
+      token: 'refresh-canary', token_type_hint: 'refresh_token' });
+    expect(test.store.secrets.size).toBe(0);
+    expect(await test.start()).toEqual({ status: 'unknown' });
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(4);
+    expect(JSON.stringify({ results, rows })).not.toMatch(/canary/);
+  } finally {
+    await test.close();
+  }
+}
+it('finishes one provider revoke under duplicate and racing workers and retires every copy',
+  finishesProviderRevoke);
