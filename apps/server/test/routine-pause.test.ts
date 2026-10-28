@@ -248,9 +248,13 @@ async function loadsHistoryFirst() {
 it('loads routine and member history before the short check and never reads it again',
   loadsHistoryFirst);
 
-async function replaysSavedPause() {
+async function replaysSavedPause(access: boolean) {
   const occupied = await occupy();
-  await pause();
+  if (access) {
+    await accessPause(await removalRequest());
+  } else {
+    await pause();
+  }
   const storage = await database('pg');
   try {
     const current = await storage.db.query<{ name: string }>('SELECT current_database() AS name');
@@ -278,7 +282,8 @@ async function replaysSavedPause() {
     await storage.close();
   }
 }
-it('rebuilds the saved pause with jobs, appends, credentials, wake and calls forbidden',
+it.each([false, true])(
+  'rebuilds a pause with all execution effects forbidden, access: %s',
   replaysSavedPause, 30_000);
 
 async function occupy() {
@@ -350,3 +355,119 @@ async function savesRemovalPause() {
     activeRun: { occurrenceId: 'occurrence' } });
 }
 it('saves one system pause from owner removal despite unavailable IAM', savesRemovalPause);
+
+async function recoversRemovalPause() {
+  await occupy();
+  const request = await removalRequest();
+  const append = nats.store.append.bind(nats.store);
+  async function loseReply(change: AppendCommand): Promise<never> {
+    await append(change);
+    throw new Error('private-service-canary');
+  }
+  vi.spyOn(nats.store, 'append').mockImplementationOnce(loseReply);
+  await expect(accessPause(request)).rejects.toThrow(/^Routine access pause refused$/u);
+  await waitForDuplicateWindow(nats);
+  await nats.stop();
+  await nats.restart();
+  const before = await nats.store.head();
+  const results = await Promise.all([accessPause(request), accessPause(request)]);
+  expect(results[0]).toEqual(results[1]);
+  expect(await rows()).toHaveLength(3);
+  expect(await nats.store.head()).toBe(before);
+}
+it('recovers removal prohibition after a lost reply, deduplication expiry and restart',
+  recoversRemovalPause, 30_000);
+
+async function refusesRemovalCause(kind: string) {
+  await occupy();
+  const memberId = kind === 'foreign member' ? 'bob' : 'alice';
+  const silo = kind === 'foreign silo' ? 'other' : 'test';
+  if (kind === 'older admission') {
+    const joined = { ...joinedMember('alice'), id: 'rejoined', commandId: 'rejoined' };
+    await nats.seed([joined]);
+  }
+  let request = await removalRequest(memberId, silo);
+  if (kind === 'position') request.cause.position--;
+  if (kind === 'id') request.cause.eventId = 'forged';
+  if (kind === 'occurrence') request.occurrenceId = 'other';
+  if (kind === 'owner' || kind === 'revision') {
+    const owner = kind === 'owner' ? 'bob' : 'alice';
+    await nats.seed([routine('routine.reassigned', owner)]);
+    request = { ...request, expectedPosition: await nats.store.head('routine-orders'),
+      expectedDefinitionRevision: 2, expectedControlRevision: 2 };
+  }
+  const before = await nats.store.head();
+  await expect(accessPause(request)).rejects.toThrow(/^Routine access pause refused$/u);
+  expect(await nats.store.head()).toBe(before);
+}
+it.each(['foreign member', 'foreign silo', 'position', 'id', 'older admission',
+  'occurrence', 'owner', 'revision'])('refuses removal with changed %s', refusesRemovalCause);
+
+async function refusesUnavailableWithoutLoss() {
+  await occupy();
+  await fga.pause();
+  const { changeId: _change, ...expected } = input;
+  const cause = { eventId: 'joined-alice', position: 1 };
+  const before = await nats.store.head();
+  await expect(accessPause({ ...expected, occurrenceId: 'occurrence', cause }))
+    .rejects.toThrow(/^Routine access pause refused$/u);
+  expect(await nats.store.head()).toBe(before);
+}
+it('does not treat unavailable IAM as a recorded loss', refusesUnavailableWithoutLoss);
+
+async function refusesForgedRemovalEvidence(kind: string) {
+  await occupy();
+  const request = await removalRequest(kind === 'member' ? 'bob' : 'alice');
+  if (kind === 'position') request.cause.position--;
+  if (kind === 'id') request.cause.eventId = 'forged';
+  const affectedRun = kind === 'occurrence' ? 'other' : 'occurrence';
+  const saved = { ...event('forged-pause', 'routine-orders', 'routine.paused'),
+    source: 'opencrane-server', principal: { kind: 'system' as const, id: 'opencrane-server' },
+    data: { version: 1, routineId: 'orders', definitionRevision: 1, scheduleRevision: 1,
+      controlRevision: 2, source: 'access', actorId: 'opencrane-server',
+      reason: 'owner_removed', affectedRun, next: null, cause: request.cause } };
+  await nats.seed([saved]);
+  const position = await nats.store.head('routine-orders');
+  await expect(readRootStopEvidence(nats.store, 'routine-orders', position))
+    .rejects.toThrow(/^Root stop evidence refused$/u);
+}
+it.each(['member', 'position', 'id', 'occurrence'])(
+  'refuses saved access-pause evidence with forged %s', refusesForgedRemovalEvidence);
+
+async function removalWriteWindow(expire: boolean) {
+  await occupy();
+  const request = await removalRequest();
+  const read = nats.store.readStream.bind(nats.store);
+  const append = nats.store.append.bind(nats.store);
+  const now = performance.now.bind(performance);
+  let elapsed = 0;
+  let loadedRoutine = false;
+  function clock() {
+    return now() + elapsed;
+  }
+  async function* delayedHistory(subject: string, from?: number, deadline?: number) {
+    if (subject === 'member-alice') expect(loadedRoutine).toBe(true);
+    yield* read(subject, from, deadline);
+    if (subject === 'routine-orders') {
+      elapsed += 3000;
+      loadedRoutine = true;
+    }
+  }
+  async function publish(change: AppendCommand) {
+    expect(change.deadline! - clock()).toBeLessThanOrEqual(2000);
+    expect(change.deadline! - clock()).toBeGreaterThan(0);
+    expect(change.historyChecked).toBe(true);
+    if (expire) elapsed += 2001;
+    return append(change);
+  }
+  vi.spyOn(performance, 'now').mockImplementation(clock);
+  vi.spyOn(nats.store, 'readStream').mockImplementation(delayedHistory);
+  vi.spyOn(nats.store, 'append').mockImplementationOnce(publish);
+  if (expire) {
+    await expect(accessPause(request)).rejects.toThrow(/^Routine access pause refused$/u);
+  } else {
+    expect(await accessPause(request)).toMatchObject({ status: 'confirmed' });
+  }
+}
+it.each([false, true])('loads history before the removal write limit, expired: %s',
+  removalWriteWindow);
