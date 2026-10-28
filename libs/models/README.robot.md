@@ -42,13 +42,18 @@ The member command still refuses removed and other members without exposing the 
 
 Operator configuration may include `revocationEndpoint`; the saved configuration digest
 binds it with the provider and client. Missing or changed settings prevent sending.
-The existing transport sends a fixed form with a refresh token, or the access token when
-there is no refresh token. It keeps address, TLS, redirect, five-second and byte limits.
+Before sending, the worker resolves the exact private reply for any claimed refresh.
+It checks the reply against the saved account using the refresh verifier. A send without
+a recoverable reply stays unknown; a claim that never sent uses the saved generation.
+The existing transport sends the newest refresh token and each distinct access token
+still held in the saved generations, including a verified but unsaved refresh reply.
+Each token has its own request. Rotating or revoking a refresh token need not invalidate
+access tokens. The transport keeps address, TLS, redirect, five-second and byte limits.
 Revocation accepts HTTP 200, including an empty body without a content type. Response
 bodies are discarded. Token exchange still requires its JSON response and token checks.
 
-The private journal flushes one send marker and retains only confirmed success. Duplicates
-and restart recover that status. A lost HTTP reply without a saved result stays `unknown`
+The private journal flushes one marker before the group of token requests and retains
+confirmed success only after all requests succeed. Duplicates and restart recover that status. A lost HTTP reply without a saved result stays `unknown`
 and never resends. No provider error or token enters events, logs, results or the journal.
 These private records describe an external attempt; the event remains business authority.
 
@@ -56,7 +61,9 @@ Regardless of provider outcome, the worker scans authenticated custody pages and
 all personal copies for that silo, member, server and profile whose preparation precedes
 the revoke. This includes all generations, consent material and saved refresh replies.
 Later preparations and other profiles or silos remain untouched. Exact saved UID/version
-checks and deletion markers protect removal and block reads during interrupted deletion.
+checks and deletion markers protect removal and block ordinary reads during interrupted
+deletion. Only the private revocation reader can read a retained generation after deletion
+has started, so its still-valid access token can also be revoked.
 Retries finish deletion after member removal. Missing identity evidence, damaged copies
 or incomplete pages keep the outcome unknown; they never count as completed retirement.
 `completed` means provider confirmation and local deletion; `unknown` grants no access.

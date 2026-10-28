@@ -104,6 +104,17 @@ export function connectionStageJournal(directory: string) {
   async function claimSend(name: string) {
     return claimOnce('send', name);
   }
+  async function hasSendClaim(name: string) {
+    try {
+      await files.read(reference('send', name));
+      return true;
+    } catch (error) {
+      if (missingFile.safeParse(error).success) {
+        return false;
+      }
+      throw error;
+    }
+  }
   async function deletion(name: string) {
     return readIdentity('deletion', name);
   }
@@ -128,6 +139,6 @@ export function connectionStageJournal(directory: string) {
     await publish(path, 'confirmed');
     return true;
   }
-  return { prepared, preparation, identity, pin, claimCreate, claimSend, deletion, markDeletion,
-    revokeOnce };
+  return { prepared, preparation, identity, pin, claimCreate, claimSend, hasSendClaim,
+    deletion, markDeletion, revokeOnce };
 }

@@ -100,7 +100,7 @@ export async function exchangePersonalOAuthRefresh(store: EventStore, binding: B
       if (contents === undefined) {
         throw new Error('OAuth refresh result unavailable');
       }
-      const expiresAt = await verifyResult(prepared, claimed, contents, refreshToken);
+      const expiresAt = await verifyRefreshResult(prepared, claimed, contents, refreshToken);
       return { prepared, claimed, generation, resultStage, contents, checkCurrent, expiresAt };
     }
     const result = await withConnectionStage(db, profile, exchange);
@@ -115,7 +115,8 @@ export async function exchangePersonalOAuthRefresh(store: EventStore, binding: B
   }
 }
 
-async function verifyResult(prepared: Awaited<ReturnType<typeof prepareRefresh>>,
+export async function verifyRefreshResult(
+  prepared: Pick<Awaited<ReturnType<typeof prepareRefresh>>, 'configuration' | 'activation'>,
   claimed: StoredEvent, contents: string, previousRefresh: string) {
   const verified = await verifyOAuthIdentity(prepared.configuration, contents);
   const account = prepared.activation.account;

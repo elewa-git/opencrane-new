@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import type { EventStore } from '@opencrane/event-store';
 import type { Db } from '@opencrane/projections';
 import { foldConnection } from './bearer-connections.ts';
@@ -8,6 +7,7 @@ import { oauthConfigurationDigest, oauthConfigurationSchema } from './oauth-atte
 import { oauthProviderTransport } from './oauth-exchange.ts';
 import { refreshInput } from './oauth-refresh.ts';
 import { prepareRevoke } from './oauth-revoke.ts';
+import { resolveRevocationTokens } from './oauth-revoke-material.ts';
 import type { RemoteNetwork } from './remote-https.ts';
 
 type Custody = ReturnType<typeof connectionCustody>;
@@ -32,9 +32,8 @@ export async function finishPersonalOAuthRevoke(store: EventStore, siloId: strin
         purpose: 'personal', generation: activation.generation,
         endpointDigest: activation.endpointDigest, operationId: activation.operationId,
         expectedSequence: activation.expectedSequence, appendUntil: activation.appendUntil };
+      const preceding = prepared.preceding;
       const configurationDigest = activation.configurationDigest;
-      const identity = { reference: saved.secretRef.slice('secret:'.length),
-        uid: activation.uid, resourceVersion: activation.resourceVersion };
       async function send() {
         const rawConfiguration = await loadConfiguration(input.serverId);
         const configuration = oauthConfigurationSchema.parse(rawConfiguration);
@@ -42,12 +41,14 @@ export async function finishPersonalOAuthRevoke(store: EventStore, siloId: strin
             oauthConfigurationDigest(configuration) !== configurationDigest) {
           throw new Error('OAuth revoke configuration unavailable');
         }
-        const contents = await custody.readRevocationMaterial(generation, identity);
-        const material = revocationMaterial(contents);
+        const materials = await resolveRevocationTokens(custody, preceding,
+          generation, configuration);
         const settings = { revocationEndpoint: configuration.revocationEndpoint,
           clientId: configuration.clientId };
         const transport = oauthProviderTransport(settings, network);
-        await transport(material, new AbortController().signal);
+        for (const material of materials) {
+          await transport(material, new AbortController().signal);
+        }
       }
       let confirmed = false;
       try {
@@ -97,17 +98,4 @@ async function retireCopies(custody: Custody, generation: ConnectionStage, revok
     continuation = page.continuation;
   } while (continuation);
   return complete;
-}
-
-function revocationMaterial(contents: string | undefined) {
-  if (contents === undefined) {
-    throw new Error('OAuth revocation material unavailable');
-  }
-  const token = z.string().regex(/^[\x21-\x7e]{1,4096}$/u);
-  const schema = z.object({ access_token: token, refresh_token: token.optional() });
-  const material = schema.parse(JSON.parse(contents));
-  if (material.refresh_token) {
-    return { revokeToken: material.refresh_token, tokenTypeHint: 'refresh_token' as const };
-  }
-  return { revokeToken: material.access_token, tokenTypeHint: 'access_token' as const };
 }
