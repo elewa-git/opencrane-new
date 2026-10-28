@@ -256,6 +256,9 @@ async function appendCorrection(options: MemoryOptions, input: Input,
   async function checkAccess() {
     // Check expiry and custody again after the store prepares publication.
     await fresh();
+    if (agent) {
+      await agent.confirm();
+    }
     const references = memoryReferences(rows, options.silo, scopeId, keys);
     const loaded = [...previous.dependsOn, previous];
     for (const reference of loaded) {
