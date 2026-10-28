@@ -8,6 +8,8 @@ import { tokenIssuer } from '@opencrane/auth';
 import { until } from '@opencrane/authz/testing';
 import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
+import { assistantProcessor } from '../src/chat/bridge-poll.ts';
+import { createLogger } from '@opencrane/observability';
 import { pauseRoutine } from '../src/routine-pause.ts';
 import { retireRoutine } from '../src/routine-retire.ts';
 import { requestRoutineStop } from '../src/routine-stop.ts';
@@ -324,6 +326,7 @@ async function startComputer(computerId = 'computer') {
     return { value: 'fixture-bridge', expiresAt: Date.now() + 120_000 };
   }
   const executedThreads: string[] = [];
+  const interruptedThreads: string[] = [];
   let closedSessions = 0;
   function privateSession() {
     const lifetime = Promise.withResolvers<void>();
@@ -341,6 +344,7 @@ async function startComputer(computerId = 'computer') {
         nativeStarts++;
         threadId = `native-thread-${nativeStarts}`;
       }
+      if (method === 'turn/interrupt') interruptedThreads.push(String(params['threadId']));
       if (method === 'turn/start') {
         expect(closed).toBe(false);
         expect(params['threadId']).toBe(threadId);
@@ -410,7 +414,7 @@ async function startComputer(computerId = 'computer') {
   }
   return { wake, restart, close, executed, get starts() { return starts; },
     get sends() { return sends; }, get nativeStarts() { return nativeStarts; },
-    get closedSessions() { return closedSessions; }, executedThreads };
+    get closedSessions() { return closedSessions; }, executedThreads, interruptedThreads, tokens };
 }
 async function savedStarts() {
   const rows = await history(nats.store, 'computer-sales-assistant', 'test');
@@ -842,3 +846,51 @@ async function refusesExpiredPreparation() {
   expect(preparedComputer.nativeStarts).toBe(1);
 }
 it('refuses delivery after the empty private session expires', refusesExpiredPreparation);
+
+
+async function saveProhibition(kind: 'Stop' | 'Pause' | 'Retire') {
+  const request = { routineId: 'orders', changeId: 'orders:bridge-stop',
+    expectedPosition: await nats.store.head('routine-orders'),
+    expectedDefinitionRevision: 1, expectedScheduleRevision: 1, expectedControlRevision: 1 };
+  if (kind === 'Stop') {
+    return requestRoutineStop(nats.store, binding, 'alice', { ...request, occurrenceId: 'occurrence' });
+  }
+  const command = kind === 'Pause' ? pauseRoutine : retireRoutine;
+  return command(nats.store, binding, 'alice', request);
+}
+async function pollRoutine() {
+  const link = await preparedComputer.wake();
+  function connected() { return link; }
+  function connectionId() { return 1; }
+  const options = { silo: 'test', store: nats.store, keys, db: undefined! };
+  const logger = createLogger('routine-stop-test', { level: 'silent' });
+  const processor = assistantProcessor(options, preparedComputer.tokens, new Set(), forbidden,
+    connectionId, logger, connected);
+  const sessions = [{ conversationId, assistantId: 'sales-assistant', createdBy: 'alice',
+    mode: 'agent_session' as const, createdAt: new Date().toISOString() }];
+  await Promise.all(processor.pollRoutines(sessions));
+}
+async function runningProhibition(kind: 'Stop' | 'Pause' | 'Retire') {
+  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
+  await until(preparedComputer.executed);
+  await saveProhibition(kind);
+  const observed = performance.now();
+  await pollRoutine();
+  function interrupted() {
+    expect(preparedComputer.interruptedThreads).toEqual([selection.threadId]);
+  }
+  await vi.waitFor(interrupted);
+  expect(performance.now() - observed).toBeLessThan(2000);
+  await Promise.all([pollRoutine(), pollRoutine()]);
+  interrupted();
+  const link = await preparedComputer.wake();
+  expect(link.socket.readyState).toBe(link.socket.OPEN);
+  expect(preparedComputer.closedSessions).toBe(0);
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  let state;
+  for (const row of rows) state = foldRoutine(state, row.event);
+  expect(state?.activeRun?.occurrenceId).toBe('occurrence');
+  expect(state?.lastRun).toBeNull();
+}
+it.each(['Stop', 'Pause', 'Retire'] as const)(
+  'polls saved owner %s and interrupts only the accepted native routine turn once', runningProhibition);
