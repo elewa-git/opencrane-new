@@ -121,7 +121,8 @@ function addMemoryContext(summary: ChatSummary, row: StoredEvent) {
   const data = memoryContextRecordedEventSchema.parse(event).data;
   const turnId = data.turnId;
   const lateInitialLoad = summary.conversationClosed && data.delivery === 'initial';
-  if (lateInitialLoad || summary.closedTurnIds.has(turnId)) {
+  const withdrawal = data.action === 'invalidated' && data.reason === 'content_changed';
+  if (lateInitialLoad || (summary.closedTurnIds.has(turnId) && !withdrawal)) {
     throw new Error('Memory evidence arrived after the turn closed');
   }
   const previous = summary.memoryContexts.get(turnId);
