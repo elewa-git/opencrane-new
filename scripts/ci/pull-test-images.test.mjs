@@ -6,13 +6,13 @@ import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 
 const minio = 'mirror.gcr.io/alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:' +
-  'cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4';
+  'f93b327d2d9a81ef9d9a966d2c7fbe3ea4d657d23ed412566c20d488e9f73332';
 const clamav = 'mirror.gcr.io/clamav/clamav-debian:1.5.2@sha256:' +
-  '14e2e0805c6a5ff6728ea591c05565e0f0954d93e8701919012c3a8c44e20674';
+  '24b4b24c303efed21633b29d61096fab4a8a7e158a595149238c7bef7b39873c';
 const node = 'mirror.gcr.io/library/node:22.23.1-bookworm-slim@sha256:' +
-  '6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3';
+  '8607a9064d4a571140998ae9e52a3b3fcf9cff361d04642d5971e6cd76d39e27';
 const openfga = 'ghcr.io/openfga/openfga:v1.21.0@sha256:' +
-  '2113c664a486b5da8d7a2cdab479e0d4e30639c80fd2c000540f645c1dbc1e55';
+  '51bece5c31783bfeb150eae0f1c818ae804c50d39e0a311c43ff5357fed6debd';
 const images = [minio, clamav, node, openfga];
 
 function writeFakeCommands(directory) {
@@ -114,6 +114,18 @@ function retriesQuotaExceeded() {
   assert.ok((result.stdout + result.stderr).includes(message));
 }
 
+function retriesMissingAttestation() {
+  const message = 'failed to copy: httpReadSeeker: failed open: ' +
+    'could not fetch content descriptor ' +
+    'sha256:17936259c48931f4b8d8acc21b6f7552e4c80722dce1be36c954be28a50cdbf2 ' +
+    '(application/vnd.in-toto+json) from remote: not found';
+  const result = pullImages(message, 1);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.calls, [['pull', minio], ...expectedPulls()]);
+  assertBackoff(result.sleeps, 1);
+  assert.ok((result.stdout + result.stderr).includes(message));
+}
+
 function retriesRateLimits() {
   const message = 'unexpected status from HEAD request: 429 Too Many Requests';
   const result = pullImages(message, 2);
@@ -148,6 +160,8 @@ function retriesTemporaryFailures() {
     'unexpected status from HEAD request: 503 Service Unavailable',
     'received unexpected HTTP status: 502 Bad Gateway',
     'net/http: TLS handshake timeout',
+    'failed to copy: httpReadSeeker: failed open: remote unavailable',
+    'could not fetch content descriptor sha256:temporary from remote: not found',
     'context deadline exceeded',
     '429',
     'tOo MaNy ReQuEsTs',
@@ -168,6 +182,8 @@ function refusesOtherFailures() {
   const errors = ['manifest unknown', 'unauthorized: authentication required',
     'unknown digest (upstream quota exceeded)',
     'manifest unknown (upstream rate limit)',
+    'manifest unknown: failed to copy: httpReadSeeker',
+    'unauthorized: could not fetch content descriptor',
     'unauthorized: authentication required (upstream 429)',
     'Cannot connect to the Docker daemon'];
   for (const message of errors) {
@@ -207,12 +223,13 @@ function usesHelperPins() {
 }
 
 test('pulls the exact images after two registry quota errors', retriesQuotaExceeded);
+test('retries the missing mirror attestation then pulls every image', retriesMissingAttestation);
 test('pulls the exact images after two rate limits', retriesRateLimits);
 test('fails immediately with the registry message for a missing digest', refusesMissingDigest);
 test('stops after four failed pulls with bounded backoff', boundsRetries);
 test('retries registry server errors and timeouts', retriesTemporaryFailures);
 test('fails immediately for permanent and unrecognised errors', refusesOtherFailures);
-test('pulls each helper and Dockerfile pin once', usesHelperPins);
+test('pulls the linux/amd64 manifest pins used by helpers and Dockerfiles', usesHelperPins);
 
 function preparesEveryTestJob() {
   const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
