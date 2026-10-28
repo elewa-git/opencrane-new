@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { authorityFence, isAuthorityChanged, memoryReferences, readActiveMember } from '@opencrane/models';
+import { authorityFence, currentMembership, isAuthorityChanged, MemberAccessRefused,
+  memoryReferences, readActiveMember } from '@opencrane/models';
 import { memoryKeys, memoryIdentity } from '@opencrane/projections';
 import { memoryCorrectedEventSchema, memoryValueEventSchema, memoryTextSchema,
   memoryWrittenDataSchema } from '@opencrane/events';
@@ -228,8 +229,33 @@ function correctionEvent(options: MemoryOptions, input: Input,
     correlation, data };
   return memoryCorrectedEventSchema.parse(proposed);
 }
-function correctionRefused(error: unknown) {
-  return error instanceof MemoryRefused || isAuthorityChanged(error);
+function correctionRefused(error: unknown): error is Error {
+  return error instanceof MemoryRefused || error instanceof MemberAccessRefused ||
+    isAuthorityChanged(error);
+}
+async function requireCorrectionMember(options: MemoryOptions, requester: string, deadline: number) {
+  const membership = await currentMembership(options.store, options.silo, requester,
+    undefined, deadline);
+  if (!membership.role) {
+    throw new MemberAccessRefused('Active silo membership required');
+  }
+}
+async function confirmCorrection(options: MemoryOptions, requester: string,
+  fresh: WriteAuthority, agent?: AgentCorrection) {
+  if (!agent) {
+    await fresh();
+    return;
+  }
+  // Check saved membership before a failed dependency can hide a removal.
+  await requireCorrectionMember(options, requester, fresh.deadline);
+  try {
+    await fresh();
+    await agent.confirm();
+  } catch (error) {
+    // Catch removals saved during the check without repeating permission checks.
+    await requireCorrectionMember(options, requester, fresh.deadline);
+    throw error;
+  }
 }
 async function appendCorrection(options: MemoryOptions, input: Input,
   entry: NonNullable<ReturnType<ReturnType<typeof commandJournal>['read']>>,
@@ -249,16 +275,10 @@ async function appendCorrection(options: MemoryOptions, input: Input,
   keys.provision(identity);
   const encrypted = keys.encrypt(identity, input.text);
   event.data = { ...event.data, ...encrypted };
-  await fresh();
-  if (agent) {
-    await agent.confirm();
-  }
+  await confirmCorrection(options, requester, fresh, agent);
   async function checkAccess() {
     // Check expiry and custody again after the store prepares publication.
-    await fresh();
-    if (agent) {
-      await agent.confirm();
-    }
+    await confirmCorrection(options, requester, fresh, agent);
     const references = memoryReferences(rows, options.silo, scopeId, keys);
     const loaded = [...previous.dependsOn, previous];
     for (const reference of loaded) {
@@ -284,13 +304,13 @@ async function appendCorrection(options: MemoryOptions, input: Input,
     result = await options.store.append(command);
   } catch (error) {
     if (agent && correctionRefused(error)) {
-      throw new MemoryRefused();
+      throw error;
     }
     return { outcome: 'unknown' };
   }
   if (result.status === 'unavailable') {
     if (agent && correctionRefused(result.cause)) {
-      throw new MemoryRefused();
+      throw result.cause;
     }
     return { outcome: 'unknown' };
   }

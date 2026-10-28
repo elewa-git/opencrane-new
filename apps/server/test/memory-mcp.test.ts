@@ -3621,12 +3621,16 @@ async function correctionPublicationActivity(change: 'loaded' | 'closed' | 'unre
   const token = await changeToken(request);
   const before = await setup.nats.store.head(`scope-${scopeId}`);
   const original = setup.nats.store.append.bind(setup.nats.store);
+  const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
+  let publicationDeadline: number | undefined;
+  let checkedTail = false;
   let intercepted = false;
   let publicationResult: Awaited<ReturnType<typeof original>> | undefined;
   async function append(command: Parameters<typeof original>[0]) {
     const event = z.object({ type: z.string() }).parse(command.event);
     if (event.type === 'memory.corrected') {
       intercepted = true;
+      publicationDeadline = command.deadline;
       if (change === 'closed') {
         await setup.append('participation-conversation', 'conversation.closed', {
           conversationId: 'conversation', closedBy: 'alice' });
@@ -3646,10 +3650,21 @@ async function correctionPublicationActivity(change: 'loaded' | 'closed' | 'unre
     }
     return result;
   }
+  async function* readStream(...args: Parameters<typeof originalRead>) {
+    if (intercepted && args[0] === 'conversation-conversation') {
+      expect(args[1]).toBeGreaterThan(1);
+      expect(args[2]).toBe(publicationDeadline);
+      expect(args[3]).toBe(true);
+      checkedTail = true;
+    }
+    yield* originalRead(...args);
+  }
+  const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(readStream);
   const appends = vi.spyOn(setup.nats.store, 'append').mockImplementation(append);
   try {
     const response = await sendChange(request, token);
     expect(intercepted).toBe(true);
+    expect(checkedTail).toBe(true);
     if (change === 'unrelated') {
       expect(publicationResult).toMatchObject({ status: 'appended' });
       expect(response.statusCode, response.body).toBe(200);
@@ -3660,6 +3675,7 @@ async function correctionPublicationActivity(change: 'loaded' | 'closed' | 'unre
       expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(before);
     }
   } finally {
+    reads.mockRestore();
     appends.mockRestore();
   }
 }

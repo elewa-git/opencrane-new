@@ -1,1 +1,1 @@
-Governed personal corrections can save one checked replacement and recover its original receipt after a lost reply. Native memory launch remains disabled.
+Governed personal corrections can save one checked replacement and recover its original receipt after a lost reply. Corrections refuse newly loaded facts, closed conversations and saved member removal before publication, including when another service fails. Native memory launch remains disabled.

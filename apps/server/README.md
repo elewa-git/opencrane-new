@@ -87,6 +87,8 @@ Recall, Correct and Forget load their history before the gateway signs the short
 The server keeps that data briefly for one call and checks current access before use.
 Calls and turn renewal prepare access receipts for every memory scope already loaded.
 Correct can save one checked personal replacement and return a receipt without text.
+Before saving, it checks for new loaded facts, an ended conversation and saved member removal.
+A later service error cannot turn a known removal into an uncertain save.
 Forget through the assistant remains disabled.
 An internal command can record that a personal turn's loaded memory became invalid
 after a saved correction, forget, expiry or loss of access. It keeps every loaded reference for replay and

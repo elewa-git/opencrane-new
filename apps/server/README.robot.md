@@ -6408,7 +6408,11 @@ company profiles and fresh-install live qualification remain NOT RUN in this sli
 Part of #97. Prepared Correct calls reuse `memory/correct.ts`, its journal, shared fact
 lock, key custody and conditional append. Keep the original signed write authority,
 target proof and every other loaded reference. Preserve sources. Before publication, check
-expiry, revision keys and the replacement's dependencies. Events record agent/requester and
+expiry, revision keys and the replacement's dependencies. The publication callback also checks
+only later conversation rows against the complete loaded evidence, using the original deadline.
+Saved membership is checked before fallible access reads and again if those reads fail.
+A saved removal keeps its `MemberAccessRefused` error through returned or thrown append failures;
+the failure path does not repeat the permission check. Events record agent/requester and
 conversation/turn/request with reason `contradiction`. Obsolete context refuses the next dispatch.
 `GET /api/memory/:scopeId/agent-changes/:commandId` reads only the owner's original agent
 correction receipt. It never searches human commands, resends work, creates keys or decrypts
