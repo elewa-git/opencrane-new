@@ -389,7 +389,7 @@ async function boundsHistory() {
 }
 it('bounds a stalled history read and retries it on a later poll', boundsHistory, 15_000);
 
-async function completionBeforePoll(replace: boolean) {
+async function completionBeforePoll(replace: boolean, detect = false) {
   const send = link.socket.send.bind(link.socket);
   let stops = 0;
   function holdAcknowledgements(data: Parameters<typeof send>[0]) {
@@ -406,7 +406,8 @@ async function completionBeforePoll(replace: boolean) {
     params: { threadId: 'thread-1', itemId: 'reply', delta: 'completed-private-canary' } });
   await flush();
   await link.settled();
-  await invalidated();
+  if (detect) await changed();
+  else await invalidated();
   computer.finish('thread-1');
   await flush();
   await link.settled();
@@ -498,3 +499,14 @@ async function detectsPersonalChange(kind: 'corrected' | 'forgotten') {
 }
 it.each(['corrected', 'forgotten'] as const)(
   'detects a personal %s cause through polling without a notification', detectsPersonalChange);
+
+async function completionBeforeDetection(replace: boolean) {
+  await completionBeforePoll(replace, true);
+  const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(facts).toMatchObject({ turnEnded: true,
+    memoryContext: { status: 'ended', executionAvailable: false } });
+  expect(facts.memoryContext?.events.size).toBe(3);
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
+}
+it.each([false, true])('withdraws a completed reply after detection, replacement=%s',
+  completionBeforeDetection);

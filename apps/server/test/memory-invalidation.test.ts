@@ -291,16 +291,15 @@ async function racingAppend(kind: 'recall' | 'closed' | 'lost') {
   const first = await invalidate();
   expect(first).toEqual({ status: kind === 'lost' ? 'unavailable' : 'reload_required' });
   const second = await invalidate();
-  if (kind === 'closed') {
-    expect(second).toEqual({ status: 'refused' });
-    return;
-  }
   expect(second).toMatchObject({ status: 'invalidated' });
   const position = await setup.store.head('conversation-chat');
   expect(await invalidate()).toEqual(second);
   expect(await setup.store.head('conversation-chat')).toBe(position);
   const facts = await readChatFacts(setup.store, 'test', 'chat', 'turn');
   expect(facts.memoryContext?.recallCalls).toBe(kind === 'recall' ? 2 : 1);
+  if (kind === 'closed') {
+    expect(facts.memoryContext).toMatchObject({ status: 'ended', executionAvailable: false });
+  }
 }
 it.each(['recall', 'closed', 'lost'] as const)(
   'reloads and reconciles after a %s append race', racingAppend);
