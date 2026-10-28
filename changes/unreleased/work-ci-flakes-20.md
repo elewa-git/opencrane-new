@@ -1,0 +1,1 @@
+- CI retries test image downloads after registry quota and rate-limit errors, with bounded waits long enough for a per-minute quota to reset. Missing images and access refusals still fail immediately.
