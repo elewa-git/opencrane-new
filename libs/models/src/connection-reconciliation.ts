@@ -4,7 +4,7 @@ import { connectionCreatedDataSchema } from '@opencrane/events';
 import type { Db } from '@opencrane/projections';
 import { envelope, history } from './actor.ts';
 import { foldConnection } from './bearer-connections.ts';
-import type { connectionCustody, ConnectionStage } from './connection-custody.ts';
+import type { connectionCustody, ConnectionStage, CustodyStage } from './connection-custody.ts';
 import { withConnectionStage } from './connection-stage-lock.ts';
 import { retireExpiredAccess } from './oauth-retained-access.ts';
 
@@ -13,7 +13,11 @@ const retained = { status: 'retained' as const };
 
 /** Reconcile one private candidate during live maintenance, never during event replay. */
 export async function reconcileConnectionStage(store: EventStore, db: Pick<Db, 'lock'>,
-  custody: Custody, stage: ConnectionStage) {
+  custody: Custody, input: CustodyStage) {
+  if (input.purpose === 'company') {
+    return retained;
+  }
+  const stage = input;
   // Keep private attempts until their deadline, then check whether they hold expired access.
   if (stage.attemptId !== undefined && Date.now() < stage.appendUntil) {
     return retained;

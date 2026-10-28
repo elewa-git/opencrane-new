@@ -34,6 +34,17 @@ export const connectionCreatedDataSchema = z
     activation: connectionActivationSchema.optional() })
   .strict();
 
+// Keep company ownership separate from the member-owned legacy and personal variants.
+export const companyConnectionCreatedDataSchema = z.strictObject({
+  siloId: connectionId, custodianId: connectionId, serverId: connectionId,
+  profile: connectionId, secretRef: secretRefSchema,
+  activation: activationFields.extend({
+    ownerKind: z.literal('company'), purpose: z.literal('company'),
+    generation: z.literal(1), expectedSequence: z.literal(0), reason: z.literal('bearer_create'),
+    registrationRevision: z.int().positive(), optInRevision: z.int().positive(),
+  }),
+});
+
 export const connectionRefreshedDataSchema = connectionCreatedDataSchema.extend({
   activation: connectionActivationSchema.optional(),
 });

@@ -873,3 +873,12 @@ its preparation digest binds the frozen run and prepared input. `rootId` remains
 record's routine reference, while the allocation contains the actual budget root id.
 A saved `senderAttemptId` can recover only the same receipt. No reaction or replay sends
 work. See the [catalogue](../../docs/architecture/events.md#routines-and-delegation).
+
+## Company bearer creation (P3-8 PR 4d)
+
+The `connection.created` registry accepts a separate strict company variant, exported as
+`companyConnectionCreatedDataSchema`. It requires siloId and custodianId instead of
+userId. Its activation pins company ownerKind/purpose, generation 1, expectedSequence 0,
+bearer_create reason, registrationRevision and optInRevision alongside exact custody
+references. Existing personal schemas remain unchanged. No company refreshed variant
+or release reaction is added; replay never reads private material or calls a provider.

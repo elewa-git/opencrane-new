@@ -4485,3 +4485,25 @@ for an ended context. It retains the ended status, references and accounting. Th
 for pending private reply removal only. Later loads remain refused; replay creates no
 execution permission. The server invalidation writer verifies the saved cause and permits
 one invalidation per context. Other terminal transitions retain their existing refusals.
+
+## Company bearer creation (P3-8 PR 4d; Part of #49)
+
+`saveCompanyBearerConnection` is internal CREATE only. Authenticated context supplies the
+silo and admin custodian. Strict input supplies serverId, connectionId, profileId,
+registrationRevision, optInRevision, expectedSequence (zero), changeRef and appendUntil.
+Company subjects use `connection-company:<serverId>:<profileId>`; custody has no userId.
+The shared profile lock covers history, immutable staging and one conditional append.
+History loads before the short membership check. Opt-in and registration positions are
+compared separately; the append callback also orders publication against access changes.
+One admin permission decision follows preparation, including failed preparation.
+`MemberAccessRefused` survives preparation errors and later lock-release failures.
+The command captures membership positions before that decision. After staging,
+`ownershipWriteAccess` checks those same positions and starts the two-second publication
+deadline. It does not ask IAM again. Changed membership still prevents publication.
+Exact retries compare the saved data and private material, UID and version. Unknown
+publication retains material. Replay preserves silo ownership and custodian metadata.
+The result is `saved_unverified`. Company rotation, revocation, selection, release,
+HTTP routes, routine creation and verified account checks remain unavailable.
+Company material stays outside personal cleanup and private OAuth material reads.
+Tests use real NATS, OpenFGA and PostgreSQL with the existing local custody fixture.
+Fresh-install and production Kubernetes qualification: NOT RUN.

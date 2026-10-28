@@ -9,12 +9,20 @@ import { connectionStageJournal } from './connection-stage-journal.ts';
 const identifier = z.string().min(1).max(200);
 const stageSchema = z.object({
   siloId: identifier, userId: identifier, serverId: identifier, connectionId: identifier,
-  profileId: identifier, purpose: z.enum(['personal', 'company', 'validation']),
+  profileId: identifier, purpose: z.enum(['personal', 'validation']),
   generation: z.int().positive(), endpointDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   operationId: identifier, expectedSequence: z.int().nonnegative(), appendUntil: z.int().positive(),
   attemptId: identifier.optional(), attemptDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
 }).strict();
 export type ConnectionStage = z.infer<typeof stageSchema>;
+const companyStageSchema = stageSchema.omit({ userId: true }).extend({
+  ownerKind: z.literal('company'), purpose: z.literal('company'), custodianId: identifier,
+  registrationRevision: z.int().positive(), optInRevision: z.int().positive(),
+  generation: z.literal(1), expectedSequence: z.literal(0),
+});
+export type CompanyConnectionStage = z.infer<typeof companyStageSchema>;
+export type CustodyStage = ConnectionStage | CompanyConnectionStage;
+const custodyStageSchema = z.union([stageSchema, companyStageSchema]);
 interface ConnectionIdentity { reference: string; uid: string; resourceVersion: string }
 interface Result {
   status: 'staged' | 'recovered' | 'conflict' | 'unknown' | 'not_found' | 'deleted';
@@ -84,7 +92,7 @@ class ConnectionCustody {
     }
     return fetch(url, options);
   }
-  private verify(secret: Secret, input: ConnectionStage, expected?: ConnectionIdentity,
+  private verify(secret: Secret, input: CustodyStage, expected?: ConnectionIdentity,
     material?: string): ConnectionIdentity | undefined {
     const metadata = metadataFor(input);
     const name = nameFor(input);
@@ -113,7 +121,7 @@ class ConnectionCustody {
     }
     return identity;
   }
-  async recover(input: ConnectionStage, expected?: ConnectionIdentity,
+  async recover(input: CustodyStage, expected?: ConnectionIdentity,
     material?: string): Promise<Result> {
     try {
       const checked = checkedStage(input);
@@ -155,7 +163,7 @@ class ConnectionCustody {
       return { status: 'unknown' };
     }
   }
-  async stage(input: ConnectionStage, material: string,
+  async stage(input: CustodyStage, material: string,
     expected?: ConnectionIdentity): Promise<Result> {
     const checked = checkedStage(input);
     if (Buffer.byteLength(material) === 0 || Buffer.byteLength(material) > 8192) {
@@ -206,7 +214,7 @@ class ConnectionCustody {
     return this.recoverCreate(checked, material);
   }
   /** Call under the profile stage lock, after confirming the live callback worker. */
-  async claimSend(input: ConnectionStage) {
+  async claimSend(input: CustodyStage) {
     const stage = checkedStage(input);
     if (!stage.attemptId || Date.now() >= stage.appendUntil) {
       return false;
@@ -214,7 +222,7 @@ class ConnectionCustody {
     return this.journal.claimSend(nameFor(stage));
   }
   /** Check under the profile lock whether a refresh could have reached the provider. */
-  async hasSendClaim(input: ConnectionStage) {
+  async hasSendClaim(input: CustodyStage) {
     const stage = checkedStage(input);
     return this.journal.hasSendClaim(nameFor(stage));
   }
@@ -228,7 +236,7 @@ class ConnectionCustody {
       const record = await this.journal.preparation(input.operationId);
       const appendUntil = record?.appendUntil ?? Date.now() + 600_000;
       const stage = checkedStage({ ...input, appendUntil });
-      if (!stage.attemptId || Date.now() >= appendUntil) {
+      if (stage.purpose !== 'personal' || !stage.attemptId || Date.now() >= appendUntil) {
         return { status: 'unknown' as const };
       }
       if (!record) {
@@ -248,15 +256,15 @@ class ConnectionCustody {
     }
   }
   /** Read only an exact private attempt. Never expose this through a member or admin API. */
-  async readAttempt(input: ConnectionStage, expected: ConnectionIdentity) {
+  async readAttempt(input: CustodyStage, expected: ConnectionIdentity) {
     return this.readMaterial(input, expected, 'attempt');
   }
   /** Check private refresh availability without returning any material to the command. */
-  async hasRefreshMaterial(input: ConnectionStage, expected: ConnectionIdentity) {
+  async hasRefreshMaterial(input: CustodyStage, expected: ConnectionIdentity) {
     return await this.readRefreshMaterial(input, expected) !== undefined;
   }
   /** Read an exact generation only for the private refresh worker. */
-  async readRefreshMaterial(input: ConnectionStage, expected: ConnectionIdentity) {
+  async readRefreshMaterial(input: CustodyStage, expected: ConnectionIdentity) {
     try {
       if (input.attemptId) {
         return undefined;
@@ -272,7 +280,7 @@ class ConnectionCustody {
     }
   }
   /** Read an exact generation privately for its saved revocation. */
-  async readRevocationMaterial(input: ConnectionStage, expected: ConnectionIdentity) {
+  async readRevocationMaterial(input: CustodyStage, expected: ConnectionIdentity) {
     if (input.attemptId) {
       return undefined;
     }
@@ -284,11 +292,11 @@ class ConnectionCustody {
     return await this.journal.deletion(nameFor(stage)) !== undefined ||
       (stage.attemptId !== undefined && Date.now() >= stage.appendUntil);
   }
-  private async readMaterial(input: ConnectionStage, expected: ConnectionIdentity,
+  private async readMaterial(input: CustodyStage, expected: ConnectionIdentity,
     purpose: 'attempt' | 'active' | 'revocation') {
     try {
       const stage = checkedStage(input);
-      if (!expected || (purpose === 'attempt' && !stage.attemptId) ||
+      if (stage.purpose === 'company' || !expected || (purpose === 'attempt' && !stage.attemptId) ||
           (purpose !== 'revocation' && await this.unreadable(stage))) {
         return undefined;
       }
@@ -333,7 +341,7 @@ class ConnectionCustody {
       }
       const body = await readResponse(response, 1_048_576);
       const page = pageSchema.parse(body);
-      const stages: ConnectionStage[] = [];
+      const stages: CustodyStage[] = [];
       for (const item of page.items) {
         const stage = this.candidate(item);
         if (stage) {
@@ -346,7 +354,7 @@ class ConnectionCustody {
       return { status: 'unknown' as const };
     }
   }
-  private candidate(item: unknown): ConnectionStage | undefined {
+  private candidate(item: unknown): CustodyStage | undefined {
     try {
       const secret = secretSchema.parse(item);
       const record = secret.metadata.annotations[`${prefix}stage`];
@@ -365,21 +373,21 @@ class ConnectionCustody {
       return undefined;
     }
   }
-  private async matchesDeletion(input: ConnectionStage, expected: ConnectionIdentity,
+  private async matchesDeletion(input: CustodyStage, expected: ConnectionIdentity,
     pending: ConnectionIdentity) {
     const recorded = await this.journal.identity(nameFor(input));
     const prepared = await this.journal.prepared(recordFor(input), false);
     return prepared && recorded !== undefined && sameIdentity(recorded, expected)
       && sameIdentity(pending, expected);
   }
-  async remove(input: ConnectionStage, expected?: ConnectionIdentity): Promise<Result> {
+  async remove(input: CustodyStage, expected?: ConnectionIdentity): Promise<Result> {
     if (!expected || input.attemptId !== undefined) {
       return { status: 'conflict' };
     }
     return this.retire(input, expected);
   }
   /** Retire an exact superseded OAuth copy only after its replacement is saved. */
-  async retire(input: ConnectionStage, expected: ConnectionIdentity): Promise<Result> {
+  async retire(input: CustodyStage, expected: ConnectionIdentity): Promise<Result> {
     try {
       const checked = checkedStage(input);
       const pending = await this.journal.deletion(nameFor(checked));
@@ -432,7 +440,7 @@ class ConnectionCustody {
     }
     return { status: 'unknown' };
   }
-  private async recoverCreate(input: ConnectionStage, material: string): Promise<Result> {
+  private async recoverCreate(input: CustodyStage, material: string): Promise<Result> {
     const recovered = await this.recover(input, undefined, material);
     if (recovered.status === 'not_found') {
       return { status: 'unknown' };
@@ -441,8 +449,8 @@ class ConnectionCustody {
   }
 }
 
-function checkedStage(input: unknown): ConnectionStage {
-  const checked = stageSchema.safeParse(input);
+function checkedStage(input: unknown): CustodyStage {
+  const checked = custodyStageSchema.safeParse(input);
   if (!checked.success) {
     throw new Error('Connection stage invalid');
   }
@@ -455,17 +463,20 @@ function checkedStage(input: unknown): ConnectionStage {
   }
   return stage;
 }
-function nameFor(input: ConnectionStage) {
+function nameFor(input: CustodyStage) {
   const coordinates = [input.siloId, input.connectionId, input.profileId];
   const hash = createHash('sha256');
   hash.update(JSON.stringify(coordinates));
+  if (input.purpose === 'company') {
+    hash.update('company');
+  }
   if (input.attemptId !== undefined) {
     hash.update(JSON.stringify(['oauth-attempt', input.attemptId]));
     return `mcp-${hash.digest('hex').slice(0, 40)}-attempt`;
   }
   return `mcp-${hash.digest('hex').slice(0, 40)}-g${input.generation}`;
 }
-function metadataFor(input: ConnectionStage) {
+function metadataFor(input: CustodyStage) {
   const labels: Record<string, string> = { 'app.kubernetes.io/managed-by': 'opencrane-server' };
   const annotations: Record<string, string> = {};
   for (const [field, value] of Object.entries(input)) {
@@ -487,7 +498,7 @@ function matches(actual: Record<string, string>, expected: Record<string, string
   }
   return true;
 }
-function digest(key: Buffer, input: ConnectionStage, material: string) {
+function digest(key: Buffer, input: CustodyStage, material: string) {
   const hmac = createHmac('sha256', key);
   hmac.update('opencrane:mcp-connection-material:v1\0');
   // Bind the private recovery record too, so edits cannot extend the append deadline.
@@ -513,7 +524,7 @@ function sameIdentity(actual: ConnectionIdentity, expected: ConnectionIdentity) 
   return actual.reference === expected.reference && actual.uid === expected.uid
     && actual.resourceVersion === expected.resourceVersion;
 }
-function recordFor(input: ConnectionStage) {
+function recordFor(input: CustodyStage) {
   return { operationId: input.operationId, reference: nameFor(input),
     expectedSequence: input.expectedSequence, appendUntil: input.appendUntil };
 }

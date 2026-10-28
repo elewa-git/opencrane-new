@@ -1,0 +1,2 @@
+An admin can internally save the first silo-owned bearer account after explicit opt-in for the reviewed installation. Exact retries recover one private generation. The account remains unverified and unavailable for tool use.
+Company account saves check permission once and keep permission refusals distinct from failed history reads or lock release. Membership changes during staging still prevent publication.
