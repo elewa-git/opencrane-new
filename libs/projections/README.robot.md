@@ -22,7 +22,8 @@ its connection, including one that arrives late from the pool. Bounded acquisiti
 at most 100 ms per PostgreSQL lock wait, so the server notices a disconnected waiter.
 The full acquisition deadline does not restart between waits. The callback keeps its
 connection until its work stops; cancellation does not release an active callback's lock.
-Memory commands use 100 ms; projection workers without options retain their existing wait.
+Remember and Correct use 100 ms. Forget allows up to one second, bounded by its original
+two-second access check. Projection workers without options retain their existing wait.
 The requested lock timeout stays set during the callback and is reset before the
 connection returns to the pool. The callback's `query` accepts a deadline and uses
 the same checked-out connection.

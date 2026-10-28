@@ -162,14 +162,19 @@ export async function forget(options: MemoryOptions, requester: string, params: 
     return forgetLocked(options, requester, scope, memoryId, input, state, fresh, reference,
       access.audience);
   }
+  function lockOptions() {
+    // Allow slow database replies while keeping the original two-second access limit.
+    const remainingMs = Math.max(0, fresh.deadline - performance.now());
+    return { timeoutMs: Math.min(1000, remainingMs) };
+  }
   async function lockFact() {
     return options.db.lock!(`memory-fact:${options.silo}:${scope.scopeId}:${memoryId}`,
-      execute, { timeoutMs: 100 });
+      execute, lockOptions());
   }
   const release = await acquireMemoryWrite(options.silo, requester, scope.scopeId);
   try {
     await fresh();
-    return await options.db.lock(`memory-command:${reference}`, lockFact, { timeoutMs: 100 });
+    return await options.db.lock(`memory-command:${reference}`, lockFact, lockOptions());
   } finally {
     release();
   }

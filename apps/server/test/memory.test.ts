@@ -601,7 +601,9 @@ it.each(['command', 'fact'] as const)(
     const lock = memory.db.lock!.bind(memory.db);
     async function trackedLock<Result>(name: string, work: (db: Db) => Promise<Result>,
       options?: { timeoutMs: number; signal?: AbortSignal }) {
-      if (name === lockName) attempted.resolve();
+      if (name === lockName) {
+        attempted.resolve();
+      }
       return lock(name, work, options);
     }
     const lockSpy = vi.spyOn(memory.db, 'lock').mockImplementation(trackedLock);
@@ -635,7 +637,9 @@ it('refuses Forget when access expires during the database lock work',
     async function slowLock<Result>(name: string, work: (db: Db) => Promise<Result>,
       options?: { timeoutMs: number; signal?: AbortSignal }) {
       async function delayedWork(db: Db) {
-        if (name.startsWith('memory-fact:')) await delay(2100);
+        if (name.startsWith('memory-fact:')) {
+          await delay(2100);
+        }
         return work(db);
       }
       return lock(name, delayedWork, options);
@@ -646,8 +650,9 @@ it('refuses Forget when access expires during the database lock work',
       const response = await sharedForget(target);
       expect(response.statusCode).toBe(503);
       expect(appendSpy).not.toHaveBeenCalled();
-      expect(keys.status({ silo: 'acme', ...target, memoryId: 'target', revision: 1 }))
-        .toBe('available');
+      const identity = { silo: 'acme', scopeId: target.scopeId, scopeKind: target.scopeKind,
+        ownerId: target.ownerId, memoryId: 'target', revision: 1 };
+      expect(keys.status(identity)).toBe('available');
     } finally {
       appendSpy.mockRestore();
       lockSpy.mockRestore();
