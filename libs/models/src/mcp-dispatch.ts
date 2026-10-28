@@ -1,6 +1,6 @@
 import { createLogger } from '@opencrane/observability';
 import { privateDecisionReason } from './decision-refusal.ts';
-import { prepareRemote, exchangeRemote, type RemoteNetwork } from './remote-https.ts';
+import { prepareRemote, exchangeRemote, remoteEvidence, type RemoteNetwork } from './remote-https.ts';
 import { recordAdapterObservation, recordToolObservation } from './tool-dispatch.ts';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import type { GatewayAcknowledgement } from './gateway-delivery.ts';
@@ -35,6 +35,7 @@ interface MemorySend {
   sign: (dispatch: MemoryDispatch, expiresAt: number) => Promise<string>;
 }
 interface BudgetBinding {
+  confirmRoutine: () => Promise<void>;
   rootId?: string;
   modelCall: ModelCall;
   decisionId: string;
@@ -243,6 +244,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
         await permit.confirmAccess();
       }
       await requirePublishedPositions(permit, admittedPosition, deadline);
+      await permit.budget.confirmRoutine();
       // Allow this acknowledged generation if a replacement was saved after the last
       // gateway-position read: that replacement is not live yet. Refuse changes visible
       // at that read, then check local state and send without another read or a lock.
@@ -530,14 +532,4 @@ function requireRemoteRevision(saved: string | undefined) {
     }
   } catch { /* Refuse malformed declarations without exposing their contents. */ }
   throw new Error('Remote MCP revision unavailable');
-}
-
-function remoteEvidence(outcome: 'responded' | 'outcome_unknown' | 'not_dispatched') {
-  if (outcome === 'not_dispatched') {
-    return 'adapter_dispatch_refused' as const;
-  }
-  if (outcome === 'responded') {
-    return 'adapter_response_received' as const;
-  }
-  return 'adapter_transport_uncertain' as const;
 }

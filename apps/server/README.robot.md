@@ -6370,3 +6370,11 @@ Tests: `personal-correct-tools.test.ts`, computer `private-thread-loads.test.ts`
 evidence, with real pinned Codex discovery and no model turn. Forget, execution,
 multiple-tool lists and production launch remain later work. Memory admission stays
 disabled. Fresh-install/live qualification: NOT RUN.
+
+## Routine calls before Stop cleanup (P4-24 PR 11a)
+
+Part of #106. The models process now checks saved routine prohibition directly.
+`applyRoutineStop` remains separate cleanup; delaying it grants no dispatch permission.
+`test/routine-session.test.ts` prepares, allocates and admits through the existing
+internal commands, then tests real decisions and a recording MCP server. These fixtures
+enable no route, scheduler, company call or automatic routine execution.

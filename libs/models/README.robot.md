@@ -4486,6 +4486,26 @@ for pending private reply removal only. Later loads remain refused; replay creat
 execution permission. The server invalidation writer verifies the saved cause and permits
 one invalidation per context. Other terminal transitions retain their existing refusals.
 
+## Routine dispatch prohibition (P4-24 PR 11a)
+
+Part of #106. `routine-dispatch.ts` reads the trusted conversation creation marker,
+validates the exact claim and frozen run, and matches its activation to the allocated
+budget root and recorded computer turn. Routine history has a separate ten-second
+limit before access starts. `authorityFence` watches no routine or conversation
+stream. Later routine checks read only new events and compare exact
+positions separately before model admission and final MCP send, including free calls.
+Saved Stop, Pause or Retire refuses without `applyRoutineStop`. Missing, mismatched
+or unavailable evidence refuses too. Ordinary chats keep their existing deadlines.
+Repeated older completions use `foldRoutineHistory`; they cannot replace the active run.
+The guard saves nothing and grants no replay effect. Settlement and uncertain holds
+retain their existing rules. No event or public API field or dependency was added.
+Company calls, Ask enablement, scheduling and automatic execution remain disabled.
+
+Tests extend the real internal routine admissions in `routine-session.test.ts`, then
+use the model decision endpoint and a recording MCP server. They check delayed cleanup,
+prohibition during admission and before send, altered evidence and consumed permits.
+Full root suite and fresh-install/live qualification: NOT RUN.
+
 ## Company bearer creation (P3-8 PR 4d; Part of #49)
 
 `saveCompanyBearerConnection` is internal CREATE only. Authenticated context supplies the

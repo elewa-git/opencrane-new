@@ -47,7 +47,8 @@ It retries failed delivery and cleanup while other chats keep running.
 Completion does not prove that buffered private replies are gone. The bridge keeps
 checking until the computer confirms removal for that exact turn and private thread.
 If removal finishes first, failed interruption cleanup still retries until the turn ends.
-Automatic routines remain unavailable.
+The models process also refuses calls directly from these saved records, before
+spending cleanup finishes. Automatic routines remain unavailable.
 
 Owners and admins can read, save or remove company account opt-in for a tool installation.
 Re-registering the server clears the effective choice. Saving opt-in grants no tool access.
@@ -129,7 +130,7 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks private callers, reads original tool reviews, checks access before history errors, prepares and allocates child and routine allowances, checks saved routine admission, applies saved Stop, Pause and Retire intent, and shares types| libs["libs/*<br/>shared code and chat keys"]
+  server -.->|checks private callers, reads original tool reviews, checks access before history errors, prepares and allocates child and routine allowances, checks saved routine admission and dispatch prohibition, applies saved Stop, Pause and Retire intent, and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; detects saved personal corrections, forgets and loaded expiry, records invalid contexts and personal account revocations, choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, encrypted inputs and checked admission receipts, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]

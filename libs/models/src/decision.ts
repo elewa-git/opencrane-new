@@ -1,4 +1,5 @@
 import { createLogger, type Logger } from '@opencrane/observability';
+import { prepareRoutineDispatch } from './routine-dispatch.ts';
 import { privateDecisionReason } from './decision-refusal.ts';
 import { prepareMemoryDecision, memoryAccessStarted } from './memory-prepare-request.ts';
 import { requestSchema } from './model-request.ts';
@@ -26,7 +27,8 @@ import { confirmDecisionAccess, decisionActivity, decisionHistoryDeadline,
   from './decision-activity.ts';
 import { requireCurrentComputer, requireRecordedActiveTurn, requireSharedTurnTools }
   from './turn-binding-check.ts';
-import { legacyTurnSchema, parseTurnToken, requireManagedTurnClaims }
+import { legacyTurnSchema, parseTurnToken, requireManagedTurnClaims,
+  requireModelRoute, knownDecisionRoute }
   from './decision-turn-token.ts';
 import { mcpPolicy, parseMcpCall, requireMcpThread } from './mcp.ts';
 import { MemoryToolRefused, prepareMemoryContext, prepareMemorySend } from './memory-context.ts';
@@ -137,20 +139,6 @@ function queuedPosition(conversation: StoredEvent[], turn: StoredEvent) {
 }
 
 
-function requireModelRoute(turnToken: z.infer<typeof legacyTurnSchema>,
-  managedRoute: boolean, enabled: boolean) {
-  if (managedRoute) {
-    if (!enabled) throw new Error('Managed calls are not enabled');
-  } else if (turnToken.providerId !== undefined) {
-    throw new RequestRefused('Managed provider calls are not available yet');
-  }
-}
-
-function knownDecisionRoute(url: string | undefined) {
-  return url === '/authorize/models/managed' || url === '/authorize' ||
-    url?.startsWith('/authorize/mcp/');
-}
-
 function requireConnectedClient(req: IncomingMessage, res: ServerResponse) {
   // Refuse before holding money when the gateway or another client has hung up.
   if (req.socket.destroyed || res.destroyed) {
@@ -231,7 +219,9 @@ export async function startDecision(
         checked.sequence, started, decisionDeadline);
       const managedTurn = requireManagedTurnClaims(checked.turn, managedRoute);
       // Read managed history before starting the short access check.
-      const historyDeadline = decisionHistoryDeadline(managedRoute || memoryRoute, decisionDeadline);
+      const routineSession = turnToken.conversation.startsWith('routine-session-');
+      const historyDeadline = decisionHistoryDeadline(
+        managedRoute || memoryRoute, decisionDeadline, routineSession);
       stage = 'turn_history';
       const activity = await decisionActivity(actor.store, actor.silo,
         computer.assistant, turnToken.conversation, turnToken.turn, historyDeadline, managedTurn);
@@ -247,6 +237,7 @@ export async function startDecision(
       const memoryClaims = { silo: actor.silo, requester: turnToken.requester,
         assistant: computer.assistant, computer: computer.computer, generation: computer.generation,
         conversation: turnToken.conversation, turn: turnToken.turn, thread: turnToken.thread };
+      const routine = await prepareRoutineDispatch(actor, memoryClaims, conversation, turn);
       stage = 'memory';
       const memory = await prepareLoadedMemory(actor.store, binding, memoryClaims,
         conversation, performance.now() + 10_000);
@@ -255,13 +246,17 @@ export async function startDecision(
         memoryClaims, raw, req.headers, requestId, dispatchOptions, identity);
       const { preparation, reads: memoryReads } = preparedMemory;
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
-      const accessStarted = memoryAccessStarted(managedRoute, memory.loaded, started, preparation);
+      const accessStarted = memoryAccessStarted(managedRoute, memory.loaded, started, preparation, routine !== undefined);
       stage = 'authority';
       const authority = await decisionAuthorityFence(actor.store, accessStarted,
         subjects, turnToken.requester, computer.assistant, grants);
+      async function confirmRoutine() {
+        await routine?.confirm(authority.deadline);
+      }
       let needsApproval = false;
       async function confirmAccess() {
         await confirmDecisionAccess(activity, authority, needsApproval, true);
+        await confirmRoutine();
       }
       const snapshot = { include: authority.include, head: authority.head,
         deadline: authority.deadline };
@@ -290,7 +285,7 @@ export async function startDecision(
           payingGroupId: z.string().min(1).parse(data(turn.event)['payingGroupId']), contextDigest };
         await actor.checkBudget(modelCall, fresh, admittedAt, root.rootId);
         const decisionId = await audit('allow', 'memory_read_allowed');
-        const budget = { modelCall, decisionId, admittedAt, ...root };
+        const budget = { modelCall, decisionId, admittedAt, ...root, confirmRoutine };
         await fresh();
         const preparedPayload = { ...memory.payload, ...preparation };
         const memorySend = prepareMemorySend(preparedPayload, identity.memory.memoryContext);
@@ -339,7 +334,7 @@ export async function startDecision(
         linkApprovalAttempt(toolFacts, approvalId);
         const decisionId = await audit(outcome, reason,
           approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
-        const budget = { modelCall, decisionId, admittedAt, ...root };
+        const budget = { modelCall, decisionId, admittedAt, ...root, confirmRoutine };
         const serverId = match[1]!;
         async function confirmToolAccess() {
           // Reuse the earlier chat history and original deadline. Event positions alone
@@ -369,6 +364,7 @@ export async function startDecision(
       requireConnectedClient(req, res);
       const granted = await grantModelCall(actor, modelCall, amountCents, raw,
         fresh, admittedAt, allowModel);
+      await confirmRoutine();
       const reservation = granted.reservationId;
       requestId = granted.requestId;
       res.setHeader('x-request-id', requestId);

@@ -81,3 +81,13 @@ async function resolveAddresses(hostname: string, network: RemoteNetwork, signal
     return await Promise.race([resolution, new Promise<never>(cancelled)]);
   } finally { signal.removeEventListener('abort', abort); }
 }
+
+export function remoteEvidence(outcome: 'responded' | 'outcome_unknown' | 'not_dispatched') {
+  if (outcome === 'not_dispatched') {
+    return 'adapter_dispatch_refused' as const;
+  }
+  if (outcome === 'responded') {
+    return 'adapter_response_received' as const;
+  }
+  return 'adapter_transport_uncertain' as const;
+}

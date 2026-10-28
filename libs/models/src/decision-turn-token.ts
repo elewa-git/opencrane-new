@@ -1,3 +1,4 @@
+import { ModelRequestRefused as RequestRefused } from './state.ts';
 import { providerTurnBindingSchema } from '@opencrane/events';
 import { z } from 'zod';
 
@@ -24,4 +25,20 @@ export function parseTurnToken(raw: unknown) {
 export function requireManagedTurnClaims(raw: unknown, enabled: boolean) {
   if (enabled) return managedTurnSchema.parse(raw);
   return undefined;
+}
+
+export function requireModelRoute(turnToken: z.infer<typeof legacyTurnSchema>,
+  managedRoute: boolean, enabled: boolean) {
+  if (managedRoute) {
+    if (!enabled) {
+      throw new Error('Managed calls are not enabled');
+    }
+  } else if (turnToken.providerId !== undefined) {
+    throw new RequestRefused('Managed provider calls are not available yet');
+  }
+}
+
+export function knownDecisionRoute(url: string | undefined) {
+  return url === '/authorize/models/managed' || url === '/authorize' ||
+    url?.startsWith('/authorize/mcp/');
 }
