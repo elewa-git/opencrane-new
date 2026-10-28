@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
+import { WebSocket } from 'ws';
 import { generateKeyPairSync } from 'node:crypto';
 import { tokenIssuer } from '@opencrane/auth';
 import { until } from '@opencrane/authz/testing';
@@ -444,7 +446,7 @@ async function startComputer(computerId = 'computer') {
   return { wake, restart, close, executed, get starts() { return starts; },
     get sends() { return sends; }, get nativeStarts() { return nativeStarts; },
     get closedSessions() { return closedSessions; }, executedThreads, interruptedThreads, closedThreads, tokens, faults,
-    releaseStart: startReply.resolve, finish };
+    releaseStart: startReply.resolve, finish, get channel() { return channel; } };
 }
 async function savedStarts() {
   const rows = await history(nats.store, 'computer-sales-assistant', 'test');
@@ -1039,7 +1041,7 @@ async function rejectsChangedTarget(change: 'generation' | 'thread' | 'requester
     if (change === 'payer') {
       changed.payingGroupId = 'billing';
     }
-    link.routines.accept(changed);
+    await link.routines.accept(changed);
   }
   await pollRoutine();
   expect(preparedComputer.interruptedThreads).toEqual([]);
@@ -1138,3 +1140,90 @@ async function prohibitionBeforeAdmission() {
 }
 it('prohibition before start admission refuses only the routine and keeps the shared bridge',
   prohibitionBeforeAdmission);
+
+async function completedRoutineClearsOutput() {
+  const link = await startRunning();
+  const send = WebSocket.prototype.send.bind(link.socket);
+  let stops = 0;
+  function holdAcknowledgements(data: Parameters<typeof send>[0]) {
+    if (typeof data === 'string') {
+      const frame = frameSchema.parse(JSON.parse(data));
+      if (frame['type'] === 'ack') return;
+      if (frame['type'] === 'stop') stops++;
+    }
+    send(data);
+  }
+  vi.spyOn(link.socket, 'send').mockImplementation(holdAcknowledgements);
+  preparedComputer.channel.notification({ method: 'item/agentMessage/delta',
+    params: { threadId: selection.threadId, itemId: 'reply', delta: 'routine-private-canary' } });
+  await delay(100);
+  await link.settled();
+  await saveProhibition('Stop');
+  preparedComputer.finish(selection.threadId);
+  function closed() {
+    expect(preparedComputer.closedSessions).toBe(1);
+  }
+  await vi.waitFor(closed);
+  await delay(100);
+  await link.settled();
+  await pollRoutine();
+  await delay(100);
+  let replayed = false;
+  function inspect(raw: Buffer) {
+    if (raw.toString().includes('routine-private-canary')) replayed = true;
+  }
+  link.socket.on('message', inspect);
+  send(JSON.stringify({ type: 'resume', since: 0 }));
+  await delay(100);
+  await link.settled();
+  await pollRoutine();
+  expect(link.rejection).toBeUndefined();
+  expect({ stops, privateTextReplayedAfterProhibition: replayed })
+    .toEqual({ stops: 1, privateTextReplayedAfterProhibition: false });
+}
+it('clears private routine output when completion precedes prohibition polling',
+  completedRoutineClearsOutput);
+
+async function routineRetriesUntilClearance() {
+  const link = await startRunning();
+  // Bind the original method to the socket that sends each frame below.
+  // eslint-disable-next-line @typescript-eslint/unbound-method
+  const send = WebSocket.prototype.send;
+  let heldReceipt: string | undefined;
+  let deliverReceipt: WebSocket['send'] | undefined;
+  let stops = 0;
+  function holdReceipt(this: WebSocket, data: Parameters<typeof send>[0]) {
+    if (typeof data === 'string') {
+      const frame = frameSchema.parse(JSON.parse(data));
+      if (frame['type'] === 'private_output_cleared') {
+        heldReceipt = data;
+        deliverReceipt = send.bind(this);
+        return;
+      }
+      if (frame['type'] === 'stop') stops++;
+    }
+    send.call(this, data, {});
+  }
+  vi.spyOn(WebSocket.prototype, 'send').mockImplementation(holdReceipt);
+  await saveProhibition('Stop');
+  preparedComputer.finish(selection.threadId);
+  await delay(100);
+  await link.settled();
+  await pollRoutine();
+  await delay(100);
+  expect(stops).toBe(1);
+  expect(heldReceipt).toBeDefined();
+  const wrongThread = { type: 'private_output_cleared', conversationId,
+    turnId, threadId: 'replacement-thread' };
+  deliverReceipt!(JSON.stringify(wrongThread), {});
+  await delay(100);
+  await pollRoutine();
+  expect(stops).toBe(2);
+  deliverReceipt!(heldReceipt!, {});
+  await delay(100);
+  await pollRoutine();
+  expect(stops).toBe(2);
+  expect(link.rejection).toBeUndefined();
+}
+it('retries completed routine clearance until the exact thread receipt arrives',
+  routineRetriesUntilClearance);
