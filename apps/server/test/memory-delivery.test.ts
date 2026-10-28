@@ -57,13 +57,13 @@ async function startTurn(id = 'turn', conversationId = 'chat', requesterId = 'al
   await flush();
 }
 async function writeFact(memoryId: string, dependsOn: { scopeId: string;
-  memoryId: string; revision: number }[] = [], ownerId = 'alice') {
+  memoryId: string; revision: number }[] = [], ownerId = 'alice', expiresAt: string | null = null) {
   const personalScope = memoryScopeId('test', 'person', ownerId);
   const hash = createHash('sha256');
   hash.update(JSON.stringify(['test', personalScope, 'person', ownerId, memoryId, 1]));
   await append(`scope-${personalScope}`, 'memory.written', { schemaVersion: 1,
     scopeId: personalScope, scopeKind: 'person', ownerId, memoryId, revision: 1, kind: 'fact',
-    pinned: false, expiresAt: null, sources: [], dependsOn,
+    pinned: false, expiresAt, sources: [], dependsOn,
     keyId: `key:${hash.digest('hex')}`, ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' });
   return { scopeId: personalScope, memoryId, revision: 1 };
 }
@@ -119,6 +119,7 @@ async function setup() {
     scopePositions: [{ scopeId, position }] });
 }
 async function cleanup() {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   link?.socket.terminate();
   await link?.settled();
@@ -554,6 +555,68 @@ async function unrelatedChanges() {
   expect(facts.memoryContext?.events.size).toBe(2);
 }
 it('preserves readers and running turns after unrelated facts and uploads', unrelatedChanges);
+
+async function forgetUnloadedFact(expired: boolean) {
+  if (expired) {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const expiresAt = Date.now() + 1000;
+    await writeFact('unloaded', [], 'alice', new Date(expiresAt).toISOString());
+    vi.setSystemTime(expiresAt);
+  } else {
+    await writeFact('unloaded');
+  }
+  await changed('forgotten', 'unloaded');
+}
+
+function observeScopeStarts() {
+  const read = nats.store.readStream.bind(nats.store);
+  const starts: number[] = [];
+  async function* observe(...args: Parameters<typeof read>) {
+    if (args[0] === `scope-${scopeId}`) {
+      starts.push(args[1]!);
+    }
+    yield* read(...args);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(observe);
+  return starts;
+}
+
+async function advancesPastUnloadedForget(expired: boolean) {
+  const loadedPosition = await nats.store.head(`scope-${scopeId}`);
+  await forgetUnloadedFact(expired);
+  const forgottenPosition = await nats.store.head(`scope-${scopeId}`);
+  const starts = observeScopeStarts();
+  await poll();
+  await poll();
+  expect(starts).toEqual([loadedPosition + 1, 1, forgottenPosition + 1]);
+  const unchanged = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(unchanged.memoryContext?.status).toBe('loaded');
+  expect(unchanged.memoryContext?.events.size).toBe(2);
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
+  expect(computer.grants.has('thread-1')).toBe(true);
+  await detectsPersonalChange('forgotten');
+  expect(starts).toEqual([
+    loadedPosition + 1, 1, forgottenPosition + 1, 1, forgottenPosition + 1, 1,
+  ]);
+}
+it.each([false, true])(
+  'advances past an unloaded forget before detecting a loaded forget, expired=%s',
+  advancesPastUnloadedForget);
+
+async function expiredForgetBeforeCompletedWithdrawal() {
+  const loadedPosition = await nats.store.head(`scope-${scopeId}`);
+  await forgetUnloadedFact(true);
+  const starts = observeScopeStarts();
+  await completionBeforeDetection(false);
+  expect(starts).toEqual([1, loadedPosition + 1, 1, 1]);
+  const rows = await history(nats.store, 'conversation-chat', 'test');
+  const saved = memoryContextRecordedEventSchema.parse(rows.at(-1)!.event);
+  expect(saved.data).toEqual({ ...prepared, action: 'invalidated',
+    reason: 'content_changed', scopePositions: [{ scopeId,
+      position: await nats.store.head(`scope-${scopeId}`) }] });
+}
+it('clears completed output when an unrelated expired forget precedes the loaded forget',
+  expiredForgetBeforeCompletedWithdrawal);
 
 async function reconcilesPollRace(kind: 'recall' | 'completed' | 'closed' | 'lost') {
   await changed();
