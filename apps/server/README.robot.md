@@ -6249,8 +6249,13 @@ Pause and Retire each save one lifecycle event, without manufacturing an owner S
 Their `affectedRun` must match the run occupied before that event; current owner and
 control revisions are checked against the preceding history. Sender admission reads the
 prohibition before budget cleanup. Neither receipt proves termination.
-Routes, subscriptions, other lifecycle causes and
-running-turn interruption remain later work. Execution remains disabled.
+`routine-bridge.ts` tracks routine starts accepted on each socket. The ordinary bridge poll
+checks saved owner Stop/Pause/Retire with `readRootStopEvidence`, shared with budget cleanup.
+It matches the allocated budget root, frozen people, accepted thread and current computer
+generation before sending the existing targeted Stop. Failed reads and sends retry.
+Only accepted terminal reports remove tracking; `private_output_cleared` proves no termination.
+Cold replay does not populate tracking or resend work. Execution remains disabled.
+Routes, subscriptions and other lifecycle causes remain later work.
 Tests in routine-session and routine-sender cover the real owner command, delayed cleanup,
 allocation races, privacy, frozen people, retained holds and late integer-cent settlement.
 Fresh-install/live qualification: NOT RUN. Part of #106, P4-24 PR 12b and PR 12c.

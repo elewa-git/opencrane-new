@@ -19,7 +19,7 @@ flowchart LR
   apps --> ops["apps/ops<br/>background workers"]
   apps --> server["apps/server<br/>back end"]
   ops -->|starts and pauses| computer
-  server -->|messages, private routine preparation and turns, files and Stop for one turn| computer
+  server -->|messages, private routine preparation, turns, files and targeted Stops| computer
   computer -->|preparation replies, reply removal receipts, progress and results| server
   computer -.->|records private thread before tool approval| server
   computer -->|checks command ownership| executor["socket-denied executor"]
@@ -75,6 +75,9 @@ records the routine's spending allowance. It keeps that process for one matching
 A refused or failed preparation leaves other conversations running.
 Expiry closes only the unused process. Stop or disconnect also removes unused preparations.
 The journal returns the input id, turn id and spending root when asking the server to start.
+A saved routine Stop cancels its private turn. Failed cleanup can retry without closing
+other chats. If interruption has not ended the turn after ten seconds, the computer
+closes that turn's private connection so its existing supervisor can remove the process.
 Automatic routine execution remains disabled.
 
 ## Processes it handles

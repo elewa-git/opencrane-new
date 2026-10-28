@@ -39,7 +39,10 @@ that request and keeps the computer connection open for other conversations.
 An internal owner command saves Stop intent for the active run. A separate operation
 stops its existing spending allowance and can recover after a failed save. A repeated
 completion for an older run does not block Stop for the current run. The run stays
-occupied until termination is proved. Automatic routines remain unavailable.
+occupied until termination is proved. The connected bridge checks saved owner Stop,
+Pause and Retire records and cancels only the accepted private routine turn.
+It retries failed delivery and cleanup while other chats keep running.
+Automatic routines remain unavailable.
 
 Owners and admins can read, save or remove company account opt-in for a tool installation.
 Re-registering the server clears the effective choice. Saving opt-in grants no tool access.
@@ -124,7 +127,7 @@ flowchart LR
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
-  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, saved memory Stops, reply removal receipts and checked reports| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, saved routine and memory Stops, reply removal receipts and checked reports| computer["apps/computer<br/>assistant computers"]
   computer -.->|records private thread before tool approval| server
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime

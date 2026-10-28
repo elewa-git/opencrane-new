@@ -1,3 +1,4 @@
+import type { routineBridge } from '../routine-bridge.ts';
 import type { memoryBridge } from '../memory/bridge.ts';
 import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -60,7 +61,8 @@ function pendingManualStops(rows: Awaited<ReturnType<typeof chatHistory>>,
 export function assistantProcessor(options: WatchOptions, tokens: Tokens, refused: Set<string>,
   connection: Connection,
   connectionId: (assistantId: string) => number | undefined, logger: Logger,
-  connected?: (assistantId: string) => { memory: ReturnType<typeof memoryBridge> } | undefined) {
+  connected?: (assistantId: string) => { memory: ReturnType<typeof memoryBridge>;
+    routines?: ReturnType<typeof routineBridge> } | undefined) {
   const seen = new Map<string, Progress>();
   const checkingStops = new Map<string, Promise<void>>();
   let watchedAssistants = new Set<string>();
@@ -239,6 +241,17 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     return pending;
   }
 
+  function pollRoutines(sessions: AgentSession[]) {
+    const pending: Promise<void>[] = [];
+    for (const session of sessions) {
+      const link = connected?.(session.assistantId);
+      if (link?.routines) {
+        pending.push(link.routines.poll(session.conversationId));
+      }
+    }
+    return pending;
+  }
+
   function pollStops(sessions: AgentSession[]) {
     for (const conversation of sessions) {
       const conversationId = conversation.conversationId;
@@ -308,5 +321,19 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     }
   }
 
-  return { processAssistant, pollStops, pollMemory, settledStops, watchControls, forgetMissing };
+  return { processAssistant, pollStops, pollMemory, pollRoutines, settledStops,
+    watchControls, forgetMissing };
+}
+
+export function groupSessions(sessions: AgentSession[]) {
+  const groups = new Map<string, AgentSession[]>();
+  for (const session of sessions) {
+    let group = groups.get(session.assistantId);
+    if (!group) {
+      group = [];
+      groups.set(session.assistantId, group);
+    }
+    group.push(session);
+  }
+  return [...groups.values()];
 }

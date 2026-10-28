@@ -1,0 +1,1 @@
+- Saved routine Stop, Pause and Retire now interrupt only the accepted private turn. Failed delivery and cleanup retry without closing other chats; unresponsive routine turns close their own private connection after ten seconds. Execution remains disabled.

@@ -345,7 +345,9 @@ async function startComputer(computerId = 'computer') {
     function close() {
       if (!closed) {
         closedSessions++;
-        if (threadId) closedThreads.push(threadId);
+        if (threadId) {
+          closedThreads.push(threadId);
+        }
       }
       closed = true;
       lifetime.resolve();
@@ -359,7 +361,9 @@ async function startComputer(computerId = 'computer') {
       }
       if (method === 'turn/interrupt') {
         interruptedThreads.push(String(params['threadId']));
-        if (faults.stallInterrupt) await interruptReply.promise;
+        if (faults.stallInterrupt) {
+          await interruptReply.promise;
+        }
       }
       if (method === 'turn/start') {
         expect(closed).toBe(false);
@@ -367,7 +371,9 @@ async function startComputer(computerId = 'computer') {
         expect(JSON.stringify(params)).toContain('Private routine instructions');
         executedThreads.push(String(threadId));
         starts++;
-        if (faults.delayStart) await startReply.promise;
+        if (faults.delayStart) {
+          await startReply.promise;
+        }
       }
       return Promise.resolve({ thread: { id: threadId, ephemeral: true, path: null },
         turn: { id: 'recorded-turn' } });
@@ -884,8 +890,12 @@ async function saveProhibition(kind: 'Stop' | 'Pause' | 'Retire') {
 }
 async function pollRoutine() {
   const link = await preparedComputer.wake();
-  function connected() { return link; }
-  function connectionId() { return 1; }
+  function connected() {
+    return link;
+  }
+  function connectionId() {
+    return 1;
+  }
   const options = { silo: 'test', store: nats.store, keys, db: undefined! };
   const logger = createLogger('routine-stop-test', { level: 'silent' });
   const processor = assistantProcessor(options, preparedComputer.tokens, new Set(), forbidden,
@@ -980,7 +990,9 @@ async function runningNeighbour(link: Awaited<ReturnType<typeof preparedComputer
     requesterId: 'bob', assistantId: 'sales-assistant', executionMode: 'restricted',
     text: 'Private routine instructions', token: 'preparing', expiresAt: Date.now() + 60_000 };
   link.socket.send(JSON.stringify(frame));
-  function running() { expect(preparedComputer.starts).toBe(2); }
+  function running() {
+    expect(preparedComputer.starts).toBe(2);
+  }
   await vi.waitFor(running, { timeout: 5000 });
 }
 
@@ -993,7 +1005,9 @@ async function boundedPrivateCleanup() {
   await pollRoutine();
   await vi.waitFor(interruptedOnce);
   expect(preparedComputer.closedThreads).toEqual([]);
-  function closed() { expect(preparedComputer.closedThreads).toEqual([selection.threadId]); }
+  function closed() {
+    expect(preparedComputer.closedThreads).toEqual([selection.threadId]);
+  }
   await vi.waitFor(closed, { timeout: 12_000 });
   expect(performance.now() - observed).toBeGreaterThanOrEqual(10_000);
   expect(performance.now() - observed).toBeLessThan(12_000);
@@ -1014,9 +1028,15 @@ async function rejectsChangedTarget(change: 'generation' | 'thread' | 'requester
     // Challenge the live connection binding; saved admission remains the authority.
     const root = actor.state.roots[0]!;
     const changed = { ...root, task: 'chat_turn' as const, executionMode: 'restricted' as const };
-    if (change === 'thread') changed.threadId = 'replacement-thread';
-    if (change === 'requester') changed.requesterId = 'bob';
-    if (change === 'payer') changed.payingGroupId = 'billing';
+    if (change === 'thread') {
+      changed.threadId = 'replacement-thread';
+    }
+    if (change === 'requester') {
+      changed.requesterId = 'bob';
+    }
+    if (change === 'payer') {
+      changed.payingGroupId = 'billing';
+    }
     link.routines.accept(changed);
   }
   await pollRoutine();
@@ -1044,24 +1064,28 @@ it('lost connection and replay cannot resurrect the prohibited routine', disconn
 
 async function stoppedBeforeGrant() {
   const link = await preparedComputer.wake();
-  const send = link.socket.send.bind(link.socket);
+  const send = vi.mocked(link.socket.send).getMockImplementation()!;
   let held: string | undefined;
   function holdGrant(bytes: Parameters<typeof send>[0]) {
     if (typeof bytes === 'string' && bytes.includes('"type":"ack"') && bytes.includes('"token"')) {
       held = bytes;
       return;
     }
-    send(bytes);
+    send(bytes, {});
   }
   vi.spyOn(link.socket, 'send').mockImplementation(holdGrant);
   expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
-  function acknowledged() { expect(held).toBeDefined(); }
+  function acknowledged() {
+    expect(held).toBeDefined();
+  }
   await vi.waitFor(acknowledged, { timeout: 5000 });
   await saveProhibition('Stop');
   await pollRoutine();
-  function closed() { expect(preparedComputer.closedSessions).toBe(1); }
+  function closed() {
+    expect(preparedComputer.closedSessions).toBe(1);
+  }
   await vi.waitFor(closed);
-  send(held!);
+  send(held!, {});
   await pollRoutine();
   expect(preparedComputer.starts).toBe(0);
   expect(preparedComputer.interruptedThreads).toEqual([]);
@@ -1079,7 +1103,9 @@ async function wrongTerminal() {
   await link.settled();
   expect(preparedComputer.closedSessions).toBe(0);
   preparedComputer.finish(selection.threadId);
-  function closed() { expect(preparedComputer.closedSessions).toBe(1); }
+  function closed() {
+    expect(preparedComputer.closedSessions).toBe(1);
+  }
   await vi.waitFor(closed);
   await link.settled();
   await pollRoutine();
@@ -1100,7 +1126,9 @@ async function prohibitionBeforeAdmission() {
   }
   vi.spyOn(nats.store, 'append').mockImplementation(prohibitAfterReport);
   expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
-  function closed() { expect(preparedComputer.closedSessions).toBe(1); }
+  function closed() {
+    expect(preparedComputer.closedSessions).toBe(1);
+  }
   await vi.waitFor(closed, { timeout: 5000 });
   expect(preparedComputer.starts).toBe(0);
   expect(link.socket.readyState).toBe(link.socket.OPEN);

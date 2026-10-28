@@ -91,6 +91,7 @@ class TurnRunner {
   readonly gate = new BridgeGate();
   private preparingCount = 0;
   private readonly stoppedTurns = new Set<string>();
+  private readonly routineStopTimers = new Map<string, NodeJS.Timeout>();
   private readonly turnModels = new Map<string, string>();
   private readonly renewals = new Map<string, Promise<void>>();
   private readonly stopRemovals = new WeakMap<Turn, Promise<void>>();
@@ -423,6 +424,8 @@ class TurnRunner {
 
   private releaseTurn(turnId: string) {
     if (this.keepInstallingTurn(turnId)) return;
+    clearTimeout(this.routineStopTimers.get(turnId));
+    this.routineStopTimers.delete(turnId);
     const threadId = this.findRunningThread(turnId);
     const turn = threadId && this.state.running.get(threadId);
     if (threadId) this.approvals?.endThread(threadId);
@@ -658,10 +661,19 @@ class TurnRunner {
       this.stoppedTurns.add(turnId);
     }
     this.cancelTurn(input);
+    this.boundRoutineStop(input);
     this.confirmPrivateClearance(turnId, cleared);
     const heldThread = this.findRunningThread(turnId);
     if (!this.gate.closed) {
-      await this.removeStoppedAccess(input, heldThread);
+      try {
+        await this.removeStoppedAccess(input, heldThread);
+      } catch (error) {
+        // Retry this private turn on the next Stop without disconnecting its neighbours.
+        if (input.senderAttemptId && input.executionMode === 'restricted') {
+          return;
+        }
+        throw error;
+      }
     } else this.endTurnHolds(heldThread);
     const codexTurnId = this.state.codexTurns.get(turnId);
     if (!codexTurnId) {
@@ -672,6 +684,21 @@ class TurnRunner {
       return;
     }
     await this.interruptOnce(input, threadId, codexTurnId);
+  }
+
+  private boundRoutineStop(input: Turn) {
+    if (!input.senderAttemptId || input.executionMode !== 'restricted' ||
+        this.routineStopTimers.has(input.id)) {
+      return;
+    }
+    const session = this.state.sessions.get(input.id);
+    if (!session) {
+      return;
+    }
+    const expired = session.close;
+    // Keep the original deadline across retries and a delayed native start reply.
+    const timer = setTimeout(expired, 10_000);
+    this.routineStopTimers.set(input.id, timer);
   }
 
   private confirmPrivateClearance(turnId: string, cleared: (() => void) | undefined) {
@@ -847,8 +874,11 @@ class TurnRunner {
 
   private confirmedTerminal(input: Turn, terminal: Record<string, unknown>) {
     const expected = this.state.codexTurns.get(input.id);
-    if (this.gate.closed && (terminal['id'] !== expected
-      || !['completed', 'interrupted', 'failed'].includes(String(terminal['status'])))) return false;
+    const routineStopping = input.senderAttemptId && this.stoppedTurns.has(input.id);
+    if ((this.gate.closed || routineStopping) && (terminal['id'] !== expected
+      || !['completed', 'interrupted', 'failed'].includes(String(terminal['status'])))) {
+      return false;
+    }
     this.gate.awaitingTerminal.delete(input.id);
     return true;
   }
