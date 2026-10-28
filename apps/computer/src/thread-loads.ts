@@ -73,7 +73,8 @@ function privateTools(input: Turn, binding: Pick<PrivateThreadBinding, 'tools'>)
   }
   const definition = record(JSON.parse(server.definitions[0]!));
   const name = definition['name'];
-  if ((name !== 'recall' && name !== 'remember' && name !== 'correct') || server.modes[name] !== 'allow'
+  if ((name !== 'recall' && name !== 'remember' && name !== 'correct' && name !== 'forget')
+    || server.modes[name] !== 'allow'
     || Object.keys(server.modes).length !== 1) throw new Error('Private tool list refused');
   return tools;
 }

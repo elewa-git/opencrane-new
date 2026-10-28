@@ -120,7 +120,8 @@ async function refusesQualification(change: typeof invalidQualifications[number]
 }
 it.each(invalidQualifications)('offers no forget with %s', refusesQualification);
 
-async function refusesChangedQualification(stage: 'catalogue' | 'access') {
+async function refusesChangedQualification(stage: 'catalogue' | 'access',
+  change: typeof invalidQualifications[number]) {
   const { input, state } = fixture();
   const started = Promise.withResolvers<void>();
   const resume = Promise.withResolvers<void>();
@@ -138,12 +139,20 @@ async function refusesChangedQualification(stage: 'catalogue' | 'access') {
   if (stage === 'access') input.canUse.mockImplementation(canUse);
   const assembling = buildPrivateTurnForgetTools(input);
   await started.promise;
-  input.qualification.checks['persistence'] = 'FAIL';
+  if (change === 'missing evidence') Reflect.deleteProperty(input, 'qualification');
+  if (change === 'failed evidence') input.qualification.checks['persistence'] = 'FAIL';
+  if (change === 'another image') input.qualification.imageDigest = `sha256:${'c'.repeat(64)}`;
+  if (change === 'another source') input.qualification.sourceSha = 'd'.repeat(40);
+  if (change === 'another host') input.qualification.environmentId = 'another-host';
   resume.resolve();
   expect(await assembling).toEqual([]);
 }
-it.each(['catalogue', 'access'] as const)(
-  'offers no forget when evidence fails during %s reads', refusesChangedQualification);
+const changedEvidence: ['catalogue' | 'access', typeof invalidQualifications[number]][] = [];
+for (const stage of ['catalogue', 'access'] as const) {
+  for (const change of invalidQualifications) changedEvidence.push([stage, change]);
+}
+it.each(changedEvidence)(
+  'offers no forget after %s waits with %s', refusesChangedQualification);
 
 const invalidBindings = [
   'no registration', 'no caller', 'another turn caller', 'no grant',

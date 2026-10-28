@@ -50,7 +50,8 @@ export async function privateCatalogue(callers: ReturnType<typeof privateCallers
 export { checkPrivateTurnTools } from '../../src/chat/turn-tools.ts';
 
 export function privateToolOffer(name: 'recall' | 'remember' | 'correct' | 'forget') {
-  let definition: typeof recallTool | typeof rememberTool | typeof correctTool | typeof forgetTool = recallTool;
+  let definition: typeof recallTool | typeof rememberTool | typeof correctTool | typeof forgetTool;
+  definition = recallTool;
   if (name === 'remember') definition = rememberTool;
   if (name === 'correct') definition = correctTool;
   if (name === 'forget') definition = forgetTool;

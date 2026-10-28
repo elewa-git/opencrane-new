@@ -1,0 +1,1 @@
+- Prepare one reviewed personal Forget definition for discovery on a fresh private thread. Discovery reads no facts and gives no permission to forget; production memory admission remains disabled.

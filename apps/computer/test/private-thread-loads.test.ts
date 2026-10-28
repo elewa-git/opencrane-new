@@ -282,16 +282,17 @@ async function refusesResponse(change: string) {
 it.each(['ephemeral', 'path', 'environments', 'missing environments', 'thread', 'discovery'])(
   'unloads and drops a refused %s response', refusesResponse);
 
-const races: [string, string][] = [];
+const races: ['recall' | 'forget', string, string][] = [];
 for (const stage of ['catalogue', 'reload', 'inventory', 'discovery']) {
   for (const ending of ['cancel', 'stop', 'disconnect', 'process', 'generation', 'ended', 'thread']) {
-    races.push([stage, ending]);
+    races.push(['recall', stage, ending]);
+    races.push(['forget', stage, ending]);
   }
 }
-async function refusesLate(stage: string, ending: string) {
+async function refusesLate(name: 'recall' | 'forget', stage: string, ending: string) {
   const test = await fixture();
   try {
-    const turn = await test.turn();
+    const turn = await test.turn('A', 1, 1, name);
     test.pause(stage);
     const pending = turn.load();
     const refused = expect(pending).rejects.toThrow('Private tools could not be loaded');
@@ -316,7 +317,7 @@ async function refusesLate(stage: string, ending: string) {
     expect(test.mcp.size).toBe(0);
   } finally { await test.close(); }
 }
-it.each(races)('discards delayed %s completion after %s', refusesLate);
+it.each(races)('discards %s delayed %s completion after %s', refusesLate);
 
 async function discoveryTimeout() {
   const test = await fixture();
@@ -516,10 +517,11 @@ it.each(['tools', 'registration', 'grant'] as const)(
 
 const changedApproval = ['requester', 'assistant', 'grant expiry', 'grant computer',
   'grant silo', 'qualification', 'runtime', 'recorded turn', 'copied tools'] as const;
-async function refusesChangedApproval(change: typeof changedApproval[number]) {
+async function refusesChangedApproval(name: 'recall' | 'forget',
+  change: typeof changedApproval[number]) {
   const test = await fixture();
   try {
-    const turn = await test.turn();
+    const turn = await test.turn('A', 1, 1, name);
     test.pause('discovery');
     const loading = turn.load();
     const refused = expect(loading).rejects.toThrow('Private tools could not be loaded');
@@ -542,7 +544,12 @@ async function refusesChangedApproval(change: typeof changedApproval[number]) {
     expect(turn.close).toHaveBeenCalled();
   } finally { await test.close(); }
 }
-it.each(changedApproval)('refuses changed assembly %s during discovery', refusesChangedApproval);
+const approvalChanges: ['recall' | 'forget', typeof changedApproval[number]][] = [];
+for (const name of ['recall', 'forget'] as const) {
+  for (const change of changedApproval) approvalChanges.push([name, change]);
+}
+it.each(approvalChanges)(
+  'refuses %s with changed assembly %s during discovery', refusesChangedApproval);
 
 async function preservesOtherRegistration(change: 'registration' | 'session') {
   const test = await fixture();

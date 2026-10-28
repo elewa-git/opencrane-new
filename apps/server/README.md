@@ -150,7 +150,7 @@ flowchart LR
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
   server -->|waits briefly for Forget locks| postgres
   server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, routine Stops even when evidence reads fail, saved memory Stops, reply removal receipts after completion and checked reports| computer["apps/computer<br/>assistant computers"]
-  computer -.->|records private thread before tool approval| server
+  computer -.->|records private thread for memory discovery| server
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime
   runtime -->|checks memory access for recall, remember and personal corrections| server
@@ -178,10 +178,11 @@ definition for the requester's personal scope. It requires passing privacy check
 the exact server source, computer image and host, before and after preparing the list.
 Missing or changed evidence leaves the list empty. It refuses Ask and Block choices. Private tool
 delivery remains disabled; the builder is exercised by local tests.
-Separate internal builders prepare remember and Correct definitions with the same privacy
-evidence, saved-turn and caller checks before and after loading. It reads no facts
-and saves nothing. Passing recall checks cannot enable native writes; public
-discovery still lists recall alone.
+Separate internal builders prepare remember, Correct and Forget definitions with the same
+privacy evidence, saved-turn and caller checks before and after loading. They read no facts
+and save nothing. Forget describes the target, revision and proof needed to request
+removal. Discovery gives no permission to remove a fact. Passing recall checks cannot
+enable native writes; public discovery still lists recall alone.
 Memory tests finish their setup reads before signing short-lived requests. Separate tests
 delay history and permission reads inside the server and record only elapsed times.
 These check that slow preparation leaves the original two-second pass available
