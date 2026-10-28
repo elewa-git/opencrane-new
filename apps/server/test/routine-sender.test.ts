@@ -944,6 +944,14 @@ function interruptedOnce() {
 }
 async function retriesRoutineStop(failure: 'send' | 'cleanup') {
   const link = await startRunning();
+  const cleared = Promise.withResolvers<Record<string, unknown>>();
+  function received(raw: Buffer) {
+    const frame = frameSchema.parse(JSON.parse(raw.toString()));
+    if (frame['type'] === 'private_output_cleared') {
+      cleared.resolve(frame);
+    }
+  }
+  link.socket.on('message', received);
   await saveProhibition('Stop');
   if (failure === 'send') {
     vi.spyOn(link.socket, 'send').mockImplementationOnce(forbidden);
@@ -952,6 +960,10 @@ async function retriesRoutineStop(failure: 'send' | 'cleanup') {
   }
   await pollRoutine();
   await new Promise(setImmediate);
+  if (failure === 'cleanup') {
+    expect(await cleared.promise).toMatchObject({ conversationId, turnId,
+      threadId: selection.threadId });
+  }
   expect(preparedComputer.interruptedThreads).toEqual([]);
   await pollRoutine();
   await vi.waitFor(interruptedOnce);
