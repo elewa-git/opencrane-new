@@ -855,3 +855,32 @@ async function unrelatedExpiryAndPin() {
   expect(facts.memoryContext?.status).toBe('loaded');
 }
 it('an unrelated expiry and a pin without expiry leave the turn running', unrelatedExpiryAndPin);
+
+async function expiredAdditionBeforeCompletedWithdrawal(replace: boolean) {
+  const expiresAt = Date.now() + 30_000;
+  const addition = await writeFact('expiring', [], 'alice', new Date(expiresAt).toISOString());
+  const position = await nats.store.head(`scope-${scopeId}`);
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(expiresAt);
+  // Retain the saved load from a recall whose delivery was refused at expiry.
+  await append('conversation-chat', 'agent.memory_context_recorded', { ...prepared,
+    action: 'loaded', delivery: 'recall', callDigest: 'a'.repeat(64),
+    dispatchDigest: 'b'.repeat(64), byteCount: 50, additions: [addition],
+    scopePositions: [{ scopeId, position }] });
+  await poll();
+  await poll();
+  const before = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(before.memoryContext?.status).toBe('loaded');
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
+  await completionBeforePoll(replace, true);
+  await poll();
+  const cold = { readStream: nats.store.readStream.bind(nats.store) };
+  const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
+  expect(facts.memoryContext).toMatchObject({ status: 'ended', reason: 'content_changed',
+    references: [{ scopeId, memoryId: 'fact', revision: 1 }, addition],
+    executionAvailable: false });
+  expect(facts.memoryContext?.events.size).toBe(4);
+}
+it.each([false, true])(
+  'a recall saved at expiry cannot block completed output clearance, replacement=%s',
+  expiredAdditionBeforeCompletedWithdrawal);

@@ -1882,3 +1882,56 @@ async function factExpiresBeforeRecallRelease() {
 }
 it('withholds recalled bytes when the fact expires after loading but before release',
   factExpiresBeforeRecallRelease);
+
+async function recallCheckAndTimestampAgree() {
+  await seedRecallFact('earlier');
+  expect((await directRecall('earlier')).statusCode).toBe(200);
+  const expiresAt = Date.now() + 60_000;
+  await seedRecallFact('expiring', new Date(expiresAt).toISOString());
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(expiresAt - 1);
+  const body = recallCall('expiry-boundary');
+  const token = await signedRecall(setup, {}, body);
+  // Let validation see the last usable millisecond while a fresh Date sees expiry.
+  vi.setSystemTime(expiresAt);
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(expiresAt - 1);
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  async function expireAfterAppend(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    if (parsed.success && parsed.data.data.action === 'loaded') {
+      clock.mockReturnValue(expiresAt);
+    }
+    return result;
+  }
+  const spy = vi.spyOn(setup.nats.store, 'append').mockImplementation(expireAfterAppend);
+  try {
+    const request = { method: 'POST' as const, url: route, payload: body,
+      headers: { ...headers, 'x-memory-context': token } };
+    const response = await app.inject(request);
+    expect(response.statusCode).toBe(403);
+    expect(response.body).not.toContain('Private canary');
+    expect(response.body).not.toContain('recallProof');
+    const rows = await history(setup.nats.store, 'conversation-conversation', 'test');
+    const saved = memoryContextRecordedEventSchema.parse(rows.at(-1)!.event);
+    expect(saved.data.action).toBe('loaded');
+    expect(saved.data.additions).toContainEqual({ scopeId, memoryId: 'expiring', revision: 1 });
+    expect(saved.time).toBe(new Date(expiresAt - 1).toISOString());
+    const options = { silo: 'test', store: setup.nats.store };
+    const input = { conversationId: 'conversation', turnId: 'turn', threadId: 'thread',
+      inputGeneration: saved.data.inputGeneration };
+    expect(await invalidateMemoryContext(options, input)).toMatchObject({ status: 'invalidated' });
+    const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store) };
+    const facts = await readChatFacts(cold, 'test', 'conversation', 'turn');
+    expect(facts.memoryContext).toMatchObject({ status: 'invalidated', reason: 'expired',
+      executionAvailable: false, recallCalls: 2 });
+    expect(facts.memoryContext?.references).toHaveLength(2);
+    expect(facts.memoryContext?.events.size).toBe(4);
+  } finally {
+    spy.mockRestore();
+    clock.mockRestore();
+    vi.useRealTimers();
+  }
+}
+it('uses the recall validation time for a load whose delivery is refused at expiry',
+  recallCheckAndTimestampAgree);

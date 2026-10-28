@@ -556,3 +556,36 @@ async function unavailableExpiryHistory() {
   expect(facts.memoryContext?.status).toBe('loaded');
 }
 it('does not claim proven expiry when history is unavailable', unavailableExpiryHistory);
+
+async function expiredAtLoadDoesNotBlockForget(transitive: boolean) {
+  const expiresAt = Date.now() + 60_000;
+  const expiring = { ...reference, memoryId: 'expiring' };
+  await append(`scope-${scopeId}`, 'memory.written', { ...memoryWrittenExample,
+    scopeId, memoryId: expiring.memoryId, expiresAt: new Date(expiresAt).toISOString() });
+  let addition = expiring;
+  if (transitive) {
+    addition = { ...reference, memoryId: 'dependent' };
+    await append(`scope-${scopeId}`, 'memory.written', { ...memoryWrittenExample,
+      scopeId, memoryId: addition.memoryId, dependsOn: [expiring] });
+  }
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    vi.setSystemTime(expiresAt);
+    await load([addition], { callDigest: 'c'.repeat(64), dispatchDigest: 'd'.repeat(64) });
+    expect(await invalidate({ causeId: undefined })).toEqual({ status: 'unchanged' });
+    await change('forgotten');
+    const receipt = await invalidate();
+    expect(receipt).toMatchObject({ status: 'invalidated' });
+    expect(await invalidate()).toEqual(receipt);
+    const cold = { readStream: setup.store.readStream.bind(setup.store) };
+    const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
+    expect(facts.memoryContext).toMatchObject({ status: 'invalidated',
+      reason: 'content_changed', references: [reference, addition], executionAvailable: false });
+    expect(facts.memoryContext?.events.size).toBe(4);
+  } finally {
+    vi.useRealTimers();
+  }
+}
+it.each([false, true])(
+  'an addition expired at load time cannot block a later forget, transitive=%s',
+  expiredAtLoadDoesNotBlockForget);
