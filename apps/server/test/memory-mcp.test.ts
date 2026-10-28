@@ -16,7 +16,7 @@ import { grantStream } from '@opencrane/authz';
 import { catalogueEvidence, fixture, reviewCatalogue,
   toolEvidence } from '@opencrane/models/testing';
 import { envelope, history, memoryRights, parseMemoryRequest, readToolPolicy, startDecision,
-  verifyMemoryContext, readActiveMember } from '@opencrane/models';
+  verifyMemoryContext, readActiveMember, MemberAccessRefused } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { limits, listFacts } from '../src/memory/reads.ts';
@@ -25,6 +25,7 @@ import { checkRecallProof } from '../src/memory/recall-proof.ts';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 import * as memoryPreparation from '../../../libs/models/src/memory-prepare-request.ts';
+import * as correctionCommands from '../src/memory/correct.ts';
 import { timeMemoryPath } from './support/memory-path-timing.ts';
 
 declare module 'vitest' {
@@ -3502,12 +3503,16 @@ async function removedDuringCorrectionStaging() {
   let staged = false;
   let removed = false;
   let unavailable = false;
+  let stagedAccessChecks = 0;
   function createCipher(...args: Parameters<typeof originalCipher>) {
     const cipher = originalCipher(...args);
     staged = true;
     return cipher;
   }
   async function* readStream(...args: Parameters<typeof originalRead>) {
+    if (staged && args[0] === 'mcp-memory') {
+      stagedAccessChecks += 1;
+    }
     if (staged && !removed && args[0] === 'mcp-memory') {
       removed = true;
       await setup.append('member-alice', 'member.removed', {
@@ -3523,14 +3528,19 @@ async function removedDuringCorrectionStaging() {
   cipher.mockImplementationOnce(createCipher);
   const reads = vi.spyOn(setup.nats.store, 'readStream');
   reads.mockImplementation(readStream);
+  const corrections = vi.spyOn(correctionCommands, 'correct');
   try {
     const response = await sendChange(request, token);
+    expect(corrections).toHaveBeenCalledTimes(1);
+    await expect(corrections.mock.results[0]!.value).rejects.toBeInstanceOf(MemberAccessRefused);
+    expect(stagedAccessChecks).toBe(1);
     expect(removed).toBe(true);
     expect(unavailable).toBe(true);
     expect(response.statusCode).toBe(403);
     expect(response.json()).toEqual({ status: 'refused' });
     expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(before);
   } finally {
+    corrections.mockRestore();
     reads.mockRestore();
     cipher.mockRestore();
   }
@@ -3656,3 +3666,55 @@ async function correctionPublicationActivity(change: 'loaded' | 'closed' | 'unre
 it.each(['loaded', 'closed', 'unrelated'] as const)(
   'checks %s conversation activity before publishing a correction', correctionPublicationActivity);
 
+async function removedBeforeCorrectionPublication(throws: boolean) {
+  const request = await changeRequest('correct', false);
+  const token = await changeToken(request);
+  const before = await setup.nats.store.head(`scope-${scopeId}`);
+  const original = setup.nats.store.append.bind(setup.nats.store);
+  const originalHead = setup.nats.store.head.bind(setup.nats.store);
+  let removed = false;
+  let dependencyFailed = false;
+  async function append(command: Parameters<typeof original>[0]) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'memory.corrected') {
+      await setup.append('member-alice', 'member.removed', {
+        memberId: 'alice', removedBy: 'owner' });
+      removed = true;
+    }
+    const result = await original(command);
+    if (throws && event.type === 'memory.corrected' && result.status === 'unavailable') {
+      if (!(result.cause instanceof Error)) {
+        throw new Error('Missing publication refusal');
+      }
+      throw result.cause;
+    }
+    return result;
+  }
+  async function head(...args: Parameters<typeof originalHead>) {
+    if (removed && args[0] === 'assistant-assistant') {
+      dependencyFailed = true;
+      throw new Error('Dependency unavailable');
+    }
+    return originalHead(...args);
+  }
+  const corrections = vi.spyOn(correctionCommands, 'correct');
+  const appends = vi.spyOn(setup.nats.store, 'append').mockImplementation(append);
+  const heads = vi.spyOn(setup.nats.store, 'head').mockImplementation(head);
+  try {
+    const response = await sendChange(request, token);
+    expect(response.statusCode, response.body).toBe(403);
+    expect(removed).toBe(true);
+    expect(dependencyFailed).toBe(false);
+    expect(corrections).toHaveBeenCalledTimes(1);
+    await expect(corrections.mock.results[0]!.value).rejects.toBeInstanceOf(MemberAccessRefused);
+    expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(before);
+    expect(response.json()).toEqual({ status: 'refused' });
+  } finally {
+    corrections.mockRestore();
+    heads.mockRestore();
+    appends.mockRestore();
+  }
+}
+it.each([false, true])(
+  'keeps saved removal ahead of publication dependency errors (throws=%s)',
+  removedBeforeCorrectionPublication);
