@@ -12,7 +12,7 @@ import { HandlerRuntime } from '@opencrane/handlers';
 import { memoryCleanupHandler } from '../../ops/test/server.ts';
 import { until } from '../../../libs/handlers/test/helpers.ts';
 import { computers, groups, memoryKeys, conversationKeys, memoryProjection, memoryScopeId,
-  pgDb, ProjectionRunner, conversations } from '@opencrane/projections';
+  pgDb, ProjectionRunner, conversations, type Db } from '@opencrane/projections';
 import * as projections from '@opencrane/projections';
 import { memoryWrittenEventSchema, memoryForgottenEventSchema, memoryCorrectedEventSchema, type MemoryIdentity,
   type memoryWrittenDataSchema } from '@opencrane/events';
@@ -585,6 +585,74 @@ async function acceptedSharedCleanup(kind: SharedForgetKind, mode: string) {
   await runner.run(projection);
   return { target, identity, candidate, tombstone };
 }
+
+it.each(['command', 'fact'] as const)(
+  'forgets after a short PostgreSQL %s lock wait', async function delayedForgetLock(kind) {
+    const target = await sharedForgetTarget('group', `lock-${kind}`);
+    const reference = commandReference('acme', target.scopeId, 'bob', 'forget');
+    let lockName = `memory-command:${reference}`;
+    if (kind === 'fact') {
+      lockName = `memory-fact:acme:${target.scopeId}:target`;
+    }
+    const databaseLockName = `opencrane:projection:${lockName}`;
+    const client = await storage.queue.connect();
+    await client.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [databaseLockName]);
+    const attempted = Promise.withResolvers<void>();
+    const lock = memory.db.lock!.bind(memory.db);
+    async function trackedLock<Result>(name: string, work: (db: Db) => Promise<Result>,
+      options?: { timeoutMs: number; signal?: AbortSignal }) {
+      if (name === lockName) attempted.resolve();
+      return lock(name, work, options);
+    }
+    const lockSpy = vi.spyOn(memory.db, 'lock').mockImplementation(trackedLock);
+    const appendSpy = vi.spyOn(nats.store, 'append');
+    const pending = sharedForget(target).then();
+    function requestFinished() {
+      throw new Error('Forget finished before trying the PostgreSQL lock');
+    }
+    try {
+      await Promise.race([attempted.promise, pending.then(requestFinished)]);
+      // Model a slow database reply without exhausting the two-second access check.
+      await delay(150);
+      await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [databaseLockName]);
+      const response = await pending;
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({ outcome: 'accepted', hidden: true });
+      expect(appendSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      await client.query('SELECT pg_advisory_unlock_all()');
+      client.release();
+      await pending;
+      appendSpy.mockRestore();
+      lockSpy.mockRestore();
+    }
+  });
+
+it('refuses Forget when access expires during the database lock work',
+  async function expiredForgetLock() {
+    const target = await sharedForgetTarget('group', 'expired-lock');
+    const lock = memory.db.lock!.bind(memory.db);
+    async function slowLock<Result>(name: string, work: (db: Db) => Promise<Result>,
+      options?: { timeoutMs: number; signal?: AbortSignal }) {
+      async function delayedWork(db: Db) {
+        if (name.startsWith('memory-fact:')) await delay(2100);
+        return work(db);
+      }
+      return lock(name, delayedWork, options);
+    }
+    const lockSpy = vi.spyOn(memory.db, 'lock').mockImplementation(slowLock);
+    const appendSpy = vi.spyOn(nats.store, 'append');
+    try {
+      const response = await sharedForget(target);
+      expect(response.statusCode).toBe(503);
+      expect(appendSpy).not.toHaveBeenCalled();
+      expect(keys.status({ silo: 'acme', ...target, memoryId: 'target', revision: 1 }))
+        .toBe('available');
+    } finally {
+      appendSpy.mockRestore();
+      lockSpy.mockRestore();
+    }
+  });
 
 async function expectSharedCleanupStatus(target: SharedForgetTarget, cleanupStatus: string) {
   const status = await get(`${target.url}/changes/forget`);
