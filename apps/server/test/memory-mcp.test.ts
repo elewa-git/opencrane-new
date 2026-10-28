@@ -3612,6 +3612,7 @@ async function correctionPublicationActivity(change: 'loaded' | 'closed' | 'unre
   const before = await setup.nats.store.head(`scope-${scopeId}`);
   const original = setup.nats.store.append.bind(setup.nats.store);
   let intercepted = false;
+  let publicationResult: Awaited<ReturnType<typeof original>> | undefined;
   async function append(command: Parameters<typeof original>[0]) {
     const event = z.object({ type: z.string() }).parse(command.event);
     if (event.type === 'memory.corrected') {
@@ -3626,16 +3627,21 @@ async function correctionPublicationActivity(change: 'loaded' | 'closed' | 'unre
       } else {
         await setup.append('member-unrelated', 'member.invited', {
           memberId: 'unrelated', email: 'unrelated@example.test',
-          displayName: 'Unrelated', role: 'member', invitedBy: 'alice' });
+          invitationId: 'unrelated-invitation', role: 'member', invitedBy: 'alice' });
       }
     }
-    return original(command);
+    const result = await original(command);
+    if (event.type === 'memory.corrected') {
+      publicationResult = result;
+    }
+    return result;
   }
   const appends = vi.spyOn(setup.nats.store, 'append').mockImplementation(append);
   try {
     const response = await sendChange(request, token);
     expect(intercepted).toBe(true);
     if (change === 'unrelated') {
+      expect(publicationResult).toMatchObject({ status: 'appended' });
       expect(response.statusCode, response.body).toBe(200);
       expect(response.json()).toMatchObject({ result: { structuredContent: {
         outcome: 'accepted', revision: 2 } } });
