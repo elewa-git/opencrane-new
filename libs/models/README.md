@@ -487,8 +487,8 @@ Later confirmed usage can still settle their cost.
 A normal tool-call audit can name the exact saved decision and selected account generation.
 Its confirmation records permission checks, not delivery or a successful outside call.
 Reading the receipt cannot send credentials. The live sending path is not built yet.
-The audit checks permission once even when saved history cannot be read. An access
-refusal still reaches the caller if a later store operation fails.
+The audit checks permission once even when its input is invalid or saved history cannot
+be read. An access refusal still reaches the caller if a later store operation fails.
 
 An internal company-account save checks current admin membership and explicit opt-in
 for the reviewed installation. The silo owns the saved account; the admin is its named

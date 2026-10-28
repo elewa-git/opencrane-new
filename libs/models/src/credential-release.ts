@@ -160,10 +160,15 @@ export async function confirmCredentialRelease(store: EventStore, silo: string,
     return refuse();
   }
 }
-async function prepareEvidence(store: EventStore, silo: string, decisionId: string,
-  release: Release) {
+async function prepareEvidence(store: EventStore, silo: string, requesterId: string,
+  decisionId: string, raw: unknown) {
   try {
-    return await loadEvidence(store, silo, decisionId, release);
+    const release = toolCredentialReleaseSchema.parse(raw);
+    if (release.userId !== requesterId || release.ownerId !== requesterId) {
+      refuse();
+    }
+    const evidence = await loadEvidence(store, silo, decisionId, release);
+    return { release, evidence };
   } catch {
     return null;
   }
@@ -171,18 +176,14 @@ async function prepareEvidence(store: EventStore, silo: string, decisionId: stri
 async function confirm(store: EventStore, silo: string, requesterId: string,
   decisionId: string, raw: unknown, prepareAccess: () => Promise<Access>,
   action: 'append' | 'recover') {
-  const release = toolCredentialReleaseSchema.parse(raw);
-  if (release.userId !== requesterId || release.ownerId !== requesterId) {
-    refuse();
-  }
-  // Finish saved evidence reads before the caller starts its two-second access check.
-  const prepared = await prepareEvidence(store, silo, decisionId, release);
+  // Finish validation and history before the caller starts its two-second access check.
+  const prepared = await prepareEvidence(store, silo, requesterId, decisionId, raw);
   const access = await prepareAccess();
-  // Report the caller's permission refusal before any saved-evidence failure.
+  // Report the caller's permission refusal before any validation or saved-evidence failure.
   if (!prepared) {
     refuse();
   }
-  const evidence = prepared;
+  const { release, evidence } = prepared;
   const deadline = Math.min(access.deadline, performance.now() + 2000,
     performance.now() + release.expiresAt - Date.now());
   if (!Number.isFinite(deadline)) {

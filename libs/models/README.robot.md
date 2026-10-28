@@ -4606,8 +4606,9 @@ profile/selection/policy positions, endpoint and account/scope fingerprints. Cur
 bearer profiles remain saved_unverified. Their synthetic audit tests do not qualify
 account identity or make credentialed tools available. OAuth/company use stays closed.
 
-History loads before the live check. Failed history waits for the single permission
-decision, so removed members and callers without the required role retain their
+History loads before the live check. Invalid input, mismatched requester or owner, and
+failed history wait for the single permission decision, so removed members and callers
+without the required role retain their
 `MemberAccessRefused`. The same refusal survives an append failure, including a later
 dependency error. Other failures return only `Release unavailable`, without a cause.
 One conditional append uses the original decision
