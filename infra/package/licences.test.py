@@ -20,6 +20,35 @@ specification.loader.exec_module(checker)
 
 
 class LicenceTests(unittest.TestCase):
+    def wasm_fixture(self):
+        path = source.parents[2] / "docs/process/p5-4-images8/check-wasm.py"
+        module_spec = importlib.util.spec_from_file_location("wasm", path)
+        wasm = importlib.util.module_from_spec(module_spec)
+        module_spec.loader.exec_module(wasm)
+        review = checker.read_json(path.with_name("wasm.json"))
+        _, _, inputs = self.pcre_fixture()
+        for name in wasm.SOURCES:
+            inputs[name] = gzip.decompress(path.with_name(name + ".gz").read_bytes())
+        return wasm, review, inputs
+
+    def test_wasm_full_terms_resolve_only_its_reference_and_leave_promotion_blocked(self):
+        wasm, review, inputs = self.wasm_fixture()
+        self.assertEqual(wasm.check_review(review, inputs), "V8 Wasm C/C++ API")
+        self.assertIn(b"Version 2.0, January 2004", inputs["wasm-LICENSE"])
+        self.assertIn(b"END OF TERMS AND CONDITIONS", inputs["wasm-LICENSE"])
+        self.assertIn(b"APPENDIX: How to apply", inputs["wasm-LICENSE"])
+        node, historical, notice = self.node_review_fixture()
+        self.assertEqual(node.check_review(historical, notice), 43)
+        self.assertEqual(len(historical["blockedReferences"]), 10)
+        valgrind, earlier, terms = self.valgrind_fixture()
+        self.assertEqual(valgrind.check_review(earlier, terms), "V8 Valgrind client API")
+        pcre, earlier, terms = self.pcre_fixture()
+        self.assertEqual(pcre.check_review(earlier, terms), "V8 PCRE test suite")
+        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
+        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        with self.assertRaisesRegex(ValueError, "exact source revision"):
+            checker.check_package_review(reviewed, inventory)
+
     def valgrind_fixture(self):
         path = source.parents[2] / "docs/process/p5-4-images7/check-valgrind.py"
         module_spec = importlib.util.spec_from_file_location("valgrind", path)
