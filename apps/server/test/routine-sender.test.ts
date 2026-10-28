@@ -324,11 +324,12 @@ async function startComputer(computerId = 'computer') {
   const faults = { failRemoval: false, delayStart: false, stallInterrupt: false };
   const startReply = Promise.withResolvers<void>();
   const interruptReply = Promise.withResolvers<void>();
-  async function grant(_thread: string, _conversation: string, token: string) {
+  function grant(_thread: string, _conversation: string, token: string) {
     if (!token && faults.failRemoval) {
       faults.failRemoval = false;
-      throw new Error('private-cleanup-canary');
+      return Promise.reject(new Error('private-cleanup-canary'));
     }
+    return Promise.resolve();
   }
   function credential() {
     return { value: 'fixture-bridge', expiresAt: Date.now() + 120_000 };
@@ -413,6 +414,10 @@ async function startComputer(computerId = 'computer') {
     link = await connectBridge(options, connection, tokens);
     trackFrames();
   }
+  function finish(threadId: string, nativeTurnId = 'recorded-turn') {
+    channel.notification({ method: 'turn/completed', params: {
+      threadId, turn: { id: nativeTurnId, status: 'completed' } } });
+  }
   let closed = false;
   async function close() {
     if (closed) return;
@@ -433,7 +438,7 @@ async function startComputer(computerId = 'computer') {
   return { wake, restart, close, executed, get starts() { return starts; },
     get sends() { return sends; }, get nativeStarts() { return nativeStarts; },
     get closedSessions() { return closedSessions; }, executedThreads, interruptedThreads, closedThreads, tokens, faults,
-    releaseStart: startReply.resolve };
+    releaseStart: startReply.resolve, finish };
 }
 async function savedStarts() {
   const rows = await history(nats.store, 'computer-sales-assistant', 'test');
@@ -1012,3 +1017,50 @@ async function disconnectedRoutineStop() {
   expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
 }
 it('lost connection and replay cannot resurrect the prohibited routine', disconnectedRoutineStop);
+
+
+async function stoppedBeforeGrant() {
+  const link = await preparedComputer.wake();
+  const send = link.socket.send.bind(link.socket);
+  let held: string | undefined;
+  function holdGrant(bytes: Parameters<typeof send>[0]) {
+    if (typeof bytes === 'string' && bytes.includes('"type":"ack"') && bytes.includes('"token"')) {
+      held = bytes;
+      return;
+    }
+    send(bytes);
+  }
+  vi.spyOn(link.socket, 'send').mockImplementation(holdGrant);
+  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
+  function acknowledged() { expect(held).toBeDefined(); }
+  await vi.waitFor(acknowledged, { timeout: 5000 });
+  await saveProhibition('Stop');
+  await pollRoutine();
+  function closed() { expect(preparedComputer.closedSessions).toBe(1); }
+  await vi.waitFor(closed);
+  send(held!);
+  await pollRoutine();
+  expect(preparedComputer.starts).toBe(0);
+  expect(preparedComputer.interruptedThreads).toEqual([]);
+  expect(link.socket.readyState).toBe(link.socket.OPEN);
+}
+it('Stop before the start grant prevents execution even when the old grant arrives', stoppedBeforeGrant);
+
+async function wrongTerminal() {
+  const link = await startRunning();
+  await saveProhibition('Stop');
+  await pollRoutine();
+  await vi.waitFor(interruptedOnce);
+  preparedComputer.finish(selection.threadId, 'unrelated-completed-turn');
+  await new Promise(setImmediate);
+  await link.settled();
+  expect(preparedComputer.closedSessions).toBe(0);
+  preparedComputer.finish(selection.threadId);
+  function closed() { expect(preparedComputer.closedSessions).toBe(1); }
+  await vi.waitFor(closed);
+  await link.settled();
+  await pollRoutine();
+  interruptedOnce();
+}
+it('retains Stopping after an unrelated terminal report and ends only the exact native turn',
+  wrongTerminal);
