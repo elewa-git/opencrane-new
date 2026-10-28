@@ -40,6 +40,14 @@ class LicenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unknown or non-OSI"):
             checker.check_entry(["npm", "other", "1", "bzip2-1.0.6", "terms"],
                                 valgrind.candidate.OSI, set())
+        with self.assertRaisesRegex(ValueError, "Unknown or non-free"):
+            checker.check_bundled_notice(
+                ["Other bundle", ["bzip2-1.0.6"], "other.h", "Unreviewed terms"],
+                valgrind.candidate.OSI)
+        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
+        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        with self.assertRaisesRegex(ValueError, "exact source revision"):
+            checker.check_package_review(reviewed, inventory)
         node, historical, notice = self.node_review_fixture()
         self.assertEqual(node.check_review(historical, notice), 43)
         self.assertEqual(len(historical["blockedReferences"]), 10)
@@ -239,7 +247,30 @@ class LicenceTests(unittest.TestCase):
                                 valgrind.check_evidence(Path("candidate"), Path("upstream"))
                                 upstream.assert_called_once_with(Path("upstream"))
                                 terms.assert_called_once_with(review, inputs)
-                                candidate.assert_called_once()
+                                record = checker.read_json(valgrind.candidate.RECORD)
+                                candidate.assert_called_once_with(record, Path("candidate"))
+
+    def test_valgrind_refuses_changed_or_missing_authenticated_inputs(self):
+        valgrind, review, _ = self.valgrind_fixture()
+        for name in review["files"]:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                with patch.object(valgrind.pcre, "FILES", {name: review["files"][name]}):
+                    with self.assertRaises(OSError):
+                        valgrind.check_upstream(directory)
+                    (directory / name).write_bytes(b"changed archive, signature or tag")
+                    with self.assertRaisesRegex(ValueError, "Evidence bytes changed"):
+                        valgrind.check_upstream(directory)
+
+    def test_valgrind_cli_withholds_paths_and_source_on_refusal(self):
+        path = source.parents[2] / "docs/process/p5-4-images7/check-valgrind.py"
+        for arguments in ([], ["private-fixture-marker", "private-fixture-marker"]):
+            result = subprocess.run([sys.executable, str(path), *arguments],
+                                    capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr,
+                             "FAIL Valgrind source-bound evidence is missing, changed or unsupported\n")
 
     def pcre_fixture(self):
         path = source.parents[2] / "docs/process/p5-4-images6/check-pcre.py"
