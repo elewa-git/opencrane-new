@@ -1759,6 +1759,41 @@ function routineRootTests() {
       ['Stop', 'model'], ['Pause', 'model'], ['Retire', 'model'],
       ['Stop', 'free tool'], ['Pause', 'free tool'], ['Retire', 'free tool'],
     ])('refuses routine dispatch after saved %s before cleanup: %s', refusesSavedProhibition);
+    async function preservesRefusalAfterAuditFailure(route: string) {
+      const fixture = await dispatchFixture();
+      try {
+        await prohibit('Stop', await stopRequest());
+        const append = nats.store.append.bind(nats.store);
+        let auditFailed = false;
+        async function failDenyAudit(command: AppendCommand) {
+          const event = z.object({ type: z.string(), data: z.unknown() }).parse(command.event);
+          if (event.type === 'decision.recorded') {
+            expect(event.data).toMatchObject({ outcome: 'deny', reason: 'request_refused' });
+            auditFailed = true;
+            throw new Error('private-audit-canary');
+          }
+          return append(command);
+        }
+        vi.spyOn(nats.store, 'append').mockImplementation(failDenyAudit);
+        const response = route === 'model' ? await fixture.model() : await fixture.tool();
+        const body = await response.text();
+        expect(auditFailed).toBe(true);
+        expect(response.status, body).toBe(403);
+        expect(response.headers.get('x-opencrane-decision')).toBe('refused');
+        expect(JSON.parse(body)).toMatchObject({ error: 'Routine dispatch refused' });
+        expect(body).not.toContain('private-audit-canary');
+        expect(response.headers.get('x-reservation-id')).toBeNull();
+        expect(response.headers.get('x-opencrane-mcp-permit')).toBeNull();
+        expect(actor.state.reservations).toEqual([]);
+        expect(actor.state.dispatches).toEqual([]);
+        expect(actor.state.roots[0]!.stop).toBeUndefined();
+        expect(fixture.received()).toBe(0);
+      } finally {
+        await fixture.close();
+      }
+    }
+    it.each(['model', 'free tool'])(
+      'preserves routine refusal when the deny audit fails: %s', preservesRefusalAfterAuditFailure);
     async function allowsAdmittedRoutine() {
       const fixture = await dispatchFixture();
       try {
