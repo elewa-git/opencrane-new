@@ -1,0 +1,1 @@
+- A private worker can revoke a saved personal OAuth account at its configured provider once and retire its earlier token copies, even after member removal. Lost replies never trigger a second provider call. Public routes and automatic scheduling remain later work.

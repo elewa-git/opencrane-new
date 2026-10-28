@@ -31,7 +31,7 @@ export async function reactionWorker(pauseHandlers = false) {
   const keyring = { currentKeyId: 'test', keys: { test: Buffer.alloc(32) } };
   const custody = connectionCustody('http://127.0.0.1:1', 'test', keyring, '/unused');
   const candidates = vi.spyOn(custody, 'candidates');
-  const emptyPage = { status: 'listed' as const, stages: [], continuation: undefined };
+  const emptyPage = { status: 'listed' as const, complete: true, stages: [], continuation: undefined };
   candidates.mockResolvedValue(emptyPage);
   const recover = vi.spyOn(custody, 'recover');
   const remove = vi.spyOn(custody, 'remove');

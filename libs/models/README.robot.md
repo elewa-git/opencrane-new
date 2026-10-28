@@ -27,12 +27,40 @@ The existing fold invalidates the account and its refresh claim. A worker waitin
 same lock sees the revoke before it can send or save a replacement. A provider request
 already sent before the revoke is not undone. The bearer cleanup handler acknowledges
 OAuth revocations without deleting; maintenance retains OAuth histories and attempts.
-This preserves private material needed by the future provider revocation worker.
+This preserves private material for the explicit worker below.
 
-Provider revocation through the reviewed transport, its private lost-reply recovery,
-retirement of all token copies, company handling, HTTP and governed use are NOT IMPLEMENTED
-in this first part. Fresh-install qualification and the full root suite are NOT RUN.
-No claim of complete OAuth revocation is made.
+Company handling, HTTP, automatic scheduling and governed use remain NOT IMPLEMENTED.
+Fresh-install qualification and the full root suite are NOT RUN.
+
+## Provider revocation and token retirement (Part of #50)
+
+`finishPersonalOAuthRevoke` is a private worker, without a route, package export or replay
+reaction. Trusted code supplies the silo and original revoke input after the local command.
+It revalidates that saved revoke under the shared profile lock. The saved event alone
+permits the provider request and deletion; current membership is irrelevant to cleanup.
+The member command still refuses removed and other members without exposing the account.
+
+Operator configuration may include `revocationEndpoint`; the saved configuration digest
+binds it with the provider and client. Missing or changed settings prevent sending.
+The existing transport sends a fixed form with a refresh token, or the access token when
+there is no refresh token. It keeps address, TLS, redirect, five-second and byte limits.
+Revocation accepts HTTP 200, including an empty body without a content type. Response
+bodies are discarded. Token exchange still requires its JSON response and token checks.
+
+The private journal flushes one send marker and retains only confirmed success. Duplicates
+and restart recover that status. A lost HTTP reply without a saved result stays `unknown`
+and never resends. No provider error or token enters events, logs, results or the journal.
+These private records describe an external attempt; the event remains business authority.
+
+Regardless of provider outcome, the worker scans authenticated custody pages and retires
+all personal copies for that silo, member, server and profile whose preparation precedes
+the revoke. This includes all generations, consent material and saved refresh replies.
+Later preparations and other profiles or silos remain untouched. Exact saved UID/version
+checks and deletion markers protect removal and block reads during interrupted deletion.
+Retries finish deletion after member removal. Missing identity evidence, damaged copies
+or incomplete pages keep the outcome unknown; they never count as completed retirement.
+`completed` means provider confirmation and local deletion; `unknown` grants no access.
+Neither result is a member-facing receipt. No new event or dependency is introduced.
 
 ## Saving an OAuth refresh (Part of #50)
 

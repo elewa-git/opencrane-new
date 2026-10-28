@@ -22,7 +22,8 @@ export async function prepareRemote(locator: string, network: RemoteNetwork, sig
 }
 
 export function exchangeRemote(target: Awaited<ReturnType<typeof prepareRemote>>, raw: string,
-  headers: OutgoingHttpHeaders, network: RemoteNetwork, signal: AbortSignal, limit: number) {
+  headers: OutgoingHttpHeaders, network: RemoteNetwork, signal: AbortSignal, limit: number,
+  replyType: 'json' | 'revocation' = 'json') {
   const { endpoint, address } = target;
   function pinned(_host: string, _options: unknown,
     done: (error: Error | null, address: string, family: number) => void) {
@@ -41,8 +42,12 @@ export function exchangeRemote(target: Awaited<ReturnType<typeof prepareRemote>>
         return refuse('redirect_refused');
       }
       const contentType = res.headers['content-type'] ?? '';
+      const invalidContentType = replyType === 'json' &&
+        !/^application\/json(?:;|$)/iu.test(contentType);
       if (res.statusCode !== 200 || res.headers['mcp-session-id'] !== undefined ||
-          !/^application\/json(?:;|$)/iu.test(contentType)) return refuse('protocol_refused');
+          invalidContentType) {
+        return refuse('protocol_refused');
+      }
       let bytes = 0;
       const chunks: Buffer[] = [];
       function collect(chunk: Buffer) {

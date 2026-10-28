@@ -46,7 +46,11 @@ function provider(request: IncomingMessage, reply: ServerResponse) {
       parameters.get('client_id') === configuration.clientId &&
       parameters.get('redirect_uri') === configuration.redirectUri &&
       verifierHash.digest('base64url') === challenge;
-    if (!valid || accepted > 0) {
+    const revocation = request.method === 'POST' && request.url === '/revoke' &&
+      parameters.size === 3 && parameters.get('token') === 'fixture-revoke-canary' &&
+      parameters.get('client_id') === configuration.clientId &&
+      parameters.get('token_type_hint') === 'refresh_token';
+    if ((!valid && !revocation) || accepted > 0) {
       reply.writeHead(400, { 'content-type': 'application/json' });
       reply.end(JSON.stringify({ error: 'invalid_grant', private: material.code }));
       return;
@@ -55,6 +59,10 @@ function provider(request: IncomingMessage, reply: ServerResponse) {
     if (mode === 'redirect') {
       reply.writeHead(307, { location: 'https://private.example.test/steal' });
       reply.end();
+      return;
+    }
+    if (revocation && mode === 'valid') {
+      reply.writeHead(200).end();
       return;
     }
     reply.writeHead(200, { 'content-type': 'application/json' });
@@ -256,3 +264,30 @@ describe('private OAuth provider transport', function transportTests() {
     expect(requests).toHaveLength(0);
   });
 });
+
+
+async function checksRevocationTransport(change: string) {
+  const settings = { revocationEndpoint: 'https://mcp.example.test/revoke',
+    clientId: configuration.clientId };
+  const material = { revokeToken: 'fixture-revoke-canary', tokenTypeHint: 'refresh_token' };
+  if (change === 'TLS') {
+    fixture.untrust();
+  } else if (change === 'private address') {
+    fixture.setAnswers(['93.184.216.34', '127.0.0.1']);
+  } else if (change === 'redirect' || change === 'large' || change === 'truncated' ||
+      change === 'unfinished') {
+    mode = change;
+  }
+  const transport = oauthProviderTransport(settings, fixture.network);
+  const result = transport(material, new AbortController().signal);
+  if (change === 'empty success') {
+    expect(await result).toEqual(Buffer.alloc(0));
+    expect(Object.fromEntries(requests[0]!)).toEqual({ client_id: configuration.clientId,
+      token: 'fixture-revoke-canary', token_type_hint: 'refresh_token' });
+  } else {
+    await expect(result).rejects.toEqual(new Error('OAuth exchange unavailable'));
+  }
+  expect(requests).toHaveLength(change === 'TLS' || change === 'private address' ? 0 : 1);
+}
+it.each(['empty success', 'TLS', 'private address', 'redirect', 'large', 'truncated', 'unfinished'])(
+  'bounds the private provider revocation transport with %s', checksRevocationTransport);

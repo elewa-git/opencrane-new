@@ -111,5 +111,23 @@ export function connectionStageJournal(directory: string) {
     // Keep the exact identity across restart while Kubernetes waits for finalisers.
     return saveIdentity('deletion', observed);
   }
-  return { prepared, preparation, identity, pin, claimCreate, claimSend, deletion, markDeletion };
+  async function revokeOnce(operationId: string, send: () => Promise<unknown>) {
+    const path = reference('revoked', operationId);
+    try {
+      return await files.read(path) === 'confirmed';
+    } catch (error) {
+      if (!missingFile.safeParse(error).success) {
+        throw error;
+      }
+    }
+    if (!await claimOnce('revoke-send', operationId)) {
+      return false;
+    }
+    await send();
+    // Save only the successful status. Provider bodies can contain private material.
+    await publish(path, 'confirmed');
+    return true;
+  }
+  return { prepared, preparation, identity, pin, claimCreate, claimSend, deletion, markDeletion,
+    revokeOnce };
 }

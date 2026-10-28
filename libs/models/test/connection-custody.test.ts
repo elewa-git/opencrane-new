@@ -4672,6 +4672,13 @@ async function cancelsClaimedOAuthRefresh() {
     }
     vi.spyOn(events.store, 'append').mockImplementation(race);
     expect(await revokeOAuth(test)).toMatchObject({ status: 'revoked' });
+    const { finishPersonalOAuthRevoke } = await import('../src/oauth-revoke-worker.ts');
+    const input = { ...test.input, changeRef: 'revoke-first' };
+    expect(await finishPersonalOAuthRevoke(events.store, 'test', test.store.restart(), input,
+      test.loader.loadConfiguration, pgDb(storage.queue), test.providerFixture.network))
+      .toEqual({ status: 'completed' });
+    expect(test.revocations).toHaveLength(1);
+    expect(test.store.secrets.size).toBe(0);
     expect(pending).toBeDefined();
     expect(await pending).toEqual({ status: 'unknown' });
     expect(await sendRefresh(test, claim)).toEqual({ status: 'unknown' });
@@ -4934,17 +4941,22 @@ it.each(['saved', 'verified'])(
   'revokes the current OAuth generation after a refresh reply is %s', revokesAfterOAuthRefresh);
 
 
-async function finishesProviderRevoke() {
+async function finishesProviderRevoke(removed: boolean) {
   const { finishPersonalOAuthRevoke } = await import('../src/oauth-revoke-worker.ts');
   const test = await refreshFixture();
   try {
     await revokeOAuth(test);
+    if (removed) {
+      await changeConsentAccess(test, 'removed');
+      await expect(revokeOAuth(test)).rejects.toThrow(/^OAuth revoke refused$/u);
+    }
     async function finish() {
       return finishPersonalOAuthRevoke(events.store, 'test', test.store.restart(), test.input,
         test.loader.loadConfiguration, pgDb(storage.queue), test.providerFixture.network);
     }
     const results = await Promise.all([finish(), finish()]);
-    expect(results).toEqual([{ status: 'completed' }, { status: 'completed' }]);
+    // Allow a busy caller to retry after the bounded profile lock wait.
+    expect(results).toContainEqual({ status: 'completed' });
     expect(await finish()).toEqual({ status: 'completed' });
     expect(test.revocations).toHaveLength(1);
     expect(Object.fromEntries(test.revocations[0]!)).toEqual({ client_id: 'fixture',
@@ -4958,5 +4970,176 @@ async function finishesProviderRevoke() {
     await test.close();
   }
 }
-it('finishes one provider revoke under duplicate and racing workers and retires every copy',
+it.each([false, true])(
+  'finishes one provider revoke under racing workers and retires every copy, removed=%s',
   finishesProviderRevoke);
+
+async function revokesAccessOnlyAccount() {
+  const test = await refreshFixture('no-refresh');
+  try {
+    await revokeOAuth(test);
+    const { finishPersonalOAuthRevoke } = await import('../src/oauth-revoke-worker.ts');
+    expect(await finishPersonalOAuthRevoke(events.store, 'test', test.custody, test.input,
+      test.loader.loadConfiguration, pgDb(storage.queue), test.providerFixture.network))
+      .toEqual({ status: 'completed' });
+    expect(test.revocations).toHaveLength(1);
+    expect(Object.fromEntries(test.revocations[0]!)).toEqual({ client_id: 'fixture',
+      token: 'result-canary', token_type_hint: 'access_token' });
+    expect(test.store.secrets.size).toBe(0);
+  } finally {
+    await test.close();
+  }
+}
+it('revokes an access-only OAuth account at the provider and retires its copies',
+  revokesAccessOnlyAccount);
+
+async function recoversProviderRevoke(failure: string) {
+  const test = await refreshFixture();
+  try {
+    const { finishPersonalOAuthRevoke } = await import('../src/oauth-revoke-worker.ts');
+    await revokeOAuth(test);
+    if (failure === 'provider reply') {
+      test.loseRevokeReply();
+    } else if (failure === 'delete') {
+      test.store.failDeletes(true);
+    } else {
+      const revoke = test.custody.revokeOnce.bind(test.custody);
+      async function loseReply(...args: Parameters<typeof revoke>): Promise<never> {
+        await revoke(...args);
+        throw new Error('refresh-canary', { cause: new Error('result-canary') });
+      }
+      vi.spyOn(test.custody, 'revokeOnce').mockImplementationOnce(loseReply);
+    }
+    async function finish(custody = test.custody) {
+      return finishPersonalOAuthRevoke(events.store, 'test', custody, test.input,
+        test.loader.loadConfiguration, pgDb(storage.queue), test.providerFixture.network);
+    }
+    expect(await finish()).toEqual({ status: 'unknown' });
+    await changeConsentAccess(test, 'removed');
+    await expect(revokeOAuth(test)).rejects.toThrow(/^OAuth revoke refused$/u);
+    const restarted = test.store.restart();
+    const page = await restarted.candidates();
+    expect(page.status).toBe('listed');
+    for (const stage of page.stages ?? []) {
+      const copy = await restarted.recover(stage);
+      expect(await restarted.readAttempt(stage, copy.identity!)).toBeUndefined();
+      expect(await restarted.readRefreshMaterial(stage, copy.identity!)).toBeUndefined();
+    }
+    test.store.failDeletes(false);
+    const expected = { status: failure === 'provider reply' ? 'unknown' : 'completed' };
+    expect(await finish(restarted)).toEqual(expected);
+    expect(await finish(test.store.restart())).toEqual(expected);
+    expect(test.revocations).toHaveLength(1);
+    expect(test.store.secrets.size).toBe(0);
+    const rows = await history(events.store, test.subject, 'test');
+    expect(rows).toHaveLength(4);
+    const journal: string[] = [];
+    for (const name of await readdir(test.store.directory)) {
+      journal.push(await readFile(`${test.store.directory}/${name}`, 'utf8'));
+    }
+    expect(JSON.stringify({ rows, expected, journal })).not.toMatch(/canary/);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['provider reply', 'saved reply', 'delete'])(
+  'recovers OAuth revoke after lost %s and member removal without another provider call',
+  recoversProviderRevoke);
+
+async function retiresAllOAuthGenerations(progress: string) {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    const claim = await claimRefresh(test);
+    if (progress === 'saved') {
+      test.store.failDeletes(true);
+      expect(await saveRefresh(test, claim)).toEqual({ status: 'unknown' });
+      test.store.failDeletes(false);
+      const rows = await history(events.store, test.subject, 'test');
+      test.input.expectedSequence = rows.at(-1)!.sequence;
+      test.input.expectedGeneration = 2;
+    } else {
+      expect(await sendRefresh(test, claim)).toMatchObject({ status: 'verified' });
+    }
+    expect(test.store.secrets.size).toBe(progress === 'saved' ? 6 : 5);
+    test.input.changeRef = 'revoke-after-refresh';
+    await revokeOAuth(test, test.input);
+    const { finishPersonalOAuthRevoke } = await import('../src/oauth-revoke-worker.ts');
+    expect(await finishPersonalOAuthRevoke(events.store, 'test', test.store.restart(), test.input,
+      test.loader.loadConfiguration, pgDb(storage.queue), test.providerFixture.network))
+      .toEqual({ status: 'completed' });
+    expect(test.store.secrets.size).toBe(0);
+    expect(test.revocations).toHaveLength(1);
+    expect(test.revocations[0]!.get('token')).toBe(
+      progress === 'saved' ? 'next-refresh-canary' : 'refresh-canary');
+    expect(await sendRefresh(test, claim)).toEqual({ status: 'unknown' });
+    expect(test.refreshSends).toBe(1);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['saved', 'verified'])(
+  'retires all OAuth generations and the %s refresh reply after provider revoke',
+  retiresAllOAuthGenerations);
+
+async function requiresSavedRevoke(change: string) {
+  const test = await refreshFixture();
+  try {
+    const { finishPersonalOAuthRevoke } = await import('../src/oauth-revoke-worker.ts');
+    if (change !== 'missing revoke') {
+      await revokeOAuth(test);
+    }
+    const input = { ...test.input };
+    if (change === 'wrong generation') {
+      input.expectedGeneration++;
+    } else if (change === 'wrong member') {
+      input.userId = 'another-member';
+    } else if (change === 'configuration') {
+      test.configuration.revocationEndpoint = 'https://other.example.test/revoke';
+    }
+    expect(await finishPersonalOAuthRevoke(events.store, 'test', test.custody, input,
+      test.loader.loadConfiguration, pgDb(storage.queue), test.providerFixture.network))
+      .toEqual({ status: 'unknown' });
+    expect(test.revocations).toHaveLength(0);
+    expect(test.store.secrets.size).toBe(change === 'configuration' ? 0 : 4);
+  } finally {
+    await test.close();
+  }
+}
+it.each(['missing revoke', 'wrong generation', 'wrong member', 'configuration'])(
+  'refuses provider revocation for %s without disclosing private data', requiresSavedRevoke);
+
+async function scopesRevokeRetirement(damaged: boolean) {
+  const test = await refreshFixture();
+  try {
+    const { finishPersonalOAuthRevoke } = await import('../src/oauth-revoke-worker.ts');
+    const copy = { ...stage, siloId: 'test', userId: test.session.userId,
+      serverId: test.input.serverId, profileId: test.input.profileId };
+    for (let index = 0; index < 26; index++) {
+      const abandoned = { ...copy, operationId: `abandoned-${index}`, generation: index + 2 };
+      await test.custody.stage(abandoned,
+        '{"access_token":"abandoned-canary","refresh_token":"abandoned-refresh-canary"}');
+    }
+    if (damaged) {
+      test.store.secret.data.token = Buffer.from('corrupt-canary').toString('base64');
+    }
+    const revoked = await revokeOAuth(test);
+    const later = { ...copy, operationId: 'later-profile', generation: 28,
+      expectedSequence: revoked.sequence };
+    const laterCopy = await test.custody.stage(later, material);
+    const foreign = await test.custody.stage(stage, material);
+    expect(laterCopy.status).toBe('staged');
+    expect(foreign.status).toBe('staged');
+    expect(await finishPersonalOAuthRevoke(events.store, 'test', test.store.restart(), test.input,
+      test.loader.loadConfiguration, pgDb(storage.queue), test.providerFixture.network))
+      .toEqual({ status: damaged ? 'unknown' : 'completed' });
+    expect(test.store.secrets.size).toBe(damaged ? 3 : 2);
+    expect(test.store.secrets.has(laterCopy.identity!.reference)).toBe(true);
+    expect(test.store.secrets.has(foreign.identity!.reference)).toBe(true);
+    expect(test.revocations).toHaveLength(1);
+  } finally {
+    await test.close();
+  }
+}
+it.each([false, true])(
+  'retires every page without touching later or foreign copies, damaged=%s', scopesRevokeRetirement);

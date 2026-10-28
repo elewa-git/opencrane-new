@@ -2,11 +2,16 @@ import { z } from 'zod';
 import { remoteEndpoint } from './address-policy.ts';
 import { exchangeRemote, prepareRemote, type RemoteNetwork } from './remote-https.ts';
 
-const configurationSchema = z.strictObject({
+const tokenConfigurationSchema = z.strictObject({
   tokenEndpoint: z.string().max(2048),
   clientId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u),
   redirectUri: z.string().max(2048),
 });
+const revocationConfigurationSchema = z.strictObject({
+  revocationEndpoint: z.string().max(2048),
+  clientId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u),
+});
+const configurationSchema = z.union([tokenConfigurationSchema, revocationConfigurationSchema]);
 const consentMaterialSchema = z.strictObject({
   code: z.string().regex(/^[\x21-\x7e]{1,4096}$/u),
   verifier: z.string().regex(/^[A-Za-z0-9_-]{43}$/u),
@@ -26,7 +31,9 @@ const replySchema = z.looseObject({
 function checkedConfiguration(raw: unknown) {
   try {
     const configuration = configurationSchema.parse(raw);
-    for (const value of [configuration.tokenEndpoint, configuration.redirectUri]) {
+    const endpoints = 'revocationEndpoint' in configuration
+      ? [configuration.revocationEndpoint] : [configuration.tokenEndpoint, configuration.redirectUri];
+    for (const value of endpoints) {
       if (remoteEndpoint(value).href !== value) {
         throw new Error('OAuth configuration invalid');
       }
@@ -52,22 +59,24 @@ export function oauthProviderTransport(rawConfiguration: unknown, network: Remot
     try {
       const boundedSignal = AbortSignal.any([signal, controller.signal]);
       boundedSignal.throwIfAborted();
-      const material = materialSchema.parse(rawMaterial);
-      const parameters = grantParameters(configuration, material);
+      const { parameters, endpoint, replyType } = providerRequest(configuration, rawMaterial);
       const form = new URLSearchParams(parameters);
       const body = form.toString();
       if (Buffer.byteLength(body) > 20_000) {
         throw new Error('OAuth request too large');
       }
-      const target = await prepareRemote(configuration.tokenEndpoint, configuredNetwork,
+      const target = await prepareRemote(endpoint, configuredNetwork,
         boundedSignal);
       await checkCurrent?.();
       boundedSignal.throwIfAborted();
       const headers = { 'content-type': 'application/x-www-form-urlencoded',
         accept: 'application/json', 'content-length': Buffer.byteLength(body) };
       const reply = await exchangeRemote(target, body, headers, configuredNetwork,
-        boundedSignal, 8192);
+        boundedSignal, 8192, replyType);
       boundedSignal.throwIfAborted();
+      if (replyType === 'revocation') {
+        return Buffer.alloc(0);
+      }
       const decoder = new TextDecoder('utf-8', { fatal: true });
       const text = decoder.decode(reply.data);
       replySchema.parse(JSON.parse(text));
@@ -81,11 +90,25 @@ export function oauthProviderTransport(rawConfiguration: unknown, network: Remot
       controller.abort();
     }
   }
-  // A later worker must durably claim each attempt before invoking this one-request adapter.
+  // Require a durable claim before invoking this one-request adapter.
   return exchange;
 }
 
-function grantParameters(configuration: z.infer<typeof configurationSchema>,
+function providerRequest(configuration: z.infer<typeof configurationSchema>, raw: unknown) {
+  if ('revocationEndpoint' in configuration) {
+    const schema = z.strictObject({ revokeToken: token,
+      tokenTypeHint: z.enum(['refresh_token', 'access_token']) });
+    const material = schema.parse(raw);
+    return { endpoint: configuration.revocationEndpoint, replyType: 'revocation' as const,
+      parameters: { client_id: configuration.clientId, token: material.revokeToken,
+        token_type_hint: material.tokenTypeHint } };
+  }
+  const material = materialSchema.parse(raw);
+  return { endpoint: configuration.tokenEndpoint, replyType: 'json' as const,
+    parameters: grantParameters(configuration, material) };
+}
+
+function grantParameters(configuration: z.infer<typeof tokenConfigurationSchema>,
   material: z.infer<typeof materialSchema>) {
   if ('refreshToken' in material) {
     return { grant_type: 'refresh_token', client_id: configuration.clientId,
