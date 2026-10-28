@@ -3604,3 +3604,49 @@ async function correctionInvalidatesDependency() {
 }
 it('refuses a correction that would invalidate another loaded dependency',
   { meta: { correctionDependency: true } }, correctionInvalidatesDependency);
+
+async function correctionPublicationActivity(change: 'loaded' | 'closed' | 'unrelated') {
+  const request = await changeRequest('correct', false);
+  const prepared = await contextRecord();
+  const token = await changeToken(request);
+  const before = await setup.nats.store.head(`scope-${scopeId}`);
+  const original = setup.nats.store.append.bind(setup.nats.store);
+  let intercepted = false;
+  async function append(command: Parameters<typeof original>[0]) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'memory.corrected') {
+      intercepted = true;
+      if (change === 'closed') {
+        await setup.append('participation-conversation', 'conversation.closed', {
+          conversationId: 'conversation', closedBy: 'alice' });
+      } else if (change === 'loaded') {
+        await seedEvidence({ ...prepared, action: 'loaded', reason: 'none', delivery: 'recall',
+          callDigest: 'e'.repeat(64), dispatchDigest: 'f'.repeat(64), byteCount: 1,
+          additions: [{ scopeId, memoryId: 'fact_20', revision: 1 }] });
+      } else {
+        await setup.append('member-unrelated', 'member.invited', {
+          memberId: 'unrelated', email: 'unrelated@example.test',
+          displayName: 'Unrelated', role: 'member', invitedBy: 'alice' });
+      }
+    }
+    return original(command);
+  }
+  const appends = vi.spyOn(setup.nats.store, 'append').mockImplementation(append);
+  try {
+    const response = await sendChange(request, token);
+    expect(intercepted).toBe(true);
+    if (change === 'unrelated') {
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({ result: { structuredContent: {
+        outcome: 'accepted', revision: 2 } } });
+    } else {
+      expect(response.statusCode, response.body).toBe(403);
+      expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(before);
+    }
+  } finally {
+    appends.mockRestore();
+  }
+}
+it.each(['loaded', 'closed', 'unrelated'] as const)(
+  'checks %s conversation activity before publishing a correction', correctionPublicationActivity);
+
