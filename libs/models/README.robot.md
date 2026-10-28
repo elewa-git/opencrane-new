@@ -4549,9 +4549,10 @@ two-second observation limit, including slow evidence reads and completed pendin
 
 ## Typed memory access refusals (P4-15 PR 3i)
 
-`currentAuthority` reports a confirmed permission denial as `AuthorityRefused`.
-An unavailable IAM result or unapplied relevant receipt remains an ordinary failure,
-including when another permission result denies access. `loadedMemoryRights` checks
+`currentAuthority` reports a confirmed permission denial or a saved inactive assistant
+as `AuthorityRefused`. A confirmed denial takes priority over an unavailable permission
+result. An unavailable-only result or unapplied relevant receipt remains an ordinary failure.
+`loadedMemoryRights` checks
 receipts and current permissions before treating missing recorded grants as a denial.
 The server shares this check and `prepareMemoryReceipts` for personal withdrawal.
 History and receipt preparation finish before the two-second access deadline.

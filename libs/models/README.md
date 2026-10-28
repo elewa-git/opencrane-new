@@ -163,8 +163,9 @@ saved after the last memory read is checked at the next renewal or call.
 A corrected, forgotten or expired fact, an invalid dependency, or removed memory access
 refuses the next call. Other facts, messages and uploads do not refuse it.
 Saved expiry or confirmed access loss can also withdraw a completed private reply
-while preserving the ended status. Permission failures stay unavailable; they cannot
-be mistaken for a confirmed denial.
+while preserving the ended status. A confirmed denial remains decisive when another
+permission check is unavailable. A saved inactive assistant also confirms loss of access.
+Unavailable checks alone cannot confirm a denial.
 Replaying that record checks no clock and starts no work.
 Recall, Correct and Forget prepare history before the gateway signs their short pass.
 Each call checks permissions again; prepared data never grants access.

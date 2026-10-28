@@ -1025,14 +1025,17 @@ async function completedMixedDenial(deniedKind: 'person' | 'assistant') {
   async function remove() {
     await loseAccess('memory_read');
     const auth = memberAuthorisation(iam);
-    function permission(kind: 'person' | 'assistant') {
+    function permission(kind: 'person' | 'assistant'): ReturnType<typeof auth.use> {
       if (kind === deniedKind) {
-        return Promise.resolve({ allowed: false, status: 'ok' as const });
+        const denied = { allowed: false, status: 'ok' as const };
+        return Promise.resolve(denied);
       }
-      return Promise.resolve({ allowed: false, status: 'unavailable' as const,
-        error: new Error('private-iam-canary') });
+      const unavailable = { allowed: false as const, status: 'unavailable' as const,
+        error: new Error('private-iam-canary') };
+      return Promise.resolve(unavailable);
     }
-    vi.spyOn(auth, 'use').mockImplementation(permission);
+    const use = vi.spyOn(auth, 'use');
+    use.mockImplementation(permission);
   }
   await completionBeforePoll(false, false, undefined, remove);
   await accessEvidence(true);
@@ -1044,8 +1047,9 @@ it.each(['person', 'assistant'] as const)(
 async function completedInactiveAssistant(removeMember: boolean) {
   async function remove() {
     if (removeMember) await loseAccess('member');
-    await append('assistant-assistant', 'assistant.settings_changed',
-      { assistantId: 'assistant', changedBy: 'alice', changedFields: ['active'], active: false });
+    const settings = { assistantId: 'assistant', changedBy: 'alice',
+      changedFields: ['active'], active: false };
+    await append('assistant-assistant', 'assistant.settings_changed', settings);
   }
   await completionBeforePoll(false, false, undefined, remove);
   await accessEvidence(true);

@@ -68,7 +68,7 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
       throw new Error('IAM projection behind');
     }
   }
-  if (!active) throw new Error('Assistant inactive');
+  if (!active) throw new AuthorityRefused('Assistant inactive');
   const permissions = await Promise.all([auth.check(requester, 'member'), auth.actsFor(requester, assistant),
     auth.conversation(requester, conversation, 'post'), auth.use('person', requester, resourceType, resourceId),
     auth.use('assistant', assistant, resourceType, resourceId)]);
@@ -82,10 +82,11 @@ function requirePermissions(permissions: { status: 'ok' | 'unavailable'; allowed
     return permission.status === 'unavailable';
   }
   function denied(permission: (typeof permissions)[number]) {
-    return !permission.allowed;
+    return permission.status === 'ok' && !permission.allowed;
   }
-  if (permissions.some(unavailable)) throw new Error('Current authority unavailable');
+  // Preserve a confirmed denial even when another permission check is unavailable.
   if (permissions.some(denied)) throw new AuthorityRefused('Current authority refused');
+  if (permissions.some(unavailable)) throw new Error('Current authority unavailable');
 }
 
 function receiptReader(auth: ReturnType<typeof memberAuthorisation>,

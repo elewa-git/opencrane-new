@@ -102,7 +102,8 @@ reply has been cleared. It checks the turn and computer after reading history, w
 waking a computer. One slow chat cannot delay another chat's check or connection shutdown.
 The reaction needs no read access from the former user. Polling also checks their membership
 and the memory and tool grants required by the saved requester and assistant.
-Unavailable permissions delay the check; they never count as confirmed access loss.
+A confirmed denial or saved assistant deactivation clears the reply even when another
+permission check is unavailable. Unavailable checks alone never confirm access loss.
 Retries recover the same saved receipt after the old fact expires. A competing recall
 keeps its added references when the server reloads and records the invalidation.
 After a restart, memory recovery uses the existing private keys and saved command records.
