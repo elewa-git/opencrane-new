@@ -5372,6 +5372,96 @@ async function savesCompany() {
 }
 it('saves one silo-owned company generation without granting or selecting it', savesCompany);
 
+async function companyPreparationRefusal(failedHistory: boolean, failedRelease: boolean) {
+  const test = await companyFixture();
+  const read = events.store.readStream.bind(events.store);
+  async function* removeDuringHistory(subject: string, from?: number, deadline?: number) {
+    if (subject === test.subject) {
+      historyFault.mockRestore();
+      await test.removeAdmin();
+      if (failedHistory) {
+        throw new Error(material);
+      }
+    }
+    yield* read(subject, from, deadline);
+  }
+  const lock = test.db.lock;
+  async function failRelease<Result>(name: string, work: (db: Db) => Promise<Result>) {
+    await lock(name, work);
+    throw new Error(material);
+  }
+  const historyFault = vi.spyOn(events.store, 'readStream');
+  historyFault.mockImplementation(removeDuringHistory);
+  if (failedRelease) {
+    vi.spyOn(test.db, 'lock').mockImplementation(failRelease);
+  }
+  try {
+    await expect(test.save()).rejects.toBeInstanceOf(MemberAccessRefused);
+    expect(test.store.creates).toBe(0);
+    expect(await test.rows()).toHaveLength(0);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each([[false, false], [true, false], [false, true], [true, true]])(
+  'preserves company removal refusal with failed history=%s and failed release=%s',
+  companyPreparationRefusal);
+
+async function companyPermissionOnce(outcome: string) {
+  const test = await companyFixture(outcome !== 'missing opt-in');
+  let original;
+  if (outcome === 'retry') {
+    original = await test.save();
+  }
+  const read = events.store.readStream.bind(events.store);
+  async function* failHistory(subject: string, from?: number, deadline?: number) {
+    if (subject === test.subject) {
+      throw new Error(material);
+    }
+    yield* read(subject, from, deadline);
+  }
+  if (outcome === 'failed history') {
+    vi.spyOn(events.store, 'readStream').mockImplementation(failHistory);
+  }
+  const client = new OpenFgaClient(consentBinding);
+  const check = client.check.bind(client);
+  let permissionChecks = 0;
+  async function permission(...args: Parameters<typeof check>) {
+    if (args[0].relation === 'admin') {
+      permissionChecks += 1;
+      if (permissionChecks > 1) {
+        throw new Error(material);
+      }
+    }
+    return check(...args);
+  }
+  vi.spyOn(OpenFgaClient.prototype, 'check').mockImplementation(permission);
+  const writes = vi.spyOn(events.store, 'append');
+  try {
+    if (outcome === 'success' || outcome === 'retry') {
+      const saved = await test.save();
+      expect(saved).toMatchObject({ status: 'saved_unverified', generation: 1 });
+      expect(test.store.creates).toBe(1);
+      expect(await test.rows()).toHaveLength(1);
+      if (outcome === 'retry') {
+        expect(saved).toEqual(original);
+        expect(writes).not.toHaveBeenCalled();
+      } else {
+        expect(writes).toHaveBeenCalledTimes(1);
+      }
+    } else {
+      await expect(test.save()).rejects.toThrow(/^Company connection unavailable$/u);
+      expect(test.store.creates).toBe(0);
+      expect(writes).not.toHaveBeenCalled();
+    }
+    expect(permissionChecks).toBe(1);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each(['success', 'retry', 'failed history', 'missing opt-in'])(
+  'makes one company permission decision for %s', companyPermissionOnce);
+
 async function refusesCompanyBeforeStage(kind: string) {
   const mode = kind === 'mode' ? 'personal' : 'company';
   const test = await companyFixture(kind !== 'absent', mode);
@@ -5396,7 +5486,12 @@ async function refusesCompanyBeforeStage(kind: string) {
     };
     input = { ...test.input, ...patches[kind] };
   }
-  await expect(test.save(input, material, binding)).rejects.toThrow('Company connection unavailable');
+  const pending = test.save(input, material, binding);
+  if (kind === 'removed' || kind === 'non-admin' || kind === 'silo') {
+    await expect(pending).rejects.toBeInstanceOf(MemberAccessRefused);
+  } else {
+    await expect(pending).rejects.toThrow('Company connection unavailable');
+  }
   expect(test.store.creates).toBe(0);
   expect(await test.rows()).toHaveLength(0);
 }
