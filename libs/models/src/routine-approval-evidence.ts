@@ -1,8 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
-import { approvalDecidedDataSchema, budgetRootAllowanceSetDataSchema,
+import { approvalDecidedDataSchema, approvalUsedDataSchema, budgetRootAllowanceSetDataSchema,
   conversationCreatedDataSchema, parseEventByType, toolApprovalRequestedDataSchema,
-  type RoutineState } from '@opencrane/events';
+  toolDispatchRecordedDataSchema, type RoutineState } from '@opencrane/events';
 import { data } from './state.ts';
 import { history } from './event-history.ts';
 
@@ -137,21 +137,80 @@ function requireRequest(requested: StoredEvent, terminal: StoredEvent, run: Run,
   }
 }
 
-function requireTerminal(rows: StoredEvent[], source: StoredEvent, request: Request) {
-  let index = 1;
-  const firstChange = rows[index];
-  if (source.event.type === 'approval.expired' && firstChange?.event.type === 'approval.decided') {
-    requireRow(firstChange, source.event.silo, source.event.subject);
-    if (!ownerDecision(firstChange, request.requesterId, 'approved') ||
-        data(firstChange.event)['approvalId'] !== request.approvalId) {
-      return refuse();
+async function requireUnsent(store: EventStore, used: StoredEvent, next: StoredEvent,
+  request: Request, deadline: number) {
+  const { permitId } = approvalUsedDataSchema.parse(used.event.data);
+  const subject = `decision-${permitId}`;
+  const rows = await history(store, subject, used.event.silo, deadline);
+  let observation: StoredEvent | undefined;
+  for (const row of rows) {
+    if (row.sequence >= next.sequence) {
+      break;
     }
-    index++;
+    observation = row;
   }
-  const terminal = rows[index];
-  if (!terminal || terminal.sequence !== source.sequence || terminal.event.id !== source.event.id) {
+  const saved = requireRow(observation, used.event.silo, subject);
+  requireModelsSource(saved, 'tool.dispatch_recorded');
+  const dispatch = toolDispatchRecordedDataSchema.parse(saved.event.data);
+  const provedUnsent = dispatch.evidence === 'connection_refused' ||
+    dispatch.evidence === 'adapter_dispatch_refused';
+  if (saved.sequence <= used.sequence || dispatch.approvalId !== request.approvalId ||
+      dispatch.requestId !== permitId || dispatch.conversationId !== request.conversationId ||
+      dispatch.turnId !== request.turnId || dispatch.serverId !== request.serverId ||
+      dispatch.toolName !== request.tool || dispatch.outcome !== 'not_dispatched' || !provedUnsent) {
     return refuse();
   }
+}
+
+async function requireChange(store: EventStore, previous: StoredEvent, row: StoredEvent,
+  request: Request, deadline: number) {
+  const event = row.event;
+  const previousType = previous.event.type;
+  if (event.type === 'approval.decided' && previousType === 'tool.approval_requested' &&
+      ownerDecision(row, request.requesterId, 'approved')) {
+    return;
+  }
+  if (event.type === 'approval.used' &&
+      (previousType === 'approval.decided' || previousType === 'approval.retry_requested')) {
+    requireModelsSource(row, 'approval.used');
+    return;
+  }
+  if (event.type === 'approval.retry_requested' && previousType === 'approval.used' &&
+      event.source === 'opencrane-server' && event.principal?.kind === 'human' &&
+      event.principal.id === request.requesterId) {
+    await requireUnsent(store, previous, row, request, deadline);
+    return;
+  }
+  return refuse();
+}
+
+async function requireTerminal(store: EventStore, rows: StoredEvent[], source: StoredEvent,
+  request: Request, deadline: number) {
+  let previous = rows[0]!;
+  for (const saved of rows.slice(1)) {
+    const row = requireRow(saved, source.event.silo, source.event.subject);
+    if (row.sequence <= previous.sequence ||
+        data(row.event)['approvalId'] !== request.approvalId) {
+      return refuse();
+    }
+    if (row.sequence === source.sequence && row.event.id === source.event.id) {
+      if (source.event.type !== 'approval.expired' &&
+          previous.event.type !== 'tool.approval_requested') {
+        return refuse();
+      }
+      if (previous.event.type === 'approval.used') {
+        // Verify that expiry was permitted then. Never authorise another attempt.
+        await requireUnsent(store, previous, row, request, deadline);
+      }
+      return;
+    }
+    if (row.sequence >= source.sequence) {
+      return refuse();
+    }
+    await requireChange(store, previous, row, request, deadline);
+    previous = row;
+  }
+  return refuse();
 }
 
 /** Read saved terminal evidence without expiring a card or opening its encrypted review. */
@@ -173,7 +232,7 @@ export async function readRoutineApproval(store: EventStore, previous: RoutineSt
   requireRow(requested, state.silo, subject);
   const terminal = requireRow(source, state.silo, subject);
   requireRequest(requested, terminal, run, request);
-  requireTerminal(rows, source, request);
+  await requireTerminal(store, rows, source, request, deadline);
   const reason = terminalReason(terminal, run.definition.ownerId, request.expiresAt);
   const prepared = await requirePreparation(store, state, run, claimPosition, deadline);
   await requireAllocation(store, state, run, prepared, requested.sequence, deadline);

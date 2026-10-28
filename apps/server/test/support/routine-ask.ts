@@ -66,8 +66,12 @@ export async function routineUsedAsk(store: EventStore, kind: string) {
     const details = { ...dispatch, approvalId, requestId: permitId,
       conversationId: 'routine-session-occurrence', turnId: 'routine-turn-occurrence',
       serverId: 'mcp_1', toolName: 'odoo.write' };
-    if (kind === 'foreign proof') details.approvalId = 'another';
-    if (kind === 'uncertain') details.evidence = 'transport_uncertain';
+    if (kind === 'foreign proof') {
+      details.approvalId = 'another';
+    }
+    if (kind === 'uncertain') {
+      details.evidence = 'transport_uncertain';
+    }
     const decisionSubject = `decision-${permitId}`;
     const proof = envelope('test', decisionSubject, 'tool.dispatch_recorded', details,
       `dispatch-${permitId}`, new Date('2026-10-11T07:02:01.000Z'));
@@ -77,7 +81,9 @@ export async function routineUsedAsk(store: EventStore, kind: string) {
     return used;
   }
   const used = await use('00000000-0000-4000-8000-000000000001');
-  if (kind === 'used only') return used;
+  if (kind === 'used only') {
+    return used;
+  }
   if (['retry', 'retry used', 'foreign retry'].includes(kind)) {
     await save('approval.retry_requested', { approvalId }, 'retry', true);
   }

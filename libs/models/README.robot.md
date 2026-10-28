@@ -4553,9 +4553,15 @@ two-second observation limit, including slow evidence reads and completed pendin
 its first terminal event and follow the trusted preparation and allocation. Owner rejection
 must name the frozen owner; an expiry record must be at or after the saved expiresAt. The
 request can be stamped just after the hold starts; at most 15 minutes may remain.
-Clock passage alone proves nothing. A saved expiry can follow approval if the card was
-never used. Requested, approved or used records alone, foreign people, requests, turns,
-routines and silos refuse.
+Clock passage alone proves nothing. A saved expiry can follow an unused approval or a
+used approval with matching saved proof that nothing was sent. Each use must follow
+approval or the owner's saved retry request. Each retry and expiry after use must follow
+`connection_refused` or `adapter_dispatch_refused` proof with `not_dispatched`, bound to
+that permit, approval, conversation, turn, server and tool. Later proof cannot justify
+an earlier expiry. Verification grants no retry authority. Requested, approved or used
+records alone, foreign people, requests, turns, routines and silos refuse.
+The routine-session tests cover saved expiry after use, owner retry and another unsent
+use, including a NATS restart before verification and cold replay of the saved Stop.
 `readRootStopEvidence` repeats these checks before budget or bridge cleanup. No approval
 read mutates state, opens review ciphertext, reads credentials, wakes or sends work.
 Existing routine dispatch checks refuse the saved Stop before cleanup, including free calls.
@@ -4571,8 +4577,6 @@ The server shares this check and `prepareMemoryReceipts` for personal withdrawal
 History and receipt preparation finish before the two-second access deadline.
 No conversation stream enters that access check. Replay retains ended status and
 loaded references after an `access_changed` withdrawal, without granting execution.
-=======
-## Routine approval termination evidence
 
 `readRoutineApproval` validates saved evidence only. The original request must precede
 its first terminal event and follow the trusted preparation and allocation. Owner rejection

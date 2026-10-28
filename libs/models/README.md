@@ -66,7 +66,9 @@ It can finish deletion after the member leaves. A lost reply never grants anothe
 provider call. Public routes remain unavailable.
 
 The library verifies a routine Ask's saved denial or expiry against its original request
-and spending allowance. Verification never opens the private review or starts work.
+and spending allowance. Expiry can also stop the routine after an approved attempt
+when saved evidence proves the tool call was not sent. Verification never opens the
+private review or starts work.
 
 A system pause can stop a routine after its recorded owner is removed. The library
 checks the saved removal against that run and its original membership.
@@ -109,7 +111,7 @@ flowchart LR
   models -->|stages credentials, callback codes and replies, confirms first accounts, starts, joins, claims and sends refresh attempts, saves replacements, retains old access tokens until expiry and removes revoked tokens even after member removal, recovers replies and checks signed accounts, shares a database lock for personal and company saves and personal cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves events, local account revocations, remote starts and unsent proof; recovers budgets in order and applies saved routine Stops, pauses, verified owner removal, Ask termination and retirements; reads spending and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
+  models -->|saves events, local account revocations, remote starts and unsent proof; recovers budgets in order and applies saved routine Stops, pauses, verified owner removal, Ask denial or expiry and retirements; reads spending and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also

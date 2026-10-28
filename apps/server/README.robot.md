@@ -6569,8 +6569,6 @@ are unavailable without a saved denial.
 No event or HTTP API field, dependency, routine file or loader changed. Browser
 reply delivery, group/notes withdrawal and native launch remain later work.
 Admission remains disabled. Fresh-install live qualification: NOT RUN.
-=======
-## Routine Stop after a denied or expired Ask
 
 Part of #107. Prerequisite: #802 merged as `5b5d82b68`.
 `stopRoutineAfterApproval(store, silo, input)` saves one conditional Stop for the occupied

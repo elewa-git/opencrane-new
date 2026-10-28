@@ -1804,7 +1804,9 @@ function routineRootTests() {
       expect(await stopRoutineAfterApproval(nats.store, 'test', request)).toEqual(stopped);
       const savedRows = await history(nats.store, 'routine-orders', 'test');
       let state;
-      for (const row of savedRows) state = foldRoutine(state, row.event);
+      for (const row of savedRows) {
+        state = foldRoutine(state, row.event);
+      }
       expect(state).toMatchObject({ stopRequested: true, executionAvailable: false,
         activeRun: { occurrenceId: 'occurrence' } });
       expect(await nats.store.head()).toBe(before + 1);
