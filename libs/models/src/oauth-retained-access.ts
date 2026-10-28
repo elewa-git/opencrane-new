@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import { connectionOperationId } from './bearer-connections.ts';
+import { isDeepStrictEqual } from 'node:util';
+import type { StoredEvent } from '@opencrane/event-store';
+import { connectionOperationId, foldConnection } from './bearer-connections.ts';
 import type { connectionCustody, ConnectionStage } from './connection-custody.ts';
 
 type Custody = ReturnType<typeof connectionCustody>;
@@ -45,4 +47,48 @@ export async function retainAccessToken(custody: Custody, generation: Connection
   if (!saved.identity || !['staged', 'recovered'].includes(saved.status)) {
     throw new Error('OAuth access retention unconfirmed');
   }
+}
+
+function isExpiredRetainedAccess(rows: StoredEvent[], candidate: ConnectionStage) {
+  for (let index = 0; index < rows.length; index++) {
+    const row = rows[index]!;
+    if (!['connection.created', 'connection.refreshed'].includes(row.event.type)) {
+      continue;
+    }
+    const saved = foldConnection(rows.slice(0, index + 1)).data;
+    const activation = saved?.activation;
+    if (!saved || activation?.reason !== 'oauth_confirmed' ||
+        activation.operationId !== row.event.id || Date.now() < activation.account.expiresAt) {
+      continue;
+    }
+    const generation: ConnectionStage = { siloId: row.event.silo, userId: saved.userId,
+      serverId: saved.serverId, connectionId: activation.connectionId,
+      profileId: saved.profile, purpose: activation.purpose,
+      generation: activation.generation, endpointDigest: activation.endpointDigest,
+      operationId: activation.operationId, expectedSequence: activation.expectedSequence,
+      appendUntil: activation.appendUntil };
+    const retained = retainedAccessStage(generation, activation.account.expiresAt);
+    if (isDeepStrictEqual(candidate, retained)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Delete only the access-only copy whose saved account proves its expiry. */
+export async function retireExpiredAccess(custody: Pick<Custody, 'recover' | 'retire'>,
+  rows: StoredEvent[], candidate: ConnectionStage) {
+  const retained = { status: 'retained' as const };
+  if (!isExpiredRetainedAccess(rows, candidate)) {
+    return retained;
+  }
+  const recovered = await custody.recover(candidate);
+  if (recovered.status !== 'recovered' || !recovered.identity) {
+    return retained;
+  }
+  const removed = await custody.retire(candidate, recovered.identity);
+  if (removed.status !== 'deleted') {
+    return retained;
+  }
+  return { status: 'deleted' as const };
 }

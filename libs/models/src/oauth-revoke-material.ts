@@ -80,7 +80,8 @@ async function previousAccessTokens(custody: Custody, rows: StoredEvent[],
     const saved = foldConnection(rows.slice(0, index + 1)).data;
     const activation = saved?.activation;
     if (!saved || activation?.reason !== 'oauth_confirmed' ||
-        activation.generation >= generation.generation) {
+        activation.generation >= generation.generation ||
+        Date.now() >= activation.account.expiresAt) {
       continue;
     }
     const stage = { ...generation, generation: activation.generation,
