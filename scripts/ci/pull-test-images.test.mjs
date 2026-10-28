@@ -82,6 +82,38 @@ function expectedPulls() {
   return images.map(pull);
 }
 
+function assertBackoff(sleeps, expectedCount) {
+  assert.equal(sleeps.length, expectedCount);
+  const delays = sleeps.map(Number);
+  const minimums = [10, 30, 60];
+  let total = 0;
+  for (let index = 0; index < delays.length; index += 1) {
+    const delay = delays[index];
+    const minimum = minimums[index];
+    assert.ok(delay >= minimum, `wait ${index + 1} was only ${delay} seconds`);
+    assert.ok(delay <= minimum + 2, `wait ${index + 1} exceeded its jitter limit`);
+    total += delay;
+  }
+  assert.ok(total <= 106, `total wait was ${total} seconds`);
+  if (expectedCount === 3) {
+    assert.ok(total >= 100, 'allow a per-minute registry quota to reset');
+  }
+}
+
+function retriesQuotaExceeded() {
+  const message = "error from registry: Quota exceeded for quota metric " +
+    "'Requests per project in the US multi-region' and limit " +
+    "'Requests per project in the US multi-region per minute' of service " +
+    "'artifactregistry.googleapis.com'";
+  const result = pullImages(message, 2);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.calls, [
+    ['pull', minio], ['pull', minio], ...expectedPulls(),
+  ]);
+  assertBackoff(result.sleeps, 2);
+  assert.ok((result.stdout + result.stderr).includes(message));
+}
+
 function retriesRateLimits() {
   const message = 'unexpected status from HEAD request: 429 Too Many Requests';
   const result = pullImages(message, 2);
@@ -89,7 +121,7 @@ function retriesRateLimits() {
   assert.deepEqual(result.calls, [
     ['pull', minio], ['pull', minio], ...expectedPulls(),
   ]);
-  assert.deepEqual(result.sleeps, ['2', '4']);
+  assertBackoff(result.sleeps, 2);
   assert.match(result.stdout + result.stderr, /429 Too Many Requests/);
 }
 
@@ -108,7 +140,7 @@ function boundsRetries() {
   assert.deepEqual(result.calls, [
     ['pull', minio], ['pull', minio], ['pull', minio], ['pull', minio],
   ]);
-  assert.deepEqual(result.sleeps, ['2', '4', '8']);
+  assertBackoff(result.sleeps, 3);
 }
 
 function retriesTemporaryFailures() {
@@ -117,17 +149,26 @@ function retriesTemporaryFailures() {
     'received unexpected HTTP status: 502 Bad Gateway',
     'net/http: TLS handshake timeout',
     'context deadline exceeded',
+    '429',
+    'tOo MaNy ReQuEsTs',
+    'qUoTa ExCeEdEd',
+    'registry rate limit exceeded',
+    'RATE LIMIT exceeded',
+    'ToOmAnYrEqUeStS',
   ];
   for (const message of errors) {
     const result = pullImages(message, 1);
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(result.calls, [['pull', minio], ...expectedPulls()]);
-    assert.deepEqual(result.sleeps, ['2']);
+    assertBackoff(result.sleeps, 1);
   }
 }
 
 function refusesOtherFailures() {
   const errors = ['manifest unknown', 'unauthorized: authentication required',
+    'unknown digest (upstream quota exceeded)',
+    'manifest unknown (upstream rate limit)',
+    'unauthorized: authentication required (upstream 429)',
     'Cannot connect to the Docker daemon'];
   for (const message of errors) {
     const result = pullImages(message, 99);
@@ -165,6 +206,7 @@ function usesHelperPins() {
   assert.deepEqual(result.sleeps, []);
 }
 
+test('pulls the exact images after two registry quota errors', retriesQuotaExceeded);
 test('pulls the exact images after two rate limits', retriesRateLimits);
 test('fails immediately with the registry message for a missing digest', refusesMissingDigest);
 test('stops after four failed pulls with bounded backoff', boundsRetries);
@@ -199,7 +241,7 @@ function retriesCommandTimeouts() {
     const result = pullImages('', 1, status);
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(result.calls, [['pull', minio], ...expectedPulls()]);
-    assert.deepEqual(result.sleeps, ['2']);
+    assertBackoff(result.sleeps, 1);
   }
 }
 
