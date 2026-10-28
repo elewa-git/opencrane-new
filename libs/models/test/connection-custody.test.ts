@@ -4392,7 +4392,7 @@ async function savesRefreshOnce(fault: string) {
       expect(foldConnection(altered).data).toBeUndefined();
     }
     expect(test.refreshSends).toBe(1);
-    expect(test.store.creates).toBe(6);
+    expect(test.store.creates).toBe(7);
     expect(test.store.secrets.has(test.generation.secretRef.slice(7))).toBe(false);
     for (const secret of test.store.secrets.values()) {
       const contents = Buffer.from(secret.data.token, 'base64').toString();
@@ -4445,7 +4445,7 @@ async function retiresRefreshAfterMemberRemoval() {
     expect(await saveRefresh(test, undefined, true)).toEqual({ status: 'unknown' });
     expect(test.store.deletes).toBe(2);
     expect(await history(events.store, test.subject, 'test')).toEqual(savedRows);
-    expect(test.store.creates).toBe(6);
+    expect(test.store.creates).toBe(7);
     expect(test.refreshSends).toBe(1);
   } finally {
     await test.close();
@@ -5186,3 +5186,38 @@ async function refusesUnresolvedRefreshRevoke() {
 }
 it('keeps provider revoke unknown when a refresh reply cannot be recovered',
   refusesUnresolvedRefreshRevoke);
+
+async function refusesMissingUnexpiredAccess() {
+  const test = await refreshFixture();
+  try {
+    await test.start();
+    expect(await saveRefresh(test, await claimRefresh(test)))
+      .toMatchObject({ status: 'saved', generation: 2 });
+    for (const [name, secret] of test.store.secrets) {
+      const contents = Buffer.from(secret.data.token, 'base64').toString();
+      if (contents === '{"access_token":"result-canary"}') {
+        test.store.secrets.delete(name);
+      }
+    }
+    const rows = await history(events.store, test.subject, 'test');
+    test.input.expectedSequence = rows.at(-1)!.sequence;
+    test.input.expectedGeneration = 2;
+    test.input.changeRef = 'revoke-missing-old-access';
+    await revokeOAuth(test);
+    const { finishPersonalOAuthRevoke } = await import('../src/oauth-revoke-worker.ts');
+    expect(await finishPersonalOAuthRevoke(events.store, 'test', test.store.restart(), test.input,
+      test.loader.loadConfiguration, pgDb(storage.queue), test.providerFixture.network))
+      .toEqual({ status: 'unknown' });
+    expect(test.revocations).toHaveLength(0);
+    expect(test.tokenIsValid('result-canary')).toBe(true);
+    expect(test.store.secrets.size).toBe(0);
+    expect(await finishPersonalOAuthRevoke(events.store, 'test', test.store.restart(), test.input,
+      test.loader.loadConfiguration, pgDb(storage.queue), test.providerFixture.network))
+      .toEqual({ status: 'unknown' });
+    expect(test.revocations).toHaveLength(0);
+  } finally {
+    await test.close();
+  }
+}
+it('refuses revoke completion when an unexpired older access token is missing',
+  refusesMissingUnexpiredAccess);
