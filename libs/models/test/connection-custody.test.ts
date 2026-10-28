@@ -5011,8 +5011,10 @@ async function recoversProviderRevoke(failure: string) {
   try {
     const { finishPersonalOAuthRevoke } = await import('../src/oauth-revoke-worker.ts');
     await revokeOAuth(test);
-    if (failure === 'provider reply') {
+    const lostProviderReply = failure.startsWith('provider reply');
+    if (lostProviderReply) {
       test.loseRevokeReply();
+      test.store.failDeletes(failure === 'provider reply and delete');
     } else if (failure === 'delete') {
       test.store.failDeletes(true);
     } else {
@@ -5039,10 +5041,10 @@ async function recoversProviderRevoke(failure: string) {
       expect(await restarted.readRefreshMaterial(stage, copy.identity!)).toBeUndefined();
     }
     test.store.failDeletes(false);
-    const expected = { status: failure === 'provider reply' ? 'unknown' : 'completed' };
+    const expected = { status: lostProviderReply ? 'unknown' : 'completed' };
     expect(await finish(restarted)).toEqual(expected);
     expect(await finish(test.store.restart())).toEqual(expected);
-    expect(test.revocations).toHaveLength(failure === 'provider reply' ? 1 : 2);
+    expect(test.revocations).toHaveLength(lostProviderReply ? 1 : 2);
     expect(test.store.secrets.size).toBe(0);
     const rows = await history(events.store, test.subject, 'test');
     expect(rows).toHaveLength(4);
@@ -5055,7 +5057,7 @@ async function recoversProviderRevoke(failure: string) {
     await test.close();
   }
 }
-it.each(['provider reply', 'saved reply', 'delete'])(
+it.each(['provider reply', 'provider reply and delete', 'saved reply', 'delete'])(
   'recovers OAuth revoke after lost %s and member removal without another provider call',
   recoversProviderRevoke);
 

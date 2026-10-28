@@ -9,7 +9,7 @@ type Identity = Parameters<Custody['retire']>[1];
 const accessSchema = z.object({ access_token: z.string().regex(/^[\x21-\x7e]{1,4096}$/u) });
 
 /** Keep one access-only copy tied to the original saved generation. */
-export function retainedAccessStage(generation: ConnectionStage,
+function retainedAccessStage(generation: ConnectionStage,
   expiresAt: number): ConnectionStage {
   const subject = `connection-${generation.userId}-${generation.serverId}-${generation.profileId}`;
   const operationId = connectionOperationId(generation.siloId, subject,
