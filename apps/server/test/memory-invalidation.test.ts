@@ -424,3 +424,22 @@ async function anotherCauseAfterCompletion() {
   expect(await setup.store.head('conversation-chat')).toBe(before);
 }
 it('keeps one invalidation when a different cause arrives after completion', anotherCauseAfterCompletion);
+
+async function expiryBoundary() {
+  const { expiresAt, expiring } = await loadExpiringFact();
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(expiresAt - 1);
+  try {
+    expect(await invalidate({ causeId: undefined })).toEqual({ status: 'unchanged' });
+    clock.mockReturnValue(expiresAt);
+    const receipt = await invalidate({ causeId: undefined });
+    expect(receipt).toMatchObject({ status: 'invalidated', inputGeneration: 'input' });
+    const facts = await readChatFacts(setup.store, 'test', 'chat', 'turn');
+    expect(facts.memoryContext).toMatchObject({ status: 'invalidated', reason: 'expired',
+      references: [reference, expiring], executionAvailable: false });
+    expect(await invalidate({ causeId: undefined })).toEqual(receipt);
+    expect(facts.memoryContext?.events.size).toBe(4);
+  } finally {
+    clock.mockRestore();
+  }
+}
+it('withdraws loaded memory exactly at expiry without a mutation event', expiryBoundary);
