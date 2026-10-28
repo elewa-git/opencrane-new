@@ -31,6 +31,8 @@ import { calculateRoutineOccurrence } from '@opencrane/events/routine-schedule';
 import { claimScheduledRoutine } from '../../ops/test/support/routine-claim.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { applyRoutineStop } from '../src/routine-stop-budget.ts';
+import { pauseRoutine } from '../src/routine-pause.ts';
+import { retireRoutine } from '../src/routine-retire.ts';
 import { requestRoutineStop } from '../src/routine-stop.ts';
 import { prepareRoutineSession } from '../src/routine-session.ts';
 import { assistantSnapshot, processConversation } from '../src/chat/bridge-conversation.ts';
@@ -968,7 +970,18 @@ function finishedStopRun(occurrenceId: string) {
     { ...data, ...stopRunBinding(occurrenceId) });
   return { ...finished, principal: { kind: 'system' as const, id: 'opencrane-server' } };
 }
-async function stopAfterOlderCompletion() {
+async function prohibit(kind: string, request: Awaited<ReturnType<typeof stopRequest>>,
+  memberId = 'alice') {
+  if (kind === 'Stop') {
+    return requestRoutineStop(nats.store, binding, memberId, request);
+  }
+  const { occurrenceId: _occurrence, ...control } = request;
+  if (kind === 'Pause') {
+    return pauseRoutine(nats.store, binding, memberId, control);
+  }
+  return retireRoutine(nats.store, binding, memberId, control);
+}
+async function stopAfterOlderCompletion(kind: string) {
   const firstFinished = finishedStopRun('occurrence');
   await nats.seed([firstFinished]);
   const dueTemplate = due();
@@ -991,11 +1004,22 @@ async function stopAfterOlderCompletion() {
   const allocation = { requesterId: 'alice', conversationId: currentRun.conversationId,
     turnId: currentRun.turnId, assistantId: 'sales-assistant', payingGroupId: 'sales',
     ...selection, allowanceCents: 1000 };
+  const otherConversation = { ...allocation, conversationId: 'another-conversation' };
+  const otherTurn = { ...allocation, turnId: 'another-turn' };
+  await budget.setRootAllowance(otherConversation, 1);
+  await budget.setRootAllowance(otherTurn, 1);
   const root = await budget.setRootAllowance(allocation, 1);
   expect(root.rootId).not.toBe(currentRun.rootId);
   const request = { ...await stopRequest(), occurrenceId: 'run-c' };
-  const receipt = await requestRoutineStop(nats.store, binding, 'alice', request);
+  const receipt = await prohibit(kind, request);
   expect(receipt.status).toBe('confirmed');
+  if (kind === 'Retire') {
+    const saved = await nats.store.readEvent(receipt.position);
+    const auth = memberAuthorisation(binding, nats.store);
+    await auth.handler.handle(saved.event, db);
+  }
+  expect(await prohibit(kind, request)).toEqual(receipt);
+  await nats.seed([finishedStopRun('run-c')]);
   const reference = { routineId: 'orders', eventId: receipt.eventId, position: receipt.position };
   const before = await nats.store.head();
   const result = await applyRoutineStop(nats.store, 'test', reference, budget, { enabled: true });
@@ -1003,8 +1027,10 @@ async function stopAfterOlderCompletion() {
   const expectedStop = { rootId: root.rootId, reason: 'routine_stop',
     sourceSubject: 'routine-orders', sourcePosition: receipt.position,
     sourceEventId: receipt.eventId };
-  expect(budget.state.roots[0]!.stop).toEqual(expectedStop);
+  expect(budget.state.roots[2]!.stop).toEqual(expectedStop);
   expect(await nats.store.head()).toBe(before + 1);
+  expect(budget.state.roots[0]!.stop).toBeUndefined();
+  expect(budget.state.roots[1]!.stop).toBeUndefined();
   const savedStop = await nats.store.readEvent(before + 1);
   expect(savedStop.event).toMatchObject({ type: 'budget.root_stopped', data: expectedStop });
   const recovered = new BudgetActor(nats.store, 'test');
@@ -1012,10 +1038,11 @@ async function stopAfterOlderCompletion() {
   const beforeRetry = await nats.store.head();
   expect(await applyRoutineStop(nats.store, 'test', reference, recovered, { enabled: true }))
     .toEqual(result);
-  expect(recovered.state.roots[0]!.stop).toEqual(expectedStop);
+  expect(recovered.state.roots[2]!.stop).toEqual(expectedStop);
   expect(await nats.store.head()).toBe(beforeRetry);
 }
-it('owner Stop applies and recovers after an older completed run finishes again',
+it.each(['Stop', 'Pause', 'Retire'])(
+  'owner %s applies and recovers after an older completed run finishes again',
   stopAfterOlderCompletion);
 
 async function stopWriteChecks(kind: string) {
@@ -1120,16 +1147,26 @@ function routineRootTests() {
     expect(actor.state.dispatches).toEqual([]);
   }
   it('duplicate due processing and concurrent allocation save one immutable allowance', once);
-  async function stopsAllocatedRoot(stage: string) {
+  async function stopsAllocatedRoot(kind: string, stage: string) {
     stopping = true;
-    if (stage !== 'prepared') await prepare();
+    if (stage !== 'prepared') {
+      await prepare();
+    }
     if (stage === 'admitted') {
       activationMode = true;
       await prepare();
     }
     const request = await stopRequest();
-    const receipt = await requestRoutineStop(nats.store, binding, 'alice', request);
+    const beforeControl = await nats.store.head();
+    const receipt = await prohibit(kind, request);
+    expect(await nats.store.head()).toBe(beforeControl + 1);
+    const saved = await nats.store.readEvent(receipt.position);
+    expect(saved.event.data).toMatchObject({ affectedRun: 'occurrence' });
     const reference = { routineId: 'orders', eventId: receipt.eventId, position: receipt.position };
+    const before = await nats.store.head();
+    expect(await applyRoutineStop(nats.store, 'test', reference, actor,
+      { enabled: true, replay: true })).toEqual({ status: 'disabled' });
+    expect(await nats.store.head()).toBe(before);
     const result = await applyRoutineStop(nats.store, 'test', reference, actor, { enabled: true });
     if (stage === 'prepared') {
       expect(result).toEqual({ status: 'pending' });
@@ -1142,12 +1179,16 @@ function routineRootTests() {
       expect(await applyRoutineStop(nats.store, 'test', reference, actor, { enabled: true }))
         .toEqual(result);
     }
-    if (stage === 'allocated') activationMode = true;
+    if (stage === 'allocated') {
+      activationMode = true;
+    }
     await refuses();
   }
-  it.each(['prepared', 'allocated', 'admitted'])(
-    'owner Stop prevents further admission at the %s stage', stopsAllocatedRoot);
-  async function budgetStopRecovery() {
+  it.each([['Stop', 'prepared'], ['Stop', 'allocated'], ['Stop', 'admitted'],
+    ['Pause', 'prepared'], ['Pause', 'allocated'], ['Pause', 'admitted'],
+    ['Retire', 'prepared'], ['Retire', 'allocated'], ['Retire', 'admitted']])(
+    'owner %s prevents further admission at the %s stage', stopsAllocatedRoot);
+  async function budgetStopRecovery(kind: string) {
     stopping = true;
     await prepare();
     const root = actor.state.roots[0]!;
@@ -1159,7 +1200,7 @@ function routineRootTests() {
     await apply([joinedMember('bob'), routine('routine.reassigned', 'bob')]);
     const request = { ...await stopRequest(), expectedDefinitionRevision: 2,
       expectedControlRevision: 2 };
-    const saved = await requestRoutineStop(nats.store, binding, 'bob', request);
+    const saved = await prohibit(kind, request, 'bob');
     const reference = { routineId: 'orders', eventId: saved.eventId, position: saved.position };
     const append = nats.store.append.bind(nats.store);
     async function loseReply(change: AppendCommand): Promise<never> {
@@ -1208,33 +1249,49 @@ function routineRootTests() {
       .toEqual({ status: 'confirmed' });
     expect(actor.state.roots[0]!.stop?.reason).toBe('routine_stop');
   }
-  it('owner Stop retains frozen people and uncertain cents through budget failure and restart',
+  it.each(['Stop', 'Pause', 'Retire'])(
+    'owner %s retains frozen people and uncertain cents through budget failure and restart',
     budgetStopRecovery);
 
-  async function racingStop(afterAllocation: boolean) {
+  async function racingStop(kind: string, afterAllocation: boolean) {
     stopping = true;
     const request = await stopRequest();
     let saved: Awaited<ReturnType<typeof requestRoutineStop>>;
     const append = nats.store.append.bind(nats.store);
     async function race(change: AppendCommand) {
       let result;
-      if (afterAllocation) result = await append(change);
-      saved = await requestRoutineStop(nats.store, binding, 'alice', request);
+      if (afterAllocation) {
+        result = await append(change);
+      }
+      saved = await prohibit(kind, request);
       const reference = { routineId: 'orders', eventId: saved.eventId, position: saved.position };
       expect(await applyRoutineStop(nats.store, 'test', reference, actor, { enabled: true }))
         .toEqual({ status: 'pending' });
-      if (result) return result;
+      if (result) {
+        return result;
+      }
       return append(change);
     }
     vi.spyOn(nats.store, 'append').mockImplementationOnce(race);
     await expect(prepare()).rejects.toThrow('Routine root refused');
     const reference = { routineId: 'orders', eventId: saved!.eventId, position: saved!.position };
     await applyRoutineStop(nats.store, 'test', reference, actor, { enabled: true });
-    if (afterAllocation) expect(actor.state.roots[0]!.stop?.reason).toBe('routine_stop');
-    else expect(actor.state.roots).toEqual([]);
+    if (afterAllocation) {
+      expect(actor.state.roots[0]!.stop?.reason).toBe('routine_stop');
+      actor = new BudgetActor(nats.store, 'test');
+      await actor.start();
+      const before = await nats.store.head();
+      await applyRoutineStop(nats.store, 'test', reference, actor, { enabled: true });
+      expect(await nats.store.head()).toBe(before);
+      expect(actor.state.roots[0]!.stop?.reason).toBe('routine_stop');
+    } else {
+      expect(actor.state.roots).toEqual([]);
+    }
     await refuses();
   }
-  it.each([false, true])('owner Stop racing allocation is recovered, already saved: %s', racingStop);
+  it.each([['Stop', false], ['Stop', true], ['Pause', false], ['Pause', true],
+    ['Retire', false], ['Retire', true]] as const)(
+    'owner %s racing allocation is recovered, already saved: %s', racingStop);
 
   async function stopOperationGuards() {
     stopping = true;

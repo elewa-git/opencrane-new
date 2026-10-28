@@ -1,6 +1,6 @@
 import { foldRoutineHistory } from '@opencrane/authz';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
-import { parseEventByType, type EventEnvelope, type RoutineState }
+import { parseEventByType, routineControlSchema, type EventEnvelope, type RoutineState }
   from '@opencrane/events';
 import { data, type BudgetState } from './state.ts';
 import { withinBudgetDeadline } from './budget-writer.ts';
@@ -32,11 +32,34 @@ async function readEvidence(store: EventStore, subject: string, position: number
     throw new Error('Missing source event');
   }
   const source = { sequence: saved.sequence, event: parsed.event };
-  if (source.event.type !== 'routine.run_stop_requested') {
+  if (source.event.type !== 'routine.run_stop_requested' &&
+      !isLifecycleProhibition(source.event)) {
     return source;
   }
   const routine = await readRoutineThroughStop(store, source, deadline);
   return { ...source, routine };
+}
+
+function isLifecycleProhibition(event: EventEnvelope) {
+  return event.type === 'routine.paused' || event.type === 'routine.retired';
+}
+
+function requireLifecycleRun(state: RoutineState | undefined, event: EventEnvelope) {
+  if (!isLifecycleProhibition(event)) {
+    return;
+  }
+  const control = routineControlSchema.parse(event.data);
+  const saved = state?.definition;
+  const run = state?.activeRun;
+  // Bind the prohibition to the run occupied before this lifecycle change was saved.
+  if (!saved || !run || state.status === 'retired' ||
+      control.affectedRun !== run.occurrenceId || control.source !== 'owner' ||
+      control.actorId !== saved.definition.ownerId ||
+      control.definitionRevision !== saved.definitionRevision ||
+      control.scheduleRevision !== saved.scheduleRevision ||
+      control.controlRevision !== saved.controlRevision + 1) {
+    throw new Error('Invalid routine prohibition');
+  }
 }
 
 async function readRoutineThroughStop(store: EventStore, source: StoredEvent, deadline: number) {
@@ -45,6 +68,9 @@ async function readRoutineThroughStop(store: EventStore, source: StoredEvent, de
   for await (const row of store.readStream(source.event.subject, 1, deadline)) {
     if (performance.now() >= deadline || row.sequence > source.sequence) {
       break;
+    }
+    if (row.sequence === source.sequence && row.event.id === source.event.id) {
+      requireLifecycleRun(routine, row.event);
     }
     routine = foldRoutineHistory(routine, row.event, completedRuns);
     if (row.sequence === source.sequence && row.event.id === source.event.id) {
@@ -59,7 +85,9 @@ function matchesRoutineStop(root: Root, source: StopEvidence) {
   const run = routine?.activeRun;
   // Validate repeated completions and the Stop against their original runs while reading history.
   // Match that frozen run to the allocated budget root through its turn and people.
-  return source.event.type === 'routine.run_stop_requested' && routine?.stopRequested === true &&
+  const prohibited = isLifecycleProhibition(source.event) ||
+    (source.event.type === 'routine.run_stop_requested' && routine?.stopRequested === true);
+  return prohibited &&
     run !== null && run !== undefined && matchesTurn(root, run) &&
     run.definition.ownerId === root.requesterId &&
     run.definition.assistantId === root.assistantId &&

@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { memberAuthorisation, type Binding } from '@opencrane/authz';
+import { foldRoutineHistory, memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { foldRoutine, routineControlSchema, type EventEnvelope,
+import { routineControlSchema, type EventEnvelope,
   type RoutineState } from '@opencrane/events';
 import { ownershipWriteAccess } from '@opencrane/models';
 
@@ -42,13 +42,14 @@ function requireRevisions(input: Input, state: RoutineState | undefined, positio
 
 function pauseData(state: RoutineState | undefined) {
   const saved = state?.definition;
-  if (!saved || state.status === 'retired' || state.activeRun) {
+  if (!saved || state.status === 'retired') {
     throw new PauseRefused();
   }
   const data = { version: 1, routineId: state.routineId,
     definitionRevision: saved.definitionRevision, scheduleRevision: saved.scheduleRevision,
     controlRevision: saved.controlRevision + 1, actorId: saved.definition.ownerId,
-    source: 'owner', reason: 'owner_requested', affectedRun: null, next: saved.next };
+    source: 'owner', reason: 'owner_requested',
+    affectedRun: state.activeRun?.occurrenceId ?? null, next: saved.next };
   return routineControlSchema.parse(data);
 }
 
@@ -66,19 +67,20 @@ function requireSamePause(event: EventEnvelope, input: Input, memberId: string,
 function previousPause(rows: StoredEvent[], input: Input, memberId: string) {
   let state: RoutineState | undefined;
   let position = 0;
+  const completed = new Map<string, NonNullable<RoutineState['activeRun']>>();
   for (const row of rows) {
     if (row.event.commandId === input.changeId) {
       requireRevisions(input, state, position);
       requireSamePause(row.event, input, memberId, pauseData(state));
       return receipt(row, input.changeId);
     }
-    state = foldRoutine(state, row.event);
+    state = foldRoutineHistory(state, row.event, completed);
     position = row.sequence;
   }
   return undefined;
 }
 
-/** Save only the owner's pause; active runs need the later Stop operation. */
+/** Save the pause and occupied run; budget cleanup uses this event separately. */
 export async function pauseRoutine(store: EventStore, binding: Binding,
   memberId: string, raw: unknown) {
   try {
@@ -89,11 +91,12 @@ export async function pauseRoutine(store: EventStore, binding: Binding,
     }
     const auth = memberAuthorisation(binding, store);
     const saved = await auth.loadRoutineAccess(memberId, input.routineId);
+    // Refuse non-owners before revealing saved changes or revision conflicts.
+    if (!(await saved.check('manage')).allowed) {
+      throw new PauseRefused();
+    }
     const previous = previousPause(saved.rows, input, memberId);
     if (previous) {
-      if (!(await saved.check('manage')).allowed) {
-        throw new PauseRefused();
-      }
       return previous;
     }
     const data = pauseData(saved.state);

@@ -465,14 +465,17 @@ is a member `agent.turn_stop_requested`, never the budget form. Turn-end evidenc
 is a matching chat `computer.turn_closed`, `agent.turn_completed` or `agent.turn_failed`.
 Access-loss evidence is requester removal or close on the root's participation stream,
 or removal on the requester's member stream. Parent changes are not accepted.
-Routine evidence is a saved `routine.run_stop_requested`. The actor folds history through
+Routine evidence is a saved `routine.run_stop_requested`, or an owner `routine.paused` or
+`routine.retired` naming the occupied run in `affectedRun`. Lifecycle evidence checks the
+current owner and preceding definition, schedule and control revisions. The actor folds history through
 that source within its separate ten-second read deadline, before queueing. The saved due
 must match the Stop's occurrence, routine root, input, turn and revisions. Its frozen owner,
 assistant, payer, conversation and turn must match the allocated budget root. The routine
 root reference differs from the allocated budget root id. Owner and admin sources both use
 `routine_stop`; later valid evidence cannot replace the first reason or source.
 The first stop stays permanent and refunds nothing. Dispatch checks follow separately.
-These internal records have no caller, route or reaction yet.
+Explicitly enabled internal cleanup applies these saved routine records to an existing
+allocation. There is no route or subscribed lifecycle reaction; execution remains disabled.
 
 The Phase 2 model actor records the global monthly `ceilingCents` and
 `dailyCeilingCents` together. Reservations include `modelCall`: model, pinned
@@ -692,7 +695,7 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` / `routine.reassigned` | server for checked actor | routine facts | `update-openfga` applies creation, reassignment and retirement permissions and receipts; no execution |
+| `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` / `routine.reassigned` | server for checked actor | routine facts | `update-openfga` applies creation, reassignment and retirement permissions and receipts; explicitly enabled internal cleanup applies verified owner Pause/Retire evidence to the occupied run’s existing budget root; no execution |
 | `routine.due` | server system | frozen occurrence facts (pure fold only) | none; no input or root is started |
 | `routine.occurrence_skipped` / `routine.occurrences_missed` | server system | saved cursor/next facts | none |
 | `routine.run_activation_admitted` | internal server conditional command | saved exact admission and sender attempt | none; receipt only, execution remains disabled |

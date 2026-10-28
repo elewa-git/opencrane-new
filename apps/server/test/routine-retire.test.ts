@@ -98,6 +98,7 @@ it.each(['active', 'paused'])(
   'retires an %s routine once without any execution events', savesOneRetirement);
 
 async function recoversLostReply() {
+  await occupy();
   const append = nats.store.append.bind(nats.store);
   async function loseReply(change: AppendCommand): Promise<never> {
     await append(change);
@@ -111,9 +112,9 @@ async function recoversLostReply() {
   const saved = await rows();
   await applyRetirement();
   const result = await retire();
-  expect(result.eventId).toBe(saved[1]?.event.id);
-  expect(result.position).toBe(saved[1]?.sequence);
-  expect(await rows()).toHaveLength(2);
+  expect(result.eventId).toBe(saved[2]?.event.id);
+  expect(result.position).toBe(saved[2]?.sequence);
+  expect(await rows()).toHaveLength(3);
 }
 it('recovers a lost committed reply after deduplication expires and NATS restarts',
   recoversLostReply, 30_000);
@@ -122,7 +123,7 @@ async function conflicts() {
   await retire();
   await applyRetirement();
   await expect(retire('bob')).rejects.toThrow(new Error('Routine retirement refused'));
-  await expect(retire('admin')).rejects.toThrow(new Error('Routine retirement conflict'));
+  await expect(retire('admin')).rejects.toThrow(new Error('Routine retirement refused'));
   const changes = [ { routineId: 'other' }, { expectedDefinitionRevision: 2 },
     { expectedScheduleRevision: 2 }, { expectedControlRevision: 2 },
     { expectedPosition: 0 } ];
@@ -200,11 +201,7 @@ async function refusesSavedChanges(type: string) {
   if (type === 'member.removed') {
     saved = event('removed-alice', 'member-alice', type);
   }
-  if (type === 'routine.due') {
-    saved = { ...event('due', 'routine-orders', type), source: 'opencrane-server',
-      principal: { kind: 'system', id: 'opencrane-server' },
-      data: getEventDefinition(type)!.example };
-  }
+
   await nats.seed([saved]);
   input.expectedPosition = await nats.store.head('routine-orders');
   input.expectedDefinitionRevision = type === 'routine.reassigned' ? 2 : 1;
@@ -213,7 +210,7 @@ async function refusesSavedChanges(type: string) {
   await expect(retire()).rejects.toThrow('Routine retirement refused');
   expect(await nats.store.head()).toBe(before);
 }
-it.each(['routine.reassigned', 'routine.retired', 'member.removed', 'routine.due'])(
+it.each(['routine.reassigned', 'routine.retired', 'member.removed'])(
   'refuses saved %s even before IAM catches up', refusesSavedChanges);
 
 async function refusesLegacy() {
@@ -311,6 +308,7 @@ it('loads routine and member history before the short check and never reads it a
   loadsHistoryFirst);
 
 async function replaysSavedRetirement() {
+  const occupied = await occupy();
   await retire();
   await applyRetirement();
   const options = { verifyAgainst: binding };
@@ -340,7 +338,8 @@ async function replaysSavedRetirement() {
     expect(saved.rows[0]?.state.executionAvailable).toBe(false);
     expect(saved.rows[0]?.state.definition?.next).toBeNull();
     const runs = await storage.db.query('SELECT * FROM routine_occurrences');
-    expect(runs.rows).toEqual([]);
+    expect(runs.rows).toHaveLength(1);
+    expect(saved.rows[0]?.state.activeRun).toEqual(occupied.data);
     const jobs = await storage.db.query("SELECT tablename FROM pg_tables WHERE schemaname='pgboss'");
     expect(jobs.rows).toEqual([]);
     expect(await nats.store.head()).toBe(before);
@@ -462,3 +461,45 @@ async function hidesMalformedPrincipal(condition: string) {
 it.each(['bob', 'outsider', 'removed owner', 'IAM outage'])(
   'hides a saved principal mismatch with the missing-routine refusal for %s',
   hidesMalformedPrincipal);
+
+async function occupy() {
+  const type = 'routine.due';
+  const saved = { ...event('occupied', 'routine-orders', type), source: 'opencrane-server',
+    principal: { kind: 'system' as const, id: 'opencrane-server' },
+    data: getEventDefinition(type)!.example };
+  await nats.seed([saved]);
+  input.expectedPosition = await nats.store.head('routine-orders');
+  return saved;
+}
+async function occupiedRetirement() {
+  const occupied = await occupy();
+  const before = await nats.store.head();
+  const results = await Promise.all([retire(), retire()]);
+  expect(results[0]).toEqual(results[1]);
+  expect(await nats.store.head()).toBe(before + 1);
+  const saved = await rows();
+  expect(saved.at(-1)?.event).toMatchObject({ type: 'routine.retired',
+    data: { affectedRun: 'occurrence', controlRevision: 2 } });
+  let state: RoutineState | undefined;
+  for (const row of saved) {
+    state = foldRoutine(state, row.event);
+  }
+  expect(state?.activeRun).toEqual(occupied.data);
+  expect(state?.executionAvailable).toBe(false);
+  const changedRequests = [{ expectedPosition: 0 }, { expectedDefinitionRevision: 2 },
+    { expectedScheduleRevision: 2 }, { expectedControlRevision: 2 }];
+  await applyRetirement();
+  expect(await retire()).toEqual(results[0]);
+  for (const change of changedRequests) {
+    await expect(retire('alice', { ...input, ...change }))
+      .rejects.toThrow('Routine retirement conflict');
+  }
+  for (const member of ['admin', 'bob', 'outsider']) {
+    for (const change of [{}, { expectedPosition: 0 }, { changeId: 'orders:unknown' }]) {
+      await expect(retire(member, { ...input, ...change }))
+        .rejects.toThrow('Routine retirement refused');
+    }
+  }
+  expect(await nats.store.head()).toBe(before + 1);
+}
+it('saves one occupied retire and gives non-owners uniform refusals', occupiedRetirement);

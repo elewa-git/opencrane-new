@@ -594,3 +594,45 @@ async function routineOtherOccurrence() {
 }
 it('refuses a valid source for another occurrence without stopping the earlier allocation',
   routineOtherOccurrence);
+
+async function lifecycleEvidence(type: string) {
+  await prepareRoutine();
+  const data = { ...routineExample(type), controlRevision: 2, affectedRun: 'occurrence' };
+  return routineEvidence(type, data);
+}
+async function acceptsLifecycle(type: string) {
+  const source = await lifecycleEvidence(type);
+  await acceptsEvidence(source);
+  const heldBefore = actor.state.reservations;
+  await expect(reserve()).rejects.toMatchObject({ reason: 'routine_stop' });
+  expect(actor.state.reservations).toEqual(heldBefore);
+}
+it.each(['routine.paused', 'routine.retired'])(
+  'accepts saved %s as evidence for only its frozen allocation', acceptsLifecycle);
+
+async function refusesLifecycle(type: string, field: string, value: unknown) {
+  const source = await lifecycleEvidence(type);
+  const changed = { ...source, data: { ...source.data, [field]: value } };
+  const saved = await save(changed);
+  await refuses(changed, saved.position);
+  await reserve();
+}
+const invalidControls: [string, string, unknown][] = [];
+const controlChanges: [string, unknown][] = [['affectedRun', 'another'], ['affectedRun', null],
+  ['source', 'admin'], ['actorId', 'bob'], ['definitionRevision', 2],
+  ['scheduleRevision', 2], ['controlRevision', 1]];
+for (const type of ['routine.paused', 'routine.retired']) {
+  for (const [field, value] of controlChanges) {
+    invalidControls.push([type, field, value]);
+  }
+}
+it.each(invalidControls)('refuses %s with forged %s=%s without a Stop', refusesLifecycle);
+
+async function foreignLifecycle(type: string) {
+  const source = await lifecycleEvidence(type);
+  const foreign = await save(source, 'another-silo');
+  await refuses(source, foreign.position);
+  await reserve();
+}
+it.each(['routine.paused', 'routine.retired'])(
+  'refuses foreign %s evidence without stopping its allocation', foreignLifecycle);

@@ -4728,7 +4728,8 @@ or hyphens. Changing the target while keeping the reference conflicts permanentl
 
 The operation loads routine and member history before its two-second write check.
 It uses the exact routine IAM receipts from `libs/authz`. Only the recorded current
-owner with active membership may save. Legacy, retired and active-run records refuse.
+owner with active membership may save. Legacy and retired records refuse. An occupied
+run remains in its slot and supplies the saved `affectedRun`.
 A pause derives owner, revisions, next slot and fixed `owner_requested` reason from
 saved history. It increments only the control revision. One conditional append writes
 `routine.paused`; the append rechecks the original small access records and deadline.
@@ -4744,8 +4745,8 @@ and unavailable errors contain fixed descriptions only. No definition is returne
 database. It checks recovery, conflicts, refusals, queued access changes, expiry,
 slow history and replay with execution services forbidden. Run it under `nice -n 10`
 with `PG_TEST_URL` pointing to a disposable test database.
-Routes, admin intervention, reassign/resume, active-root Stop, scheduling and
-execution remain later work. Fresh-install execution qualification: NOT RUN.
+Routes, admin intervention, reassign/resume, scheduling and execution remain later work.
+The separate `applyRoutineStop` operation accepts the saved pause as budget Stop evidence. Fresh-install execution qualification: NOT RUN.
 
 Bridge approval entries include the computer stream position in their change check.
 Before settlement, the connected bridge sends its local work gate. If it cannot send
@@ -5476,13 +5477,14 @@ streams enter the access check. The routine position guards against concurrent c
 
 One conditional append saves `routine.retired`. Saved facts supply the actor and
 revisions; source is `owner`, reason is `owner_requested`, and `next` is null.
-It refuses legacy records, retired routines and active occurrences. It increments only
+It refuses legacy records and retired routines. Occupied runs remain in their slots and
+supply `affectedRun` for separate budget cleanup. It increments only
 control revision. Execution stays disabled and retirement cannot restore scheduling.
 
 An exact retry returns the original `{ status: 'confirmed', changeId, eventId, position }`.
 Saved identity binds the original owner, target, preceding position and all revisions.
-Every request checks current `read_metadata` access before checking saved change identity
-or revisions. Existing and unknown change ids give the same refusal when access is denied,
+Every request checks current `read_metadata` access and recorded ownership before checking
+saved change identity or revisions. Metadata-only admins receive the non-owner refusal. Existing and unknown change ids give the same refusal when access is denied,
 without returning a receipt. Recovery checks access once, including retirement's IAM receipt.
 It does not require the management permission retirement removed or start a write window.
 Missing receipts, removed owners and IAM outages refuse. Replies and errors contain no
@@ -5499,7 +5501,8 @@ Neither failure appends an event or returns a saved receipt.
 lost replies past deduplication expiry and NATS restart, refusal cases, queued changes,
 publish retries, slow history and both permission and content replay. Run it with
 `nice -n 10` and `PG_TEST_URL` set to the disposable test database.
-There is no route, admin intervention, reassignment, scheduler or Stop reaction.
+There is no route, admin intervention, reassignment or scheduler. The separate internal
+`applyRoutineStop` operation accepts this retirement as budget Stop evidence.
 Fresh-install execution qualification: NOT RUN.
 
 ## Bounded saved effect spending
@@ -6233,7 +6236,8 @@ Exact retries retain the original request and receipt beyond deduplication expir
 
 `applyRoutineStop(store, silo, reference, actor, options)` is a separate internal operation.
 The reference contains routineId, eventId and position. Only `enabled: true` without replay
-allows effects. It verifies saved Stop evidence, actor/store/silo and the allocated root's
+allows effects. It verifies saved Stop, Pause or Retire evidence, actor/store/silo and the
+allocated root's
 conversation, turn and frozen people. It never uses the due's rootId as a budget id.
 Missing allocation returns pending without creating a root. Retry after allocation or a
 failed budget save uses the same reference. The first budget reason remains permanent.
@@ -6241,8 +6245,12 @@ Cleanup uses the same validated history as the owner command. A correctly bound 
 completion for an older run cannot prevent Stop for the current run. The regression in
 `test/routine-session.test.ts` finishes two runs, claims a third, repeats the first completion,
 then saves the owner's Stop and checks the budget record and retry after actor recovery.
-Neither receipt proves termination. Routes, subscriptions, other lifecycle causes and
+Pause and Retire each save one lifecycle event, without manufacturing an owner Stop request.
+Their `affectedRun` must match the run occupied before that event; current owner and
+control revisions are checked against the preceding history. Sender admission reads the
+prohibition before budget cleanup. Neither receipt proves termination.
+Routes, subscriptions, other lifecycle causes and
 running-turn interruption remain later work. Execution remains disabled.
 Tests in routine-session and routine-sender cover the real owner command, delayed cleanup,
 allocation races, privacy, frozen people, retained holds and late integer-cent settlement.
-Fresh-install/live qualification: NOT RUN. Part of #106, P4-24 PR 12b.
+Fresh-install/live qualification: NOT RUN. Part of #106, P4-24 PR 12b and PR 12c.

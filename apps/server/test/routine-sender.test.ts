@@ -8,6 +8,8 @@ import { tokenIssuer } from '@opencrane/auth';
 import { until } from '@opencrane/authz/testing';
 import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
+import { pauseRoutine } from '../src/routine-pause.ts';
+import { retireRoutine } from '../src/routine-retire.ts';
 import { requestRoutineStop } from '../src/routine-stop.ts';
 import { createRoutineSender } from '../src/routine-sender.ts';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
@@ -511,7 +513,16 @@ async function refusesAfterWake(kind: string) {
         expectedPosition: await nats.store.head('routine-orders'),
         expectedDefinitionRevision: 1, expectedScheduleRevision: 1, expectedControlRevision: 1 };
       await requestRoutineStop(nats.store, binding, 'alice', request);
-    } else await changes(kind);
+    } else if (kind === 'owner Pause' || kind === 'owner Retire') {
+      const request = { routineId: 'orders', changeId: 'orders:control-1',
+        expectedPosition: await nats.store.head('routine-orders'),
+        expectedDefinitionRevision: 1, expectedScheduleRevision: 1, expectedControlRevision: 1 };
+      const command = kind === 'owner Pause' ? pauseRoutine : retireRoutine;
+      await command(nats.store, binding, 'alice', request);
+      expect(actor.state.roots[0]!.stop).toBeUndefined();
+    } else {
+      await changes(kind);
+    }
     return computer.wake();
   }
   try {
@@ -523,7 +534,8 @@ async function refusesAfterWake(kind: string) {
     expect(await authority.send(computer.wake)).toEqual({ status: 'unknown' });
   } finally { await computer.close(); }
 }
-it.each(['member', 'grant', 'expiry', 'routine.paused', 'computer', 'Stop', 'owner Stop'])(
+it.each(['member', 'grant', 'expiry', 'routine.paused', 'computer', 'Stop', 'owner Stop',
+  'owner Pause', 'owner Retire'])(
   'sends nothing after fourteen-second wake and %s', refusesAfterWake);
 
 async function inert(enabled: boolean, replay: boolean) {

@@ -5,7 +5,7 @@ import { readRootStopEvidence, type BudgetActor } from '@opencrane/models';
 const referenceSchema = z.strictObject({ routineId: z.string().regex(/^[\w-]{1,200}$/u),
   eventId: z.string().min(1).max(300), position: z.int().positive() });
 
-/** Apply a saved intent only in explicitly enabled live work; retries use the same reference. */
+/** Apply saved Stop, Pause or Retire intent only in explicitly enabled live work. */
 export async function applyRoutineStop(store: EventStore, silo: string, raw: unknown,
   actor: BudgetActor, options: { enabled?: boolean; replay?: boolean } = {}) {
   if (options.enabled !== true || options.replay === true) {
@@ -22,9 +22,12 @@ export async function applyRoutineStop(store: EventStore, silo: string, raw: unk
     if (!run || source.event.silo !== silo || source.event.id !== reference.eventId) {
       throw new Error('Source mismatch');
     }
-    const { conversationId, turnId } = run;
+    const { conversationId, turnId, definition } = run;
     function matches(root: BudgetActor['state']['roots'][number]) {
-      return root.conversationId === conversationId && root.turnId === turnId;
+      return root.conversationId === conversationId && root.turnId === turnId &&
+        root.requesterId === definition.ownerId &&
+        root.assistantId === definition.assistantId &&
+        root.payingGroupId === definition.payingGroupId;
     }
     const root = actor.state.roots.find(matches);
     // Keep intent when allocation has not finished. Never create capacity for cleanup.
