@@ -101,7 +101,8 @@ function requireTransition(previous: MemoryContextState | undefined, data: Memor
     throw new Error('Memory preparation missing or repeated');
   }
   const withdrawal = data.action === 'invalidated' &&
-    (data.reason === 'content_changed' || data.reason === 'expired');
+    (data.reason === 'content_changed' || data.reason === 'expired' ||
+      data.reason === 'access_changed');
   if ((previous?.status === 'ended' && !withdrawal) ||
       (previous?.status === 'invalidated' && data.action !== 'ended')) {
     throw new Error('Memory context ended');

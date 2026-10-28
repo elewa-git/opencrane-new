@@ -1,3 +1,5 @@
+import type { Binding } from '@opencrane/authz';
+import { invalidateMemoryAccess } from './invalidation.ts';
 import { computerSummary, type ComputerSummary } from '@opencrane/auth';
 import { readStreamSummary, type EventStore } from '@opencrane/event-store';
 import { memoryContextRecordedEventSchema } from '@opencrane/events';
@@ -11,7 +13,7 @@ import { stopInvalidatedMemory } from './stop.ts';
 type Admitted = NonNullable<Awaited<ReturnType<typeof turnCommand>>>;
 type Report = { type: string; conversationId: string; turnId: string; sequence: number;
   threadId?: string | undefined };
-type Options = { silo: string; store: EventStore };
+type Options = { silo: string; store: EventStore; binding?: Binding };
 type Computer = { assistantId: string; computerId: string };
 type TrackedTurn = { turn: Admitted; generation: number;
   detect: ReturnType<typeof memoryChanges> };
@@ -72,22 +74,31 @@ export function memoryBridge(options: Options, computer: Computer, socket: WebSo
     try {
       let chat = await readChatFacts(options.store, options.silo, conversationId, active.turn.turnId);
       if (!chat.memoryContext) return;
+      const preparation = chat.memoryContext.events.values().next().value;
+      if (!preparation) return;
+      const decodedPreparation: unknown = JSON.parse(preparation);
+      const saved = memoryContextRecordedEventSchema.parse(decodedPreparation).data;
+      const request = { conversationId: saved.conversationId, turnId: saved.turnId,
+        threadId: saved.threadId, inputGeneration: saved.inputGeneration };
+      await invalidateMemoryAccess(options, request);
       await active.detect(chat.memoryContext);
       chat = await readChatFacts(options.store, options.silo, conversationId, active.turn.turnId);
       if (!chat.memoryContext) return;
       const first = chat.memoryContext.events.values().next().value;
       if (!first) return;
       const initial: unknown = JSON.parse(first);
-      const inputGeneration = memoryContextRecordedEventSchema.parse(initial).data.inputGeneration;
+      const preparationBinding = memoryContextRecordedEventSchema.parse(initial).data;
+      if (preparationBinding.requesterId !== active.turn.requesterId ||
+          preparationBinding.assistantId !== computer.assistantId ||
+          preparationBinding.computerId !== computer.computerId ||
+          preparationBinding.generation !== active.generation ||
+          preparationBinding.threadId !== active.turn.threadId) return;
       for (const encoded of chat.memoryContext.events.values()) {
         const decoded: unknown = JSON.parse(encoded);
         const event = memoryContextRecordedEventSchema.parse(decoded);
         if (event.data.action !== 'invalidated') continue;
         // Use saved preparation to keep the input generation independent of the invalidation.
-        const binding = { conversationId, turnId: active.turn.turnId,
-          requesterId: active.turn.requesterId, assistantId: computer.assistantId,
-          computerId: computer.computerId, generation: active.generation,
-          threadId: active.turn.threadId, inputGeneration };
+        const binding = preparationBinding;
         let currentGeneration: number | undefined;
         async function refresh() {
           currentGeneration = await generation();

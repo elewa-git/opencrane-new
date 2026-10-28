@@ -4480,8 +4480,8 @@ followed by 24 `Connection server unavailable` failures. This draft is not sourc
 
 ## Memory withdrawal after completion (P4-15 PR 3g)
 
-`foldMemoryContext` accepts a later invalidation with reason `content_changed` or `expired`
-for an ended context. It retains the ended status, references and accounting. This records evidence
+`foldMemoryContext` accepts a later invalidation with reason `content_changed`, `expired` or
+`access_changed` for an ended context. It retains the ended status, references and accounting. This records evidence
 for pending private reply removal only. Later loads remain refused; replay creates no
 execution permission. The server invalidation writer verifies the saved cause and permits
 one invalidation per context. Other terminal transitions retain their existing refusals.
@@ -4546,3 +4546,14 @@ Final decision checks read the routine prohibition before checking access change
 so the same removal cannot replace that refusal with an ambiguous model retry error.
 Budget cleanup and the bridge share this check. The bridge retains its existing
 two-second observation limit, including slow evidence reads and completed pending output.
+
+## Typed memory access refusals (P4-15 PR 3i)
+
+`currentAuthority` reports a confirmed permission denial as `AuthorityRefused`.
+An unavailable IAM result or unapplied relevant receipt remains an ordinary failure,
+including when another permission result denies access. `loadedMemoryRights` checks
+receipts and current permissions before treating missing recorded grants as a denial.
+The server shares this check and `prepareMemoryReceipts` for personal withdrawal.
+History and receipt preparation finish before the two-second access deadline.
+No conversation stream enters that access check. Replay retains ended status and
+loaded references after an `access_changed` withdrawal, without granting execution.

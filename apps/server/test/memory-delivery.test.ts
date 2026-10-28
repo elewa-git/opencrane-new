@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -16,7 +17,7 @@ import type { AgentSession } from '../src/chat/bridge-conversation.ts';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
-import { invalidateMemoryContext } from '../src/memory/invalidation.ts';
+import { invalidateMemoryAccess, invalidateMemoryContext } from '../src/memory/invalidation.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let computer: Awaited<ReturnType<typeof fixture>>;
@@ -27,6 +28,8 @@ const sessions: AgentSession[] = [];
 const frameSchema = z.object({ type: z.string(), token: z.unknown().optional() });
 function forbiddenConnection(): Promise<never> { throw new Error('Must not open a computer'); }
 const opening = vi.fn(forbiddenConnection);
+const iam = { silo: 'test', apiUrl: 'http://127.0.0.1:1',
+  storeId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', authorizationModelId: '01ARZ3NDEKTSV4RRFFQ69G5FAW' };
 const scopeId = memoryScopeId('test', 'person', 'alice');
 const binding = { conversationId: 'chat', turnId: 'turn', requesterId: 'alice',
   assistantId: 'assistant', computerId: 'computer', generation: 1,
@@ -95,8 +98,6 @@ async function setup() {
     threadId: 'thread-1', task: 'chat_turn', executionMode: 'restricted' });
   computer.socket.terminate();
   await once(computer.socket, 'close');
-  const iam = { silo: 'test', apiUrl: 'http://127.0.0.1:1',
-    storeId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', authorizationModelId: '01ARZ3NDEKTSV4RRFFQ69G5FAW' };
   function applied() { return Promise.resolve(true); }
   function allowed() { return Promise.resolve({ allowed: true, status: 'ok' as const }); }
   vi.spyOn(memberAuthorisation(iam), 'applied').mockImplementation(applied);
@@ -428,7 +429,8 @@ async function boundsHistory() {
 }
 it('bounds a stalled history read and retries it on a later poll', boundsHistory, 15_000);
 
-async function completionBeforePoll(replace: boolean, detect = false, expiresAt?: number) {
+async function completionBeforePoll(replace: boolean, detect = false, expiresAt?: number,
+  access?: () => Promise<void>) {
   const send = link.socket.send.bind(link.socket);
   let stops = 0;
   function holdAcknowledgements(data: Parameters<typeof send>[0]) {
@@ -445,7 +447,7 @@ async function completionBeforePoll(replace: boolean, detect = false, expiresAt?
     params: { threadId: 'thread-1', itemId: 'reply', delta: 'completed-private-canary' } });
   await flush();
   await link.settled();
-  if (expiresAt === undefined) {
+  if (!access && expiresAt === undefined) {
     if (detect) await changed();
     else await invalidated();
   }
@@ -453,6 +455,7 @@ async function completionBeforePoll(replace: boolean, detect = false, expiresAt?
   await flush();
   await link.settled();
   if (replace) await startReplacement();
+  if (access) await access();
   if (expiresAt !== undefined) vi.spyOn(Date, 'now').mockReturnValue(expiresAt);
   await poll();
   let replayed = false;
@@ -904,7 +907,37 @@ it.each([false, true])(
   'a recall saved at expiry cannot block completed output clearance, replacement=%s',
   expiredAdditionBeforeCompletedWithdrawal);
 
+async function pendingPrivateReply() {
+  const send = link.socket.send.bind(link.socket);
+  function holdAcknowledgements(data: Parameters<typeof send>[0]) {
+    if (typeof data === 'string') {
+      const decoded: unknown = JSON.parse(data);
+      const frame = frameSchema.parse(decoded);
+      if (frame.type === 'ack' && !('token' in frame)) return;
+    }
+    send(data);
+  }
+  vi.spyOn(link.socket, 'send').mockImplementation(holdAcknowledgements);
+  computer.channel.notification({ method: 'item/agentMessage/delta',
+    params: { threadId: 'thread-1', itemId: 'reply', delta: 'access-private-canary' } });
+  await flush();
+  await link.settled();
+  return async function cleared() {
+    let replayed = false;
+    function inspect(raw: Buffer) {
+      if (raw.toString().includes('access-private-canary')) replayed = true;
+    }
+    link.socket.on('message', inspect);
+    computer.channel.notification({ method: 'item/agentMessage/delta',
+      params: { threadId: 'thread-1', itemId: 'late', delta: 'access-private-canary' } });
+    send(JSON.stringify({ type: 'resume', since: 0 }));
+    await flush();
+    expect(replayed).toBe(false);
+  };
+}
+
 async function removesLoadedRequester() {
+  const cleared = await pendingPrivateReply();
   await append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'owner' });
   await poll();
   const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
@@ -912,5 +945,194 @@ async function removesLoadedRequester() {
     references: [{ scopeId, memoryId: 'fact', revision: 1 }], executionAvailable: false });
   expect(computer.calls.filter(targetInterrupt)).toHaveLength(1);
   expect(computer.grants.has('thread-1')).toBe(false);
+  await cleared();
 }
 it('withdraws loaded personal memory when its saved requester is removed', removesLoadedRequester);
+
+type AccessLoss = 'member' | 'memory_read' | 'mcp_server';
+async function loseAccess(kind: AccessLoss, granteeKind = 'member', granteeId = 'alice') {
+  if (kind === 'member') {
+    await append(`member-${granteeId}`, 'member.removed',
+      { memberId: granteeId, removedBy: 'owner' });
+    return;
+  }
+  const resourceId = kind === 'memory_read' ? scopeId : 'memory';
+  await append(grantStream(kind, resourceId), 'grant.revoked',
+    { resourceType: kind, resourceId, granteeKind, granteeId, revokedBy: 'owner' });
+}
+function accessReceipt() {
+  const options = { silo: 'test', store: nats.store, binding: iam };
+  const request = { conversationId: 'chat', turnId: 'turn', threadId: 'thread-1',
+    inputGeneration: '1' };
+  return invalidateMemoryAccess(options, request);
+}
+async function accessEvidence(ended = false) {
+  const cold = { readStream: nats.store.readStream.bind(nats.store) };
+  const calls = [...computer.calls];
+  const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
+  expect(computer.calls).toEqual(calls);
+  const state = facts.memoryContext!;
+  expect(state.status).toBe(ended ? 'ended' : 'invalidated');
+  expect(state.executionAvailable).toBe(false);
+  const withdrawals = [];
+  for (const encoded of state.events.values()) {
+    const decoded: unknown = JSON.parse(encoded);
+    const event = memoryContextRecordedEventSchema.parse(decoded);
+    if (event.data.action === 'invalidated') withdrawals.push(event);
+  }
+  expect(withdrawals).toHaveLength(1);
+  expect(withdrawals[0]!.data).toMatchObject({ ...prepared,
+    action: 'invalidated', reason: 'access_changed', scopePositions: state.scopePositions });
+  expect(state.references).toContainEqual({ scopeId, memoryId: 'fact', revision: 1 });
+}
+async function losesRequiredGrant(kind: 'memory_read' | 'mcp_server', granteeKind: string) {
+  await otherTurn('bob');
+  const cleared = await pendingPrivateReply();
+  const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
+  await loseAccess(kind, granteeKind, granteeId);
+  await Promise.all([poll(), poll()]);
+  await poll();
+  await accessEvidence();
+  await cleared();
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(1);
+  expect(computer.grants.has('thread-1')).toBe(false);
+  expect(computer.grants.has('thread-2')).toBe(true);
+  expect(computer.calls).not.toContain('turn/interrupt:thread-2');
+}
+it.each([['memory_read', 'member'], ['memory_read', 'assistant'],
+  ['mcp_server', 'member'], ['mcp_server', 'assistant']] as const)(
+  'withdraws after the required %s grant for %s is revoked', losesRequiredGrant);
+
+async function completedAccessLoss(kind: AccessLoss, replace: boolean) {
+  async function remove() { await loseAccess(kind); }
+  await completionBeforePoll(replace, false, undefined, remove);
+  await accessEvidence(true);
+}
+it.each([['member', false], ['member', true], ['memory_read', false],
+  ['memory_read', true], ['mcp_server', false], ['mcp_server', true]] as const)(
+  'clears completed output after %s loss, replacement=%s', completedAccessLoss);
+
+async function accessUnavailable(mode: 'lag' | 'outage' | 'mixed' | 'denial') {
+  const auth = memberAuthorisation(iam);
+  await loseAccess('memory_read');
+  if (mode === 'lag') vi.spyOn(auth, 'applied').mockResolvedValue(false);
+  if (mode === 'outage' || mode === 'mixed') {
+    vi.spyOn(auth, 'use').mockResolvedValue({ allowed: false, status: 'unavailable',
+      error: new Error('private-iam-canary') });
+  }
+  if (mode === 'mixed') {
+    vi.spyOn(auth, 'use').mockResolvedValueOnce({ allowed: false, status: 'ok' });
+  }
+  if (mode === 'denial') vi.spyOn(auth, 'use').mockResolvedValue({ allowed: false, status: 'ok' });
+  const result = await accessReceipt();
+  if (mode === 'denial') {
+    expect(result.status).toBe('invalidated');
+    return;
+  }
+  expect(result).toEqual({ status: 'unavailable' });
+  await poll();
+  const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(facts.memoryContext?.events.size).toBe(2);
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
+  vi.spyOn(auth, 'applied').mockResolvedValue(true);
+  vi.spyOn(auth, 'use').mockResolvedValue({ allowed: true, status: 'ok' });
+  await poll();
+  await accessEvidence();
+}
+it.each(['lag', 'outage', 'mixed', 'denial'] as const)(
+  'distinguishes permission %s before recording access loss', accessUnavailable);
+
+async function delayedAccessPreparation(source: 'receipts' | 'history') {
+  if (source === 'receipts') {
+    async function slowReceipt() { await delay(2100); return true; }
+    vi.spyOn(memberAuthorisation(iam), 'applied').mockImplementationOnce(slowReceipt);
+  } else {
+    const read = nats.store.readStream.bind(nats.store);
+    let delayed = false;
+    async function* slowHistory(...args: Parameters<typeof read>) {
+      if (!delayed && args[0] === 'conversation-chat') {
+        delayed = true;
+        await delay(2100);
+      }
+      yield* read(...args);
+    }
+    vi.spyOn(nats.store, 'readStream').mockImplementation(slowHistory);
+  }
+  await loseAccess('memory_read');
+  expect((await accessReceipt()).status).toBe('invalidated');
+}
+it.each(['receipts', 'history'] as const)(
+  'finishes delayed %s before starting the access deadline', delayedAccessPreparation);
+
+async function losesAccessDuringCheck() {
+  async function revoke() {
+    await loseAccess('memory_read');
+    return { allowed: true, status: 'ok' as const };
+  }
+  vi.spyOn(memberAuthorisation(iam), 'use').mockImplementationOnce(revoke);
+  expect(await accessReceipt()).toEqual({ status: 'unavailable' });
+  await poll();
+  await accessEvidence();
+}
+it('refuses access that moves during checking and confirms loss on the next poll',
+  losesAccessDuringCheck);
+
+async function unchangedCompletedAccess() {
+  computer.finish('thread-1');
+  await flush();
+  await link.settled();
+  await loseAccess('memory_read', 'member', 'bob');
+  await append('assistant-assistant', 'assistant.settings_changed',
+    { assistantId: 'assistant', changedFields: ['persona'], changedBy: 'alice' });
+  await poll();
+  await poll();
+  const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(facts.memoryContext?.status).toBe('ended');
+  expect(facts.memoryContext?.events.size).toBe(2);
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
+  expect(link.socket.readyState).toBe(WebSocket.OPEN);
+}
+it('leaves completed memory and the reader alone after unrelated access changes',
+  unchangedCompletedAccess);
+
+async function accessAppendRace(kind: 'lost' | 'recall' | 'expiry') {
+  await loseAccess('memory_read');
+  const appendSaved = nats.store.append.bind(nats.store);
+  let attempts = 0;
+  let expiresAt: number | undefined;
+  if (kind === 'expiry') expiresAt = await loadExpiringReference();
+  async function race(command: Parameters<typeof appendSaved>[0]) {
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    if (!parsed.success || parsed.data.data.reason !== 'access_changed') return appendSaved(command);
+    attempts++;
+    if (attempts === 1 && kind === 'recall') {
+      const reference = await writeFact('later');
+      await append('conversation-chat', 'agent.memory_context_recorded', { ...prepared,
+        action: 'loaded', delivery: 'recall', callDigest: 'a'.repeat(64),
+        dispatchDigest: 'b'.repeat(64), byteCount: 10, additions: [reference],
+        scopePositions: [{ scopeId, position: await nats.store.head(`scope-${scopeId}`) }] });
+    }
+    if (attempts === 1 && kind === 'expiry') {
+      vi.spyOn(Date, 'now').mockReturnValue(expiresAt!);
+      const request = { conversationId: 'chat', turnId: 'turn', threadId: 'thread-1',
+        inputGeneration: '1' };
+      await invalidateMemoryContext({ silo: 'test', store: nats.store }, request);
+    }
+    const result = await appendSaved(command);
+    if (kind === 'lost') throw new Error('private-append-canary');
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(race);
+  await Promise.all([poll(), poll()]);
+  await poll();
+  await poll();
+  if (kind !== 'expiry') await accessEvidence();
+  const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(facts.memoryContext?.events.size).toBe(kind === 'lost' ? 3 : 4);
+  if (kind === 'expiry') expect(facts.memoryContext?.reason).toBe('expired');
+  if (kind === 'recall') expect(facts.memoryContext?.references).toHaveLength(2);
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(1);
+  expect(attempts).toBe(kind === 'recall' ? 2 : 1);
+}
+it.each(['lost', 'recall', 'expiry'] as const)(
+  'converges after an access withdrawal races with %s', accessAppendRace);

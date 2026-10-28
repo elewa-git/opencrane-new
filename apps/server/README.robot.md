@@ -6396,3 +6396,31 @@ retain the allocated root, held cents, late settlement and exact private-thread 
 Unavailable services alone are not removal evidence. Replay only rebuilds the paused state.
 No subscription, route, scheduler or automatic execution is enabled. Other access causes,
 company profiles and fresh-install live qualification remain NOT RUN in this slice.
+
+## Personal memory access withdrawal (P4-15 PR 3i)
+
+Part of #97. The existing connected-memory poll calls `invalidateMemoryAccess`.
+It derives the person scope and all identity fields from saved preparation. The
+internal command accepts only the existing conversation, turn, thread and input
+generation identifiers. It records the existing `access_changed` reason once.
+It shares conditional append, conflict handling and lost-reply recovery with expiry
+and correction withdrawal. Competing recalls retain every loaded reference.
+
+`memory/access-loss.ts` reads chat history and prepares IAM receipts before starting
+the two-second access check. It reuses typed permission denials, saved grants and
+active membership checks. Only small access streams are watched. An IAM outage,
+missing receipt or access change during checking returns unavailable. It neither
+records a revocation nor authorises use. Later polls try again.
+
+The existing exact-thread Stop and clearance receipt remove running and completed
+private output. A completed context keeps its ended status and loaded references.
+Cold replay grants no execution. Other requesters, sessions and replacement threads
+keep their own identity. Unrelated events do not close readers.
+
+Tests use real NATS and recording computer bridges with controlled IAM responses.
+They cover membership and both required grant types, completed output, replacements,
+IAM lag/outage, delayed history/receipts, changes during checks, lost append replies,
+competing expiry/recall and replay. The earlier cursor and expiry regressions remain.
+No event or HTTP API field, dependency, routine file or loader changed. Browser
+reply delivery, group/notes withdrawal and native launch remain later work.
+Admission remains disabled. Fresh-install live qualification: NOT RUN.

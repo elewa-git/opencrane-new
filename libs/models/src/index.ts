@@ -22,7 +22,7 @@ export { approvalCards, readApproval, decideApproval } from './approvals.ts';
 export {
   authorityFence, decisionAuthorityFence, ownershipWriteAccess,
   conversationAccessFence,
-  currentAuthority,
+  currentAuthority, AuthorityRefused,
   isAuthorityChanged,
 } from './authority.ts';
 
@@ -44,7 +44,7 @@ export { activeMember, readActiveMember, MemberAccessRefused } from './member-au
 export { providerBindingCommand, providerDependencies, providerDefaultHandler } from './provider-bindings.ts';
 
 export { parseMemoryRequest } from './mcp.ts';
-export { MemoryToolRefused, memoryRights, verifyMemoryContext, type MemoryContext } from './memory-context.ts';
+export { MemoryToolRefused, memoryRights, loadedMemoryRights, verifyMemoryContext, type MemoryContext } from './memory-context.ts';
 
 export { conversationParticipation, conversationHistoryPosition } from './conversation.ts';
 export { memoryReferences } from './memory-lineage.ts';
@@ -98,7 +98,7 @@ export { prepareRemote, exchangeRemote, type RemoteNetwork } from './remote-http
 
 export { startEgress } from './egress-startup.ts';
 
-export { prepareMemoryReads } from './memory-preparation.ts';
+export { prepareMemoryReads, prepareMemoryReceipts } from './memory-preparation.ts';
 
 export { changeConnectionSelection, SelectionInputInvalid, SelectionConflict }
   from './connection-selection.ts';

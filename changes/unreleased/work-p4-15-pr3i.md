@@ -1,0 +1,1 @@
+- Personal memory replies are withdrawn when the saved requester loses membership or required memory or tool access, including replies awaiting clearance after completion. Unavailable permission checks never fabricate a revocation. Native memory remains disabled.

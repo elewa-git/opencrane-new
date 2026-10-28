@@ -43,8 +43,10 @@ The bridge keeps the exact turn tracked after completion until the computer conf
 that its reply buffer is clear. A replacement turn keeps its own identity and access.
 It does not require the former user to retain read access. Existing polling detects personal
 corrections, forgets and expiry. Expiry checks the revisions saved at each load and every
-supporting fact. An unrelated expired fact does not stop the turn. Access-loss detection
-remains planned.
+supporting fact. An unrelated expired fact does not stop the turn. Polling checks the
+saved requester’s membership and the requester’s and assistant’s required grants.
+Confirmed loss clears the exact private reply, including after completion.
+Unavailable permissions leave the check pending and grant no access.
 An addition saved at expiry cannot block clearing output from an earlier loaded fact.
 Recall saves the time used to check its facts and checks again before returning text.
 
@@ -57,7 +59,7 @@ Recall saves the time used to check its facts and checks again before returning 
 | [commands-routes.ts](commands-routes.ts), [commands.ts](commands.ts), [correct.ts](correct.ts), [forget.ts](forget.ts) | Save facts, corrections and forget requests, and recover original results. |
 | [command-history.ts](command-history.ts), [journal.ts](journal.ts) | Track unfinished writes so recovery keeps the right keys. |
 | [mcp.ts](mcp.ts), [recall-delivery.ts](recall-delivery.ts), [recall-proof.ts](recall-proof.ts), [agent-lineage.ts](agent-lineage.ts) | Serve assistant recall and remember tools with proof of loaded facts. |
-| [invalidation.ts](invalidation.ts), [stop.ts](stop.ts) | Record withdrawn memory context and stop its matching connected turn. |
+| [invalidation.ts](invalidation.ts), [access-loss.ts](access-loss.ts), [stop.ts](stop.ts) | Record withdrawn memory context and stop its matching connected turn. |
 | [turn-preview.ts](turn-preview.ts), [maintenance.ts](maintenance.ts) | Preview private-turn memories and record future upkeep choices and history. |
 
 ## How it connects
