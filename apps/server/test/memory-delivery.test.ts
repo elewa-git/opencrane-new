@@ -457,6 +457,13 @@ async function completionBeforePoll(replace: boolean, detect = false, expiresAt?
   if (replace) await startReplacement();
   if (access) await access();
   if (expiresAt !== undefined) vi.spyOn(Date, 'now').mockReturnValue(expiresAt);
+  const clearances: unknown[] = [];
+  function inspectClearance(raw: Buffer) {
+    const decoded: unknown = JSON.parse(raw.toString());
+    const frame = frameSchema.parse(decoded);
+    if (frame.type === 'private_output_cleared') clearances.push(decoded);
+  }
+  link.socket.on('message', inspectClearance);
   await poll();
   let replayed = false;
   function inspect(raw: Buffer) {
@@ -474,6 +481,8 @@ async function completionBeforePoll(replace: boolean, detect = false, expiresAt?
   }
   expect({ stops, privateTextReplayedAfterInvalidation: replayed })
     .toEqual({ stops: 1, privateTextReplayedAfterInvalidation: false });
+  expect(clearances).toEqual([{ type: 'private_output_cleared', conversationId: 'chat',
+    turnId: 'turn', threadId: 'thread-1' }]);
 }
 async function savedCompletionBeforePoll(replace: boolean) {
   await completionBeforePoll(replace);
@@ -1012,6 +1021,39 @@ it.each([['member', false], ['member', true], ['memory_read', false],
   ['memory_read', true], ['mcp_server', false], ['mcp_server', true]] as const)(
   'clears completed output after %s loss, replacement=%s', completedAccessLoss);
 
+async function completedMixedDenial(deniedKind: 'person' | 'assistant') {
+  async function remove() {
+    await loseAccess('memory_read');
+    const auth = memberAuthorisation(iam);
+    function permission(kind: 'person' | 'assistant') {
+      if (kind === deniedKind) {
+        return Promise.resolve({ allowed: false, status: 'ok' as const });
+      }
+      return Promise.resolve({ allowed: false, status: 'unavailable' as const,
+        error: new Error('private-iam-canary') });
+    }
+    vi.spyOn(auth, 'use').mockImplementation(permission);
+  }
+  await completionBeforePoll(false, false, undefined, remove);
+  await accessEvidence(true);
+}
+it.each(['person', 'assistant'] as const)(
+  'clears completed output after confirmed %s denial despite another unavailable permission',
+  completedMixedDenial);
+
+async function completedInactiveAssistant(removeMember: boolean) {
+  async function remove() {
+    if (removeMember) await loseAccess('member');
+    await append('assistant-assistant', 'assistant.settings_changed',
+      { assistantId: 'assistant', changedBy: 'alice', changedFields: ['active'], active: false });
+  }
+  await completionBeforePoll(false, false, undefined, remove);
+  await accessEvidence(true);
+}
+it.each([false, true])(
+  'clears completed output after assistant deactivation, saved requester removed=%s',
+  completedInactiveAssistant);
+
 async function accessUnavailable(mode: 'lag' | 'outage' | 'mixed' | 'denial') {
   const auth = memberAuthorisation(iam);
   await loseAccess('memory_read');
@@ -1025,7 +1067,7 @@ async function accessUnavailable(mode: 'lag' | 'outage' | 'mixed' | 'denial') {
   }
   if (mode === 'denial') vi.spyOn(auth, 'use').mockResolvedValue({ allowed: false, status: 'ok' });
   const result = await accessReceipt();
-  if (mode === 'denial') {
+  if (mode === 'denial' || mode === 'mixed') {
     expect(result.status).toBe('invalidated');
     return;
   }
