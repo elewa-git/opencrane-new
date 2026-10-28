@@ -960,11 +960,33 @@ async function delayedNativeStart() {
 }
 it('cancels a delayed native start reply without executing another turn', delayedNativeStart);
 
+async function runningNeighbour(link: Awaited<ReturnType<typeof preparedComputer.wake>>) {
+  await apply([joinedMember('bob')]);
+  keys.provision('test', 'neighbour-chat');
+  const encrypted = keys.encrypt('test', 'neighbour-chat', 'Private routine instructions');
+  await nats.seed([
+    record('neighbour-chat', 'conversation-neighbour-chat', 'conversation.created',
+      { conversationId: 'neighbour-chat', assistantId: 'sales-assistant', createdBy: 'bob',
+        payingGroupId: 'billing', mode: 'agent_session' }),
+    record('neighbour', 'conversation-neighbour-chat', 'message.posted',
+      { conversationId: 'neighbour-chat', authorId: 'bob', authorKind: 'human',
+        contentType: 'text', ...encrypted }),
+    record('neighbour-start', 'computer-sales-assistant', 'computer.turn_started',
+      { conversationId: 'neighbour-chat', turnId: 'neighbour', requesterId: 'bob',
+        payingGroupId: 'billing', assistantId: 'sales-assistant', computerId: 'computer',
+        threadId: 'native-thread-2', task: 'chat_turn', executionMode: 'restricted' }),
+  ]);
+  const frame = { type: 'turn', id: 'neighbour', conversationId: 'neighbour-chat',
+    requesterId: 'bob', assistantId: 'sales-assistant', executionMode: 'restricted',
+    text: 'Private routine instructions', token: 'preparing', expiresAt: Date.now() + 60_000 };
+  link.socket.send(JSON.stringify(frame));
+  function running() { expect(preparedComputer.starts).toBe(2); }
+  await vi.waitFor(running, { timeout: 5000 });
+}
+
 async function boundedPrivateCleanup() {
   const link = await startRunning();
-  const neighbour = { id: 'neighbour', conversationId: 'neighbour-chat',
-    requesterId: 'bob', assistantId: 'sales-assistant', expiresAt: Date.now() + 60_000 };
-  const prepared = await link.prepareRoutineThread(neighbour);
+  await runningNeighbour(link);
   preparedComputer.faults.stallInterrupt = true;
   await saveProhibition('Retire');
   const observed = performance.now();
@@ -976,8 +998,9 @@ async function boundedPrivateCleanup() {
   expect(performance.now() - observed).toBeGreaterThanOrEqual(10_000);
   expect(performance.now() - observed).toBeLessThan(12_000);
   expect(link.socket.readyState).toBe(link.socket.OPEN);
-  expect(prepared).not.toBe(selection.threadId);
-  expect(preparedComputer.starts).toBe(1);
+  expect(preparedComputer.starts).toBe(2);
+  preparedComputer.finish('native-thread-2');
+  await link.settled();
 }
 it('closes only the uncooperative private routine process after ten seconds',
   boundedPrivateCleanup, 20_000);
@@ -1064,3 +1087,23 @@ async function wrongTerminal() {
 }
 it('retains Stopping after an unrelated terminal report and ends only the exact native turn',
   wrongTerminal);
+
+async function prohibitionBeforeAdmission() {
+  const link = await preparedComputer.wake();
+  const append = nats.store.append.bind(nats.store);
+  async function prohibitAfterReport(...args: Parameters<typeof append>) {
+    const result = await append(...args);
+    if (proposedEvent.parse(args[0].event).type === 'agent.turn_started') {
+      await saveProhibition('Stop');
+    }
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(prohibitAfterReport);
+  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
+  function closed() { expect(preparedComputer.closedSessions).toBe(1); }
+  await vi.waitFor(closed, { timeout: 5000 });
+  expect(preparedComputer.starts).toBe(0);
+  expect(link.socket.readyState).toBe(link.socket.OPEN);
+}
+it('prohibition before start admission refuses only the routine and keeps the shared bridge',
+  prohibitionBeforeAdmission);
