@@ -1058,6 +1058,74 @@ it.each([false, true])(
   'clears completed output after assistant deactivation, saved requester removed=%s',
   completedInactiveAssistant);
 
+async function unavailableCompletedOutput() {
+  const send = link.socket.send.bind(link.socket);
+  let stops = 0;
+  let replayed = false;
+  function holdAcknowledgements(data: Parameters<typeof send>[0]) {
+    if (typeof data === 'string') {
+      const decoded: unknown = JSON.parse(data);
+      const frame = frameSchema.parse(decoded);
+      if (frame.type === 'ack' && !('token' in frame)) return;
+      if (frame.type === 'stop') stops++;
+    }
+    send(data);
+  }
+  vi.spyOn(link.socket, 'send').mockImplementation(holdAcknowledgements);
+  computer.channel.notification({ method: 'item/agentMessage/delta',
+    params: { threadId: 'thread-1', itemId: 'reply', delta: 'completed-private-canary' } });
+  await flush();
+  await link.settled();
+  computer.finish('thread-1');
+  await flush();
+  await link.settled();
+  const unavailable = { allowed: false as const, status: 'unavailable' as const,
+    error: new Error('fixture IAM unavailable') };
+  vi.spyOn(memberAuthorisation(iam), 'use').mockResolvedValue(unavailable);
+  expect(await accessReceipt()).toEqual({ status: 'unavailable' });
+  await poll();
+  function inspect(raw: Buffer) {
+    if (raw.toString().includes('completed-private-canary')) replayed = true;
+  }
+  link.socket.on('message', inspect);
+  send(JSON.stringify({ type: 'resume', since: 0 }));
+  await flush();
+  await link.settled();
+  const cold = { readStream: nats.store.readStream.bind(nats.store) };
+  const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
+  expect(stops).toBe(0);
+  expect(replayed).toBe(true);
+  expect(facts.memoryContext?.status).toBe('ended');
+  for (const encoded of facts.memoryContext!.events.values()) {
+    const decoded: unknown = JSON.parse(encoded);
+    const event = memoryContextRecordedEventSchema.parse(decoded);
+    expect(event.data.action).not.toBe('invalidated');
+  }
+}
+it('keeps completed output when only permission availability is lost',
+  unavailableCompletedOutput);
+
+async function removedMemberWithUnavailableAssistant() {
+  async function remove() {
+    await loseAccess('member');
+    const auth = memberAuthorisation(iam);
+    function permission(kind: 'person' | 'assistant'): ReturnType<typeof auth.use> {
+      if (kind === 'person') {
+        const allowed = { allowed: true, status: 'ok' as const };
+        return Promise.resolve(allowed);
+      }
+      const unavailable = { allowed: false as const, status: 'unavailable' as const,
+        error: new Error('fixture assistant permission unavailable') };
+      return Promise.resolve(unavailable);
+    }
+    vi.spyOn(auth, 'use').mockImplementation(permission);
+  }
+  await completionBeforePoll(false, false, undefined, remove);
+  await accessEvidence(true);
+}
+it('clears completed output after saved member removal despite unavailable assistant permission',
+  removedMemberWithUnavailableAssistant);
+
 async function accessUnavailable(mode: 'lag' | 'outage' | 'mixed' | 'denial') {
   const auth = memberAuthorisation(iam);
   await loseAccess('memory_read');
