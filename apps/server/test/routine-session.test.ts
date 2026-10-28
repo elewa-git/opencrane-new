@@ -1794,6 +1794,109 @@ function routineRootTests() {
     }
     it.each(['model', 'free tool'])(
       'preserves routine refusal when the deny audit fails: %s', preservesRefusalAfterAuditFailure);
+    async function refusesStalledRoutineHistory() {
+      const fixture = await dispatchFixture();
+      const release = Promise.withResolvers<void>();
+      const read = nats.store.readStream.bind(nats.store);
+      let readDeadline: number | undefined;
+      let readFinished = false;
+      async function* stallHistory(target: string, from?: number, deadline?: number) {
+        if (target === 'routine-orders') {
+          readDeadline = deadline;
+          await release.promise;
+          readFinished = true;
+          return;
+        }
+        yield* read(target, from, deadline);
+      }
+      vi.spyOn(nats.store, 'readStream').mockImplementation(stallHistory);
+      let response: Response | undefined;
+      function receive(result: Response) {
+        response = result;
+      }
+      function refusedWithinDeadline() {
+        expect(response).toBeDefined();
+      }
+      const request = fixture.model().then(receive);
+      try {
+        await vi.waitFor(refusedWithinDeadline, { timeout: 11_000, interval: 20 });
+        expect(readDeadline).toBeDefined();
+        expect(performance.now()).toBeLessThan(readDeadline! + 1000);
+        expect(readFinished).toBe(false);
+        expect(response!.status, await response!.text()).toBe(403);
+        expect(response!.headers.get('x-opencrane-decision')).toBe('refused');
+        expect(response!.headers.get('x-reservation-id')).toBeNull();
+        expect(actor.state.reservations).toEqual([]);
+        expect(actor.state.dispatches).toEqual([]);
+        expect(fixture.received()).toBe(0);
+      } finally {
+        release.resolve();
+        await fixture.close();
+        await request;
+      }
+    }
+    it('refuses a stalled routine history read within its deadline', refusesStalledRoutineHistory);
+
+    async function allowsSustainedUnrelatedActivity() {
+      const fixture = await dispatchFixture();
+      const head = nats.store.head.bind(nats.store);
+      const append = nats.store.append.bind(nats.store);
+      const encrypted = keys.encrypt('test', conversationId, 'Unrelated fixture input');
+      let batches = 0;
+      let publishing = false;
+      async function publish(command: AppendCommand) {
+        // Keep activity between writes. Injecting inside every conditional append
+        // would force a global write conflict on every retry.
+        publishing = true;
+        try {
+          return await append(command);
+        } finally {
+          publishing = false;
+        }
+      }
+      async function addActivity(...args: Parameters<typeof head>) {
+        if (args[0] === 'routine-orders' && !publishing) {
+          batches += 1;
+          const otherId = `other-routine-${batches}`;
+          const other = routine('routine.created', 'alice', otherId);
+          const definition = z.record(z.string(), z.unknown()).parse(other.data);
+          const otherRoutine = { ...other, subject: `routine-${otherId}`,
+            data: { ...definition, routineId: otherId } };
+          const turn = { conversationId, turnId: `other-turn-${batches}`,
+            assistantId: 'sales-assistant' };
+          const started = record(`other-start-${batches}`, subject, 'agent.turn_started', turn);
+          const message = record(`other-message-${batches}`, subject, 'message.posted',
+            { conversationId, authorId: 'alice', authorKind: 'human', contentType: 'text',
+              ...encrypted });
+          const computer = record(`other-computer-${batches}`, 'computer-sales-assistant',
+            'computer.turn_started', { ...turn, computerId: 'computer', threadId: 'other-thread',
+              requesterId: 'alice', task: 'chat_turn', executionMode: 'restricted' });
+          await nats.seed([otherRoutine, started, message, computer]);
+        }
+        return head(...args);
+      }
+      vi.spyOn(nats.store, 'append').mockImplementation(publish);
+      vi.spyOn(nats.store, 'head').mockImplementation(addActivity);
+      try {
+        const model = await fixture.model();
+        expect(model.status, await model.text()).toBe(200);
+        expect(batches).toBeGreaterThanOrEqual(2);
+        const afterModel = batches;
+        const tool = await fixture.tool();
+        expect(tool.status, await tool.text()).toBe(200);
+        expect(batches - afterModel).toBeGreaterThanOrEqual(2);
+        const afterTool = batches;
+        const sent = await fixture.send(tool.headers.get('x-opencrane-mcp-permit')!);
+        expect(sent.status, await sent.text()).toBe(200);
+        expect(batches - afterTool).toBeGreaterThanOrEqual(2);
+        expect(actor.state.reservations).toHaveLength(1);
+        expect(actor.state.dispatches).toHaveLength(1);
+        expect(fixture.received()).toBeGreaterThan(0);
+      } finally {
+        await fixture.close();
+      }
+    }
+    it('allows routine dispatch through sustained unrelated activity', allowsSustainedUnrelatedActivity);
     async function allowsAdmittedRoutine() {
       const fixture = await dispatchFixture();
       try {
@@ -1845,7 +1948,7 @@ function routineRootTests() {
         vi.spyOn(nats.store, 'append').mockImplementation(intercept);
         const response = permit ? await fixture.send(permit) : await fixture.model();
         expect(saved).toBe(true);
-        expect(response.status).not.toBe(200);
+        expect(response.status).toBe(403);
         expect(response.headers.get('x-reservation-id')).toBeNull();
         expect(fixture.received()).toBe(0);
         expect(actor.state.roots[0]!.stop).toBeUndefined();
