@@ -36,7 +36,7 @@ import { calculateRoutineOccurrence } from '@opencrane/events/routine-schedule';
 import { claimScheduledRoutine } from '../../ops/test/support/routine-claim.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { applyRoutineStop } from '../src/routine-stop-budget.ts';
-import { routineAsk } from './support/routine-ask.ts';
+import { routineAsk, routineUsedAsk } from './support/routine-ask.ts';
 import { stopRoutineAfterApproval } from '../src/routine-approval-stop.ts';
 import { pauseRoutineAfterRemoval } from '../src/routine-access-pause.ts';
 import { pauseRoutine } from '../src/routine-pause.ts';
@@ -1780,6 +1780,50 @@ function routineRootTests() {
     }
     it.each(['lost reply', 'race'])(
       'Ask termination keeps the first cause after %s, duplicates and restart', approvalRecovery);
+
+    async function usedApprovalExpiry(kind: string, restart: boolean) {
+      await prepare();
+      const cause = await routineUsedAsk(nats.store, kind);
+      const request = await approvalInput(cause);
+      if (restart) {
+        await nats.stop();
+        await nats.restart();
+      }
+      const before = await nats.store.head();
+      const stopped = await stopRoutineAfterApproval(nats.store, 'test', request);
+      expect(stopped.status).toBe('confirmed');
+      expect(await nats.store.head()).toBe(before + 1);
+      const saved = await nats.store.readEvent(stopped.position);
+      expect(saved.event.data).toMatchObject({ source: 'approval', reason: 'approval_expired',
+        cause, occurrenceId: 'occurrence', conversationId, turnId: 'routine-turn-occurrence' });
+      const reference = { routineId: 'orders', eventId: stopped.eventId, position: stopped.position };
+      expect(await applyRoutineStop(nats.store, 'test', reference, actor,
+        { enabled: true, replay: true })).toEqual({ status: 'disabled' });
+      await nats.stop();
+      await nats.restart();
+      expect(await stopRoutineAfterApproval(nats.store, 'test', request)).toEqual(stopped);
+      const savedRows = await history(nats.store, 'routine-orders', 'test');
+      let state;
+      for (const row of savedRows) state = foldRoutine(state, row.event);
+      expect(state).toMatchObject({ stopRequested: true, executionAvailable: false,
+        activeRun: { occurrenceId: 'occurrence' } });
+      expect(await nats.store.head()).toBe(before + 1);
+      expect(actor.state.dispatches).toEqual([]);
+    }
+    it.each([['expired', false], ['expired', true], ['retry', true], ['retry used', true]] as const)(
+      'stops after proved-unsent use and saved expiry: %s, cold replay %s', usedApprovalExpiry);
+
+    async function invalidUsedApproval(kind: string) {
+      await prepare();
+      const cause = await routineUsedAsk(nats.store, kind);
+      const request = await approvalInput(cause);
+      const before = await nats.store.head();
+      await expect(stopRoutineAfterApproval(nats.store, 'test', request))
+        .rejects.toThrow(/^Routine approval Stop refused$/u);
+      expect(await nats.store.head()).toBe(before);
+    }
+    it.each(['used only', 'missing proof', 'foreign proof', 'uncertain', 'foreign retry'])(
+      'refuses used Ask expiry with %s', invalidUsedApproval);
 
     async function routineTool() {
       await apply([joinedMember('admin')]);
