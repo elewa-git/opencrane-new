@@ -21,6 +21,342 @@ specification.loader.exec_module(checker)
 
 
 class LicenceTests(unittest.TestCase):
+    def corepack_fixture(self):
+        path = source.parents[2] / "docs/process/p5-4-images9/check-corepack.py"
+        module_spec = importlib.util.spec_from_file_location("corepack", path)
+        corepack = importlib.util.module_from_spec(module_spec)
+        module_spec.loader.exec_module(corepack)
+        review = checker.read_json(path.with_name("inventory.json"))
+        with tarfile.open(path.with_name("corepack-source.tar.gz")) as archive:
+            rows, contents = corepack.scan(archive, "deps/", "lib/node_modules/")
+        return corepack, review, rows, contents
+
+    def test_corepack_authentic_inventory_preserves_blocked_grants_and_promotion(self):
+        corepack, review, rows, contents = self.corepack_fixture()
+        self.assertEqual(corepack.check_review(review, contents), 21)
+        corepack.check_files(rows, review, source_only=True)
+        self.assertEqual(len(contents[corepack.BUNDLE]), 967004)
+        regions = gzip.decompress(corepack.RECORD.with_name("regions.json.gz").read_bytes())
+        self.assertEqual(len(json.loads(regions)), 175)
+        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
+        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        with self.assertRaisesRegex(ValueError, "exact source revision"):
+            checker.check_package_review(reviewed, inventory)
+
+    def test_corepack_refuses_missing_duplicate_substituted_or_approved_rows(self):
+        corepack, original, _, contents = self.corepack_fixture()
+        for field in ("files", "modules", "embeddedParts", "inlineGrants"):
+            for index in range(len(original[field])):
+                for case in ("missing", "duplicate", "substitute"):
+                    with self.subTest(field=field, index=index, case=case):
+                        review = json.loads(json.dumps(original))
+                        rows = review[field]
+                        if case == "missing":
+                            rows.pop(index)
+                        elif case == "duplicate":
+                            rows.append(rows[index])
+                        else:
+                            rows[index][-1] = "substituted"
+                        with self.assertRaises(ValueError):
+                            corepack.check_review(review, contents)
+        for field in ("status", "nodeCommit", "nodeFiles", "candidateSha256",
+                      "bundleSha256", "regionsSha256", "ancestry", "corepackVersion"):
+            review = dict(original)
+            review[field] = "complete"
+            with self.assertRaises(ValueError):
+                corepack.check_review(review, contents)
+        for index, row in enumerate(original["modules"]):
+            for column in range(len(row)):
+                review = json.loads(json.dumps(original))
+                review["modules"][index][column] = "changed version, patch, hash or approval"
+                with self.assertRaises(ValueError):
+                    corepack.check_review(review, contents)
+        for name in contents:
+            for replacement in (None, b"substituted"):
+                changed = dict(contents)
+                if replacement is None:
+                    del changed[name]
+                else:
+                    changed[name] = replacement
+                with self.assertRaises((ValueError, KeyError)):
+                    corepack.check_review(original, changed)
+        changed = dict(contents)
+        changed[corepack.BUNDLE] = contents[corepack.BUNDLE].split(b"/*! Bundled license")[0]
+        with self.assertRaises(ValueError):
+            corepack.check_review(original, changed)
+
+    def test_corepack_files_wrappers_links_and_extra_layer_copies_refuse(self):
+        corepack, review, rows, _ = self.corepack_fixture()
+        installed = json.loads(json.dumps(review["files"]))
+        corepack.check_files(installed, review)
+        for index in range(len(installed)):
+            for case in ("missing", "duplicate", "bytes or target", "type"):
+                with self.subTest(index=index, case=case):
+                    changed = json.loads(json.dumps(installed))
+                    if case == "missing":
+                        changed.pop(index)
+                    elif case == "duplicate":
+                        changed.append(changed[index])
+                    elif case == "type":
+                        changed[index][1] = "unsupported"
+                    else:
+                        changed[index][-1] = "changed"
+                    with self.assertRaises(ValueError):
+                        corepack.check_files(changed, review)
+        with self.assertRaises(ValueError):
+            corepack.check_files(rows + rows, review, source_only=True)
+
+    def test_corepack_source_official_candidate_and_dependency_refusals_are_independent(self):
+        corepack, review, rows, contents = self.corepack_fixture()
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            fixture = gzip.decompress(corepack.RECORD.with_name("corepack-source.tar.gz").read_bytes())
+            source_rows = []
+            source_contents = {}
+            for name, kind, size, digest in rows:
+                relative = name.removeprefix("lib/node_modules/")
+                source_rows.append([relative, kind, size, digest])
+                source_contents[relative] = contents[name]
+            for stage in ("matching", "source", "source bytes", "official", "official bytes",
+                          "candidate", "signature", "git"):
+                with self.subTest(stage=stage):
+                    first = (source_rows, source_contents)
+                    second = (review["files"], contents)
+                    if stage == "source":
+                        first = (source_rows[:-1], source_contents)
+                    elif stage == "source bytes":
+                        first = (source_rows, dict.fromkeys(source_contents, b"changed"))
+                    elif stage == "official":
+                        second = (review["files"][:-1], contents)
+                    elif stage == "official bytes":
+                        second = (review["files"], dict.fromkeys(contents, b"changed"))
+                    with contextlib.ExitStack() as stack:
+                        upstream = stack.enter_context(patch.object(corepack.pcre, "check_upstream"))
+                        git = stack.enter_context(patch.object(corepack.pcre, "run_checked",
+                                                              return_value=fixture))
+                        candidate = stack.enter_context(patch.object(corepack, "check_candidate"))
+                        stack.enter_context(patch.object(corepack, "read_archive",
+                                                         side_effect=[first, second]))
+                        if stage == "signature":
+                            upstream.side_effect = ValueError("private dependency output")
+                        elif stage == "git":
+                            git.return_value = b"malformed archive"
+                        elif stage == "candidate":
+                            candidate.side_effect = ValueError("private dependency output")
+                        if stage == "matching":
+                            corepack.check_evidence(directory, directory)
+                            candidate.assert_called_once_with(directory, review)
+                        else:
+                            with self.assertRaises((ValueError, tarfile.TarError)):
+                                corepack.check_evidence(directory, directory)
+
+    def test_corepack_candidate_checks_every_layer_and_preserves_dependency_failure(self):
+        corepack, review, _, contents = self.corepack_fixture()
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            for index, rows in enumerate((review["files"][:-1], review["files"][-1:])):
+                with tarfile.open(directory / f"layer{index}.tar", "w") as archive:
+                    for name, kind, size, digest in rows:
+                        member = tarfile.TarInfo("usr/local/" + name)
+                        if kind == "link":
+                            member.type = tarfile.SYMTYPE
+                            member.linkname = digest
+                            archive.addfile(member)
+                        else:
+                            member.size = size
+                            archive.addfile(member, io.BytesIO(contents[name]))
+            layers = ["layer0.tar", "layer1.tar"]
+            for case in ("matching", "extra layer", "missing layer", "outside location"):
+                changed_layers = list(layers)
+                if case == "extra layer":
+                    changed_layers.append(layers[0])
+                elif case == "missing layer":
+                    changed_layers.pop()
+                elif case == "outside location":
+                    self.write_licence_tar(directory / "extra.tar", {"opt/corepack/file": b"extra"})
+                    changed_layers.append("extra.tar")
+                manifest = json.dumps([{"Layers": changed_layers}]).encode()
+                entries = {"manifest.json": manifest}
+                for name in changed_layers:
+                    entries[name] = (directory / name).read_bytes()
+                self.write_licence_tar(directory / "candidate.tar", entries)
+                with patch.object(corepack.pcre, "check_candidate") as dependency:
+                    if case == "matching":
+                        corepack.check_candidate(directory, review)
+                        dependency.assert_called_once()
+                    else:
+                        with self.assertRaises(ValueError):
+                            corepack.check_candidate(directory, review)
+            with patch.object(corepack.pcre, "check_candidate", side_effect=ValueError("refused")):
+                with self.assertRaisesRegex(ValueError, "refused"):
+                    corepack.check_candidate(directory, review)
+
+    def test_corepack_unknown_and_changed_byte_regions_cannot_be_completed(self):
+        corepack, _, _, contents = self.corepack_fixture()
+        data = gzip.decompress(corepack.RECORD.with_name("regions.json.gz").read_bytes())
+        original = json.loads(data)
+        for index in range(len(original)):
+            for case in ("missing", "duplicate", "hash", "gap", "overlap"):
+                changed = json.loads(data)
+                if case == "missing":
+                    changed.pop(index)
+                elif case == "duplicate":
+                    changed.insert(index, changed[index])
+                elif case == "hash":
+                    changed[index][-1] = "0" * 64
+                elif case == "gap":
+                    changed[index][0] += 1
+                else:
+                    changed[index][0] -= 1
+                with self.assertRaises(ValueError):
+                    corepack.check_regions(changed, contents[corepack.BUNDLE])
+
+    def test_corepack_hostile_archives_and_cli_withhold_private_values(self):
+        corepack, _, _, _ = self.corepack_fixture()
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "private-fixture.tar"
+            for name, kind, target in (("../corepack/escape", tarfile.REGTYPE, ""),
+                                       ("/corepack/escape", tarfile.REGTYPE, ""),
+                                       ("lib/node_modules/corepack/a", tarfile.SYMTYPE, "/private"),
+                                       ("lib/node_modules/corepack/a", tarfile.LNKTYPE, "../private")):
+                with tarfile.open(path, "w") as archive:
+                    member = tarfile.TarInfo(name)
+                    member.type = kind
+                    member.linkname = target
+                    archive.addfile(member)
+                with self.assertRaises(ValueError):
+                    corepack.read_archive(path, "")
+            for failure in (ValueError("private output"), tarfile.ReadError(str(path)),
+                            OSError(str(path))):
+                output = io.StringIO()
+                with patch.object(corepack, "check_evidence", side_effect=failure):
+                    with contextlib.redirect_stderr(output):
+                        self.assertEqual(corepack.main([str(path), str(path)]), 1)
+                self.assertEqual(output.getvalue(), corepack.REFUSAL + "\n")
+            result = subprocess.run([sys.executable, str(corepack.RECORD.with_name(
+                "check-corepack.py")), str(path), str(path)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stderr, corepack.REFUSAL + "\n")
+            isolated = path.parent / "isolated/check-corepack.py"
+            isolated.parent.mkdir()
+            shutil.copyfile(corepack.RECORD.with_name("check-corepack.py"), isolated)
+            result = subprocess.run([sys.executable, str(isolated), str(path), str(path)],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stderr, corepack.REFUSAL + "\n")
+
+    def assert_corepack_refusal(self, result):
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(result.stderr,
+                         "FAIL Corepack inventory evidence is missing, changed or unsupported\n")
+
+    def run_corepack_input_fixture(self, directory, stage):
+        checker_path = source.parents[2] / "docs/process/p5-4-images9/check-corepack.py"
+        script = """
+import gzip
+import hashlib
+import importlib.util
+import sys
+from pathlib import Path
+from unittest.mock import patch
+
+checker_path = Path(sys.argv[1])
+directory = Path(sys.argv[2])
+stage = sys.argv[3]
+specification = importlib.util.spec_from_file_location("corepack", checker_path)
+corepack = importlib.util.module_from_spec(specification)
+specification.loader.exec_module(corepack)
+
+def check_candidate_fixture(candidate_directory, upstream_directory):
+    corepack.check_candidate(candidate_directory, corepack.trusted_review())
+
+if stage in ("regions", "regions decoder"):
+    source_archive = checker_path.with_name("corepack-source.tar.gz").read_bytes()
+    git_archive = gzip.decompress(source_archive)
+    corepack.RECORD = directory / "inventory.json"
+    if stage == "regions decoder":
+        compressed = (directory / "regions.json.gz").read_bytes()
+        corepack.REGIONS_SHA256 = hashlib.sha256(compressed).hexdigest()
+    with patch.object(corepack.pcre, "check_upstream"):
+        with patch.object(corepack.pcre, "run_checked", return_value=git_archive):
+            sys.exit(corepack.main([str(directory), str(directory)]))
+else:
+    with patch.object(corepack.pcre, "check_candidate"):
+        with patch.object(corepack, "check_evidence", check_candidate_fixture):
+            sys.exit(corepack.main([str(directory), str(directory)]))
+"""
+        arguments = [sys.executable, "-c", script, str(checker_path), str(directory), stage]
+        return subprocess.run(arguments, capture_output=True, text=True, check=False)
+
+    def test_corepack_malformed_compression_withholds_paths_and_output(self):
+        corepack, _, _, _ = self.corepack_fixture()
+        original = corepack.RECORD.with_name("regions.json.gz").read_bytes()
+        corrupt = bytearray(original)
+        corrupt[10] = 0xff
+        for compressed in (bytes(corrupt), original[:-8], b"unsupported compression"):
+            with self.subTest(compressed=compressed[:11]):
+                with tempfile.TemporaryDirectory() as temporary:
+                    directory = Path(temporary)
+                    shutil.copyfile(corepack.RECORD, directory / "inventory.json")
+                    (directory / "regions.json.gz").write_bytes(compressed)
+                    for stage in ("regions", "regions decoder"):
+                        with self.subTest(stage=stage):
+                            result = self.run_corepack_input_fixture(directory, stage)
+                            self.assert_corepack_refusal(result)
+
+    def test_corepack_checks_compressed_checksum_before_decompressing(self):
+        corepack, review, _, contents = self.corepack_fixture()
+        compressed = bytearray(corepack.RECORD.with_name("regions.json.gz").read_bytes())
+        # Change only the gzip timestamp so decompression would still succeed.
+        compressed[4] ^= 1
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            shutil.copyfile(corepack.RECORD, directory / "inventory.json")
+            (directory / "regions.json.gz").write_bytes(compressed)
+            with patch.object(corepack, "RECORD", directory / "inventory.json"):
+                with patch.object(corepack.gzip, "decompress", wraps=gzip.decompress) as decoder:
+                    with self.assertRaises(ValueError):
+                        corepack.check_review(review, contents)
+                    decoder.assert_not_called()
+
+    def test_corepack_malformed_and_nested_json_withhold_paths_and_output(self):
+        nested_json = b"[" * 200000 + b"0" + b"]" * 200000
+        for manifest in (b"{", b"\xff", nested_json):
+            with self.subTest(manifest=manifest[:11]):
+                with tempfile.TemporaryDirectory() as temporary:
+                    directory = Path(temporary)
+                    entries = {"manifest.json": manifest}
+                    self.write_licence_tar(directory / "candidate.tar", entries)
+                    result = self.run_corepack_input_fixture(directory, "manifest")
+                    self.assert_corepack_refusal(result)
+
+    def test_corepack_symlink_loop_withholds_paths_and_output(self):
+        checker_path = source.parents[2] / "docs/process/p5-4-images9/check-corepack.py"
+        with tempfile.TemporaryDirectory() as temporary:
+            loop = Path(temporary) / "private-loop"
+            loop.symlink_to(loop.name)
+            arguments = [sys.executable, str(checker_path), str(loop), str(loop)]
+            result = subprocess.run(arguments, capture_output=True, text=True, check=False)
+            self.assert_corepack_refusal(result)
+
+    def test_corepack_dependency_json_failure_withholds_paths_and_output(self):
+        checker_path = source.parents[2] / "docs/process/p5-4-images9/check-corepack.py"
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            isolated = directory / "p5-4-images9/check-corepack.py"
+            isolated.parent.mkdir()
+            shutil.copyfile(checker_path, isolated)
+            dependency = directory / "p5-4-images6/check-pcre.py"
+            dependency.parent.mkdir()
+            dependency.write_text("import json\nfrom pathlib import Path\n"
+                                  "json.loads(Path(__file__).with_name('nested.json').read_bytes())\n")
+            nested_json = b"[" * 200000 + b"0" + b"]" * 200000
+            dependency.with_name("nested.json").write_bytes(nested_json)
+            arguments = [sys.executable, str(isolated), str(directory), str(directory)]
+            result = subprocess.run(arguments, capture_output=True, text=True, check=False)
+            self.assert_corepack_refusal(result)
+
     def wasm_fixture(self):
         path = source.parents[2] / "docs/process/p5-4-images8/check-wasm.py"
         module_spec = importlib.util.spec_from_file_location("wasm", path)
