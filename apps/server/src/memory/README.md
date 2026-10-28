@@ -46,8 +46,8 @@ corrections, forgets and expiry. Expiry checks the revisions saved at each load 
 supporting fact. An unrelated expired fact does not stop the turn. Polling checks the
 saved requester’s membership and the requester’s and assistant’s required grants.
 Confirmed loss clears the exact private reply, including after completion.
-A confirmed denial or saved assistant deactivation clears the reply even when another
-permission check is unavailable. Unavailable checks alone leave the check pending.
+A saved member removal, confirmed denial or saved assistant deactivation clears the reply
+even when another permission check is unavailable. Unavailable checks alone leave the check pending.
 An addition saved at expiry cannot block clearing output from an earlier loaded fact.
 Recall saves the time used to check its facts and checks again before returning text.
 
