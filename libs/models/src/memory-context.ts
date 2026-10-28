@@ -4,7 +4,7 @@ import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { grantStream, type Binding } from '@opencrane/authz';
 import { memoryScopeId } from '@opencrane/projections';
 import { assistantCreatedDataSchema, type MemoryIdentity } from '@opencrane/events';
-import { type authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
+import { type authorityFence, decisionAuthorityFence, currentAuthority, AuthorityRefused } from './authority.ts';
 import { confirmDecisionAccess, decisionActivity } from './decision-activity.ts';
 import { mcpPolicy, parseMcpCall, parseMemoryRequest, toolDecision } from './mcp.ts';
 import { closesDecisionTurn } from './approvals.ts';
@@ -225,7 +225,7 @@ async function requireRecordedGrants(store: EventStore, silo: string,
     }
   }
   if ((!memberAllowed && !groupAllowed) || !assistantAllowed) {
-    throw new Error('Recorded memory grant refused');
+    throw new AuthorityRefused('Recorded memory grant refused');
   }
 }
 
@@ -339,12 +339,12 @@ export function prepareMemorySend(payload: Awaited<ReturnType<typeof prepareMemo
 export async function loadedMemoryRights(store: EventStore, binding: Binding,
   claims: ThreadIdentity, scopeId: string, fresh: Awaited<ReturnType<typeof authorityFence>>,
   conversation: StoredEvent[], applied: (eventId: string) => Promise<boolean>) {
+  await currentAuthority(store, binding, claims.requester, claims.assistant,
+    claims.conversation, 'mcp_server', 'memory', fresh, conversation, undefined, applied);
   const selected = await selectedMemoryScope(store, binding, claims, scopeId, fresh, applied);
   await requireRecordedGrants(store, binding.silo, claims, 'mcp_server', 'memory', fresh);
   await currentAuthority(store, binding, claims.requester, claims.assistant,
-    claims.conversation, 'mcp_server', 'memory', fresh, conversation, undefined, applied);
+    claims.conversation, 'memory_read', scopeId, fresh, conversation, undefined, applied);
   await requireRecordedGrants(store, binding.silo, claims, 'memory_read', scopeId,
     fresh, selected.requesterGroup);
-  await currentAuthority(store, binding, claims.requester, claims.assistant,
-    claims.conversation, 'memory_read', scopeId, fresh, conversation, undefined, applied);
 }

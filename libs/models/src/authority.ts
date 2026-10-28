@@ -6,6 +6,8 @@ import { data } from './state.ts';
 import { memberStateTypes } from './ownership.ts';
 import type { DecisionGrants, DecisionGrantRow } from './decision-grants.ts';
 
+export class AuthorityRefused extends Error {}
+
 export const outputReportTypes: readonly string[] = [
   'agent.command_ran', 'agent.file_changed', 'agent.reasoning_summarised',
   'agent.message_delta', 'agent.message_completed', 'agent.output_lost',
@@ -66,13 +68,25 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
       throw new Error('IAM projection behind');
     }
   }
-  if (!active) throw new Error('Assistant inactive');
+  if (!active) throw new AuthorityRefused('Assistant inactive');
   const permissions = await Promise.all([auth.check(requester, 'member'), auth.actsFor(requester, assistant),
     auth.conversation(requester, conversation, 'post'), auth.use('person', requester, resourceType, resourceId),
     auth.use('assistant', assistant, resourceType, resourceId)]);
-  if (permissions.some(p => !p.allowed)) throw new Error('Current authority refused');
+  requirePermissions(permissions);
   await fresh();
   return createHash('sha256').update(JSON.stringify({ facts, permissions, memoryScopes: [], credential: null })).digest('hex');
+}
+
+function requirePermissions(permissions: { status: 'ok' | 'unavailable'; allowed: boolean }[]) {
+  function unavailable(permission: (typeof permissions)[number]) {
+    return permission.status === 'unavailable';
+  }
+  function denied(permission: (typeof permissions)[number]) {
+    return permission.status === 'ok' && !permission.allowed;
+  }
+  // Preserve a confirmed denial even when another permission check is unavailable.
+  if (permissions.some(denied)) throw new AuthorityRefused('Current authority refused');
+  if (permissions.some(unavailable)) throw new Error('Current authority unavailable');
 }
 
 function receiptReader(auth: ReturnType<typeof memberAuthorisation>,

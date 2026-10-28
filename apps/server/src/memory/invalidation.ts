@@ -1,3 +1,5 @@
+import type { Binding } from '@opencrane/authz';
+import { lostMemoryAccess } from './access-loss.ts';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -11,7 +13,7 @@ const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const requestSchema = z.strictObject({ conversationId: identifier, turnId: identifier,
   threadId: identifier, inputGeneration: identifier, causeId: identifier.optional() });
 type Request = z.infer<typeof requestSchema>;
-type Options = { silo: string; store: EventStore };
+type Options = { silo: string; store: EventStore; binding?: Binding };
 type Receipt = { status: 'invalidated'; eventId: string; inputGeneration: string } |
   { status: 'unchanged' | 'refused' | 'reload_required' | 'unavailable' };
 
@@ -150,15 +152,34 @@ function canWithdraw(state: MemoryContextState) {
   return true;
 }
 
-async function recordInvalidation(options: Options, request: Request): Promise<Receipt> {
+function withdrawalReason(request: Request, access: boolean) {
+  if (access) return 'access_changed';
+  if (request.causeId !== undefined) return 'content_changed';
+  return 'expired';
+}
+
+async function detectWithdrawal(options: Options, request: Request, saved: MemoryContextRecord,
+  state: MemoryContextState, scopeId: string, access: boolean) {
+  if (access) {
+    for (const reference of state.references) {
+      if (reference.scopeId !== scopeId) throw new Error('Personal memory required');
+    }
+    return { changed: await lostMemoryAccess(options, saved, scopeId), position: 0 };
+  }
+  const rows = await history(options.store, `scope-${scopeId}`, options.silo,
+    performance.now() + 10_000);
+  return withdrawalCause(options, rows, request, saved, state, scopeId);
+}
+
+async function recordInvalidation(options: Options, request: Request, access = false): Promise<Receipt> {
   // Read saved history without requiring the former reader to retain access.
   // This internal command can only withdraw use of an already recorded generation.
   const chat = await readChatFacts(options.store, options.silo,
     request.conversationId, request.turnId);
   const saved = savedBinding(chat, request);
   const state = chat.memoryContext!;
-  const id = invalidationId(state.binding, request.causeId);
-  const reason = request.causeId === undefined ? 'expired' : 'content_changed';
+  const reason = withdrawalReason(request, access);
+  const id = invalidationId(state.binding, access ? reason : request.causeId);
   const receipt: Receipt = { status: 'invalidated', eventId: id,
     inputGeneration: saved.inputGeneration };
   const recorded = state.events.get(id);
@@ -174,9 +195,7 @@ async function recordInvalidation(options: Options, request: Request): Promise<R
   }
   if (!canWithdraw(state)) return { status: 'refused' };
   const scopeId = memoryScopeId(options.silo, 'person', saved.requesterId);
-  const rows = await history(options.store, `scope-${scopeId}`, options.silo,
-    performance.now() + 10_000);
-  const cause = withdrawalCause(options, rows, request, saved, state, scopeId);
+  const cause = await detectWithdrawal(options, request, saved, state, scopeId, access);
   if (!cause.changed) return { status: 'unchanged' };
 
   const current = await readChatFacts(options.store, options.silo,
@@ -194,7 +213,7 @@ async function recordInvalidation(options: Options, request: Request): Promise<R
 }
 
 function invalidationEvent(silo: string, saved: MemoryContextRecord, state: MemoryContextState,
-  scopeId: string, causePosition: number, id: string, reason: 'expired' | 'content_changed') {
+  scopeId: string, causePosition: number, id: string, reason: 'expired' | 'content_changed' | 'access_changed') {
   const positions = new Map<string, number>();
   for (const position of state.scopePositions) {
     positions.set(position.scopeId, position.position);
@@ -241,5 +260,15 @@ export async function invalidateMemoryContext(options: Options, input: Request):
     return await recordInvalidation(options, request);
   } catch {
     return { status: 'refused' };
+  }
+}
+
+export async function invalidateMemoryAccess(options: Options, input: Request): Promise<Receipt> {
+  try {
+    const request = requestSchema.parse(input);
+    if (request.causeId !== undefined) return { status: 'refused' };
+    return await recordInvalidation(options, request, true);
+  } catch {
+    return { status: 'unavailable' };
   }
 }

@@ -88,7 +88,7 @@ The server keeps that data briefly for one call and checks current access before
 Calls and turn renewal prepare access receipts for every memory scope already loaded.
 Correct and Forget validate their targets but remain disabled.
 An internal command can record that a personal turn's loaded memory became invalid
-after a saved correction, forget or expiry. It keeps every loaded reference for replay and
+after a saved correction, forget, expiry or loss of access. It keeps every loaded reference for replay and
 returns a receipt without fact text. An internal reaction can send Stop after confirming
 that saved invalidation belongs to the connected private turn. The computer handles
 repeated Stops once and clears the reply even if the turn has just completed.
@@ -100,7 +100,10 @@ Recall saves the same time it used to check each fact and its supporting facts.
 It keeps each turn tracked after completion until the computer confirms that its private
 reply has been cleared. It checks the turn and computer after reading history, without
 waking a computer. One slow chat cannot delay another chat's check or connection shutdown.
-The reaction needs no read access from the former user. Access-loss detection remains planned.
+The reaction needs no read access from the former user. Polling also checks their membership
+and the memory and tool grants required by the saved requester and assistant.
+A saved member removal, confirmed denial or saved assistant deactivation clears the reply
+even when another permission check is unavailable. Unavailable checks alone never confirm access loss.
 Retries recover the same saved receipt after the old fact expires. A competing recall
 keeps its added references when the server reloads and records the invalidation.
 After a restart, memory recovery uses the existing private keys and saved command records.
@@ -133,7 +136,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks private callers, reads original tool reviews, checks access before history errors, prepares and allocates child and routine allowances, checks saved routine admission and dispatch prohibition, applies saved Stop, Pause and Retire intent and verifies owner removal, and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; detects saved personal corrections, forgets and loaded expiry, records invalid contexts and personal account revocations, choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, encrypted inputs and checked admission receipts, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; detects saved personal corrections, forgets, loaded expiry and lost access, records invalid contexts and personal account revocations, choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, encrypted inputs and checked admission receipts, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
@@ -251,7 +254,7 @@ can be used now is checked separately. Missing evidence never means it is safe t
 
 ## Processes it handles
 
-The server checks corrections, forgets and expiry while polling connected private turns.
+The server checks corrections, forgets, expiry and access while polling connected private turns.
 It checks the saved revision and all its supporting facts, even without a new memory event.
 It records which loaded facts became unusable before asking the computer to clear that
 turn. Completed replies remain eligible for removal until the computer confirms it.
