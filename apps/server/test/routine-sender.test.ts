@@ -321,36 +321,52 @@ async function startComputer(computerId = 'computer') {
   let starts = 0;
   let sends = 0;
   let nativeStarts = 0;
-  async function grant() {}
+  const faults = { failRemoval: false, delayStart: false, stallInterrupt: false };
+  const startReply = Promise.withResolvers<void>();
+  const interruptReply = Promise.withResolvers<void>();
+  async function grant(_thread: string, _conversation: string, token: string) {
+    if (!token && faults.failRemoval) {
+      faults.failRemoval = false;
+      throw new Error('private-cleanup-canary');
+    }
+  }
   function credential() {
     return { value: 'fixture-bridge', expiresAt: Date.now() + 120_000 };
   }
   const executedThreads: string[] = [];
   const interruptedThreads: string[] = [];
+  const closedThreads: string[] = [];
   let closedSessions = 0;
   function privateSession() {
     const lifetime = Promise.withResolvers<void>();
     let threadId: string | undefined;
     let closed = false;
     function close() {
-      if (!closed) closedSessions++;
+      if (!closed) {
+        closedSessions++;
+        if (threadId) closedThreads.push(threadId);
+      }
       closed = true;
       lifetime.resolve();
     }
-    function rpc(method: string, params: Record<string, unknown>) {
+    async function rpc(method: string, params: Record<string, unknown>) {
       if (method === 'thread/start') {
         expect(params).not.toHaveProperty('threadId');
         expect(JSON.stringify(params)).not.toContain('Private routine instructions');
         nativeStarts++;
         threadId = `native-thread-${nativeStarts}`;
       }
-      if (method === 'turn/interrupt') interruptedThreads.push(String(params['threadId']));
+      if (method === 'turn/interrupt') {
+        interruptedThreads.push(String(params['threadId']));
+        if (faults.stallInterrupt) await interruptReply.promise;
+      }
       if (method === 'turn/start') {
         expect(closed).toBe(false);
         expect(params['threadId']).toBe(threadId);
         expect(JSON.stringify(params)).toContain('Private routine instructions');
         executedThreads.push(String(threadId));
         starts++;
+        if (faults.delayStart) await startReply.promise;
       }
       return Promise.resolve({ thread: { id: threadId, ephemeral: true, path: null },
         turn: { id: 'recorded-turn' } });
@@ -401,6 +417,8 @@ async function startComputer(computerId = 'computer') {
   async function close() {
     if (closed) return;
     closed = true;
+    startReply.resolve();
+    interruptReply.resolve();
     link.socket.terminate();
     await channel.close();
     await link.settled();
@@ -414,7 +432,8 @@ async function startComputer(computerId = 'computer') {
   }
   return { wake, restart, close, executed, get starts() { return starts; },
     get sends() { return sends; }, get nativeStarts() { return nativeStarts; },
-    get closedSessions() { return closedSessions; }, executedThreads, interruptedThreads, tokens };
+    get closedSessions() { return closedSessions; }, executedThreads, interruptedThreads, closedThreads, tokens, faults,
+    releaseStart: startReply.resolve };
 }
 async function savedStarts() {
   const rows = await history(nats.store, 'computer-sales-assistant', 'test');
@@ -867,7 +886,7 @@ async function pollRoutine() {
   const processor = assistantProcessor(options, preparedComputer.tokens, new Set(), forbidden,
     connectionId, logger, connected);
   const sessions = [{ conversationId, assistantId: 'sales-assistant', createdBy: 'alice',
-    mode: 'agent_session' as const, createdAt: new Date().toISOString() }];
+    mode: 'agent_session' as const, createdAt: new Date().toISOString(), assistantKind: 'team' as const }];
   await Promise.all(processor.pollRoutines(sessions));
 }
 async function runningProhibition(kind: 'Stop' | 'Pause' | 'Retire') {
@@ -894,3 +913,102 @@ async function runningProhibition(kind: 'Stop' | 'Pause' | 'Retire') {
 }
 it.each(['Stop', 'Pause', 'Retire'] as const)(
   'polls saved owner %s and interrupts only the accepted native routine turn once', runningProhibition);
+
+
+async function startRunning() {
+  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
+  await until(preparedComputer.executed);
+  return preparedComputer.wake();
+}
+function interruptedOnce() {
+  expect(preparedComputer.interruptedThreads).toEqual([selection.threadId]);
+}
+async function retriesRoutineStop(failure: 'send' | 'cleanup') {
+  const link = await startRunning();
+  await saveProhibition('Stop');
+  if (failure === 'send') {
+    vi.spyOn(link.socket, 'send').mockImplementationOnce(forbidden);
+  } else {
+    preparedComputer.faults.failRemoval = true;
+  }
+  await pollRoutine();
+  await new Promise(setImmediate);
+  expect(preparedComputer.interruptedThreads).toEqual([]);
+  await pollRoutine();
+  await vi.waitFor(interruptedOnce);
+  expect(link.socket.readyState).toBe(link.socket.OPEN);
+}
+it.each(['send', 'cleanup'] as const)('retries failed routine Stop %s without closing neighbours',
+  retriesRoutineStop);
+
+async function delayedNativeStart() {
+  preparedComputer.faults.delayStart = true;
+  await startRunning();
+  await saveProhibition('Pause');
+  await pollRoutine();
+  expect(preparedComputer.interruptedThreads).toEqual([]);
+  preparedComputer.releaseStart();
+  await vi.waitFor(interruptedOnce);
+  await pollRoutine();
+  interruptedOnce();
+  expect(preparedComputer.starts).toBe(1);
+}
+it('cancels a delayed native start reply without executing another turn', delayedNativeStart);
+
+async function boundedPrivateCleanup() {
+  const link = await startRunning();
+  const neighbour = { id: 'neighbour', conversationId: 'neighbour-chat',
+    requesterId: 'bob', assistantId: 'sales-assistant', expiresAt: Date.now() + 60_000 };
+  const prepared = await link.prepareRoutineThread(neighbour);
+  preparedComputer.faults.stallInterrupt = true;
+  await saveProhibition('Retire');
+  const observed = performance.now();
+  await pollRoutine();
+  await vi.waitFor(interruptedOnce);
+  expect(preparedComputer.closedThreads).toEqual([]);
+  function closed() { expect(preparedComputer.closedThreads).toEqual([selection.threadId]); }
+  await vi.waitFor(closed, { timeout: 12_000 });
+  expect(performance.now() - observed).toBeGreaterThanOrEqual(10_000);
+  expect(performance.now() - observed).toBeLessThan(12_000);
+  expect(link.socket.readyState).toBe(link.socket.OPEN);
+  expect(prepared).not.toBe(selection.threadId);
+  expect(preparedComputer.starts).toBe(1);
+}
+it('closes only the uncooperative private routine process after ten seconds',
+  boundedPrivateCleanup, 20_000);
+
+async function rejectsChangedTarget(change: 'generation' | 'thread' | 'requester' | 'payer') {
+  const link = await startRunning();
+  await saveProhibition('Stop');
+  if (change === 'generation') {
+    await changes('computer');
+  } else {
+    // Challenge the live connection binding; saved admission remains the authority.
+    const root = actor.state.roots[0]!;
+    const changed = { ...root, task: 'chat_turn' as const, executionMode: 'restricted' as const };
+    if (change === 'thread') changed.threadId = 'replacement-thread';
+    if (change === 'requester') changed.requesterId = 'bob';
+    if (change === 'payer') changed.payingGroupId = 'billing';
+    link.routines.accept(changed);
+  }
+  await pollRoutine();
+  expect(preparedComputer.interruptedThreads).toEqual([]);
+  expect(preparedComputer.closedSessions).toBe(0);
+  expect(link.socket.readyState).toBe(link.socket.OPEN);
+}
+it.each(['generation', 'thread', 'requester', 'payer'] as const)(
+  'does not interrupt a replacement %s binding', rejectsChangedTarget);
+
+async function disconnectedRoutineStop() {
+  const link = await startRunning();
+  await saveProhibition('Stop');
+  link.socket.terminate();
+  await once(link.socket, 'close');
+  await pollRoutine();
+  await preparedComputer.restart();
+  await pollRoutine();
+  expect(preparedComputer.starts).toBe(1);
+  expect(preparedComputer.interruptedThreads).toEqual([]);
+  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+}
+it('lost connection and replay cannot resurrect the prohibited routine', disconnectedRoutineStop);
