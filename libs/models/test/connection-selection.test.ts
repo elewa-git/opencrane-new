@@ -15,6 +15,9 @@ import { saveBearerConnection, changePersonalConnection, foldConnection } from '
 import { changeConnectionSelection, foldConnectionSelection, readConnectionSelection }
   from '../src/connection-selection.ts';
 import { toolPolicyFromRows } from '../src/tool-policy.ts';
+import { confirmCredentialRelease } from '../src/credential-release.ts';
+import { authorityFence } from '../src/authority.ts';
+import { activeMember } from '../src/member-authority.ts';
 import { data as eventData } from '../src/state.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -1050,3 +1053,147 @@ async function historyBeforeWriteAccess() {
 }
 it('finishes profile history before starting the two-second write access check',
   historyBeforeWriteAccess);
+
+
+async function releaseFixture() {
+  const test = await fixture();
+  const selection = await test.select();
+  const issuedAt = Date.now();
+  const release = { requestId: `release-${test.userId}`, permitId: `permit-${test.userId}`,
+    leaseId: `lease-${test.userId}`, purpose: 'tool_call' as const,
+    userId: test.userId, ownerId: test.userId, ownerKind: 'personal' as const,
+    assistantId: 'assistant', computerId: 'computer', computerGeneration: 1,
+    conversationId: 'conversation', turnId: 'turn', threadId: 'thread',
+    serverId: 'server', toolName: 'read', connectionId: 'installed', profileId: 'personal',
+    generation: 1, profileRevision: test.created.sequence, selectionRevision: selection.sequence,
+    policyRevision: await nats.store.head('mcp-server'),
+    argumentsDigest: 'a'.repeat(64), scopeDigest: 'b'.repeat(64), accountDigest: 'c'.repeat(64),
+    issuedAt, expiresAt: issuedAt + 30_000 };
+  const decision = envelope('test', `decision-${release.requestId}`, 'decision.recorded', {
+    requestId: release.requestId, requesterId: test.userId, assistantId: release.assistantId,
+    conversationId: release.conversationId, turnId: release.turnId, permitId: release.permitId,
+    serverId: release.serverId, toolName: release.toolName, route: 'mcp', outcome: 'allow',
+    reason: 'policy_allow', contextDigest: 'd'.repeat(64), release,
+  });
+  decision.correlation.approval = 'approval';
+  await nats.seed([decision]);
+  async function prepareAccess() {
+    const fresh = await authorityFence(nats.store, performance.now());
+    await activeMember(nats.store, binding, test.userId, { requiredRole: 'member', fresh });
+    return { deadline: fresh.deadline, checkAccess: fresh };
+  }
+  async function confirm(raw: unknown = release) {
+    return confirmCredentialRelease(nats.store, 'test', test.userId, decision.id, raw,
+      prepareAccess);
+  }
+  return { ...test, release, decision, confirm, prepareAccess,
+    releaseSubject: `credential-${release.requestId}` };
+}
+
+async function confirmsReleaseOnce() {
+  const test = await releaseFixture();
+  const budgetBefore = await nats.store.head('budget-test');
+  const first = await test.confirm();
+  expect(first).toEqual({ status: 'confirmed', eventId: `${test.decision.id}:release`,
+    sequence: expect.any(Number) });
+  expect(await test.confirm()).toEqual(first);
+  const rows = await history(nats.store, test.releaseSubject, 'test');
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.event.data).toEqual(test.release);
+  expect(rows[0]!.event.correlation).toMatchObject({ request: test.decision.id,
+    approval: 'approval', permit: test.release.permitId });
+  expect(await nats.store.head('budget-test')).toBe(budgetBefore);
+  expect(test.custody.stage).not.toHaveBeenCalled();
+}
+it('confirms one exact release audit without custody, forwarding or another budget',
+  confirmsReleaseOnce);
+
+async function changedRelease(patch: Record<string, unknown>) {
+  const test = await releaseFixture();
+  await expect(test.confirm({ ...test.release, ...patch })).rejects.toThrow('Release unavailable');
+  expect(await nats.store.head(test.releaseSubject)).toBe(0);
+}
+it.each([{ requestId: 'other' }, { purpose: 'discovery' }, { generation: 2 },
+  { ownerId: 'other' }, { userId: 'other' }, { threadId: 'other' }, { turnId: 'other' },
+  { permitId: 'other' }, { expiresAt: 1 }, { scopeDigest: 'e'.repeat(64) },
+  { accountDigest: 'e'.repeat(64) }, { argumentsDigest: 'e'.repeat(64) },
+  { computerGeneration: 2 }, { selectionRevision: 1 }, { policyRevision: 1 }])(
+  'refuses changed release binding %j', changedRelease);
+
+async function releaseAppendFailure(saved: boolean) {
+  const test = await releaseFixture();
+  const append = nats.store.append.bind(nats.store);
+  async function loseReply(command: AppendCommand) {
+    if (saved) await append(command);
+    throw new Error('private-secret-canary');
+  }
+  const failure = vi.spyOn(nats.store, 'append').mockImplementationOnce(loseReply);
+  await expect(test.confirm()).rejects.toThrow(/^Release unavailable$/u);
+  failure.mockRestore();
+  const rows = await history(nats.store, test.releaseSubject, 'test');
+  expect(rows).toHaveLength(saved ? 1 : 0);
+  if (saved) {
+    const spy = vi.spyOn(nats.store, 'append');
+    expect(await test.confirm()).toMatchObject({ status: 'confirmed', sequence: rows[0]!.sequence });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  }
+}
+it.each([false, true])('returns no receipt on an outage or lost append reply: saved=%s',
+  releaseAppendFailure);
+
+async function racingRelease() {
+  const test = await releaseFixture();
+  const outcomes = await Promise.allSettled([test.confirm(), test.confirm()]);
+  expect(outcomes.some(isFulfilled)).toBe(true);
+  const rows = await history(nats.store, test.releaseSubject, 'test');
+  expect(rows).toHaveLength(1);
+  expect(await test.confirm()).toMatchObject({ sequence: rows[0]!.sequence });
+}
+function isFulfilled(result: PromiseSettledResult<unknown>) {
+  return result.status === 'fulfilled';
+}
+it('racing audit confirmations retain one saved identity', racingRelease);
+
+async function invalidatesRelease(kind: string) {
+  const test = await releaseFixture();
+  async function changedAccess() {
+    if (kind === 'expiry') {
+      vi.spyOn(Date, 'now').mockReturnValue(test.release.expiresAt);
+    } else if (kind === 'policy') {
+      await publishServer();
+    } else if (kind === 'selection') {
+      await test.select({ ...test.command, action: 'clear', profileId: undefined,
+        profileRevision: undefined, expectedSequence: test.release.selectionRevision,
+        changeRef: 'clear-release' });
+    } else {
+      const event = envelope('test', test.profileSubject, 'connection.revoked', {
+        userId: test.userId, serverId: 'server', profile: 'personal',
+      });
+      await nats.seed([event]);
+    }
+    return test.prepareAccess();
+  }
+  try {
+    await expect(confirmCredentialRelease(nats.store, 'test', test.userId, test.decision.id,
+      test.release, changedAccess)).rejects.toThrow('Release unavailable');
+    expect(await nats.store.head(test.releaseSubject)).toBe(0);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each(['expiry', 'policy', 'selection', 'revoke'])(
+  'refuses %s changed while checking access', invalidatesRelease);
+
+async function forgedRelease(legacy: boolean) {
+  const test = await releaseFixture();
+  const { requestId, permitId, connectionId, profileId, leaseId, generation } = test.release;
+  const old = { requestId, permitId, connectionId, profileId, leaseId, generation };
+  const event = envelope('test', test.releaseSubject, 'credential.released',
+    legacy ? old : test.release, `${test.decision.id}:release`);
+  event.source = 'untrusted';
+  await nats.seed([event]);
+  await expect(test.confirm()).rejects.toThrow('Release unavailable');
+  expect(await history(nats.store, test.releaseSubject, 'test')).toHaveLength(1);
+}
+it.each([true, false])('legacy or forged saved audit cannot confirm: legacy=%s', forgedRelease);
