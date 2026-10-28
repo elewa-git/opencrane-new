@@ -12,6 +12,7 @@ import { readActiveMember } from './member-authority.ts';
 import { exchangePersonalOAuthRefresh, refreshSaveEvidence } from './oauth-refresh-worker.ts';
 import { refreshAccess, refreshInput } from './oauth-refresh.ts';
 import { sessionSchema } from './oauth-start.ts';
+import { retainAccessToken } from './oauth-retained-access.ts';
 import type { RemoteNetwork } from './remote-https.ts';
 
 type Custody = ReturnType<typeof connectionCustody>;
@@ -140,6 +141,9 @@ async function retirePrevious(custody: Custody, rows: StoredEvent[], siloId: str
     appendUntil: activation.appendUntil };
   const identity = { reference: saved.secretRef.slice('secret:'.length), uid: activation.uid,
     resourceVersion: activation.resourceVersion };
+  if (activation.reason === 'oauth_confirmed' && Date.now() < activation.account.expiresAt) {
+    await retainAccessToken(custody, stage, identity, activation.account.expiresAt);
+  }
   const removed = await custody.retire(stage, identity);
   if (!['deleted', 'not_found'].includes(removed.status)) {
     throw new Error('OAuth refresh retirement unconfirmed');

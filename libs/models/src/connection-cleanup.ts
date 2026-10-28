@@ -9,7 +9,7 @@ import { foldConnection } from './bearer-connections.ts';
 import type { connectionCustody, ConnectionStage } from './connection-custody.ts';
 import { reconcileConnectionStage } from './connection-reconciliation.ts';
 
-type Custody = Pick<ReturnType<typeof connectionCustody>, 'recover' | 'remove'>;
+type Custody = Pick<ReturnType<typeof connectionCustody>, 'recover' | 'remove' | 'retire'>;
 
 function confirmedChange(rows: StoredEvent[], trigger: EventEnvelope) {
   function matches(row: StoredEvent) {

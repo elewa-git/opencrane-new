@@ -22,6 +22,7 @@ export const oauthConfigurationSchema = z.strictObject({
   issuer: z.string().max(2048), consentEndpoint: z.string().max(2048),
   redirectUri: z.string().max(2048), clientId: id,
   tokenEndpoint: z.string().max(2048).optional(),
+  revocationEndpoint: z.string().max(2048).optional(),
   identityVerification: z.strictObject({ algorithm: z.literal('RS256'),
     publicKey: z.string().min(1).max(8192) }).optional(),
   protocolScopes: scopes, toolScopes: z.record(toolName, scopes),

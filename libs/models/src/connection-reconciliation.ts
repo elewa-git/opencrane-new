@@ -6,21 +6,25 @@ import { envelope, history } from './actor.ts';
 import { foldConnection } from './bearer-connections.ts';
 import type { connectionCustody, ConnectionStage } from './connection-custody.ts';
 import { withConnectionStage } from './connection-stage-lock.ts';
+import { retireExpiredAccess } from './oauth-retained-access.ts';
 
-type Custody = Pick<ReturnType<typeof connectionCustody>, 'recover' | 'remove'>;
+type Custody = Pick<ReturnType<typeof connectionCustody>, 'recover' | 'remove' | 'retire'>;
 const retained = { status: 'retained' as const };
 
 /** Reconcile one private candidate during live maintenance, never during event replay. */
 export async function reconcileConnectionStage(store: EventStore, db: Pick<Db, 'lock'>,
   custody: Custody, stage: ConnectionStage) {
-  // Keep consent attempts until their separate lifecycle can prove deletion is safe.
-  if (stage.attemptId !== undefined) {
+  // Keep private attempts until their deadline, then check whether they hold expired access.
+  if (stage.attemptId !== undefined && Date.now() < stage.appendUntil) {
     return retained;
   }
   async function reconcile() {
     // Read under the lock before rebuilding missing private records from saved identities.
     const subject = `connection-${stage.userId}-${stage.serverId}-${stage.profileId}`;
     let rows = await history(store, subject, stage.siloId, performance.now() + 10_000);
+    if (stage.attemptId !== undefined) {
+      return retireExpiredAccess(custody, rows, stage);
+    }
     // Leave OAuth copies to their worker, which must contact the provider before retirement.
     if (rows.some(isOAuthGeneration)) {
       return retained;

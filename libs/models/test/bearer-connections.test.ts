@@ -680,7 +680,7 @@ async function lateAppendCannotFollowDeletion(next: 'rotate' | 'revoke' | 'race'
     deletes += 1;
     return { status: 'deleted' as const };
   }
-  const custody = { recover, remove };
+  const custody = { recover, remove, retire: remove };
   const db = pgDb(storage.queue);
   expect(await reconcileConnectionStage(nats.store, db, custody, candidate!))
     .toEqual({ status: 'retained' });

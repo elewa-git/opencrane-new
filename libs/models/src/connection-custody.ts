@@ -3,6 +3,7 @@
 // Adapt the OC1 Secret and HMAC checks. Keep their notice in connection-custody.NOTICE.
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
+import { readResponse } from './connection-custody-response.ts';
 import { connectionStageJournal } from './connection-stage-journal.ts';
 
 const identifier = z.string().min(1).max(200);
@@ -212,6 +213,15 @@ class ConnectionCustody {
     }
     return this.journal.claimSend(nameFor(stage));
   }
+  /** Check under the profile lock whether a refresh could have reached the provider. */
+  async hasSendClaim(input: ConnectionStage) {
+    const stage = checkedStage(input);
+    return this.journal.hasSendClaim(nameFor(stage));
+  }
+  /** Call only under the profile lock, with authority from an exact saved revocation. */
+  async revokeOnce(operationId: string, send: () => Promise<unknown>) {
+    return this.journal.revokeOnce(operationId, send);
+  }
   /** Prepare private consent material once. A saved create claim prevents another create. */
   async prepareAttempt(input: Omit<ConnectionStage, 'appendUntil'>, material: () => string) {
     try {
@@ -239,7 +249,7 @@ class ConnectionCustody {
   }
   /** Read only an exact private attempt. Never expose this through a member or admin API. */
   async readAttempt(input: ConnectionStage, expected: ConnectionIdentity) {
-    return this.readMaterial(input, expected, true);
+    return this.readMaterial(input, expected, 'attempt');
   }
   /** Check private refresh availability without returning any material to the command. */
   async hasRefreshMaterial(input: ConnectionStage, expected: ConnectionIdentity) {
@@ -251,7 +261,7 @@ class ConnectionCustody {
       if (input.attemptId) {
         return undefined;
       }
-      const contents = await this.readMaterial(input, expected, false);
+      const contents = await this.readMaterial(input, expected, 'active');
       const schema = z.object({ refresh_token: z.string().regex(/^[\x21-\x7e]{1,4096}$/u) });
       if (contents === undefined) {
         return undefined;
@@ -261,15 +271,25 @@ class ConnectionCustody {
       return undefined;
     }
   }
+  /** Read an exact generation privately for its saved revocation. */
+  async readRevocationMaterial(input: ConnectionStage, expected: ConnectionIdentity) {
+    if (input.attemptId) {
+      return undefined;
+    }
+    // Allow cleanup to revoke tokens whose local deletion has started but not finished.
+    // Keep ordinary attempt and refresh readers blocked by their deletion markers.
+    return this.readMaterial(input, expected, 'revocation');
+  }
   private async unreadable(stage: ConnectionStage) {
     return await this.journal.deletion(nameFor(stage)) !== undefined ||
       (stage.attemptId !== undefined && Date.now() >= stage.appendUntil);
   }
   private async readMaterial(input: ConnectionStage, expected: ConnectionIdentity,
-    attemptOnly: boolean) {
+    purpose: 'attempt' | 'active' | 'revocation') {
     try {
       const stage = checkedStage(input);
-      if (!expected || (attemptOnly && !stage.attemptId) || await this.unreadable(stage)) {
+      if (!expected || (purpose === 'attempt' && !stage.attemptId) ||
+          (purpose !== 'revocation' && await this.unreadable(stage))) {
         return undefined;
       }
       const recovered = await this.recover(stage, expected);
@@ -286,7 +306,7 @@ class ConnectionCustody {
         return undefined;
       }
       // Refuse retirement or expiry that happened while the private read was waiting.
-      if (await this.unreadable(stage)) {
+      if (purpose !== 'revocation' && await this.unreadable(stage)) {
         return undefined;
       }
       return decodeToken(secret.data.token)?.toString('utf8');
@@ -320,7 +340,7 @@ class ConnectionCustody {
           stages.push(stage);
         }
       }
-      return { status: 'listed' as const, stages,
+      return { status: 'listed' as const, stages, complete: stages.length === page.items.length,
         continuation: page.metadata.continue || undefined };
     } catch {
       return { status: 'unknown' as const };
@@ -480,30 +500,6 @@ function equalDigest(actual: string, expected: string) {
   const actualBytes = Buffer.from(actual);
   const expectedBytes = Buffer.from(expected);
   return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
-}
-async function readResponse(response: Response, maximumBytes = 32768): Promise<unknown> {
-  if (!response.body) {
-    throw new Error('Connection custody response invalid');
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) {
-        break;
-      }
-      size += chunk.value.length;
-      if (size > maximumBytes) {
-        throw new Error('Connection custody response too large');
-      }
-      chunks.push(chunk.value);
-    }
-    return JSON.parse(Buffer.concat(chunks).toString()) as unknown;
-  } finally {
-    await reader.cancel();
-  }
 }
 
 function decodeToken(encoded: string) {

@@ -195,7 +195,7 @@ async function sharedProfileLock(path: string) {
     const scanning = Promise.withResolvers<void>();
     async function listStages() {
       await scanning.promise;
-      return { status: 'listed' as const, stages, continuation: undefined };
+      return { status: 'listed' as const, complete: true, stages, continuation: undefined };
     }
     if (path === 'scan') {
       setup.candidates.mockImplementation(listStages);
@@ -255,7 +255,7 @@ async function drainOnLoss() {
     entered.resolve();
     await held.promise;
     setup.ordering.push('scan-drained');
-    return { status: 'listed' as const, stages: [], continuation: undefined };
+    return { status: 'listed' as const, complete: true, stages: [], continuation: undefined };
   }
   setup.candidates.mockImplementation(candidates);
   await setup.start();

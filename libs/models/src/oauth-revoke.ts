@@ -65,7 +65,7 @@ export async function revokePersonalOAuth(store: EventStore, binding: Binding,
   }
 }
 
-async function prepareRevoke(store: EventStore, siloId: string, subject: string, input: Input) {
+export async function prepareRevoke(store: EventStore, siloId: string, subject: string, input: Input) {
   try {
     const rows = await history(store, subject, siloId, performance.now() + 10_000);
     const last = rows.at(-1);
@@ -90,7 +90,7 @@ async function prepareRevoke(store: EventStore, siloId: string, subject: string,
         !isDeepStrictEqual(original.event, event))) {
       return undefined;
     }
-    return { event, original, sequence: state.sequence };
+    return { event, original, sequence: state.sequence, preceding };
   } catch {
     // Defer target and history failures until after the caller's current access decision.
     return undefined;

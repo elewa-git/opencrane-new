@@ -26,13 +26,52 @@ and `callsAvailable: false`. Other errors use the fixed `OAuth revoke unavailabl
 The existing fold invalidates the account and its refresh claim. A worker waiting for the
 same lock sees the revoke before it can send or save a replacement. A provider request
 already sent before the revoke is not undone. The bearer cleanup handler acknowledges
-OAuth revocations without deleting; maintenance retains OAuth histories and attempts.
-This preserves private material needed by the future provider revocation worker.
+OAuth revocations without deleting. Maintenance keeps OAuth generations and replies
+for the explicit worker below. It deletes only access-only copies whose saved expiry
+has passed.
 
-Provider revocation through the reviewed transport, its private lost-reply recovery,
-retirement of all token copies, company handling, HTTP and governed use are NOT IMPLEMENTED
-in this first part. Fresh-install qualification and the full root suite are NOT RUN.
-No claim of complete OAuth revocation is made.
+Company handling, HTTP, automatic refresh/revoke scheduling and governed use remain
+NOT IMPLEMENTED.
+Fresh-install qualification and the full root suite are NOT RUN.
+
+## Provider revocation and token retirement (Part of #50)
+
+`finishPersonalOAuthRevoke` is a private worker, without a route, package export or replay
+reaction. Trusted code supplies the silo and original revoke input after the local command.
+It revalidates that saved revoke under the shared profile lock. The saved event alone
+permits the provider request and deletion; current membership is irrelevant to cleanup.
+The member command still refuses removed and other members without exposing the account.
+
+Operator configuration may include `revocationEndpoint`; the saved configuration digest
+binds it with the provider and client. Missing or changed settings prevent sending.
+Before sending, the worker resolves the exact private reply for any claimed refresh.
+It checks the reply against the saved account using the refresh verifier. A send without
+a recoverable reply stays unknown; a claim that never sent uses the saved generation.
+The existing transport sends the newest refresh token, the current access token and
+each distinct unexpired older access token. It includes access-only copies retained
+after refresh and a verified but unsaved refresh reply. Missing private material for an unexpired
+generation refuses completion; local absence never proves provider invalidation.
+Each token has its own request. Rotating or revoking a refresh token need not invalidate
+access tokens. The transport keeps address, TLS, redirect, five-second and byte limits.
+Revocation accepts HTTP 200, including an empty body without a content type. Response
+bodies are discarded. Token exchange still requires its JSON response and token checks.
+
+The private journal flushes one marker before the group of token requests and retains
+confirmed success only after all requests succeed. Duplicates and restart recover that status. A lost HTTP reply without a saved result stays `unknown`
+and never resends. No provider error or token enters events, logs, results or the journal.
+These private records describe an external attempt; the event remains business authority.
+
+Regardless of provider outcome, the worker scans authenticated custody pages and retires
+all personal copies for that silo, member, server and profile whose preparation precedes
+the revoke. This includes all generations, consent material and saved refresh replies.
+Later preparations and other profiles or silos remain untouched. Exact saved UID/version
+checks and deletion markers protect removal and block ordinary reads during interrupted
+deletion. Only the private revocation reader can read a retained generation after deletion
+has started, so its still-valid access token can also be revoked.
+Retries finish deletion after member removal. Missing identity evidence, damaged copies
+or incomplete pages keep the outcome unknown; they never count as completed retirement.
+`completed` means provider confirmation and local deletion; `unknown` grants no access.
+Neither result is a member-facing receipt. No new event or dependency is introduced.
 
 ## Saving an OAuth refresh (Part of #50)
 
@@ -47,14 +86,22 @@ the account and scopes, advances exactly one generation and leaves OAuth unavail
 for tool use. Recovery reads exact saved history before expired private replies, checks
 current membership once and returns the original sequence and generation. It never sends.
 
-After a confirmed save, custody removes the prior generation and its earlier reply using
-exact UID/version preconditions. Deletion markers refuse further private reads, including
+After a confirmed save, custody first keeps the prior access token alone in an immutable
+private copy until its saved expiry. Its deterministic attempt id binds the original
+generation; its private contents contain no refresh token or identity reply. Custody then
+removes the prior generation and its earlier reply using exact UID/version preconditions.
+Deletion markers refuse further private reads, including
 while deletion is interrupted. Retries finish removal without saving again. A failed
 removal returns `unknown`; the saved event remains the truth. Recovery completes retirement
 before checking current membership for the receipt. The saved replacement alone authorises
 deletion, so removing the member cannot leave the old copies readable. Removed members
 still receive `unknown` and cannot start an attempt or save a new generation.
-Revoke, governed use, routes and scheduling remain out of scope.
+The existing startup and periodic maintenance scan checks these access-only copies
+under the profile lock. It derives their exact private stage and expiry from accepted
+account events, then retires expired copies with pinned UID/version checks. It retains
+unexpired, changed or unproved copies and retries interrupted deletion after restart,
+including after member removal. It does not send to the provider or append an event.
+Governed use, public routes and automatic refresh/revoke scheduling remain out of scope.
 Fresh-install live qualification: NOT RUN.
 
 Own checks after the member-removal fix: PASS lint (including Knip), typecheck,
