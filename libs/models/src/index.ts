@@ -78,7 +78,7 @@ export { publicationEntry } from './publication.ts';
 export { prepareGatewayConfiguration, gatewayConfigurationCurrent, PublicationUnavailable }
   from './gateway-generation.ts';
 export { renderGatewayConfiguration, type GatewayRenderSettings } from './gateway-renderer.ts';
-export { readRootStopEvidence } from './root-stop-evidence.ts';
+export { readRootStopEvidence, readRoutineRemoval } from './root-stop-evidence.ts';
 export { RootBudgetRefused, rootTotals } from './root-budget.ts';
 export { registerHosted, hostedRegistrationChange } from './hosted-registration.ts';
 export { gatewayDelivery } from './gateway-delivery.ts';

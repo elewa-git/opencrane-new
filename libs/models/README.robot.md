@@ -4534,3 +4534,15 @@ HTTP routes, routine creation and verified account checks remain unavailable.
 Company material stays outside personal cleanup and private OAuth material reads.
 Tests use real NATS, OpenFGA and PostgreSQL with the existing local custody fixture.
 Fresh-install and production Kubernetes qualification: NOT RUN.
+
+## Routine removal evidence
+
+`readRoutineRemoval` checks an exact saved member.removed against the occupied run,
+its original member admission, owner, revisions and occurrence/activation ordering.
+`readRootStopEvidence` also accepts a system access pause with that verified cause.
+The cause must precede the pause. Both readers reject changed or foreign evidence;
+neither requires the removed member's current IAM or spending rights.
+Final decision checks read the routine prohibition before checking access changes,
+so the same removal cannot replace that refusal with an ambiguous model retry error.
+Budget cleanup and the bridge share this check. The bridge retains its existing
+two-second observation limit, including slow evidence reads and completed pending output.

@@ -1,0 +1,1 @@
+- An internal command pauses an occupied routine after its recorded owner is removed. The saved pause stops further calls and supports separate spending cleanup and private-thread interruption, even when IAM is unavailable. Automatic execution remains disabled.

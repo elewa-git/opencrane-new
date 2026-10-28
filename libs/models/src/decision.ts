@@ -245,8 +245,9 @@ export async function startDecision(
       }
       let needsApproval = false;
       async function confirmAccess() {
-        await confirmDecisionAccess(activity, authority, needsApproval, true);
+        // Preserve saved prohibition when its member removal also invalidates access.
         await confirmRoutine();
+        await confirmDecisionAccess(activity, authority, needsApproval, true);
       }
       const snapshot = { include: authority.include, head: authority.head,
         deadline: authority.deadline };

@@ -36,6 +36,7 @@ import { calculateRoutineOccurrence } from '@opencrane/events/routine-schedule';
 import { claimScheduledRoutine } from '../../ops/test/support/routine-claim.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { applyRoutineStop } from '../src/routine-stop-budget.ts';
+import { pauseRoutineAfterRemoval } from '../src/routine-access-pause.ts';
 import { pauseRoutine } from '../src/routine-pause.ts';
 import { retireRoutine } from '../src/routine-retire.ts';
 import { requestRoutineStop } from '../src/routine-stop.ts';
@@ -977,6 +978,13 @@ function finishedStopRun(occurrenceId: string) {
 }
 async function prohibit(kind: string, request: Awaited<ReturnType<typeof stopRequest>>,
   memberId = 'alice') {
+  if (kind === 'Access') {
+    const removed = event('removed-alice', 'member-alice', 'member.removed');
+    await nats.seed([removed]);
+    const { changeId: _change, ...expected } = request;
+    const cause = { eventId: removed.id, position: await nats.store.head(removed.subject) };
+    return pauseRoutineAfterRemoval(nats.store, 'test', { ...expected, cause });
+  }
   if (kind === 'Stop') {
     return requestRoutineStop(nats.store, binding, memberId, request);
   }
@@ -1166,7 +1174,8 @@ function routineRootTests() {
     const request = await stopRequest();
     const beforeControl = await nats.store.head();
     const receipt = await prohibit(kind, request);
-    expect(await nats.store.head()).toBe(beforeControl + 1);
+    const added = kind === 'Access' ? 2 : 1;
+    expect(await nats.store.head()).toBe(beforeControl + added);
     const saved = await nats.store.readEvent(receipt.position);
     expect(saved.event.data).toMatchObject({ affectedRun: 'occurrence' });
     const reference = { routineId: 'orders', eventId: receipt.eventId, position: receipt.position };
@@ -1193,7 +1202,8 @@ function routineRootTests() {
   }
   it.each([['Stop', 'prepared'], ['Stop', 'allocated'], ['Stop', 'admitted'],
     ['Pause', 'prepared'], ['Pause', 'allocated'], ['Pause', 'admitted'],
-    ['Retire', 'prepared'], ['Retire', 'allocated'], ['Retire', 'admitted']])(
+    ['Retire', 'prepared'], ['Retire', 'allocated'], ['Retire', 'admitted'],
+    ['Access', 'admitted']])(
     'owner %s prevents further admission at the %s stage', stopsAllocatedRoot);
   async function budgetStopRecovery(kind: string) {
     stopping = true;
@@ -1204,9 +1214,13 @@ function routineRootTests() {
       model: 'gpt-6.1-sol', priceTableId, contextDigest: '0'.repeat(64) };
     const held = await actor.reserve(call, 100, undefined, undefined, root.rootId);
     await actor.uncertain(held, 'settle_timeout');
-    await apply([joinedMember('bob'), routine('routine.reassigned', 'bob')]);
-    const request = { ...await stopRequest(), expectedDefinitionRevision: 2,
-      expectedControlRevision: 2 };
+    let request = await stopRequest();
+    if (kind === 'Access') {
+      await fga.pause();
+    } else {
+      await apply([joinedMember('bob'), routine('routine.reassigned', 'bob')]);
+      request = { ...await stopRequest(), expectedDefinitionRevision: 2, expectedControlRevision: 2 };
+    }
     const saved = await prohibit(kind, request, 'bob');
     const reference = { routineId: 'orders', eventId: saved.eventId, position: saved.position };
     const append = nats.store.append.bind(nats.store);
@@ -1256,14 +1270,14 @@ function routineRootTests() {
       .toEqual({ status: 'confirmed' });
     expect(actor.state.roots[0]!.stop?.reason).toBe('routine_stop');
   }
-  it.each(['Stop', 'Pause', 'Retire'])(
-    'owner %s retains frozen people and uncertain cents through budget failure and restart',
+  it.each(['Stop', 'Pause', 'Retire', 'Access'])(
+    'saved %s retains frozen people and uncertain cents through budget failure and restart',
     budgetStopRecovery);
 
   async function racingStop(kind: string, afterAllocation: boolean) {
     stopping = true;
     const request = await stopRequest();
-    let saved: Awaited<ReturnType<typeof requestRoutineStop>>;
+    let saved: Awaited<ReturnType<typeof prohibit>>;
     const append = nats.store.append.bind(nats.store);
     async function race(change: AppendCommand) {
       let result;
@@ -1756,8 +1770,8 @@ function routineRootTests() {
       }
     }
     it.each([
-      ['Stop', 'model'], ['Pause', 'model'], ['Retire', 'model'],
-      ['Stop', 'free tool'], ['Pause', 'free tool'], ['Retire', 'free tool'],
+      ['Stop', 'model'], ['Pause', 'model'], ['Retire', 'model'], ['Access', 'model'],
+      ['Stop', 'free tool'], ['Pause', 'free tool'], ['Retire', 'free tool'], ['Access', 'free tool'],
     ])('refuses routine dispatch after saved %s before cleanup: %s', refusesSavedProhibition);
     async function preservesRefusalAfterAuditFailure(route: string) {
       const fixture = await dispatchFixture();
@@ -1962,6 +1976,7 @@ function routineRootTests() {
       ['Stop', 'decision.recorded'], ['Pause', 'decision.recorded'],
       ['Retire', 'decision.recorded'], ['Stop', 'mcp.dispatch_admitted'],
       ['Pause', 'mcp.dispatch_admitted'], ['Retire', 'mcp.dispatch_admitted'],
+      ['Access', 'decision.recorded'], ['Access', 'mcp.dispatch_admitted'],
     ])('refuses routine dispatch when %s is saved after %s', prohibitionDuringDispatch);
 
     async function changedDispatchEvidence(kind: string) {

@@ -44,35 +44,116 @@ function isLifecycleProhibition(event: EventEnvelope) {
   return event.type === 'routine.paused' || event.type === 'routine.retired';
 }
 
-function requireLifecycleRun(state: RoutineState | undefined, event: EventEnvelope) {
-  if (!isLifecycleProhibition(event)) {
-    return;
-  }
+function lifecycleRun(state: RoutineState | undefined, event: EventEnvelope) {
   const control = routineControlSchema.parse(event.data);
   const saved = state?.definition;
   const run = state?.activeRun;
   // Bind the prohibition to the run occupied before this lifecycle change was saved.
   if (!saved || !run || state.status === 'retired' ||
-      control.affectedRun !== run.occurrenceId || control.source !== 'owner' ||
-      control.actorId !== saved.definition.ownerId ||
+      control.affectedRun !== run.occurrenceId ||
       control.definitionRevision !== saved.definitionRevision ||
       control.scheduleRevision !== saved.scheduleRevision ||
       control.controlRevision !== saved.controlRevision + 1) {
     throw new Error('Invalid routine prohibition');
   }
+  return { control, state };
+}
+
+async function requireLifecycleRun(store: EventStore, state: RoutineState | undefined,
+  source: StoredEvent, claimPosition: number, deadline: number) {
+  if (!isLifecycleProhibition(source.event)) {
+    return;
+  }
+  const checked = lifecycleRun(state, source.event);
+  const control = checked.control;
+  if (control.source === 'access') {
+    if (source.event.type !== 'routine.paused' || !control.cause ||
+        control.cause.position >= source.sequence || control.reason !== 'owner_removed') {
+      throw new Error('Invalid routine prohibition');
+    }
+    await readRoutineRemoval(store, state, control.cause, claimPosition, deadline);
+  } else if (control.source !== 'owner' ||
+      control.actorId !== checked.state.definition!.definition.ownerId) {
+    throw new Error('Invalid routine prohibition');
+  }
+}
+
+function sameFrozenDefinition(state: RoutineState) {
+  const run = state.activeRun!;
+  const saved = state.definition!;
+  return saved.definition.ownerId === run.definition.ownerId &&
+    saved.definition.ownerAdmissionId === run.definition.ownerAdmissionId &&
+    saved.definitionRevision === run.definitionRevision &&
+    saved.scheduleRevision === run.scheduleRevision && saved.controlRevision === run.controlRevision;
+}
+function removalRun(state: RoutineState | undefined, position: number, claimPosition: number) {
+  if (!state?.activeRun || !state.definition || state.status === 'retired' || claimPosition < 1 ||
+      position <= claimPosition || position <= (state.activation?.admission.position ?? 0) ||
+      !sameFrozenDefinition(state)) {
+    throw new Error('Invalid routine removal');
+  }
+  return state.activeRun;
+}
+function requireMemberRow(row: StoredEvent, silo: string, subject: string, deadline: number) {
+  const parsed = parseEventByType(row.event);
+  if (!parsed.success || row.event.silo !== silo || row.event.subject !== subject ||
+      performance.now() >= deadline) {
+    throw new Error('Invalid routine removal');
+  }
+  return data(parsed.event);
+}
+/** Verify removal of the membership recorded by this still-occupied occurrence. */
+export async function readRoutineRemoval(store: EventStore, state: RoutineState | undefined,
+  cause: { eventId: string; position: number }, claimPosition: number, deadline: number) {
+  const run = removalRun(state, cause.position, claimPosition);
+  const subject = `member-${run.definition.ownerId}`;
+  let admissionId: string | undefined;
+  let verified = false;
+  let position = 0;
+  for await (const row of store.readStream(subject, 1, deadline)) {
+    const fields = requireMemberRow(row, state!.silo, subject, deadline);
+    position = row.sequence;
+    // Keep later membership changes from erasing removal of the original admission.
+    if (row.sequence > cause.position) {
+      continue;
+    }
+    if (fields['memberId'] !== run.definition.ownerId) {
+      throw new Error('Invalid routine removal');
+    }
+    if (row.sequence === cause.position) {
+      if (row.event.id !== cause.eventId || row.event.type !== 'member.removed' ||
+          admissionId !== run.definition.ownerAdmissionId) {
+        break;
+      }
+      verified = true;
+    }
+    if (row.event.type === 'member.joined' || row.event.type === 'silo.owner_bootstrapped') {
+      admissionId = row.event.id;
+    } else if (row.event.type === 'member.removed') {
+      admissionId = undefined;
+    }
+  }
+  if (verified) {
+    return new Map([[subject, position]]);
+  }
+  throw new Error('Invalid routine removal');
 }
 
 async function readRoutineThroughStop(store: EventStore, source: StoredEvent, deadline: number) {
   let routine: RoutineState | undefined;
+  let claimPosition = 0;
   const completedRuns = new Map<string, NonNullable<RoutineState['activeRun']>>();
   for await (const row of store.readStream(source.event.subject, 1, deadline)) {
     if (performance.now() >= deadline || row.sequence > source.sequence) {
       break;
     }
     if (row.sequence === source.sequence && row.event.id === source.event.id) {
-      requireLifecycleRun(routine, row.event);
+      await requireLifecycleRun(store, routine, row, claimPosition, deadline);
     }
     routine = foldRoutineHistory(routine, row.event, completedRuns);
+    if (row.event.type === 'routine.due') {
+      claimPosition = row.sequence;
+    }
     if (row.sequence === source.sequence && row.event.id === source.event.id) {
       return routine;
     }

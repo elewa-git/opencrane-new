@@ -882,3 +882,12 @@ userId. Its activation pins company ownerKind/purpose, generation 1, expectedSeq
 bearer_create reason, registrationRevision and optInRevision alongside exact custody
 references. Existing personal schemas remain unchanged. No company refreshed variant
 or release reaction is added; replay never reads private material or calls a provider.
+
+## Routine removal cause
+
+Modern routine controls accept optional strict `cause: { eventId, position }`.
+Envelope validation permits it only on routine.paused with source `access` and
+actorId/system principal `opencrane-server`; that combination requires the reference.
+The system command and Stop reader verify member.removed, the occupied occurrence and
+its frozen membership admission. Schema acceptance alone proves no saved removal.
+The pure fold retains the occupied run, pauses scheduling and enables no execution.
