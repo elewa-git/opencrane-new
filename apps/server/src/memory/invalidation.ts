@@ -107,6 +107,19 @@ function invalidationId(binding: string, causeId: string) {
   return `memory-invalidation-${hash.digest('hex')}`;
 }
 
+function canWithdraw(state: MemoryContextState) {
+  if ((state.status !== 'loaded' && state.status !== 'ended') || state.references.length === 0) {
+    return false;
+  }
+  for (const encoded of state.events.values()) {
+    const decoded: unknown = JSON.parse(encoded);
+    if (memoryContextRecordedEventSchema.parse(decoded).data.action === 'invalidated') {
+      return false;
+    }
+  }
+  return true;
+}
+
 async function recordInvalidation(options: Options, request: Request): Promise<Receipt> {
   // Read saved history without requiring the former reader to retain access.
   // This internal command can only withdraw use of an already recorded generation.
@@ -128,15 +141,7 @@ async function recordInvalidation(options: Options, request: Request): Promise<R
     }
     return receipt;
   }
-  if ((state.status !== 'loaded' && state.status !== 'ended') || state.references.length === 0) {
-    return { status: 'refused' };
-  }
-  for (const encoded of state.events.values()) {
-    const decoded: unknown = JSON.parse(encoded);
-    if (memoryContextRecordedEventSchema.parse(decoded).data.action === 'invalidated') {
-      return { status: 'refused' };
-    }
-  }
+  if (!canWithdraw(state)) return { status: 'refused' };
   const scopeId = memoryScopeId(options.silo, 'person', saved.requesterId);
   const rows = await history(options.store, `scope-${scopeId}`, options.silo,
     performance.now() + 10_000);

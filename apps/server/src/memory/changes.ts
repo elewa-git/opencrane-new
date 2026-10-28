@@ -30,7 +30,7 @@ async function readChanges(options: Options, scopeId: string, position: number) 
   }
 }
 
-// Keep only a cursor, never fact content. A later recall resets it to its saved evidence.
+// Keep only a cursor between polls. Recheck saved loads when a later recall adds evidence.
 export function memoryChanges(options: Options) {
   let evidenceCount = 0;
   let position = 0;

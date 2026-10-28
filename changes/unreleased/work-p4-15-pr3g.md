@@ -1,0 +1,1 @@
+- Detect saved personal corrections and forgets while polling private turns, record the exact affected context and clear only its thread. Pending replies can still be withdrawn after completion; memory admission remains disabled.
