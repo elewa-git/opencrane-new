@@ -89,7 +89,7 @@ async function fixture(assembled = true, nativeFields: Record<string, unknown> =
     return record(await response.json());
   }
   async function turn(id = 'A', generation = 1, inputGeneration = 1,
-    name: 'recall' | 'remember' | 'correct' = 'recall') {
+    name: 'recall' | 'remember' | 'correct' | 'forget' = 'recall') {
     const input = parseTurn({ id, conversationId: 'same-chat', assistantId: 'assistant',
       requesterId: 'alice', executionMode: 'restricted', text: 'Hello', token: 'fixture',
       expiresAt: Date.now() + 60_000, tools: structuredClone(reviewed) });
@@ -382,7 +382,7 @@ async function hidesCleanupErrors() {
 }
 it('revokes access and hides native cleanup errors', hidesCleanupErrors);
 
-async function loadsRealAssembly(name: 'recall' | 'remember' | 'correct') {
+async function loadsRealAssembly(name: 'recall' | 'remember' | 'correct' | 'forget') {
   const test = await fixture(true);
   try {
     const turn = await test.turn('A', 1, 1, name);
@@ -393,20 +393,20 @@ async function loadsRealAssembly(name: 'recall' | 'remember' | 'correct') {
     expect(test.grants.size).toBe(0);
   } finally { await test.close(); }
 }
-it.each(['recall', 'remember', 'correct'] as const)(
+it.each(['recall', 'remember', 'correct', 'forget'] as const)(
   'loads %s from the real assembler with its bound caller and recorded grant', loadsRealAssembly);
 
-async function refusesCorrectApproval(change: string) {
+async function refusesChangeApproval(name: 'correct' | 'forget', change: string) {
   const test = await fixture();
   try {
-    const turn = await test.turn('A', 1, 1, 'correct');
+    const turn = await test.turn('A', 1, 1, name);
     if (change === 'copy') turn.binding.tools = structuredClone(turn.binding.tools);
     if (change === 'mutation') {
-      turn.binding.tools[0]!.definitions[0] = JSON.stringify({ name: 'correct' });
+      turn.binding.tools[0]!.definitions[0] = JSON.stringify({ name });
       turn.input.tools = structuredClone(turn.binding.tools);
     }
     if (change === 'another thread') {
-      const other = await test.turn('B', 1, 1, 'correct');
+      const other = await test.turn('B', 1, 1, name);
       turn.binding.tools = other.binding.tools;
     }
     if (change === 'multiple definitions') {
@@ -419,14 +419,19 @@ async function refusesCorrectApproval(change: string) {
     expect(test.grants.size).toBe(0);
   } finally { await test.close(); }
 }
-it.each(['copy', 'mutation', 'another thread', 'multiple definitions'])(
-  'refuses Correct approval with %s', refusesCorrectApproval);
+const changeApprovals: ['correct' | 'forget', string][] = [];
+for (const name of ['correct', 'forget'] as const) {
+  for (const change of ['copy', 'mutation', 'another thread', 'multiple definitions']) {
+    changeApprovals.push([name, change]);
+  }
+}
+it.each(changeApprovals)('refuses %s approval with %s', refusesChangeApproval);
 
-async function removesOnlyOriginalCorrect(ending: string) {
+async function removesOnlyOriginalChange(name: 'correct' | 'forget', ending: string) {
   const test = await fixture();
   try {
-    const first = await test.turn('A', 1, 1, 'correct');
-    const second = await test.turn('B', 1, 1, 'correct');
+    const first = await test.turn('A', 1, 1, name);
+    const second = await test.turn('B', 1, 1, name);
     await second.load();
     test.pause('discovery');
     const loading = first.load();
@@ -449,8 +454,14 @@ async function removesOnlyOriginalCorrect(ending: string) {
       .toEqual(second.offered);
   } finally { await test.close(); }
 }
-it.each(['cancel', 'failed discovery', 'timeout', 'process'])(
-  'revokes only the original Correct registration after %s', removesOnlyOriginalCorrect);
+const changeEndings: ['correct' | 'forget', string][] = [];
+for (const name of ['correct', 'forget'] as const) {
+  for (const ending of ['cancel', 'failed discovery', 'timeout', 'process']) {
+    changeEndings.push([name, ending]);
+  }
+}
+it.each(changeEndings)(
+  'revokes only the original %s registration after %s', removesOnlyOriginalChange);
 
 async function refusesDetachedTools() {
   const test = await fixture(false);

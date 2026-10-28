@@ -24,7 +24,7 @@ async function usesNativePrivateProtocol() {
 }
 it('uses native private configuration to discover through the real proxy', usesNativePrivateProtocol);
 
-async function loadsNativePrivateCatalogue(name: 'recall' | 'remember' | 'correct') {
+async function loadsNativePrivateCatalogue(name: 'recall' | 'remember' | 'correct' | 'forget') {
   const execute = promisify(execFile);
   const image = process.env['COMPUTER_TEST_IMAGE'] ?? 'ocn-upload-computer:test';
   const source = resolve('.');
@@ -53,7 +53,7 @@ async function loadsNativePrivateCatalogue(name: 'recall' | 'remember' | 'correc
   expect(observed['thread']).toMatchObject({ ephemeral: true, path: null, environments: [] });
   expect(observed['grants']).toBe(0);
 }
-it.each(['recall', 'remember', 'correct'] as const)(
+it.each(['recall', 'remember', 'correct', 'forget'] as const)(
   'loads approved %s on the same native ephemeral thread', loadsNativePrivateCatalogue);
 
 function array(value: unknown): unknown[] {
