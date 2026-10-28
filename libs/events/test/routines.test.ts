@@ -21,6 +21,23 @@ const run = { occurrenceId: 'occurrence', rootId: 'root', conversationId: 'chat'
 const due = { ...identity, ...run, source: 'scheduled', definition,
   slot, firedAt: '2026-10-11T07:00:00Z', startBy: '2026-10-11T07:01:00Z' };
 
+function acceptsRemovalReference() {
+  const data = { ...identity, controlRevision: 2, actorId: 'opencrane-server',
+    source: 'access', reason: 'owner_removed', affectedRun: 'occurrence', next: null,
+    cause: { eventId: 'removed-alice', position: 20 } };
+  const event = { ...envelope('routine.paused', data),
+    principal: { kind: 'system', id: 'opencrane-server' } };
+  expect(parseEventByType(event).success).toBe(true);
+  for (const cause of [undefined, { eventId: 'removed-alice', position: 0 },
+    { eventId: 'removed-alice', position: 20, detail: 'private-canary' }]) {
+    expect(parseEventByType({ ...event, data: { ...data, cause } }).success).toBe(false);
+  }
+  const forged = { ...data, actorId: 'alice' };
+  expect(parseEventByType(envelope('routine.paused', forged)).success).toBe(false);
+}
+it('binds an access pause to a strict removal reference and the system actor',
+  acceptsRemovalReference);
+
 function envelope(type: string, data: unknown) {
   return { id: type, commandId: 'command', type, data, silo: 'test',
     subject: 'routine-orders', source: 'opencrane-server', time: '2026-10-11T07:00:00Z',
