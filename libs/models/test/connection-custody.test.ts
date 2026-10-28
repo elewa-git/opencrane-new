@@ -5065,16 +5065,16 @@ async function retiresAllOAuthGenerations(progress: string) {
     await test.start();
     const claim = await claimRefresh(test);
     if (progress === 'saved') {
-      test.store.failDeletes(true);
-      expect(await saveRefresh(test, claim)).toEqual({ status: 'unknown' });
-      test.store.failDeletes(false);
+      expect(await saveRefresh(test, claim)).toMatchObject({ status: 'saved', generation: 2 });
       const rows = await history(events.store, test.subject, 'test');
       test.input.expectedSequence = rows.at(-1)!.sequence;
       test.input.expectedGeneration = 2;
     } else {
       expect(await sendRefresh(test, claim)).toMatchObject({ status: 'verified' });
     }
-    expect(test.store.secrets.size).toBe(progress === 'saved' ? 6 : 5);
+    const privateCopies = test.store.secrets.size;
+    expect(test.tokenIsValid('refresh-canary')).toBe(false);
+    expect(test.tokenIsValid('result-canary')).toBe(true);
     test.input.changeRef = 'revoke-after-refresh';
     await revokeOAuth(test, test.input);
     const { finishPersonalOAuthRevoke } = await import('../src/oauth-revoke-worker.ts');
@@ -5085,6 +5085,7 @@ async function retiresAllOAuthGenerations(progress: string) {
     expect(test.tokenIsValid('next-refresh-canary')).toBe(false);
     expect(test.tokenIsValid('next-access-canary')).toBe(false);
     expect(test.tokenIsValid('result-canary')).toBe(false);
+    expect(privateCopies).toBe(5);
     expect(test.revocations).toHaveLength(3);
     expect(test.revocations[0]!.get('token')).toBe('next-refresh-canary');
     expect(test.revocations[1]!.get('token')).toBe('next-access-canary');
