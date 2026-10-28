@@ -8,6 +8,7 @@ import { envelope, history } from './actor.ts';
 import { foldConnection } from './bearer-connections.ts';
 import { foldConnectionSelection } from './connection-selection.ts';
 import { connectionServer } from './connection-server.ts';
+import { MemberAccessRefused } from './member-authority.ts';
 
 type Release = z.infer<typeof toolCredentialReleaseSchema>;
 type Access = { deadline: number; checkAccess: () => Promise<void> };
@@ -128,9 +129,20 @@ export async function confirmCredentialRelease(store: EventStore, silo: string,
   prepareAccess: () => Promise<Access>, action: 'append' | 'recover' = 'append') {
   try {
     return await confirm(store, silo, requesterId, decisionId, raw, prepareAccess, action);
-  } catch {
+  } catch (error) {
+    if (error instanceof MemberAccessRefused) {
+      throw error;
+    }
     // Keep store failures and invalid input out of outward errors.
     return refuse();
+  }
+}
+async function prepareEvidence(store: EventStore, silo: string, decisionId: string,
+  release: Release) {
+  try {
+    return await loadEvidence(store, silo, decisionId, release);
+  } catch {
+    return null;
   }
 }
 async function confirm(store: EventStore, silo: string, requesterId: string,
@@ -141,8 +153,12 @@ async function confirm(store: EventStore, silo: string, requesterId: string,
     refuse();
   }
   // Finish saved evidence reads before the caller starts its two-second access check.
-  const evidence = await loadEvidence(store, silo, decisionId, release);
+  const evidence = await prepareEvidence(store, silo, decisionId, release);
   const access = await prepareAccess();
+  // Report the caller's permission refusal before any saved-evidence failure.
+  if (!evidence) {
+    refuse();
+  }
   const deadline = Math.min(access.deadline, performance.now() + 2000,
     performance.now() + release.expiresAt - Date.now());
   if (!Number.isFinite(deadline)) {
