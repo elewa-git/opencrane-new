@@ -1186,6 +1186,7 @@ it('clears private routine output when completion precedes prohibition polling',
 
 async function routineRetriesUntilClearance() {
   const link = await startRunning();
+  vi.spyOn(link.socket, 'send').mockRestore();
   // Bind the original method to the socket that sends each frame below.
   // eslint-disable-next-line @typescript-eslint/unbound-method
   const send = WebSocket.prototype.send;
@@ -1227,3 +1228,47 @@ async function routineRetriesUntilClearance() {
 }
 it('retries completed routine clearance until the exact thread receipt arrives',
   routineRetriesUntilClearance);
+
+async function slowProhibitionValidation() {
+  const link = await startRunning();
+  await saveProhibition('Pause');
+  const read = nats.store.readStream.bind(nats.store);
+  let observedAt: number | undefined;
+  let validationDeadline: number | undefined;
+  let validationStartedAt: number | undefined;
+  let delayed = false;
+  let validationFinished = false;
+  async function* slowValidation(...args: Parameters<typeof read>) {
+    if (args[0] === 'routine-orders' && args[1] === 1 && observedAt !== undefined && !delayed) {
+      delayed = true;
+      validationDeadline = args[2];
+      validationStartedAt = performance.now();
+      await delay(2200);
+      validationFinished = true;
+    }
+    for await (const row of read(...args)) {
+      if (row.event.type === 'routine.paused' && observedAt === undefined) {
+        observedAt = performance.now();
+      }
+      yield row;
+    }
+  }
+  const reading = vi.spyOn(nats.store, 'readStream').mockImplementation(slowValidation);
+  await pollRoutine();
+  expect(delayed).toBe(true);
+  expect(observedAt).toBeDefined();
+  expect(validationDeadline).toBeDefined();
+  expect(validationStartedAt).toBeDefined();
+  expect(validationDeadline! - validationStartedAt!).toBeLessThanOrEqual(2000);
+  expect(validationFinished).toBe(false);
+  expect(preparedComputer.interruptedThreads).toEqual([]);
+  await delay(250);
+  expect(validationFinished).toBe(true);
+  expect(preparedComputer.interruptedThreads).toEqual([]);
+  expect(link.socket.readyState).toBe(link.socket.OPEN);
+  reading.mockRestore();
+  await pollRoutine();
+  await vi.waitFor(interruptedOnce);
+}
+it('bounds slow prohibition validation by the cancellation deadline and retries safely',
+  slowProhibitionValidation);
