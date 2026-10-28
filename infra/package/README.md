@@ -18,7 +18,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, bundled terms and installs"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>image contents and installs"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
@@ -150,6 +150,8 @@ Separate licence checks connect a regular-expression test library, a Valgrind
 client header and the WebAssembly C/C++ API to Node's signed source release and
 the exact binary in every saved image layer. They keep the full terms and explain
 why each bundled part is allowed.
+A separate Corepack inventory compares its files, launcher link and bundled code
+with signed Node inputs and every saved layer. The dependencies’ licences still need review.
 They do not claim that this code is absent. The
 [operator notes](README.robot.md#package-image-promotion) explain the saved files
 needed to repeat these checks. Other licence reviews and installation approval

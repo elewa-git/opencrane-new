@@ -36,7 +36,8 @@ class LicenceTests(unittest.TestCase):
         self.assertEqual(corepack.check_review(review, contents), 21)
         corepack.check_files(rows, review, source_only=True)
         self.assertEqual(len(contents[corepack.BUNDLE]), 967004)
-        self.assertEqual(len(review["regions"]), 175)
+        regions = gzip.decompress(corepack.RECORD.with_name("regions.json.gz").read_bytes())
+        self.assertEqual(len(json.loads(regions)), 175)
         reviewed = checker.read_json(source.with_name("reviewed-images.json"))
         inventory = checker.read_json(source.with_name("licence-inventory.json"))
         with self.assertRaisesRegex(ValueError, "exact source revision"):
@@ -44,7 +45,7 @@ class LicenceTests(unittest.TestCase):
 
     def test_corepack_refuses_missing_duplicate_substituted_or_approved_rows(self):
         corepack, original, _, contents = self.corepack_fixture()
-        for field in ("files", "modules", "regions", "inlineGrants"):
+        for field in ("files", "modules", "embeddedParts", "inlineGrants"):
             for index in range(len(original[field])):
                 for case in ("missing", "duplicate", "substitute"):
                     with self.subTest(field=field, index=index, case=case):
@@ -59,7 +60,7 @@ class LicenceTests(unittest.TestCase):
                         with self.assertRaises(ValueError):
                             corepack.check_review(review, contents)
         for field in ("status", "nodeCommit", "nodeFiles", "candidateSha256",
-                      "bundleSha256", "ancestry", "corepackVersion"):
+                      "bundleSha256", "regionsSha256", "ancestry", "corepackVersion"):
             review = dict(original)
             review[field] = "complete"
             with self.assertRaises(ValueError):
@@ -97,7 +98,7 @@ class LicenceTests(unittest.TestCase):
                     elif case == "duplicate":
                         changed.append(changed[index])
                     elif case == "type":
-                        changed[index][1] = "link"
+                        changed[index][1] = "unsupported"
                     else:
                         changed[index][-1] = "changed"
                     with self.assertRaises(ValueError):
@@ -106,33 +107,109 @@ class LicenceTests(unittest.TestCase):
             corepack.check_files(rows + rows, review, source_only=True)
 
     def test_corepack_source_official_candidate_and_dependency_refusals_are_independent(self):
-        corepack, review, _, _ = self.corepack_fixture()
+        corepack, review, rows, contents = self.corepack_fixture()
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
-            fixture = corepack.RECORD.with_name("corepack-source.tar.gz").read_bytes()
-            calls = {"source": fixture, "official": fixture, "candidate": fixture}
-            for stage in ("source", "official", "candidate", "signature", "git"):
+            fixture = gzip.decompress(corepack.RECORD.with_name("corepack-source.tar.gz").read_bytes())
+            source_rows = []
+            source_contents = {}
+            for name, kind, size, digest in rows:
+                relative = name.removeprefix("lib/node_modules/")
+                source_rows.append([relative, kind, size, digest])
+                source_contents[relative] = contents[name]
+            for stage in ("matching", "source", "source bytes", "official", "official bytes",
+                          "candidate", "signature", "git"):
                 with self.subTest(stage=stage):
+                    first = (source_rows, source_contents)
+                    second = (review["files"], contents)
+                    if stage == "source":
+                        first = (source_rows[:-1], source_contents)
+                    elif stage == "source bytes":
+                        first = (source_rows, dict.fromkeys(source_contents, b"changed"))
+                    elif stage == "official":
+                        second = (review["files"][:-1], contents)
+                    elif stage == "official bytes":
+                        second = (review["files"], dict.fromkeys(contents, b"changed"))
                     with contextlib.ExitStack() as stack:
                         upstream = stack.enter_context(patch.object(corepack.pcre, "check_upstream"))
                         git = stack.enter_context(patch.object(corepack.pcre, "run_checked",
                                                               return_value=fixture))
-                        candidate = stack.enter_context(patch.object(corepack.pcre, "check_candidate"))
-                        scan = stack.enter_context(patch.object(corepack, "read_archive"))
-                        scan.return_value = (review["files"], {})
-                        stack.enter_context(patch.object(corepack, "check_review"))
-                        stack.enter_context(patch.object(corepack, "check_files"))
+                        candidate = stack.enter_context(patch.object(corepack, "check_candidate"))
+                        stack.enter_context(patch.object(corepack, "read_archive",
+                                                         side_effect=[first, second]))
                         if stage == "signature":
                             upstream.side_effect = ValueError("private dependency output")
                         elif stage == "git":
-                            git.side_effect = ValueError("private dependency output")
+                            git.return_value = b"malformed archive"
                         elif stage == "candidate":
                             candidate.side_effect = ValueError("private dependency output")
-                        else:
-                            calls[stage] = None
-                            scan.side_effect = ValueError("archive refuses")
-                        with self.assertRaises(ValueError):
+                        if stage == "matching":
                             corepack.check_evidence(directory, directory)
+                            candidate.assert_called_once_with(directory, review)
+                        else:
+                            with self.assertRaises((ValueError, tarfile.TarError)):
+                                corepack.check_evidence(directory, directory)
+
+    def test_corepack_candidate_checks_every_layer_and_preserves_dependency_failure(self):
+        corepack, review, _, contents = self.corepack_fixture()
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            for index, rows in enumerate((review["files"][:-1], review["files"][-1:])):
+                with tarfile.open(directory / f"layer{index}.tar", "w") as archive:
+                    for name, kind, size, digest in rows:
+                        member = tarfile.TarInfo("usr/local/" + name)
+                        if kind == "link":
+                            member.type = tarfile.SYMTYPE
+                            member.linkname = digest
+                            archive.addfile(member)
+                        else:
+                            member.size = size
+                            archive.addfile(member, io.BytesIO(contents[name]))
+            layers = ["layer0.tar", "layer1.tar"]
+            for case in ("matching", "extra layer", "missing layer", "outside location"):
+                changed_layers = list(layers)
+                if case == "extra layer":
+                    changed_layers.append(layers[0])
+                elif case == "missing layer":
+                    changed_layers.pop()
+                elif case == "outside location":
+                    self.write_licence_tar(directory / "extra.tar", {"opt/corepack/file": b"extra"})
+                    changed_layers.append("extra.tar")
+                manifest = json.dumps([{"Layers": changed_layers}]).encode()
+                entries = {"manifest.json": manifest}
+                for name in changed_layers:
+                    entries[name] = (directory / name).read_bytes()
+                self.write_licence_tar(directory / "candidate.tar", entries)
+                with patch.object(corepack.pcre, "check_candidate") as dependency:
+                    if case == "matching":
+                        corepack.check_candidate(directory, review)
+                        dependency.assert_called_once()
+                    else:
+                        with self.assertRaises(ValueError):
+                            corepack.check_candidate(directory, review)
+            with patch.object(corepack.pcre, "check_candidate", side_effect=ValueError("refused")):
+                with self.assertRaisesRegex(ValueError, "refused"):
+                    corepack.check_candidate(directory, review)
+
+    def test_corepack_unknown_and_changed_byte_regions_cannot_be_completed(self):
+        corepack, _, _, contents = self.corepack_fixture()
+        data = gzip.decompress(corepack.RECORD.with_name("regions.json.gz").read_bytes())
+        original = json.loads(data)
+        for index in range(len(original)):
+            for case in ("missing", "duplicate", "hash", "gap", "overlap"):
+                changed = json.loads(data)
+                if case == "missing":
+                    changed.pop(index)
+                elif case == "duplicate":
+                    changed.insert(index, changed[index])
+                elif case == "hash":
+                    changed[index][-1] = "0" * 64
+                elif case == "gap":
+                    changed[index][0] += 1
+                else:
+                    changed[index][0] -= 1
+                with self.assertRaises(ValueError):
+                    corepack.check_regions(changed, contents[corepack.BUNDLE])
 
     def test_corepack_hostile_archives_and_cli_withhold_private_values(self):
         corepack, _, _, _ = self.corepack_fixture()
@@ -158,6 +235,13 @@ class LicenceTests(unittest.TestCase):
                 self.assertEqual(output.getvalue(), corepack.REFUSAL + "\n")
             result = subprocess.run([sys.executable, str(corepack.RECORD.with_name(
                 "check-corepack.py")), str(path), str(path)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stderr, corepack.REFUSAL + "\n")
+            isolated = path.parent / "isolated/check-corepack.py"
+            isolated.parent.mkdir()
+            shutil.copyfile(corepack.RECORD.with_name("check-corepack.py"), isolated)
+            result = subprocess.run([sys.executable, str(isolated), str(path), str(path)],
+                                    capture_output=True, text=True)
             self.assertEqual(result.returncode, 1)
             self.assertEqual(result.stderr, corepack.REFUSAL + "\n")
 

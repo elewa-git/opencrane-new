@@ -1,0 +1,1 @@
+Image licence checks now compare every shipped Corepack file and launcher link with signed Node inputs and record the dependencies found in its bundle. Dependency licences and installation approval remain blocked.

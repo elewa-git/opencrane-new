@@ -329,6 +329,25 @@ The historical ten-reference validation and PCRE/Valgrind records stay unchanged
 Seven references, Corepack/Go/kubectl/agentgateway bundles, vulnerability clearance,
 exact-source R3 approval and publication remain outstanding.
 
+The [Corepack inventory](../../docs/process/p5-4-images9/inventory.json) adds exact
+file and launcher-link comparisons for Corepack 0.34.6. Its compressed source
+fixture retains all 54 files. The compressed range list accounts for all 967,004
+bundle bytes, including generated helpers, dependency labels and inline attribution.
+The [receipt](../../docs/process/p5-4-images9/receipt.md) explains every table column.
+
+```sh
+nice -n 10 python3 docs/process/p5-4-images9/check-corepack.py \
+  /tmp/p5-4-images4 /tmp/p5-4-images6
+```
+
+The same saved signed Node evidence supplies Git, release source and official
+installed copies; the candidate comparison checks every layer, including hidden
+or additional copies. Observed module versions and patched cache labels do not
+prove complete source ancestry. All dependency grants remain BLOCKED, including
+Undici's embedded llhttp Wasm and the retained inline MIT claims. Corepack's own
+MIT declaration grants no blanket approval. Historical resolutions, approved
+inventory and runtime pins are unchanged. Promotion still refuses exact-source R3.
+
 ## Private owner email
 
 The development owner email uses the [private host file](../dev-stack/README.robot.md#private-owner-email)
