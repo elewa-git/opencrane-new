@@ -32,7 +32,7 @@ export function timeMemoryPath(setup: Fixture, slowStep: Step, delay: () => Prom
     }
     return measure('history', read);
   }
-  const checkReferences = lineage.refuseAgentChange;
+  const checkReferences = lineage.checkAgentChange;
   function loaded(...args: Parameters<typeof checkReferences>) {
     function check() {
       return checkReferences(...args);
@@ -76,7 +76,7 @@ export function timeMemoryPath(setup: Fixture, slowStep: Step, delay: () => Prom
   }
   const spies = [
     vi.spyOn(delivery, 'readRecallContext').mockImplementation(history),
-    vi.spyOn(lineage, 'refuseAgentChange').mockImplementation(loaded),
+    vi.spyOn(lineage, 'checkAgentChange').mockImplementation(loaded),
     vi.spyOn(setup.nats.store, 'readStream').mockImplementation(stream),
     vi.spyOn(setup.auth, 'applied').mockImplementation(applied),
     vi.spyOn(setup.auth, 'use').mockImplementation(use),
