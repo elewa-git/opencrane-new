@@ -337,24 +337,31 @@ async function removalRequest(memberId = 'alice', silo = 'test') {
 async function accessPause(request: unknown) {
   return pauseRoutineAfterRemoval(nats.store, 'test', request);
 }
-async function savesRemovalPause() {
+async function savesRemovalPause(restored: boolean) {
   await occupy();
   const request = await removalRequest();
+  if (restored) {
+    const joined = { ...joinedMember('alice'), id: 'restored', commandId: 'restored' };
+    await nats.seed([joined]);
+  }
   await fga.pause();
   const before = await nats.store.head();
-  const result = await accessPause(request);
+  const [result, concurrent] = await Promise.all([accessPause(request), accessPause(request)]);
+  expect(concurrent).toEqual(result);
+  expect(result).toBeDefined();
   expect(await accessPause(request)).toEqual(result);
   expect(await nats.store.head()).toBe(before + 1);
-  const saved = await nats.store.readEvent(result.position);
+  const saved = await nats.store.readEvent(result!.position);
   expect(saved.event).toMatchObject({ type: 'routine.paused',
     principal: { kind: 'system', id: 'opencrane-server' }, data: {
       actorId: 'opencrane-server', source: 'access', reason: 'owner_removed',
       affectedRun: 'occurrence', controlRevision: 2, cause: request.cause } });
-  const proof = await readRootStopEvidence(nats.store, 'routine-orders', result.position);
+  const proof = await readRootStopEvidence(nats.store, 'routine-orders', result!.position);
   expect(proof.routine).toMatchObject({ status: 'paused', executionAvailable: false,
     activeRun: { occurrenceId: 'occurrence' } });
 }
-it('saves one system pause from owner removal despite unavailable IAM', savesRemovalPause);
+it.each([false, true])(
+  'saves one system pause despite unavailable IAM, membership restored: %s', savesRemovalPause);
 
 async function recoversRemovalPause() {
   await occupy();

@@ -1277,7 +1277,7 @@ function routineRootTests() {
   async function racingStop(kind: string, afterAllocation: boolean) {
     stopping = true;
     const request = await stopRequest();
-    let saved: Awaited<ReturnType<typeof requestRoutineStop>>;
+    let saved: Awaited<ReturnType<typeof prohibit>>;
     const append = nats.store.append.bind(nats.store);
     async function race(change: AppendCommand) {
       let result;
