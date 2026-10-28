@@ -42,6 +42,8 @@ completion for an older run does not block Stop for the current run. The run sta
 occupied until termination is proved. The connected bridge checks saved owner Stop,
 Pause and Retire records and cancels only the accepted private routine turn.
 It retries failed delivery and cleanup while other chats keep running.
+Completion does not prove that buffered private replies are gone. The bridge keeps
+checking until the computer confirms removal for that exact turn and private thread.
 Automatic routines remain unavailable.
 
 Owners and admins can read, save or remove company account opt-in for a tool installation.
@@ -127,7 +129,7 @@ flowchart LR
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
-  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, saved routine and memory Stops, reply removal receipts and checked reports| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, saved routine and memory Stops, reply removal receipts after completion and checked reports| computer["apps/computer<br/>assistant computers"]
   computer -.->|records private thread before tool approval| server
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime

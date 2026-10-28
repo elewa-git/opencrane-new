@@ -10,12 +10,12 @@ export type RootStopReason = 'requester_stop' | 'turn_ended' | 'access_revoked' 
 type StopEvidence = StoredEvent & { routine?: RoutineState };
 type Append = (type: string, payload: unknown) => Promise<void>;
 
-export async function readRootStopEvidence(store: EventStore, subject: string, position: number) {
+export async function readRootStopEvidence(store: EventStore, subject: string, position: number,
+  deadline = performance.now() + 10_000) {
   try {
     if (!Number.isSafeInteger(position) || position < 1) {
       throw new Error('Invalid position');
     }
-    const deadline = performance.now() + 10_000;
     const reading = readEvidence(store, subject, position, deadline);
     return await withinBudgetDeadline(reading, deadline);
   } catch {

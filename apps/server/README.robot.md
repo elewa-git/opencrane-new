@@ -6253,7 +6253,14 @@ prohibition before budget cleanup. Neither receipt proves termination.
 checks saved owner Stop/Pause/Retire with `readRootStopEvidence`, shared with budget cleanup.
 It matches the allocated budget root, frozen people, accepted thread and current computer
 generation before sending the existing targeted Stop. Failed reads and sends retry.
-Only accepted terminal reports remove tracking; `private_output_cleared` proves no termination.
+The two-second cancellation deadline starts when the poll sees a matching prohibition.
+Evidence validation and the computer check share that deadline. An expired read sends no
+late Stop; a later poll retries all checks. Unavailable evidence cannot guarantee interruption
+within two seconds, and never permits sending without validation.
+Completion keeps the accepted turn and computer generation tracked until the matching
+`private_output_cleared` receipt arrives. That receipt confirms reply removal, not termination.
+Receipts for another conversation, turn or thread cannot discard tracking. The same receipt
+reaches both routine and memory tracking. Closing the socket clears its tracked turns.
 Cold replay does not populate tracking or resend work. Execution remains disabled.
 Routes, subscriptions and other lifecycle causes remain later work.
 Tests in routine-session and routine-sender cover the real owner command, delayed cleanup,

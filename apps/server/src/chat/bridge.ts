@@ -118,12 +118,10 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
     }
     if (status === 'started' && binding) {
       if (result !== 'duplicate') {
-        options.routines.accept(binding);
+        await options.routines.accept(binding);
         await options.memory.accept(report, binding);
       }
       await releaseTurnCredentials(options, context, tokens, report, binding, acknowledgement);
-    } else if (status !== 'started') {
-      options.routines.ended(report.turnId);
     }
   }
   if (socket.readyState === socket.OPEN) {
@@ -188,7 +186,9 @@ function reportReceiver(options: ReportOptions, input: BridgeInput,
   const queues = new Map<string, ReportQueue>();
   function receiveReceipt(value: unknown) {
     if (control.receive(value)) return true;
-    if (options.memory.receive(value)) return true;
+    const memoryReceipt = options.memory.receive(value);
+    const routineReceipt = options.routines.receive(value);
+    if (memoryReceipt || routineReceipt) return true;
     if (receiptData.safeParse(value).success) return true;
     return approvals.receive(value);
   }

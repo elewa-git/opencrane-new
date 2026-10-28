@@ -2793,7 +2793,10 @@ The due's `rootId` is a routine reference, not the allocated budget root id.
 Later edits or reassignment do not replace those frozen facts. Both owner and admin sources
 use `routine_stop`, retaining the exact source reference and the first saved budget reason.
 The server owner command saves intent. Its separate internal cleanup operation reuses
-exported `readRootStopEvidence` and calls `stopRoot` for an existing allocation. Routes,
+exported `readRootStopEvidence` and calls `stopRoot` for an existing allocation.
+The bridge supplies its two-second cancellation deadline to this reader, covering both
+source lookup and routine history validation. Other callers retain the ten-second default.
+Routes,
 subscriptions and interruption remain later work; execution remains disabled.
 Chat turn close, completion or failure counts as turn-end evidence. Requester removal
 or close on participation, or requester removal on member, counts as access loss.
