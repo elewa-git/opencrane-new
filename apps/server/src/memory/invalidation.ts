@@ -89,14 +89,18 @@ function affected(options: Options, rows: StoredEvent[], request: Request,
   const checkedAt = Date.parse(cause.row.event.time);
   const before = memoryReferences(beforeRows, options.silo, scopeId, 'event-only', checkedAt);
   const after = memoryReferences(afterRows, options.silo, scopeId, 'event-only', checkedAt);
-  const target = { scopeId, memoryId: cause.data.memoryId, revision: cause.data.expectedRevision };
-  if (before.current(target) !== 'current') throw new Error('Memory change unavailable');
   checkLoadedReferences(options, rows, state, scopeId);
   let changed = false;
   for (const reference of state.references) {
     if (before.current(reference) === 'current' && after.current(reference) !== 'current') {
       changed = true;
     }
+  }
+  // Let polling pass an unrelated forget even when its target had already expired.
+  // Still require a current target before recording any change to loaded memory.
+  const target = { scopeId, memoryId: cause.data.memoryId, revision: cause.data.expectedRevision };
+  if (changed && before.current(target) !== 'current') {
+    throw new Error('Memory change unavailable');
   }
   return { changed, position: cause.row.sequence };
 }
@@ -105,6 +109,19 @@ function invalidationId(binding: string, causeId: string) {
   const hash = createHash('sha256');
   hash.update(JSON.stringify([binding, causeId]));
   return `memory-invalidation-${hash.digest('hex')}`;
+}
+
+function canWithdraw(state: MemoryContextState) {
+  if ((state.status !== 'loaded' && state.status !== 'ended') || state.references.length === 0) {
+    return false;
+  }
+  for (const encoded of state.events.values()) {
+    const decoded: unknown = JSON.parse(encoded);
+    if (memoryContextRecordedEventSchema.parse(decoded).data.action === 'invalidated') {
+      return false;
+    }
+  }
+  return true;
 }
 
 async function recordInvalidation(options: Options, request: Request): Promise<Receipt> {
@@ -128,9 +145,7 @@ async function recordInvalidation(options: Options, request: Request): Promise<R
     }
     return receipt;
   }
-  if (state.status !== 'loaded' || chat.turnEnded || chat.conversationClosed) {
-    return { status: 'refused' };
-  }
+  if (!canWithdraw(state)) return { status: 'refused' };
   const scopeId = memoryScopeId(options.silo, 'person', saved.requesterId);
   const rows = await history(options.store, `scope-${scopeId}`, options.silo,
     performance.now() + 10_000);
@@ -139,7 +154,8 @@ async function recordInvalidation(options: Options, request: Request): Promise<R
 
   const current = await readChatFacts(options.store, options.silo,
     request.conversationId, request.turnId);
-  if (current.turnEnded || current.conversationClosed ||
+  if (current.turnEnded !== chat.turnEnded ||
+      current.conversationClosed !== chat.conversationClosed ||
       JSON.stringify(current.memoryContext) !== JSON.stringify(state) ||
       JSON.stringify(Array.from(current.memoryContext?.events ?? [])) !==
       JSON.stringify(Array.from(state.events))) {
@@ -147,7 +163,7 @@ async function recordInvalidation(options: Options, request: Request): Promise<R
   }
   const event = invalidationEvent(options.silo, saved, state, scopeId, cause.position, id);
   foldMemoryContext(state, event);
-  return appendInvalidation(options, event, current.sequence, receipt);
+  return appendInvalidation(options, event, current, receipt);
 }
 
 function invalidationEvent(silo: string, saved: MemoryContextRecord, state: MemoryContextState,
@@ -172,9 +188,9 @@ function invalidationEvent(silo: string, saved: MemoryContextRecord, state: Memo
 }
 
 async function appendInvalidation(options: Options,
-  event: z.infer<typeof memoryContextRecordedEventSchema>, sequence: number,
+  event: z.infer<typeof memoryContextRecordedEventSchema>, before: ChatFacts,
   receipt: Receipt): Promise<Receipt> {
-  const command = { event, expectedSequence: sequence, historyChecked: true as const,
+  const command = { event, expectedSequence: before.sequence, historyChecked: true as const,
     deadline: performance.now() + 2000 };
   try {
     const result = await options.store.append(command);
@@ -183,7 +199,8 @@ async function appendInvalidation(options: Options,
     // Reconcile participation closure separately because it uses another stream.
     const current = await readChatFacts(options.store, options.silo,
       event.data.conversationId, event.data.turnId);
-    if (current.conversationClosed || current.turnEnded) return { status: 'reload_required' };
+    if (current.conversationClosed !== before.conversationClosed ||
+        current.turnEnded !== before.turnEnded) return { status: 'reload_required' };
     return receipt;
   } catch {
     // Recover uncertain appends from history on a later call; never append twice here.

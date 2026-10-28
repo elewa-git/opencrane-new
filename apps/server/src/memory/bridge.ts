@@ -5,6 +5,7 @@ import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { readChatFacts } from '../chat/chat-summary.ts';
 import type { turnCommand } from '../chat/turns.ts';
+import { memoryChanges } from './changes.ts';
 import { stopInvalidatedMemory } from './stop.ts';
 
 type Admitted = NonNullable<Awaited<ReturnType<typeof turnCommand>>>;
@@ -12,7 +13,8 @@ type Report = { type: string; conversationId: string; turnId: string; sequence: 
   threadId?: string | undefined };
 type Options = { silo: string; store: EventStore };
 type Computer = { assistantId: string; computerId: string };
-type TrackedTurn = { turn: Admitted; generation: number };
+type TrackedTurn = { turn: Admitted; generation: number;
+  detect: ReturnType<typeof memoryChanges> };
 const clearedData = z.object({ type: z.literal('private_output_cleared'),
   conversationId: z.string(), turnId: z.string(), threadId: z.string() });
 const generationData = z.object({ computerId: z.string(), generation: z.int().positive() });
@@ -60,7 +62,7 @@ export function memoryBridge(options: Options, computer: Computer, socket: WebSo
     const savedGeneration = await generation();
     if (savedGeneration === undefined || observed.get(report.conversationId)?.sequence !== report.sequence ||
         socket.readyState !== WebSocket.OPEN) return;
-    const active = { turn, generation: savedGeneration };
+    const active = { turn, generation: savedGeneration, detect: memoryChanges(options) };
     const conversation = turns.get(report.conversationId) ?? new Map<string, TrackedTurn>();
     conversation.set(turn.turnId, active);
     turns.set(report.conversationId, conversation);
@@ -68,7 +70,10 @@ export function memoryBridge(options: Options, computer: Computer, socket: WebSo
   async function deliverTurn(conversationId: string, active: TrackedTurn) {
     if (socket.readyState !== WebSocket.OPEN) return;
     try {
-      const chat = await readChatFacts(options.store, options.silo, conversationId, active.turn.turnId);
+      let chat = await readChatFacts(options.store, options.silo, conversationId, active.turn.turnId);
+      if (!chat.memoryContext) return;
+      await active.detect(chat.memoryContext);
+      chat = await readChatFacts(options.store, options.silo, conversationId, active.turn.turnId);
       if (!chat.memoryContext) return;
       const first = chat.memoryContext.events.values().next().value;
       if (!first) return;

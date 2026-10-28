@@ -4424,3 +4424,11 @@ The other failures above remain unresolved. Runs 04 and 06 hit NATS read timeout
 Run 05 returned 503 where the slow receipt test expected 200; its cause is not proved.
 Run 06 also exceeded the PGlite test's 30-second limit. In run 07, a NATS timeout was
 followed by 24 `Connection server unavailable` failures. This draft is not source ready.
+
+## Memory withdrawal after completion (P4-15 PR 3g)
+
+`foldMemoryContext` accepts a later `invalidated/content_changed` record for an ended
+context. It retains the ended status, references and accounting. This records evidence
+for pending private reply removal only. Later loads remain refused; replay creates no
+execution permission. The server invalidation writer verifies the saved cause and permits
+one invalidation per context. Other terminal transitions retain their existing refusals.

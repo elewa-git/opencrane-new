@@ -291,16 +291,15 @@ async function racingAppend(kind: 'recall' | 'closed' | 'lost') {
   const first = await invalidate();
   expect(first).toEqual({ status: kind === 'lost' ? 'unavailable' : 'reload_required' });
   const second = await invalidate();
-  if (kind === 'closed') {
-    expect(second).toEqual({ status: 'refused' });
-    return;
-  }
   expect(second).toMatchObject({ status: 'invalidated' });
   const position = await setup.store.head('conversation-chat');
   expect(await invalidate()).toEqual(second);
   expect(await setup.store.head('conversation-chat')).toBe(position);
   const facts = await readChatFacts(setup.store, 'test', 'chat', 'turn');
   expect(facts.memoryContext?.recallCalls).toBe(kind === 'recall' ? 2 : 1);
+  if (kind === 'closed') {
+    expect(facts.memoryContext).toMatchObject({ status: 'ended', executionAvailable: false });
+  }
 }
 it.each(['recall', 'closed', 'lost'] as const)(
   'reloads and reconciles after a %s append race', racingAppend);
@@ -391,3 +390,37 @@ async function harmlessActivity() {
   await unrelatedChange('corrected');
 }
 it('leaves unchanged facts alone after messages and uploads', harmlessActivity);
+
+async function completedWithdrawalRefusesRecall() {
+  await append('conversation-chat', 'agent.turn_completed',
+    { conversationId: 'chat', turnId: 'turn' });
+  await change('forgotten');
+  const receipt = await invalidate();
+  expect(receipt).toMatchObject({ status: 'invalidated' });
+  expect(await invalidate()).toEqual(receipt);
+  const before = await setup.store.head('conversation-chat');
+  const cold = { readStream: setup.store.readStream.bind(setup.store) };
+  expect(await readChatFacts(cold, 'test', 'chat', 'turn')).toMatchObject({
+    turnEnded: true, memoryContext: { status: 'ended', executionAvailable: false } });
+  expect(await setup.store.head('conversation-chat')).toBe(before);
+  await load([], { callDigest: 'c'.repeat(64), dispatchDigest: 'd'.repeat(64) });
+  await expect(readChatFacts(cold, 'test', 'chat', 'turn')).rejects.toThrow();
+}
+it('retains completion and refuses later recall after reply withdrawal',
+  completedWithdrawalRefusesRecall);
+
+async function anotherCauseAfterCompletion() {
+  await change('forgotten');
+  const receipt = await invalidate();
+  expect(receipt).toMatchObject({ status: 'invalidated' });
+  await append('conversation-chat', 'agent.turn_completed',
+    { conversationId: 'chat', turnId: 'turn' });
+  const next = await append(`scope-${scopeId}`, 'memory.forgotten', { schemaVersion: 1,
+    scopeId, scopeKind: 'person', ownerId: 'alice', memoryId: 'base', revision: 2,
+    expectedRevision: 1 });
+  const before = await setup.store.head('conversation-chat');
+  expect(await invalidate({ causeId: next.id })).toEqual({ status: 'refused' });
+  expect(await invalidate()).toEqual(receipt);
+  expect(await setup.store.head('conversation-chat')).toBe(before);
+}
+it('keeps one invalidation when a different cause arrives after completion', anotherCauseAfterCompletion);

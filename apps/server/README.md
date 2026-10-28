@@ -81,11 +81,13 @@ after a saved correction or forget. It keeps every loaded reference for replay a
 returns a receipt without fact text. An internal reaction can send Stop after confirming
 that saved invalidation belongs to the connected private turn. The computer handles
 repeated Stops once and clears the reply even if the turn has just completed.
-The bridge polls saved invalidations for its connected private turns and retries uncertain
-Stop delivery. It keeps each turn tracked after completion until the computer confirms
-that its private reply has been cleared. It checks the turn and computer after reading history, without
+The bridge polls personal correction and forget events for its connected private turns.
+It saves the exact invalidation before sending Stop and retries uncertain delivery.
+Forgetting an unrelated expired fact does not delay checks for later changes.
+It keeps each turn tracked after completion until the computer confirms that its private
+reply has been cleared. It checks the turn and computer after reading history, without
 waking a computer. One slow chat cannot delay another chat's check or connection shutdown.
-The reaction needs no read access from the former user. Detecting new causes remains planned.
+The reaction needs no read access from the former user. Expiry and access changes remain planned.
 Retries recover the same saved receipt after the old fact expires. A competing recall
 keeps its added references when the server reloads and records the invalidation.
 After a restart, memory recovery uses the existing private keys and saved command records.
@@ -118,7 +120,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks private callers, reads original tool reviews, checks access before history errors, prepares and allocates child and routine allowances, checks saved routine admission, applies saved Stop, Pause and Retire intent, and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; records invalid personal memory contexts and personal account revocations, choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, encrypted inputs and checked admission receipts, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; detects saved personal corrections and forgets, records invalid contexts and personal account revocations, choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, encrypted inputs and checked admission receipts, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
@@ -235,6 +237,12 @@ can be used now is checked separately. Missing evidence never means it is safe t
 | [providers](src/providers/README.md) | Connects model providers and manages keys, checks and provider choices. |
 
 ## Processes it handles
+
+The server checks saved corrections and forgets while polling connected private turns.
+It records which loaded facts became unusable before asking the computer to clear that
+turn. Completed replies remain eligible for removal until the computer confirms it.
+Unaffected sessions keep running, including those using another person's facts.
+This does not enable memory.
 
 Member departure reviews check whether any routine exists without opening routine
 instructions or reading every routine. Any saved routine still blocks removal.

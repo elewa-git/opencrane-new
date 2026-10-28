@@ -6218,8 +6218,8 @@ on same-connection replay, both with and without a replacement turn. A delayed r
 check keeps retrying until the exact thread confirms clearance. The original completion
 regression failed before the fix: zero Stops and private text replayed on the same connection.
 No event or HTTP API field was added; the event security naming rule is unchanged.
-Admission remains disabled. Detecting correction/forget causes, access/expiry invalidation,
-volatile server/browser replies and native enablement remain later work.
+Admission remains disabled. The following section adds correction/forget detection.
+Access/expiry invalidation, volatile server/browser replies and native enablement remain later work.
 Fresh-install live qualification: NOT RUN.
 
 ## Owner routine Stop
@@ -6254,3 +6254,41 @@ running-turn interruption remain later work. Execution remains disabled.
 Tests in routine-session and routine-sender cover the real owner command, delayed cleanup,
 allocation races, privacy, frozen people, retained holds and late integer-cent settlement.
 Fresh-install/live qualification: NOT RUN. Part of #106, P4-24 PR 12b and PR 12c.
+
+## Detect personal changes before clearing turns (P4-15 PR 3g)
+
+Part of #97. `memory/changes.ts` runs from the existing `memory/bridge.ts` poll.
+It derives the person scope, input generation and first load position from saved evidence.
+It reads at most 128 scope events per turn per poll, with a separate ten-second deadline.
+It keeps only a cursor between polls. New recall evidence resets that cursor to the first
+saved load, so a competing recall cannot hide an earlier cause. Polling catches missed
+notifications; no new subscription, connection, key read or model call is needed.
+
+Only actual corrected/forgotten events reach `invalidateMemoryContext`. That command
+checks the saved cause against all loaded references, including transitive dependencies.
+An unchanged result advances the cursor. Failed reads, uncertain appends and competing
+writes retry on later polls. The bridge rereads saved evidence before delivering Stop.
+The existing exact generation checks and clearance receipts remain decisive.
+
+An unrelated forget returns `unchanged` even if its target had already expired.
+The writer validates saved history and every addition at its load time before deciding
+whether the cause changes any loaded reference. A change that needs invalidation still
+requires its target to have been current immediately before the cause. Refusals do not
+advance the cursor. The delivery regression checks an expired unrelated forget followed
+by a loaded fact's forget, cursor progress, one saved invalidation and Stop, and removal
+of completed private output before replay.
+
+The writer now also permits withdrawal after completion or conversation closure.
+It retains all references and the ended status. Replay accepts the saved withdrawal but
+cannot load more memory, restore execution or produce a Stop. Another invalidation cause
+cannot create a second record for that context. An exact retry recovers its saved result.
+No event or public API field, dependency or access stream was added.
+
+Tests extend `memory-delivery.test.ts` through `assistantProcessor.pollMemory`, with real
+NATS and recording bridge sockets. They cover correction, forget, transitive dependencies,
+independent requesters and sessions, completion with an unacknowledged reply, replacements,
+paged catch-up, failed reads, append uncertainty, recall/closure races and replay.
+`memory-invalidation.test.ts` checks withdrawal after a competing completion.
+The clearance receipt tests remain in place. Admission stays disabled.
+Expiry/access loss, browser reply delivery and native launch remain later work.
+Fresh-install live qualification: NOT RUN.

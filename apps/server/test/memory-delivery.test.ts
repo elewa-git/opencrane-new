@@ -56,6 +56,17 @@ async function startTurn(id = 'turn', conversationId = 'chat', requesterId = 'al
   await vi.waitFor(running);
   await flush();
 }
+async function writeFact(memoryId: string, dependsOn: { scopeId: string;
+  memoryId: string; revision: number }[] = [], ownerId = 'alice', expiresAt: string | null = null) {
+  const personalScope = memoryScopeId('test', 'person', ownerId);
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(['test', personalScope, 'person', ownerId, memoryId, 1]));
+  await append(`scope-${personalScope}`, 'memory.written', { schemaVersion: 1,
+    scopeId: personalScope, scopeKind: 'person', ownerId, memoryId, revision: 1, kind: 'fact',
+    pinned: false, expiresAt, sources: [], dependsOn,
+    keyId: `key:${hash.digest('hex')}`, ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' });
+  return { scopeId: personalScope, memoryId, revision: 1 };
+}
 async function setup() {
   nats = await natsFixture();
   computer = await fixture(false);
@@ -97,12 +108,9 @@ async function setup() {
   processor = assistantProcessor(watch, computer.issuer, new Set(), opening,
     connectionId, createLogger('memory-delivery', { level: 'silent' }), connected);
   opening.mockClear();
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(['test', scopeId, 'person', 'alice', 'fact', 1]));
-  await append(`scope-${scopeId}`, 'memory.written', { schemaVersion: 1, scopeId,
-    scopeKind: 'person', ownerId: 'alice', memoryId: 'fact', revision: 1, kind: 'fact',
-    pinned: false, expiresAt: null, sources: [], dependsOn: [],
-    keyId: `key:${hash.digest('hex')}`, ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' });
+  await writeFact('root');
+  await writeFact('base', [{ scopeId, memoryId: 'root', revision: 1 }]);
+  await writeFact('fact', [{ scopeId, memoryId: 'base', revision: 1 }]);
   await append('conversation-chat', 'agent.memory_context_recorded', prepared);
   const position = await nats.store.head(`scope-${scopeId}`);
   await append('conversation-chat', 'agent.memory_context_recorded', { ...prepared,
@@ -111,6 +119,7 @@ async function setup() {
     scopePositions: [{ scopeId, position }] });
 }
 async function cleanup() {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   link?.socket.terminate();
   await link?.settled();
@@ -119,18 +128,21 @@ async function cleanup() {
 }
 beforeEach(setup);
 afterEach(cleanup);
-async function invalidated(kind: 'corrected' | 'forgotten' = 'forgotten') {
+async function changed(kind: 'corrected' | 'forgotten' = 'forgotten', memoryId = 'fact') {
   const data = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
-    memoryId: 'fact', revision: 2, expectedRevision: 1 };
+    memoryId, revision: 2, expectedRevision: 1 };
   let changed: object = data;
   if (kind === 'corrected') {
     const hash = createHash('sha256');
-    hash.update(JSON.stringify(['test', scopeId, 'person', 'alice', 'fact', 2]));
+    hash.update(JSON.stringify(['test', scopeId, 'person', 'alice', memoryId, 2]));
     changed = { ...data, kind: 'fact', pinned: false, expiresAt: null, sources: [], dependsOn: [],
       keyId: `key:${hash.digest('hex')}`, ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-      supersedes: { memoryId: 'fact', revision: 1 }, reason: 'human' };
+      supersedes: { memoryId, revision: 1 }, reason: 'human' };
   }
-  const cause = await append(`scope-${scopeId}`, `memory.${kind}`, changed);
+  return append(`scope-${scopeId}`, `memory.${kind}`, changed);
+}
+async function invalidated(kind: 'corrected' | 'forgotten' = 'forgotten') {
+  const cause = await changed(kind);
   const options = { silo: 'test', store: nats.store };
   const request = { conversationId: 'chat', turnId: 'turn', threadId: 'thread-1',
     inputGeneration: '1', causeId: cause.id };
@@ -190,13 +202,25 @@ async function otherTurn(requesterId = 'alice') {
 }
 async function preservesOther(requesterId: string) {
   await otherTurn(requesterId);
-  await invalidated();
+  let memoryId = 'independent';
+  if (requesterId === 'bob') memoryId = 'fact';
+  const reference = await writeFact(memoryId, [], requesterId);
+  const other = { ...prepared, conversationId: 'other', turnId: 'other-turn',
+    requesterId, threadId: 'thread-2' };
+  await append('conversation-other', 'agent.memory_context_recorded', other);
+  await append('conversation-other', 'agent.memory_context_recorded', { ...other,
+    action: 'loaded', delivery: 'initial', additions: [reference], byteCount: 50,
+    scopePositions: [{ scopeId: reference.scopeId,
+      position: await nats.store.head(`scope-${reference.scopeId}`) }] });
+  await changed();
   await poll();
   function interrupted() { expect(computer.calls.filter(targetInterrupt)).toHaveLength(1); }
   await vi.waitFor(interrupted);
   expect(computer.grants.has('thread-2')).toBe(true);
   expect(computer.calls).not.toContain('turn/interrupt:thread-2');
   expect(opening).not.toHaveBeenCalled();
+  const facts = await readChatFacts(nats.store, 'test', 'other', 'other-turn');
+  expect(facts.memoryContext?.status).toBe('loaded');
 }
 it.each(['alice', 'bob'])('preserves %s in another private session', preservesOther);
 
@@ -207,7 +231,7 @@ async function replaceGeneration() {
     computerId: 'computer', generation: 2, podUid: 'replacement' });
 }
 async function refusesReplacement() {
-  await invalidated();
+  await changed();
   await replaceGeneration();
   await poll();
   expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
@@ -386,7 +410,7 @@ async function boundsHistory() {
 }
 it('bounds a stalled history read and retries it on a later poll', boundsHistory, 15_000);
 
-async function completionBeforePoll(replace: boolean) {
+async function completionBeforePoll(replace: boolean, detect = false) {
   const send = link.socket.send.bind(link.socket);
   let stops = 0;
   function holdAcknowledgements(data: Parameters<typeof send>[0]) {
@@ -403,7 +427,8 @@ async function completionBeforePoll(replace: boolean) {
     params: { threadId: 'thread-1', itemId: 'reply', delta: 'completed-private-canary' } });
   await flush();
   await link.settled();
-  await invalidated();
+  if (detect) await changed();
+  else await invalidated();
   computer.finish('thread-1');
   await flush();
   await link.settled();
@@ -470,3 +495,275 @@ async function retriesUntilClearanceReceipt() {
 }
 it('retries completed withdrawal until the exact computer clearance receipt arrives',
   retriesUntilClearanceReceipt);
+
+async function detectsPersonalChange(kind: 'corrected' | 'forgotten', memoryId = 'fact') {
+  const appending = vi.spyOn(nats.store, 'append');
+  await changed(kind, memoryId);
+  await poll();
+  function interrupted() { expect(computer.calls.filter(targetInterrupt)).toHaveLength(1); }
+  await vi.waitFor(interrupted);
+  await Promise.all([poll(), poll()]);
+  const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(facts.memoryContext).toMatchObject({ status: 'invalidated',
+    references: [{ scopeId, memoryId: 'fact', revision: 1 }], executionAvailable: false });
+  function isInvalidation(call: (typeof appending.mock.calls)[number]) {
+    const parsed = memoryContextRecordedEventSchema.safeParse(call[0].event);
+    return parsed.success && parsed.data.data.action === 'invalidated';
+  }
+  const writes = appending.mock.calls.filter(isInvalidation);
+  expect(writes).toHaveLength(1);
+  const saved = memoryContextRecordedEventSchema.parse(writes[0]![0].event);
+  expect(saved.data).toEqual({ ...prepared, action: 'invalidated',
+    reason: 'content_changed', scopePositions: [{ scopeId,
+      position: await nats.store.head(`scope-${scopeId}`) }] });
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(1);
+  expect(computer.grants.has('thread-1')).toBe(false);
+}
+it.each(['corrected', 'forgotten'] as const)(
+  'detects a personal %s cause through polling without a notification', detectsPersonalChange);
+
+async function completionBeforeDetection(replace: boolean) {
+  await completionBeforePoll(replace, true);
+  const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(facts).toMatchObject({ turnEnded: true,
+    memoryContext: { status: 'ended', executionAvailable: false } });
+  expect(facts.memoryContext?.events.size).toBe(3);
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
+}
+it.each([false, true])('withdraws a completed reply after detection, replacement=%s',
+  completionBeforeDetection);
+
+async function detectsDependency(kind: 'corrected' | 'forgotten') {
+  await detectsPersonalChange(kind, 'root');
+}
+it.each(['corrected', 'forgotten'] as const)(
+  'detects a transitive dependency that was %s', detectsDependency);
+
+async function unrelatedChanges() {
+  await writeFact('independent');
+  await changed('corrected', 'independent');
+  await append('conversation-chat', 'file.uploaded', { conversationId: 'chat', fileId: 'upload',
+    uploadedBy: 'alice', name: 'file.txt', size: 1, sha256: 'a'.repeat(64),
+    mime: 'text/plain', objectKey: 'test/chat/upload' });
+  await poll();
+  await poll();
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
+  expect(computer.grants.has('thread-1')).toBe(true);
+  expect(link.socket.readyState).toBe(WebSocket.OPEN);
+  const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(facts.memoryContext?.status).toBe('loaded');
+  expect(facts.memoryContext?.events.size).toBe(2);
+}
+it('preserves readers and running turns after unrelated facts and uploads', unrelatedChanges);
+
+async function forgetUnloadedFact(expired: boolean) {
+  if (expired) {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const expiresAt = Date.now() + 1000;
+    await writeFact('unloaded', [], 'alice', new Date(expiresAt).toISOString());
+    vi.setSystemTime(expiresAt);
+  } else {
+    await writeFact('unloaded');
+  }
+  await changed('forgotten', 'unloaded');
+}
+
+function observeScopeStarts() {
+  const read = nats.store.readStream.bind(nats.store);
+  const starts: number[] = [];
+  async function* observe(...args: Parameters<typeof read>) {
+    if (args[0] === `scope-${scopeId}`) {
+      starts.push(args[1]!);
+    }
+    yield* read(...args);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(observe);
+  return starts;
+}
+
+async function advancesPastUnloadedForget(expired: boolean) {
+  const loadedPosition = await nats.store.head(`scope-${scopeId}`);
+  await forgetUnloadedFact(expired);
+  const forgottenPosition = await nats.store.head(`scope-${scopeId}`);
+  const starts = observeScopeStarts();
+  await poll();
+  await poll();
+  expect(starts).toEqual([loadedPosition + 1, 1, forgottenPosition + 1]);
+  const unchanged = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(unchanged.memoryContext?.status).toBe('loaded');
+  expect(unchanged.memoryContext?.events.size).toBe(2);
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
+  expect(computer.grants.has('thread-1')).toBe(true);
+  await detectsPersonalChange('forgotten');
+  expect(starts).toEqual([
+    loadedPosition + 1, 1, forgottenPosition + 1, 1, forgottenPosition + 1, 1,
+  ]);
+}
+it.each([false, true])(
+  'advances past an unloaded forget before detecting a loaded forget, expired=%s',
+  advancesPastUnloadedForget);
+
+async function expiredForgetBeforeCompletedWithdrawal() {
+  const loadedPosition = await nats.store.head(`scope-${scopeId}`);
+  await forgetUnloadedFact(true);
+  const starts = observeScopeStarts();
+  await completionBeforeDetection(false);
+  expect(starts).toEqual([1, loadedPosition + 1, 1, 1]);
+  const rows = await history(nats.store, 'conversation-chat', 'test');
+  const saved = memoryContextRecordedEventSchema.parse(rows.at(-1)!.event);
+  expect(saved.data).toEqual({ ...prepared, action: 'invalidated',
+    reason: 'content_changed', scopePositions: [{ scopeId,
+      position: await nats.store.head(`scope-${scopeId}`) }] });
+}
+it('clears completed output when an unrelated expired forget precedes the loaded forget',
+  expiredForgetBeforeCompletedWithdrawal);
+
+async function reconcilesPollRace(kind: 'recall' | 'completed' | 'closed' | 'lost') {
+  await changed();
+  const appendSaved = nats.store.append.bind(nats.store);
+  let attempts = 0;
+  async function race(command: Parameters<typeof appendSaved>[0]) {
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    if (!parsed.success || parsed.data.data.action !== 'invalidated') return appendSaved(command);
+    attempts++;
+    if (attempts === 1) {
+      if (kind === 'recall') {
+        const reference = await writeFact('later');
+        await append('conversation-chat', 'agent.memory_context_recorded', { ...prepared,
+          action: 'loaded', delivery: 'recall', callDigest: 'a'.repeat(64),
+          dispatchDigest: 'b'.repeat(64), byteCount: 10, additions: [reference],
+          scopePositions: [{ scopeId, position: await nats.store.head(`scope-${scopeId}`) }] });
+      }
+      if (kind === 'completed') {
+        computer.finish('thread-1');
+        await flush();
+        await link.settled();
+      }
+      if (kind === 'closed') {
+        await append('participation-chat', 'conversation.closed',
+          { conversationId: 'chat', closedBy: 'alice' });
+      }
+    }
+    const result = await appendSaved(command);
+    if (kind === 'lost') throw new Error('Private append canary');
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(race);
+  await Promise.all([poll(), poll()]);
+  await poll();
+  await poll();
+  const cold = { readStream: nats.store.readStream.bind(nats.store) };
+  const before = [...computer.calls];
+  const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
+  expect(computer.calls).toEqual(before);
+  const evidence = facts.memoryContext!;
+  let invalidations = 0;
+  for (const encoded of evidence.events.values()) {
+    const decoded: unknown = JSON.parse(encoded);
+    if (memoryContextRecordedEventSchema.parse(decoded).data.action === 'invalidated') {
+      invalidations++;
+    }
+  }
+  expect(invalidations).toBe(1);
+  expect(attempts).toBe(kind === 'recall' || kind === 'completed' ? 2 : 1);
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(kind === 'completed' ? 0 : 1);
+  expect(computer.grants.has('thread-1')).toBe(false);
+  if (kind === 'recall') expect(evidence.references).toHaveLength(2);
+  if (kind === 'completed' || kind === 'closed') expect(evidence.status).toBe('ended');
+  computer.channel.notification({ method: 'item/agentMessage/delta',
+    params: { threadId: 'thread-1', itemId: 'late', delta: 'late-private-canary' } });
+  let leaked = false;
+  function inspect(raw: Buffer) { if (raw.toString().includes('late-private-canary')) leaked = true; }
+  link.socket.on('message', inspect);
+  link.socket.send(JSON.stringify({ type: 'resume', since: 0 }));
+  await flush();
+  expect(leaked).toBe(false);
+}
+it.each(['recall', 'completed', 'closed', 'lost'] as const)(
+  'reconciles a %s append race before clearing the affected thread', reconcilesPollRace);
+
+async function boundedCatchUp() {
+  const loadedPosition = await nats.store.head(`scope-${scopeId}`);
+  for (let index = 0; index < 128; index++) await writeFact(`unrelated-${index}`);
+  const pageEnd = await nats.store.head(`scope-${scopeId}`);
+  await changed();
+  const read = nats.store.readStream.bind(nats.store);
+  const starts: number[] = [];
+  async function* observe(...args: Parameters<typeof read>) {
+    if (args[0] === `scope-${scopeId}`) {
+      starts.push(args[1]!);
+      expect(args[2]! - performance.now()).toBeLessThanOrEqual(10_000);
+    }
+    yield* read(...args);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(observe);
+  await poll();
+  expect(starts).toEqual([loadedPosition + 1]);
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
+  await poll();
+  expect(starts).toEqual([loadedPosition + 1, pageEnd + 1, 1]);
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(1);
+}
+it('catches lost notifications in bounded pages from the saved load position', boundedCatchUp);
+
+async function failedScopeRead(stalled: boolean) {
+  await changed();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const read = nats.store.readStream.bind(nats.store);
+  async function* fail(...args: Parameters<typeof read>) {
+    if (args[0] === `scope-${scopeId}`) {
+      for await (const row of read(...args)) yield row;
+      entered.resolve();
+      if (stalled) await release.promise;
+      throw new Error('Private read canary');
+    }
+    yield* read(...args);
+  }
+  const reading = vi.spyOn(nats.store, 'readStream').mockImplementation(fail);
+  const before = performance.now();
+  const pending = poll();
+  await entered.promise;
+  try {
+    await pending;
+    expect(performance.now() - before).toBeLessThan(12_000);
+    const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+    expect(facts.memoryContext?.status).toBe('loaded');
+    expect(facts.memoryContext?.events.size).toBe(2);
+    expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
+  } finally {
+    reading.mockRestore();
+    release.resolve();
+  }
+  await poll();
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(1);
+}
+it.each([false, true])('retries an unsuccessful scope read, stalled=%s', failedScopeRead, 15_000);
+
+async function completedReplyPreservesOther(requesterId: string) {
+  await otherTurn(requesterId);
+  await completionBeforePoll(false, true);
+  expect(computer.grants.has('thread-2')).toBe(true);
+  expect(computer.calls).not.toContain('turn/interrupt:thread-2');
+  expect(sessions).toHaveLength(2);
+}
+it.each(['alice', 'bob'])('clears a completed reply while %s uses another session',
+  completedReplyPreservesOther);
+
+async function recallAfterEarlierPoll() {
+  const reference = await writeFact('independent');
+  const position = await nats.store.head(`scope-${scopeId}`);
+  await changed('forgotten', 'independent');
+  await poll();
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
+  await append('conversation-chat', 'agent.memory_context_recorded', { ...prepared,
+    action: 'loaded', delivery: 'recall', callDigest: 'a'.repeat(64),
+    dispatchDigest: 'b'.repeat(64), byteCount: 10, additions: [reference],
+    scopePositions: [{ scopeId, position }] });
+  await poll();
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(1);
+  const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(facts.memoryContext).toMatchObject({ status: 'invalidated', recallCalls: 1 });
+  expect(facts.memoryContext?.references).toHaveLength(2);
+}
+it('rechecks an earlier cause when a competing recall saves more references', recallAfterEarlierPoll);

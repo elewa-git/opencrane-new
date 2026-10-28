@@ -100,7 +100,8 @@ function requireTransition(previous: MemoryContextState | undefined, data: Memor
   if ((!previous && data.action !== 'prepared') || (previous && data.action === 'prepared')) {
     throw new Error('Memory preparation missing or repeated');
   }
-  if (previous?.status === 'ended' ||
+  const withdrawal = data.action === 'invalidated' && data.reason === 'content_changed';
+  if ((previous?.status === 'ended' && !withdrawal) ||
       (previous?.status === 'invalidated' && data.action !== 'ended')) {
     throw new Error('Memory context ended');
   }
@@ -134,8 +135,11 @@ export function foldMemoryContext(previous: MemoryContextState | undefined,
   if (data.action === 'loaded') {
     load(state, data);
   }
-  state.status = data.action;
-  state.reason = data.reason;
+  // Retain completion when later evidence only withdraws a pending private reply.
+  if (previous?.status !== 'ended') {
+    state.status = data.action;
+    state.reason = data.reason;
+  }
   state.events.set(event.id, encoded);
   return state;
 }
