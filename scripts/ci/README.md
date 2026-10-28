@@ -17,7 +17,7 @@ flowchart LR
   ci -->|runs files| vitest["Vitest<br/>root tests"]
   actions -->|builds for image, native configuration and demo read tests| computer["apps/computer<br/>test image"]
   ci -->|installs for browser use| chromium["Chromium<br/>test browser"]
-  ci -->|retries temporary image download failures| docker["Docker<br/>test containers"]
+  ci -->|pulls exact Linux images and retries downloads| docker["Docker<br/>test containers"]
   actions -->|restores system packages| cache["Actions cache<br/>downloaded packages"]
   cache -->|supplies saved packages| ci
 ```
@@ -48,8 +48,10 @@ The browser job also runs the hosted integration-row journey regression.
 Fresh runners install missing packages from the Actions cache without downloading
 them again. A cache miss downloads and saves the packages, with a time limit.
 
-Each test job pulls the exact test images before tests start containers. Temporary
-registry failures, including rate limits and quota errors, get a few retries.
+Each test job pulls the exact Linux amd64 test images before tests start containers.
+It downloads each image directly, avoiding attached build records that the mirror
+may not have cached. Temporary registry failures, including missing content during
+a download, rate limits and quota errors, get a few retries.
 Increasing waits allow a per-minute quota to reset. Missing images and access
 refusals stop the job immediately and keep the registry message.
 

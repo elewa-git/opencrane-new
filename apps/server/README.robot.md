@@ -993,6 +993,11 @@ Disabling secure cookies or allowing insecure OIDC HTTP is only for local testin
 
 ## File upload runtime licences
 
+The upload and recovery helpers select linux/amd64 image manifests for MinIO,
+ClamAV and the bridge test Node base. The
+[CI download notes](../../scripts/ci/README.robot.md#test-image-downloads) record
+the original index digests, their selected manifests and the mirror failure.
+
 These packages support file inspection and upload handling in `apps/server`.
 Their pinned versions and package metadata are recorded in the root lockfile.
 

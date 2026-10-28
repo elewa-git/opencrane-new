@@ -3,7 +3,11 @@
 For people, read [README.md](README.md) first.
 
 The dev daemon runs ClamAV 1.5.2, based on the immutable upstream image
-`clamav/clamav-debian@sha256:14e2e0805c6a5ff6728ea591c05565e0f0954d93e8701919012c3a8c44e20674`.
+`clamav/clamav-debian@sha256:24b4b24c303efed21633b29d61096fab4a8a7e158a595149238c7bef7b39873c`.
+This is the linux/amd64 manifest from the previously pinned index
+`sha256:14e2e0805c6a5ff6728ea591c05565e0f0954d93e8701919012c3a8c44e20674`.
+The Dockerfile and CI pre-pull use this manifest to avoid missing mirror
+attestations. See the [download details](../../scripts/ci/README.robot.md#test-image-downloads).
 Its bundled databases are main 63, daily 28046 and bytecode 339. Startup runs
 `clamd` directly: no FreshClam, entrypoint download or network access is needed.
 The digest pins both the engine and offline signatures. Our Dockerfile removes

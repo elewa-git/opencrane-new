@@ -95,7 +95,9 @@ Verified licences: [OpenFGA v1.21.0](https://github.com/openfga/openfga/blob/v1.
 are Apache-2.0 (source/npm metadata and installed LICENSE files).
 The transformer is dev-only. Axios is overridden to **1.20.0 (MIT)** because the
 SDK pins vulnerable 1.19.0. The real-service tests exercise the overridden SDK.
-The fixture pins the server image by digest; no new dependency is used by apps/web.
+The fixture pins the linux/amd64 server image manifest by digest. The
+[CI download notes](../../scripts/ci/README.robot.md#test-image-downloads) record
+the original index digest and its selected manifest. No new dependency is used by apps/web.
 
 P3-1 adds explicit `resource#use` grants for people, assistants and team members,
 plus team membership and assistant ownership relations. `use` and `applied` support

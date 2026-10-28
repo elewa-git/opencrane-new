@@ -18,7 +18,7 @@ export async function uploadServices() {
   try {
     const minio = await docker('run', '-d', '--user', '0:0', '--name', `upload-minio-${randomUUID()}`, '-p', '127.0.0.1::9000',
       '-e', 'MINIO_ROOT_USER=upload-test', '-e', 'MINIO_ROOT_PASSWORD=disposable-upload-test',
-      'mirror.gcr.io/alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4', 'server', '/data');
+      'mirror.gcr.io/alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:f93b327d2d9a81ef9d9a966d2c7fbe3ea4d657d23ed412566c20d488e9f73332', 'server', '/data');
     containers.push(minio);
     await docker('build', '-t', 'opencrane-upload-clamav:1.5.2-no-unrar', 'infra/clamav');
     const clam = await docker('run', '-d', '--name', `upload-clam-${randomUUID()}`, '-p', '127.0.0.1::3310',

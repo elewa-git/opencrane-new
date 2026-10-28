@@ -10,7 +10,7 @@ const containers = new Set<string>();
 const fixtureLabelValue = String(process.pid);
 const fixtureLabel = `opencrane.test.process=${fixtureLabelValue}`;
 const image =
-  "ghcr.io/openfga/openfga:v1.21.0@sha256:2113c664a486b5da8d7a2cdab479e0d4e30639c80fd2c000540f645c1dbc1e55";
+  "ghcr.io/openfga/openfga:v1.21.0@sha256:51bece5c31783bfeb150eae0f1c818ae804c50d39e0a311c43ff5357fed6debd";
 async function docker(...args: string[]) {
   return (await exec("docker", args, { timeout: 120_000 })).stdout.trim();
 }

@@ -57,7 +57,13 @@ for database creation and cleanup. Run test commands under `nice -n 10`.
 
 `pull-test-images.sh` runs once before Vitest in each shard and both fixture jobs.
 It pulls the existing MinIO, ClamAV base, Node base and OpenFGA digest pins from
-exactly the registries used by the test helpers. Docker then reuses those images
+exactly the registries used by the test helpers. Each pin selects the linux/amd64
+image manifest rather than its multi-platform index. The adjacent comments keep
+the original index digests. The manifests came from each exact index using
+`docker buildx imagetools inspect --raw <registry/image:tag@index-digest>` and
+selecting the entry with `platform.os: linux` and `platform.architecture: amd64`.
+The helper-pin test checks all four selected digests against the pull commands,
+test helpers and ClamAV Dockerfile. Docker then reuses those images
 for container starts and local builds. The locally built computer and ClamAV
 images keep their existing build steps. PostgreSQL still uses the workflow's
 service container; it starts before job steps and is outside this retry helper.
@@ -70,7 +76,8 @@ excluding time spent starting commands and printing output.
 
 The script retries HTTP 429, “Too Many Requests”, “toomanyrequests”, “Quota exceeded”
 and “rate limit” messages, ignoring letter case. It also retries HTTP 5xx, timeouts,
-connection resets and unexpected EOF errors. Unknown digests, HTTP 404, unknown
+connection resets, unexpected EOF errors, `failed to copy: httpReadSeeker` and
+`could not fetch content descriptor` errors. Unknown digests, HTTP 404, unknown
 manifests and access refusals stop immediately, even if another line mentions a
 temporary failure. Unrecognised errors also stop immediately. Every failed attempt
 prints Docker's original message. There is no tag or registry fallback.
@@ -79,7 +86,36 @@ The script tests use fake Docker and sleep commands, so they never wait for real
 They cover two quota errors followed by success, the retry and wait limits,
 case-insensitive messages and immediate failure for permanent errors. They also
 compare the pull list with the helper and Dockerfile pins and check all three
-workflow job types.
+workflow job types. The missing-attestation regression uses the full CI error,
+then succeeds on the next fake Docker pull. Manifest and access errors still stop
+immediately, including when the same message mentions a content download failure.
+
+### Missing mirror attestation investigation
+
+Main run 40751999121, attempt 1, job 123041036623 used hosted image
+`ubuntu-26.04` version `20261025.179.1`. Its `docker info` reports Docker 29.4.2,
+`Storage Driver: overlayfs` and `driver-type: io.containerd.snapshotter.v1`.
+The [Docker image-store documentation](https://docs.docker.com/engine/storage/containerd/)
+explains its support for indexes and attestations. The
+[Docker pull code](https://github.com/moby/moby/blob/master/daemon/containerd/image_pull.go)
+selects a platform and also follows the attached attestation manifests through
+`referrersForPull`. Selecting a platform alone does not remove that path.
+
+The ClamAV index lists amd64 image manifest
+`sha256:24b4b24c303efed21633b29d61096fab4a8a7e158a595149238c7bef7b39873c`
+and its attestation manifest
+`sha256:7bd6630447bd85aa0a388e919ef7edeedfc8ba99b9bb0b09fe0a423d285b905e`.
+Inspecting the latter through the same mirror identifies the failed blob
+`sha256:17936259c48931f4b8d8acc21b6f7552e4c80722dce1be36c954be28a50cdbf2`
+as an `application/vnd.in-toto+json` layer with SPDX document metadata.
+It is a software bill of materials, not a filesystem layer. Pulling the image
+manifest directly avoids the index and its attached build records.
+
+Local attempt on 28 October 2026: the original `docker pull` command succeeded
+on Docker 29.8.2 with the containerd image store. It reported an up-to-date image;
+this cached machine did not reproduce the missing remote blob. No daemon settings
+or shared images were changed to force a cold pull. Hosted confirmation after
+the fix remains NOT RUN until the CI watcher records the draft PR run.
 
 ## Timing evidence and remaining work
 

@@ -9,7 +9,7 @@ import { storageClient } from '../../apps/server/src/files/storage.ts';
 
 const execute = promisify(execFile);
 const image = 'mirror.gcr.io/alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:' +
-  'cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4';
+  'f93b327d2d9a81ef9d9a966d2c7fbe3ea4d657d23ed412566c20d488e9f73332';
 type Storage = ReturnType<typeof storageClient>;
 interface Target {
   silo: string;

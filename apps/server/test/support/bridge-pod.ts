@@ -20,7 +20,7 @@ export async function bridgePod() {
   try {
     const image = `127.0.0.1:5001/opencrane/bridge-fence:${namespace}`;
     const dockerfile = `${directory}/Dockerfile`;
-    await writeFile(dockerfile, `FROM mirror.gcr.io/library/node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3
+    await writeFile(dockerfile, `FROM mirror.gcr.io/library/node:22.23.1-bookworm-slim@sha256:8607a9064d4a571140998ae9e52a3b3fcf9cff361d04642d5971e6cd76d39e27
 WORKDIR /app
 COPY node_modules/ws /app/node_modules/ws
 COPY libs/models/package.json /app/libs/models/package.json

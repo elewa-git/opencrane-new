@@ -212,7 +212,8 @@ It does not copy unreferenced files or prove that a whole installation can recov
 The [object notes](README.robot.md#event-referenced-object-copy) explain its limits.
 
 The file restore helper checks every encrypted file before creating a new storage
-bucket. It accepts only a fresh local MinIO instance made by the recovery provisioner.
+bucket. It accepts only a fresh local Linux amd64 MinIO instance made by the
+recovery provisioner.
 It checks the owner marker at that destination and refuses other running processes
 or another restore using the same instance. It restores the saved addresses and file
 types, then reads every file back to check its size and checksum. Existing buckets refuse, including empty ones.
