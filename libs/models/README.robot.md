@@ -1995,6 +1995,10 @@ references that cannot be checked. Discovery offers recall only until trusted re
 every loaded memory reference.
 The optional `checkedAt` is a timestamp in milliseconds for nightly selection at its
 intended boundary. Other callers check the current time on each `current` call.
+`current(reference, at?)` also accepts one timestamp for an individual check, including
+all dependencies. Recall uses it to save the same time that it checked before appending.
+Withdrawal can exclude expiry while checking saved evidence; it still rejects missing
+revisions, replacements, tombstones and invalid dependencies.
 Revision selection uses the same `shouldReplaceMemoryRevision` rule as the projection
 and nightly scanner. The scanner supplies metadata-only custody because it opens no keys
 and dispatch stays disabled; live readers still use real key status.
@@ -4474,8 +4478,8 @@ followed by 24 `Connection server unavailable` failures. This draft is not sourc
 
 ## Memory withdrawal after completion (P4-15 PR 3g)
 
-`foldMemoryContext` accepts a later `invalidated/content_changed` record for an ended
-context. It retains the ended status, references and accounting. This records evidence
+`foldMemoryContext` accepts a later invalidation with reason `content_changed` or `expired`
+for an ended context. It retains the ended status, references and accounting. This records evidence
 for pending private reply removal only. Later loads remain refused; replay creates no
 execution permission. The server invalidation writer verifies the saved cause and permits
 one invalidation per context. Other terminal transitions retain their existing refusals.

@@ -41,8 +41,12 @@ A saved invalidation can send Stop to the matching connected private turn. This 
 reaction confirms the saved event and the current turn identity before sending.
 The bridge keeps the exact turn tracked after completion until the computer confirms
 that its reply buffer is clear. A replacement turn keeps its own identity and access.
-It does not require the former user to retain read access. Automatic detection and
-subscriptions are still planned.
+It does not require the former user to retain read access. Existing polling detects personal
+corrections, forgets and expiry. Expiry checks the revisions saved at each load and every
+supporting fact. An unrelated expired fact does not stop the turn. Access-loss detection
+remains planned.
+An addition saved at expiry cannot block clearing output from an earlier loaded fact.
+Recall saves the time used to check its facts and checks again before returning text.
 
 ## Main files
 

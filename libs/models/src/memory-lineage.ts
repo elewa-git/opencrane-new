@@ -122,8 +122,8 @@ function ownStatus(history: ReturnType<typeof memoryHistory>, scopeId: string,
 export function memoryReferences(rows: StoredEvent[], silo: string, scopeId: string,
   custody: Custody, checkedAt?: number) {
   const history = memoryHistory(rows, silo, scopeId);
-  function current(reference: Reference): Status {
-    const status = ownStatus(history, scopeId, custody, reference, checkedAt);
+  function current(reference: Reference, at = checkedAt): Status {
+    const status = ownStatus(history, scopeId, custody, reference, at);
     if (status !== 'current') {
       return status;
     }
@@ -143,7 +143,7 @@ export function memoryReferences(rows: StoredEvent[], silo: string, scopeId: str
         continue;
       }
       const invalidDependency = visiting.has(id) ||
-        ownStatus(history, scopeId, custody, step.reference, checkedAt) !== 'current';
+        ownStatus(history, scopeId, custody, step.reference, at) !== 'current';
       if (invalidDependency) {
         return 'invalid';
       }

@@ -9,7 +9,7 @@ import { readChatFacts, type ChatFacts } from '../chat/chat-summary.ts';
 
 const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const requestSchema = z.strictObject({ conversationId: identifier, turnId: identifier,
-  threadId: identifier, inputGeneration: identifier, causeId: identifier });
+  threadId: identifier, inputGeneration: identifier, causeId: identifier.optional() });
 type Request = z.infer<typeof requestSchema>;
 type Options = { silo: string; store: EventStore };
 type Receipt = { status: 'invalidated'; eventId: string; inputGeneration: string } |
@@ -50,6 +50,8 @@ function checkedCause(rows: StoredEvent[], request: Request, saved: MemoryContex
 
 function checkLoadedReferences(options: Options, rows: StoredEvent[],
   state: MemoryContextState, scopeId: string) {
+  let expired = false;
+  const checkedAt = Date.now();
   for (const encoded of state.events.values()) {
     const decoded: unknown = JSON.parse(encoded);
     const loaded = memoryContextRecordedEventSchema.parse(decoded);
@@ -68,15 +70,30 @@ function checkLoadedReferences(options: Options, rows: StoredEvent[],
       return row.sequence <= scopePosition;
     }
     const loadedRows = rows.filter(throughLoad);
+    if (loadedRows.at(-1)?.sequence !== scopePosition) {
+      throw new Error('Memory evidence unavailable');
+    }
     const loadedAt = Date.parse(loaded.time);
     const references = memoryReferences(loadedRows, options.silo, scopeId, 'event-only', loadedAt);
+    const current = memoryReferences(loadedRows, options.silo, scopeId, 'event-only', checkedAt);
     // Check each addition where it was loaded; later recalls need not predate the cause.
     for (const reference of loaded.data.additions) {
-      if (reference.scopeId !== scopeId || references.current(reference) !== 'current') {
+      if (reference.scopeId !== scopeId) {
         throw new Error('Memory evidence unavailable');
       }
+      if (references.current(reference) !== 'current') {
+        // Prove that only expiry made this addition unusable at its saved load time.
+        // Keep refused delivery evidence from blocking withdrawal of earlier output.
+        if (references.current(reference, Number.NEGATIVE_INFINITY) === 'current') {
+          continue;
+        }
+        throw new Error('Memory evidence unavailable');
+      }
+      // Compare the same saved revision and dependencies. Only time can change this result.
+      expired ||= current.current(reference) !== 'current';
     }
   }
+  return expired;
 }
 
 function affected(options: Options, rows: StoredEvent[], request: Request,
@@ -105,7 +122,16 @@ function affected(options: Options, rows: StoredEvent[], request: Request,
   return { changed, position: cause.row.sequence };
 }
 
-function invalidationId(binding: string, causeId: string) {
+function withdrawalCause(options: Options, rows: StoredEvent[], request: Request,
+  saved: MemoryContextRecord, state: MemoryContextState, scopeId: string) {
+  if (request.causeId !== undefined) {
+    return affected(options, rows, request, saved, state, scopeId);
+  }
+  return { changed: checkLoadedReferences(options, rows, state, scopeId),
+    position: rows.at(-1)?.sequence ?? 0 };
+}
+
+function invalidationId(binding: string, causeId: string | undefined) {
   const hash = createHash('sha256');
   hash.update(JSON.stringify([binding, causeId]));
   return `memory-invalidation-${hash.digest('hex')}`;
@@ -132,6 +158,7 @@ async function recordInvalidation(options: Options, request: Request): Promise<R
   const saved = savedBinding(chat, request);
   const state = chat.memoryContext!;
   const id = invalidationId(state.binding, request.causeId);
+  const reason = request.causeId === undefined ? 'expired' : 'content_changed';
   const receipt: Receipt = { status: 'invalidated', eventId: id,
     inputGeneration: saved.inputGeneration };
   const recorded = state.events.get(id);
@@ -140,7 +167,7 @@ async function recordInvalidation(options: Options, request: Request): Promise<R
     const decoded: unknown = JSON.parse(recorded);
     const recovered = memoryContextRecordedEventSchema.parse(decoded);
     if (recovered.data.action !== 'invalidated' ||
-        recovered.data.reason !== 'content_changed' || recovered.commandId !== id) {
+        recovered.data.reason !== reason || recovered.commandId !== id) {
       return { status: 'refused' };
     }
     return receipt;
@@ -149,7 +176,7 @@ async function recordInvalidation(options: Options, request: Request): Promise<R
   const scopeId = memoryScopeId(options.silo, 'person', saved.requesterId);
   const rows = await history(options.store, `scope-${scopeId}`, options.silo,
     performance.now() + 10_000);
-  const cause = affected(options, rows, request, saved, state, scopeId);
+  const cause = withdrawalCause(options, rows, request, saved, state, scopeId);
   if (!cause.changed) return { status: 'unchanged' };
 
   const current = await readChatFacts(options.store, options.silo,
@@ -161,13 +188,13 @@ async function recordInvalidation(options: Options, request: Request): Promise<R
       JSON.stringify(Array.from(state.events))) {
     return { status: 'reload_required' };
   }
-  const event = invalidationEvent(options.silo, saved, state, scopeId, cause.position, id);
+  const event = invalidationEvent(options.silo, saved, state, scopeId, cause.position, id, reason);
   foldMemoryContext(state, event);
   return appendInvalidation(options, event, current, receipt);
 }
 
 function invalidationEvent(silo: string, saved: MemoryContextRecord, state: MemoryContextState,
-  scopeId: string, causePosition: number, id: string) {
+  scopeId: string, causePosition: number, id: string, reason: 'expired' | 'content_changed') {
   const positions = new Map<string, number>();
   for (const position of state.scopePositions) {
     positions.set(position.scopeId, position.position);
@@ -178,7 +205,7 @@ function invalidationEvent(silo: string, saved: MemoryContextRecord, state: Memo
     scopePositions.push({ scopeId: savedScope, position });
   }
   const data: MemoryContextRecord = { ...saved, action: 'invalidated',
-    reason: 'content_changed', scopePositions };
+    reason, scopePositions };
   const input = { id, commandId: id,
     silo, subject: `conversation-${saved.conversationId}`,
     type: 'agent.memory_context_recorded', source: 'opencrane-server',
