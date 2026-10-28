@@ -1071,7 +1071,8 @@ async function unavailableCompletedOutput() {
     }
     send(data);
   }
-  vi.spyOn(link.socket, 'send').mockImplementation(holdAcknowledgements);
+  const sending = vi.spyOn(link.socket, 'send');
+  sending.mockImplementation(holdAcknowledgements);
   computer.channel.notification({ method: 'item/agentMessage/delta',
     params: { threadId: 'thread-1', itemId: 'reply', delta: 'completed-private-canary' } });
   await flush();
@@ -1081,7 +1082,9 @@ async function unavailableCompletedOutput() {
   await link.settled();
   const unavailable = { allowed: false as const, status: 'unavailable' as const,
     error: new Error('fixture IAM unavailable') };
-  vi.spyOn(memberAuthorisation(iam), 'use').mockResolvedValue(unavailable);
+  const auth = memberAuthorisation(iam);
+  const permissions = vi.spyOn(auth, 'use');
+  permissions.mockResolvedValue(unavailable);
   expect(await accessReceipt()).toEqual({ status: 'unavailable' });
   await poll();
   function inspect(raw: Buffer) {
@@ -1118,7 +1121,8 @@ async function removedMemberWithUnavailableAssistant() {
         error: new Error('fixture assistant permission unavailable') };
       return Promise.resolve(unavailable);
     }
-    vi.spyOn(auth, 'use').mockImplementation(permission);
+    const permissions = vi.spyOn(auth, 'use');
+    permissions.mockImplementation(permission);
   }
   await completionBeforePoll(false, false, undefined, remove);
   await accessEvidence(true);
