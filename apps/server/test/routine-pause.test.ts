@@ -90,6 +90,7 @@ async function savesOnePause() {
 it('saves one owner pause and replays it without any execution events', savesOnePause);
 
 async function recoversLostReply() {
+  await occupy();
   const append = nats.store.append.bind(nats.store);
   async function loseReply(change: AppendCommand): Promise<never> {
     await append(change);
@@ -102,16 +103,16 @@ async function recoversLostReply() {
   await nats.restart();
   const saved = await rows();
   const result = await pause();
-  expect(result.eventId).toBe(saved[1]?.event.id);
-  expect(result.position).toBe(saved[1]?.sequence);
-  expect(await rows()).toHaveLength(2);
+  expect(result.eventId).toBe(saved[2]?.event.id);
+  expect(result.position).toBe(saved[2]?.sequence);
+  expect(await rows()).toHaveLength(3);
 }
 it('recovers a lost committed reply after deduplication expires and NATS restarts',
   recoversLostReply, 30_000);
 
 async function conflicts() {
   await pause();
-  await expect(pause('bob')).rejects.toThrow('Routine pause conflict');
+  await expect(pause('bob')).rejects.toThrow('Routine pause refused');
   const changes = [ { routineId: 'other' }, { expectedDefinitionRevision: 2 },
     { expectedScheduleRevision: 2 }, { expectedControlRevision: 2 },
     { expectedPosition: 0 }, { changeId: 'orders:another-change' } ];
@@ -139,11 +140,7 @@ async function refusesSavedChanges(type: string) {
   if (type === 'member.removed') {
     saved = event('removed-alice', 'member-alice', type);
   }
-  if (type === 'routine.due') {
-    saved = { ...event('due', 'routine-orders', type), source: 'opencrane-server',
-      principal: { kind: 'system', id: 'opencrane-server' },
-      data: getEventDefinition(type)!.example };
-  }
+
   await nats.seed([saved]);
   input.expectedPosition = await nats.store.head('routine-orders');
   input.expectedDefinitionRevision = type === 'routine.reassigned' ? 2 : 1;
@@ -152,7 +149,7 @@ async function refusesSavedChanges(type: string) {
   await expect(pause()).rejects.toThrow('Routine pause refused');
   expect(await nats.store.head()).toBe(before);
 }
-it.each(['routine.reassigned', 'routine.retired', 'member.removed', 'routine.due'])(
+it.each(['routine.reassigned', 'routine.retired', 'member.removed'])(
   'refuses saved %s even before IAM catches up', refusesSavedChanges);
 
 async function refusesLegacy() {
@@ -279,3 +276,37 @@ async function replaysSavedPause() {
 }
 it('rebuilds the saved pause with jobs, appends, credentials, wake and calls forbidden',
   replaysSavedPause, 30_000);
+
+async function occupy() {
+  const type = 'routine.due';
+  const saved = { ...event('occupied', 'routine-orders', type), source: 'opencrane-server',
+    principal: { kind: 'system' as const, id: 'opencrane-server' },
+    data: getEventDefinition(type)!.example };
+  await nats.seed([saved]);
+  input.expectedPosition = await nats.store.head('routine-orders');
+  return saved;
+}
+async function occupiedPause() {
+  const occupied = await occupy();
+  const before = await nats.store.head();
+  const results = await Promise.all([pause(), pause()]);
+  expect(results[0]).toEqual(results[1]);
+  expect(await nats.store.head()).toBe(before + 1);
+  const saved = await rows();
+  expect(saved.at(-1)?.event).toMatchObject({ type: 'routine.paused',
+    data: { affectedRun: 'occurrence', controlRevision: 2 } });
+  let state: RoutineState | undefined;
+  for (const row of saved) {
+    state = foldRoutine(state, row.event);
+  }
+  expect(state?.activeRun).toEqual(occupied.data);
+  expect(state?.executionAvailable).toBe(false);
+  for (const member of ['admin', 'bob', 'outsider']) {
+    for (const change of [{}, { expectedPosition: 0 }, { changeId: 'orders:unknown' }]) {
+      await expect(pause(member, { ...input, ...change }))
+        .rejects.toThrow('Routine pause refused');
+    }
+  }
+  expect(await nats.store.head()).toBe(before + 1);
+}
+it('saves one occupied pause and gives non-owners uniform refusals', occupiedPause);
