@@ -1241,7 +1241,7 @@ async function routineRetriesUntilClearance() {
 it('retries completed routine clearance until the exact thread receipt arrives',
   routineRetriesUntilClearance);
 
-async function slowProhibitionValidation() {
+async function failedProhibitionValidation(failure: 'slow' | 'error') {
   const link = await startRunning();
   await saveProhibition('Pause');
   const read = nats.store.readStream.bind(nats.store);
@@ -1255,6 +1255,9 @@ async function slowProhibitionValidation() {
       delayed = true;
       validationDeadline = args[2];
       validationStartedAt = performance.now();
+      if (failure === 'error') {
+        throw new Error('Evidence history unavailable');
+      }
       await delay(2200);
       validationFinished = true;
     }
@@ -1273,14 +1276,20 @@ async function slowProhibitionValidation() {
   expect(validationStartedAt).toBeDefined();
   expect(validationDeadline! - validationStartedAt!).toBeLessThanOrEqual(2000);
   expect(validationFinished).toBe(false);
-  expect(preparedComputer.interruptedThreads).toEqual([]);
-  await delay(250);
-  expect(validationFinished).toBe(true);
-  expect(preparedComputer.interruptedThreads).toEqual([]);
+  await vi.waitFor(interruptedOnce);
+  expect(performance.now() - observedAt!).toBeLessThan(2000);
+  if (failure === 'slow') {
+    function finished() {
+      expect(validationFinished).toBe(true);
+    }
+    await vi.waitFor(finished, { timeout: 2500 });
+  }
+  interruptedOnce();
   expect(link.socket.readyState).toBe(link.socket.OPEN);
   reading.mockRestore();
   await pollRoutine();
   await vi.waitFor(interruptedOnce);
 }
-it('bounds slow prohibition validation by the cancellation deadline and retries safely',
-  slowProhibitionValidation);
+it.each(['slow', 'error'] as const)(
+  'interrupts the exact routine within two seconds despite %s prohibition evidence reads',
+  failedProhibitionValidation);
