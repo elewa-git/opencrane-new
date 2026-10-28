@@ -4496,6 +4496,10 @@ stream. Later routine checks read only new events and compare exact
 positions separately before model admission and final MCP send, including free calls.
 Saved Stop, Pause or Retire refuses without `applyRoutineStop`. Missing, mismatched
 or unavailable evidence refuses too. Ordinary chats keep their existing deadlines.
+`RoutineDispatchRefused` preserves HTTP 403, the `x-opencrane-decision: refused`
+header and fixed `Routine dispatch refused` message if a later deny-audit append fails
+or an earlier audit was already attempted. Other audit failures keep their existing handling.
+Model retry handling retains this refusal too, without releasing an uncertain hold.
 Repeated older completions use `foldRoutineHistory`; they cannot replace the active run.
 The guard saves nothing and grants no replay effect. Settlement and uncertain holds
 retain their existing rules. No event or public API field or dependency was added.
@@ -4504,6 +4508,9 @@ Company calls, Ask enablement, scheduling and automatic execution remain disable
 Tests extend the real internal routine admissions in `routine-session.test.ts`, then
 use the model decision endpoint and a recording MCP server. They check delayed cleanup,
 prohibition during admission and before send, altered evidence and consumed permits.
+They also fail the deny audit after a saved owner Stop for both model and free-tool
+requests, stall routine history beyond its deadline, and keep unrelated routine,
+conversation and computer-thread activity arriving throughout dispatch.
 Full root suite and fresh-install/live qualification: NOT RUN.
 
 ## Company bearer creation (P3-8 PR 4d; Part of #49)

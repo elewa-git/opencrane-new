@@ -11,6 +11,12 @@ type Identity = { requester: string; assistant: string; computer: string; genera
   conversation: string; turn: string; thread: string };
 type Run = NonNullable<RoutineState['activeRun']>;
 
+export class RoutineDispatchRefused extends Error {
+  constructor() {
+    super('Routine dispatch refused');
+  }
+}
+
 function preparation(conversation: StoredEvent[], claims: Identity, silo: string) {
   function isCreation(row: StoredEvent) {
     return row.event.type === 'conversation.created';
@@ -76,7 +82,7 @@ export async function prepareRoutineDispatch(actor: BudgetActor, claims: Identit
     const deadline = performance.now() + 10_000;
     return await withinBudgetDeadline(load(actor, claims, saved, turn, deadline), deadline);
   } catch {
-    throw new Error('Routine dispatch refused');
+    throw new RoutineDispatchRefused();
   }
 }
 
@@ -149,7 +155,7 @@ async function load(actor: BudgetActor, claims: Identity,
     try {
       await withinBudgetDeadline(check(deadline), deadline);
     } catch {
-      throw new Error('Routine dispatch refused');
+      throw new RoutineDispatchRefused();
     }
   }
   return { confirm };

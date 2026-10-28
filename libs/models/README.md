@@ -67,6 +67,7 @@ provider call. Public routes remain unavailable.
 
 Routine calls check saved owner Stop, Pause and Retire before holding money or granting
 a tool permit, and again before sending. They refuse even when spending cleanup is delayed.
+An established refusal still reaches the caller if saving its audit record fails.
 Missing or mismatched run evidence refuses the call. Automatic routines remain unavailable.
 
 ## Where it fits

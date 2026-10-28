@@ -1,6 +1,6 @@
 import { createLogger, type Logger } from '@opencrane/observability';
-import { prepareRoutineDispatch } from './routine-dispatch.ts';
-import { privateDecisionReason } from './decision-refusal.ts';
+import { prepareRoutineDispatch, RoutineDispatchRefused } from './routine-dispatch.ts';
+import { privateDecisionReason, decisionError } from './decision-refusal.ts';
 import { prepareMemoryDecision, memoryAccessStarted } from './memory-prepare-request.ts';
 import { requestSchema } from './model-request.ts';
 import { authoriseEgress } from './egress-admission.ts';
@@ -9,12 +9,12 @@ import { refuseCallRetry, grantModelCall } from './call-retry.ts';
 import { turnRootBinding } from './root-budget.ts';
 import { modelPermission } from './decision-provider.ts';
 import { LoadedMemoryRefused, prepareLoadedMemory } from './loaded-memory.ts';
-import { checkNativeCall, NativeDelegationDisabled } from './native-call-check.ts';
+import { checkNativeCall } from './native-call-check.ts';
 import { mcpDispatch, type McpDispatchOptions } from './mcp-dispatch.ts';
 import { admitProviderVerification, runProviderVerification, verifyProviderCapability,
   type ProviderVerificationOptions } from './provider-verification.ts';
 import { ProviderConflict, ProviderRefused, ProviderUnpriced } from './providers.ts';
-import { groupMembership, PayingGroupRefused, AuthorityApplying } from './paying-group.ts';
+import { groupMembership } from './paying-group.ts';
 import { configureBudget } from './budget-config.ts';
 import { respondBudgetRefusal } from './budget-scope.ts';
 import { approvalDecision, type ReviewKeys } from './approvals.ts';
@@ -42,16 +42,6 @@ import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { StoredEvent } from '@opencrane/event-store';
 import { BudgetActor, BudgetRefused, envelope, history } from './actor.ts';
 import { requestReservationCents, ModelRequestRefused as RequestRefused, data, models, priceTableId, type ModelCall } from './state.ts';
-
-function decisionError(error: unknown) {
-  if (error instanceof BudgetRefused || error instanceof RequestRefused ||
-      error instanceof LoadedMemoryRefused || error instanceof MemoryToolRefused ||
-      error instanceof PayingGroupRefused ||
-      error instanceof AuthorityApplying || error instanceof NativeDelegationDisabled) {
-    return error.message;
-  }
-  return 'Request refused or decision service unavailable';
-}
 
 const id = z.string().regex(/^[\w-]+$/u).max(200);
 const common = { silo: id, assistant: id, exp: z.int(), iat: z.int() };
@@ -373,19 +363,27 @@ export async function startDecision(
     })().catch(async (error: unknown) => {
       if (refuseCallRetry(error, res, auditAttempted)) return;
       const capped = error instanceof BudgetRefused;
+      const routineRefused = error instanceof RoutineDispatchRefused;
       const reason = capped ? 'budget_exhausted' : privateDecisionReason(error);
       const elapsedMs = Math.round(performance.now() - started);
       const diagnostic = { requestId, route, stage, reason, elapsedMs };
       logger.warn(diagnostic, 'Gateway request refused');
       try {
         if (!auditAttempted) await audit('deny', capped ? 'budget_exhausted' : 'request_refused');
-        else if (!(error instanceof LoadedMemoryRefused)) {
+        else if (!(error instanceof LoadedMemoryRefused) && !routineRefused) {
           res.writeHead(503);
           res.end('{"error":"Decision audit unavailable"}');
           return;
         }
       }
-      catch { res.writeHead(503); res.end('{"error":"Decision audit unavailable"}'); return; }
+      catch {
+        // Preserve the routine refusal even when its deny audit cannot be saved.
+        if (!routineRefused) {
+          res.writeHead(503);
+          res.end('{"error":"Decision audit unavailable"}');
+          return;
+        }
+      }
       res.setHeader('x-request-id', requestId);
       res.setHeader('x-opencrane-decision', 'refused');
       res.writeHead(capped ? 402 : 403);

@@ -4,6 +4,7 @@ import { history } from './event-history.ts';
 import { data, type BudgetState } from './state.ts';
 import type { BudgetActor } from './actor.ts';
 import { CallRetryRefused, turnRootId } from './root-budget.ts';
+import { RoutineDispatchRefused } from './routine-dispatch.ts';
 import type { ModelCall } from './state.ts';
 
 type NativeCall = {
@@ -63,8 +64,11 @@ export async function grantModelCall(actor: BudgetActor,
       reservationId, modelCall: saved.call, rootId };
     await actor.admitDispatch(dispatch, confirmAccess, admittedAt, native?.rootTurn);
     return { reservationId, requestId };
-  } catch {
+  } catch (error) {
     // Keep an uncertain hold and its original decision available for a later retry.
+    if (error instanceof RoutineDispatchRefused) {
+      throw error;
+    }
     throw new CallRetryRefused();
   }
 }

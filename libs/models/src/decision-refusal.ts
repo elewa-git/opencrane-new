@@ -1,6 +1,23 @@
 import { errors } from 'jose';
 import { ZodError } from 'zod';
 import { isEventStoreUnavailable } from '@opencrane/event-store';
+import { ModelRequestRefused } from './state.ts';
+import { BudgetRefused } from './budget-refusal.ts';
+import { LoadedMemoryRefused } from './loaded-memory.ts';
+import { MemoryToolRefused } from './memory-context.ts';
+import { PayingGroupRefused, AuthorityApplying } from './paying-group.ts';
+import { NativeDelegationDisabled } from './native-call-check.ts';
+import { RoutineDispatchRefused } from './routine-dispatch.ts';
+
+export function decisionError(error: unknown) {
+  if (error instanceof BudgetRefused || error instanceof ModelRequestRefused ||
+      error instanceof LoadedMemoryRefused || error instanceof MemoryToolRefused ||
+      error instanceof PayingGroupRefused || error instanceof RoutineDispatchRefused ||
+      error instanceof AuthorityApplying || error instanceof NativeDelegationDisabled) {
+    return error.message;
+  }
+  return 'Request refused or decision service unavailable';
+}
 
 const refusalReasons = new Map([
   ['Missing credentials', 'credentials_missing'],
