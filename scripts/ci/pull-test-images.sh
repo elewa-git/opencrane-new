@@ -14,7 +14,7 @@ transient_failure() {
   local status=$1
   local permanent_errors='(^|[^[:alnum:]])404([^[:alnum:]]|$)'
   permanent_errors+='|manifest unknown|manifest_unknown|name unknown|name_unknown'
-  permanent_errors+='|unauthorized|denied'
+  permanent_errors+='|unknown digest|digest unknown|digest_unknown|unauthorized|denied'
   # Refuse permanent errors even when another line mentions a temporary failure.
   if grep -Eqi "$permanent_errors" "$pull_log"; then
     return 1
@@ -23,7 +23,8 @@ transient_failure() {
     return 0
   fi
   local transient_errors='(^|[^[:alnum:]])(429|5[0-9]{2})([^[:alnum:]]|$)'
-  transient_errors+='|too many requests|toomanyrequests|timeout|timed out'
+  transient_errors+='|too many requests|toomanyrequests|quota exceeded|rate limit'
+  transient_errors+='|timeout|timed out'
   transient_errors+='|deadline exceeded|connection reset|unexpected EOF'
   grep -Eqi "$transient_errors" "$pull_log"
 }
@@ -31,7 +32,8 @@ transient_failure() {
 pull_image() {
   local image=$1
   local attempt=1
-  local backoff=2
+  local backoffs=(10 30 60)
+  local backoff
   local status
   while true; do
     printf 'Pulling test image (attempt %s of 4): %s\n' "$attempt" "$image"
@@ -45,10 +47,11 @@ pull_image() {
     if (( attempt == 4 )) || ! transient_failure "$status"; then
       return "$status"
     fi
+    # Allow a per-minute quota to reset and spread concurrent jobs by up to two seconds.
+    backoff=$((backoffs[attempt - 1] + RANDOM % 3))
     printf 'Temporary image pull failure; retrying in %s seconds.\n' "$backoff" >&2
     sleep "$backoff"
     attempt=$((attempt + 1))
-    backoff=$((backoff * 2))
   done
 }
 

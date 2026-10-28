@@ -62,13 +62,24 @@ for container starts and local builds. The locally built computer and ClamAV
 images keep their existing build steps. PostgreSQL still uses the workflow's
 service container; it starts before job steps and is outside this retry helper.
 
-Each pull has at most four attempts, with waits of 2, 4 and 8 seconds. Each
-attempt has a 90-second limit and is forcibly stopped after another 5 seconds.
-Only HTTP 429, HTTP 5xx, timeouts, connection resets and unexpected EOF errors
-are retried. Permanent or unrecognised errors stop immediately. Every failed
-attempt prints Docker's original message. There is no tag or registry fallback.
-The script tests use fake Docker and sleep commands. They also compare the pull
-list with the helper and Dockerfile pins and check all three workflow job types.
+Each pull has at most four attempts, with waits of 10, 30 and 60 seconds plus
+0–2 seconds of random jitter per wait. Total waiting is at most 106 seconds per
+image. Each attempt has a 90-second limit and is forcibly stopped after another
+5 seconds. The four attempts and waits take at most 486 seconds per image,
+excluding time spent starting commands and printing output.
+
+The script retries HTTP 429, “Too Many Requests”, “toomanyrequests”, “Quota exceeded”
+and “rate limit” messages, ignoring letter case. It also retries HTTP 5xx, timeouts,
+connection resets and unexpected EOF errors. Unknown digests, HTTP 404, unknown
+manifests and access refusals stop immediately, even if another line mentions a
+temporary failure. Unrecognised errors also stop immediately. Every failed attempt
+prints Docker's original message. There is no tag or registry fallback.
+
+The script tests use fake Docker and sleep commands, so they never wait for real.
+They cover two quota errors followed by success, the retry and wait limits,
+case-insensitive messages and immediate failure for permanent errors. They also
+compare the pull list with the helper and Dockerfile pins and check all three
+workflow job types.
 
 ## Timing evidence and remaining work
 
