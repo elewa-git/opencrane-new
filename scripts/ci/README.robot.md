@@ -53,6 +53,23 @@ install the pinned Chromium with `npx playwright install chromium`, and set
 `PG_TEST_URL` to a disposable PostgreSQL instance. See the root working rules
 for database creation and cleanup. Run test commands under `nice -n 10`.
 
+## Test image downloads
+
+`pull-test-images.sh` runs once before Vitest in each shard and both fixture jobs.
+It pulls the existing MinIO, ClamAV base, Node base and OpenFGA digest pins from
+exactly the registries used by the test helpers. Docker then reuses those images
+for container starts and local builds. The locally built computer and ClamAV
+images keep their existing build steps. PostgreSQL still uses the workflow's
+service container; it starts before job steps and is outside this retry helper.
+
+Each pull has at most four attempts, with waits of 2, 4 and 8 seconds. Each
+attempt has a 90-second limit and is forcibly stopped after another 5 seconds.
+Only HTTP 429, HTTP 5xx, timeouts, connection resets and unexpected EOF errors
+are retried. Permanent or unrecognised errors stop immediately. Every failed
+attempt prints Docker's original message. There is no tag or registry fallback.
+The script tests use fake Docker and sleep commands. They also compare the pull
+list with the helper and Dockerfile pins and check all three workflow job types.
+
 ## Timing evidence and remaining work
 
 The main runs below use the current 4-CPU layout. Times come from the GitHub

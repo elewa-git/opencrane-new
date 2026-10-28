@@ -243,6 +243,9 @@ jobs:
       - name: Verify Docker for real OpenFGA tests
         run: docker info
 
+      - name: Pull pinned test images with bounded retries
+        run: bash scripts/ci/pull-test-images.sh
+
       - name: Test shard ${{ matrix.shard }} of 4
         run: nice -n 10 node scripts/ci/run-tests.mjs ${{ matrix.shard }}
 
@@ -306,6 +309,9 @@ jobs:
       # Authz tests use disposable Docker containers and the PostgreSQL service above.
       - name: Verify Docker for real OpenFGA tests
         run: docker info
+
+      - name: Pull pinned test images with bounded retries
+        run: bash scripts/ci/pull-test-images.sh
 
       - uses: docker/setup-buildx-action@v3
 
@@ -401,6 +407,9 @@ jobs:
       # Authz tests use disposable Docker containers and the PostgreSQL service above.
       - name: Verify Docker for real OpenFGA tests
         run: docker info
+
+      - name: Pull pinned test images with bounded retries
+        run: bash scripts/ci/pull-test-images.sh
 
       - name: Read Chromium package cache versions
         id: chromium-cache-key
