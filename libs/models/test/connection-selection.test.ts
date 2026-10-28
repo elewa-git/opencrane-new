@@ -1412,3 +1412,51 @@ async function releaseHistoryFailureAfterPermission(failedHistory: string) {
 it.each(['decision', 'profile'])(
   'sanitises failed %s release history after one permission decision',
   releaseHistoryFailureAfterPermission);
+
+async function releaseAppendAccessRefusal(message: string, laterFailure: string) {
+  const test = await releaseFixture();
+  const refusal = new MemberAccessRefused(message);
+  let appending = false;
+  async function prepareAccess() {
+    const access = await test.prepareAccess();
+    async function checkAccess() {
+      if (appending) {
+        throw refusal;
+      }
+      await access.checkAccess();
+    }
+    return { deadline: access.deadline, checkAccess };
+  }
+  const permission = vi.fn(prepareAccess);
+  const append = nats.store.append.bind(nats.store);
+  async function appendFailure(command: AppendCommand) {
+    appending = true;
+    const result = await append(command);
+    expect(result.status).toBe('unavailable');
+    if (laterFailure === 'throw') {
+      throw new Error('private-append-canary');
+    }
+    if (laterFailure === 'return') {
+      return { status: 'unavailable' as const, cause: new Error('private-append-canary') };
+    }
+    return result;
+  }
+  const writes = vi.spyOn(nats.store, 'append');
+  writes.mockImplementationOnce(appendFailure);
+  try {
+    const pending = confirmCredentialRelease(nats.store, 'test', test.userId,
+      test.decision.id, test.release, permission);
+    await expect(pending).rejects.toBe(refusal);
+    expect(permission).toHaveBeenCalledTimes(1);
+    expect(writes).toHaveBeenCalledTimes(1);
+    expect(await nats.store.head(test.releaseSubject)).toBe(0);
+    expect(test.custody.stage).not.toHaveBeenCalled();
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each([
+  ['Active silo membership required', 'none'], ['Owner or Admin required', 'none'],
+  ['Active silo membership required', 'throw'], ['Owner or Admin required', 'throw'],
+  ['Active silo membership required', 'return'], ['Owner or Admin required', 'return'],
+])('preserves release append refusal %s through a later %s failure', releaseAppendAccessRefusal);
