@@ -472,6 +472,9 @@ Later confirmed usage can still settle their cost.
 An internal company-account save checks current admin membership and explicit opt-in
 for the reviewed installation. The silo owns the saved account; the admin is its named
 custodian. Saving keeps the account unverified and grants no tool access.
+The save checks permission once, including when its history could not be loaded.
+A permission refusal takes precedence over a history or lock-release failure.
+After staging, membership changes still prevent the save from being published.
 
 An internal confirmation checks the original verified account and saved provider reply again.
 It stores one private generation, then saves its exact reference, account, scopes and expiry.

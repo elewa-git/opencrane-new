@@ -4495,6 +4495,11 @@ Company subjects use `connection-company:<serverId>:<profileId>`; custody has no
 The shared profile lock covers history, immutable staging and one conditional append.
 History loads before the short membership check. Opt-in and registration positions are
 compared separately; the append callback also orders publication against access changes.
+One admin permission decision follows preparation, including failed preparation.
+`MemberAccessRefused` survives preparation errors and later lock-release failures.
+The command captures membership positions before that decision. After staging,
+`ownershipWriteAccess` checks those same positions and starts the two-second publication
+deadline. It does not ask IAM again. Changed membership still prevents publication.
 Exact retries compare the saved data and private material, UID and version. Unknown
 publication retains material. Replay preserves silo ownership and custodian metadata.
 The result is `saved_unverified`. Company rotation, revocation, selection, release,

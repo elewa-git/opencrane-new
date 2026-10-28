@@ -5487,7 +5487,7 @@ async function refusesCompanyBeforeStage(kind: string) {
     input = { ...test.input, ...patches[kind] };
   }
   const pending = test.save(input, material, binding);
-  if (kind === 'removed' || kind === 'non-admin' || kind === 'silo') {
+  if (kind === 'removed' || kind === 'non-admin') {
     await expect(pending).rejects.toBeInstanceOf(MemberAccessRefused);
   } else {
     await expect(pending).rejects.toThrow('Company connection unavailable');

@@ -5,13 +5,14 @@ import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { companyConnectionCreatedDataSchema } from '@opencrane/events';
 import type { Db } from '@opencrane/projections';
 import { envelope, history } from './actor.ts';
-import { authorityFence } from './authority.ts';
+import { ownershipWriteAccess } from './authority.ts';
 import { connectionOperationId } from './bearer-connections.ts';
 import { foldCompanyOptIn } from './company-opt-in.ts';
 import type { connectionCustody, CompanyConnectionStage } from './connection-custody.ts';
 import { connectionServer } from './connection-server.ts';
 import { withConnectionStage } from './connection-stage-lock.ts';
-import { activeMember, readActiveMember } from './member-authority.ts';
+import { activeMember, MemberAccessRefused } from './member-authority.ts';
+import { currentMembership } from './ownership.ts';
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const inputSchema = z.strictObject({
@@ -71,12 +72,23 @@ export async function saveCompanyBearerConnection(store: EventStore, binding: Bi
       return saveLocked(store, binding, custodianId, custody, input, material);
     }
     return await withConnectionStage(db, profile, save);
-  } catch {
+  } catch (error) {
+    if (error instanceof MemberAccessRefused) {
+      throw error;
+    }
     // Hide dependency messages and parser input because they may contain private material.
+    // eslint-disable-next-line preserve-caught-error -- Dependency causes may contain credentials.
     throw new Error('Company connection unavailable');
   }
 }
 async function prepare(store: EventStore, silo: string, input: Input) {
+  try {
+    return await prepareHistory(store, silo, input);
+  } catch {
+    return null;
+  }
+}
+async function prepareHistory(store: EventStore, silo: string, input: Input) {
   const deadline = performance.now() + 10_000;
   const subject = subjectFor(input.serverId, input.profileId);
   const rows = await history(store, subject, silo, deadline);
@@ -99,15 +111,22 @@ async function prepare(store: EventStore, silo: string, input: Input) {
 async function saveLocked(store: EventStore, binding: Binding, custodianId: string,
   custody: Custody, input: Input, material: string) {
   const prepared = await prepare(store, binding.silo, input);
-  await readActiveMember(store, binding, custodianId, 'admin');
-  const { rows, subject, endpointDigest } = prepared;
+  const membership = await currentMembership(store, binding.silo, custodianId,
+    undefined, performance.now() + 10_000);
+  const options = { requiredRole: 'admin' as const, membership };
+  await activeMember(store, binding, custodianId, options);
+  // Report a permission refusal before any preparation failure.
+  if (!prepared) {
+    throw new Error('Company connection unavailable');
+  }
+  const { rows, subject, endpointDigest, serverSubject, optInSubject, server } = prepared;
   const original = rows[0];
   const operationId = connectionOperationId(binding.silo, subject, input.changeRef);
   if (original && (original.event.id !== operationId ||
       foldCompanyConnection(rows).status !== 'saved_unverified')) {
     throw new Error('Company connection conflict');
   }
-  if (!original && Date.now() >= Math.min(input.appendUntil, prepared.server.expiresAt)) {
+  if (!original && Date.now() >= Math.min(input.appendUntil, server.expiresAt)) {
     throw new Error('Company connection expired');
   }
   const stage: CompanyConnectionStage = { siloId: binding.silo, custodianId,
@@ -131,16 +150,14 @@ async function saveLocked(store: EventStore, binding: Binding, custodianId: stri
   const event = { ...envelope(binding.silo, subject, 'connection.created', data, operationId),
     commandId: input.changeRef, source: 'opencrane-server',
     principal: { kind: 'human' as const, id: custodianId } };
-  // Finish history and staging before starting the short check of membership streams.
-  const fresh = await authorityFence(store, performance.now());
-  const options = { requiredRole: 'admin' as const, fresh };
-  await activeMember(store, binding, custodianId, options);
+  // Recheck the membership positions used for admission after staging, without asking IAM again.
+  const fresh = await ownershipWriteAccess(store, membership.positions);
   async function checkAccess() {
     await fresh();
-    const serverPosition = await store.head(prepared.serverSubject, fresh.deadline);
-    const optInPosition = await store.head(prepared.optInSubject, fresh.deadline);
-    if (serverPosition !== prepared.server.sequence || optInPosition !== input.optInRevision ||
-        Date.now() >= prepared.server.expiresAt || (!original && Date.now() >= input.appendUntil)) {
+    const serverPosition = await store.head(serverSubject, fresh.deadline);
+    const optInPosition = await store.head(optInSubject, fresh.deadline);
+    if (serverPosition !== server.sequence || optInPosition !== input.optInRevision ||
+        Date.now() >= server.expiresAt || (!original && Date.now() >= input.appendUntil)) {
       throw new Error('Company connection changed');
     }
   }
@@ -152,7 +169,7 @@ async function saveLocked(store: EventStore, binding: Binding, custodianId: stri
     return receipt(original);
   }
   const deadline = Math.min(fresh.deadline,
-    performance.now() + Math.min(input.appendUntil, prepared.server.expiresAt) - Date.now());
+    performance.now() + Math.min(input.appendUntil, server.expiresAt) - Date.now());
   const command = { event, expectedSequence: 0, checkAccess,
     historyChecked: true as const, deadline };
   const appended = await store.append(command);
