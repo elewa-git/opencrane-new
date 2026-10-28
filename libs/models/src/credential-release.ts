@@ -176,12 +176,13 @@ async function confirm(store: EventStore, silo: string, requesterId: string,
     refuse();
   }
   // Finish saved evidence reads before the caller starts its two-second access check.
-  const evidence = await prepareEvidence(store, silo, decisionId, release);
+  const prepared = await prepareEvidence(store, silo, decisionId, release);
   const access = await prepareAccess();
   // Report the caller's permission refusal before any saved-evidence failure.
-  if (!evidence) {
+  if (!prepared) {
     refuse();
   }
+  const evidence = prepared;
   const deadline = Math.min(access.deadline, performance.now() + 2000,
     performance.now() + release.expiresAt - Date.now());
   if (!Number.isFinite(deadline)) {

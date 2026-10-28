@@ -1352,7 +1352,7 @@ async function releasePreparationRefusal(change: string, failedHistory: string) 
     yield* readStream(subject, from, deadline);
   }
   let refusal: unknown;
-  async function prepareAccess() {
+  async function prepareAccess(): Promise<never> {
     try {
       await activeMember(nats.store, binding, test.userId, { requiredRole: 'admin' });
     } catch (error) {
