@@ -90,10 +90,15 @@ export function confirmAgentLineage(options: MemoryOptions, context: MemoryConte
 }
 
 type Input = ReturnType<typeof parseMemoryRequest>['input'];
-export async function refuseAgentChange(options: MemoryOptions, context: MemoryContext,
+export async function checkAgentChange(options: MemoryOptions, context: MemoryContext,
   evidence: Evidence, input: Input, secret: string, confirmRights: () => Promise<unknown>,
   deadline: number, preparedRows?: StoredEvent[]) {
-  if (input?.operation !== 'correct' && input?.operation !== 'forget') return;
+  if (!input) {
+    return;
+  }
+  if (input.operation !== 'correct' && input.operation !== 'forget') {
+    return;
+  }
   const target = { scopeId: input.scopeId, memoryId: input.memoryId,
     revision: input.expectedRevision };
   const loaded = evidence.chat.memoryContext?.references ?? [];
@@ -119,6 +124,9 @@ export async function refuseAgentChange(options: MemoryOptions, context: MemoryC
   for (const reference of proved) {
     if (references.current(reference) !== 'current') throw new MemoryRefused();
   }
-  await confirm();
-  throw new MemoryToolRefused('memory_tool_unavailable');
+  if (input.operation === 'forget') {
+    await confirm();
+    throw new MemoryToolRefused('memory_tool_unavailable');
+  }
+  return { rows, confirm };
 }

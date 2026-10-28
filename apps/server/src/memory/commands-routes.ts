@@ -6,7 +6,7 @@ import { sessionFor } from '../members/routes.ts';
 import { scopeAccess, resolveScope, memoryAccessChecks, MemoryRefused,
   type MemoryOptions } from './access.ts';
 import { remember, readCommand, changeParams, reconcileCommands } from './commands.ts';
-import { correct } from './correct.ts';
+import { correct, readAgentCorrection } from './correct.ts';
 import { forget } from './forget.ts';
 import { bindMaintenance } from './maintenance.ts';
 import { MemoryBusy } from './admission.ts';
@@ -31,6 +31,7 @@ export function registerMemoryCommands(app: FastifyInstance, config: AuthConfig,
   }
   app.addHook('onReady', startRecovery);
   app.get('/api/memory/:scopeId/changes/:commandId', handle);
+  app.get('/api/memory/:scopeId/agent-changes/:commandId', handle);
   const postOptions = { bodyLimit: 16384, errorHandler: invalidCommandBody };
   app.post('/api/memory/:scopeId/facts', postOptions, handle);
   app.post('/api/memory/:scopeId/facts/:memoryId/forget', postOptions, handle);
@@ -109,6 +110,12 @@ async function handleCommand(request: FastifyRequest, options: MemoryOptions, re
   const access = await scopeAccess(options, requester, scope, true, checks);
   if (!access.canRead && !access.canWrite) {
     throw new MemoryRefused();
+  }
+  if (request.routeOptions.url?.includes('/agent-changes/')) {
+    if (!access.canCorrect) {
+      throw new MemoryRefused();
+    }
+    return { status: 200, body: await readAgentCorrection(options, requester, scope, params.commandId) };
   }
   return { status: 200, body: await readCommand(options, requester, scope,
     params.commandId, access) };
