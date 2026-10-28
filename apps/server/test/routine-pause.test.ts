@@ -11,6 +11,8 @@ import { database } from '../../../libs/projections/test/database.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { pauseRoutine } from '../src/routine-pause.ts';
+import { pauseRoutineAfterRemoval } from '../src/routine-access-pause.ts';
+import { readRootStopEvidence } from '@opencrane/models';
 
 let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -319,3 +321,32 @@ async function occupiedPause() {
   expect(await nats.store.head()).toBe(before + 1);
 }
 it('saves one occupied pause and gives non-owners uniform refusals', occupiedPause);
+
+async function removalRequest(memberId = 'alice', silo = 'test') {
+  const removed = { ...event(`removed-${memberId}`, `member-${memberId}`, 'member.removed'), silo };
+  await nats.seed([removed]);
+  const { changeId: _change, ...expected } = input;
+  return { ...expected, occurrenceId: 'occurrence',
+    cause: { eventId: removed.id, position: await nats.store.head(removed.subject) } };
+}
+async function accessPause(request: unknown) {
+  return pauseRoutineAfterRemoval(nats.store, 'test', request);
+}
+async function savesRemovalPause() {
+  await occupy();
+  const request = await removalRequest();
+  await fga.pause();
+  const before = await nats.store.head();
+  const result = await accessPause(request);
+  expect(await accessPause(request)).toEqual(result);
+  expect(await nats.store.head()).toBe(before + 1);
+  const saved = await nats.store.readEvent(result.position);
+  expect(saved.event).toMatchObject({ type: 'routine.paused',
+    principal: { kind: 'system', id: 'opencrane-server' }, data: {
+      actorId: 'opencrane-server', source: 'access', reason: 'owner_removed',
+      affectedRun: 'occurrence', controlRevision: 2, cause: request.cause } });
+  const proof = await readRootStopEvidence(nats.store, 'routine-orders', result.position);
+  expect(proof.routine).toMatchObject({ status: 'paused', executionAvailable: false,
+    activeRun: { occurrenceId: 'occurrence' } });
+}
+it('saves one system pause from owner removal despite unavailable IAM', savesRemovalPause);
