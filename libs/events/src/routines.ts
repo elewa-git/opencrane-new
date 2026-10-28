@@ -37,7 +37,8 @@ export const routineDefinitionEventSchema = identity.extend({ definition: routin
   next: slot.nullable(), cursor: slot.nullable() });
 export const routineControlSchema = identity.extend({ actorId: id,
   reason,
-  source: z.enum(['owner', 'admin', 'access']), affectedRun: id.nullable(), next: slot.nullable() });
+  source: z.enum(['owner', 'admin', 'access']), affectedRun: id.nullable(), next: slot.nullable(),
+  cause: reference.optional() });
 const run = { occurrenceId: id, rootId: id, conversationId: id, messageId: id, turnId: id };
 export const routineDueSchema = identity.extend({ ...run,
   source: z.enum(['scheduled', 'manual']), definition: routineDefinitionSchema,
@@ -76,7 +77,8 @@ export const routineRetiredSchema = z.union([routineControlSchema, legacyRetired
 export const routineDueDataSchema = z.union([routineDueSchema, legacyDue]);
 
 const modernIdentity = z.object({ version: z.literal(1), routineId: id,
-  actorId: id.optional(), definition: routineDefinitionSchema.optional() });
+  actorId: id.optional(), definition: routineDefinitionSchema.optional(),
+  source: z.string().optional(), cause: reference.optional() });
 export function checkRoutineEvent(event: EventEnvelope, context: z.RefinementCtx): void {
   if (!event.type.startsWith('routine.')) {
     return;
@@ -91,10 +93,24 @@ export function checkRoutineEvent(event: EventEnvelope, context: z.RefinementCtx
   let valid = event.subject === `routine-${data.routineId}` &&
     event.source === 'opencrane-server' && event.principal?.kind === kind &&
     event.principal.id === actorId && typeof event.commandId === 'string';
-  if (event.type === 'routine.created' || event.type === 'routine.updated') {
-    valid = valid && data.definition?.ownerId === actorId;
-  }
+  valid = valid && validDefinitionOwner(event.type, data, actorId);
+  valid = valid && validAccessCause(event.type, data);
   if (!valid) {
     context.addIssue({ code: 'custom', message: 'Routine record requires its bound server stream' });
   }
+}
+
+function validDefinitionOwner(type: string, data: z.infer<typeof modernIdentity>, actorId: string) {
+  if (type === 'routine.created' || type === 'routine.updated') {
+    return data.definition?.ownerId === actorId;
+  }
+  return true;
+}
+
+function validAccessCause(type: string, data: z.infer<typeof modernIdentity>) {
+  if (data.source === 'access') {
+    return type === 'routine.paused' && data.actorId === 'opencrane-server' &&
+      data.cause !== undefined;
+  }
+  return data.cause === undefined;
 }

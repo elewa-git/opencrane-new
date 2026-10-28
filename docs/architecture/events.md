@@ -467,15 +467,21 @@ Access-loss evidence is requester removal or close on the root's participation s
 or removal on the requester's member stream. Parent changes are not accepted.
 Routine evidence is a saved `routine.run_stop_requested`, or an owner `routine.paused` or
 `routine.retired` naming the occupied run in `affectedRun`. Lifecycle evidence checks the
-current owner and preceding definition, schedule and control revisions. The actor folds history through
+current owner and preceding definition, schedule and control revisions. A system
+`routine.paused` with source `access`, reason `owner_removed` and strict
+`cause: { eventId, position }` is also accepted. Verify the exact saved `member.removed`
+for the frozen owner and membership admission, after the occupied occurrence and any
+activation admission, before the pause. Changed owner or revisions refuse. Routine history
+loads before the small member stream. Saving this one prohibition needs no IAM or spend
+rights; budget Stop and bridge interruption remain separate operations. The actor folds history through
 that source within its separate ten-second read deadline, before queueing. The saved due
 must match the Stop's occurrence, routine root, input, turn and revisions. Its frozen owner,
 assistant, payer, conversation and turn must match the allocated budget root. The routine
-root reference differs from the allocated budget root id. Owner and admin sources both use
+root reference differs from the allocated budget root id. Owner, admin and system pause sources use
 `routine_stop`; later valid evidence cannot replace the first reason or source.
 The first stop stays permanent and refunds nothing. Dispatch checks follow separately.
 Explicitly enabled internal cleanup applies these saved routine records to an existing
-allocation. The connected bridge polls verified owner Stop/Pause/Retire records and
+allocation. The connected bridge polls verified routine Stop/Pause/Retire records and
 interrupts only the accepted private turn on the bound computer generation. Sent frames
 and reply-clearance receipts do not prove termination. There is no route or subscribed
 lifecycle reaction; execution remains disabled.
@@ -698,7 +704,7 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` / `routine.reassigned` | server for checked actor | routine facts | `update-openfga` applies creation, reassignment and retirement permissions and receipts; explicitly enabled internal cleanup applies verified owner Pause/Retire evidence to the occupied run’s existing budget root; the connected bridge polls verified prohibitions to interrupt the accepted private turn; no execution |
+| `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` / `routine.reassigned` | server for checked actor | routine facts | `update-openfga` applies creation, reassignment and retirement permissions and receipts; explicitly enabled internal cleanup applies verified owner Pause/Retire or system owner-removal pause evidence to the occupied run’s existing budget root; the connected bridge polls verified prohibitions to interrupt the accepted private turn; no execution |
 | `routine.due` | server system | frozen occurrence facts (pure fold only) | none; no input or root is started |
 | `routine.occurrence_skipped` / `routine.occurrences_missed` | server system | saved cursor/next facts | none |
 | `routine.run_activation_admitted` | internal server conditional command | saved exact admission and sender attempt | none; receipt only, execution remains disabled |

@@ -65,7 +65,9 @@ access-only copies after their saved expiry, including after restart or member r
 It can finish deletion after the member leaves. A lost reply never grants another
 provider call. Public routes remain unavailable.
 
-Routine calls check saved owner Stop, Pause and Retire before holding money or granting
+A system pause can stop a routine after its recorded owner is removed. The library
+checks the saved removal against that run and its original membership.
+Routine calls check saved routine Stop, Pause and Retire before holding money or granting
 a tool permit, and again before sending. They refuse even when spending cleanup is delayed.
 An established refusal still reaches the caller if saving its audit record fails.
 Missing or mismatched run evidence refuses the call. Automatic routines remain unavailable.
@@ -104,7 +106,7 @@ flowchart LR
   models -->|stages credentials, callback codes and replies, confirms first accounts, starts, joins, claims and sends refresh attempts, saves replacements, retains old access tokens until expiry and removes revoked tokens even after member removal, recovers replies and checks signed accounts, shares a database lock for personal and company saves and personal cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves events, local account revocations, remote starts and unsent proof; recovers budgets in order and applies saved routine Stops, pauses and retirements; reads spending and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
+  models -->|saves events, local account revocations, remote starts and unsent proof; recovers budgets in order and applies saved routine Stops, pauses, verified owner removal and retirements; reads spending and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also

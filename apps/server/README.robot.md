@@ -6378,3 +6378,21 @@ Part of #106. The models process now checks saved routine prohibition directly.
 `test/routine-session.test.ts` prepares, allocates and admits through the existing
 internal commands, then tests real decisions and a recording MCP server. These fixtures
 enable no route, scheduler, company call or automatic routine execution.
+
+## Routine pause after owner removal
+
+`pauseRoutineAfterRemoval(store, silo, input)` is internal and saves one conditional
+`routine.paused` with source `access`, reason `owner_removed` and the server system actor.
+Input names routineId, occurrenceId, expectedPosition, the three expected revisions and
+`cause: { eventId, position }`. The cause must be an exact saved member removal after
+this occurrence and any recorded activation admission. Its preceding membership admission
+must equal the frozen ownerAdmissionId. A later rejoin does not erase that removal.
+Changed owner or revisions refuse.
+Routine history loads before the small member stream; only that member stream enters
+the two-second write check. No IAM, spend rights or removed-owner impersonation is needed.
+A deterministic command id recovers the same receipt beyond deduplication expiry and restart.
+The saved pause precedes separate budget and bridge Stop operations. Their existing checks
+retain the allocated root, held cents, late settlement and exact private-thread clearance.
+Unavailable services alone are not removal evidence. Replay only rebuilds the paused state.
+No subscription, route, scheduler or automatic execution is enabled. Other access causes,
+company profiles and fresh-install live qualification remain NOT RUN in this slice.
