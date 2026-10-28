@@ -1066,7 +1066,8 @@ it('lost connection and replay cannot resurrect the prohibited routine', disconn
 
 async function stoppedBeforeGrant() {
   const link = await preparedComputer.wake();
-  const send = vi.mocked(link.socket.send).getMockImplementation()!;
+  const sending = vi.spyOn(link.socket, 'send');
+  const send = sending.getMockImplementation()!;
   let held: string | undefined;
   function holdGrant(bytes: Parameters<typeof send>[0]) {
     if (typeof bytes === 'string' && bytes.includes('"type":"ack"') && bytes.includes('"token"')) {
@@ -1075,7 +1076,7 @@ async function stoppedBeforeGrant() {
     }
     send(bytes, {});
   }
-  vi.spyOn(link.socket, 'send').mockImplementation(holdGrant);
+  sending.mockImplementation(holdGrant);
   expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
   function acknowledged() {
     expect(held).toBeDefined();
