@@ -119,18 +119,21 @@ async function cleanup() {
 }
 beforeEach(setup);
 afterEach(cleanup);
-async function invalidated(kind: 'corrected' | 'forgotten' = 'forgotten') {
+async function changed(kind: 'corrected' | 'forgotten' = 'forgotten', memoryId = 'fact') {
   const data = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
-    memoryId: 'fact', revision: 2, expectedRevision: 1 };
+    memoryId, revision: 2, expectedRevision: 1 };
   let changed: object = data;
   if (kind === 'corrected') {
     const hash = createHash('sha256');
-    hash.update(JSON.stringify(['test', scopeId, 'person', 'alice', 'fact', 2]));
+    hash.update(JSON.stringify(['test', scopeId, 'person', 'alice', memoryId, 2]));
     changed = { ...data, kind: 'fact', pinned: false, expiresAt: null, sources: [], dependsOn: [],
       keyId: `key:${hash.digest('hex')}`, ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-      supersedes: { memoryId: 'fact', revision: 1 }, reason: 'human' };
+      supersedes: { memoryId, revision: 1 }, reason: 'human' };
   }
-  const cause = await append(`scope-${scopeId}`, `memory.${kind}`, changed);
+  return append(`scope-${scopeId}`, `memory.${kind}`, changed);
+}
+async function invalidated(kind: 'corrected' | 'forgotten' = 'forgotten') {
+  const cause = await changed(kind);
   const options = { silo: 'test', store: nats.store };
   const request = { conversationId: 'chat', turnId: 'turn', threadId: 'thread-1',
     inputGeneration: '1', causeId: cause.id };
@@ -470,3 +473,28 @@ async function retriesUntilClearanceReceipt() {
 }
 it('retries completed withdrawal until the exact computer clearance receipt arrives',
   retriesUntilClearanceReceipt);
+
+async function detectsPersonalChange(kind: 'corrected' | 'forgotten') {
+  const appending = vi.spyOn(nats.store, 'append');
+  await changed(kind);
+  await poll();
+  function interrupted() { expect(computer.calls.filter(targetInterrupt)).toHaveLength(1); }
+  await vi.waitFor(interrupted);
+  await Promise.all([poll(), poll()]);
+  const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(facts.memoryContext).toMatchObject({ status: 'invalidated',
+    references: [{ scopeId, memoryId: 'fact', revision: 1 }], executionAvailable: false });
+  function isInvalidation(call: (typeof appending.mock.calls)[number]) {
+    const parsed = memoryContextRecordedEventSchema.safeParse(call[0].event);
+    return parsed.success && parsed.data.data.action === 'invalidated';
+  }
+  const writes = appending.mock.calls.filter(isInvalidation);
+  expect(writes).toHaveLength(1);
+  expect(writes[0]![0].event.data).toEqual({ ...prepared, action: 'invalidated',
+    reason: 'content_changed', scopePositions: [{ scopeId,
+      position: await nats.store.head(`scope-${scopeId}`) }] });
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(1);
+  expect(computer.grants.has('thread-1')).toBe(false);
+}
+it.each(['corrected', 'forgotten'] as const)(
+  'detects a personal %s cause through polling without a notification', detectsPersonalChange);
