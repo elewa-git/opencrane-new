@@ -466,7 +466,8 @@ class TurnRunner {
     return true;
   }
 
-  private failTurn(input: Turn, reason: 'model_error' | 'stop_interrupted' = 'model_error') {
+  private failTurn(input: Turn, reason: 'model_error' | 'stop_interrupted' = 'model_error',
+    nativeTermination?: 'turn_completed') {
     if (input.executionMode === 'restricted') this.cancelTurn(input);
     if (!this.isFinished(input.id)) {
       // Keep Stop when removing its connection makes Codex report a failure.
@@ -474,6 +475,9 @@ class TurnRunner {
         reason = 'stop_interrupted';
       }
       const extra: Partial<BridgeReport> = { reason };
+      if (nativeTermination) {
+        extra.nativeTermination = nativeTermination;
+      }
       if (this.state.refusedTools.has(input.id)) extra.reason = 'restricted_tool_refused';
       this.appendReport(input, 'agent.turn_failed', extra);
     }
@@ -893,7 +897,12 @@ class TurnRunner {
       if (turn['status'] === 'interrupted' && this.state.cancelled.has(input.id)) {
         reason = 'stop_interrupted';
       }
-      this.failTurn(input, reason);
+      // Distinguish a matching native reply from transport failure or requested cancellation.
+      const expected = this.state.codexTurns.get(input.id);
+      const terminalStatus = ['completed', 'interrupted', 'failed'].includes(String(turn['status']));
+      const nativeTermination = expected && turn['id'] === expected && terminalStatus
+        ? 'turn_completed' : undefined;
+      this.failTurn(input, reason, nativeTermination);
       return;
     }
     this.appendReport(input, 'agent.turn_completed');

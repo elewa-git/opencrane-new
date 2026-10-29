@@ -29,6 +29,7 @@ export interface BridgeReport {
   sharingClass?: 'shared_only';
   reason?: 'restricted_tool_refused' | 'unsupported_native_consent'
     | 'stop_interrupted' | 'model_error' | 'bridge_restarted';
+  nativeTermination?: 'turn_completed';
   memoryOnly?: boolean;
 }
 
@@ -307,6 +308,7 @@ function readStorageDetails(value: Record<string, unknown>, report: BridgeReport
     }
     report.reason = reason;
   }
+  readNativeTermination(value, report);
   const memoryOnly = value['memoryOnly'];
   if (memoryOnly !== undefined) {
     if (typeof memoryOnly !== 'boolean') throw new Error('Invalid journal storage');
@@ -347,4 +349,14 @@ function readNativeDetails(value: Record<string, unknown>, report: BridgeReport)
   const serverName = optionalString(value, 'serverName');
   if (nativeRequestId !== undefined) report.nativeRequestId = nativeRequestId;
   if (serverName !== undefined) report.serverName = serverName;
+}
+
+function readNativeTermination(value: Record<string, unknown>, report: BridgeReport) {
+  const nativeTermination = value['nativeTermination'];
+  if (nativeTermination !== undefined) {
+    if (nativeTermination !== 'turn_completed') {
+      throw new Error('Invalid native termination');
+    }
+    report.nativeTermination = nativeTermination;
+  }
 }

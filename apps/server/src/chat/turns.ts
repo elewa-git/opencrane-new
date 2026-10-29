@@ -46,6 +46,7 @@ export function requiredExecutionMode(assistantKind: string, requested: unknown)
 }
 
 type TurnInput = {
+  nativeTermination?: 'turn_completed' | undefined;
   executionMode?: ExecutionMode | undefined;
   messageId?: string | undefined; rootId?: string | undefined;
   senderAttemptId?: string | undefined;
@@ -113,8 +114,9 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   const eventData: TurnBinding & {
     assistantId: string; computerId: string; status?: 'completed' | 'failed';
     executionMode?: ExecutionMode; sharingClass?: ContextClass | undefined;
-    budgetStopId?: string;
+    budgetStopId?: string; nativeTermination?: 'turn_completed';
   } = { ...data, assistantId: context.assistantId, computerId: context.computerId };
+  addNativeTermination(eventData, input, facts);
   if (refusal instanceof BudgetAdmissionRejected) eventData.budgetStopId = refusal.stopId;
   const event: EventEnvelope = {
     id, commandId: id, type, subject, silo: context.silo, correlation: {},
@@ -129,6 +131,13 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   await confirmBudget?.(saved);
   if (input.status === 'started') return admittedTurn(data, executionMode);
   return undefined;
+}
+
+function addNativeTermination(data: { nativeTermination?: 'turn_completed' },
+  input: TurnInput, facts: ComputerFacts) {
+  if (input.status === 'failed' && input.nativeTermination && facts.turn?.hasStart) {
+    data.nativeTermination = input.nativeTermination;
+  }
 }
 
 function admittedTurn(data: TurnBinding, executionMode: ExecutionMode | undefined) {

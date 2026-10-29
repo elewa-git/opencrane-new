@@ -229,7 +229,8 @@ async function recordsTerminalReason(testCase: TerminalReasonCase) {
       threadId: 'thread', turn: { id: 'codex-turn', status: testCase.status },
     } });
     const terminal = test.reports.at(-1)!;
-    expect(terminal).toMatchObject({ type: 'agent.turn_failed', reason: testCase.reason });
+    expect(terminal).toMatchObject({ type: 'agent.turn_failed', reason: testCase.reason,
+      nativeTermination: 'turn_completed' });
     const reopened = reportJournal(test.driver);
     reopened.load();
     const replayed: BridgeReport[] = [];

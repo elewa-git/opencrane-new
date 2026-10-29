@@ -325,7 +325,8 @@ export const agentTurnCompletedDataSchema = z.object({ conversationId: id, turnI
 export { agentTurnStopRequestedDataSchema } from './turn-stop.ts';
 
 export const agentTurnFailedDataSchema = z
-  .object({ conversationId: id, turnId: id, reason: reasonCodeSchema })
+  .object({ conversationId: id, turnId: id, reason: reasonCodeSchema,
+    nativeTermination: z.literal('turn_completed').optional() })
   .strict();
 
 // Risky type: the bridge reports a completed assistant message, but the
@@ -676,6 +677,7 @@ const computerTurnClosedFieldsSchema = optionalProviderTurnBindingSchema.safeExt
   ...computerTurnStartedFieldsSchema.shape,
   threadId: id.optional(), status: z.enum(['completed', 'failed']),
   budgetStopId: id.optional(),
+  nativeTermination: z.literal('turn_completed').optional(),
 });
 const chatTurnClosed = computerTurnClosedFieldsSchema
   .refine(hasProviderTurnModel, 'Provider turns require a model');

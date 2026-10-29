@@ -42,6 +42,13 @@ that request and keeps the computer connection open for other conversations.
 An internal command stops the exact routine run after its owner denies a held Ask,
 or after a saved expiry. It checks the original request and keeps cleanup retryable.
 
+An internal completion command can release a stopped run after its exact native turn
+has returned a matching terminal reply and closed as failed. A connection failure alone
+does not release the run. It refuses runs with descendants or incomplete evidence. It leaves
+the schedule, stopped spending allowance and held money unchanged. It stays disabled
+by default and during replay. Activity in other chats or spending roots does not
+prevent completion.
+
 A current silo owner or admin can also save an internal safety pause. It keeps the
 routine owner, payer and active run unchanged and grants no private chat access.
 Cleanup honours the saved pause even if the admin later loses their role.
@@ -155,7 +162,7 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks saved membership before personal memory tools, checks private callers, reads original tool reviews, checks access before history errors, prepares and allocates child and routine allowances, checks saved routine admission and dispatch prohibition, applies saved Stop, Pause and Retire intent and verifies admin authority at a pause, owner removal and Ask termination, and shares types| libs["libs/*<br/>shared code and chat keys"]
+  server -.->|checks saved membership before personal memory tools, private callers, original tool reviews, and access before history errors; prepares and allocates child and routine allowances; checks saved routine admission and dispatch prohibition; applies saved Stop, Pause and Retire intent; verifies confirmed native termination for stopped turns and admin authority at a pause, owner removal and Ask termination; shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; detects saved personal corrections, forgets, loaded expiry and lost access, records invalid contexts and personal account revocations, bearer and verified OAuth choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, encrypted inputs and checked admission receipts, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]

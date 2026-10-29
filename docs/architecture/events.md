@@ -247,7 +247,7 @@ The dev stack retains its explicit invitation/join bootstrap for the privately c
 | `assistant.settings_changed` | owner, admin or departure deactivation reaction | assistants (model, persona, tools, active) | update the computer's configuration on next wake |
 | `computer.claimed` | server (claim intent) | computers (generation, token id) | reconciler creates the claim and delivers the committed credential |
 | `computer.ready` | reconciler (Pod ready, credential delivered) | computers (Sandbox and Pod UIDs) | deliver queued messages and decisions |
-| `computer.turn_started` / `computer.turn_closed` | server turn command | chat admission and idle-suspend checks; native computer-root read indexes and internal admission limits | chat starts bind the message, thread and `executionMode`; routine starts retain distinct `messageId`/`turnId` and allocated `rootId`, with optional provider/model identity; native starts bind root and ancestry, copying `sharingClass` for shared-only roots without granting authority; closed is permanent; a chat budget refusal retains `budgetStopId` for reliable decision recording |
+| `computer.turn_started` / `computer.turn_closed` | server turn command | chat admission and idle-suspend checks; native computer-root read indexes and internal admission limits | chat starts bind the message, thread and `executionMode`; routine starts retain distinct `messageId`/`turnId` and allocated `rootId`, with optional provider/model identity; native starts bind root and ancestry, copying `sharingClass` for shared-only roots without granting authority; closed is permanent; a chat budget refusal retains `budgetStopId` for reliable decision recording; optional `nativeTermination: turn_completed` records a matched native terminal reply, never socket loss, admission refusal or requested cancellation |
 | `computer.suspended` / `computer.resumed` | server or idle/departure worker (suspend intent) | computers (resume has the rotated token id) | reconciler applies operating mode; resume delivers refreshed credentials |
 | `computer.lost` | server (Pod gone) or departure worker (confirm an existing loss) | computers | mark in-flight effects of this computer `effect.uncertain`; re-claim only the current loss, unless its personal owner was removed; departure confirmation advances the computer stream to reject earlier pending claims before cleanup completes |
 | `computer.retired` | server | computers | delete snapshots after retention |
@@ -1007,3 +1007,9 @@ It remains checking without discovery, rejection or network contact. The event t
 records when it queued. No image check receipt or admission is implied. Registration
 uses the original commandId, a serverId derived from silo and commandId, and one
 conditional append. Lost replies recover that event; absence remains unknown.
+
+A failed agent turn can include `nativeTermination: turn_completed`. The computer records
+it only after a terminal native reply matches the running native turn id. The server
+keeps it on the admitted chat turn's failed closure. A failed closure without this
+field does not prove termination. The internal routine finisher requires this evidence;
+it cannot infer process exit from a disconnected socket or a requested Stop.

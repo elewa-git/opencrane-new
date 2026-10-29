@@ -6639,6 +6639,40 @@ reports unavailable. Agent status reads recover the original id without resendin
 decrypting old text, creating keys or starting any work. Human semantics stay unchanged.
 Native admission and shared writes remain disabled. Live qualification: NOT RUN.
 
+## Finish one stopped routine occurrence
+
+Part of #107. `finishRoutine(store, silo, input, options)` is internal. It requires
+`enabled: true` and refuses replay. Input names routineId, occurrenceId and the exact
+terminalEvidence eventId and position. Saved routine history supplies the frozen run;
+budget history supplies its separate allocation and permanent Stop. Allocation must
+follow the claim. The server-recorded start and failed closure must match that allocation,
+the frozen people, message, private thread and computer generation at both records.
+Any descendant admission for that root refuses, including an admission whose delegation
+agreement has not yet been saved. Stop, timeout, socket loss, output clearance and an
+agent completion report cannot replace the native closure. The failed closure must
+carry `nativeTermination: turn_completed`, copied from a matching native terminal
+reply. A transport failure, cancellation request or admission refusal has no such
+evidence. Older closures without it remain insufficient. Process-exit reporting is
+not added; an unconfirmed disconnect keeps the occurrence occupied.
+
+History has a separate ten-second limit. Before publication, the command reads only
+new budget and computer records within two seconds, outside access streams. It refuses
+a changed allocation for this root or turn, activity on this root or private thread,
+and computer lifecycle changes. Neighbouring allocations, settlements and chats do
+not refuse completion. A proven unsaved publication conflict retries after checking
+new routine records, using the same event identity and original two-second deadline.
+An uncertain publication is never retried. One existing routine.run_finished records
+interrupted and the exact closure reference. Concurrent calls, lost replies and retries
+after duplicate expiry or restart retain the first outcome. Schedule state, the stopped
+root, uncertain holds and late settlement remain unchanged. Old closure evidence cannot
+finish a newer occurrence. No route, subscription, wake, call or cleanup is added.
+
+`test/routine-finish.test.ts` uses real NATS and disposable PostgreSQL. It checks recovery,
+identity refusals, withheld process exit after timeout or disconnect, neighbouring
+activity, publication conflicts, execution races and two projection rebuilds with 210 held cents and
+late settlement. Execution stays disabled. Tree and success completion remain later work.
+Fresh-install live qualification: NOT RUN.
+
 ## Personal memory preparation membership (P4-15 PR 4i; Part of #97)
 
 `chat/personal-memory-tools.ts` supplies `preparePersonalMemoryTools`. Trusted server

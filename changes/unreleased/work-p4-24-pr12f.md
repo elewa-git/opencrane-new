@@ -1,0 +1,2 @@
+- Add a disabled internal command that finishes one stopped routine run only after its exact native turn has returned a matching terminal reply and closed as failed. Socket loss and cancellation requests cannot release the slot. It releases the occupied slot while preserving the schedule, stopped allowance, held money and late charges.
+- Allow completion while other spending roots allocate or settle money and other chats start on the same assistant. Retry proven unsaved publication conflicts within the original deadline.
