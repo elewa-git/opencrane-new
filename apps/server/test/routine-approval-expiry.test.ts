@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { AppendCommand } from '@opencrane/event-store';
 import { readApproval } from '@opencrane/models';
@@ -45,7 +46,7 @@ async function recovery(kind: string) {
   fixture.advance(900_000);
   const store = fixture.nats.store;
   const append = store.append.bind(store);
-  async function loseReply(change: AppendCommand) {
+  async function loseReply(change: AppendCommand): Promise<never> {
     await append(change);
     throw new Error('private-service-canary');
   }
@@ -102,7 +103,7 @@ async function refuses(kind: string) {
   async function* changed(...args: Parameters<typeof read>) {
     for await (const row of read(...args)) {
       const event = structuredClone(row.event);
-      const data = event.data as Record<string, unknown>;
+      const data = z.record(z.string(), z.unknown()).parse(event.data);
       if (event.type === 'tool.approval_requested' &&
           ['requesterId', 'turnId', 'assistantId'].includes(kind)) data[kind] = 'foreign';
       if (event.type === 'conversation.created') {
@@ -110,6 +111,7 @@ async function refuses(kind: string) {
         if (kind === 'forged creation') event.source = 'models';
       }
       if (event.type === 'routine.created' && kind.endsWith('Revision')) data[kind] = 2;
+      event.data = data;
       yield { ...row, event };
     }
   }
@@ -134,3 +136,38 @@ async function disabled() {
   expect(await fixture.nats.store.head()).toBe(before);
 }
 it('does nothing during replay or without explicit enablement', disabled);
+async function terminalRead(kind: string) {
+  fixture.advance(60_000);
+  if (kind === 'denied') await fixture.decision('rejected');
+  else await fixture.save('approval.cancelled', 'approval-ask-Requested',
+    { approvalId: 'ask-Requested' });
+  fixture.advance(900_000);
+  const before = await fixture.nats.store.head();
+  const result = await expire();
+  expect(result.status).toBe(kind === 'denied' ? 'confirmed' : 'unchanged');
+  expect(await expire()).toEqual(result);
+  expect(await fixture.nats.store.head()).toBe(before);
+}
+it.each(['denied', 'cancelled'])('reads a saved %s terminal without appending', terminalRead);
+async function foreignProof(field: string) {
+  await fixture.use('connection_refused');
+  fixture.advance(900_000);
+  const store = fixture.nats.store;
+  const read = store.readStream.bind(store);
+  async function* changed(...args: Parameters<typeof read>) {
+    for await (const row of read(...args)) {
+      if (row.event.type !== 'tool.dispatch_recorded') {
+        yield row;
+        continue;
+      }
+      const data = z.record(z.string(), z.unknown()).parse(row.event.data);
+      yield { ...row, event: { ...row.event, data: { ...data, [field]: 'foreign' } } };
+    }
+  }
+  vi.spyOn(store, 'readStream').mockImplementation(changed);
+  const before = await store.head();
+  await expect(expire()).rejects.toThrow(/^Routine approval expiry refused$/u);
+  expect(await store.head()).toBe(before);
+}
+it.each(['conversationId', 'turnId', 'serverId', 'toolName'])(
+  'rejects unsent proof with a foreign %s', foreignProof);

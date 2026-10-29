@@ -6,10 +6,10 @@ import { BudgetActor } from '@opencrane/models';
 import { shortDuplicateWindowFixture } from './duplicate-window.ts';
 import { routineAsk } from './routine-ask.ts';
 
-export function example(type: string) {
+function example(type: string) {
   return z.record(z.string(), z.unknown()).parse(getEventDefinition(type)!.example);
 }
-export async function expiryFixture() {
+export async function expiryFixture(locator?: string) {
   const nats = await shortDuplicateWindowFixture();
   let clock = new Date('2026-10-11T07:00:00.000Z');
   function now() { return clock; }
@@ -56,6 +56,10 @@ export async function expiryFixture() {
     { ...example('routine.run_activation_admitted'), conversationId, turnId, admission }, system);
   await save('agent.turn_started', `conversation-${conversationId}`,
     { conversationId, turnId, assistantId: 'sales-assistant' });
+  if (locator) {
+    await save('mcp.server_registered', 'mcp-mcp_1', { serverId: 'mcp_1', kind: 'remote',
+      locator, registeredBy: 'alice', catalogueRef: 'catalogue:fixture' });
+  }
   const checkedAt = Date.now();
   const digest = createHash('sha256').update('[]').digest('hex');
   await save('mcp.server_discovered', 'mcp-mcp_1', { serverId: 'mcp_1', toolCount: 0,
@@ -75,10 +79,16 @@ export async function expiryFixture() {
     await save('approval.used', 'approval-ask-Requested',
       { approvalId: 'ask-Requested', permitId });
     if (evidence) {
+      const adapter = { decisionId: permitId, startId: `${permitId}:tool-dispatch-started`,
+        connectionId: 'installed', generation: 1, recordDigest: '0'.repeat(64), reviewRevision: 1 };
+      let outcome = 'not_dispatched';
+      if (evidence === 'adapter_response_received') outcome = 'responded';
+      if (evidence === 'transport_uncertain') outcome = 'outcome_unknown';
+      const adapterFields = evidence.startsWith('adapter_') ? { adapter } : {};
       await save('tool.dispatch_recorded', `decision-${permitId}`,
         { ...example('tool.dispatch_recorded'), requestId: permitId,
           approvalId: 'ask-Requested', conversationId, turnId, serverId: 'mcp_1',
-          toolName: 'odoo.write', outcome: 'not_dispatched', evidence });
+          toolName: 'odoo.write', outcome, evidence, ...adapterFields });
     }
   }
   return { nats, now, advance, save, input, decision, use, actor, binding,

@@ -1,3 +1,5 @@
+import { createServer, type Socket } from 'node:net';
+import { once } from 'node:events';
 import { afterEach, expect, it } from 'vitest';
 import { BudgetActor, envelope, history, priceTableId } from '@opencrane/models';
 import { rootTotals } from '../../../libs/models/src/root-budget.ts';
@@ -7,10 +9,26 @@ import { applyRoutineStop } from '../src/routine-stop-budget.ts';
 import { expiryFixture } from './support/routine-expiry.ts';
 
 let fixture: Awaited<ReturnType<typeof expiryFixture>>;
-async function close() { await fixture?.nats.close(); }
+let upstream: ReturnType<typeof createServer>;
+let upstreamBytes = 0;
+function countBytes(chunk: Buffer) { upstreamBytes += chunk.length; }
+function connected(socket: Socket) { socket.on('data', countBytes); }
+async function close() {
+  await fixture?.nats.close();
+  if (upstream) {
+    const closed = once(upstream, 'close');
+    upstream.close();
+    await closed;
+  }
+}
 afterEach(close);
 async function expiresAndStops() {
-  fixture = await expiryFixture();
+  upstream = createServer(connected);
+  upstream.listen(0, '127.0.0.1');
+  await once(upstream, 'listening');
+  const address = upstream.address();
+  if (!address || typeof address === 'string') throw new Error('Missing fixture port');
+  fixture = await expiryFixture(`https://127.0.0.1:${address.port}`);
   const { nats, input, binding, rootId, now } = fixture;
   let actor = fixture.actor;
   const { allowanceCents: _allowance, preparationDigest: _digest, ...identity } = binding;
@@ -58,6 +76,7 @@ async function expiresAndStops() {
   }
   expect(rows.filter(isStop)).toHaveLength(1);
   expect(actor.state.dispatches).toEqual([]);
+  expect(upstreamBytes).toBe(0);
 }
 it('feeds saved offline expiry to one Stop, retains uncertain holds and settles full late cents',
   expiresAndStops);
