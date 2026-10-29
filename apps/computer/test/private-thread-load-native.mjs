@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -83,7 +84,14 @@ try {
   connection.notify('initialized', {});
   const ended = Promise.withResolvers();
   function close() { ended.resolve(); }
-  const session = { rpc: connection.rpc, close, closed: ended.promise };
+  const nativeMethods = [];
+  function rpc(method, params) {
+    nativeMethods.push(method);
+    assert.notEqual(method, 'thread/resume');
+    assert.notEqual(method, 'turn/start');
+    return connection.rpc(method, params);
+  }
+  const session = { rpc, close, closed: ended.promise };
   const owner = { ...identity, caller: registration.caller, authority, registration, session };
   const started = await loads.startPrivate(input, owner);
   // Let the initial unapproved discovery fail before recording and binding the real id.
@@ -96,6 +104,16 @@ try {
   const binding = { ...owner, grant, tools: approval.tools, checkTools: checkPrivateTurnTools };
   const response = await loads.loadPrivate(input, binding);
   const listing = await connection.rpc('mcpServerStatus/list', { threadId: grant.thread });
+  if (name === 'all') {
+    const tools = listing.data[0].tools;
+    assert.deepEqual(Object.keys(tools).sort(), ['correct', 'forget', 'recall', 'remember']);
+    for (const definition of approval.tools[0].definitions) {
+      const expected = JSON.parse(definition);
+      assert.deepEqual(tools[expected.name], expected);
+    }
+  }
+  assert.equal(nativeMethods.filter(isStart).length, 1);
+  function isStart(method) { return method === 'thread/start'; }
   const result = { version, discovered: true, methods, protocols, thread: response.thread,
     startedId: started.thread.id, approvedId: grant.thread, beforeApproval, unapprovedDiscoveries,
     listing, grants: grants.size };

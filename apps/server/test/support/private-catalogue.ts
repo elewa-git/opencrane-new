@@ -9,7 +9,7 @@ import { recallTool, rememberTool, correctTool, forgetTool } from '../../src/mem
 // Supply synthetic evidence only to exercise the disabled preparation contract.
 export async function privateCatalogue(callers: ReturnType<typeof privateCallers>,
   caller: string, grant: Parameters<typeof assembly.buildPrivateTurnRecallTools>[0]['grant'],
-  name: 'recall' | 'remember' | 'correct' | 'forget' = 'recall') {
+  name: 'recall' | 'remember' | 'correct' | 'forget' | 'all' = 'recall') {
   if (!grant) throw new Error('Missing fixture grant');
   const runtime = { sourceSha: 'a'.repeat(40), imageDigest: `sha256:${'b'.repeat(64)}`,
     environmentId: 'disposable-test-host' };
@@ -33,6 +33,17 @@ export async function privateCatalogue(callers: ReturnType<typeof privateCallers
     published: true, accountMode: 'none', serverInfo: { name: 'OpenCrane memory', version: '1' },
     discoveryTools: [{ name, revision: reviewed.digest, definition }],
     policyTools: [{ name, revision: reviewed.digest, reviewed: true, costCents: 0, mode: 'allow' }] };
+  if (name === 'all') {
+    state.discoveryTools = [];
+    state.policyTools = [];
+    for (const tool of [recallTool, rememberTool, correctTool, forgetTool]) {
+      const definition = JSON.stringify(tool);
+      const revision = losslessJson(definition).digest;
+      state.discoveryTools.push({ name: tool.name, definition, revision });
+      state.policyTools.push({ name: tool.name, revision, reviewed: true,
+        costCents: 0, mode: 'allow' });
+    }
+  }
   function readServer() { return Promise.resolve(state); }
   function canUse() { return Promise.resolve(true); }
   const input = { runtime, qualification, silo: grant.silo,
@@ -43,23 +54,34 @@ export async function privateCatalogue(callers: ReturnType<typeof privateCallers
   if (name === 'recall') tools = await assembly.buildPrivateTurnRecallTools(input);
   else if (name === 'remember') tools = await assembly.buildPrivateTurnRememberTools(input);
   else if (name === 'correct') tools = await assembly.buildPrivateTurnCorrectTools(input);
-  else tools = await assembly.buildPrivateTurnForgetTools(input);
-  return { tools, input };
+  else if (name === 'forget') tools = await assembly.buildPrivateTurnForgetTools(input);
+  else tools = await assembly.buildPrivateTurnMemoryTools(input);
+  return { tools, input, state };
 }
 
 export { checkPrivateTurnTools } from '../../src/chat/turn-tools.ts';
 
-export function privateToolOffer(name: 'recall' | 'remember' | 'correct' | 'forget') {
+export function privateToolOffer(name: 'recall' | 'remember' | 'correct' | 'forget' | 'all') {
   let definition: typeof recallTool | typeof rememberTool | typeof correctTool | typeof forgetTool;
   definition = recallTool;
   if (name === 'remember') definition = rememberTool;
   if (name === 'correct') definition = correctTool;
   if (name === 'forget') definition = forgetTool;
+  const definitions = [JSON.stringify(definition)];
+  const modes: Record<string, 'allow'> = { [name]: 'allow' };
+  if (name === 'all') {
+    definitions.length = 0;
+    delete modes['all'];
+    for (const tool of [recallTool, rememberTool, correctTool, forgetTool]) {
+      definitions.push(JSON.stringify(tool));
+      modes[tool.name] = 'allow';
+    }
+  }
   const hash = createHash('sha256');
   hash.update('memory');
   const digest = hash.digest('hex');
   const key = `oc_${digest.slice(0, 10)}`;
   return [{ key, serverId: 'memory', connectionId: 'server',
     serverInfo: { name: 'OpenCrane memory', version: '1' },
-    definitions: [JSON.stringify(definition)], modes: { [name]: 'allow' as const } }];
+    definitions, modes }];
 }
