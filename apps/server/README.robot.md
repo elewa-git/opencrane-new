@@ -6520,7 +6520,9 @@ lock, key custody and conditional append. Keep the original signed write authori
 target proof and every other loaded reference. Preserve sources. Before publication, check
 expiry, revision keys and the replacement's dependencies. The publication callback also checks
 only later conversation rows against the complete loaded evidence, using the original deadline.
-Saved membership is checked before fallible access reads and again if those reads fail.
+Saved membership is checked before fallible access reads and again if those reads fail
+without establishing a refusal. Correct and Forget preserve confirmed refusals before any
+further membership read. A later dependency failure cannot replace a refusal with an unknown result.
 A saved removal keeps its `MemberAccessRefused` error through returned or thrown append failures;
 the failure path does not repeat the permission check. Events record agent/requester and
 conversation/turn/request with reason `contradiction`. Obsolete context refuses the next dispatch.

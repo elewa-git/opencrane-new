@@ -99,6 +99,8 @@ A later service error cannot turn a known removal into an uncertain save.
 The governed backend can also hide a personal fact through Forget. Its receipt stays
 cleanup-pending until the worker confirms deletion. A lost reply can be checked without
 sending Forget again. Native memory tools remain disabled.
+Correct and Forget keep a confirmed refusal even when a later membership read is unavailable.
+They return a refusal and save no memory change.
 An internal command can record that a personal turn's loaded memory became invalid
 after a saved correction, forget, expiry or loss of access. It keeps every loaded reference for replay and
 returns a receipt without fact text. An internal reaction can send Stop after confirming

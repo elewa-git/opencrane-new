@@ -30,6 +30,10 @@ export async function confirmChange(options: MemoryOptions, requester: string,
     await fresh();
     await agent.confirm();
   } catch (error) {
+    // Preserve a confirmed refusal before another dependency can fail.
+    if (changeRefused(error)) {
+      throw error;
+    }
     // Catch removals saved during the check without repeating permission checks.
     await requireChangeMember(options, requester, fresh.deadline);
     throw error;

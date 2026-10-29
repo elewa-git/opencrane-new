@@ -1,1 +1,2 @@
 - Governed personal Forget can hide one fact and recover its original receipt without resending. Cleanup remains pending until confirmed; native memory admission stays disabled.
+- Personal Correct and Forget keep confirmed refusals when a later membership read is unavailable, without saving a memory change.
