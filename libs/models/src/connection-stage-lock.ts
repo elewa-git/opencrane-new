@@ -7,7 +7,7 @@ type Profile = Pick<ConnectionStage, 'siloId' | 'userId' | 'serverId' | 'profile
 
 /** Hold the same database lock across staging, append recovery and cleanup. */
 export async function withConnectionStage<Result>(db: Pick<Db, 'lock'>,
-  profile: Profile, work: () => Promise<Result>): Promise<Result> {
+  profile: Profile, work: (locked: Db) => Promise<Result>): Promise<Result> {
   if (!db.lock) {
     throw new Error('Connection coordination unavailable');
   }
@@ -20,9 +20,9 @@ export async function withConnectionStage<Result>(db: Pick<Db, 'lock'>,
   hash.update(JSON.stringify(coordinates));
   const name = `connection-stage:${hash.digest('hex')}`;
   let refusal: { error: unknown } | undefined;
-  async function execute() {
+  async function execute(locked: Db) {
     try {
-      return { ok: true as const, result: await work() };
+      return { ok: true as const, result: await work(locked) };
     } catch (error) {
       // Keep the command's refusal even if releasing the database lock later fails.
       refusal = { error };

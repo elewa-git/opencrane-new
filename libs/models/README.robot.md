@@ -4707,7 +4707,7 @@ writers do not populate it. Legacy decisions and release records cannot confirm.
 The helper checks exact selected personal profile, generation, owner, installation,
 profile/selection/policy positions, endpoint and account/scope fingerprints. Current
 bearer profiles remain saved_unverified. Their synthetic audit tests do not qualify
-account identity or make credentialed tools available. OAuth/company use stays closed.
+account identity or make credentialed tools available. Production OAuth/company use stays closed.
 
 History loads before the live check. Invalid input, mismatched requester or owner, and
 failed history wait for the single permission decision, so removed members and callers
@@ -4722,9 +4722,9 @@ missing or uncertain evidence never causes another append. Exact recovery checks
 current positions, access and expiry again. The receipt has only status,
 eventId and sequence. It is audit evidence, never a lease or permission to send.
 
-There is no custody reader, network adapter, event reaction, budget allocation or charge.
-Restart/replay cannot construct a sending capability. Tests use real NATS/OpenFGA and
-PostgreSQL fixtures. Live qualification and production dispatch integration are NOT RUN.
+The audit helper reads no custody and starts no network, reaction or spending work.
+The private broker described below supplies access-only reads. Tests use real NATS/OpenFGA
+and PostgreSQL fixtures. Live qualification and production dispatch integration are NOT RUN.
 
 Dependency-error checks distinguish `Release unavailable` from `MemberAccessRefused`.
 After a history outage, a new attempt checks permission again and saves one exact audit.
@@ -4776,3 +4776,28 @@ generation, empty material and oversized material. These and current-admin cases
 exactly one permission decision and membership read, no staging or append, and unchanged
 unverified company history that personal account use still refuses.
 Fresh-install and production Kubernetes qualification: NOT RUN.
+
+## Private single-request credential broker (Part of #49)
+
+`credential-broker.ts` has no public export or route. It takes authenticated request
+context and reads the exact saved allowed decision. Ownership, selected profile,
+verified OAuth account, generation and scopes come from saved records. The existing
+selection check validates current configuration and tool scopes. Bearer and company
+bindings cannot send. The trusted caller still supplies current computer, turn,
+requester/assistant permissions, approval and budget checks through `prepareAccess`.
+No production caller supplies this contract yet.
+
+The broker holds the shared profile lock through exact UID/version custody reads,
+release confirmation and the private callback. A lost lock session refuses the send.
+Only the access token reaches that callback. A RAM reference expires within 30 seconds; final authority keeps its original
+deadline, capped at two seconds. References are dropped before awaiting the callback.
+JavaScript does not guarantee secure erasure, and the callback must not retain material.
+The callback is invoked once; failures never grant another invocation. A fresh audit
+append is required. Duplicate or unknown append outcomes cannot send. `recover` reads
+the original receipt only; restart never rebuilds a lease from that receipt.
+
+Release records prove authorisation, not upstream success. No event or public API field
+was added; request context uses existing audited names and digests. Security rules and
+both authority test files remain unchanged. Tests use real NATS/PostgreSQL and the real
+custody adapter against a synthetic HTTP transport. Gateway/header integration and
+fresh-install provider qualification remain NOT RUN.

@@ -1,11 +1,13 @@
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { z } from 'zod';
 import { afterAll, afterEach, beforeAll, expect, it, onTestFinished, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { databases } from '@opencrane/authz/testing';
+import { databases, until } from '@opencrane/authz/testing';
 import { pgDb } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
+import { foldConnection } from '../src/bearer-connections.ts';
 import { authorityFence } from '../src/authority.ts';
 import { connectionCustody, type ConnectionStage } from '../src/connection-custody.ts';
 import { credentialBroker } from '../src/credential-broker.ts';
@@ -43,21 +45,25 @@ async function fixture() {
   const secrets = new Map<string, string>();
   const keyring = { currentKeyId: 'test', keys: { test: Buffer.alloc(32, 7) } };
   const custody = connectionCustody('http://127.0.0.1:1', 'custody', keyring, directory);
-  async function fetchSecret(url: string | URL | Request, options?: RequestInit) {
-    const path = String(url);
+  function fetchSecret(url: string | URL | Request, options?: RequestInit) {
+    const path = url instanceof Request ? url.url : url.toString();
     if (options?.method === 'POST') {
-      const body: unknown = JSON.parse(String(options.body));
-      const secret = body as { metadata: { name: string; uid: string; resourceVersion: string } };
-      secret.metadata.uid = 'uid';
-      secret.metadata.resourceVersion = '1';
+      if (typeof options.body !== 'string') {
+        throw new Error('Fixture body invalid');
+      }
+      const schema = z.looseObject({ metadata: z.looseObject({ name: z.string(),
+        uid: z.string().default('uid'), resourceVersion: z.string().default('1') }) });
+      const secret = schema.parse(JSON.parse(options.body));
       secrets.set(`${path}/${secret.metadata.name}`, JSON.stringify(secret));
-      return new Response(JSON.stringify(secret));
+      return Promise.resolve(new Response(JSON.stringify(secret)));
     }
     if (options?.method === 'DELETE') {
       secrets.delete(path);
-      return new Response('{}');
+      return Promise.resolve(new Response('{}'));
     }
-    return new Response(secrets.get(path) ?? '{}', { status: secrets.has(path) ? 200 : 404 });
+    const response = new Response(secrets.get(path) ?? '{}',
+      { status: secrets.has(path) ? 200 : 404 });
+    return Promise.resolve(response);
   }
   const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(fetchSecret);
   const contents = JSON.stringify({ access_token: 'synthetic-access',
@@ -133,3 +139,225 @@ async function releasesOnlyAccessOnce() {
 }
 it('releases only current access material once after its saved audit, including after restart',
   releasesOnlyAccessOnce);
+
+async function refusesForeignContext(field: string) {
+  const test = await fixture();
+  const context = { ...test.context, [field]: 'foreign' };
+  await expect(test.broker(context).send()).rejects.toThrow('Release unavailable');
+  expect(test.sends).toEqual([]);
+}
+it.each(['userId', 'turnId', 'threadId', 'purpose', 'permitId', 'computerId',
+  'conversationId', 'argumentsDigest', 'ownerId'])('refuses changed %s', refusesForeignContext);
+
+async function refusesStoredChange(kind: string) {
+  const test = await fixture();
+  if (kind === 'expiry') {
+    vi.spyOn(Date, 'now').mockReturnValue(test.release.expiresAt);
+  } else if (kind === 'scope') {
+    test.configuration.toolScopes.read.push('write');
+  } else if (kind === 'custody') {
+    test.fetch.mockResolvedValue(new Response('synthetic-refresh', { status: 503 }));
+  } else if (kind === 'uid' || kind === 'resourceVersion') {
+    for (const [key, value] of test.secrets) {
+      const old = kind === 'uid' ? '"uid":"uid"' : '"resourceVersion":"1"';
+      test.secrets.set(key, value.replace(old, `"${kind}":"changed"`));
+    }
+  } else {
+    const subjects: Record<string, string> = { decision: `decision-${test.userId}`,
+      selection: test.selectionSubject, generation: test.subject,
+      block: `connection-control-${test.userId}-${test.release.serverId}` };
+    const event = envelope('test', subjects[kind]!, 'connection.revoked', {
+      userId: test.userId, serverId: test.release.serverId, profile: 'oauth',
+      revokedBy: test.userId,
+    });
+    await nats.seed([event]);
+  }
+  await expect(test.broker().send()).rejects.toThrow('Release unavailable');
+  expect(test.sends).toEqual([]);
+  expect(await nats.store.head(`credential-${test.userId}`)).toBe(0);
+}
+it.each(['expiry', 'scope', 'custody', 'uid', 'resourceVersion', 'decision',
+  'selection', 'generation', 'block'])('refuses changed %s before release', refusesStoredChange);
+
+async function failedAudit(kind: string) {
+  const test = await fixture();
+  const append = nats.store.append.bind(nats.store);
+  async function uncertain(command: Parameters<typeof append>[0]) {
+    if (kind !== 'outage') {
+      await append(command);
+    }
+    if (kind === 'duplicate') {
+      const rows = await history(nats.store, `credential-${test.userId}`, 'test');
+      return { status: 'appended' as const, sequence: rows[0]!.sequence,
+        outcome: { kind: 'duplicate_saved' as const, saved: rows[0]! } };
+    }
+    return { status: 'unavailable' as const, cause: new Error('synthetic-refresh') };
+  }
+  const fault = vi.spyOn(nats.store, 'append').mockImplementationOnce(uncertain);
+  const broker = test.broker();
+  await expect(broker.send()).rejects.toThrow('Release unavailable');
+  fault.mockRestore();
+  await expect(broker.send()).rejects.toThrow('Release unavailable');
+  if (kind !== 'outage') {
+    expect(await test.broker().recover()).toMatchObject({ status: 'confirmed' });
+    await expect(test.broker().send()).rejects.toThrow('Release unavailable');
+  } else {
+    await expect(broker.recover()).rejects.toThrow('Release unavailable');
+  }
+  expect(test.sends).toEqual([]);
+}
+it.each(['outage', 'unknown', 'duplicate'])('never sends after an %s audit reply', failedAudit);
+
+async function racingSend(throwing: boolean) {
+  const test = await fixture();
+  function send(value: string) {
+    test.sends.push(value);
+    if (throwing) {
+      return Promise.reject(new Error('synthetic-access'));
+    }
+    return Promise.resolve();
+  }
+  const first = test.broker(test.context, send);
+  const second = test.broker(test.context, send);
+  const results = await Promise.allSettled([first.send(), first.send(), second.send()]);
+  expect(test.sends).toEqual(['synthetic-access']);
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      expect(String(result.reason)).toBe('Error: Release unavailable');
+    }
+  }
+  await expect(test.broker().send()).rejects.toThrow('Release unavailable');
+}
+it.each([false, true])('cannot send twice with racing instances and throwing=%s', racingSend);
+
+async function heldRead(kind: string) {
+  const test = await fixture();
+  const entered = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  function resumeRead() {
+    resume.resolve();
+  }
+  onTestFinished(resumeRead);
+  async function read(url: string | URL | Request, options?: RequestInit) {
+    entered.resolve();
+    await resume.promise;
+    return test.fetchSecret(url, options);
+  }
+  test.fetch.mockImplementationOnce(read);
+  const result = test.broker().send();
+  const refused = expect(result).rejects.toThrow('Release unavailable');
+  await entered.promise;
+  if (kind === 'lock loss') {
+    await storage.queue.query(`SELECT pg_terminate_backend(pid) FROM pg_locks
+      WHERE locktype = 'advisory' AND granted
+      AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`);
+    resume.resolve();
+    await refused;
+    expect(test.sends).toEqual([]);
+    expect(test.secrets.size).toBe(1);
+    return;
+  }
+  const blocked = envelope('test', `connection-control-${test.userId}-${test.release.serverId}`,
+    'connection.disabled', { userId: test.userId, serverId: test.release.serverId,
+      profile: 'oauth', disabledBy: 'admin', expectedSequence: 0, reason: 'admin_disabled' });
+  await nats.seed([blocked]);
+  const { withConnectionStage } = await import('../src/connection-stage-lock.ts');
+  let retiring = false;
+  async function retire() {
+    retiring = true;
+    const identity = { reference: test.saved.secretRef.slice('secret:'.length),
+      uid: test.saved.activation.uid, resourceVersion: test.saved.activation.resourceVersion };
+    return test.custody.retire(test.stage, identity);
+  }
+  const cleanup = withConnectionStage(test.db, test.stage, retire);
+  async function waitingForRead() {
+    const result = await storage.queue.query<{ waiting: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory'
+       AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+       AND NOT granted) AS waiting`);
+    return result.rows[0]?.waiting === true;
+  }
+  await until(waitingForRead);
+  expect(retiring).toBe(false);
+  expect(test.secrets.size).toBe(1);
+  resume.resolve();
+  await refused;
+  expect(test.sends).toEqual([]);
+  expect(await cleanup).toMatchObject({ status: 'deleted' });
+  expect(test.secrets.size).toBe(0);
+}
+it.each(['block', 'lock loss'])('refuses %s during a read and coordinates retirement', heldRead);
+
+async function finalInvalidation(kind: string) {
+  const test = await fixture();
+  const append = nats.store.append.bind(nats.store);
+  async function changedAfterAudit(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    if (kind === 'lease') {
+      vi.spyOn(Date, 'now').mockReturnValue(test.release.expiresAt);
+    } else if (kind === 'authority') {
+      const now = performance.now();
+      vi.spyOn(performance, 'now').mockReturnValue(now + 2001);
+    } else {
+      const removed = envelope('test', `member-${test.userId}`, 'member.removed',
+        { memberId: test.userId, removedBy: 'admin' });
+      await nats.seed([removed]);
+    }
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementationOnce(changedAfterAudit);
+  await expect(test.broker().send()).rejects.toThrow('Release unavailable');
+  expect(test.sends).toEqual([]);
+}
+it.each(['lease', 'authority', 'member'])('refuses %s changes after saving the audit',
+  finalInvalidation);
+
+async function invalidDecision(kind: string) {
+  const test = await fixture();
+  const read = nats.store.readStream.bind(nats.store);
+  async function* changed(subject: string, from?: number, deadline?: number) {
+    for await (const row of read(subject, from, deadline)) {
+      const copy = structuredClone(row);
+      if (kind === 'bearer' && subject === test.subject) {
+        if (row.event.type !== 'connection.created') {
+          continue;
+        }
+        const activation: Record<string, unknown> = { ...test.saved.activation,
+          reason: 'bearer_create', expectedSequence: 0 };
+        delete activation['account'];
+        delete activation['configurationDigest'];
+        copy.event.data = { ...test.saved, activation };
+        expect(foldConnection([copy]).status).toBe('saved_unverified');
+      }
+      if (subject === `decision-${test.userId}` && kind !== 'bearer') {
+        if (kind === 'missing') {
+          continue;
+        }
+        const data = z.record(z.string(), z.unknown()).parse(copy.event.data);
+        if (kind === 'deny') {
+          data['outcome'] = 'deny';
+        } else {
+          data['release'] = { ...test.release, [kind]: changedValue(kind) };
+        }
+        copy.event.data = data;
+      }
+      yield copy;
+    }
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(changed);
+  test.fetch.mockClear();
+  await expect(test.broker().send()).rejects.toThrow('Release unavailable');
+  expect(test.fetch).not.toHaveBeenCalled();
+  expect(test.sends).toEqual([]);
+}
+function changedValue(kind: string) {
+  if (kind === 'generation') {
+    return 2;
+  }
+  if (kind === 'ownerKind') {
+    return 'company';
+  }
+  return 'foreign';
+}
+it.each(['missing', 'deny', 'generation', 'ownerId', 'ownerKind', 'purpose', 'bearer'])(
+  'reads no custody for a decision with changed %s', invalidDecision);

@@ -1,0 +1,1 @@
+- An internal broker can release one verified personal OAuth access token to one private callback after saving its audit. Lost replies, stale access and reuse cannot grant another send. Public tool routes remain closed.
