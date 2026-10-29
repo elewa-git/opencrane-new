@@ -65,12 +65,14 @@ async function facts(store: EventStore, silo: string, selection: Selection,
   const rows = await history(store, serverSubject, silo, deadline);
   const server = connectionServer(rows, selection.connectionId);
   const policy = toolPolicyFromRows(rows);
-  async function serverCurrent() {
+  async function currentServerExpiry() {
     const currentRows = await history(store, serverSubject, silo, performance.now() + 10_000);
     const currentServer = connectionServer(currentRows, selection.connectionId);
     const currentPolicy = toolPolicyFromRows(currentRows);
-    return currentServer.available && currentPolicy.policyRevision === policy.policyRevision &&
-      Date.now() < currentServer.expiresAt;
+    if (!currentServer.available || currentPolicy.policyRevision !== policy.policyRevision) {
+      return null;
+    }
+    return currentServer.expiresAt;
   }
   const control = `connection-control-${selection.userId}-${selection.serverId}`;
   const controlSequence = await store.head(control, deadline);
@@ -91,7 +93,8 @@ async function facts(store: EventStore, silo: string, selection: Selection,
       (oauth !== null || (toolName === undefined && profileMatchesSelection(profile, selection))) &&
       profile.data?.activation.endpointDigest === server.endpointDigest;
   }
-  return { available, positions, connectionId: server.connectionId, expiresAt, oauth, serverCurrent };
+  return { available, positions, connectionId: server.connectionId, expiresAt,
+    oauth, currentServerExpiry };
 }
 function profileMatchesSelection(profile: ReturnType<typeof foldConnection>,
   selection: Extract<Selection, { action: 'select' }>) {
@@ -374,7 +377,11 @@ export async function readConnectionSelection(store: EventStore, binding: Bindin
     checked.positions.set(subject, state.sequence);
     // Allow catalogue renewal while still requiring the same policy and current evidence.
     checked.positions.delete(`mcp-${serverId}`);
-    if (!await checked.oauth.configurationCurrent() || !await checked.serverCurrent()) {
+    if (!await checked.oauth.configurationCurrent()) {
+      return unavailable;
+    }
+    const serverExpiresAt = await checked.currentServerExpiry();
+    if (serverExpiresAt === null) {
       return unavailable;
     }
     try {
@@ -385,7 +392,7 @@ export async function readConnectionSelection(store: EventStore, binding: Bindin
       }
       throw error;
     }
-    if (Date.now() >= checked.expiresAt) {
+    if (Date.now() >= Math.min(serverExpiresAt, checked.oauth.expiresAt)) {
       return unavailable;
     }
     return { status: 'verified' as const, sequence: state.sequence,
