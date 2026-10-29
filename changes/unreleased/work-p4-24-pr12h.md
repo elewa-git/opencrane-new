@@ -1,0 +1,1 @@
+- Let current admins internally reassign paused routines after all runs have ended, preserving settings and private run history. The new owner must have access to the same assistant and payer; the routine stays paused.

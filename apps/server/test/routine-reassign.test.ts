@@ -39,7 +39,7 @@ async function setup() {
   for (const teamId of ['sales', 'billing']) {
     records.push(record(`created-${teamId}`, `team-${teamId}`, 'team.created',
       { teamId, name: teamId, createdBy: 'alice' }));
-    for (const memberId of ['bob', 'carol']) {
+    for (const memberId of ['alice', 'bob', 'carol']) {
       records.push(record(`added-${teamId}-${memberId}`, `team-${teamId}`, 'team.member_added',
         { teamId, memberId, addedBy: 'alice' }));
     }
@@ -164,13 +164,18 @@ it.each(['ordinary owner', 'ordinary member', 'removed admin', 'demoted admin',
   'assistant inactive', 'payer lost', 'assistant group lost'])(
   'refuses %s before revealing a conflict', refuses);
 
-async function privateRetry() {
+async function privateRetry(kind: string) {
   await reassign();
-  await applySaved();
-  await changeMember('admin', 'member.removed');
+  if (kind !== 'unapplied receipt') await applySaved();
+  if (kind === 'removed admin') await changeMember('admin', 'member.removed');
+  if (kind === 'demoted admin') await changeMember();
+  if (kind === 'removed recipient') await changeMember('bob', 'member.removed');
   const read = nats.store.readStream.bind(nats.store);
   async function* failed(subject: string, from?: number, deadline?: number) {
-    if (subject === 'ownership-test') throw new Error('private-service-canary');
+    if (kind === 'removed admin' && subject === 'ownership-test' ||
+        kind === 'removed recipient' && subject === 'assistant-sales-assistant') {
+      throw new Error('private-service-canary');
+    }
     yield* read(subject, from, deadline);
   }
   vi.spyOn(nats.store, 'readStream').mockImplementation(failed);
@@ -178,7 +183,8 @@ async function privateRetry() {
   await expect(reassign()).rejects.toThrow(/^Routine reassignment refused$/u);
   expect(await nats.store.head()).toBe(before);
 }
-it('keeps saved removal decisive through dependency failure and hides an existing receipt', privateRetry);
+it.each(['removed admin', 'demoted admin', 'removed recipient', 'unapplied receipt'])(
+  'hides an existing receipt and keeps saved removal through dependency failure: %s', privateRetry);
 
 async function recovery() {
   const append = nats.store.append.bind(nats.store);
@@ -252,6 +258,18 @@ async function replay() {
     await runner.initialise(routines);
     await runner.run(routines);
     const before = await storage.db.query('SELECT * FROM routine_occurrences');
+    expect(before.rows[0]?.['data']).toMatchObject({ due: { rootId: 'root',
+      definition: { ownerId: 'alice', payingGroupId: 'sales' } } });
+    await apply([record('chat', 'conversation-chat', 'conversation.created',
+      { conversationId: 'chat', assistantId: 'sales-assistant', createdBy: 'alice',
+        mode: 'agent_session', payingGroupId: 'sales' })]);
+    const charge = record('settled', 'budget-test', 'budget.settled',
+      { reservationId: 'old-call', permitId: 'old-permit', settledCents: 1234 });
+    const reserved = record('reserved', 'budget-test', 'budget.reserved',
+      { reservationId: 'old-call', permitId: 'old-permit', rootId: 'root', amountCents: 1300,
+        payingGroupId: 'sales', assistantId: 'sales-assistant' });
+    await nats.seed([reserved, charge]);
+    const budgetPosition = await nats.store.head('budget-test');
     const global = await nats.store.head();
     await reassign();
     await applySaved();
@@ -262,8 +280,10 @@ async function replay() {
       definition: { definition: { ownerId: 'bob' } } });
     const auth = memberAuthorisation(binding, nats.store);
     for (const memberId of ['bob', 'admin']) {
-      expect((await auth.conversation(memberId, 'conversation', 'read')).allowed).toBe(false);
+      expect((await auth.conversation(memberId, 'chat', 'read')).allowed).toBe(false);
     }
+    expect((await auth.conversation('alice', 'chat', 'read')).allowed).toBe(true);
+    expect(await nats.store.head('budget-test')).toBe(budgetPosition);
     const append = vi.spyOn(nats.store, 'append');
     const options = { verifyAgainst: binding };
     expect((await rebuildMembers(fga.apiUrl, 'test', nats.reader, options)).verified).toBe(true);
@@ -278,3 +298,17 @@ async function replay() {
   }
 }
 it('applies and cold-replays the saved command without changing completed runs or starting work', replay);
+
+async function competingEditors() {
+  const alternative = { ...input, changeId: 'orders:other', ownerId: 'carol' };
+  const results = await Promise.allSettled([reassign(), reassign('admin', alternative)]);
+  function succeeded(result: PromiseSettledResult<unknown>) { return result.status === 'fulfilled'; }
+  expect(results.filter(succeeded)).toHaveLength(1);
+  const saved = await rows();
+  expect(saved).toHaveLength(2);
+  await applySaved();
+  let stale = alternative;
+  if (saved.at(-1)!.event.commandId === alternative.changeId) stale = input;
+  await expect(reassign('admin', stale)).rejects.toThrow(/^Routine reassignment conflict$/u);
+}
+it('lets only one of two editors save their reviewed owner', competingEditors);

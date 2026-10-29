@@ -58,6 +58,9 @@ prevent completion.
 A current silo owner or admin can also save an internal safety pause. It keeps the
 routine owner, payer and active run unchanged and grants no private chat access.
 Cleanup honours the saved pause even if the admin later loses their role.
+A separate internal command can reassign a paused routine once its run has ended.
+It checks the new owner’s assistant and payer access, preserves the settings and
+keeps earlier private runs with their original owner. The routine stays paused.
 
 An internal system command pauses an occupied routine after its recorded owner is removed.
 It checks the exact saved removal, even when the permissions service is unavailable.
@@ -169,8 +172,8 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks saved membership before single or combined personal memory tools, private callers, original tool reviews, and access before history errors; prepares and allocates child and routine allowances; checks saved routine admission and dispatch prohibition; applies saved Stop, Pause and Retire intent; verifies confirmed native termination for stopped turns and admin authority at a pause, owner removal and Ask termination; shares types| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
-  server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; detects saved personal corrections, forgets, loaded expiry and lost access, records invalid contexts and personal account revocations, bearer and verified OAuth choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, encrypted inputs and checked admission receipts, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
+  server -.->|checks saved membership before personal memory tools and history errors; prepares allowances; checks routine admission; applies Stop, Pause and Retire; verifies termination and admin authority; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
+  server -->|reads and saves opt-in, metadata, receipts, memory changes, account choices, pauses, retirements, paused ownership changes, routine sessions, inputs, cancellations and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
