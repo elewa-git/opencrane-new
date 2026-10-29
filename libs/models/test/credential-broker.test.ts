@@ -11,6 +11,7 @@ import { foldConnection } from '../src/bearer-connections.ts';
 import { authorityFence } from '../src/authority.ts';
 import { connectionCustody, type ConnectionStage } from '../src/connection-custody.ts';
 import { credentialBroker } from '../src/credential-broker.ts';
+import { MemberAccessRefused } from '../src/member-authority.ts';
 import { oauthSelectionFixture } from './support/oauth-selection.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -117,16 +118,24 @@ async function fixture() {
     sends.push(value);
   }
   const db = pgDb(storage.queue);
-  function broker(raw: unknown = context, callback = send) {
+  function broker(raw: unknown = context, callback = send, permission = prepareAccess) {
     return credentialBroker(nats.store, db, custody, 'test', decision.id, raw,
-      saved.loadConfiguration, prepareAccess, callback);
+      saved.loadConfiguration, permission, callback);
   }
   return { ...saved, userId, release, decision, context, broker, sends, custody, db,
-    stage: stage!, secrets, fetch, fetchSecret, selectionSubject };
+    stage: stage!, secrets, fetch, fetchSecret, selectionSubject, prepareAccess, send };
 }
 async function releasesOnlyAccessOnce() {
   const test = await fixture();
-  const broker = test.broker();
+  const permission = vi.fn(test.prepareAccess);
+  async function readAfterAudit(url: string | URL | Request, options?: RequestInit) {
+    expect(permission).toHaveBeenCalledTimes(1);
+    const receipt = await test.broker().recover();
+    expect(receipt).toMatchObject({ status: 'confirmed', eventId: `${test.decision.id}:release` });
+    return test.fetchSecret(url, options);
+  }
+  test.fetch.mockImplementationOnce(readAfterAudit);
+  const broker = test.broker(test.context, test.send, permission);
   expect(await broker.send()).toBeUndefined();
   await expect(broker.send()).rejects.toThrow('Release unavailable');
   await expect(test.broker().send()).rejects.toThrow('Release unavailable');
@@ -174,7 +183,19 @@ async function refusesStoredChange(kind: string) {
   }
   await expect(test.broker().send()).rejects.toThrow('Release unavailable');
   expect(test.sends).toEqual([]);
-  expect(await nats.store.head(`credential-${test.userId}`)).toBe(0);
+  if (['custody', 'uid', 'resourceVersion'].includes(kind)) {
+    const rows = await history(nats.store, `credential-${test.userId}`, 'test');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.event.data).toEqual(test.release);
+    const receipt = await test.broker().recover();
+    expect(receipt).toMatchObject({ status: 'confirmed', eventId: `${test.decision.id}:release` });
+    test.fetch.mockClear();
+    await expect(test.broker().send()).rejects.toThrow('Release unavailable');
+    expect(test.fetch).not.toHaveBeenCalled();
+    expect(test.sends).toEqual([]);
+  } else {
+    expect(await nats.store.head(`credential-${test.userId}`)).toBe(0);
+  }
 }
 it.each(['expiry', 'scope', 'custody', 'uid', 'resourceVersion', 'decision',
   'selection', 'generation', 'block'])('refuses changed %s before release', refusesStoredChange);
@@ -195,7 +216,9 @@ async function failedAudit(kind: string) {
   }
   const fault = vi.spyOn(nats.store, 'append').mockImplementationOnce(uncertain);
   const broker = test.broker();
+  test.fetch.mockClear();
   await expect(broker.send()).rejects.toThrow('Release unavailable');
+  expect(test.fetch).not.toHaveBeenCalled();
   fault.mockRestore();
   await expect(broker.send()).rejects.toThrow('Release unavailable');
   if (kind !== 'outage') {
@@ -361,3 +384,111 @@ function changedValue(kind: string) {
 }
 it.each(['missing', 'deny', 'generation', 'ownerId', 'ownerKind', 'purpose', 'bearer'])(
   'reads no custody for a decision with changed %s', invalidDecision);
+
+const preparationFaults = ['none', 'validation', 'history', 'lock', 'profile', 'custody'];
+function failPreparation(test: Awaited<ReturnType<typeof fixture>>, fault: string) {
+  if (fault === 'history') {
+    const read = nats.store.readStream.bind(nats.store);
+    function failedRead(...args: Parameters<typeof read>) {
+      if (args[0] === test.decision.subject) {
+        throw new Error('private-history');
+      }
+      return read(...args);
+    }
+    vi.spyOn(nats.store, 'readStream').mockImplementation(failedRead);
+  } else if (fault === 'lock') {
+    vi.spyOn(test.db, 'lock').mockRejectedValueOnce(new Error('private-lock'));
+  } else if (fault === 'profile') {
+    test.configuration.toolScopes.read.push('write');
+  } else if (fault === 'custody') {
+    test.fetch.mockRejectedValueOnce(new Error('private-custody'));
+  }
+  if (fault === 'validation') {
+    return { ...test.context, requestId: '' };
+  }
+  return test.context;
+}
+async function permissionBeforePreparationFailure(fault: string) {
+  for (const message of ['Active silo membership required', 'Owner or Admin required']) {
+    for (const action of ['send', 'recover'] as const) {
+      const test = await fixture();
+      const raw = failPreparation(test, fault);
+      const refusal = new MemberAccessRefused(message);
+      function refusePermission() {
+        return Promise.reject(refusal);
+      }
+      const permission = vi.fn(refusePermission);
+      const writes = vi.spyOn(nats.store, 'append');
+      test.fetch.mockClear();
+      const broker = test.broker(raw, test.send, permission);
+      await expect(broker[action]()).rejects.toBe(refusal);
+      expect(permission).toHaveBeenCalledTimes(1);
+      expect(test.fetch).not.toHaveBeenCalled();
+      expect(writes).not.toHaveBeenCalled();
+      expect(test.sends).toEqual([]);
+      vi.restoreAllMocks();
+    }
+  }
+}
+it.each(preparationFaults)(
+  'keeps removed and demoted permission refusals ahead of %s failures',
+  permissionBeforePreparationFailure);
+
+async function allowedPreparationFailure(fault: string) {
+  const test = await fixture();
+  const raw = failPreparation(test, fault);
+  const permission = vi.fn(test.prepareAccess);
+  const broker = test.broker(raw, test.send, permission);
+  await expect(broker.send()).rejects.toThrow(/^Release unavailable$/u);
+  expect(permission).toHaveBeenCalledTimes(1);
+  expect(test.sends).toEqual([]);
+}
+it.each(['validation', 'history', 'lock', 'profile', 'custody'])(
+  'checks allowed permission once with a %s failure', allowedPreparationFailure);
+
+async function refusalSurvivesLaterFailures(laterFailure: string) {
+  const test = await fixture();
+  const refusal = new MemberAccessRefused('Active silo membership required');
+  let appending = false;
+  async function prepareAccess() {
+    const access = await test.prepareAccess();
+    async function checkAccess() {
+      if (appending) {
+        throw refusal;
+      }
+      await access.checkAccess();
+    }
+    return { deadline: access.deadline, checkAccess };
+  }
+  const permission = vi.fn(prepareAccess);
+  const append = nats.store.append.bind(nats.store);
+  async function failedAppend(command: Parameters<typeof append>[0]) {
+    appending = true;
+    const result = await append(command);
+    expect(result.status).toBe('unavailable');
+    if (laterFailure === 'audit') {
+      throw new Error('private-audit');
+    }
+    if (laterFailure === 'expiry') {
+      vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 30_001);
+    }
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementationOnce(failedAppend);
+  if (laterFailure === 'unlock') {
+    const lock = test.db.lock!;
+    const failedUnlock: typeof lock = async function failedUnlock(name, work, options) {
+      await lock(name, work, options);
+      throw new Error('private-unlock');
+    };
+    vi.spyOn(test.db, 'lock').mockImplementationOnce(failedUnlock);
+  }
+  test.fetch.mockClear();
+  await expect(test.broker(test.context, test.send, permission).send()).rejects.toBe(refusal);
+  expect(permission).toHaveBeenCalledTimes(1);
+  expect(test.fetch).not.toHaveBeenCalled();
+  expect(test.sends).toEqual([]);
+  expect(await nats.store.head(`credential-${test.userId}`)).toBe(0);
+}
+it.each(['audit', 'expiry', 'unlock'])(
+  'preserves a permission refusal through a later %s failure', refusalSurvivesLaterFailures);
