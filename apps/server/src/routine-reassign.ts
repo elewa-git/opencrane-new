@@ -136,13 +136,14 @@ async function recipient(store: EventStore, binding: Binding, ownerId: string,
 
 async function reassignmentAccess(store: EventStore, binding: Binding,
   memberId: string, input: Input) {
+  // Keep admin refusals decisive before preparing routine access can fail.
+  await requireAdmin(store, binding, memberId);
   const auth = memberAuthorisation(binding, store);
   const saved = await auth.loadRoutineAccess(memberId, input.routineId);
   // Check metadata and the separate admin role before revealing conflicts or receipts.
   if (!(await saved.check('read_metadata')).allowed) {
     throw new ReassignmentRefused();
   }
-  await requireAdmin(store, binding, memberId);
   const state = saved.state;
   const definition = state?.definition;
   if (!state || !definition || state.status !== 'paused' || state.activeRun) {
