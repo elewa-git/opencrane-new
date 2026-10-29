@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -69,6 +69,8 @@ async function apply(events: EventEnvelope[]) {
   const db = { query: forbidden };
   for (const saved of events) await auth.handler.handle(saved, db);
 }
+let afterProjection = projectionComplete;
+function projectionComplete() {}
 async function setup() {
   nats = await natsFixture();
   fga = await openfga();
@@ -122,6 +124,7 @@ async function setup() {
       const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
       const auth = memberAuthorisation(binding, nats.store);
       await auth.handler.handle(rows[0]!.event, { query: forbidden });
+      afterProjection();
     }
     return result;
   }
@@ -1380,3 +1383,38 @@ async function finishWithNativeEvidence(kind: 'terminal' | 'timeout' | 'connecti
 it.each(['terminal', 'timeout', 'connection loss'] as const)(
   'finishes only after saved native termination through the bridge: %s', finishWithNativeEvidence,
   25_000);
+
+function delayedFixtureProjection() {
+  function delayProjectionClock() {
+    const monotonic = performance.now.bind(performance);
+    function afterWait() {
+      return monotonic() + 2100;
+    }
+    vi.spyOn(performance, 'now').mockImplementation(afterWait);
+  }
+  function delayProjection() {
+    afterProjection = delayProjectionClock;
+  }
+  function restoreProjection() {
+    afterProjection = projectionComplete;
+  }
+  beforeAll(delayProjection);
+  afterAll(restoreProjection);
+
+  async function preparesAfterProjection() {
+    await admit();
+    expect(await inspect()).toMatchObject({ status: 'unknown', executionAvailable: false });
+    const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
+    const types: string[] = [];
+    for (const row of rows) types.push(row.event.type);
+    expect(types).toEqual(['conversation.created', 'message.posted']);
+    expect(actor.state.roots).toHaveLength(1);
+    expect(actor.state.roots[0]!.allowanceCents).toBe(1000);
+    expect(actor.state.reservations).toEqual([]);
+    expect(preparedComputer.nativeStarts).toBe(1);
+    expect(preparedComputer.starts).toBe(0);
+  }
+  it('prepares the sender after fixture projection takes longer than a write deadline',
+    preparesAfterProjection);
+}
+describe('delayed fixture projection', delayedFixtureProjection);
