@@ -45,6 +45,27 @@ on a separate test stream. The original connection history must stay unchanged.
 Both refresh references must recover the same receipt, and claim copies and restart
 must remain unable to send. The checks still require one saved start or claim, the
 same private copies and no further provider requests. No deadline is extended.
+## Decision dependency failures
+
+The gateway authorisation endpoint returns HTTP 503 and the fixed message
+`Decision service unavailable` for recognised NATS outages and timeouts,
+`Current authority unavailable`, `Authority snapshot expired`, and unavailable
+budget appends or writers. The response includes the request id but no
+`x-opencrane-decision: refused`, reservation or tool permit header.
+The existing audit-failure response remains HTTP 503. No deadline is extended,
+failed call is sent, or uncertain hold is released by this response change.
+
+Membership and receipt checks preserve OpenFGA's unavailable status. A confirmed
+missing receipt still stops the request, and confirmed membership or resource denials
+remain HTTP 403. Budget exhaustion remains HTTP 402. The same request can succeed
+after recovery only by passing the normal access and spending checks again.
+
+`decision-refusal.test.ts` injects failures at event-store reads and budget writes,
+and forwards real OpenFGA traffic through a local proxy that can return errors or
+delay selected permission checks. It checks 503, absent permits, unchanged spending,
+recovery to 200 and a saved member removal returning 403. Cold-history tests now
+require 503 when their deliberately paused read expires; their access, money and
+read-volume assertions remain in place. The authority suites are unchanged.
 
 ## Local OAuth revocation (Part of #50)
 

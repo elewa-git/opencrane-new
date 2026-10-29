@@ -19,6 +19,18 @@ export function decisionError(error: unknown) {
   return 'Request refused or decision service unavailable';
 }
 
+const unavailableReasons = new Set([
+  'Authority snapshot expired',
+  'Current authority unavailable',
+  'Budget append unavailable',
+  'Budget writer unavailable',
+]);
+
+export function decisionUnavailable(error: unknown): boolean {
+  if (isEventStoreUnavailable(error)) return true;
+  return error instanceof Error && unavailableReasons.has(error.message);
+}
+
 const refusalReasons = new Map([
   ['Missing credentials', 'credentials_missing'],
   ['Credential binding mismatch', 'credential_binding_mismatch'],
@@ -33,6 +45,9 @@ const refusalReasons = new Map([
   ['Authority changed', 'authority_changed'],
   ['Authority snapshot expired', 'access_deadline_expired'],
   ['IAM projection behind', 'iam_projection_behind'],
+  ['Current authority unavailable', 'iam_unavailable'],
+  ['Budget append unavailable', 'budget_append_unavailable'],
+  ['Budget writer unavailable', 'budget_writer_unavailable'],
   ['Current authority refused', 'current_authority_refused'],
   ['Membership unavailable or refused', 'membership_refused'],
   ['Assistant inactive', 'assistant_inactive'],

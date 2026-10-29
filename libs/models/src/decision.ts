@@ -1,6 +1,6 @@
 import { createLogger, type Logger } from '@opencrane/observability';
 import { prepareRoutineDispatch, RoutineDispatchRefused } from './routine-dispatch.ts';
-import { privateDecisionReason, decisionError } from './decision-refusal.ts';
+import { privateDecisionReason, decisionError, decisionUnavailable } from './decision-refusal.ts';
 import { prepareMemoryDecision, memoryAccessStarted } from './memory-prepare-request.ts';
 import { requestSchema } from './model-request.ts';
 import { authoriseEgress } from './egress-admission.ts';
@@ -66,7 +66,9 @@ async function context(actor: BudgetActor, binding: Binding,
   turn: StoredEvent, grants?: DecisionGrants,
   readAuthorityHistory?: ReturnType<typeof authorityHistoryReader>): Promise<ModelCall> {
   const permission = await memberAuthorisation(binding).check(turnToken.requester, 'member');
-  if (!permission.allowed || binding.silo !== actor.silo) throw new Error('Membership unavailable or refused');
+  if (binding.silo !== actor.silo) throw new Error('Membership unavailable or refused');
+  if (permission.status === 'unavailable') throw new Error('Current authority unavailable');
+  if (!permission.allowed) throw new Error('Membership unavailable or refused');
   const assistantRead = history(
     actor.store, `assistant-${computer.assistant}`, actor.silo, fresh.deadline);
   const authorityRead = currentAuthority(actor.store, binding, turnToken.requester,
@@ -386,6 +388,11 @@ export async function startDecision(
         }
       }
       res.setHeader('x-request-id', requestId);
+      if (decisionUnavailable(error)) {
+        res.writeHead(503);
+        res.end(JSON.stringify({ requestId, error: 'Decision service unavailable' }));
+        return;
+      }
       res.setHeader('x-opencrane-decision', 'refused');
       res.writeHead(capped ? 402 : 403);
       const refusal = error instanceof MemoryToolRefused &&

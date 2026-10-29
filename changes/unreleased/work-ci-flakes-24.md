@@ -1,0 +1,1 @@
+- Gateway permission requests now report an unavailable service instead of an access refusal when event reads, permission checks or budget writes fail or time out. Access and spending limits remain enforced.

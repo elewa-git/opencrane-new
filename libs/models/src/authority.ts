@@ -91,7 +91,14 @@ function requirePermissions(permissions: { status: 'ok' | 'unavailable'; allowed
 
 function receiptReader(auth: ReturnType<typeof memberAuthorisation>,
   applied: ((eventId: string) => Promise<boolean>) | undefined) {
-  return applied ?? auth.applied.bind(auth);
+  if (applied) return applied;
+  async function readReceipt(eventId: string) {
+    const result = await auth.checkApplied(eventId);
+    // Keep a failed service check separate from a confirmed missing receipt.
+    if (result.status === 'unavailable') throw new Error('Current authority unavailable');
+    return result.allowed;
+  }
+  return readReceipt;
 }
 
 async function readAuthorityHistories(subjects: string[],

@@ -2,7 +2,6 @@ import { expect, it, vi } from 'vitest';
 import { once } from 'node:events';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
-import { TimeoutError } from '@nats-io/transport-node';
 import { grantStream } from '@opencrane/authz';
 import { z } from 'zod';
 import { createEventStore } from '@opencrane/event-store';
@@ -126,14 +125,15 @@ async function reportsStoreUnavailable(stage: typeof storeFailures[number]) {
     const target = stage === 'history' ? undefined : 'member-alice';
     if (!injected && args[0] === target) {
       injected = true;
-      throw new TimeoutError();
+      return head(args[0], performance.now() - 1);
     }
     return head(...args);
   }
   async function* failedGrantRead(...args: Parameters<typeof read>) {
     if (!injected && args[0] === grantStream('model', 'gpt-6-luna')) {
       injected = true;
-      throw new TimeoutError();
+      yield* read(args[0], args[1], performance.now() - 1, args[3]);
+      return;
     }
     yield* read(...args);
   }
@@ -141,7 +141,8 @@ async function reportsStoreUnavailable(stage: typeof storeFailures[number]) {
     const event = z.object({ type: z.string() }).parse(command.event);
     if (event.type === 'budget.reserved') {
       injected = true;
-      return { status: 'unavailable' as const, cause: new TimeoutError() };
+      const outcome = { kind: 'transport_failure' as const, possiblyPublished: false };
+      return { status: 'unavailable' as const, cause: new Error('Scripted budget transport outage'), outcome };
     }
     return append(command);
   }
