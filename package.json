@@ -104,7 +104,7 @@
     "@openfga/sdk": {
       "axios": "1.20.0"
     },
-    "decode-uri-component": "0.5.0",
+    "decode-uri-component": "0.5.1",
     "@modelcontextprotocol/sdk": "1.31.0",
     "piscina": "5.3.2"
   }

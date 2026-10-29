@@ -6768,3 +6768,10 @@ dependency failure precedence, refused MCP-use permissions and unrelated activit
 byte boundaries and stale preparation. Computer tests load the complete catalogue
 through the real proxy and pinned native discovery without calls. No event or API
 field or dependency was added. Fresh-install qualification and live native calls are NOT RUN.
+
+## HTTP dependency patches
+
+Fastify is pinned to 5.12.6 (MIT). The shared lockfile also updates fast-uri
+to 3.1.9 and 4.2.3 (BSD-3-Clause). Registry metadata and installed licence
+files were checked. The [audit notes](../../docs/process/npm-audit.md#29-october-2026-update)
+record the affected paths and the decoder override.

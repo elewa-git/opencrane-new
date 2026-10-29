@@ -311,3 +311,10 @@ Trusted process wiring, HTTPS wrapper/TLS, loaded-database freshness, consumer
 integration and real clean/EICAR qualification are **NOT RUN** and remain later
 P5-6a/P5-6b parts. Upload/image admission, Stage B, memory and access checks are
 unchanged. This slice alone does not qualify the shared scanner on a fresh install.
+
+## HTTP dependency patches
+
+Fastify is pinned to 5.12.6 (MIT). The shared lockfile also updates fast-uri
+to 3.1.9 and 4.2.3 (BSD-3-Clause). Registry metadata and installed licence
+files were checked. The [audit notes](../../docs/process/npm-audit.md#29-october-2026-update)
+record the affected paths and the decoder override.

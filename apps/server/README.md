@@ -591,6 +591,10 @@ settings, expired results and scanner outages leave uploads unavailable.
 
 ## How to run or test it
 
+The HTTP server uses packages with security fixes. The
+[dependency audit notes](../../docs/process/npm-audit.md)
+record the versions and the remaining moderate MinIO parser findings.
+
 The upload and file recovery tests use exact Linux amd64 container images.
 CI downloads them before tests start, with retries for temporary registry failures.
 
