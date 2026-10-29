@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { connectionCustody, ConnectionStage } from '../../src/connection-custody.ts';
 import type { natsFixture } from '@opencrane/event-store/testing';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
@@ -20,7 +21,8 @@ function choice(tool: ReturnType<typeof declaration>) {
 }
 
 export async function oauthSelectionFixture(nats: Awaited<ReturnType<typeof natsFixture>>,
-  userId: string, serverId: string, profileId = 'oauth') {
+  userId: string, serverId: string, profileId = 'oauth',
+  stageMaterial?: (stage: ConnectionStage) => ReturnType<ReturnType<typeof connectionCustody>['stage']>) {
   const subject = `connection-${userId}-${serverId}-${profileId}`;
   const serverSubject = `mcp-${serverId}`;
   const tools = ['read', 'write'].map(declaration);
@@ -88,6 +90,18 @@ export async function oauthSelectionFixture(nats: Awaited<ReturnType<typeof nats
     account: { issuer: configuration.issuer, subject: userId, scopes: ['openid', 'read'],
       expiresAt: now + 120_000 } };
   const saved = { userId, serverId, profile: profileId, secretRef: 'secret:synthetic', activation };
+  if (stageMaterial) {
+    const stage: ConnectionStage = { siloId: 'test', userId, serverId,
+      profileId, purpose: 'personal', connectionId: 'installed', generation: 1,
+      endpointDigest, operationId, expectedSequence: claimed, appendUntil };
+    const staged = await stageMaterial(stage);
+    if (!staged.identity) {
+      throw new Error('Fixture custody unavailable');
+    }
+    saved.secretRef = `secret:${staged.identity.reference}`;
+    activation.uid = staged.identity.uid;
+    activation.resourceVersion = staged.identity.resourceVersion;
+  }
   const revision = await seed('connection.created', saved, operationId, 'consent');
   function loadConfiguration() {
     return Promise.resolve(configuration);
