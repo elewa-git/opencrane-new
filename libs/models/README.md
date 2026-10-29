@@ -696,6 +696,9 @@ Tests here also check conversation and delegation read tables against model even
 The cleanup retry test waits for its database lock and for the queue to record failure
 before checking that every attempt sent a delete request.
 Connection command tests also wait for their locks, except when checking lock contention.
+OAuth recovery tests use a fresh event broker with a short duplicate window set before
+the first event. They wait until the broker accepts the original event ID on a separate
+test stream before checking recovery.
 Scan tests wait for the scan to report each completed page.
 Cleanup tests wait for each database lock, except when checking lock contention.
 The paging test checks that all 53 saved credentials are listed and deleted exactly

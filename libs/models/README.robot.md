@@ -2,6 +2,26 @@
 
 For people, read [README.md](README.md) first.
 
+## OAuth recovery tests under load
+
+The seven callback, refresh-start and refresh-claim duplicate-expiry cases in
+`test/connection-custody.test.ts` each use a fresh NATS fixture. They set its duplicate
+window to 100 ms before publishing any event. Other cases keep the shared broker and
+its normal 120-second window. Test cleanup restores that shared broker and closes the
+temporary one, including after a failure.
+
+NATS 2.15.0 can wake its duplicate cleanup timer before updating the duration it reads.
+Changing the window while message IDs are already recorded can therefore keep the
+old timer delay. The source shows the [timer reset before the duration update](https://github.com/nats-io/nats-server/blob/v2.15.0/server/stream.go#L2776-L2781)
+and the [later duration update](https://github.com/nats-io/nats-server/blob/v2.15.0/server/stream.go#L2959-L2962).
+Preparing an empty broker avoids that race.
+
+The existing 15-second poll still proves expiry by publishing the original event ID
+on a separate test stream. The original connection history must stay unchanged.
+Both refresh references must recover the same receipt, and claim copies and restart
+must remain unable to send. The checks still require one saved start or claim, the
+same private copies and no further provider requests. No deadline is extended.
+
 ## Local OAuth revocation (Part of #50)
 
 PR 11a is split at the saved local revocation to stay below about 600 changed lines.
