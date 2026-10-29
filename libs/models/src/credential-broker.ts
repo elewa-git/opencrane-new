@@ -20,6 +20,24 @@ function refuse(): never {
   throw new Error('Release unavailable');
 }
 
+async function binding(store: EventStore, silo: string,
+  context: ReturnType<typeof contextSchema.safeParse>) {
+  if (!context.success) {
+    refuse();
+  }
+  const rows = await history(store, `decision-${context.data.requestId}`, silo,
+    performance.now() + 10_000);
+  const release = decisionRecordedDataSchema.parse(rows[0]?.event.data).release;
+  if (!release || release.ownerId !== context.data.userId) {
+    refuse();
+  }
+  const expected = savedContextSchema.parse(release);
+  if (!isDeepStrictEqual(context.data, expected)) {
+    refuse();
+  }
+  return release;
+}
+
 /** Keep one request private. The caller supplies authenticated context and live dispatch checks. */
 export function credentialBroker(store: EventStore, db: Pick<Db, 'lock'>, custody: Custody,
   silo: string, decisionId: string, raw: unknown, loadConfiguration: OAuthConfigurationLoader,
@@ -27,22 +45,6 @@ export function credentialBroker(store: EventStore, db: Pick<Db, 'lock'>, custod
   let used = false;
   // Copy before any wait, so caller mutation cannot replace the authenticated request.
   const context = contextSchema.safeParse(raw);
-  async function binding() {
-    if (!context.success) {
-      refuse();
-    }
-    const rows = await history(store, `decision-${context.data.requestId}`, silo,
-      performance.now() + 10_000);
-    const release = decisionRecordedDataSchema.parse(rows[0]?.event.data).release;
-    if (!release || release.ownerId !== context.data.userId) {
-      refuse();
-    }
-    const expected = savedContextSchema.parse(release);
-    if (!isDeepStrictEqual(context.data, expected)) {
-      refuse();
-    }
-    return release;
-  }
   async function execute(recover: boolean) {
     let permission: Promise<Access> | undefined;
     let refusal: MemberAccessRefused | undefined;
@@ -72,7 +74,7 @@ export function credentialBroker(store: EventStore, db: Pick<Db, 'lock'>, custod
       return permission;
     }
     try {
-      const release = await binding();
+      const release = await binding(store, silo, context);
       const profile = { siloId: silo, userId: release.userId,
         serverId: release.serverId, profileId: release.profileId };
       async function work(locked: Db) {

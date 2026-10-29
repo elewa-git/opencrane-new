@@ -320,7 +320,6 @@ Record source-ready versus fresh-live results explicitly. A fixture-only pass is
 
 No tools in this scope charge money: record zero integer cents and respect current allowances/hard stops. Do not call paid upstream APIs or models for qualification. Do not introduce a generic OAuth service, secret platform, SQL business engine or startup-only deployment in these issues.
 
-
 ## 7. Left for later
 
 The orchestrator decision of 29 October 2026 changes section 2, step 5 from

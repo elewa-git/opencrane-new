@@ -479,7 +479,7 @@ async function refusalSurvivesLaterFailures(laterFailure: string) {
   }
   vi.spyOn(nats.store, 'append').mockImplementationOnce(failedAppend);
   if (laterFailure === 'unlock') {
-    const lock = test.db.lock!;
+    const lock = test.db.lock!.bind(test.db);
     const failedUnlock: typeof lock = async function failedUnlock(name, work, options) {
       await lock(name, work, options);
       throw new Error('private-unlock');
