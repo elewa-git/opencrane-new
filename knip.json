@@ -6,6 +6,8 @@
   "workspaces": {
     ".": {
       "entry": [
+        "scripts/private-memory-qualification/vitest.config.mjs",
+        "scripts/private-memory-qualification/*.test.ts",
         "infra/package/upgrade-recovery*.test.ts",
         "infra/package/computer-volume-inventory.ts",
         "scripts/check-stage-b-polish.mjs",
@@ -16,6 +18,7 @@
         "scripts/ci/*.test.mjs"
       ],
       "project": [
+        "scripts/private-memory-qualification/*.ts",
         "scripts/**/*.mjs",
         "*.mjs"
       ]
