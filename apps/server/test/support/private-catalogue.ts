@@ -4,12 +4,12 @@ import { envelope, privateCallers } from '@opencrane/models';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { memoryScopeId } from '@opencrane/projections';
 import * as assembly from '../../src/chat/turn-tools.ts';
-import { recallTool, rememberTool, correctTool } from '../../src/memory/mcp.ts';
+import { recallTool, rememberTool, correctTool, forgetTool } from '../../src/memory/mcp.ts';
 
 // Supply synthetic evidence only to exercise the disabled preparation contract.
 export async function privateCatalogue(callers: ReturnType<typeof privateCallers>,
   caller: string, grant: Parameters<typeof assembly.buildPrivateTurnRecallTools>[0]['grant'],
-  name: 'recall' | 'remember' | 'correct' = 'recall') {
+  name: 'recall' | 'remember' | 'correct' | 'forget' = 'recall') {
   if (!grant) throw new Error('Missing fixture grant');
   const runtime = { sourceSha: 'a'.repeat(40), imageDigest: `sha256:${'b'.repeat(64)}`,
     environmentId: 'disposable-test-host' };
@@ -27,6 +27,7 @@ export async function privateCatalogue(callers: ReturnType<typeof privateCallers
   let definition = JSON.stringify(recallTool);
   if (name === 'remember') definition = JSON.stringify(rememberTool);
   if (name === 'correct') definition = JSON.stringify(correctTool);
+  if (name === 'forget') definition = JSON.stringify(forgetTool);
   const reviewed = losslessJson(definition);
   const state: assembly.TurnToolServerState = { serverId: 'memory', connectionId: 'server',
     published: true, accountMode: 'none', serverInfo: { name: 'OpenCrane memory', version: '1' },
@@ -41,16 +42,19 @@ export async function privateCatalogue(callers: ReturnType<typeof privateCallers
   let tools;
   if (name === 'recall') tools = await assembly.buildPrivateTurnRecallTools(input);
   else if (name === 'remember') tools = await assembly.buildPrivateTurnRememberTools(input);
-  else tools = await assembly.buildPrivateTurnCorrectTools(input);
+  else if (name === 'correct') tools = await assembly.buildPrivateTurnCorrectTools(input);
+  else tools = await assembly.buildPrivateTurnForgetTools(input);
   return { tools, input };
 }
 
 export { checkPrivateTurnTools } from '../../src/chat/turn-tools.ts';
 
-export function privateToolOffer(name: 'recall' | 'remember' | 'correct') {
-  let definition: typeof recallTool | typeof rememberTool | typeof correctTool = recallTool;
+export function privateToolOffer(name: 'recall' | 'remember' | 'correct' | 'forget') {
+  let definition: typeof recallTool | typeof rememberTool | typeof correctTool | typeof forgetTool;
+  definition = recallTool;
   if (name === 'remember') definition = rememberTool;
   if (name === 'correct') definition = correctTool;
+  if (name === 'forget') definition = forgetTool;
   const hash = createHash('sha256');
   hash.update('memory');
   const digest = hash.digest('hex');

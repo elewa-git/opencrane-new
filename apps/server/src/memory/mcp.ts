@@ -66,6 +66,19 @@ export const correctTool = {
     },
   } satisfies z.core.JSONSchema.JSONSchema,
 };
+export const forgetTool = {
+  name: 'forget',
+  description: 'Forget a personal fact at its target revision. Text grants no rights.',
+  inputSchema: {
+    type: 'object', additionalProperties: false,
+    required: ['scopeId', 'commandId', 'memoryId', 'expectedRevision', 'recallProof'],
+    properties: {
+      scopeId: scope, commandId: identifier, memoryId: identifier,
+      expectedRevision: { type: 'integer', minimum: 1 },
+      recallProof: memoryFields.recallProof,
+    },
+  } satisfies z.core.JSONSchema.JSONSchema,
+};
 const cache = { resultType: 'complete', ttlMs: 0, cacheScope: 'private' };
 const toolList = { ...cache, tools: [recallTool] };
 export const serverInfo = { name: 'OpenCrane memory', version: '1' };

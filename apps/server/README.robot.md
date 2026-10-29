@@ -6172,7 +6172,7 @@ production-disabled regression before implementation.
 
 ## Private catalogue approval during loading
 
-`checkPrivateTurnTools` checks the exact list returned by the recall, remember or Correct
+`checkPrivateTurnTools` checks the exact list returned by the recall, remember, Correct or Forget
 assembler. A WeakMap keeps its approval in RAM. Copying or serialising the list
 does not transfer approval, and no caller or grant is added to the tool frame.
 The saved approval includes the caller and every recorded grant field, including
@@ -6467,9 +6467,9 @@ Public discovery lists recall alone.
 
 Tests: `personal-correct-tools.test.ts`, computer `private-thread-loads.test.ts` and
 `codex-config.test.ts`. The native test uses synthetic qualification and recorded-turn
-evidence, with real pinned Codex discovery and no model turn. Forget, native execution,
-multiple-tool lists and production launch remain later work. Memory admission stays
-disabled. Fresh-install/live qualification: NOT RUN.
+evidence, with real pinned Codex discovery and no model turn. Forget preparation is
+described below. Native execution, multiple-tool lists and production launch remain
+later work. Memory admission stays disabled. Fresh-install/live qualification: NOT RUN.
 
 ## Routine calls before Stop cleanup (P4-24 PR 11a)
 
@@ -6570,15 +6570,26 @@ No event or HTTP API field, dependency, routine file or loader changed. Browser
 reply delivery, group/notes withdrawal and native launch remain later work.
 Admission remains disabled. Fresh-install live qualification: NOT RUN.
 
-Part of #107. Prerequisite: #802 merged as `5b5d82b68`.
-`stopRoutineAfterApproval(store, silo, input)` saves one conditional Stop for the occupied
-occurrence. Input names routineId, occurrenceId, expectedPosition, the three expected
-revisions and `cause: { eventId, position }`. Only an exact saved owner rejection or
-saved expiry of a 15-minute Ask is accepted. Verification uses event reads, never
-`readApproval`, credential access or review decryption. The request must match the
-trusted routinePreparation, frozen owner/assistant/payer and admitted allocation.
-The first Stop survives competing causes, lost replies and restart. It keeps the schedule
-and occupied slot. Budget cleanup and connected-thread interruption remain separate;
-cleanup failure cannot restore dispatch or enlarge the allowance. Replay starts no work.
-The credential-free fixture proves termination only, not a company account review.
-Company Ask creation/use, offline expiry discovery, firing and live qualification are later.
+## Personal Forget preparation (P4-15 PR 4g)
+
+`buildPrivateTurnForgetTools` reuses `buildPrivateMemoryTools` and its saved person
+scope, requester, private turn, caller, grant and generation checks. Matching source,
+image and host evidence is required before and after catalogue and permission waits.
+Only the exact built-in `forgetTool` definition with one reviewed zero-cent Allow
+policy is accepted. Its strict fields match `forgetInput`: `scopeId`, `commandId`,
+`memoryId`, `expectedRevision` and `recallProof`. Replacement and source fields are refused.
+Approval remains on the original list in RAM and is checked throughout discovery.
+Preparing a definition reads no facts, appends nothing and creates no keys.
+
+The native loader accepts this single definition on the fresh thread returned by
+Codex. Public discovery remains recall-only; ordinary assembly excludes private tools.
+Forget execution still refuses without events or files. Production callers,
+multiple-tool lists and enablement remain later work. Admission remains disabled.
+Tests use synthetic qualification and saved-turn evidence; network-disabled native
+discovery starts no model turn and installs no call grant. Live qualification: NOT RUN.
+
+Own checks on 28 October 2026: PASS, 467 targeted tests twice, including
+`personal-forget-tools.test.ts`, the three other personal tool builders, ordinary
+turn tools, private loading and native discovery. PASS, two selected MCP backend
+Forget refusal/input checks and 460 event security rules. The initial test commit
+failed before the definition, builder and loader support were added.

@@ -5,7 +5,7 @@ import { createLogger } from '@opencrane/observability';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import type { privateCallers } from '@opencrane/models';
 import { memoryScopeId } from '@opencrane/projections';
-import { correctTool, recallTool, rememberTool,
+import { correctTool, forgetTool, recallTool, rememberTool,
   serverInfo as memoryServerInfo } from '../memory/mcp.ts';
 import { personalRecallQualified } from './recall-qualification.ts';
 
@@ -136,6 +136,10 @@ export async function buildPrivateTurnCorrectTools(input: QualifiedPrivateMemory
   return buildPrivateMemoryTools(input, correctTool);
 }
 
+export async function buildPrivateTurnForgetTools(input: QualifiedPrivateMemoryInput) {
+  return buildPrivateMemoryTools(input, forgetTool);
+}
+
 async function buildPrivateMemoryTools(input: QualifiedPrivateMemoryInput, tool: MemoryTool) {
   if (!personalRecallQualified(input.runtime, input.qualification) || !hasPrivateBinding(input)
     || !input.caller || !input.grant) {
@@ -207,7 +211,7 @@ function matchesRecordedGrant(input: PersonalMemoryInput,
     && grant.thread === turn.threadId;
 }
 
-type MemoryTool = typeof recallTool | typeof rememberTool | typeof correctTool;
+type MemoryTool = typeof recallTool | typeof rememberTool | typeof correctTool | typeof forgetTool;
 
 async function buildPersonalMemoryTools(input: PersonalMemoryInput, tool: MemoryTool) {
   const restricted = { ...input, rows: [{ serverId: 'memory' }], approvalWaiting: false };
