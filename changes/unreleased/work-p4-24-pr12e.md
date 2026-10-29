@@ -1,0 +1,1 @@
+- A current silo owner or admin can save an internal safety pause for a routine without reading its private chat or changing its owner or payer. Cleanup checks the saved role, so later demotion cannot undo the stop. Automatic execution remains disabled.

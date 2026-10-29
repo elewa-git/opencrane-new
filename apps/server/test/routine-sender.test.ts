@@ -886,7 +886,9 @@ async function refusesExpiredPreparation() {
 it('refuses delivery after the empty private session expires', refusesExpiredPreparation);
 
 
-async function saveProhibition(kind: 'Stop' | 'Pause' | 'Retire' | 'Access' | 'Denied' | 'Expired' | 'Admin') {
+async function saveProhibition(
+  kind: 'Stop' | 'Pause' | 'Retire' | 'Access' | 'Denied' | 'Expired' | 'Admin',
+) {
   const request = { routineId: 'orders', changeId: 'orders:bridge-stop',
     expectedPosition: await nats.store.head('routine-orders'),
     expectedDefinitionRevision: 1, expectedScheduleRevision: 1, expectedControlRevision: 1 };
@@ -906,7 +908,10 @@ async function saveProhibition(kind: 'Stop' | 'Pause' | 'Retire' | 'Access' | 'D
   }
   if (kind === 'Admin') {
     await apply([joinedMember('admin')]);
-    return pauseRoutineAsAdmin(nats.store, binding, 'admin', request);
+    const receipt = await pauseRoutineAsAdmin(nats.store, binding, 'admin', request);
+    const auth = memberAuthorisation(binding, nats.store);
+    expect((await auth.conversation('admin', conversationId, 'read')).allowed).toBe(false);
+    return receipt;
   }
   if (kind === 'Stop') {
     return requestRoutineStop(nats.store, binding, 'alice', { ...request, occurrenceId: 'occurrence' });
@@ -930,7 +935,9 @@ async function pollRoutine() {
     mode: 'agent_session' as const, createdAt: new Date().toISOString(), assistantKind: 'team' as const }];
   await Promise.all(processor.pollRoutines(sessions));
 }
-async function runningProhibition(kind: 'Stop' | 'Pause' | 'Retire' | 'Access' | 'Denied' | 'Expired' | 'Admin') {
+async function runningProhibition(
+  kind: 'Stop' | 'Pause' | 'Retire' | 'Access' | 'Denied' | 'Expired' | 'Admin',
+) {
   expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
   await until(preparedComputer.executed);
   await saveProhibition(kind);
@@ -953,7 +960,7 @@ async function runningProhibition(kind: 'Stop' | 'Pause' | 'Retire' | 'Access' |
   expect(state?.lastRun).toBeNull();
 }
 it.each(['Stop', 'Pause', 'Retire', 'Access', 'Denied', 'Expired', 'Admin'] as const)(
-  'polls saved owner %s and interrupts only the accepted native routine turn once', runningProhibition);
+  'polls saved %s and interrupts only the accepted native routine turn once', runningProhibition);
 
 
 async function startRunning() {

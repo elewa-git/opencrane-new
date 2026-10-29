@@ -4844,7 +4844,8 @@ and unavailable errors contain fixed descriptions only. No definition is returne
 database. It checks recovery, conflicts, refusals, queued access changes, expiry,
 slow history and replay with execution services forbidden. Run it under `nice -n 10`
 with `PG_TEST_URL` pointing to a disposable test database.
-Routes, admin intervention, reassign/resume, scheduling and execution remain later work.
+Routes, reassign/resume, scheduling and execution remain later work.
+The separate internal admin safety pause is described below.
 The separate `applyRoutineStop` operation accepts the saved pause as budget Stop evidence. Fresh-install execution qualification: NOT RUN.
 
 Bridge approval entries include the computer stream position in their change check.
@@ -6593,3 +6594,21 @@ Own checks on 28 October 2026: PASS, 467 targeted tests twice, including
 turn tools, private loading and native discovery. PASS, two selected MCP backend
 Forget refusal/input checks and 460 event security rules. The initial test commit
 failed before the definition, builder and loader support were added.
+
+## Internal admin safety pause
+
+Part of #107. `pauseRoutineAsAdmin(store, binding, memberId, input)` uses the same
+strict input and receipt as the owner pause. It checks routine metadata permission,
+current active Owner/Admin membership and applied IAM receipts before exposing a
+conflict or retry receipt. It never uses owner manage permission or private chat access.
+Routine and member history load before the two-second write check. Only the small
+member and ownership streams enter that check; the routine uses conditional append.
+One `routine.paused` records source `admin`, reason `admin_requested`, the actual actor
+and occupied `affectedRun`. The definition, owner, payer and frozen run stay unchanged.
+Exact retries recover after deduplication expiry and restart. Changed intent conflicts.
+Budget cleanup and bridge interruption use the existing saved-evidence reader, including
+historical admin authority. Demotion after the pause cannot undo that prohibition.
+The focused command, root evidence, routine-session and routine-sender tests cover
+refusals, races, restart, uncertain holds, late settlement, delayed cleanup and private
+thread interruption. Replay sends nothing. Execution, routes, admin retirement,
+reassignment, resume and company calls remain disabled or unbuilt; live qualification is NOT RUN.

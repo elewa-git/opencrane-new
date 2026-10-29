@@ -639,9 +639,13 @@ it.each(['routine.paused', 'routine.retired'])(
 
 async function forgedAdminPause(kind: string) {
   const source = await lifecycleEvidence('routine.paused');
-  const member = envelope('test', 'member-admin', 'member.joined',
+  let member = envelope('test', 'member-admin', 'member.joined',
     { memberId: 'admin', email: 'admin@example.test', displayName: 'Admin',
       role: 'admin' });
+  if (kind === 'unjoined promotion') {
+    member = envelope('test', 'member-admin', 'member.role_changed',
+      { memberId: 'admin', previousRole: 'member', newRole: 'admin', changedBy: 'alice' });
+  }
   if (kind === 'foreign role') member.silo = 'other';
   if (kind === 'wrong member') member.subject = 'member-bob';
   if (kind !== 'missing role' && kind !== 'later role') await nats.seed([member]);
@@ -658,5 +662,6 @@ async function forgedAdminPause(kind: string) {
   await refuses(changed, saved.position);
   await reserve();
 }
-it.each(['missing role', 'foreign role', 'wrong member', 'later role', 'demoted', 'occurrence'])(
+it.each(['missing role', 'foreign role', 'wrong member', 'later role', 'demoted',
+  'unjoined promotion', 'occurrence'])(
   'refuses forged admin pause evidence: %s', forgedAdminPause);

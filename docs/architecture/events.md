@@ -471,6 +471,12 @@ Verify the original 15-minute request, owner decision or saved expiry time, trus
 routine preparation, frozen people and allocated turn before cleanup. Clock passage
 alone is not evidence. This records no approval decision and enables no firing.
 
+An internal admin safety pause saves `routine.paused` with source `admin`, reason
+`admin_requested`, the actual actor and occupied `affectedRun`. Metadata access, current
+Owner/Admin membership and applied IAM receipts are required independently of owner manage.
+Cleanup checks that actor’s saved member and ownership authority before the pause; later
+demotion cannot prevent Stop. No definition, payer or private chat permission changes.
+
 Routine evidence is a saved `routine.run_stop_requested`, or an owner `routine.paused` or
 `routine.retired` naming the occupied run in `affectedRun`. Lifecycle evidence checks the
 current owner and preceding definition, schedule and control revisions. A system
@@ -710,7 +716,7 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` / `routine.reassigned` | server for checked actor | routine facts | `update-openfga` applies creation, reassignment and retirement permissions and receipts; explicitly enabled internal cleanup applies verified owner Pause/Retire or system owner-removal pause evidence to the occupied run’s existing budget root; the connected bridge polls verified prohibitions to interrupt the accepted private turn; no execution |
+| `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` / `routine.reassigned` | server for checked actor | routine facts | `update-openfga` applies creation, reassignment and retirement permissions and receipts; explicitly enabled internal cleanup applies verified owner Pause/Retire, admin safety pause or system owner-removal pause evidence to the occupied run’s existing budget root; the connected bridge polls verified prohibitions to interrupt the accepted private turn; no execution |
 | `routine.due` | server system | frozen occurrence facts (pure fold only) | none; no input or root is started |
 | `routine.occurrence_skipped` / `routine.occurrences_missed` | server system | saved cursor/next facts | none |
 | `routine.run_activation_admitted` | internal server conditional command | saved exact admission and sender attempt | none; receipt only, execution remains disabled |

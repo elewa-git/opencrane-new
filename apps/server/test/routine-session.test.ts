@@ -1186,7 +1186,7 @@ function routineRootTests() {
     const request = await stopRequest();
     const beforeControl = await nats.store.head();
     const receipt = await prohibit(kind, request);
-    const added = kind === 'Access' ? 2 : 1;
+    const added = kind === 'Access' || kind === 'Admin' ? 2 : 1;
     expect(await nats.store.head()).toBe(beforeControl + added);
     const saved = await nats.store.readEvent(receipt.position);
     expect(saved.event.data).toMatchObject({ affectedRun: 'occurrence' });
@@ -1215,8 +1215,9 @@ function routineRootTests() {
   it.each([['Stop', 'prepared'], ['Stop', 'allocated'], ['Stop', 'admitted'],
     ['Pause', 'prepared'], ['Pause', 'allocated'], ['Pause', 'admitted'],
     ['Retire', 'prepared'], ['Retire', 'allocated'], ['Retire', 'admitted'],
-    ['Access', 'admitted']])(
-    'owner %s prevents further admission at the %s stage', stopsAllocatedRoot);
+    ['Access', 'admitted'], ['Admin', 'prepared'], ['Admin', 'allocated'],
+    ['Admin', 'admitted']])(
+    'saved %s prevents further admission at the %s stage', stopsAllocatedRoot);
   async function budgetStopRecovery(kind: string) {
     stopping = true;
     await prepare();

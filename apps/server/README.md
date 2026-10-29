@@ -39,6 +39,10 @@ that request and keeps the computer connection open for other conversations.
 An internal command stops the exact routine run after its owner denies a held Ask,
 or after a saved expiry. It checks the original request and keeps cleanup retryable.
 
+A current silo owner or admin can also save an internal safety pause. It keeps the
+routine owner, payer and active run unchanged and grants no private chat access.
+Cleanup honours the saved pause even if the admin later loses their role.
+
 An internal system command pauses an occupied routine after its recorded owner is removed.
 It checks the exact saved removal, even when the permissions service is unavailable.
 An internal owner command saves Stop intent for the active run. A separate operation
@@ -143,7 +147,7 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks private callers, reads original tool reviews, checks access before history errors, prepares and allocates child and routine allowances, checks saved routine admission and dispatch prohibition, applies saved Stop, Pause and Retire intent and verifies owner removal and Ask termination, and shares types| libs["libs/*<br/>shared code and chat keys"]
+  server -.->|checks private callers, reads original tool reviews, checks access before history errors, prepares and allocates child and routine allowances, checks saved routine admission and dispatch prohibition, applies saved Stop, Pause and Retire intent and verifies admin authority at a pause, owner removal and Ask termination, and shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; detects saved personal corrections, forgets, loaded expiry and lost access, records invalid contexts and personal account revocations, choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, encrypted inputs and checked admission receipts, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]

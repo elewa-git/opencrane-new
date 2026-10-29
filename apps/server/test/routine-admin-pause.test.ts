@@ -122,7 +122,7 @@ async function privateRefusal(kind: string) {
   }
   const before = await nats.store.head();
   for (const change of [{}, { expectedPosition: 0 }, { expectedDefinitionRevision: 99 },
-    { changeId: 'orders:unknown' }]) {
+    { changeId: 'orders:unknown' }, { changeId: 'other:pause' }]) {
     await expect(pause(memberId, { ...input, ...change }))
       .rejects.toThrow(/^Routine admin pause refused$/u);
   }
@@ -147,7 +147,8 @@ async function losesReply() {
   const before = await nats.store.head();
   const [first, concurrent] = await Promise.all([pause(), pause()]);
   expect(concurrent).toEqual(first);
-  expect(first.position).toBe(before);
+  expect(first.position).toBe(await nats.store.head('routine-orders'));
+  expect(await rows()).toHaveLength(3);
   for (const change of [{ expectedPosition: 0 }, { expectedDefinitionRevision: 2 },
     { expectedScheduleRevision: 2 }, { expectedControlRevision: 2 },
     { changeId: 'orders:another' }, { changeId: 'another:pause' }]) {
@@ -205,3 +206,22 @@ async function savedAuthority(kind: string) {
 }
 it.each(['member.removed', 'member.role_changed'])(
   'validates authority at the saved pause despite later %s', savedAuthority);
+
+async function siloOwnerPause() {
+  await occupy();
+  const joined = joinedMember('owner');
+  const owner = { ...joined, data: { memberId: 'owner', email: 'owner@example.test',
+    displayName: 'Owner', role: 'owner' } };
+  const seeded = { ...event('ownership-seed-test', 'ownership-test', 'ownership.seeded'),
+    data: { ownerIds: ['owner'] } };
+  const auth = memberAuthorisation(binding, nats.store);
+  await nats.seed([owner, seeded]);
+  await auth.handler.handle(owner, db);
+  await auth.handler.handle(seeded, db);
+  const saved = await pause('owner');
+  const proof = await readRootStopEvidence(nats.store, 'routine-orders', saved.position);
+  expect(proof.event).toMatchObject({ principal: { kind: 'human', id: 'owner' },
+    data: { actorId: 'owner', source: 'admin' } });
+  await expect(pause('admin')).rejects.toThrow(/^Routine admin pause conflict$/u);
+}
+it('permits a current silo owner and binds retries to the actual actor', siloOwnerPause);

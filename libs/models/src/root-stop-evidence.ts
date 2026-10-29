@@ -3,6 +3,7 @@ import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event
 import { parseEventByType, routineControlSchema, routineStopSchema,
   type EventEnvelope, type RoutineState } from '@opencrane/events';
 import { readRoutineApproval } from './routine-approval-evidence.ts';
+import { currentMembership } from './ownership.ts';
 import { data, type BudgetState } from './state.ts';
 import { withinBudgetDeadline } from './budget-writer.ts';
 
@@ -92,10 +93,60 @@ async function requireLifecycleRun(store: EventStore, state: RoutineState | unde
       throw new Error('Invalid routine prohibition');
     }
     await readRoutineRemoval(store, state, control.cause, claimPosition, deadline);
+  } else if (control.source === 'admin') {
+    await requireAdminPause(store, source, deadline);
   } else if (control.source !== 'owner' ||
       control.actorId !== checked.state.definition!.definition.ownerId) {
     throw new Error('Invalid routine prohibition');
   }
+}
+
+async function requireAdminPause(store: EventStore, source: StoredEvent, deadline: number) {
+  const control = routineControlSchema.parse(source.event.data);
+  if (source.event.type !== 'routine.paused' || control.reason !== 'admin_requested') {
+    throw new Error('Invalid admin prohibition');
+  }
+  // Read authority as it stood at the pause. Later demotion must not prevent cleanup.
+  async function* readStream(subject: string, from = 1) {
+    for await (const row of store.readStream(subject, from, deadline)) {
+      if (performance.now() >= deadline) {
+        throw new Error('Admin history unavailable');
+      }
+      if (row.sequence >= source.sequence) {
+        return;
+      }
+      const parsed = parseEventByType(row.event);
+      if (!parsed.success || row.event.subject !== subject ||
+          (subject.startsWith('member-') && data(row.event)['memberId'] !== control.actorId)) {
+        throw new Error('Invalid admin history');
+      }
+      yield row;
+    }
+  }
+  const history = { readStream };
+  const member = await currentMembership(history, source.event.silo, control.actorId,
+    undefined, deadline);
+  if (!hasActiveAdmission(member.facts, control.actorId) ||
+      (member.role !== 'admin' && member.role !== 'owner')) {
+    throw new Error('Invalid admin authority');
+  }
+}
+
+function hasActiveAdmission(facts: StoredEvent[], actorId: string) {
+  let active = false;
+  for (const row of facts) {
+    if (row.event.subject !== `member-${actorId}`) {
+      continue;
+    }
+    if (row.event.type === 'member.joined' || row.event.type === 'silo.owner_bootstrapped') {
+      active = true;
+    } else if (row.event.type === 'member.removed') {
+      active = false;
+    } else if (row.event.type === 'member.role_changed' && !active) {
+      return false;
+    }
+  }
+  return active;
 }
 
 function sameFrozenDefinition(state: RoutineState) {
