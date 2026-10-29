@@ -5651,3 +5651,37 @@ async function companyApprovalReuse() {
   expect(await test.rows()).toHaveLength(0);
 }
 it('refuses reusing a pending company operation with changed approval', companyApprovalReuse);
+
+async function companyRotationFixture() {
+  const test = await companyFixture();
+  const original = await test.save();
+  const input = { ...test.input, action: 'rotate', changeRef: 'rotate',
+    expectedSequence: original.sequence, expectedGeneration: 1 };
+  async function save(raw: unknown = input, supplied = 'synthetic-replacement') {
+    return test.save(raw, supplied);
+  }
+  return { ...test, input, save, original };
+}
+async function rotatesCompanyOnce() {
+  const test = await companyRotationFixture();
+  const before = await events.store.head();
+  const attempts = [test.save(), test.save()];
+  const saved = await Promise.all(attempts);
+  expect(saved[0]).toEqual(saved[1]);
+  expect(saved[0]).toMatchObject({ status: 'saved_unverified', generation: 2 });
+  expect(await events.store.head()).toBe(before + 1);
+  expect(test.store.creates).toBe(2);
+  expect(test.store.deletes).toBe(0);
+  const rows = await test.rows();
+  expect(rows).toHaveLength(2);
+  const rebuilt = foldCompanyConnection(rows);
+  expect(rebuilt).toMatchObject({ status: 'saved_unverified', data: {
+    siloId: 'test', custodianId: test.userId,
+    activation: { generation: 2, reason: 'bearer_rotation' },
+  } });
+  expect(foldConnection(rows).status).toBe('unavailable');
+  expect(JSON.stringify([saved, rows])).not.toContain('synthetic-replacement');
+  test.store.fail();
+  expect(foldCompanyConnection(rows)).toEqual(rebuilt);
+}
+it('rotates one company generation once without selecting or releasing it', rotatesCompanyOnce);
