@@ -168,11 +168,14 @@ async function privateRetry(kind: string) {
   await reassign();
   if (kind !== 'unapplied receipt') await applySaved();
   if (kind === 'removed admin') await changeMember('admin', 'member.removed');
-  if (kind === 'demoted admin') await changeMember();
+  if (kind === 'demoted admin' || kind === 'demoted admin with failed ownership') {
+    await changeMember();
+  }
   if (kind === 'removed recipient') await changeMember('bob', 'member.removed');
   const read = nats.store.readStream.bind(nats.store);
   async function* failed(subject: string, from?: number, deadline?: number) {
-    if (kind === 'removed admin' && subject === 'ownership-test' ||
+    const failedOwnership = kind === 'removed admin' || kind === 'demoted admin with failed ownership';
+    if (failedOwnership && subject === 'ownership-test' ||
         kind === 'removed recipient' && subject === 'assistant-sales-assistant') {
       throw new Error('private-service-canary');
     }
@@ -183,7 +186,8 @@ async function privateRetry(kind: string) {
   await expect(reassign()).rejects.toThrow(/^Routine reassignment refused$/u);
   expect(await nats.store.head()).toBe(before);
 }
-it.each(['removed admin', 'demoted admin', 'removed recipient', 'unapplied receipt'])(
+it.each(['removed admin', 'demoted admin', 'demoted admin with failed ownership',
+  'removed recipient', 'unapplied receipt'])(
   'hides an existing receipt and keeps saved removal through dependency failure: %s', privateRetry);
 
 async function recovery() {
