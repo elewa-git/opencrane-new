@@ -8,6 +8,7 @@ import { authorityFence } from './authority.ts';
 import { foldConnection } from './bearer-connections.ts';
 import { activeMember, readActiveMember, MemberAccessRefused } from './member-authority.ts';
 import { connectionServer } from './connection-server.ts';
+import { toolPolicyFromRows } from './tool-policy.ts';
 import { data } from './state.ts';
 import { selectedOAuth, type OAuthConfigurationLoader } from './oauth-selection.ts';
 
@@ -63,6 +64,14 @@ async function facts(store: EventStore, silo: string, selection: Selection,
   const serverSubject = `mcp-${selection.serverId}`;
   const rows = await history(store, serverSubject, silo, deadline);
   const server = connectionServer(rows, selection.connectionId);
+  const policy = toolPolicyFromRows(rows);
+  async function serverCurrent() {
+    const currentRows = await history(store, serverSubject, silo, performance.now() + 10_000);
+    const currentServer = connectionServer(currentRows, selection.connectionId);
+    const currentPolicy = toolPolicyFromRows(currentRows);
+    return currentServer.available && currentPolicy.policyRevision === policy.policyRevision &&
+      Date.now() < currentServer.expiresAt;
+  }
   const control = `connection-control-${selection.userId}-${selection.serverId}`;
   const controlSequence = await store.head(control, deadline);
   const positions = new Map([[serverSubject, server.sequence], [control, controlSequence]]);
@@ -82,7 +91,7 @@ async function facts(store: EventStore, silo: string, selection: Selection,
       (oauth !== null || (toolName === undefined && profileMatchesSelection(profile, selection))) &&
       profile.data?.activation.endpointDigest === server.endpointDigest;
   }
-  return { available, positions, connectionId: server.connectionId, expiresAt, oauth };
+  return { available, positions, connectionId: server.connectionId, expiresAt, oauth, serverCurrent };
 }
 function profileMatchesSelection(profile: ReturnType<typeof foldConnection>,
   selection: Extract<Selection, { action: 'select' }>) {
@@ -293,7 +302,9 @@ export async function readConnectionSelection(store: EventStore, binding: Bindin
   if (checked.oauth) {
     // Check data changes after the single permission decision, without a read authority fence.
     checked.positions.set(subject, state.sequence);
-    if (!await checked.oauth.configurationCurrent()) {
+    // Allow catalogue renewal while still requiring the same policy and current evidence.
+    checked.positions.delete(`mcp-${serverId}`);
+    if (!await checked.oauth.configurationCurrent() || !await checked.serverCurrent()) {
       return unavailable;
     }
     try {
