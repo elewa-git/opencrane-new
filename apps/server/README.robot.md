@@ -6789,8 +6789,13 @@ One conditional `routine.reassigned` changes owner/admission and advances defini
 and control revisions only. It remains paused. Occupied runs refuse even after Stop.
 All other settings and encrypted instructions stay unchanged. Existing IAM and
 projection handlers apply the saved event; original completed runs stay private.
-Identical retries recover the receipt after current authority checks. Changed retries
-conflict. There is no broker, wake, credential release, budget action or execution switch.
+Identical retries recover the receipt after current authority checks, including after
+the new owner retires the routine. Paused status and absence of an occupied run are
+required for a new reassignment, after checking for a saved matching receipt.
+The admin check precedes routine-access preparation, so a saved demotion still returns
+`ReassignmentRefused` when ownership history fails. Permission is not retried on failure.
+Changed retries conflict. There is no broker, wake, credential release, budget action
+or execution switch.
 Checks and limits: [build record](../../docs/process/p4-24-pr12h/README.robot.md).
 
 ## Initial personal load gate repair

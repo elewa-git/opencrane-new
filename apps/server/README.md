@@ -61,6 +61,8 @@ Cleanup honours the saved pause even if the admin later loses their role.
 A separate internal command can reassign a paused routine once its run has ended.
 It checks the new owner’s assistant and payer access, preserves the settings and
 keeps earlier private runs with their original owner. The routine stays paused.
+An authorised retry can recover its saved confirmation after the new owner retires
+the routine. A demoted admin stays refused if a later access read fails.
 
 An internal system command pauses an occupied routine after its recorded owner is removed.
 It checks the exact saved removal, even when the permissions service is unavailable.

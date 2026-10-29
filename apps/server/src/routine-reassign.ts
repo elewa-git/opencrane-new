@@ -146,7 +146,7 @@ async function reassignmentAccess(store: EventStore, binding: Binding,
   }
   const state = saved.state;
   const definition = state?.definition;
-  if (!state || !definition || state.status !== 'paused' || state.activeRun) {
+  if (!definition) {
     throw new ReassignmentRefused();
   }
   let successor: Awaited<ReturnType<typeof recipient>>;
@@ -188,6 +188,7 @@ export async function reassignRoutine(store: EventStore, binding: Binding,
     if (!input.changeId.startsWith(`${input.routineId}:`)) throw new ReassignmentConflict();
     const previous = previousReassignment(saved.rows, input, memberId, successor.admissionId);
     if (previous) return previous;
+    // Require paused, unoccupied work only when saving a new reassignment.
     const data = reassignmentData(saved.state, memberId, input.ownerId, successor.admissionId);
     const position = saved.rows.at(-1)?.sequence ?? 0;
     requireRevisions(input, saved.state, position);

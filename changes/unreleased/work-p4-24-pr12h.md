@@ -1,1 +1,2 @@
 - Let current admins internally reassign paused routines after all runs have ended, preserving settings and private run history. The new owner must have access to the same assistant and payer; the routine stays paused.
+- Keep demoted admins refused when access reads fail, and let authorised retries recover a reassignment confirmation after the new owner retires the routine.
