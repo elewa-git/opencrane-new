@@ -674,8 +674,8 @@ It never creates or deletes keys or runs reactions. Public access is not impleme
 | `memory.maintenance_recorded` | Native nightly scheduler | Payload-free scope night history; `no_changes` reviews exact input revisions and a content position | No dispatch or spending |
 | `memory.maintenance_bound` | Authenticated consenting member | Current memory maintenance binding | Native scheduling records intent only; no dispatch or spending |
 | `memory.written` | OpenCrane memory MCP (remember) | Postgres memory projection for that scope | mark that scope for nightly dreaming |
-| `memory.corrected` | Person-scope HTTP correction; OpenCrane memory MCP (planned); nightly dreaming job (planned) | Publishes the new revision and hides superseded content and dependent facts | `cleanup-memory` destroys superseded and dependent keys and verifies search removal |
-| `memory.forgotten` | Authorised person, group and assistant-notes HTTP forget commands | Postgres memory projection hides the fact and all dependent facts | `cleanup-memory` destroys revision and candidate keys in all three scopes and verifies search removal |
+| `memory.corrected` | Person-scope HTTP correction; governed personal memory MCP; nightly dreaming job (planned) | Publishes the new revision and hides superseded content and dependent facts | `cleanup-memory` destroys superseded and dependent keys and verifies search removal |
+| `memory.forgotten` | Authorised person, group and assistant-notes HTTP forget commands; governed personal memory MCP | Postgres memory projection hides the fact and all dependent facts | `cleanup-memory` destroys revision and candidate keys in all three scopes and verifies search removal |
 | `memory.cleanup_recorded` | Configured cleanup worker after verified deletion or exhausted retries | Memory projection checks the fixed `completed` or `unavailable` outcome without changing fact rows; scope history retains both | — |
 | `memory.consolidated` | Reserved for later use; not emitted by MVP dreaming | Postgres memory projection for that scope | — |
 | `scope.promotion_requested` / `scope.promoted` | person / approver | scopes | OpenFGA viewer tuples; copy to the target dataset |
@@ -690,7 +690,7 @@ The projection hides superseded revisions and their transitive dependent facts b
 opening any text. Cleanup deletes their keys while retaining the current replacement
 and its candidate key. The existing completion, exhaustion and recovery rules apply.
 Legacy corrections still parse but stop replay. Personal HTTP correction uses this registered event.
-Group, notes and MCP correction emitters remain planned.
+Group and notes correction emitters remain planned. Native memory admission remains disabled.
 
 Version-1 forgotten data records scope identity, memory id, expected revision and the
 next tombstone revision. It contains no text, ciphertext or key. The projection reads

@@ -3791,7 +3791,7 @@ The HTTP tests run accepted shared forget requests through the queued cleanup wo
 They check revision and candidate key destruction, forgotten status, exhausted cleanup,
 and facts staying hidden during projection rebuild.
 Scopes and detail advertise canForget from these current rights. Forgotten detail
-returns HTTP 200 with status unavailable and reason forgotten. The memory MCP has no forget.
+returns HTTP 200 with status unavailable and reason forgotten. Public memory MCP discovery remains recall-only.
 Fresh-install qualification remains NOT RUN; no screens, model calls or dev stack are included.
 
 ## Hosted image admission receipts
@@ -5197,7 +5197,7 @@ Their prepared data contains scope events, with no decrypted fact text or permis
 The signed pass checks current permissions and reads only later scope events before
 validating the target and every loaded reference. It rechecks the original access
 streams after reading the conversation tail. Correct can append through the shared command
-below. Forget returns `memory_tool_unavailable` and creates no business event or file.
+below. Forget uses the same prepared authority through the personal command described below.
 Remember and discovery still use their existing paths. Fresh-install qualification: NOT RUN.
 
 ### Team memory test setup
@@ -6525,11 +6525,11 @@ A saved removal keeps its `MemberAccessRefused` error through returned or thrown
 the failure path does not repeat the permission check. Events record agent/requester and
 conversation/turn/request with reason `contradiction`. Obsolete context refuses the next dispatch.
 `GET /api/memory/:scopeId/agent-changes/:commandId` reads only the owner's original agent
-correction receipt. It never searches human commands, resends work, creates keys or decrypts
+correction or Forget receipt. It never searches human commands, resends work, creates keys or decrypts
 text. Uncertain agent commands refuse replacement bodies; recovery uses status reads.
 `test/memory-mcp.test.ts` covers real gateway/store execution, replay, races, recovery,
 prepared reads and refused evidence/access. Test-first commits: `9db1037f7`, `cb7e6b22d`,
-`62730876a`, `63fd022a4`. Native launch/admission and Forget stay disabled. Live qualification: NOT RUN.
+`62730876a`, `63fd022a4`. Native launch/admission stay disabled. Live qualification: NOT RUN.
 
 ## Personal memory access withdrawal (P4-15 PR 3i)
 
@@ -6584,7 +6584,7 @@ Preparing a definition reads no facts, appends nothing and creates no keys.
 
 The native loader accepts this single definition on the fresh thread returned by
 Codex. Public discovery remains recall-only; ordinary assembly excludes private tools.
-Forget execution still refuses without events or files. Production callers,
+The governed backend can save Forget as described below. Production callers,
 multiple-tool lists and enablement remain later work. Admission remains disabled.
 Tests use synthetic qualification and saved-turn evidence; network-disabled native
 discovery starts no model turn and installs no call grant. Live qualification: NOT RUN.
@@ -6612,3 +6612,20 @@ The focused command, root evidence, routine-session and routine-sender tests cov
 refusals, races, restart, uncertain holds, late settlement, delayed cleanup and private
 thread interruption. Replay sends nothing. Execution, routes, admin retirement,
 reassignment, resume and company calls remain disabled or unbuilt; live qualification is NOT RUN.
+
+## Governed personal Forget (P4-15 PR 4h)
+
+Part of #97. Prepared calls use `memory/forget.ts`, the human command's fact/command
+locks and one conditional append. Agent command ids are separate from human ids.
+The backend requires the target proof, complete loaded evidence and both parties'
+read/write grants. History and IAM receipts load before the original signed deadline.
+Final checks read only later conversation events and retain that deadline. They reject
+changed evidence, ended turns, expired references and saved membership removal.
+Forget checks target metadata without decrypting text or requiring its revision key.
+
+The existing tombstone hides the fact and its dependent facts before replay decrypts
+anything. Reactions perform cleanup and exact-thread invalidation. Acceptance reports
+hidden and cleanup-pending; only saved completion confirms erasure. Failed cleanup
+reports unavailable. Agent status reads recover the original id without resending,
+decrypting old text, creating keys or starting any work. Human semantics stay unchanged.
+Native admission and shared writes remain disabled. Live qualification: NOT RUN.

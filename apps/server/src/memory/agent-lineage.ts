@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { StoredEvent } from '@opencrane/event-store';
-import { memoryReferences, MemoryToolRefused, type MemoryContext,
+import { memoryReferences, type MemoryContext,
   type parseMemoryRequest } from '@opencrane/models';
 import { checkRecallProof } from './recall-proof.ts';
 import { MemoryRefused, type MemoryOptions } from './access.ts';
@@ -106,7 +106,7 @@ export async function checkAgentChange(options: MemoryOptions, context: MemoryCo
   const proved = [...dependencies, target];
   checkRecallProof(secret, context, input.recallProof, proved,
     evidence.inputGeneration, target);
-  const confirm = confirmAgentLineage(options, context, evidence, dependencies,
+  const confirmLineage = confirmAgentLineage(options, context, evidence, dependencies,
     confirmRights, deadline, target);
   if (!preparedRows) {
     throw new MemoryRefused();
@@ -120,13 +120,18 @@ export async function checkAgentChange(options: MemoryOptions, context: MemoryCo
     }
     rows.push(row);
   }
-  const references = memoryReferences(rows, options.silo, input.scopeId, 'event-only');
-  for (const reference of proved) {
-    if (references.current(reference) !== 'current') throw new MemoryRefused();
+  function requireReferences() {
+    const references = memoryReferences(rows, options.silo, target.scopeId, 'event-only');
+    for (const reference of proved) {
+      if (references.current(reference) !== 'current') {
+        throw new MemoryRefused();
+      }
+    }
   }
-  if (input.operation === 'forget') {
-    await confirm();
-    throw new MemoryToolRefused('memory_tool_unavailable');
+  requireReferences();
+  async function confirm() {
+    await confirmLineage();
+    requireReferences();
   }
-  return { rows, confirm };
+  return { rows, confirm, input };
 }

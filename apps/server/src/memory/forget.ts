@@ -11,6 +11,8 @@ import { MemoryConflict } from './reads.ts';
 import { commandJournal } from './journal.ts';
 import { commandReference, commandHistory } from './command-history.ts';
 import { acquireMemoryWrite } from './admission.ts';
+import { confirmChange, changeRefused, type AgentChange, type WriteAuthority }
+  from './change-authority.ts';
 
 const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const targetParams = z.strictObject({ scopeId: z.string(), memoryId: identifier });
@@ -128,12 +130,17 @@ async function requireTarget(rows: StoredEvent[], options: MemoryOptions, scope:
     throw new MemoryConflict();
   }
 }
-export async function forget(options: MemoryOptions, requester: string, params: unknown, raw: unknown) {
+export async function forget(options: MemoryOptions, requester: string, params: unknown,
+  raw: unknown, agent?: AgentChange) {
   const target = targetParams.safeParse(params);
   if (!target.success) {
     throw new MemoryRefused();
   }
   const scope = await resolveScope(options, requester, target.data.scopeId);
+  if (agent && (scope.scopeKind !== 'person' || scope.ownerId !== requester)) {
+    throw new MemoryRefused();
+  }
+  const principalKind: 'agent' | 'human' = agent ? 'agent' : 'human';
   const initialAccess = await scopeAccess(options, requester, scope, true);
   requireForgetAccess(initialAccess);
   const { memoryId } = target.data;
@@ -144,23 +151,21 @@ export async function forget(options: MemoryOptions, requester: string, params: 
   if (known.rows.length === 0) {
     throw new MemoryRefused();
   }
-  const state = await commandHistory(options, scope.scopeId, requester, input.commandId);
+  const state = await commandHistory(options, scope.scopeId, requester, input.commandId,
+    agent?.checkAccess.deadline, agent?.rows, principalKind);
   if (!state.original) {
     await requireTarget(state.rows, options, scope, memoryId, input.expectedRevision);
   }
-  const fresh = await authorityFence(options.store, performance.now(), [`member-${requester}`]);
-  const checks = memoryAccessChecks(options, requester, fresh);
-  await readActiveMember(options.store, options.binding, requester, 'member', checks.applied);
-  const access = await scopeAccess(options, requester, scope, true, checks);
-  requireForgetAccess(access);
+  const fresh = agent?.checkAccess ?? await humanAuthority(options, requester, scope);
   await fresh();
   if (!options.keyDirectory || !options.db.lock) {
     throw new Error('Memory command records unavailable');
   }
-  const reference = commandReference(options.silo, scope.scopeId, requester, input.commandId);
+  const reference = commandReference(options.silo, scope.scopeId, requester, input.commandId,
+    principalKind);
   async function execute() {
     return forgetLocked(options, requester, scope, memoryId, input, state, fresh, reference,
-      access.audience);
+      initialAccess.audience, agent);
   }
   function lockOptions() {
     // Allow slow database replies while keeping the original two-second access limit.
@@ -179,10 +184,19 @@ export async function forget(options: MemoryOptions, requester: string, params: 
     release();
   }
 }
+async function humanAuthority(options: MemoryOptions, requester: string, scope: Scope) {
+  const fresh = await authorityFence(options.store, performance.now(), [`member-${requester}`]);
+  const checks = memoryAccessChecks(options, requester, fresh);
+  await readActiveMember(options.store, options.binding, requester, 'member', checks.applied);
+  const access = await scopeAccess(options, requester, scope, true, checks);
+  requireForgetAccess(access);
+  return fresh;
+}
 async function forgetLocked(options: MemoryOptions, requester: string, scope: Scope,
   memoryId: string, input: Input, state: Awaited<ReturnType<typeof commandHistory>>,
-  fresh: Awaited<ReturnType<typeof authorityFence>>, reference: string,
-  audience: { kind: string; ownerId: string }) {
+  fresh: WriteAuthority, reference: string,
+  audience: { kind: string; ownerId: string }, agent?: AgentChange) {
+  const principalKind: 'agent' | 'human' = agent ? 'agent' : 'human';
   const journal = commandJournal(options.keyDirectory!, reference);
   const factReference = commandReference(options.silo, scope.scopeId, requester, memoryId);
   const reservation = commandJournal(options.keyDirectory!, `fact-${factReference}`);
@@ -190,6 +204,10 @@ async function forgetLocked(options: MemoryOptions, requester: string, scope: Sc
   const metadata = { operation: 'forget', memoryId, ...input };
   fingerprint.update(JSON.stringify(metadata));
   const inputDigest = fingerprint.digest('hex');
+  function historyDeadline() {
+    const deadline = performance.now() + 100;
+    return agent ? Math.min(fresh.deadline, deadline) : deadline;
+  }
   function recoveredReceipt(row: StoredEvent, rows: StoredEvent[]) {
     const receipt = originalForget(row, rows, input, memoryId, audience);
     journal.remove();
@@ -199,21 +217,21 @@ async function forgetLocked(options: MemoryOptions, requester: string, scope: Sc
   }
   async function reconcile() {
     const reconciled = await commandHistory(options, scope.scopeId, requester, input.commandId,
-      performance.now() + 100, state.rows);
+      historyDeadline(), state.rows, principalKind);
     if (reconciled.original) {
       return recoveredReceipt(reconciled.original, reconciled.rows);
     }
     throw new MemoryConflict();
   }
   const current = await commandHistory(options, scope.scopeId, requester, input.commandId,
-    performance.now() + 100, state.rows);
+    historyDeadline(), state.rows, principalKind);
   await fresh();
   if (current.original) {
     return recoveredReceipt(current.original, current.rows);
   }
   const pending = journal.read();
   if (pending) {
-    if (pending.operation !== 'forget' || pending.inputDigest !== inputDigest ||
+    if (agent || pending.operation !== 'forget' || pending.inputDigest !== inputDigest ||
       pending.stage === 'failed') {
       throw new MemoryConflict();
     }
@@ -222,10 +240,14 @@ async function forgetLocked(options: MemoryOptions, requester: string, scope: Sc
   const expectedSequence = state.rows.at(-1)?.sequence ?? 0;
   const data = { schemaVersion: 1, ...scope, memoryId,
     expectedRevision: input.expectedRevision, revision: input.expectedRevision + 1 };
+  let correlation = {};
+  if (agent) {
+    correlation = { conversation: agent.conversation, turn: agent.turn, request: agent.requestId };
+  }
   const proposed = { id: reference, commandId: input.commandId,
     silo: options.silo, subject: `scope-${scope.scopeId}`, type: 'memory.forgotten',
     source: 'opencrane-server', time: new Date().toISOString(),
-    principal: { kind: 'human', id: requester }, correlation: {}, data };
+    principal: { kind: principalKind, id: requester }, correlation, data };
   const event = memoryForgottenEventSchema.parse(proposed);
   const identity = { silo: options.silo, ...scope, memoryId, revision: input.expectedRevision };
   const position = await options.store.head(`scope-${scope.scopeId}`, fresh.deadline);
@@ -234,16 +256,15 @@ async function forgetLocked(options: MemoryOptions, requester: string, scope: Sc
     return reconcile();
   }
   // Keep uncertain attempts across restart. This record never authorises key recovery or a resend.
-  const entry = { operation: 'forget' as const, identity, requester, principalKind: 'human' as const,
+  const entry = { operation: 'forget' as const, identity, requester, principalKind,
     commandId: input.commandId, inputDigest, expectedSequence, stage: 'unknown' as const };
-  journal.save(entry);
-  let result;
-  try {
-    const command = { event, expectedSequence, historyChecked: true as const, deadline: fresh.deadline };
-    result = await options.store.append(command);
-  } catch {
-    return { outcome: 'unknown' };
+  async function checkAccess() {
+    await confirmChange(options, requester, fresh, agent);
   }
+  journal.save(entry);
+  const command = { event, expectedSequence, historyChecked: true as const,
+    deadline: fresh.deadline, ...(agent ? { checkAccess } : {}) };
+  const result = await appendForget(options, command, agent);
   if (result.status === 'unavailable') {
     return { outcome: 'unknown' };
   }
@@ -256,4 +277,35 @@ async function forgetLocked(options: MemoryOptions, requester: string, scope: Sc
   const failed = { ...entry, stage: 'failed' as const };
   journal.save(failed);
   return reconcile();
+}
+
+async function appendForget(options: MemoryOptions,
+  command: Parameters<MemoryOptions['store']['append']>[0], agent?: AgentChange) {
+  try {
+    const result = await options.store.append(command);
+    if (result.status === 'unavailable' && agent && changeRefused(result.cause)) {
+      throw result.cause;
+    }
+    return result;
+  } catch (error) {
+    if (agent && changeRefused(error)) {
+      throw error;
+    }
+    return { status: 'unavailable' as const };
+  }
+}
+
+export async function readAgentChange(options: MemoryOptions, requester: string, scope: Scope,
+  commandId: string) {
+  if (scope.scopeKind !== 'person' || scope.ownerId !== requester) {
+    throw new MemoryRefused();
+  }
+  const state = await commandHistory(options, scope.scopeId, requester, commandId,
+    performance.now() + 10_000, [], 'agent');
+  if (state.original?.event.type !== 'memory.corrected' &&
+    state.original?.event.type !== 'memory.forgotten') {
+    return { outcome: 'unknown' };
+  }
+  const audience = { kind: 'person', ownerId: requester };
+  return changeReceipt(state.original, state.rows, audience, options.keyDirectory);
 }

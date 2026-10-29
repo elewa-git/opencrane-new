@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi, type TestContext } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
 import * as crypto from 'node:crypto';
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { request, type IncomingMessage } from 'node:http';
 import { once } from 'node:events';
@@ -20,12 +20,13 @@ import { envelope, history, memoryRights, parseMemoryRequest, readToolPolicy, st
 import { memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { limits, listFacts } from '../src/memory/reads.ts';
-import { memoryContextRecordedEventSchema } from '@opencrane/events';
+import { memoryContextRecordedEventSchema, memoryCleanupRecordedEventSchema } from '@opencrane/events';
 import { checkRecallProof } from '../src/memory/recall-proof.ts';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 import * as memoryPreparation from '../../../libs/models/src/memory-prepare-request.ts';
 import * as correctionCommands from '../src/memory/correct.ts';
+import * as forgetCommands from '../src/memory/forget.ts';
 import { timeMemoryPath } from './support/memory-path-timing.ts';
 
 declare module 'vitest' {
@@ -2458,7 +2459,7 @@ async function missingLoadedEvidence(stage: string) {
 it.each(['absent', 'prepared', 'empty'])(
   'refuses valid personal proofs with %s loaded evidence', missingLoadedEvidence);
 
-async function loadChangeFacts(revision: number) {
+async function loadChangeFacts(revision: number, recordLoaded = true) {
   if (revision === 2) await saveHumanCorrection('fact_21');
   const data = { conversationId: 'conversation', turnId: 'turn', requesterId: 'alice',
     assistantId: 'assistant', computerId: 'computer', generation: 1, threadId: 'thread',
@@ -2471,7 +2472,9 @@ async function loadChangeFacts(revision: number) {
   const position = await setup.nats.store.head(`scope-${scopeId}`);
   const loaded = { ...data, action: 'loaded', delivery: 'initial', additions,
     byteCount: 1, scopePositions: [{ scopeId, position }] };
-  await seedEvidence(loaded);
+  if (recordLoaded) {
+    await seedEvidence(loaded);
+  }
   // Build a proof for the seeded references without delivering a recall.
   const claims = await recallClaims(setup);
   const token = await preparationToken(setup, claims);
@@ -2480,7 +2483,8 @@ async function loadChangeFacts(revision: number) {
   const { recallProof } = await import('../src/memory/recall-proof.ts');
   return recallProof(testAuthConfig().cookieSecret, context, [additions[0]!], data.inputGeneration);
 }
-async function changeRequest(operation: 'correct' | 'forget', checkControl = true, revision = 1) {
+async function changeRequest(operation: 'correct' | 'forget', checkControl = true, revision = 1,
+  recordLoaded = true) {
   const catalogue = memoryCatalogue;
   for (const tool of [recallTool, forgetTool, correctTool]) {
     await setup.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',
@@ -2491,10 +2495,10 @@ async function changeRequest(operation: 'correct' | 'forget', checkControl = tru
   await grantWrite('member');
   await grantWrite('assistant');
   await prepareMemoryAccess();
-  const recallProof = await loadChangeFacts(revision);
+  const recallProof = await loadChangeFacts(revision, recordLoaded);
   const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
   const dependsOn = chat.memoryContext!.references;
-  const target = dependsOn[0]!;
+  const target = dependsOn[0] ?? { scopeId, memoryId: 'fact_21', revision };
   const input: Record<string, unknown> = { scopeId, memoryId: target.memoryId,
     commandId: 'change', expectedRevision: target.revision, recallProof };
   if (operation === 'correct') {
@@ -2762,10 +2766,11 @@ it.each(['correct', 'forget'] as const)(
   'finishes the %s lineage test observations before signing its request',
   preparesLineageObservation);
 
-async function changePolicy(value: 'ask' | 'block') {
-  const request = await changeRequest('correct');
+async function changePolicy(value: 'ask' | 'block', operation: 'correct' | 'forget' = 'correct') {
+  const request = await changeRequest(operation);
+  const tool = operation === 'correct' ? correctTool : forgetTool;
   await setup.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',
-    connectionId: 'server', toolName: 'correct', toolRevision: correctTool.revision,
+    connectionId: 'server', toolName: operation, toolRevision: tool.revision,
     mode: value, setBy: 'alice' });
   await publishMemory(setup);
   const position = await setup.nats.store.head('conversation-conversation');
@@ -2789,7 +2794,10 @@ async function changePolicy(value: 'ask' | 'block') {
   }
   appends.mockRestore();
 }
-it.each(['ask', 'block'] as const)('checks correct policy independently of recall: %s', changePolicy);
+async function correctPolicy(value: 'ask' | 'block') {
+  await changePolicy(value);
+}
+it.each(['ask', 'block'] as const)('checks correct policy independently of recall: %s', correctPolicy);
 
 async function changeScope(kind: 'group' | 'assistant_notes', loaded: boolean) {
   const assistant = await history(setup.nats.store, 'assistant-assistant', 'test');
@@ -3391,8 +3399,9 @@ it.each([false, true])('saves one correction when command attempts race (changed
 
 const invalidCorrections = ['proof', 'requester', 'thread', 'generation', 'stale', 'expiry',
   'mixed', 'target revision', 'sources', 'lost access'] as const;
-async function invalidCorrection(change: typeof invalidCorrections[number]) {
-  const request = await changeRequest('correct', false);
+async function invalidChange(change: typeof invalidCorrections[number],
+  operation: 'correct' | 'forget' = 'correct') {
+  const request = await changeRequest(operation, false);
   const input = request.body.params.arguments;
   if (change === 'proof') {
     input['recallProof'] = 'forged-proof';
@@ -3447,6 +3456,9 @@ async function invalidCorrection(change: typeof invalidCorrections[number]) {
   } finally {
     clock.restore();
   }
+}
+async function invalidCorrection(change: typeof invalidCorrections[number]) {
+  await invalidChange(change);
 }
 it.each(invalidCorrections)('refuses an agent correction with %s', invalidCorrection);
 
@@ -3571,8 +3583,10 @@ async function correctionInvalidatesDependency() {
 it('refuses a correction that would invalidate another loaded dependency',
   { meta: { correctionDependency: true } }, correctionInvalidatesDependency);
 
-async function correctionPublicationActivity(change: 'loaded' | 'closed' | 'unrelated') {
-  const request = await changeRequest('correct', false);
+async function publicationActivity(change: 'loaded' | 'closed' | 'unrelated',
+  operation: 'correct' | 'forget' = 'correct') {
+  const request = await changeRequest(operation, false);
+  const eventType = operation === 'correct' ? 'memory.corrected' : 'memory.forgotten';
   const prepared = await contextRecord();
   const token = await changeToken(request);
   const before = await setup.nats.store.head(`scope-${scopeId}`);
@@ -3584,7 +3598,7 @@ async function correctionPublicationActivity(change: 'loaded' | 'closed' | 'unre
   let publicationResult: Awaited<ReturnType<typeof original>> | undefined;
   async function append(command: Parameters<typeof original>[0]) {
     const event = z.object({ type: z.string() }).parse(command.event);
-    if (event.type === 'memory.corrected') {
+    if (event.type === eventType) {
       intercepted = true;
       publicationDeadline = command.deadline;
       if (change === 'closed') {
@@ -3601,7 +3615,7 @@ async function correctionPublicationActivity(change: 'loaded' | 'closed' | 'unre
       }
     }
     const result = await original(command);
-    if (event.type === 'memory.corrected') {
+    if (event.type === eventType) {
       publicationResult = result;
     }
     return result;
@@ -3635,11 +3649,16 @@ async function correctionPublicationActivity(change: 'loaded' | 'closed' | 'unre
     appends.mockRestore();
   }
 }
+async function correctionPublicationActivity(change: 'loaded' | 'closed' | 'unrelated') {
+  await publicationActivity(change);
+}
 it.each(['loaded', 'closed', 'unrelated'] as const)(
   'checks %s conversation activity before publishing a correction', correctionPublicationActivity);
 
-async function removedBeforeCorrectionPublication(throws: boolean) {
-  const request = await changeRequest('correct', false);
+async function removedBeforePublication(throws: boolean,
+  operation: 'correct' | 'forget' = 'correct') {
+  const request = await changeRequest(operation, false);
+  const eventType = operation === 'correct' ? 'memory.corrected' : 'memory.forgotten';
   const token = await changeToken(request);
   const before = await setup.nats.store.head(`scope-${scopeId}`);
   const original = setup.nats.store.append.bind(setup.nats.store);
@@ -3648,13 +3667,13 @@ async function removedBeforeCorrectionPublication(throws: boolean) {
   let dependencyFailed = false;
   async function append(command: Parameters<typeof original>[0]) {
     const event = z.object({ type: z.string() }).parse(command.event);
-    if (event.type === 'memory.corrected') {
+    if (event.type === eventType) {
       await setup.append('member-alice', 'member.removed', {
         memberId: 'alice', removedBy: 'owner' });
       removed = true;
     }
     const result = await original(command);
-    if (throws && event.type === 'memory.corrected' && result.status === 'unavailable') {
+    if (throws && event.type === eventType && result.status === 'unavailable') {
       if (!(result.cause instanceof Error)) {
         throw new Error('Missing publication refusal');
       }
@@ -3669,7 +3688,8 @@ async function removedBeforeCorrectionPublication(throws: boolean) {
     }
     return originalHead(...args);
   }
-  const corrections = vi.spyOn(correctionCommands, 'correct');
+  const corrections = operation === 'correct'
+    ? vi.spyOn(correctionCommands, 'correct') : vi.spyOn(forgetCommands, 'forget');
   const appends = vi.spyOn(setup.nats.store, 'append').mockImplementation(append);
   const heads = vi.spyOn(setup.nats.store, 'head').mockImplementation(head);
   try {
@@ -3687,9 +3707,24 @@ async function removedBeforeCorrectionPublication(throws: boolean) {
     appends.mockRestore();
   }
 }
+async function removedBeforeCorrectionPublication(throws: boolean) {
+  await removedBeforePublication(throws);
+}
 it.each([false, true])(
   'keeps saved removal ahead of publication dependency errors (throws=%s)',
   removedBeforeCorrectionPublication);
+
+async function recordCleanup(changeId: string, outcome: 'unavailable' | 'completed') {
+  const id = randomUUID();
+  const data = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
+    changeId, outcome, ...(outcome === 'unavailable' ? { failureCode: 'retry_exhausted' } : {}) };
+  const event = memoryCleanupRecordedEventSchema.parse({ id, commandId: id,
+    silo: 'test', subject: `scope-${scopeId}`, type: 'memory.cleanup_recorded',
+    source: 'opencrane-worker', time: new Date().toISOString(),
+    principal: { kind: 'system', id: 'opencrane-worker' }, correlation: {}, data });
+  await setup.nats.seed([event]);
+  return event;
+}
 
 async function savedAgentForget(lostReply: boolean) {
   const request = await changeRequest('forget', false);
@@ -3703,14 +3738,27 @@ async function savedAgentForget(lostReply: boolean) {
   async function append(command: Parameters<typeof original>[0]) {
     const result = await original(command);
     const event = z.object({ type: z.string() }).parse(command.event);
-    if (event.type === 'memory.forgotten' && lostReply) throw new Error('Lost reply');
+    if (event.type === 'memory.forgotten') {
+      expect(result.status).toBe('appended');
+      if (lostReply) {
+        throw new Error('Lost reply');
+      }
+    }
     return result;
   }
   const appends = vi.spyOn(setup.nats.store, 'append').mockImplementation(append);
-  const response = await setup.call(request.requestHeaders, request.body, route);
-  appends.mockRestore();
+  // Hold time still so this case tests receipt recovery after a real accepted append.
+  vi.useFakeTimers({ toFake: ['Date', 'performance'] });
+  let response;
+  try {
+    response = await setup.call(request.requestHeaders, request.body, route);
+  } finally {
+    vi.useRealTimers();
+    appends.mockRestore();
+  }
   expect(response.status, response.text).toBe(200);
-  const received = JSON.parse(response.text) as { result: { structuredContent: { outcome: string } } };
+  const received = z.object({ result: z.object({ structuredContent: z.object({
+    outcome: z.string() }) }) }).parse(JSON.parse(response.text));
   expect(received.result.structuredContent.outcome).toBe(lostReply ? 'unknown' : 'accepted');
   const rows = await history(setup.nats.store, `scope-${scopeId}`, 'test');
   expect(rows).toHaveLength(before.length + 1);
@@ -3725,18 +3773,28 @@ async function savedAgentForget(lostReply: boolean) {
   expect(status.json()).toMatchObject({ operation: 'forget', outcome: 'accepted',
     changeId: saved.event.id, hidden: true, cleanupStatus: 'pending' });
   expect(status.body).not.toMatch(/canary|ciphertext|keyId|recallProof|forgottenAt/u);
+  await setup.runner.run(projection);
   expect((await correctionStatus('changes')).json()).toMatchObject({ outcome: 'saved', revision: 1 });
-  const { readAgentCorrection } = await import('../src/memory/correct.ts');
+  const { readAgentChange } = await import('../src/memory/forget.ts');
   const decrypts = vi.spyOn(crypto, 'createDecipheriv');
   const writes = vi.spyOn(setup.nats.store, 'append');
-  await readAgentCorrection(correctionOptions(), 'alice', scope, 'change');
+  await readAgentChange(correctionOptions(), 'alice', scope, 'change');
   expect(decrypts).not.toHaveBeenCalled();
   expect(writes).not.toHaveBeenCalled();
   decrypts.mockRestore();
   writes.mockRestore();
   expect(readdirSync(dirname(setup.options.configFile))).toEqual(files);
   const { detailFact } = await import('../src/memory/reads.ts');
-  await setup.runner.rebuild(projection);
+  function replayDecrypt(identity: MemoryIdentity, value: { ciphertext: string; keyId: string }) {
+    expect(['fact_21', 'fact_22']).not.toContain(identity.memoryId);
+    return keys.decrypt(identity, value);
+  }
+  const replayProjection = memoryProjection({ decrypt: replayDecrypt });
+  const replayWrites = vi.spyOn(setup.nats.store, 'append');
+  await setup.runner.rebuild(replayProjection);
+  expect(replayWrites).not.toHaveBeenCalled();
+  replayWrites.mockRestore();
+  expect(readdirSync(dirname(setup.options.configFile))).toEqual(files);
   expect(await detailFact(correctionOptions(), 'alice', scope, 'fact_21')).toMatchObject({
     status: 'unavailable', reason: 'forgotten' });
   const next = await setup.call(headers, call, route);
@@ -3744,6 +3802,93 @@ async function savedAgentForget(lostReply: boolean) {
   const retry = await setup.call(request.requestHeaders, request.body, route);
   expect(retry.status).toBe(403);
   expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(saved.sequence);
+  const { memoryChanges } = await import('../src/memory/changes.ts');
+  const chat = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+  const detect = memoryChanges(correctionOptions());
+  await detect(chat.memoryContext!);
+  const invalidated = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
+  expect(invalidated.memoryContext).toMatchObject({ status: 'invalidated', reason: 'content_changed' });
+  await recordCleanup(saved.event.id, 'unavailable');
+  expect((await correctionStatus()).json()).toMatchObject({ hidden: true, cleanupStatus: 'unavailable' });
+  const completed = await recordCleanup(saved.event.id, 'completed');
+  expect((await correctionStatus()).json()).toMatchObject({ hidden: true,
+    cleanupStatus: 'forgotten', forgottenAt: completed.time });
 }
 it.each([false, true])('saves one agent Forget and recovers without resending (lost=%s)',
-  savedAgentForget);
+  { meta: { correctionDependency: true } }, savedAgentForget);
+
+async function forgetPolicy(value: 'ask' | 'block') {
+  await changePolicy(value, 'forget');
+}
+it.each(['ask', 'block'] as const)('checks Forget policy independently of recall: %s', forgetPolicy);
+async function invalidForget(change: typeof invalidCorrections[number]) {
+  await invalidChange(change, 'forget');
+}
+it.each(['proof', 'requester', 'thread', 'generation', 'stale', 'expiry', 'mixed',
+  'lost access'] as const)('refuses an agent Forget with %s', invalidForget);
+async function forgetPublicationActivity(change: 'loaded' | 'closed' | 'unrelated') {
+  await publicationActivity(change, 'forget');
+}
+it.each(['loaded', 'closed', 'unrelated'] as const)(
+  'checks %s conversation activity before publishing a Forget', forgetPublicationActivity);
+async function removedBeforeForgetPublication(throws: boolean) {
+  await removedBeforePublication(throws, 'forget');
+}
+it.each([false, true])('keeps Forget refused after saved removal (throws=%s)',
+  removedBeforeForgetPublication);
+
+async function forgetWithoutKeys() {
+  const request = await changeRequest('forget', false);
+  const rows = await history(setup.nats.store, `scope-${scopeId}`, 'test');
+  for (const row of rows) {
+    const data = z.object({ memoryId: z.string(), keyId: z.string() }).parse(row.event.data);
+    if (data.memoryId === 'fact_21') {
+      rmSync(`${dirname(setup.options.configFile)}/${data.keyId.slice(4)}`);
+    }
+  }
+  const response = await setup.call(request.requestHeaders, request.body, route);
+  expect(response.status, response.text).toBe(200);
+  expect((await correctionStatus()).json()).toMatchObject({ operation: 'forget', hidden: true,
+    cleanupStatus: 'pending' });
+}
+it('accepts metadata-proved Forget without the target key', forgetWithoutKeys);
+
+async function racedForget(other: 'forget' | 'correct') {
+  const first = await changeRequest('forget', false);
+  const second = structuredClone(first);
+  if (other === 'correct') {
+    second.body.params.name = 'correct';
+    second.requestHeaders['mcp-name'] = 'correct';
+    Object.assign(second.body.params.arguments, { text: 'Replacement private canary',
+      kind: 'fact', pinned: false, expiresAt: null,
+      dependsOn: [{ scopeId, memoryId: 'fact_22', revision: 1 }] });
+  }
+  const firstClaims = await preparedChangeClaims(first);
+  const secondClaims = await preparedChangeClaims(second);
+  const before = await history(setup.nats.store, `scope-${scopeId}`, 'test');
+  // Hold time still to test lock ordering. Separate cases check signed expiry.
+  vi.useFakeTimers({ toFake: ['Date', 'performance'] });
+  let results;
+  try {
+    const firstToken = await setup.tokens.memoryContext(firstClaims, Date.now() + 2000);
+    const secondToken = await setup.tokens.memoryContext(secondClaims, Date.now() + 2000);
+    results = await Promise.all([sendChange(first, firstToken), sendChange(second, secondToken)]);
+  } finally {
+    vi.useRealTimers();
+  }
+  const statuses = results.map(responseStatus);
+  expect(statuses).toContain(200);
+  const after = await history(setup.nats.store, `scope-${scopeId}`, 'test');
+  expect(after).toHaveLength(before.length + 1);
+  expect((await correctionStatus()).json()).toMatchObject({ outcome: 'accepted', revision: 2,
+    changeId: after.at(-1)!.event.id });
+}
+it.each(['forget', 'correct'] as const)('saves one change when Forget races %s', racedForget);
+
+async function forgetWithoutLoadedEvidence() {
+  const request = await changeRequest('forget', false, 1, false);
+  const before = await setup.nats.store.head(`scope-${scopeId}`);
+  await refusedChange(request);
+  expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(before);
+}
+it('refuses Forget with a target proof but no loaded evidence', forgetWithoutLoadedEvidence);
