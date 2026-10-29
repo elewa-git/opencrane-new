@@ -1700,3 +1700,31 @@ when `turn/completed` names the recorded native turn and a terminal status
 A closed private socket, a failed RPC, admission refusal, restart and a cancellation
 request omit it. Socket closure still lets the supervisor stop the private process,
 but does not prove process exit. No supervisor process-exit reporting is added.
+## Native recall call protocol — P4-15 PR 5b
+
+`test/private-recall-call.test.ts` runs pinned Codex 0.159.2 in the existing test
+image with external networking disabled. It reuses the private configuration,
+single-recall builder, loader, caller registry and real loopback MCP proxy.
+`private-recall-call-session.mjs` supplies a local scripted model using the response
+pattern in `codex-mcp-resume.mjs`. Codex creates every MCP call and consumes its
+reply on the same ephemeral thread. No fixture constructs a `tools/call` request.
+The test turn uses `on-request` native consent: the fixture accepts exactly one MCP
+request for the expected thread, turn and single-recall server. The generated private
+configuration stays unchanged. Its normal `never` policy refused the native call
+before it reached the proxy; this fixture does not enable production consent.
+
+Preparation uses the existing synthetic qualification and recorded-turn evidence.
+These are test-only inputs, not production qualification. A recording upstream
+replaces the gateway and backend. The fixture checks native protocol headers,
+call/thread metadata, personal scope, arguments and forwarded credentials in RAM.
+Its output contains counts and outcomes, never caller bytes, passes or test text.
+
+Discovery grants no call permission. Calls with no grant, a foreign caller or
+thread, an ended registration or an expired grant reveal no test text. Transport
+substitution changes the caller or catalogue address while preserving Codex's call.
+Cancellation drops a partially received reply. A lost reply is not resent.
+A second private session stays loaded and completes its own recall afterwards.
+Shell, file and browser tools stay off. Native starts are ephemeral with no rollout
+path and no execution environments. Admission and product files are unchanged.
+Disk isolation, loaded-reference accounting, backend/gateway checks and all live
+fresh-install journeys remain NOT RUN. See the [receipt](../../docs/process/p4-15-pr5b/receipt.md).

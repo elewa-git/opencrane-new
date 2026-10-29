@@ -57,6 +57,9 @@ private reply buffers are cleared before waiting for interruption to finish.
   It checks the same caller, thread, requester, assistant and grant after waiting.
   Copied tool lists have no approval. The private configuration selects the protocol
   that the proxy accepts. Cancellation removes the list. Discovery reads no facts and gives no permission to call tools.
+  An offline test also makes native Codex call recall and read a test reply through
+  the proxy. It checks refusals and cancellation while another private session survives.
+  This proves the call protocol only; live memory access remains disabled.
   The server and computer use the same private caller checks from the models library.
   The image includes this small shared file, which uses only Node's built-in functions.
 - Checks fixed package and Git requests against the supervisor's record of the tool call.

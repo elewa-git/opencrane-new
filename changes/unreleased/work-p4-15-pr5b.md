@@ -1,0 +1,1 @@
+- Check native private recall calls through the restricted proxy with an offline model fixture, including refused identities, cancellation and lost replies. Live memory admission stays disabled.

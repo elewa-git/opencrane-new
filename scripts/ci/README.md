@@ -40,7 +40,8 @@ files run one at a time because concurrent Angular servers miss their startup
 deadlines. A development build prepares Angular before tests start their own servers.
 
 The image job runs the offline demo read through a real computer and local services.
-It also checks native private tool discovery with the generated configuration.
+It also checks native private tool discovery and recall calls with the generated
+configuration. The recall check uses local scripted replies and no external model.
 It installs Chromium because the screenshot test needs both.
 Chromium setup checks installed system packages first. When they are present,
 it installs only the browser and avoids an apt update or package download.
