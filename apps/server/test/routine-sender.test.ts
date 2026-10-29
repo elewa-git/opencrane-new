@@ -28,6 +28,7 @@ import { BudgetActor, history, priceTableId, rootTotals } from '@opencrane/model
 import { conversationKeys } from '@opencrane/projections';
 import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
+import * as routineSession from '../src/routine-session.ts';
 import { prepareRoutineComputer } from '../src/routine-computer.ts';
 import { admitRoutineActivation } from '../src/routine-activation.ts';
 import { inspectRoutineSender } from '../src/routine-sender.ts';
@@ -116,25 +117,45 @@ async function setup() {
   actor = new BudgetActor(nats.store, 'test');
   await actor.start(10_000, 10_000, 'sales');
   preparedComputer = await startComputer();
-  const append = nats.store.append.bind(nats.store);
-  async function projectCreation(...args: Parameters<typeof append>) {
-    const result = await append(...args);
-    if (proposedEvent.parse(args[0].event).type === 'conversation.created') {
-      expect(preparedComputer.nativeStarts).toBe(1);
-      const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
-      const auth = memberAuthorisation(binding, nats.store);
-      await auth.handler.handle(rows[0]!.event, { query: forbidden });
-      afterProjection();
-    }
+  const preparedSelection = await prepareSenderFixture();
+  Object.assign(selection, preparedSelection);
+}
+async function projectPreparedSession() {
+  expect(preparedComputer.nativeStarts).toBe(1);
+  const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
+  const creation = rows[0]!.event;
+  const auth = memberAuthorisation(binding, nats.store);
+  await auth.handler.handle(creation, { query: forbidden });
+  async function sessionReady() {
+    const receipt = await auth.checkApplied(creation.id);
+    const access = await auth.conversation('alice', conversationId, 'post');
+    return receipt.allowed && access.allowed;
+  }
+  await until(sessionReady, 10_000);
+  afterProjection();
+}
+async function prepareSenderFixture() {
+  const prepareSession = routineSession.prepareRoutineSession;
+  let stage = 'preparation';
+  async function projectSession(...args: Parameters<typeof prepareSession>) {
+    stage = 'session';
+    const result = await prepareSession(...args);
+    stage = 'projection';
+    // Run the real command first. Apply test permissions outside its two-second write check.
+    await projectPreparedSession();
+    stage = 'preparation';
     return result;
   }
-  const projection = vi.spyOn(nats.store, 'append');
-  projection.mockImplementation(projectCreation);
-  const link = await preparedComputer.wake();
-  const preparedSelection = await prepareRoutineComputer(nats.store, keys, worker(),
-    input, actor, link, 1);
-  Object.assign(selection, preparedSelection);
-  projection.mockRestore();
+  const projection = vi.spyOn(routineSession, 'prepareRoutineSession');
+  projection.mockImplementation(projectSession);
+  try {
+    const link = await preparedComputer.wake();
+    return await prepareRoutineComputer(nats.store, keys, worker(), input, actor, link, 1);
+  } catch {
+    throw new Error(`Sender fixture stage: ${stage}`);
+  } finally {
+    projection.mockRestore();
+  }
 }
 async function cleanup() {
   vi.restoreAllMocks();
