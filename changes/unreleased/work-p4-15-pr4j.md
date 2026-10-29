@@ -1,0 +1,1 @@
+- Prepare permitted personal recall, remember, Correct and Forget tools together for one private thread. Keep exact reviewed definitions, caller checks and byte limits; production memory admission remains disabled.

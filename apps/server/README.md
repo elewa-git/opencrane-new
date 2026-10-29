@@ -7,7 +7,10 @@ It runs as a Node.js service. The website sends it requests to sign in, chat, up
 files and manage the organisation.
 Internal personal memory tool preparation checks saved membership before reading
 the catalogue or permissions. It keeps each person in their own scope and refuses
-a delayed list if access changed. Live private tool delivery remains disabled.
+a delayed list if access changed. A separate internal builder can prepare all four
+reviewed personal tools together: recall, remember, Correct and Forget. It leaves
+out operations without permission or a reviewed free Allow policy.
+Live private tool delivery remains disabled.
 The server checks who is asking and what they may do, saves each change in the
 [event log](../../GLOSSARY.md#event-log-event-store), and passes chat work to each
 assistant's [computer](../../GLOSSARY.md#computer).
@@ -170,6 +173,7 @@ flowchart LR
   server -->|waits briefly for Forget locks| postgres
   server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, routine Stops after deactivation or failed evidence reads, memory Stops after confirmed loss, reply removal receipts after completion and checked reports| computer["apps/computer<br/>assistant computers"]
   computer -.->|records private thread for memory discovery| server
+  server -.->|prepares up to four private memory tools| computer
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime
   runtime -->|checks memory reads and personal changes| server

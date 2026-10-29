@@ -124,30 +124,35 @@ export function checkPrivateTurnTools(tools: object, identity: PrivateToolIdenti
 }
 
 export async function buildPrivateTurnRecallTools(input: QualifiedPrivateMemoryInput) {
-  return buildPrivateMemoryTools(input, recallTool);
+  return buildPrivateMemoryTools(input, [recallTool]);
 }
 
 // Prepare definitions only. Recall qualification does not approve native writes.
 export async function buildPrivateTurnRememberTools(input: QualifiedPrivateMemoryInput) {
-  return buildPrivateMemoryTools(input, rememberTool);
+  return buildPrivateMemoryTools(input, [rememberTool]);
 }
 
 export async function buildPrivateTurnCorrectTools(input: QualifiedPrivateMemoryInput) {
-  return buildPrivateMemoryTools(input, correctTool);
+  return buildPrivateMemoryTools(input, [correctTool]);
 }
 
 export async function buildPrivateTurnForgetTools(input: QualifiedPrivateMemoryInput) {
-  return buildPrivateMemoryTools(input, forgetTool);
+  return buildPrivateMemoryTools(input, [forgetTool]);
 }
 
-async function buildPrivateMemoryTools(input: QualifiedPrivateMemoryInput, tool: MemoryTool) {
+export async function buildPrivateTurnMemoryTools(input: QualifiedPrivateMemoryInput) {
+  return buildPrivateMemoryTools(input, [recallTool, rememberTool, correctTool, forgetTool]);
+}
+
+async function buildPrivateMemoryTools(input: QualifiedPrivateMemoryInput,
+  definitions: readonly MemoryTool[]) {
   if (!personalRecallQualified(input.runtime, input.qualification) || !hasPrivateBinding(input)
     || !input.caller || !input.grant) {
     return [];
   }
   const original = { caller: input.caller, grant: input.grant };
   const identity = privateToolIdentity(original);
-  const tools = await buildPersonalMemoryTools(input, tool);
+  const tools = await buildPersonalMemoryTools(input, definitions);
   const approved = { identity, definitions: JSON.stringify(tools), input };
   privateCatalogues.set(tools, approved);
   // Repeat qualification and recorded identity checks after catalogue and access reads.
@@ -213,12 +218,12 @@ function matchesRecordedGrant(input: PersonalMemoryInput,
 
 type MemoryTool = typeof recallTool | typeof rememberTool | typeof correctTool | typeof forgetTool;
 
-async function buildPersonalMemoryTools(input: PersonalMemoryInput, tool: MemoryTool) {
+async function buildPersonalMemoryTools(input: PersonalMemoryInput, tools: readonly MemoryTool[]) {
   const restricted = { ...input, rows: [{ serverId: 'memory' }], approvalWaiting: false };
-  return assembleTurnTools(restricted, tool);
+  return assembleTurnTools(restricted, tools);
 }
 
-async function assembleTurnTools(input: TurnToolInput, memoryTool?: MemoryTool) {
+async function assembleTurnTools(input: TurnToolInput, memoryTools?: readonly MemoryTool[]) {
   const availableBytes = Math.min(maximumToolBytes,
     maximumTurnBytes - input.baseMessageBytes - rootFieldBytes);
   if (availableBytes <= 0) {
@@ -231,9 +236,9 @@ async function assembleTurnTools(input: TurnToolInput, memoryTool?: MemoryTool) 
   let omittedServers = 0;
   for (const row of input.rows) {
     // Keep ordinary turns separate from the restricted memory catalogue.
-    if (row.serverId === 'memory' && !memoryTool) continue;
+    if (row.serverId === 'memory' && !memoryTools) continue;
     let state = await input.readServer(row.serverId);
-    if (state && memoryTool) state = memoryToolOnly(state, memoryTool);
+    if (state && memoryTools) state = memoryToolsOnly(state, memoryTools);
     if (!state || !isAvailableServer(state)) continue;
     if (!hasComputerCompatibleFields(state)) {
       omittedServers += 1;
@@ -254,6 +259,18 @@ async function assembleTurnTools(input: TurnToolInput, memoryTool?: MemoryTool) 
 
   logOmittedServers(omittedServers);
   return tools;
+}
+
+function memoryToolsOnly(state: TurnToolServerState, definitions: readonly MemoryTool[]) {
+  const discoveryTools: TurnToolServerState['discoveryTools'] = [];
+  const policyTools: TurnToolServerState['policyTools'] = [];
+  for (const definition of definitions) {
+    const selected = memoryToolOnly(state, definition);
+    if (!selected) continue;
+    discoveryTools.push(...selected.discoveryTools);
+    policyTools.push(...selected.policyTools);
+  }
+  return { ...state, discoveryTools, policyTools };
 }
 
 function memoryToolOnly(state: TurnToolServerState,

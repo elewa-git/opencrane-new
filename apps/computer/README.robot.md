@@ -1617,8 +1617,9 @@ caller registry, registration, private RPC session, computer/input generations a
 exact tool list approved by server assembly, its recorded grant and the server's
 `checkPrivateTurnTools` function. The binding must never come from a
 model, desktop process or public request. The loader compares the turn's tools with
-that reviewed list and accepts only one Allow recall, remember, Correct or Forget definition from
-`memory/server`. It does not replace the server's definition or qualification checks.
+that reviewed list and accepts one to four Allow definitions from `memory/server`,
+in recall, remember, Correct, Forget order. Empty lists, duplicates, other tools and
+extra modes refuse preparation. It does not replace the server's definition or qualification checks.
 
 `startPrivate` owns the registration and session from the start. It assigns a fresh
 random address and calls private `thread/start` once. It requires `ephemeral: true`,
@@ -1733,3 +1734,18 @@ Shell, file and browser tools stay off. Native starts are ephemeral with no roll
 path and no execution environments. Admission and product files are unchanged.
 Disk isolation, loaded-reference accounting, backend/gateway checks and all live
 fresh-install journeys remain NOT RUN. See the [receipt](../../docs/process/p4-15-pr5b/receipt.md).
+
+## Combined private memory catalogue — P4-15 PR 4j
+
+Part of #97. The existing native discovery fixture also loads all four reviewed
+personal definitions together on one fresh ephemeral ID. It starts before binding,
+requires the initial discovery to be refused, then compares every native definition
+with the approved list. No resume, model turn or tool-call grant is used.
+
+Combined-list tests repeat cancellation, timeout, process closure and delayed
+approval checks. Removing one session leaves the second session's list usable.
+Copied approvals, changed callers, generations, qualification or definitions refuse.
+The 48 KiB tool and 120 KiB turn limits remain. No public API or event field is added;
+`RISKY_FIELD_NAME` was checked and the protected tests are unchanged.
+Qualification evidence in these fixtures is synthetic. Fresh-install qualification,
+native calls and production admission remain NOT RUN or disabled.

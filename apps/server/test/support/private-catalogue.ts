@@ -44,8 +44,10 @@ export async function privateCatalogue(callers: ReturnType<typeof privateCallers
         costCents: 0, mode: 'allow' });
     }
   }
-  function readServer() { return Promise.resolve(state); }
-  function canUse() { return Promise.resolve(true); }
+  function readServer(_serverId: string) { return Promise.resolve(state); }
+  function canUse(_serverId: string, _kind: 'person' | 'assistant', _subject: string) {
+    return Promise.resolve(true);
+  }
   const input = { runtime, qualification, silo: grant.silo,
     scopeId: memoryScopeId(grant.silo, 'person', grant.requesterId),
     requesterId: grant.requesterId, assistantId: grant.assistantId, baseMessageBytes: 100,
@@ -59,7 +61,7 @@ export async function privateCatalogue(callers: ReturnType<typeof privateCallers
   return { tools, input, state };
 }
 
-export { checkPrivateTurnTools } from '../../src/chat/turn-tools.ts';
+export { checkPrivateTurnTools, buildPrivateTurnMemoryTools } from '../../src/chat/turn-tools.ts';
 
 export function privateToolOffer(name: 'recall' | 'remember' | 'correct' | 'forget' | 'all') {
   let definition: typeof recallTool | typeof rememberTool | typeof correctTool | typeof forgetTool;

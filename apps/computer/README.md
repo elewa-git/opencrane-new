@@ -21,7 +21,7 @@ flowchart LR
   ops -->|starts and pauses| computer
   server -->|messages, private routine preparation, turns, files and targeted Stops| computer
   computer -->|preparation replies, reply removal receipts, native termination, progress and results| server
-  server -.->|prepares one private memory definition| computer
+  server -.->|prepares up to four private memory tools| computer
   computer -.->|records private thread before tool approval| server
   computer -->|checks command ownership| executor["socket-denied executor"]
   computer -->|runs| desktop["Codex, browser and desktop"]
@@ -50,8 +50,9 @@ private reply buffers are cleared before waiting for interruption to finish.
   still need to be connected to these checks before they provide isolation.
   Each tool call checks the caller against the pass it will send, including after
   approval. Ordinary and private turns cannot share a bound thread.
-  An internal loader can discover one reviewed recall, remember, Correct or Forget definition
-  for one fresh private turn.
+  An internal loader can discover permitted recall, remember, Correct and Forget definitions
+  together for one fresh private turn. It accepts at most four tools in that order.
+  Empty lists, duplicates and other tools refuse preparation.
   It starts the native thread first, so the server can record its real ID and approve
   the tools for that thread. It then loads the approved list on the same thread.
   It checks the same caller, thread, requester, assistant and grant after waiting.

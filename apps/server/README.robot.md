@@ -6730,3 +6730,25 @@ Validation on 29 October 2026, code at `9e1a3afc3`, on the shared development ho
 
 All lint, typecheck and test commands used `nice -n 10`. Logs are in
 `/tmp/p4-24-pr12g-*.log` on that host. The broader test failure prevents a source-ready claim.
+
+## Combined personal memory preparation (P4-15 PR 4j)
+
+Part of #97. `buildPrivateTurnMemoryTools` uses the existing private approval checks
+and returns one bounded `memory/server` catalogue. It selects recall, remember,
+correct and forget in that order. Each definition must equal its built-in definition,
+with matching discovery and policy revisions, reviewed zero-cent Allow and both
+requester and assistant MCP-use permissions. Missing, Ask, Block, paid, unreviewed,
+duplicate or altered operations supply no definition. Foreign tools are never selected.
+
+Assembly reads the catalogue once and checks each subject once. It retains the
+48 KiB tool and 120 KiB turn byte limits, including JSON encoding. Qualification,
+recorded turn, caller and generations are checked again after waits. Approval remains
+in RAM on the original list and caller identity; a copy or changed list is refused.
+Single-tool exports remain available. The saved-membership adapter still selects
+one operation and is unchanged; connecting it to combined preparation is separate work.
+Ordinary assembly, public discovery, backend writes and production admission are unchanged.
+
+`private-memory-catalogue.test.ts` covers ordered and partial selection, refusals,
+byte boundaries and stale preparation. Computer tests load the complete catalogue
+through the real proxy and pinned native discovery without calls. No event or API
+field or dependency was added. Fresh-install qualification and live native calls are NOT RUN.
