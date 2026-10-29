@@ -1,0 +1,1 @@
+- Test personal remember, Correct and Forget calls with pinned Codex, real receipt shapes and refused delivery cases. Native memory admission remains disabled.
