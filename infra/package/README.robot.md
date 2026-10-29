@@ -1579,3 +1579,42 @@ paths are withheld from output. The installer tests use generated certificates,
 real NKeys and the shipped configuration. Separate cases change each mounted
 identity's key, dates, names, usages, CA status and issuer, then check refusal
 before any Helm command. Expired and future fixtures use explicit ordered dates.
+
+## Raw computer home restoration fixture
+
+P5-9 PR 5a adds `computer-volume-restore.ts` and `upgrade-recovery-home.test.ts`.
+`provisionComputerHomeTarget` creates and registers a new private temporary directory
+for one complete home identity, silo and attempt. The caller owns its eventual cleanup.
+Only that returned object can be used; copied objects and replaced or occupied
+directories refuse. A newly created directory cannot be an existing source home.
+The target identity includes its device, inode, timestamps, permissions and owner.
+
+`restoreComputerVolumeBackup` takes the archived NATS source, home-check options,
+registered targets in inventory order and the caller's original `captureBounds`.
+Options also require stopped writers, disabled effects and the trusted current memory
+source with both key directories. The helper consumes all targets before validation.
+It has no CLI, mounts, extraction, replay or reopening operation.
+
+The existing version-2 checker authenticates every home before invoking an optional
+internal delivery callback. Without that callback it still discards each plaintext
+chunk. With it, the checker owns at most 64 MiB of retained plaintext plus one chunk
+and erases the buffers after delivery succeeds or refuses. Authentication failures,
+cancellation and deadline expiry also erase them. The callback cannot outlive cleanup.
+
+Delivery checks current key deletion records against the archived event history,
+then rechecks the source history, private input identities, descriptor and original
+deadline. Every target must still be empty and match its registered binding before
+any file is opened for writing. The writer creates `home-image` exclusively with mode
+0600, writes bounded chunks, flushes them and compares bytes read from the same file.
+All readback buffers are erased too. Failures preserve saved files and consume the
+whole attempt: there is no retry, erase, reopening or later home writer.
+
+Only confirmed delivery returns `{ kind: 'home-image-bytes-only', homes, byteCount }`.
+The result and fixed errors contain no private paths or contents. The helper starts
+no process and creates no event or API field. It uses Node's existing standard library.
+The existing combined event/object restore result remains unchanged.
+
+The [receipt](../../docs/process/p5-9-pr5a/receipt.md) records this PARTIAL result.
+Mounted filesystem restoration, CNPG/WAL, package upgrade, reopening and fresh-install
+qualification remain NOT RUN. Existing image pins, preflight gates and chart settings
+are unchanged. Synthetic home readers do not establish live volume ownership.

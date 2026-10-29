@@ -1,0 +1,28 @@
+Environment: Node 22; disposable NATS and MinIO; supplied PG_TEST_URL.
+No full root suite, dev stack or model calls.
+
+npm ci
+Link the worktree's .tools/nats-server and .tools/lychee to the shared tools.
+
+nice -n 10 npx vitest run \
+  infra/package/upgrade-recovery-home.test.ts \
+  apps/server/test/recovery-restore.test.ts \
+  apps/server/test/recovery-custody.test.ts \
+  libs/event-store/test/computer-volume-export.test.ts \
+  infra/package/backup-capture.test.ts \
+  libs/events/test/security-rules.test.ts \
+  --maxWorkers=1 --no-file-parallelism
+PASS: 654 tests; security rules included once.
+
+nice -n 10 npx vitest run infra/package/upgrade-recovery-home.test.ts \
+  --maxWorkers=1 --no-file-parallelism
+PASS twice: 28 tests per run.
+
+nice -n 10 npm run lint
+nice -n 10 npm run typecheck
+nice -n 10 npm run check:events
+nice -n 10 npx knip
+nice -n 10 npm run lint:changelog
+PASS: all five checks.
+
+git diff --check

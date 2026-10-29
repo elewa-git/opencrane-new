@@ -1,0 +1,1 @@
+- Restore authenticated computer home bytes once into registered disposable fixture files, with current deletion checks, exact readback and isolation after uncertain writes. Mounted restoration and live recovery remain unqualified.
