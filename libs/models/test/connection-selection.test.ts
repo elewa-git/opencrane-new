@@ -1147,7 +1147,10 @@ async function releaseAppendFailure(saved: boolean | 'unknown') {
     throw new Error('private-secret-canary');
   }
   const failure = vi.spyOn(nats.store, 'append').mockImplementationOnce(loseReply);
-  await expect(test.confirm()).rejects.toThrow(/^Release unavailable$/u);
+  const pending = test.confirm();
+  await expect(pending).rejects.toThrow(/^Release unavailable$/u);
+  await expect(pending).rejects.not.toBeInstanceOf(MemberAccessRefused);
+  await expect(pending).rejects.not.toHaveProperty('cause');
   failure.mockRestore();
   const rows = await history(nats.store, test.releaseSubject, 'test');
   expect(rows).toHaveLength(saved === true ? 1 : 0);
@@ -1359,16 +1362,29 @@ async function releaseHistoryFailureAfterPermission(failedHistory: string) {
     const pending = confirmCredentialRelease(nats.store, 'test', test.userId,
       test.decision.id, test.release, permission);
     await expect(pending).rejects.toThrow(/^Release unavailable$/u);
+    await expect(pending).rejects.not.toBeInstanceOf(MemberAccessRefused);
     await expect(pending).rejects.not.toHaveProperty('cause');
     expect(permission).toHaveBeenCalledTimes(1);
     expect(writes).not.toHaveBeenCalled();
     expect(await nats.store.head(test.releaseSubject)).toBe(0);
+
+    reads.mockRestore();
+    const receipt = await confirmCredentialRelease(nats.store, 'test', test.userId,
+      test.decision.id, test.release, permission);
+    expect(receipt.status).toBe('confirmed');
+    expect(receipt.eventId).toBe(`${test.decision.id}:release`);
+    expect(permission).toHaveBeenCalledTimes(2);
+    expect(writes).toHaveBeenCalledTimes(1);
+    const rows = await history(nats.store, test.releaseSubject, 'test');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.event.data).toEqual(test.release);
+    expect(test.custody.stage).not.toHaveBeenCalled();
   } finally {
     vi.restoreAllMocks();
   }
 }
 it.each(['decision', 'profile'])(
-  'sanitises failed %s release history after one permission decision',
+  'keeps failed %s release history unavailable and checks permission again on retry',
   releaseHistoryFailureAfterPermission);
 
 const invalidReleaseBindings = [{ generation: 0 }, { ownerId: 'other' }, { userId: 'other' }];
