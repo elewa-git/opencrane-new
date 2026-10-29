@@ -85,6 +85,13 @@ export async function recallSession(name, authority, loads, canary) {
     assert.equal(result.status, 'completed');
     assert.equal(nativeCall?.tool, 'recall');
     assert.equal(consents, 1);
+    if (name === 'matching' || name === 'survivor') {
+      assert.deepEqual(nativeCall.result.content, []);
+      const recalled = nativeCall.result.structuredContent;
+      assert.equal(recalled.facts.length, 1);
+      assert.equal(recalled.facts[0].text, canary);
+      assert.equal(recalled.recallProof, 'fixture-recall-proof');
+    }
     return exposed;
   }
   async function dispose() {
