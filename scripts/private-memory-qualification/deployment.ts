@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { closeSync, constants, fstatSync, openSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { checks, qualifications } from './collect.ts';
+import { runInContainer } from './container-process.ts';
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const containerSchema = z.object({
@@ -66,11 +67,6 @@ function docker(args: string[], input = ''): unknown {
   return JSON.parse(output) as unknown;
 }
 
-function exec(containerId: string, args: string[], input = ''): unknown {
-  const settings = ['--workdir', '/app', '--env', 'NODE_OPTIONS=', '--env', 'NODE_PATH=',
-    '--env', 'LD_PRELOAD='];
-  return docker(['exec', ...settings, '-i', containerId, ...args], input);
-}
 
 function measure(containerId: string) {
   const containers = docker(['inspect', '--type', 'container', containerId]);
@@ -118,7 +114,7 @@ function assertSame(expected: object, actual: object): void {
 function readEventState(containerId: string) {
   const args = ['/usr/local/bin/node', '--experimental-strip-types',
     '--input-type=module', '--eval', freshProbe];
-  return freshSchema.parse(exec(containerId, args));
+  return freshSchema.parse(runInContainer(containerId, args));
 }
 
 function assertFresh(containerId: string, containerCreated: string): string {
@@ -152,7 +148,7 @@ function runCheck(containerId: string, binding: Binding, name: string): string {
   const startedAt = Date.now();
   const args = ['/usr/local/bin/node', '--experimental-strip-types',
     '/app/scripts/private-memory-qualification/journey.mjs'];
-  const receipt = receiptSchema.parse(exec(containerId, args, input));
+  const receipt = receiptSchema.parse(runInContainer(containerId, args, input));
   assertSame(request, receipt);
   if (receipt.observedAt < startedAt || receipt.observedAt > Date.now()) {
     throw new Error('stale_receipt');

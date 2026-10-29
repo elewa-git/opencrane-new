@@ -252,3 +252,39 @@ function refusesAnotherLocalSilo(): void {
   expect(execFileSync).not.toHaveBeenCalled();
 }
 it('refuses a caller selecting another local silo before Docker runs', refusesAnotherLocalSilo);
+
+function refusesWrongConfiguredSilo(): void {
+  container['Config'] = { Env: ['SILO_ID=other-local-silo'] };
+  expect(collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });
+  expect(responses).toHaveLength(0);
+}
+it('refuses a configured container whose silo does not match', refusesWrongConfiguredSilo);
+
+function refusesUnsafeConfiguration(kind: string): void {
+  const stat = { uid: 0, mode: 0o100600, size: 150, isFile: regularFile };
+  if (kind === 'owner') {
+    stat.uid = 1000;
+  }
+  if (kind === 'writable') {
+    stat.mode = 0o100620;
+  }
+  if (kind === 'oversized') {
+    stat.size = 1025;
+  }
+  if (kind === 'non-file') {
+    stat.isFile = notRegularFile;
+  }
+  vi.mocked(fstatSync).mockReturnValue(stat as ReturnType<typeof fstatSync>);
+  expect(collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });
+  expect(execFileSync).not.toHaveBeenCalled();
+  expect(closeSync).toHaveBeenCalledWith(42);
+}
+function regularFile(): boolean {
+  return true;
+}
+function notRegularFile(): boolean {
+  return false;
+}
+it.each(['owner', 'writable', 'oversized', 'non-file'])(
+  'refuses unsafe target configuration: %s', refusesUnsafeConfiguration,
+);
