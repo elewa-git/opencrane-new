@@ -1,9 +1,9 @@
 import { dirname } from 'node:path';
 import { z } from 'zod';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { grantStream } from '@opencrane/authz';
+import { grantStream, memberAuthorisation } from '@opencrane/authz';
 import { createEventStore } from '@opencrane/event-store';
-import { history } from '@opencrane/models';
+import { history, MemberAccessRefused } from '@opencrane/models';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from '@opencrane/models/testing';
 import { computers, groups, memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
@@ -230,3 +230,64 @@ async function memoryFree() {
     .toThrow('memory_context_unavailable');
 }
 it('does not upgrade a memory-free turn', memoryFree);
+
+async function oneDecisionPerCommand() {
+  await fact();
+  const auth = memberAuthorisation(options.binding);
+  const check = vi.spyOn(auth, 'check');
+  const use = vi.spyOn(auth, 'use');
+  const pending = await prepare();
+  expect(check).toHaveBeenCalledExactlyOnceWith('alice', 'member');
+  expect(use.mock.calls).toEqual([
+    ['person', 'alice', 'mcp_server', 'memory'],
+    ['assistant', 'assistant', 'mcp_server', 'memory'],
+    ['person', 'alice', 'memory_read', scopeId],
+    ['assistant', 'assistant', 'memory_read', scopeId],
+  ]);
+  check.mockClear();
+  use.mockClear();
+  await expect(pending.load()).resolves.toEqual({ status: 'loaded', dispatch: 'disabled' });
+  expect(check).toHaveBeenCalledExactlyOnceWith('alice', 'member');
+  expect(use).toHaveBeenCalledTimes(4);
+  expect((await state())?.initialLoaded).toBe(true);
+}
+it('keeps one membership and permission decision per successful command', oneDecisionPerCommand);
+
+async function removalBeforeCatalogueFailure() {
+  await setup.append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'alice' });
+  const read = options.store.readStream.bind(options.store);
+  let catalogueRead = false;
+  async function* unavailable(...args: Parameters<typeof read>) {
+    if (args[0] === 'mcp-memory') {
+      catalogueRead = true;
+      throw new Error('Private catalogue failure');
+    }
+    yield* read(...args);
+  }
+  vi.spyOn(options.store, 'readStream').mockImplementation(unavailable);
+  await expect(prepare()).rejects.toThrow(MemberAccessRefused);
+  expect(catalogueRead).toBe(false);
+  expect(await state()).toBeUndefined();
+}
+it('keeps saved removal ahead of a catalogue outage', removalBeforeCatalogueFailure);
+
+async function demotionDuringSnapshot() {
+  const query = options.db.query.bind(options.db);
+  let changed = false;
+  async function demote(...args: Parameters<typeof query>) {
+    const result = await query(...args);
+    if (!changed && String(args[0]).includes('projection_generations')) {
+      changed = true;
+      const event = await setup.append('member-alice', 'member.role_changed', {
+        memberId: 'alice', previousRole: 'owner', newRole: 'member', changedBy: 'alice',
+      });
+      await setup.auth.handler.handle(event, setup.db);
+    }
+    return result;
+  }
+  vi.spyOn(options.db, 'query').mockImplementation(demote);
+  await expect(prepare()).rejects.toThrow('memory_context_unavailable');
+  expect(changed).toBe(true);
+  expect(await state()).toBeUndefined();
+}
+it('refuses an applied demotion during the first snapshot read', demotionDuringSnapshot);
