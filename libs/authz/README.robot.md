@@ -253,6 +253,13 @@ the saved small-stream positions and keep its original deadline through append.
 Routine position comparison belongs to that append. Ordinary `routine(...)` readers
 still load facts and check permissions once, without a write deadline.
 
+After a complete membership read shows no active membership, the loader skips
+ownership history and keeps those membership facts for `check`. Ownership cannot
+restore membership, and its read failure must not replace the refusal with unavailable.
+Active members still need complete ownership history and every existing receipt check.
+The admin-pause and routine-guards regressions compare this refusal with healthy history;
+the command saves no events in either case.
+
 When routine history fails, `loadRoutineAccess` discards partial state and rows,
 then loads current membership. Its `check` refuses removed members and queries the
 same routine relation as a successful load. A denied permission returns a refusal;

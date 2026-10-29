@@ -24,7 +24,7 @@ flowchart LR
   models["libs/models<br/>AI access and spending"] -.->|checks access, receipts and outages| authz
   ops["apps/ops<br/>background workers"] -.->|checks routine claims and run links| authz
   authz -->|checks permissions, including routine ownership| fga["OpenFGA<br/>permissions service"]
-  authz -.->|reads saved ownership and membership| store["libs/event-store<br/>saved changes"]
+  authz -.->|reads membership before ownership| store["libs/event-store<br/>saved changes"]
   authz -.-> handlers["libs/handlers<br/>background jobs"]
 ```
 
@@ -61,6 +61,8 @@ flowchart LR
    even after another run finishes. Routine claims use the same history check.
    Failed history still checks read permission. Non-readers receive a refusal;
    permitted readers receive unavailable. Incomplete history never grants access.
+   A completed membership read that shows removal keeps its refusal, even when
+   ownership history is unavailable.
    The result distinguishes failed history from an unavailable permissions service,
    so retirement can report broken records only to permitted readers.
    A writer can load history first, then check permissions within its short write limit.
