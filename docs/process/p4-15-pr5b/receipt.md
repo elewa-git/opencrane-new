@@ -59,6 +59,27 @@ Local check logs use `/tmp/p4-15-pr5b-` followed by `native1.log`, `native2.log`
 `list2.log`, `security.log`, `lint.log` and `typecheck.log`.
 Earlier fixture development failures are not passing evidence.
 
+## Structured recall response correction
+
+The recording upstream now returns the backend's recall format: `content: []`
+with facts, page metadata and a test-only recall proof in `structuredContent`.
+The test value appears only inside one fact. Successful native results must keep
+that fact and proof. Existing model consumption and refusal assertions remain.
+
+- PASS: the new native-result assertions failed with the old text-only response.
+  They were committed first in `aabb23e67`.
+- PASS: all nine native cases passed twice with the corrected response, in
+  11.68 and 13.69 seconds including test startup.
+- PASS: temporarily deleting `result.structuredContent` in the proxy's upstream
+  response made the native test fail. The proxy was restored before the second
+  passing run. The mutation is not committed.
+- PASS: the event catalogue check, with 157 event types in agreement.
+
+These runs used `nice -n 10`, one Vitest worker and the supplied `PG_TEST_URL`.
+Local logs are `/tmp/pr821-red.log`, `/tmp/pr821-mutation.log`,
+`/tmp/pr821-green1.log`, `/tmp/pr821-green2.log` and `/tmp/pr821-events.log`.
+No production behaviour or admission changed.
+
 ## Limits
 
 Admission remains off. No product files, event schemas or dependencies changed.

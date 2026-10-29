@@ -58,7 +58,11 @@ async function upstream(request, response) {
     response.destroy();
     return;
   }
-  const result = { content: [{ type: 'text', text: canary }] };
+  const fact = { memoryId: 'fixture-fact', revision: 1, text: canary, kind: 'fact',
+    pinned: false, expiresAt: null, savedAt: '2026-10-01T00:00:00.000Z' };
+  const structuredContent = { scopeId, facts: [fact], returnedCount: 1,
+    nextCursor: null, recallProof: 'fixture-recall-proof' };
+  const result = { content: [], structuredContent };
   const bytes = JSON.stringify({ jsonrpc: '2.0', id: body.id, result });
   response.writeHead(200, { 'content-type': 'application/json' });
   if (active.name === 'cancelled') {

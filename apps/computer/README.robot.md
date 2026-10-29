@@ -1700,6 +1700,7 @@ when `turn/completed` names the recorded native turn and a terminal status
 A closed private socket, a failed RPC, admission refusal, restart and a cancellation
 request omit it. Socket closure still lets the supervisor stop the private process,
 but does not prove process exit. No supervisor process-exit reporting is added.
+
 ## Native recall call protocol — P4-15 PR 5b
 
 `test/private-recall-call.test.ts` runs pinned Codex 0.159.2 in the existing test
@@ -1718,6 +1719,10 @@ These are test-only inputs, not production qualification. A recording upstream
 replaces the gateway and backend. The fixture checks native protocol headers,
 call/thread metadata, personal scope, arguments and forwarded credentials in RAM.
 Its output contains counts and outcomes, never caller bytes, passes or test text.
+The upstream returns the backend's recall envelope: empty `content` and facts,
+page metadata and a test-only recall proof in `structuredContent`. The test value
+appears only in a fact's text. Successful native results must retain that fact and
+proof, and the next model request must contain the test value.
 
 Discovery grants no call permission. Calls with no grant, a foreign caller or
 thread, an ended registration or an expired grant reveal no test text. Transport
