@@ -28,8 +28,7 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   grants?: DecisionGrants, applied?: (eventId: string) => Promise<boolean>,
   readHistory?: ReturnType<typeof authorityHistoryReader>, permissions?: AuthorityPermissions) {
   fresh ??= await authorityFence(store, performance.now());
-  const auth = permissions ?? memberAuthorisation(binding);
-  await permissions?.confirm();
+  const auth = await permissionReader(binding, permissions);
   const checkApplied = receiptReader(memberAuthorisation(binding), applied);
   const facts = [], receipts: string[] = [];
   let active = true;
@@ -81,6 +80,14 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   const hash = createHash('sha256');
   hash.update(JSON.stringify(input));
   return hash.digest('hex');
+}
+
+async function permissionReader(binding: Binding, permissions?: AuthorityPermissions) {
+  if (permissions) {
+    await permissions.confirm();
+    return permissions;
+  }
+  return memberAuthorisation(binding);
 }
 
 async function requireReceipts(receipts: string[], checkApplied: (id: string) => Promise<boolean>) {

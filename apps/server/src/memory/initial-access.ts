@@ -35,7 +35,7 @@ export async function initialMemoryAccess(options: MemoryOptions, requester: str
   const head = await options.store.head(undefined, deadline);
   const subjects = new Set<string>(membership.positions.keys());
   const auth = memberAuthorisation(options.binding);
-  const check = cached(auth.check);
+  const check = cached(auth.check.bind(auth));
   const permission = await check(requester, 'member');
   if (permission.status === 'unavailable') throw new Error('Permissions unavailable');
   if (!permission.allowed) throw new MemberAccessRefused('Membership unavailable');
@@ -59,9 +59,9 @@ export async function initialMemoryAccess(options: MemoryOptions, requester: str
     }
     if (performance.now() >= deadline) throw new LoadedMemoryRefused();
   }
-  const actsFor = cached(auth.actsFor);
-  const conversation = cached(auth.conversation);
-  const use = cached(auth.use);
+  const actsFor = cached(auth.actsFor.bind(auth));
+  const conversation = cached(auth.conversation.bind(auth));
+  const use = cached(auth.use.bind(auth));
   await confirm();
   return { check, actsFor, conversation, use, include, confirm };
 }

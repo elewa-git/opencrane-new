@@ -27,7 +27,6 @@ export async function initialQualificationFixture() {
   const originalClose = fs.closeSync;
   const originalWrite = fs.writeFileSync;
   const originalRename = fs.renameSync;
-  const template = fs.statSync(import.meta.filename);
   function open(...args: Parameters<typeof fs.openSync>) {
     const path = String(args[0]);
     if (!path.startsWith('/etc/opencrane/')) return originalOpen(...args);
@@ -45,8 +44,8 @@ export async function initialQualificationFixture() {
     const path = descriptors.get(args[0]);
     if (!path) return originalStat(...args);
     const metadata = { uid: 0, mode: 0o100600, size: Buffer.byteLength(files.get(path)!) };
-    const copy = Object.create(Object.getPrototypeOf(template)) as fs.Stats;
-    return Object.assign(copy, template, metadata);
+    const copy = fs.statSync(import.meta.filename);
+    return Object.assign(copy, metadata);
   }
   function close(descriptor: number) {
     if (!descriptors.has(descriptor)) originalClose(descriptor);
@@ -54,7 +53,7 @@ export async function initialQualificationFixture() {
   function write(...args: Parameters<typeof fs.writeFileSync>) {
     const path = String(args[0]);
     if (!path.startsWith('/etc/opencrane/')) return originalWrite(...args);
-    files.set(path, String(args[1]));
+    files.set(path, z.string().parse(args[1]));
   }
   function rename(from: fs.PathLike, to: fs.PathLike) {
     if (!String(from).startsWith('/etc/opencrane/')) return originalRename(from, to);
