@@ -4787,8 +4787,12 @@ bindings cannot send. The trusted caller still supplies current computer, turn,
 requester/assistant permissions, approval and budget checks through `prepareAccess`.
 No production caller supplies this contract yet.
 
-The broker holds the shared profile lock through exact UID/version custody reads,
-release confirmation and the private callback. A lost lock session refuses the send.
+The broker holds the shared profile lock through release confirmation, exact
+UID/version custody reads and the private callback. Validation, history and lock
+failures wait behind one permission decision. An established MemberAccessRefused
+keeps its identity through later audit, expiry and unlock failures. Release audit
+confirmation precedes every custody read, so an audit outage reads no material.
+A custody failure can leave a saved audit, which grants no retry or resend. A lost lock session refuses the send.
 Only the access token reaches that callback. A RAM reference expires within 30 seconds; final authority keeps its original
 deadline, capped at two seconds. References are dropped before awaiting the callback.
 JavaScript does not guarantee secure erasure, and the callback must not retain material.

@@ -118,7 +118,8 @@ async function fixture() {
     sends.push(value);
   }
   const db = pgDb(storage.queue);
-  function broker(raw: unknown = context, callback = send, permission = prepareAccess) {
+  function broker(raw: unknown = context, callback = send,
+    permission: Parameters<typeof credentialBroker>[7] = prepareAccess) {
     return credentialBroker(nats.store, db, custody, 'test', decision.id, raw,
       saved.loadConfiguration, permission, callback);
   }
@@ -130,8 +131,10 @@ async function releasesOnlyAccessOnce() {
   const permission = vi.fn(test.prepareAccess);
   async function readAfterAudit(url: string | URL | Request, options?: RequestInit) {
     expect(permission).toHaveBeenCalledTimes(1);
-    const receipt = await test.broker().recover();
-    expect(receipt).toMatchObject({ status: 'confirmed', eventId: `${test.decision.id}:release` });
+    const rows = await history(nats.store, `credential-${test.userId}`, 'test');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.event.id).toBe(`${test.decision.id}:release`);
+    expect(rows[0]!.event.data).toEqual(test.release);
     return test.fetchSecret(url, options);
   }
   test.fetch.mockImplementationOnce(readAfterAudit);

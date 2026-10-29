@@ -687,8 +687,10 @@ Saved membership removals and grant revocations refuse access even if another hi
 or permission receipt cannot be read. These checks grant no permission to send a call.
 
 A separate private broker can pass one selected OAuth access token to one internal
-callback after recording permission to release it. It shares the cleanup lock, checks
-current access before sending and refuses reuse, including after a lost reply or restart.
+callback. It checks permission once and saves the release audit before reading any
+credential material. A permission refusal takes precedence over preparation errors.
+It shares the cleanup lock, checks current access before sending and refuses reuse,
+including after a lost reply or restart.
 Refresh and identity tokens stay private. Public tool routes remain closed.
 
 A member can read their own saved tool profile without using the private credential store.

@@ -44,6 +44,33 @@ export function credentialBroker(store: EventStore, db: Pick<Db, 'lock'>, custod
     return release;
   }
   async function execute(recover: boolean) {
+    let permission: Promise<Access> | undefined;
+    let refusal: MemberAccessRefused | undefined;
+    async function decide() {
+      try {
+        const access = await prepareAccess();
+        async function checkAccess() {
+          try {
+            await access.checkAccess();
+          } catch (error) {
+            if (error instanceof MemberAccessRefused) {
+              refusal = error;
+            }
+            throw error;
+          }
+        }
+        return { deadline: access.deadline, checkAccess };
+      } catch (error) {
+        if (error instanceof MemberAccessRefused) {
+          refusal = error;
+        }
+        throw error;
+      }
+    }
+    function prepare() {
+      permission ??= decide();
+      return permission;
+    }
     try {
       const release = await binding();
       const profile = { siloId: silo, userId: release.userId,
@@ -51,16 +78,22 @@ export function credentialBroker(store: EventStore, db: Pick<Db, 'lock'>, custod
       async function work(locked: Db) {
         if (recover) {
           return confirmCredentialRelease(store, silo, release.userId, decisionId, release,
-            prepareAccess, 'recover', loadConfiguration);
+            prepare, 'recover', loadConfiguration);
         }
         return sendCurrent(store, locked, custody, silo, decisionId, release,
-          loadConfiguration, prepareAccess, sendAccess);
+          loadConfiguration, prepare, sendAccess);
       }
       // Keep retirement behind the exact read and the final invocation of the callback.
       return await withConnectionStage(db, profile, work);
-    } catch (error) {
-      if (error instanceof MemberAccessRefused) {
-        throw error;
+    } catch {
+      // Hold validation, history and lock failures behind the same permission decision.
+      try {
+        await prepare();
+      } catch {
+        // Keep the typed refusal below; hide all other dependency details.
+      }
+      if (refusal) {
+        throw refusal;
       }
       return refuse();
     }
@@ -106,10 +139,6 @@ async function sendCurrent(store: EventStore, locked: Db, custody: Custody, silo
   }
   const timer = setTimeout(discard, Math.max(0, until - performance.now()));
   try {
-    material = await custody.readAccessMaterial(stage, identity);
-    if (material === undefined || performance.now() >= until) {
-      refuse();
-    }
     let access: Access | undefined;
     async function prepare() {
       const current = await prepareAccess();
@@ -121,6 +150,11 @@ async function sendCurrent(store: EventStore, locked: Db, custody: Custody, silo
       release, prepare, 'claim', loadConfiguration);
     evidence.positions.set(`credential-${release.requestId}`, receipt.sequence);
     if (!access) {
+      refuse();
+    }
+    // Save the release audit before reading any material, even if custody later fails.
+    material = await custody.readAccessMaterial(stage, identity);
+    if (material === undefined || performance.now() >= until) {
       refuse();
     }
     await access.checkAccess();
