@@ -132,6 +132,34 @@ it.each(['ordinary owner', 'ordinary member', 'removed', 'demoted',
   'missing role receipt', 'missing routine receipt'])(
   'refuses %s before disclosing saved receipts or conflicts', privateRefusal);
 
+async function removedBeforeOwnershipFailure() {
+  await occupy();
+  await roleChange('admin', 'member.removed');
+  const before = await nats.store.head();
+  const healthyRequest = pause();
+  await expect(healthyRequest).rejects.toThrow(/^Routine admin pause refused$/u);
+  const healthyRefusal = await healthyRequest.catch(captureError);
+  expect(await nats.store.head()).toBe(before);
+
+  const read = nats.store.readStream.bind(nats.store);
+  async function* failedOwnership(subject: string, from?: number, deadline?: number) {
+    if (subject === 'ownership-test') {
+      throw new Error('private ownership history failure');
+    }
+    yield* read(subject, from, deadline);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(failedOwnership);
+  const failedRequest = pause();
+  await expect(failedRequest).rejects.toThrow(/^Routine admin pause refused$/u);
+  expect(await failedRequest.catch(captureError)).toEqual(healthyRefusal);
+  expect(await nats.store.head()).toBe(before);
+}
+function captureError(error: unknown) {
+  return error;
+}
+it('keeps the same refusal and saves nothing after removal when ownership history fails',
+  removedBeforeOwnershipFailure);
+
 async function losesReply() {
   await occupy();
   const append = nats.store.append.bind(nats.store);
