@@ -1075,6 +1075,10 @@ async function stopWriteChecks(kind: string) {
   const append = nats.store.append.bind(nats.store);
   const read = nats.store.readStream.bind(nats.store);
   let clock = performance.now();
+  if (kind === 'fractional-clock') {
+    // Cross a floating-point precision boundary when the write deadline is added.
+    clock = 128_000.004;
+  }
   function monotonic() { return clock; }
   vi.spyOn(performance, 'now').mockImplementation(monotonic);
   async function* slowHistory(target: string, from?: number, deadline?: number) {
@@ -1097,10 +1101,13 @@ async function stopWriteChecks(kind: string) {
   }
   vi.spyOn(nats.store, 'append').mockImplementationOnce(beforeAppend);
   const result = requestRoutineStop(nats.store, binding, 'alice', request);
-  if (kind === 'slow') await expect(result).resolves.toMatchObject({ status: 'confirmed' });
-  else await expect(result).rejects.toThrow();
+  if (kind === 'slow' || kind === 'fractional-clock') {
+    await expect(result).resolves.toMatchObject({ status: 'confirmed' });
+  } else {
+    await expect(result).rejects.toThrow();
+  }
 }
-it.each(['slow', 'expiry', 'member', 'owner'])(
+it.each(['slow', 'fractional-clock', 'expiry', 'member', 'owner'])(
   'owner Stop reads history before its bounded write check: %s', stopWriteChecks);
 
 function routineRootTests() {
