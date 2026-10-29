@@ -303,8 +303,9 @@ async function reportsHistoryAndAccessTimeout(route: 'model' | 'mcp') {
       const response = await decide(setup, route);
       expect(historyDelayed).toBe(true);
       expect(response.status, response.body).toBe(503);
+      const requestId: unknown = expect.any(String);
       expect(JSON.parse(response.body)).toEqual({
-        requestId: expect.any(String), error: 'Decision service unavailable',
+        requestId, error: 'Decision service unavailable',
       });
       expect(response.reservationId).toBeNull();
       expect(setup.actor.state.reservations).toHaveLength(0);

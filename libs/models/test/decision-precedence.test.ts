@@ -132,16 +132,16 @@ async function preservesRefusalDuringOutage(refusal: typeof refusalCases[number]
   const setup = await fixture();
   let unavailable = false;
   let denied = false;
-  async function intercept(check: Check) {
+  function intercept(check: Check) {
     if (refusal === 'silo mismatch' && check.relation === 'member' ||
         refusal === 'inactive assistant' && check.relation === 'applied' ||
         refusal === 'permission denial' && check.relation === 'use' &&
         check.user.startsWith('assistant:')) {
       unavailable = true;
-      return 503;
+      return Promise.resolve(503);
     }
     if (refusal === 'permission denial' && check.relation === 'use') denied = true;
-    return undefined;
+    return Promise.resolve(undefined);
   }
   const proxy = await permissionProxy(setup, intercept);
   const binding = { ...setup.binding, apiUrl: proxy.apiUrl };

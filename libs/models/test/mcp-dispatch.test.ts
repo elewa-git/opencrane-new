@@ -3282,8 +3282,9 @@ async function withholdsPermitDuringAccessOutage() {
       request);
     expect(injected).toBe(true);
     expect(response.status).toBe(503);
+    const requestId: unknown = expect.any(String);
     expect(await response.json()).toEqual({
-      requestId: expect.any(String), error: 'Decision service unavailable',
+      requestId, error: 'Decision service unavailable',
     });
     expect(response.headers.get('x-opencrane-decision')).toBeNull();
     expect(response.headers.get('x-opencrane-mcp-permit')).toBeNull();
