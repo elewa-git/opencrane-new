@@ -4755,9 +4755,11 @@ server. The profile lock covers history, staging and one conditional append.
 
 Immutable custody stages N+1 before `connection.refreshed`. Membership positions,
 server and opt-in positions, and deadlines are checked after staging. Preparation
-failures wait behind one current admin permission decision; an established
-MemberAccessRefused survives later lock-release failure. Exact retries compare saved
-metadata, supplied material and pinned UID/version, recovering the original receipt
+failures, including malformed input and invalid credential material, wait behind one
+current admin permission decision. Invalid input cannot choose a profile lock or start
+staging. An established MemberAccessRefused survives later lock-release failure.
+Exact retries compare saved metadata, supplied material and pinned UID/version,
+recovering the original receipt
 even after another rotation or transport deduplication expiry. A lost stage reply can
 recover only when custody recorded the exact identity. A lost unrecorded create reply
 still refuses; copied fields cannot prove identity. Unknown append retains both copies.
@@ -4768,4 +4770,8 @@ deletes nothing and calls no provider. Company cleanup, transfer, verification,
 revocation, disable, routes, selection and use are outside this change.
 The real-store/custody tests cover concurrent retries, lost replies, changed bindings,
 UID/version mismatch, stale inputs, current admin refusal, staging races and schema
-separation. Fresh-install and production Kubernetes qualification: NOT RUN.
+separation. Removed and demoted admin tests require the typed refusal for zero expected
+generation, empty material and oversized material. These and current-admin cases require
+exactly one permission decision and membership read, no staging or append, and unchanged
+unverified company history that personal account use still refuses.
+Fresh-install and production Kubernetes qualification: NOT RUN.

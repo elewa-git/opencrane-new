@@ -90,17 +90,16 @@ function validRecord(row: StoredEvent, data: Saved, subject: string, operationId
 export async function saveCompanyBearerConnection(store: EventStore, binding: Binding,
   custodianId: string, custody: Custody, raw: unknown, material: string, db: Pick<Db, 'lock'>) {
   try {
-    const input = inputSchema.parse(raw);
-    if (!id.safeParse(custodianId).success || !id.safeParse(binding.silo).success ||
-        typeof material !== 'string' || Buffer.byteLength(material) === 0 ||
-        Buffer.byteLength(material) > 8192) {
-      throw new Error('Company connection input invalid');
-    }
-    const profile = { siloId: binding.silo, ownerKind: 'company' as const,
-      serverId: input.serverId, profileId: input.profileId };
+    const input = prepareInput(raw, material, custodianId, binding.silo);
     async function save() {
       return saveLocked(store, binding, custodianId, custody, input, material);
     }
+    if (!input) {
+      // Check permission even when invalid input cannot identify a profile to lock.
+      return await save();
+    }
+    const profile = { siloId: binding.silo, ownerKind: 'company' as const,
+      serverId: input.serverId, profileId: input.profileId };
     return await withConnectionStage(db, profile, save);
   } catch (error) {
     if (error instanceof MemberAccessRefused) {
@@ -109,6 +108,19 @@ export async function saveCompanyBearerConnection(store: EventStore, binding: Bi
     // Hide dependency messages and parser input because they may contain private material.
     // eslint-disable-next-line preserve-caught-error -- Dependency causes may contain credentials.
     throw new Error('Company connection unavailable');
+  }
+}
+function prepareInput(raw: unknown, material: string, custodianId: string, silo: string) {
+  try {
+    const input = inputSchema.parse(raw);
+    if (!id.safeParse(custodianId).success || !id.safeParse(silo).success ||
+        typeof material !== 'string' || Buffer.byteLength(material) === 0 ||
+        Buffer.byteLength(material) > 8192) {
+      return null;
+    }
+    return input;
+  } catch {
+    return null;
   }
 }
 async function prepare(store: EventStore, silo: string, input: Input) {
@@ -212,17 +224,18 @@ async function stageCompanyData(custody: Custody, stage: CompanyConnectionStage,
   return savedSchema.parse(payload);
 }
 async function saveLocked(store: EventStore, binding: Binding, custodianId: string,
-  custody: Custody, input: Input, material: string) {
-  const prepared = await prepare(store, binding.silo, input);
+  custody: Custody, input: Input | null, material: string) {
+  const prepared = input ? await prepare(store, binding.silo, input) : null;
   const membership = await currentMembership(store, binding.silo, custodianId,
     undefined, performance.now() + 10_000);
   const options = { requiredRole: 'admin' as const, membership };
   await activeMember(store, binding, custodianId, options);
-  // Report a permission refusal before any preparation failure.
-  if (!prepared) {
+  // Report a permission refusal before any validation or history failure.
+  if (!input || !prepared) {
     throw new Error('Company connection unavailable');
   }
   const { subject, serverSubject, optInSubject, server } = prepared;
+  const { optInRevision, appendUntil } = input;
   const { event, original, data } = await prepareSave(custody, input, material,
     binding.silo, custodianId, prepared);
   // Recheck the membership positions used for admission after staging, without asking IAM again.
@@ -231,8 +244,8 @@ async function saveLocked(store: EventStore, binding: Binding, custodianId: stri
     await fresh();
     const serverPosition = await store.head(serverSubject, fresh.deadline);
     const optInPosition = await store.head(optInSubject, fresh.deadline);
-    if (serverPosition !== server.sequence || optInPosition !== input.optInRevision ||
-        Date.now() >= server.expiresAt || (!original && Date.now() >= input.appendUntil)) {
+    if (serverPosition !== server.sequence || optInPosition !== optInRevision ||
+        Date.now() >= server.expiresAt || (!original && Date.now() >= appendUntil)) {
       throw new Error('Company connection changed');
     }
   }
@@ -244,7 +257,7 @@ async function saveLocked(store: EventStore, binding: Binding, custodianId: stri
     return receipt(original);
   }
   const deadline = Math.min(fresh.deadline,
-    performance.now() + Math.min(input.appendUntil, server.expiresAt) - Date.now());
+    performance.now() + Math.min(appendUntil, server.expiresAt) - Date.now());
   const command = { event, expectedSequence: input.expectedSequence, checkAccess,
     historyChecked: true as const, deadline };
   const appended = await store.append(command);
