@@ -89,10 +89,16 @@ async function requireLifecycleRun(store: EventStore, state: RoutineState | unde
   const control = checked.control;
   if (control.source === 'access') {
     if (source.event.type !== 'routine.paused' || !control.cause ||
-        control.cause.position >= source.sequence || control.reason !== 'owner_removed') {
+        control.cause.position >= source.sequence) {
       throw new Error('Invalid routine prohibition');
     }
-    await readRoutineRemoval(store, state, control.cause, claimPosition, deadline);
+    if (control.reason === 'owner_removed') {
+      await readRoutineRemoval(store, state, control.cause, claimPosition, deadline);
+    } else if (control.reason === 'assistant_inactive') {
+      await readRoutineDeactivation(store, state, control.cause, claimPosition, deadline);
+    } else {
+      throw new Error('Invalid routine prohibition');
+    }
   } else if (control.source === 'admin') {
     await requireAdminPause(store, source, deadline);
   } else if (control.source !== 'owner' ||
@@ -157,7 +163,7 @@ function sameFrozenDefinition(state: RoutineState) {
     saved.definitionRevision === run.definitionRevision &&
     saved.scheduleRevision === run.scheduleRevision && saved.controlRevision === run.controlRevision;
 }
-function removalRun(state: RoutineState | undefined, position: number, claimPosition: number) {
+function accessPauseRun(state: RoutineState | undefined, position: number, claimPosition: number) {
   if (!state?.activeRun || !state.definition || state.status === 'retired' || claimPosition < 1 ||
       position <= claimPosition || position <= (state.activation?.admission.position ?? 0) ||
       !sameFrozenDefinition(state)) {
@@ -176,7 +182,7 @@ function requireMemberRow(row: StoredEvent, silo: string, subject: string, deadl
 /** Verify removal of the membership recorded by this still-occupied occurrence. */
 export async function readRoutineRemoval(store: EventStore, state: RoutineState | undefined,
   cause: { eventId: string; position: number }, claimPosition: number, deadline: number) {
-  const run = removalRun(state, cause.position, claimPosition);
+  const run = accessPauseRun(state, cause.position, claimPosition);
   const subject = `member-${run.definition.ownerId}`;
   let admissionId: string | undefined;
   let verified = false;
@@ -208,6 +214,28 @@ export async function readRoutineRemoval(store: EventStore, state: RoutineState 
     return new Map([[subject, position]]);
   }
   throw new Error('Invalid routine removal');
+}
+
+/** Verify the saved deactivation without letting later reactivation erase it. */
+export async function readRoutineDeactivation(store: EventStore, state: RoutineState | undefined,
+  cause: { eventId: string; position: number }, claimPosition: number, deadline: number) {
+  const run = accessPauseRun(state, cause.position, claimPosition);
+  const assistantId = run.definition.assistantId;
+  const subject = `assistant-${assistantId}`;
+  const saved = await readEventAt(store, subject, cause.position, deadline);
+  const parsed = parseEventByType(saved?.event);
+  if (!saved || !parsed.success || saved.event.id !== cause.eventId ||
+      saved.event.silo !== state!.silo || saved.event.subject !== subject ||
+      saved.event.type !== 'assistant.settings_changed' ||
+      state!.definition!.definition.assistantId !== assistantId || performance.now() >= deadline) {
+    throw new Error('Invalid routine deactivation');
+  }
+  const fields = data(parsed.event);
+  if (fields['assistantId'] !== assistantId || fields['active'] !== false) {
+    throw new Error('Invalid routine deactivation');
+  }
+  const position = await store.head(subject, deadline);
+  return new Map([[subject, position]]);
 }
 
 async function readRoutineThroughStop(store: EventStore, source: StoredEvent, deadline: number) {

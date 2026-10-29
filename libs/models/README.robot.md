@@ -4731,3 +4731,15 @@ After a history outage, a new attempt checks permission again and saves one exac
 Append recovery stays read-only.
 The [decision request checks](../../docs/process/evidence/p3-8-pr5a-decision-path.md)
 record the repeated comparison with main and the retained access-refusal checks.
+
+## Assistant deactivation as routine Stop evidence
+
+`readRoutineDeactivation` validates the occupied run's exact saved assistant settings event.
+The event must belong to the same silo and assistant, set `active: false`, and follow due
+and admission. Changed definition, schedule or control revisions refuse. The shared
+`readRootStopEvidence` accepts this cause only for an access pause with reason
+`assistant_inactive`, saved after the cause and naming the occupied occurrence.
+Later reactivation cannot erase that evidence. Cleanup still matches the frozen owner,
+assistant, payer, conversation and turn to the allocated root. Uncertain holds and full
+late settlement remain unchanged. The focused server evidence tests exercise this reader
+through `applyRoutineStop`, including disabled and replay calls without writes or dispatch.

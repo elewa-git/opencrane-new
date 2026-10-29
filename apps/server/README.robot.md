@@ -6699,3 +6699,17 @@ removal before outages, stale IAM, missing and late receipts, owner operations, 
 scope and demotion, changed access during waits, unchanged chat/upload activity,
 original approval identity and no effects. Qualification values in these tests are
 synthetic. Fresh-install qualification and live native delivery are NOT RUN.
+
+## Routine pause after assistant deactivation
+
+`pauseRoutineAfterDeactivation` is an internal command in `routine-assistant-pause.ts`.
+It accepts routineId, occurrenceId, expectedPosition, the three expected revisions and
+`cause: { eventId, position }`. It derives the assistant from the occupied run and verifies
+that exact saved `assistant.settings_changed` with `active: false`, after due and admission.
+It saves one `routine.paused` with source `access` and fixed reason `assistant_inactive`.
+Routine history finishes before the two-second write check watches only the assistant stream.
+Changed positions or an expired deadline refuse publication. A saved pause survives retries,
+deduplication expiry, restart and later reactivation. Identity, schedule and money stay intact.
+The existing `applyRoutineStop` and bridge reader validate the same cause for cleanup.
+Tests: `routine-assistant-pause.test.ts` and `routine-assistant-evidence.test.ts`.
+No route, subscription, scheduler or execution switch is added. Live qualification: NOT RUN.

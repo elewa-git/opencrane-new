@@ -1,0 +1,1 @@
+- An internal command can pause an occupied routine after its assistant is deactivated. Saved evidence survives reactivation and restart, so cleanup retains uncertain charges and leaves other runs alone. Automatic execution remains disabled.
