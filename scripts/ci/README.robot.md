@@ -1,11 +1,14 @@
 # CI test contracts
 
 `fixture-tests.mjs` owns the file list and the arguments passed to Vitest.
-It assigns eight files to `fixtures-image` and eight to `fixtures-browser`.
+It assigns nine files to `fixtures-image` and eight to `fixtures-browser`.
 The image group includes screenshot-browser, which also needs Chromium, and the
 offline demo read test, which uses packaged Codex and local services.
 It also runs `codex-config.test.ts` with pinned native Codex, the generated private
 configuration and the real MCP proxy inside a disposable container.
+`private-recall-call.test.ts` uses the same image with networking disabled.
+It checks one native recall reply and refusal cases using a local scripted model.
+Its preparation evidence is test-only; it does not qualify backend or gateway access.
 Approvals, live-view-k3d and screenshot-browser keep their existing opt-in flags.
 Chat-browser launches three scripts that use Chromium. No test retries are added.
 
