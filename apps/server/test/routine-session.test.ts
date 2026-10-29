@@ -1090,7 +1090,8 @@ async function stopWriteChecks(kind: string) {
   }
   vi.spyOn(nats.store, 'readStream').mockImplementation(slowHistory);
   async function beforeAppend(change: AppendCommand) {
-    expect(change.deadline! - clock).toBeLessThanOrEqual(2000);
+    // Compare absolute times so subtraction cannot round a two-second limit upwards.
+    expect(change.deadline).toBe(clock + 2000);
     if (kind === 'expiry') clock = change.deadline! + 1;
     if (kind === 'member') {
       await nats.seed([record('removed-stop', 'member-alice', 'member.removed',
@@ -1103,6 +1104,13 @@ async function stopWriteChecks(kind: string) {
   const result = requestRoutineStop(nats.store, binding, 'alice', request);
   if (kind === 'slow' || kind === 'fractional-clock') {
     await expect(result).resolves.toMatchObject({ status: 'confirmed' });
+    const confirmed = await result;
+    vi.restoreAllMocks();
+    const saved = await nats.store.readEvent(confirmed.position);
+    expect(saved.event).toMatchObject({ id: confirmed.eventId,
+      type: 'routine.run_stop_requested', subject: 'routine-orders',
+      data: { source: 'owner', actorId: 'alice', affectedRun: 'occurrence' } });
+    await refuses();
   } else {
     await expect(result).rejects.toThrow();
   }

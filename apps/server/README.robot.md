@@ -6340,6 +6340,14 @@ One conditional append saves `routine.run_stop_requested`. It keeps the due's ru
 and frozen revisions, using the current owner as actor. The schedule and active slot stay.
 Exact retries retain the original request and receipt beyond deduplication expiry.
 
+`test/routine-session.test.ts` advances the test clock by three seconds during history.
+The write must then receive a fresh two-second deadline. Compare the absolute deadline
+with `clock + 2000`: subtracting fractional times can round the difference above 2000.
+The `fractional-clock` case starts at 128000.004 ms and reproduces that rounding after
+history advances the clock to 131000.004 ms. Both successful slow-history cases require
+a saved owner Stop and refuse further session preparation. Expiry, membership removal
+and owner changes still prevent the write. No production deadline changes.
+
 `applyRoutineStop(store, silo, reference, actor, options)` is a separate internal operation.
 The reference contains routineId, eventId and position. Only `enabled: true` without replay
 allows effects. It verifies saved Stop, Pause or Retire evidence, actor/store/silo and the
