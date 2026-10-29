@@ -2,49 +2,58 @@
 
 ## What this is
 
-This developer tool checks files describing private memory tests.
-It checks that every required result belongs to the same installation and run.
-A file that passes these checks does not enable memory. Live collection is not built yet.
+This developer tool collects private memory test results from a running deployment.
+It reads the deployment identity itself and starts each check inside that image.
+It also checks older evidence files, which cannot qualify a deployment.
+Admission remains off. The live journey runner is not built yet.
 
 ## Where it fits
 
 The collector belongs to the developer tools layer, beside the local qualification checker.
-It uses the server's existing source, image and environment checks.
+It uses Docker on the deployment host and reads the deployment's event store.
 
 ```mermaid
 flowchart LR
-  scripts["scripts<br/>developer tools"] -.-> collector["private-memory-qualification<br/>checks evidence files"]
+  scripts["scripts<br/>developer tools"] -.-> collector["private-memory-qualification<br/>collects observed results"]
   scripts -.-> sibling["check-local-qualification<br/>checks local results"]
-  collector -.-> server["apps/server<br/>checks recall identity"]
+  collector --> docker["Docker<br/>running image and host"]
+  docker --> deployment["deployment<br/>event store and journey runner"]
 ```
 
 ## What it is responsible for
 
-- Refuse missing, changed, oversized or incomplete evidence.
-- Match results to one source revision, image, environment, installation and run.
-- Check file digests: hashes used to detect changed bytes.
+- Measure the source revision, image, host, silo and installation before collecting results.
+- Refuse an old or used event store, changed deployment, or missing check.
+- Accept results only from processes it starts in the measured image.
+- Refuse copied, edited, stale or foreign receipts.
 - Keep failures free of private paths and child process output.
-- Not built yet: live launch, deployment approval and production receipt writing.
 
 ## Processes it handles
 
-A deployment tool supplies the expected run and a function that reads the current
-installation identity. The collector checks the files, reads that identity again,
-then checks the files again. Replacement makes the candidate unusable.
+The deployment owner supplies a full running Docker container id. The collector
+reads Docker and the event store, then starts each required check with a new random
+challenge. It checks the deployment again around every run. Each child must complete
+within two minutes. Only complete, matching results can pass.
 
-Tests supply invented evidence in a temporary directory. Even a complete matching
-bundle cannot approve a deployment or write a production receipt.
+The fixed journey runner must be part of the deployment image. It is still pending,
+so current installations cannot pass. Tests use a fixture at the Docker command
+boundary; they do not run live memory journeys or enable memory.
 
 ## How to run or test it
 
-From the repository root:
+From the repository root, on the deployment host:
 
 ```sh
+nice -n 10 node --experimental-strip-types scripts/private-memory-qualification/run.mjs "$CONTAINER_ID"
 nice -n 10 npx vitest run --config scripts/private-memory-qualification/vitest.config.mjs
 nice -n 10 npx tsc -p scripts/private-memory-qualification/tsconfig.json
 ```
 
+The first command needs the deployment-owned runner described in the contract below.
+It prints safe measurements and results, or one fixed failure reason.
+Saved output is a record, not an approval that can be uploaded later.
+
 ## Where to read more
 
-- [Collector contract](README.robot.md): file formats, limits and live collection requirements.
+- [Collector contract](README.robot.md): deployment requirements, limits and live journeys.
 - [Server contract](../../apps/server/README.robot.md): existing recall checks.

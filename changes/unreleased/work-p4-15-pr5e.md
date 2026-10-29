@@ -1,0 +1,1 @@
+- Collect private memory qualification from a measured deployment and newly observed checks; refuse copied or foreign results. Memory admission stays off, and live journeys remain NOT RUN until the deployment runner is added.
