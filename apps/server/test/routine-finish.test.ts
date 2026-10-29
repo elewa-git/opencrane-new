@@ -343,3 +343,128 @@ async function unconfirmedClosure() {
 }
 it('keeps the occurrence occupied when failure has no confirmed native termination',
   unconfirmedClosure);
+
+const neighbourRoot = { ...root, rootId: 'neighbour-root', conversationId: 'neighbour-chat',
+  turnId: 'neighbour-turn', threadId: 'neighbour-thread' };
+type Neighbour = 'allocation' | 'settlement' | 'chat' | 'routine edit';
+async function saveNeighbour(kind: Neighbour) {
+  if (kind === 'allocation') {
+    await save('budget-test', 'budget.root_allowance_set', neighbourRoot);
+  } else if (kind === 'settlement') {
+    await save('budget-test', 'budget.settled', { reservationId: 'neighbour-hold',
+      permitId: 'neighbour-permit', settledCents: 260 });
+  } else if (kind === 'routine edit') {
+    await save('routine-orders', 'routine.run_stop_requested',
+      getEventDefinition('routine.run_stop_requested')!.example);
+  } else {
+    await save(computerSubject, 'computer.turn_started', { ...started,
+      rootId: neighbourRoot.rootId, conversationId: neighbourRoot.conversationId,
+      turnId: neighbourRoot.turnId, threadId: neighbourRoot.threadId, messageId: 'neighbour-input' });
+  }
+}
+async function neighbourEvidence(kind: Neighbour) {
+  await evidence();
+  if (kind === 'settlement') {
+    await save('budget-test', 'budget.root_allowance_set', neighbourRoot);
+    await save('budget-test', 'budget.reserved', { reservationId: 'neighbour-hold',
+      permitId: 'neighbour-permit', amountCents: 210, rootId: neighbourRoot.rootId,
+      payingGroupId: root.payingGroupId, assistantId: root.assistantId });
+  }
+}
+const neighbourCases = [
+  ['allocation', false], ['settlement', false], ['chat', false],
+  ['allocation', true], ['settlement', true], ['chat', true], ['routine edit', true],
+] as const;
+async function finishesWithNeighbour(kind: Neighbour, duringPublication: boolean) {
+  await neighbourEvidence(kind);
+  const append = nats.store.append.bind(nats.store);
+  const deadlines: number[] = [];
+  let injected = false;
+  async function appendWithNeighbour(command: AppendCommand) {
+    deadlines.push(command.deadline!);
+    if (injected) return append(command);
+    injected = true;
+    if (!duringPublication) {
+      await saveNeighbour(kind);
+      return append(command);
+    }
+    async function checkThenChange() {
+      await command.checkAccess!();
+      await saveNeighbour(kind);
+    }
+    return append({ ...command, checkAccess: checkThenChange });
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(appendWithNeighbour);
+  const result = await finish();
+  expect(result.status).toBe('confirmed');
+  expect((await folded()).activeRun).toBeNull();
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  function isFinish(row: typeof rows[number]) {
+    return row.event.type === 'routine.run_finished';
+  }
+  expect(rows.filter(isFinish)).toHaveLength(1);
+  expect(new Set(deadlines).size).toBe(1);
+  if (duringPublication) expect(deadlines).toHaveLength(2);
+}
+it.each(neighbourCases)('finishes despite neighbouring %s, during publication=%s',
+  finishesWithNeighbour);
+
+async function uncertainOrExpiredConflict(kind: 'uncertain' | 'expired') {
+  await evidence();
+  const append = nats.store.append.bind(nats.store);
+  let calls = 0;
+  async function changed(command: AppendCommand) {
+    calls++;
+    async function changeAfterCheck() {
+      await command.checkAccess!();
+      await saveNeighbour('chat');
+    }
+    const result = await append({ ...command, checkAccess: changeAfterCheck });
+    expect(result.status).toBe('conflict');
+    if (kind === 'expired') {
+      vi.spyOn(performance, 'now').mockReturnValue(command.deadline! + 1);
+      return result;
+    }
+    return { status: 'conflict' as const, outcome: {
+      kind: 'conditional_rejection_unchanged' as const, rows: [], possiblyPublished: true } };
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changed);
+  await expect(finish()).rejects.toThrow(/^Routine finish refused$/u);
+  expect(calls).toBe(1);
+  vi.restoreAllMocks();
+  expect((await folded()).activeRun).toEqual(run);
+}
+it.each(['uncertain', 'expired'] as const)(
+  'does not republish after an %s conflict', uncertainOrExpiredConflict);
+
+async function relevantChangeDuringRetry(kind: 'thread reuse' | 'allocation' | 'generation') {
+  await evidence();
+  const append = nats.store.append.bind(nats.store);
+  let calls = 0;
+  async function changed(command: AppendCommand) {
+    calls++;
+    if (calls === 1) {
+      async function changeAfterCheck() {
+        await command.checkAccess!();
+        await saveNeighbour('chat');
+      }
+      return append({ ...command, checkAccess: changeAfterCheck });
+    }
+    if (kind === 'thread reuse') {
+      await save(computerSubject, 'computer.turn_started', { ...started,
+        turnId: 'reused-thread-turn', messageId: 'other-input' });
+    } else if (kind === 'allocation') {
+      await save('budget-test', 'budget.root_allowance_set', { ...root, allowanceCents: 2000 });
+    } else {
+      await save(computerSubject, 'computer.ready', { assistantId: root.assistantId,
+        computerId: root.computerId, generation: 2 });
+    }
+    return append(command);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changed);
+  await expect(finish()).rejects.toThrow(/^Routine finish refused$/u);
+  expect(calls).toBe(2);
+  expect((await folded()).activeRun).toEqual(run);
+}
+it.each(['thread reuse', 'allocation', 'generation'] as const)(
+  'rechecks relevant %s changes on a publication retry', relevantChangeDuringRetry);
