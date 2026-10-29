@@ -1,21 +1,25 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import type { AppendCommand } from '@opencrane/event-store';
 import { event, lostReplyStore } from '@opencrane/event-store/testing';
 import { foldRoutineHistory } from '@opencrane/authz';
 import { getEventDefinition, foldRoutine, type EventEnvelope,
   type RoutineState } from '@opencrane/events';
-import { budgets, history, readBudget, rebuildBudgetProjection } from '@opencrane/models';
+import { BudgetActor, budgets, history, readBudget, rebuildBudgetProjection, totals } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { ProjectionRunner, rebuildRoutineProjection, routines } from '@opencrane/projections';
 import { database } from '../../../libs/projections/test/database.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow } from './support/duplicate-window.ts';
+import * as sender from '../src/routine-sender.ts';
+import * as cleanupCommands from '../src/routine-stop-budget.ts';
 import { finishRoutine } from '../src/routine-finish.ts';
 
 let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
 let serial: number;
 let input: { routineId: string; occurrenceId: string;
   terminalEvidence: { eventId: string; position: number } };
-const definition = getEventDefinition('routine.created')!.example as object;
+const objectSchema = z.record(z.string(), z.unknown());
+const definition = objectSchema.parse(getEventDefinition('routine.created')!.example);
 const created = { ...event('created', 'routine-orders', 'routine.created'),
   commandId: 'created', source: 'opencrane-server',
   principal: { kind: 'human' as const, id: 'alice' }, data: { ...definition, status: 'active' } };
@@ -30,6 +34,7 @@ const root = { rootId: 'allocated-root', conversationId: run.conversationId,
 const computerSubject = `computer-${root.assistantId}`;
 const turn = { ...root, task: 'chat_turn', messageId: run.messageId, executionMode: 'restricted' };
 const { generation: _generation, allowanceCents: _allowance, ...started } = turn;
+const { executionMode: _mode, ...closedIdentity } = started;
 function record(subject: string, type: string, data: unknown): EventEnvelope {
   const id = `fixture-${++serial}`;
   let actor = 'opencrane-server';
@@ -51,8 +56,7 @@ async function save(subject: string, type: string, data: unknown) {
 async function setup() {
   serial = 0;
   nats = await shortDuplicateWindowFixture();
-  const created = getEventDefinition('routine.created')!.example as object;
-  await save('routine-orders', 'routine.created', { ...created, status: 'active' });
+  await nats.seed([created]);
   await save('routine-orders', 'routine.due', run);
   input = { routineId: 'orders', occurrenceId: 'occurrence',
     terminalEvidence: { eventId: 'missing', position: 1 } };
@@ -71,7 +75,8 @@ async function evidence(changes: Record<string, unknown> = {}, kind = '') {
   await save(computerSubject, 'computer.ready', { assistantId: root.assistantId,
     computerId: root.computerId, generation: kind === 'generation' ? 2 : 1 });
   if (kind !== 'no start') {
-    await save(computerSubject, 'computer.turn_started', started);
+    const start = kind === 'start binding' ? { ...started, threadId: 'other' } : started;
+    await save(computerSubject, 'computer.turn_started', start);
   }
   await save('routine-orders', 'routine.run_stop_requested',
     getEventDefinition('routine.run_stop_requested')!.example);
@@ -81,7 +86,7 @@ async function evidence(changes: Record<string, unknown> = {}, kind = '') {
   }
   if (kind !== 'no closure') {
     input.terminalEvidence = await save(computerSubject, 'computer.turn_closed',
-      { ...started, status: 'failed', ...changes });
+      { ...closedIdentity, status: 'failed', ...changes });
   }
 }
 function finish(store = nats.store, request: unknown = input, silo = 'test') {
@@ -136,7 +141,7 @@ const wrongFields = [
   ['computerId', 'other'], ['threadId', 'other'], ['turnId', 'other'],
   ['conversationId', 'other'], ['rootId', 'other'], ['requesterId', 'bob'],
   ['payingGroupId', 'other'], ['assistantId', 'other'], ['messageId', 'other'],
-  ['status', 'completed'],
+  ['status', 'completed'], ['sharingClass', 'shared_only'],
 ] as const;
 async function wrongClosure(field: string, value: string) {
   await evidence({ [field]: value });
@@ -147,7 +152,7 @@ async function incomplete(kind: string) {
   await evidence({}, kind);
   await refused();
 }
-it.each(['no allocation', 'allocation', 'generation', 'no start', 'no budget stop',
+it.each(['no allocation', 'allocation', 'generation', 'start binding', 'no start', 'no budget stop',
   'no closure'])('keeps the slot for %s', incomplete);
 async function wrongReference(kind: string) {
   await evidence();
@@ -162,7 +167,7 @@ async function wrongReference(kind: string) {
 }
 it.each(['silo', 'occurrence', 'eventId', 'position'])('refuses wrong %s', wrongReference);
 async function descendant(complete = false) {
-  const example = getEventDefinition('delegation.started')!.example as Record<string, unknown>;
+  const example = objectSchema.parse(getEventDefinition('delegation.started')!.example);
   const { version: _version, computerAdmission: _admission, ...binding } = example;
   const data = { ...binding, ...root, task: 'native_descendant',
     rootTurnId: root.turnId, rootThreadId: root.threadId,
@@ -255,7 +260,7 @@ async function rebuild() {
     await finish();
     const first = (await history(nats.store, 'routine-orders', 'test')).at(-1)!;
     const duplicate = { ...first.event, id: 'duplicate-outcome', commandId: 'duplicate-outcome',
-      data: { ...first.event.data as object, outcome: 'succeeded' } };
+      data: { ...objectSchema.parse(first.event.data), outcome: 'succeeded' } };
     await nats.seed([duplicate]);
     const runner = new ProjectionRunner(storage.db, nats.reader, logger);
     await runner.initialise(routines);
@@ -264,9 +269,12 @@ async function rebuild() {
     await runner.run(budgets);
     const before = await storage.db.query('SELECT * FROM routine_occurrences');
     const money = await readBudget(storage.db, 'test');
-    expect(money.reservations[0]?.amountCents).toBe(210);
+    expect(totals(money).reservedCents).toBe(210);
     expect(money.roots[0]?.stop).toBeDefined();
     const append = vi.spyOn(nats.store, 'append');
+    const stop = vi.spyOn(cleanupCommands, 'applyRoutineStop');
+    const senderPreparation = vi.spyOn(sender, 'createRoutineSender');
+    const rootStop = vi.spyOn(BudgetActor.prototype, 'stopRoot');
     for (let index = 0; index < 2; index++) {
       await rebuildRoutineProjection(storage.db, nats.reader, logger, { verify: true });
       await rebuildBudgetProjection(storage.db, nats.reader, logger, { verify: true });
@@ -274,13 +282,57 @@ async function rebuild() {
       expect(await readBudget(storage.db, 'test')).toEqual(money);
     }
     expect(append).not.toHaveBeenCalled();
+    expect(stop).not.toHaveBeenCalled();
+    expect(senderPreparation).not.toHaveBeenCalled();
+    expect(rootStop).not.toHaveBeenCalled();
     expect((await folded()).lastRun?.outcome).toBe('interrupted');
-    await save('budget-test', 'budget.settled', { reservationId: 'hold', settledCents: 260 });
+    await save('budget-test', 'budget.settled', { reservationId: 'hold', permitId: 'permit', settledCents: 260 });
     await runner.run(budgets);
-    expect((await readBudget(storage.db, 'test')).reservations[0]?.settledCents).toBe(260);
+    await rebuildBudgetProjection(storage.db, nats.reader, logger, { verify: true });
+    const settled = await readBudget(storage.db, 'test');
+    expect(settled.reservations[0]?.settledCents).toBe(260);
+    expect(settled.roots[0]?.stop).toEqual(money.roots[0]?.stop);
   } finally {
     await storage.close();
   }
 }
 it('rebuilds twice with first outcome, positions, stopped root, 210 held cents and late settlement',
   rebuild, 30_000);
+
+async function nonTerminal(kind: string) {
+  await evidence({}, 'no closure');
+  if (kind === 'agent completed') {
+    input.terminalEvidence = await save(`conversation-${run.conversationId}`,
+      'agent.turn_completed', { conversationId: run.conversationId, turnId: run.turnId });
+  } else if (kind === 'socket loss') {
+    input.terminalEvidence = await save(computerSubject, 'computer.lost',
+      { assistantId: root.assistantId, computerId: root.computerId });
+  } else if (kind === 'timeout') {
+    input.terminalEvidence = await save('budget-test', 'budget.reservation_expired',
+      { reservationId: 'uncertain' });
+  } else {
+    input.terminalEvidence.eventId = 'private_output_cleared';
+  }
+  await refused();
+}
+it.each(['agent completed', 'socket loss', 'timeout', 'output clearance'])(
+  'does not use %s as termination evidence', nonTerminal);
+async function forgedServerRecord(kind: string) {
+  await evidence({}, 'no closure');
+  const closed = record(computerSubject, 'computer.turn_closed', { ...started, status: 'failed' });
+  if (kind === 'source') closed.source = 'computer';
+  if (kind === 'principal') closed.principal = { kind: 'system', id: 'computer' };
+  await nats.seed([closed]);
+  input.terminalEvidence = { eventId: closed.id, position: await nats.store.head() };
+  await refused();
+}
+it.each(['source', 'principal'])('refuses closure from a different %s', forgedServerRecord);
+async function reusedAllocation() {
+  await evidence();
+  await finish();
+  await save('routine-orders', 'routine.due', { ...run, occurrenceId: 'reused' });
+  await expect(finish(nats.store, { ...input, occurrenceId: 'reused' }))
+    .rejects.toThrow(/^Routine finish refused$/u);
+  expect((await folded()).activeRun?.occurrenceId).toBe('reused');
+}
+it('refuses an allocation saved before the occurrence', reusedAllocation);

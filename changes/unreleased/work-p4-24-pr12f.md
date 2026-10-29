@@ -1,0 +1,1 @@
+- Add a disabled internal command that finishes one stopped routine run only after its exact native turn has closed as failed. It releases the occupied slot while preserving the schedule, stopped allowance, held money and late charges.
