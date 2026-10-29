@@ -95,10 +95,11 @@ export { memoryForgottenDataSchema, memoryForgottenEventSchema } from './memory.
 
 export { memoryMaintenanceRecordedDataSchema } from './memory.ts';
 
-export { companyConnectionCreatedDataSchema, connectionCreatedDataSchema, connectionRefreshedDataSchema, connectionRevokedDataSchema,
+export { companyConnectionRefreshedDataSchema, companyConnectionCreatedDataSchema,
+  connectionCreatedDataSchema, connectionRefreshedDataSchema, connectionRevokedDataSchema,
   connectionOperationClosedDataSchema, connectionSelectedDataSchema,
   companyOptInSetDataSchema, connectionOAuthStartedDataSchema, connectionRefreshStartedDataSchema,
-  connectionOAuthExchangeClaimedDataSchema } from './data.ts';
+  connectionOAuthExchangeClaimedDataSchema } from './connections.ts';
 export { memoryContextRecordedDataSchema, memoryContextRecordedEventSchema,
   type MemoryContextRecord } from './memory-context.ts';
 

@@ -45,9 +45,34 @@ export const companyConnectionCreatedDataSchema = z.strictObject({
   }),
 });
 
+export const companyConnectionRefreshedDataSchema = companyConnectionCreatedDataSchema.extend({
+  activation: companyConnectionCreatedDataSchema.shape.activation.extend({
+    generation: z.int().min(2), expectedSequence: z.int().positive(),
+    reason: z.literal('bearer_rotation'),
+  }),
+});
+
 export const connectionRefreshedDataSchema = connectionCreatedDataSchema.extend({
   activation: connectionActivationSchema.optional(),
 });
+
+function checkRefreshedRecord(value: object, context: z.RefinementCtx) {
+  const isCompany = 'siloId' in value || 'custodianId' in value;
+  const schema = isCompany ? companyConnectionRefreshedDataSchema : connectionRefreshedDataSchema;
+  const result = schema.safeParse(value);
+  if (!result.success) {
+    for (const issue of result.error.issues) {
+      const forwarded = { ...issue };
+      context.addIssue(forwarded);
+    }
+  }
+}
+// Keep named fields inspectable while accepting only one complete, strict owner variant.
+export const connectionRefreshedRecordSchema = connectionRefreshedDataSchema.extend({
+  userId: id.optional(), siloId: connectionId.optional(), custodianId: connectionId.optional(),
+  activation: z.union([connectionActivationSchema,
+    companyConnectionRefreshedDataSchema.shape.activation]).optional(),
+}).superRefine(checkRefreshedRecord);
 
 export const connectionOAuthStartedDataSchema = z.strictObject({
   userId: connectionId, serverId: connectionId, connectionId, profile: connectionId,

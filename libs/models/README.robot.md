@@ -4617,7 +4617,7 @@ Full root suite and fresh-install/live qualification: NOT RUN.
 
 ## Company bearer creation (P3-8 PR 4d; Part of #49)
 
-`saveCompanyBearerConnection` is internal CREATE only. Authenticated context supplies the
+`saveCompanyBearerConnection` supports internal creation and rotation. Authenticated context supplies the
 silo and admin custodian. Strict input supplies serverId, connectionId, profileId,
 registrationRevision, optInRevision, expectedSequence (zero), changeRef and appendUntil.
 Company subjects use `connection-company:<serverId>:<profileId>`; custody has no userId.
@@ -4631,7 +4631,7 @@ The command captures membership positions before that decision. After staging,
 deadline. It does not ask IAM again. Changed membership still prevents publication.
 Exact retries compare the saved data and private material, UID and version. Unknown
 publication retains material. Replay preserves silo ownership and custodian metadata.
-The result is `saved_unverified`. Company rotation, revocation, selection, release,
+The result is `saved_unverified`. Company revocation, selection, release,
 HTTP routes, routine creation and verified account checks remain unavailable.
 Company material stays outside personal cleanup and private OAuth material reads.
 Tests use real NATS, OpenFGA and PostgreSQL with the existing local custody fixture.
@@ -4743,3 +4743,36 @@ Later reactivation cannot erase that evidence. Cleanup still matches the frozen 
 assistant, payer, conversation and turn to the allocated root. Uncertain holds and full
 late settlement remain unchanged. The focused server evidence tests exercise this reader
 through `applyRoutineStop`, including disabled and replay calls without writes or dispatch.
+
+## Company bearer rotation (P3-8 PR 4e; Part of #49)
+
+The internal company save accepts strict `action: rotate` input with positive
+expectedSequence and expectedGeneration, alongside the existing creation fields.
+Creation still requires expectedSequence zero and has no action or generation input.
+Trusted context supplies the silo and current admin. Rotation requires the recorded
+custodian; another admin cannot take custody through this operation. The installation,
+registration, opt-in revision and endpoint must match the saved profile and current
+server. The profile lock covers history, staging and one conditional append.
+
+Immutable custody stages N+1 before `connection.refreshed`. Membership positions,
+server and opt-in positions, and deadlines are checked after staging. Preparation
+failures, including malformed input and invalid credential material, wait behind one
+current admin permission decision. Invalid input cannot choose a profile lock or start
+staging. An established MemberAccessRefused survives later lock-release failure.
+Exact retries compare saved metadata, supplied material and pinned UID/version,
+recovering the original receipt
+even after another rotation or transport deduplication expiry. A lost stage reply can
+recover only when custody recorded the exact identity. A lost unrecorded create reply
+still refuses; copied fields cannot prove identity. Unknown append retains both copies.
+
+The pure company fold accepts only ordered, matching creation and rotation records.
+Replacements remain saved_unverified and unselected. Replay reads no custody material,
+deletes nothing and calls no provider. Company cleanup, transfer, verification,
+revocation, disable, routes, selection and use are outside this change.
+The real-store/custody tests cover concurrent retries, lost replies, changed bindings,
+UID/version mismatch, stale inputs, current admin refusal, staging races and schema
+separation. Removed and demoted admin tests require the typed refusal for zero expected
+generation, empty material and oversized material. These and current-admin cases require
+exactly one permission decision and membership read, no staging or append, and unchanged
+unverified company history that personal account use still refuses.
+Fresh-install and production Kubernetes qualification: NOT RUN.

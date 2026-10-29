@@ -880,8 +880,8 @@ The `connection.created` registry accepts a separate strict company variant, exp
 `companyConnectionCreatedDataSchema`. It requires siloId and custodianId instead of
 userId. Its activation pins company ownerKind/purpose, generation 1, expectedSequence 0,
 bearer_create reason, registrationRevision and optInRevision alongside exact custody
-references. Existing personal schemas remain unchanged. No company refreshed variant
-or release reaction is added; replay never reads private material or calls a provider.
+references. Existing personal schemas remain unchanged. Replay never reads private
+material or calls a provider.
 
 ## Routine removal cause
 
@@ -919,3 +919,16 @@ The computer omits it for transport failure, cancellation requests and admission
 refusals. The server copies it only onto an admitted turn's failed closure. Old
 records remain readable but cannot prove native termination for routine completion.
 No process-exit report or new event type is added.
+
+## Company bearer rotation (P3-8 PR 4e; Part of #49)
+
+`connection.refreshed` also accepts `companyConnectionRefreshedDataSchema`. This strict
+variant requires the same company fields as creation, with generation at least 2,
+positive expectedSequence and reason `bearer_rotation`. The company fold requires
+exactly N+1 and the preceding position, retaining silo, custodian, installation,
+registration revision, opt-in revision and endpoint. Personal and OAuth schemas remain
+separate. The registry uses an inspectable object with a refinement that accepts only
+one complete personal or company variant; mixed ownership fields refuse.
+No field name was added; all names were checked against RISKY_FIELD_NAME.
+The existing secretRef is an approved opaque reference. No event type or subscription
+changed. Company cleanup and use remain closed.

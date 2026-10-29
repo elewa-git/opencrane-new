@@ -3,11 +3,13 @@ import { changeCompanyOptIn } from '../src/company-opt-in.ts';
 import { exportSPKI, generateKeyPair, SignJWT } from 'jose';
 import { OpenFgaClient } from '@openfga/sdk';
 import { MemberAccessRefused } from '../src/member-authority.ts';
+import * as memberAuthority from '../src/member-authority.ts';
 import { exchangePersonalOAuth } from '../src/oauth-worker.ts';
 import { remoteFixture } from './support/remote-mcp.ts';
 import { open } from 'node:fs/promises';
 import { scanConnections } from '../src/connection-scan.ts';
-import { connectionRevokedDataSchema } from '@opencrane/events';
+import { connectionRevokedDataSchema, companyConnectionRefreshedDataSchema,
+  connectionRefreshedDataSchema, parseEventByType } from '@opencrane/events';
 import { HandlerRuntime } from '@opencrane/handlers';
 import { createLogger } from '@opencrane/observability';
 import { connectionCustodyFromFile } from '../src/connection-custody-file.ts';
@@ -5323,8 +5325,9 @@ async function companyFixture(enable = true, accountMode = 'company') {
     return database.lock!(name, work);
   }
   const db = { ...database, lock: waitForLock };
-  async function save(raw: unknown = input, supplied = material, binding = consentBinding) {
-    return saveCompanyBearerConnection(events.store, binding, userId,
+  async function save(raw: unknown = input, supplied = material, binding = consentBinding,
+    actorId = userId) {
+    return saveCompanyBearerConnection(events.store, binding, actorId,
       store.custody, raw, supplied, db);
   }
   async function rows() {
@@ -5377,8 +5380,9 @@ async function savesCompany() {
 }
 it('saves one silo-owned company generation without granting or selecting it', savesCompany);
 
-async function companyPreparationRefusal(failedHistory: boolean, failedRelease: boolean) {
-  const test = await companyFixture();
+async function companyPreparationRefusal(failedHistory: boolean, failedRelease: boolean,
+  rotation = false) {
+  const test = rotation ? await companyRotationFixture() : await companyFixture();
   const read = events.store.readStream.bind(events.store);
   async function* removeDuringHistory(subject: string, from?: number, deadline?: number) {
     if (subject === test.subject) {
@@ -5402,8 +5406,8 @@ async function companyPreparationRefusal(failedHistory: boolean, failedRelease: 
   }
   try {
     await expect(test.save()).rejects.toBeInstanceOf(MemberAccessRefused);
-    expect(test.store.creates).toBe(0);
-    expect(await test.rows()).toHaveLength(0);
+    expect(test.store.creates).toBe(rotation ? 1 : 0);
+    expect(await test.rows()).toHaveLength(rotation ? 1 : 0);
   } finally {
     vi.restoreAllMocks();
   }
@@ -5412,8 +5416,9 @@ it.each([[false, false], [true, false], [false, true], [true, true]])(
   'preserves company removal refusal with failed history=%s and failed release=%s',
   companyPreparationRefusal);
 
-async function companyPermissionOnce(outcome: string) {
-  const test = await companyFixture(outcome !== 'missing opt-in');
+async function companyPermissionOnce(outcome: string, rotation = false) {
+  const test = rotation ? await companyRotationFixture()
+    : await companyFixture(outcome !== 'missing opt-in');
   let original;
   if (outcome === 'retry') {
     original = await test.save();
@@ -5445,9 +5450,9 @@ async function companyPermissionOnce(outcome: string) {
   try {
     if (outcome === 'success' || outcome === 'retry') {
       const saved = await test.save();
-      expect(saved).toMatchObject({ status: 'saved_unverified', generation: 1 });
-      expect(test.store.creates).toBe(1);
-      expect(await test.rows()).toHaveLength(1);
+      expect(saved).toMatchObject({ status: 'saved_unverified', generation: rotation ? 2 : 1 });
+      expect(test.store.creates).toBe(rotation ? 2 : 1);
+      expect(await test.rows()).toHaveLength(rotation ? 2 : 1);
       if (outcome === 'retry') {
         expect(saved).toEqual(original);
         expect(writes).not.toHaveBeenCalled();
@@ -5456,7 +5461,7 @@ async function companyPermissionOnce(outcome: string) {
       }
     } else {
       await expect(test.save()).rejects.toThrow(/^Company connection unavailable$/u);
-      expect(test.store.creates).toBe(0);
+      expect(test.store.creates).toBe(rotation ? 1 : 0);
       expect(writes).not.toHaveBeenCalled();
     }
     expect(permissionChecks).toBe(1);
@@ -5464,8 +5469,11 @@ async function companyPermissionOnce(outcome: string) {
     vi.restoreAllMocks();
   }
 }
+async function createPermissionOnce(outcome: string) {
+  await companyPermissionOnce(outcome);
+}
 it.each(['success', 'retry', 'failed history', 'missing opt-in'])(
-  'makes one company permission decision for %s', companyPermissionOnce);
+  'makes one company permission decision for %s', createPermissionOnce);
 
 async function refusesCompanyBeforeStage(kind: string) {
   const mode = kind === 'mode' ? 'personal' : 'company';
@@ -5504,13 +5512,20 @@ it.each(['mode', 'absent', 'disabled', 'stale', 'non-admin', 'removed', 'silo', 
   'installation', 'registration', 'purpose', 'owner'])(
   'refuses company %s before staging', refusesCompanyBeforeStage);
 
-async function companyStageRace(kind: 'admin' | 'opt-in') {
-  const test = await companyFixture();
+async function companyStageRace(kind: string, rotation = false) {
+  const test = rotation ? await companyRotationFixture() : await companyFixture();
   const stage = test.store.custody.stage.bind(test.store.custody);
   async function changeDuringStage(...args: Parameters<typeof stage>) {
     const result = await stage(...args);
     if (kind === 'admin') {
       await test.removeAdmin();
+    } else if (kind === 'registration') {
+      const rows = await history(events.store, `mcp-${test.input.serverId}`, 'test');
+      const registration = structuredClone(rows[0]!.event);
+      registration.id = crypto.randomUUID();
+      await events.seed([registration]);
+    } else if (kind === 'deadline') {
+      vi.spyOn(Date, 'now').mockReturnValue(test.input.appendUntil + 1);
     } else {
       await test.disable();
     }
@@ -5519,11 +5534,15 @@ async function companyStageRace(kind: 'admin' | 'opt-in') {
   const fault = vi.spyOn(test.store.custody, 'stage');
   fault.mockImplementationOnce(changeDuringStage);
   await expect(test.save()).rejects.toThrow('Company connection unavailable');
-  expect(await test.rows()).toHaveLength(0);
-  expect(test.store.creates).toBe(1);
+  vi.restoreAllMocks();
+  expect(await test.rows()).toHaveLength(rotation ? 1 : 0);
+  expect(test.store.creates).toBe(rotation ? 2 : 1);
   expect(test.store.deletes).toBe(0);
 }
-it.each(['admin', 'opt-in'] as const)('refuses company %s loss while staging', companyStageRace);
+async function createStageRace(kind: string) {
+  await companyStageRace(kind);
+}
+it.each(['admin', 'opt-in'] as const)('refuses company %s loss while staging', createStageRace);
 
 async function companyRecovery(kind: string) {
   const test = await companyFixture();
@@ -5651,3 +5670,293 @@ async function companyApprovalReuse() {
   expect(await test.rows()).toHaveLength(0);
 }
 it('refuses reusing a pending company operation with changed approval', companyApprovalReuse);
+
+async function companyRotationFixture() {
+  const test = await companyFixture();
+  const original = await test.save();
+  const input = { ...test.input, action: 'rotate', changeRef: 'rotate',
+    expectedSequence: original.sequence, expectedGeneration: 1 };
+  async function save(raw: unknown = input, supplied = 'synthetic-replacement',
+    binding = consentBinding, actorId = test.userId) {
+    return test.save(raw, supplied, binding, actorId);
+  }
+  return { ...test, input, save, original };
+}
+async function rotatesCompanyOnce() {
+  await useDuplicateExpiryBroker();
+  const test = await companyRotationFixture();
+  const before = await events.store.head();
+  const attempts = [test.save(), test.save()];
+  const saved = await Promise.all(attempts);
+  expect(saved[0]).toEqual(saved[1]);
+  expect(saved[0]).toMatchObject({ status: 'saved_unverified', generation: 2 });
+  expect(await events.store.head()).toBe(before + 1);
+  expect(test.store.creates).toBe(2);
+  expect(test.store.deletes).toBe(0);
+  const rows = await test.rows();
+  expect(rows).toHaveLength(2);
+  const cleanup = connectionCleanupHandler(events.store, test.db, test.store.custody, 'test');
+  await cleanup.handle(rows[1]!.event, test.db);
+  expect(test.store.deletes).toBe(0);
+  const rebuilt = foldCompanyConnection(rows);
+  expect(rebuilt).toMatchObject({ status: 'saved_unverified', data: {
+    siloId: 'test', custodianId: test.userId,
+    activation: { generation: 2, reason: 'bearer_rotation' },
+  } });
+  expect(foldConnection(rows).status).toBe('unavailable');
+  expect(JSON.stringify([saved, rows])).not.toContain('synthetic-replacement');
+  await delay(150);
+  expect(await test.save()).toEqual(saved[0]);
+  const next = { ...test.input, changeRef: 'next', expectedGeneration: 2,
+    expectedSequence: saved[0]!.sequence };
+  const third = await test.save(next, 'synthetic-third');
+  expect(third.generation).toBe(3);
+  expect(await test.save()).toEqual(saved[0]);
+  expect(foldCompanyConnection(await test.rows()).data?.activation.generation).toBe(3);
+  const reads = vi.spyOn(events.store, 'readStream');
+  const stages = vi.spyOn(test.store.custody, 'stage');
+  test.store.fail();
+  expect(foldCompanyConnection(rows)).toEqual(rebuilt);
+  expect(reads).not.toHaveBeenCalled();
+  expect(stages).not.toHaveBeenCalled();
+  expect(test.store.deletes).toBe(0);
+}
+it('rotates one company generation once without selecting or releasing it', rotatesCompanyOnce);
+
+async function rotationValidationRefusal(membership: string, invalid: string) {
+  const test = await companyRotationFixture();
+  if (membership === 'removed') {
+    await test.removeAdmin();
+  } else if (membership === 'demoted') {
+    const demoted = envelope('test', `member-${test.userId}`, 'member.role_changed', {
+      memberId: test.userId, previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+    });
+    await events.seed([demoted]);
+  }
+  let input = test.input;
+  let supplied = 'synthetic-replacement';
+  if (invalid === 'generation') {
+    input = { ...input, expectedGeneration: 0 };
+  } else if (invalid === 'empty material') {
+    supplied = '';
+  } else {
+    supplied = 'x'.repeat(8193);
+  }
+  const before = await test.rows();
+  const permission = vi.spyOn(memberAuthority, 'activeMember');
+  const reads = vi.spyOn(events.store, 'readStream');
+  const writes = vi.spyOn(events.store, 'append');
+  const stages = vi.spyOn(test.store.custody, 'stage');
+  function readsMembership(args: Parameters<typeof events.store.readStream>) {
+    return args[0] === `member-${test.userId}`;
+  }
+  try {
+    const pending = test.save(input, supplied);
+    if (membership === 'admin') {
+      await expect(pending).rejects.toThrow(/^Company connection unavailable$/u);
+    } else {
+      await expect(pending).rejects.toBeInstanceOf(MemberAccessRefused);
+      const message = membership === 'removed'
+        ? 'Active silo membership required' : 'Owner or Admin required';
+      await expect(pending).rejects.toThrow(message);
+    }
+    expect(permission).toHaveBeenCalledTimes(1);
+    const membershipReads = reads.mock.calls.filter(readsMembership);
+    expect(membershipReads).toHaveLength(1);
+    expect(stages).not.toHaveBeenCalled();
+    expect(writes).not.toHaveBeenCalled();
+    expect(test.store.creates).toBe(1);
+    expect(test.store.deletes).toBe(0);
+    expect(await test.rows()).toEqual(before);
+    expect(foldCompanyConnection(before).status).toBe('saved_unverified');
+    expect(foldConnection(before).status).toBe('unavailable');
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each([
+  ['removed', 'generation'], ['removed', 'empty material'], ['removed', 'oversized material'],
+  ['demoted', 'generation'], ['demoted', 'empty material'], ['demoted', 'oversized material'],
+  ['admin', 'generation'], ['admin', 'empty material'], ['admin', 'oversized material'],
+])('checks company rotation permission once for %s with invalid %s', rotationValidationRefusal);
+
+async function rotationPreparationRefusal(historyFailed: boolean, releaseFailed: boolean) {
+  await companyPreparationRefusal(historyFailed, releaseFailed, true);
+}
+it.each([[false, false], [true, false], [false, true], [true, true]])(
+  'preserves company rotation access refusal with history=%s release=%s',
+  rotationPreparationRefusal);
+async function rotationPermissionOnce(outcome: string) {
+  await companyPermissionOnce(outcome, true);
+}
+it.each(['success', 'retry', 'failed history'])(
+  'makes one company rotation permission decision for %s', rotationPermissionOnce);
+async function rotationStageRace(kind: string) {
+  await companyStageRace(kind, true);
+}
+it.each(['admin', 'opt-in', 'registration', 'deadline'])(
+  'refuses company rotation after %s changes during staging', rotationStageRace);
+
+async function rotationRecovery(kind: string) {
+  await useDuplicateExpiryBroker();
+  const test = await companyRotationFixture();
+  if (kind === 'stage') {
+    const stage = test.store.custody.stage.bind(test.store.custody);
+    async function loseStageReply(...args: Parameters<typeof stage>): Promise<never> {
+      await stage(...args);
+      throw new Error(material);
+    }
+    vi.spyOn(test.store.custody, 'stage').mockImplementationOnce(loseStageReply);
+  } else {
+    const append = events.store.append.bind(events.store);
+    async function loseReply(command: AppendCommand) {
+      if (kind !== 'unknown') {
+        await append(command);
+      }
+      return { status: 'unavailable' as const, cause: new Error(material) };
+    }
+    vi.spyOn(events.store, 'append').mockImplementationOnce(loseReply);
+  }
+  await expect(test.save()).rejects.toThrow(/^Company connection unavailable$/u);
+  vi.restoreAllMocks();
+  expect(test.store.creates).toBe(2);
+  expect(test.store.deletes).toBe(0);
+  expect(test.store.secrets.size).toBe(2);
+  if (kind === 'unknown') {
+    expect(foldCompanyConnection(await test.rows()).data?.activation.generation).toBe(1);
+    return;
+  }
+  if (kind === 'uid' || kind === 'resourceVersion') {
+    test.store.secret.metadata[kind] = 'replacement';
+  }
+  const changed: Record<string, object> = {
+    binding: { appendUntil: test.input.appendUntil + 1 },
+    position: { expectedSequence: test.input.expectedSequence + 1 },
+    generation: { expectedGeneration: 2 },
+  };
+  if (kind === 'stage' || kind === 'append') {
+    await delay(150);
+    const writes = vi.spyOn(events.store, 'append');
+    if (kind === 'append') {
+      vi.spyOn(Date, 'now').mockReturnValue(test.input.appendUntil + 1);
+    }
+    const receipt = await test.save();
+    expect(receipt.generation).toBe(2);
+    expect(await test.save()).toEqual(receipt);
+    expect(writes).toHaveBeenCalledTimes(kind === 'stage' ? 1 : 0);
+  } else {
+    const input = { ...test.input, ...changed[kind] };
+    const supplied = kind === 'material' ? 'different' : 'synthetic-replacement';
+    await expect(test.save(input, supplied)).rejects.toThrow(/^Company connection unavailable$/u);
+  }
+  vi.restoreAllMocks();
+  expect(await test.rows()).toHaveLength(2);
+  expect(test.store.creates).toBe(2);
+  expect(test.store.deletes).toBe(0);
+}
+it.each(['stage', 'append', 'unknown', 'material', 'binding', 'position', 'generation',
+  'uid', 'resourceVersion'])('recovers or refuses company rotation after %s', rotationRecovery);
+
+async function refusesRotation(kind: string) {
+  const test = await companyRotationFixture();
+  let binding = consentBinding;
+  let actorId = test.userId;
+  const patches: Record<string, object> = { position: { expectedSequence: 1 },
+    generation: { expectedGeneration: 2 }, installation: { connectionId: 'another' },
+    absent: { serverId: 'absent' } };
+  if (kind === 'absent' || kind === 'personal') {
+    const mode = kind === 'personal' ? 'personal' : 'company';
+    const other = await companyFixture(false, mode);
+    patches[kind] = { serverId: other.input.serverId,
+      registrationRevision: other.input.registrationRevision };
+  }
+  if (kind === 'removed') {
+    await test.removeAdmin();
+  } else if (kind === 'revoked') {
+    await test.disable();
+  } else if (kind === 'silo') {
+    binding = { ...binding, silo: 'foreign' };
+  } else if (kind === 'custodian') {
+    const other = await companyFixture();
+    actorId = other.userId;
+  } else if (kind === 'ordinary') {
+    const demoted = envelope('test', `member-${test.userId}`, 'member.role_changed', {
+      memberId: test.userId, previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+    });
+    await events.seed([demoted]);
+  }
+  const input = { ...test.input, ...patches[kind] };
+  const pending = test.save(input, 'synthetic-replacement', binding, actorId);
+  if (kind === 'ordinary' || kind === 'removed') {
+    await expect(pending).rejects.toBeInstanceOf(MemberAccessRefused);
+  } else {
+    await expect(pending).rejects.toThrow(/^Company connection unavailable$/u);
+  }
+  expect(test.store.creates).toBe(1);
+  expect(await test.rows()).toHaveLength(1);
+}
+it.each(['position', 'generation', 'installation', 'absent', 'revoked', 'silo',
+  'ordinary', 'removed', 'custodian', 'personal'])('refuses company rotation with %s', refusesRotation);
+
+async function rotationReplay(field: string) {
+  const test = await companyRotationFixture();
+  await test.save();
+  const rows = await test.rows();
+  const previous = rows[0]!;
+  const row = rows[1]!;
+  const data = companyConnectionRefreshedDataSchema.parse(row.event.data);
+  const activation = data.activation;
+  const patches: Record<string, object> = { generation: { generation: 3 },
+    position: { expectedSequence: row.sequence }, installation: { connectionId: 'other' },
+    registration: { registrationRevision: activation.registrationRevision + 1 },
+    optIn: { optInRevision: activation.optInRevision + 1 },
+    endpoint: { endpointDigest: 'f'.repeat(64) }, reason: { reason: 'oauth_confirmed' } };
+  row.event.data = { ...data, activation: { ...activation, ...patches[field] } };
+  if (field === 'custodian') {
+    row.event.principal = { kind: 'human', id: 'other-admin' };
+    row.event.data = { ...data, custodianId: 'other-admin',
+      activation: { ...activation, changedBy: 'other-admin' } };
+  } else if (field === 'reference') {
+    const old = z.object({ secretRef: z.string() }).parse(previous.event.data);
+    row.event.data = { ...data, secretRef: old.secretRef };
+  } else if (field === 'order') {
+    rows.push(previous, row);
+  } else if (field === 'type') {
+    row.event.type = 'connection.created';
+  } else if (field === 'personal') {
+    row.event.data = { ...data, userId: test.userId };
+  }
+  expect(foldCompanyConnection(rows).status).toBe('unavailable');
+  expect(foldConnection(rows).status).toBe('unavailable');
+}
+it.each(['generation', 'position', 'installation', 'registration', 'optIn', 'endpoint',
+  'reason', 'custodian', 'reference', 'order', 'type', 'personal'])(
+  'refuses company rotation replay with changed %s', rotationReplay);
+
+async function rotationSchemas() {
+  const test = await companyRotationFixture();
+  await test.save();
+  const rows = await test.rows();
+  const row = rows[1]!;
+  const data = companyConnectionRefreshedDataSchema.parse(row.event.data);
+  expect(parseEventByType(row.event).success).toBe(true);
+  expect(connectionRefreshedDataSchema.safeParse(data).success).toBe(false);
+  const hybrid = { ...row.event, data: { ...data, userId: test.userId } };
+  expect(parseEventByType(hybrid).success).toBe(false);
+  const missingCustodian = { ...row.event, data: { ...data, custodianId: undefined } };
+  expect(parseEventByType(missingCustodian).success).toBe(false);
+  const personal = { userId: test.userId, serverId: data.serverId, profile: data.profile,
+    secretRef: data.secretRef, activation: { ...data.activation, ownerKind: 'personal',
+      purpose: 'personal' } };
+  expect(connectionRefreshedDataSchema.safeParse(personal).success).toBe(false);
+  const { registrationRevision: _registration, optInRevision: _optIn, ...activation } =
+    personal.activation;
+  const valid = { ...personal, activation };
+  expect(connectionRefreshedDataSchema.safeParse(valid).success).toBe(true);
+  const oauth = { ...valid, activation: { ...activation, reason: 'oauth_confirmed',
+    account: { issuer: 'https://issuer.example.test', subject: 'upstream-user',
+      scopes: ['openid'], expiresAt: Date.now() + 60_000 } } };
+  expect(connectionRefreshedDataSchema.safeParse(oauth).success).toBe(true);
+  expect(companyConnectionRefreshedDataSchema.safeParse(oauth).success).toBe(false);
+}
+it('keeps company rotation separate from strict personal and OAuth schemas', rotationSchemas);

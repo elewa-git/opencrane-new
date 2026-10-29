@@ -18,7 +18,6 @@ export type ConnectionStage = z.infer<typeof stageSchema>;
 const companyStageSchema = stageSchema.omit({ userId: true }).extend({
   ownerKind: z.literal('company'), purpose: z.literal('company'), custodianId: identifier,
   registrationRevision: z.int().positive(), optInRevision: z.int().positive(),
-  generation: z.literal(1), expectedSequence: z.literal(0),
 });
 export type CompanyConnectionStage = z.infer<typeof companyStageSchema>;
 export type CustodyStage = ConnectionStage | CompanyConnectionStage;
