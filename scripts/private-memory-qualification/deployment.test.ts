@@ -1,9 +1,11 @@
+import { openSync, fstatSync, readFileSync, closeSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { collectDeployment } from './deployment.ts';
 
 vi.mock('node:child_process');
+vi.mock('node:fs');
 const containerId = 'c'.repeat(64);
 const imageDigest = `sha256:${'b'.repeat(64)}`;
 const sourceSha = 'a'.repeat(40);
@@ -37,7 +39,7 @@ function docker(_file: unknown, args: unknown, options: unknown): string {
       Config: { Labels: { 'org.opencontainers.image.revision': sourceSha } } }]);
   }
   expect(command[2]).toBe('exec');
-  expect(command).toContain(containerId);
+  expect(command).toContain(container['Id']);
   expect(command).toContain('NODE_OPTIONS=');
   expect(command).toContain('/usr/local/bin/node');
   if (command.includes('--eval')) {
@@ -55,6 +57,12 @@ function docker(_file: unknown, args: unknown, options: unknown): string {
 
 function prepare(): void {
   vi.mocked(execFileSync).mockReset();
+  vi.mocked(openSync).mockReturnValue(42);
+  vi.mocked(closeSync).mockReturnValue(undefined);
+  vi.mocked(fstatSync).mockReturnValue({
+    uid: 0, mode: 0o100600, size: 150, isFile: () => true,
+  } as ReturnType<typeof fstatSync>);
+  vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ containerId, siloId: 'fixture-silo' }));
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-01-01T00:00:03Z'));
   container = {
@@ -233,3 +241,14 @@ function refusesExtraChildOutput(): void {
   expect(collectDeployment(containerId)).toEqual({ result: 'FAIL', reason: 'collection_failed' });
 }
 it('refuses extra child fields without exposing their values', refusesExtraChildOutput);
+
+function refusesAnotherLocalSilo(): void {
+  const otherContainerId = 'd'.repeat(64);
+  container['Id'] = otherContainerId;
+  container['Config'] = { Env: ['SILO_ID=other-local-silo'] };
+  expect(collectDeployment(otherContainerId)).toEqual({
+    result: 'FAIL', reason: 'collection_failed',
+  });
+  expect(execFileSync).not.toHaveBeenCalled();
+}
+it('refuses a caller selecting another local silo before Docker runs', refusesAnotherLocalSilo);
