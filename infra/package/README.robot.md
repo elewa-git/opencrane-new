@@ -370,6 +370,23 @@ Undici's embedded llhttp Wasm and the retained inline MIT claims. Corepack's own
 MIT declaration grants no blanket approval. Historical resolutions, approved
 inventory and runtime pins are unchanged. Promotion still refuses exact-source R3.
 
+The separate [is-windows review](../../docs/process/p5-4-images11/grant.json)
+checks version 1.0.2 against immutable upstream source and the complete MIT grant.
+It checks the exact text changes into the bundled module and the copied author notice.
+The earlier inventory keeps its original BLOCKED rows. This later review accepts
+only that module's grant; complete terms must accompany image distribution.
+The other 20 dependencies, embedded Wasm, unknown ranges and historical references stay
+blocked. The [receipt](../../docs/process/p5-4-images11/receipt.md) records the limits.
+
+```sh
+nice -n 10 python3 docs/process/p5-4-images11/check-is-windows.py \
+  /tmp/p5-4-images4 /tmp/p5-4-images6
+```
+
+This reuses signed Node, all-layer candidate and Corepack inventory checks.
+`scripts/p5-4-images11.test.mjs` runs offline Python fixtures in the existing CI glob.
+No promotion gate, approved inventory, runtime dependency or pin changes.
+
 ## Private owner email
 
 The development owner email uses the [private host file](../dev-stack/README.robot.md#private-owner-email)

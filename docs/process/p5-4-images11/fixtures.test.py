@@ -62,6 +62,10 @@ class GrantTests(unittest.TestCase):
                  ("LICENSE", self.inputs["LICENSE"].replace(b"Jon Schlinkert", b"Other Author")),
                  ("LICENSE", self.inputs["LICENSE"].replace(condition, b"")),
                  ("LICENSE", b"MIT")]
+        cases.append(("package.json", self.inputs["package.json"].replace(
+            b"Jon Schlinkert", b"Other Author!!")))
+        for name, data in self.inputs.items():
+            cases.extend([(name, data + b"!"), (name, b"X" + data[1:])])
         for name, value in cases:
             with self.subTest(name=name, value=value[:25]):
                 changed = dict(self.inputs)
@@ -74,6 +78,12 @@ class GrantTests(unittest.TestCase):
             with self.subTest(field=field):
                 changed = copy.deepcopy(self.review)
                 changed[field] = "changed"
+                with self.assertRaises(ValueError):
+                    self.check(review=changed)
+        for index in range(len(self.review["sourceFiles"])):
+            changed = copy.deepcopy(self.review)
+            changed["sourceFiles"][index][1] += 1
+            with patch.object(self.checker, "trusted_review", return_value=changed):
                 with self.assertRaises(ValueError):
                     self.check(review=changed)
         with tempfile.TemporaryDirectory() as temporary:
@@ -109,6 +119,14 @@ class GrantTests(unittest.TestCase):
             b"Jon Schlinkert", b"Other Author!!")
         with self.assertRaises(ValueError):
             self.check(bundle=changed)
+        _, attribution = self.checker.transform_source(self.inputs["index.js"],
+                                                     self.review["range"][2])
+        for changed in (self.bundle + b"extra", self.bundle[:-3] + attribution + b"*/\n"):
+            changed_regions = copy.deepcopy(self.review)
+            changed_regions["inlineRange"][1] = len(changed)
+            with patch.object(self.checker, "trusted_review", return_value=changed_regions):
+                with self.assertRaises(ValueError):
+                    self.check(review=changed_regions, bundle=changed)
         changed_review = copy.deepcopy(self.review)
         changed_review["transformation"] = "replace everything with MIT"
         with self.assertRaises(ValueError):
@@ -128,12 +146,13 @@ class GrantTests(unittest.TestCase):
 
     def test_signed_source_all_layer_and_inventory_checks_cannot_be_skipped(self):
         corepack = self.checker.corepack
-        for stage in ("matching", "signed", "candidate", "inventory"):
+        for stage in ("matching", "signed", "candidate", "inventory", "ranges"):
             with self.subTest(stage=stage), contextlib.ExitStack() as stack:
                 signed = stack.enter_context(patch.object(corepack.pcre, "check_upstream"))
                 git = stack.enter_context(patch.object(corepack.pcre, "run_checked"))
                 copies = stack.enter_context(patch.object(corepack, "read_archive"))
                 files = stack.enter_context(patch.object(corepack, "check_files"))
+                ranges = stack.enter_context(patch.object(corepack, "check_review"))
                 candidate = stack.enter_context(patch.object(corepack, "check_candidate"))
                 scan = stack.enter_context(patch.object(corepack, "scan"))
                 data = (ROOT / "docs/process/p5-4-images9/corepack-source.tar.gz").read_bytes()
@@ -155,11 +174,9 @@ class GrantTests(unittest.TestCase):
                     candidate.side_effect = failure
                 elif stage == "inventory":
                     files.side_effect = failure
+                elif stage == "ranges":
+                    ranges.side_effect = failure
                 self.run_main(stage == "matching")
-                signed.assert_called_once()
-                if stage == "matching":
-                    candidate.assert_called_once()
-                    self.assertEqual(files.call_count, 3)
 
     def test_dependency_output_and_malformed_inputs_have_fixed_refusal(self):
         checker = self.checker
@@ -174,17 +191,36 @@ class GrantTests(unittest.TestCase):
         with patch.object(checker.corepack, "check_evidence"):
             for damaged in (b"bad gzip", gzip.compress(b"source")[:17],
                             gzip.compress(b"source")[:10] + b"\xff" * 20):
-                with patch.object(checker.candidate, "checked_bytes", return_value=damaged):
-                    with patch.object(checker, "trusted_review", return_value=self.review):
-                        self.run_main(False)
+                actual = checker.candidate.checked_bytes
+
+                def damaged_input(path, digest):
+                    if path.name == "index.js.gz":
+                        return damaged
+                    return actual(path, digest)
+
+                with patch.object(checker.candidate, "checked_bytes", side_effect=damaged_input):
+                    self.run_main(False)
             for damaged in (b'{"grant": [}', b'\xff', b'[' * 2000):
                 with patch.object(checker.candidate, "checked_bytes", return_value=damaged):
                     self.run_main(False)
-            with patch.object(checker.tarfile, "open", side_effect=tarfile.ReadError("/private/tar")):
+            actual = checker.candidate.checked_bytes
+
+            def damaged_archive(path, digest):
+                if path.name == "corepack-source.tar.gz":
+                    return b"truncated archive"
+                return actual(path, digest)
+
+            with patch.object(checker.candidate, "checked_bytes", side_effect=damaged_archive):
                 self.run_main(False)
         result = subprocess.run([sys.executable, str(CHECKER)], capture_output=True)
         self.assertEqual((result.returncode, result.stdout, result.stderr),
                          (1, b"", (checker.REFUSAL + "\n").encode()))
+        with tempfile.TemporaryDirectory() as temporary:
+            copied = Path(temporary) / CHECKER.name
+            copied.write_bytes(CHECKER.read_bytes())
+            result = subprocess.run([sys.executable, str(copied)], capture_output=True)
+            self.assertEqual((result.returncode, result.stdout, result.stderr),
+                             (1, b"", (checker.REFUSAL + "\n").encode()))
 
     def test_compressed_and_decoded_hashes_are_separate_comparisons(self):
         checker = self.checker

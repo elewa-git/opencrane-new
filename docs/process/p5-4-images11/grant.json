@@ -1,0 +1,25 @@
+{
+  "status": "PARTIAL",
+  "grant": "MIT for the exact is-windows module only",
+  "sourceCommit": "4dcfff4ed9e36ad761a1a24d3899c832382d7254",
+  "sourceURL": "https://github.com/jonschlinkert/is-windows/tree/4dcfff4ed9e36ad761a1a24d3899c832382d7254",
+  "attribution": "Copyright (c) 2015-2018, Jon Schlinkert.",
+  "transformation": "reviewed commonjs wrapper, binding names, quotes, indentation and lifted notice",
+  "sourceFiles": [
+    ["index.js", 824, "fd80f3a3431987b4c6d6b917735b0468ee15b78f414830c5018779cbbaafcaed"],
+    ["LICENSE", 1088, "6b8eac57398e657431675649c722902adbbd3058e3af382f6bc4fd1c05325df6"],
+    ["package.json", 1412, "78963f69e47d6fb7b090bddd4e4eba074627fa32d5c4841a1839be88cf1418e1"]
+  ],
+  "compressedFiles": {
+    "index.js.gz": "a139548e9c8fa31659c9e462afbdba4d522c314e94adcdda5ac82de71dfa5904",
+    "LICENSE.gz": "bd0dd76daf22c16a05f05bdc45df3a54dbabbe174c5f17b455e97cc2ecd54320",
+    "package.json.gz": "cabd9c5ea7ee38020ecadece06d29d00521349d3db2c1ff9a7d508648802a915"
+  },
+  "inventorySha256": "076e9fb77d031a7a138c4e39c54299670ddc241fe4b43d600c84ed3b6a838f87",
+  "sourceFixtureSha256": "9fe2ff11cd60f04de8fadc7021165336cd1c5a4918347c181ef14fa3b1b1d5fb",
+  "module": ["is-windows", "1.0.2", ".yarn/cache/is-windows-npm-1.0.2-898cd6f3d7-b32f418ab3.zip", 1, "d19fa106ff9a6406c518cda9ade9d7d881e5ac71059834417a6354784c224a2e", "BLOCKED"],
+  "range": [737365, 738383, ".yarn/cache/is-windows-npm-1.0.2-898cd6f3d7-b32f418ab3.zip/node_modules/is-windows/index.js", "d19fa106ff9a6406c518cda9ade9d7d881e5ac71059834417a6354784c224a2e"],
+  "inlineRange": [966660, 967004, "retained inline attribution", "2195293cb6fe88e283a9858a401834c843dcfbe9bd0f477d392fc71261873e57"],
+  "distribution": "BLOCKED: retain the complete LICENSE with image distribution before promotion",
+  "unresolved": "BLOCKED: other 20 dependencies, embedded Wasm, unknown ranges and historical Node references"
+}
