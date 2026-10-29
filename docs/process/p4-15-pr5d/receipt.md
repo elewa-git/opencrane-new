@@ -1,5 +1,61 @@
 # Initial personal load checks
 
+## Repair checks
+
+Date: 29 October 2026. Code: `6ca39742655093761e72b8820999e8fa7a01d706`.
+The branch was rebased onto the main fetched at the start, `9f12dedaf`.
+Environment: this development worktree, the supplied PostgreSQL test listener, and
+normal disposable NATS, OpenFGA, gateway and Docker fixtures. This was not a fresh
+application installation. Every lint, typecheck and test command used `nice -n 10`.
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| Failing first | PASS | Membership failures were recorded in `d07d4be21`; collector failures in `bbb8ed6b7`; nested membership refusal in `5bef38cea`. Final-read races were recorded in `74fecf0c2`, and repeated membership history in `5cbf999aa`. Each test commit preceded its fix. |
+| Initial delivery | PASS | 42/42 passed twice, in sequential runs after the final membership change. |
+| Main memory and shared authority suites | PASS | 341 tests passed in both runs across six files. |
+| Collector | PASS | 97 tests passed twice, including the real collector output shape, both complete qualifications, stale bindings and protected-file reading. Docker and filesystem observations were simulated; process cleanup used disposable containers. |
+| Typecheck | PASS | All workspaces and infrastructure, then final server and collector checks. |
+| Full lint | PASS | Full lint passed. The final membership change and its test also passed a focused lint run. |
+| Knip, dependencies, docs and links | PASS | No unused-code or dependency violations; documentation, README and offline link checks passed. |
+| Event catalogue and changelog | PASS | All 157 event types agree; the branch fragment is valid. |
+| Native qualification and delivery | NOT RUN | No live memory journey was run. Delivery and admission stay disabled. |
+| Broader memory batch | FAIL | 966/969 passed. One nested-refusal regression and two MCP publication cases failed. The three selected MCP publication cases passed twice in isolation; no assertion or deadline changed. The full 224-case MCP file was not repeated. |
+| Full root suite | NOT RUN | Only the requested focused suites and related memory/access tests ran. |
+
+The membership regressions reproduced repeated permission decisions, a lost saved
+removal and an applied demotion during snapshot preparation. A further regression
+showed that loaded-reference checking wrapped an established membership refusal.
+The qualification regressions reproduced acceptance of caller PASS objects, failure
+to accept the collector's real output, and acceptance after installation or host changes.
+The final-read regressions also showed that an access change or qualification withdrawal
+could refuse the reply after a load had already been saved. The command now checks access
+after deployment measurement and checks its protected files without waiting before saving.
+Unchanged membership is confirmed by its original positions. Membership history is read
+again only after a change, so saved removal remains decisive.
+These failures were corrected without loosening the checks or their assertions.
+The substituted-requester fixture now creates an active second member, so it still
+reaches and tests the original identity refusal after membership is checked first.
+
+One preliminary collector integration attempt was stopped during fixture setup.
+The fixture now copies the actual process module before replacing only its Docker
+boundary. That setup attempt has no claimed test result. No owner stack or Docker
+daemon settings were changed.
+
+Earlier overlapping runs returned command refusals before several initial-load test
+scenarios could run. One also timed out while creating an OpenFGA fixture. A first
+serial run passed 40/41. The final change removes redundant membership-history reads
+without changing either access deadline. These earlier runs remain failed results;
+isolated passes do not prove the cause of every earlier failure.
+
+Logs: `/tmp/pr836-memory1.log`, `/tmp/pr836-memory2.log`,
+`/tmp/pr836-initial-complete-1.log`, `/tmp/pr836-initial-complete-2.log`,
+`/tmp/pr836-collector-final-1.log`, `/tmp/pr836-collector-final-2.log`,
+`/tmp/pr836-mcp-diagnostic-1.log`, `/tmp/pr836-mcp-diagnostic-2.log`,
+`/tmp/pr836-lint-final.log`, `/tmp/pr836-lint-last-files.log`,
+`/tmp/pr836-typecheck.log`, `/tmp/pr836-types-complete.log` and `/tmp/pr836-types-last.log`.
+
+## Earlier slice checks
+
 Date: 29 October 2026. Part of #97. Source base: `8eb69e0e3`.
 Failing-test commit: `f93ba38f5`; the implementation is the accompanying PR diff.
 Node 22.23.3; this worktree has its own `npm ci` installation. No dependency changed.

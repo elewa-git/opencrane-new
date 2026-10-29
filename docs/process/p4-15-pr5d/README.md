@@ -14,13 +14,15 @@ flowchart LR
   server["apps/server<br/>private chat"] -.-> initial["memory/initial-delivery<br/>initial records"]
   initial -->|selects eligible facts| preview["memory/turn-preview<br/>bounded selection"]
   initial -->|saves references| events["Event store<br/>saved changes"]
+  initial -->|checks saved deployment results| collector["private-memory-qualification<br/>deployment checks"]
   initial -.-> models["libs/models<br/>access and references"]
 ```
 
 ## What it is responsible for
 
 - Record preparation and loading separately, with one append for each command.
-- Check the exact private turn, current access and all selected references.
+- Check saved membership first, then the exact private turn and all selected references.
+- Require complete deployment checks for the current installation and host.
 - Refuse repeated loading, uncertain saves and changed facts.
 
 Not built yet: sending the selected text to a computer or enabling native memory.
