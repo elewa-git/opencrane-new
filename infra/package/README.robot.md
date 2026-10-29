@@ -385,6 +385,29 @@ nice -n 10 python3 docs/process/p5-4-images11/check-is-windows.py \
 
 This reuses signed Node, all-layer candidate and Corepack inventory checks.
 `scripts/p5-4-images11.test.mjs` runs offline Python fixtures in the existing CI glob.
+
+The [kubectl record](../../docs/process/p5-4-images12/build.json) binds the saved
+binary hash, archived Dockerfile, reported Go compiler, 89 module rows and build
+settings. It preserves `(devel)` versions and requires the exact replacements;
+none are reported. The scan also lists the Go standard library as its 90th row.
+The complete Go project BSD-3-Clause notice, patent grant and amd64 runtime MIT
+attribution match the official Go 1.26.8 source archive. The checker verifies the
+archive's retained detached signature with `gpgv` and the retained Google public key.
+It requires the exact signing and primary key fingerprints recorded in `build.json`.
+It also checks the fixed archive checksum. Debian signature checks authenticate only
+Debian packages. They do not authenticate Go source.
+The Go archive signature does not prove which source produced kubectl.
+
+```sh
+nice -n 10 python3 docs/process/p5-4-images12/check-kubectl.py \
+  /tmp/p5-4-images4 /tmp/p5-4-images12/go1.26.8.src.tar.gz
+```
+
+The checker uses installed GNU objcopy to read `.go.buildinfo`; it never runs
+kubectl. The [receipt](../../docs/process/p5-4-images12/receipt.md) records source
+links and proof limits. Third-party module grants, agentgateway, complete kubectl
+approval and promotion remain BLOCKED. The existing CI glob runs offline fixtures
+through `scripts/p5-4-images12.test.mjs`.
 No promotion gate, approved inventory, runtime dependency or pin changes.
 
 ## Private owner email
