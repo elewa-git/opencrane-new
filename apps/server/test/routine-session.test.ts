@@ -39,6 +39,7 @@ import { applyRoutineStop } from '../src/routine-stop-budget.ts';
 import { routineAsk, routineUsedAsk } from './support/routine-ask.ts';
 import { stopRoutineAfterApproval } from '../src/routine-approval-stop.ts';
 import { pauseRoutineAfterRemoval } from '../src/routine-access-pause.ts';
+import { pauseRoutineAsAdmin } from '../src/routine-admin-pause.ts';
 import { pauseRoutine } from '../src/routine-pause.ts';
 import { retireRoutine } from '../src/routine-retire.ts';
 import { requestRoutineStop } from '../src/routine-stop.ts';
@@ -996,6 +997,10 @@ async function prohibit(kind: string, request: Awaited<ReturnType<typeof stopReq
     return requestRoutineStop(nats.store, binding, memberId, request);
   }
   const { occurrenceId: _occurrence, ...control } = request;
+  if (kind === 'Admin') {
+    await apply([joinedMember('admin')]);
+    return pauseRoutineAsAdmin(nats.store, binding, 'admin', control);
+  }
   if (kind === 'Pause') {
     return pauseRoutine(nats.store, binding, memberId, control);
   }
@@ -1228,11 +1233,16 @@ function routineRootTests() {
     let request = await stopRequest();
     if (kind === 'Access') {
       await fga.pause();
-    } else if (kind !== 'Denied' && kind !== 'Expired') {
+    } else if (kind !== 'Denied' && kind !== 'Expired' && kind !== 'Admin') {
       await apply([joinedMember('bob'), routine('routine.reassigned', 'bob')]);
       request = { ...await stopRequest(), expectedDefinitionRevision: 2, expectedControlRevision: 2 };
     }
     const saved = await prohibit(kind, request, 'bob');
+    if (kind === 'Admin') {
+      const demoted = record('demoted-admin', 'member-admin', 'member.role_changed',
+        { memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'alice' });
+      await apply([demoted]);
+    }
     const reference = { routineId: 'orders', eventId: saved.eventId, position: saved.position };
     const append = nats.store.append.bind(nats.store);
     async function loseReply(change: AppendCommand): Promise<never> {
@@ -1281,7 +1291,7 @@ function routineRootTests() {
       .toEqual({ status: 'confirmed' });
     expect(actor.state.roots[0]!.stop?.reason).toBe('routine_stop');
   }
-  it.each(['Stop', 'Pause', 'Retire', 'Access', 'Denied', 'Expired'])(
+  it.each(['Stop', 'Pause', 'Retire', 'Access', 'Denied', 'Expired', 'Admin'])(
     'saved %s retains frozen people and uncertain cents through budget failure and restart',
     budgetStopRecovery);
 
@@ -1967,7 +1977,7 @@ function routineRootTests() {
     it.each([
       ['Stop', 'model'], ['Pause', 'model'], ['Retire', 'model'], ['Access', 'model'],
       ['Denied', 'model'], ['Expired', 'model'], ['DeniedLate', 'model'],
-      ['ExpiredApproved', 'model'],
+      ['ExpiredApproved', 'model'], ['Admin', 'model'], ['Admin', 'free tool'],
       ['Stop', 'free tool'], ['Pause', 'free tool'], ['Retire', 'free tool'], ['Access', 'free tool'],
       ['Denied', 'free tool'], ['Expired', 'free tool'],
     ])('refuses routine dispatch after saved %s before cleanup: %s', refusesSavedProhibition);

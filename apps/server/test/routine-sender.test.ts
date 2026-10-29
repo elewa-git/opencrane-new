@@ -15,6 +15,7 @@ import { createLogger } from '@opencrane/observability';
 import { routineAsk } from './support/routine-ask.ts';
 import { stopRoutineAfterApproval } from '../src/routine-approval-stop.ts';
 import { pauseRoutineAfterRemoval } from '../src/routine-access-pause.ts';
+import { pauseRoutineAsAdmin } from '../src/routine-admin-pause.ts';
 import { pauseRoutine } from '../src/routine-pause.ts';
 import { retireRoutine } from '../src/routine-retire.ts';
 import { requestRoutineStop } from '../src/routine-stop.ts';
@@ -885,7 +886,7 @@ async function refusesExpiredPreparation() {
 it('refuses delivery after the empty private session expires', refusesExpiredPreparation);
 
 
-async function saveProhibition(kind: 'Stop' | 'Pause' | 'Retire' | 'Access' | 'Denied' | 'Expired') {
+async function saveProhibition(kind: 'Stop' | 'Pause' | 'Retire' | 'Access' | 'Denied' | 'Expired' | 'Admin') {
   const request = { routineId: 'orders', changeId: 'orders:bridge-stop',
     expectedPosition: await nats.store.head('routine-orders'),
     expectedDefinitionRevision: 1, expectedScheduleRevision: 1, expectedControlRevision: 1 };
@@ -902,6 +903,10 @@ async function saveProhibition(kind: 'Stop' | 'Pause' | 'Retire' | 'Access' | 'D
     const cause = { eventId: removed.id, position: await nats.store.head(removed.subject) };
     return pauseRoutineAfterRemoval(nats.store, 'test',
       { ...expected, occurrenceId: 'occurrence', cause });
+  }
+  if (kind === 'Admin') {
+    await apply([joinedMember('admin')]);
+    return pauseRoutineAsAdmin(nats.store, binding, 'admin', request);
   }
   if (kind === 'Stop') {
     return requestRoutineStop(nats.store, binding, 'alice', { ...request, occurrenceId: 'occurrence' });
@@ -925,7 +930,7 @@ async function pollRoutine() {
     mode: 'agent_session' as const, createdAt: new Date().toISOString(), assistantKind: 'team' as const }];
   await Promise.all(processor.pollRoutines(sessions));
 }
-async function runningProhibition(kind: 'Stop' | 'Pause' | 'Retire' | 'Access' | 'Denied' | 'Expired') {
+async function runningProhibition(kind: 'Stop' | 'Pause' | 'Retire' | 'Access' | 'Denied' | 'Expired' | 'Admin') {
   expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
   await until(preparedComputer.executed);
   await saveProhibition(kind);
@@ -947,7 +952,7 @@ async function runningProhibition(kind: 'Stop' | 'Pause' | 'Retire' | 'Access' |
   expect(state?.activeRun?.occurrenceId).toBe('occurrence');
   expect(state?.lastRun).toBeNull();
 }
-it.each(['Stop', 'Pause', 'Retire', 'Access', 'Denied', 'Expired'] as const)(
+it.each(['Stop', 'Pause', 'Retire', 'Access', 'Denied', 'Expired', 'Admin'] as const)(
   'polls saved owner %s and interrupts only the accepted native routine turn once', runningProhibition);
 
 
@@ -1170,7 +1175,7 @@ async function prohibitionBeforeAdmission() {
 it('prohibition before start admission refuses only the routine and keeps the shared bridge',
   prohibitionBeforeAdmission);
 
-async function completedRoutineClearsOutput(kind: 'Stop' | 'Access' | 'Denied' | 'Expired') {
+async function completedRoutineClearsOutput(kind: 'Stop' | 'Access' | 'Denied' | 'Expired' | 'Admin') {
   const link = await startRunning();
   const send = WebSocket.prototype.send.bind(link.socket);
   let stops = 0;
@@ -1210,7 +1215,7 @@ async function completedRoutineClearsOutput(kind: 'Stop' | 'Access' | 'Denied' |
   expect({ stops, privateTextReplayedAfterProhibition: replayed })
     .toEqual({ stops: 1, privateTextReplayedAfterProhibition: false });
 }
-it.each(['Stop', 'Access', 'Denied', 'Expired'] as const)(
+it.each(['Stop', 'Access', 'Denied', 'Expired', 'Admin'] as const)(
   'clears private routine output when completion precedes %s polling',
   completedRoutineClearsOutput);
 
@@ -1259,7 +1264,7 @@ async function routineRetriesUntilClearance() {
 it('retries completed routine clearance until the exact thread receipt arrives',
   routineRetriesUntilClearance);
 
-async function failedProhibitionValidation(failure: 'slow' | 'error', kind: 'Pause' | 'Access') {
+async function failedProhibitionValidation(failure: 'slow' | 'error', kind: 'Pause' | 'Access' | 'Admin') {
   const link = await startRunning();
   await saveProhibition(kind);
   const read = nats.store.readStream.bind(nats.store);
@@ -1308,6 +1313,6 @@ async function failedProhibitionValidation(failure: 'slow' | 'error', kind: 'Pau
   await pollRoutine();
   await vi.waitFor(interruptedOnce);
 }
-it.each([['slow', 'Pause'], ['error', 'Pause'], ['slow', 'Access']] as const)(
+it.each([['slow', 'Pause'], ['error', 'Pause'], ['slow', 'Access'], ['slow', 'Admin']] as const)(
   'interrupts the exact routine within two seconds despite %s %s prohibition evidence reads',
   failedProhibitionValidation);
