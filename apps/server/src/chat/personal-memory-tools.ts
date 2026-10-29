@@ -3,7 +3,8 @@ import type { EventStore } from '@opencrane/event-store';
 import { grantGivenDataSchema, grantRevokedDataSchema } from '@opencrane/events';
 import { currentMembership, history, MemberAccessRefused } from '@opencrane/models';
 import { buildPrivateTurnCorrectTools, buildPrivateTurnForgetTools,
-  buildPrivateTurnRecallTools, buildPrivateTurnRememberTools } from './turn-tools.ts';
+  buildPrivateTurnRecallTools, buildPrivateTurnRememberTools,
+  checkPrivateTurnTools } from './turn-tools.ts';
 
 const builders = { recall: buildPrivateTurnRecallTools, remember: buildPrivateTurnRememberTools,
   correct: buildPrivateTurnCorrectTools, forget: buildPrivateTurnForgetTools };
@@ -40,6 +41,10 @@ export async function preparePersonalMemoryTools(input: Input) {
     }
     const fields = Object.entries(original);
     if (!fields.every(unchanged)) return [];
+    if (!prepared.caller || !prepared.grant) return [];
+    const identity = { caller: prepared.caller, grant: prepared.grant };
+    // Recheck the original approval after our final store reads have finished.
+    if (!checkPrivateTurnTools(tools, identity)) return [];
     return tools;
   } catch (error) {
     // Keep an established refusal even if a later membership read would fail.

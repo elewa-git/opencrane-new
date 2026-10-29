@@ -371,7 +371,9 @@ async function changesDuringConfirmation(change: 'caller' | 'generation' | 'qual
   if (change === 'caller') setup.registration.close();
   if (change === 'generation') setup.input.grant.inputGeneration += 1;
   if (change === 'qualification') setup.input.qualification.checks.persistence = 'FAIL';
-  if (change === 'turn') setup.input.turn.firstClose = setup.input.turn.firstStart;
+  if (change === 'turn') {
+    setup.input.turn.firstClose = { sequence: 100, status: 'completed' };
+  }
   resume.resolve();
   expect(await preparing).toEqual([]);
   expect(setup.check).toHaveBeenCalledTimes(1);
