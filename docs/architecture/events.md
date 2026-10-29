@@ -112,12 +112,12 @@ no access and start no model work. Replay copies ciphertext without touching key
 
 | Event | Producer | Projections | Reactions |
 | --- | --- | --- | --- |
-| `credential.released` | credential broker (P3-8; fixture contract) | audit lease metadata only | none; never release on replay |
+| `credential.released` | internal release audit confirmation; no live route | exact normal-call decision, requester, personal selection/generation, computer/turn/thread, tool, request/permit, scope/account digests, purpose and expiry; legacy six-field records remain non-authorising evidence | none; confirmation proves neither material delivery nor upstream success; replay never releases |
 | `egress.destination_allowed` | Owner/Admin destination command | egress-policy, audit | none; networking stays off |
 | `egress.destination_revoked` | Owner/Admin destination command | egress-policy, audit | none; networking stays off |
 | `egress.observed` | relay close reaction or admission refusal after a saved dispatch (networking disabled) | audit | none; never dispatch on replay |
 | `gateway.observation_recorded` | safe gateway log ingest | audit, including unverified JWT failures | none; no asserted requester identity |
-| `decision.recorded` | ext_authz, including operation-bound egress; server bridge for budget admission refusals | audit; MCP decisions feed conversations with turn id, outcome, reason, request id and optional call id and approval id; model budget refusals keep only turn id and reason | egress allows register one private relay only after the final zero-cost spending check; replay opens none; admission is not an observed effect |
+| `decision.recorded` | ext_authz, including operation-bound egress; server bridge for budget admission refusals | audit; MCP decisions may carry an exact optional release binding; missing bindings cannot confirm release; decisions feed conversations with turn id, outcome, reason, request id and optional call id and approval id; model budget refusals keep only turn id and reason | egress allows register one private relay only after the final zero-cost spending check; replay opens none; admission is not an observed effect |
 
 Each admission attempt records `requestId`, `route`, `outcome` (allow/ask/deny),
 `reason` and `contextDigest`. Verified callers also carry `requesterId`,

@@ -4588,3 +4588,44 @@ routines and silos refuse.
 `readRootStopEvidence` repeats these checks before budget or bridge cleanup. No approval
 read mutates state, opens review ciphertext, reads credentials, wakes or sends work.
 Existing routine dispatch checks refuse the saved Stop before cleanup, including free calls.
+
+## Release audit confirmation (P3-8 PR 5a; Part of #49)
+
+`confirmCredentialRelease` is internal and has no route or public package export.
+This is the audit-only part of row 5. It accepts a trusted authenticated requester,
+saved decision id, strict normal-call binding and trusted `prepareAccess` function.
+The function must prepare current dispatch authority after saved evidence loads and
+return the original short deadline plus repeatable final checks. Those checks own
+requester/assistant rights, active computer/turn/thread, tool policy, approval and
+budget hard stops. No production caller supplies them yet. This helper alone is
+not a complete authorisation service, and its receipt cannot authorise forwarding.
+
+The saved decision must include the identical `release` binding. Existing decision
+writers do not populate it. Legacy decisions and release records cannot confirm.
+The helper checks exact selected personal profile, generation, owner, installation,
+profile/selection/policy positions, endpoint and account/scope fingerprints. Current
+bearer profiles remain saved_unverified. Their synthetic audit tests do not qualify
+account identity or make credentialed tools available. OAuth/company use stays closed.
+
+History loads before the live check. Invalid input, mismatched requester or owner, and
+failed history wait for the single permission decision, so removed members and callers
+without the required role retain their
+`MemberAccessRefused`. The same refusal survives an append failure, including a later
+dependency error. Other failures return only `Release unavailable`, without a cause.
+One conditional append uses the original decision
+id with `:release`, on `credential-<requestId>`. Existing correlation.request links the
+decision; correlation.approval preserves approval identity. An ambiguous append returns
+only the fixed error. A later call with `action: recover` only reads the original record;
+missing or uncertain evidence never causes another append. Exact recovery checks
+current positions, access and expiry again. The receipt has only status,
+eventId and sequence. It is audit evidence, never a lease or permission to send.
+
+There is no custody reader, network adapter, event reaction, budget allocation or charge.
+Restart/replay cannot construct a sending capability. Tests use real NATS/OpenFGA and
+PostgreSQL fixtures. Live qualification and production dispatch integration are NOT RUN.
+
+Dependency-error checks distinguish `Release unavailable` from `MemberAccessRefused`.
+After a history outage, a new attempt checks permission again and saves one exact audit.
+Append recovery stays read-only.
+The [decision request checks](../../docs/process/evidence/p3-8-pr5a-decision-path.md)
+record the repeated comparison with main and the retained access-refusal checks.

@@ -45,7 +45,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
-  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks consent starts, callback and refresh claims, refresh starts, account confirmations and replacement generations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal and saved tool choices, company opt-in, and blocks| events
+  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks release audit bindings, consent starts, callback and refresh claims, refresh starts, account confirmations and replacement generations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal and saved tool choices, company opt-in, and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
 ```
 
@@ -69,6 +69,10 @@ admin custodian without changing existing personal records. Saving grants no acc
   Share the same pause record checks with the server's internal owner operation.
 
 ## Processes it handles
+
+A normal tool-call audit can name the exact saved decision and selected account generation.
+Its confirmation records permission checks, not delivery or a successful outside call.
+Reading the receipt cannot send credentials. The live sending path is not built yet.
 
 A first account confirmation records the verified issuer and account, granted scopes,
 expiry and exact private storage reference. It follows the consent and callback records.

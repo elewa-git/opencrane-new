@@ -104,7 +104,7 @@ built-in functions.
 ```mermaid
 flowchart LR
   models -.->|replay tests use the database helper| store
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal account choices and owner revocation from HTTP, admin company opt-in, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks release audit bindings, public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal account choices and owner revocation from HTTP, admin company opt-in, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
   models -->|tests private sign-in, refresh and revocation requests, revokes refresh and access tokens; checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains reply withdrawal after expiry or access loss; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models and checks private callers; native child calls refused| models
   models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
@@ -483,6 +483,12 @@ Older holds keep their money because their senders used older rules.
 Later confirmed usage can still settle their cost.
 
 ## Processes it handles
+
+A normal tool-call audit can name the exact saved decision and selected account generation.
+Its confirmation records permission checks, not delivery or a successful outside call.
+Reading the receipt cannot send credentials. The live sending path is not built yet.
+The audit checks permission once even when its input is invalid or saved history cannot
+be read. An access refusal still reaches the caller if a later store operation fails.
 
 An internal company-account save checks current admin membership and explicit opt-in
 for the reviewed installation. The silo owns the saved account; the admin is its named

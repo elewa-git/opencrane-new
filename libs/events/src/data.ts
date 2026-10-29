@@ -1,3 +1,4 @@
+import { toolCredentialReleaseSchema } from './credential-release.ts';
 import { budgetCallRetrySchema } from './budget-root.ts';
 import { hostedCredentialContractSchema } from './startup-credentials.ts';
 import { hostedImageInstallationSchema } from './hosted-image.ts';
@@ -691,6 +692,7 @@ export const decisionRecordedDataSchema = z.object({
   conversationId: id.optional(), turnId: id.optional(), permitId: id.optional(),
   route: z.enum(['model', 'mcp', 'egress']), outcome: z.enum(['allow', 'ask', 'deny']),
   reason: reasonCodeSchema, contextDigest: digestSchema,
+  release: toolCredentialReleaseSchema.optional(),
 }).strict();
 
 // A view is a lease, never permission to control the desktop.

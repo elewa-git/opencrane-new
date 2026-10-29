@@ -898,3 +898,15 @@ The pure fold retains the occupied run, pauses scheduling and enables no executi
 `opencrane-server` and required `cause: { eventId, position }`. The command and Stop reader
 verify `approval_denied` or `approval_expired` against exact saved approval evidence.
 The fold keeps the schedule and occupied run, sets stopRequested, and performs no effects.
+
+## Normal tool-call release audit
+
+`credential.released` accepts the old strict six-field shape for replay, or the strict
+`purpose: tool_call` shape. The new shape names the personal owner/requester, selected
+profile and generation, profile/selection/policy revisions, computer generation,
+conversation/turn/thread, server/tool, request/permit, lease id, argument/account/scope
+digests and integer issue/expiry times. The writer limits lifetime to 30 seconds.
+`decision.recorded.release` optionally carries the identical binding. Legacy decisions
+without it cannot support confirmation. Existing request correlation links the decision
+id and approval correlation remains unchanged. No event gains a reaction or material.
+A confirmed audit proves neither custody delivery nor a successful outside call.

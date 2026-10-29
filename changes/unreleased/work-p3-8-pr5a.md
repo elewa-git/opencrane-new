@@ -1,0 +1,2 @@
+- Record exact normal tool-call release audit bindings and confirm one saved audit before any future forwarding. Legacy evidence cannot confirm a release; credentialed routes remain closed.
+- Preserve access refusals when release input is invalid, history cannot be read or a later append dependency fails. Check permission once before reporting unavailable evidence; forwarding remains closed.

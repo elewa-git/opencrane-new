@@ -130,3 +130,5 @@ export { childRetryRequestedDataSchema, childRetryRequestedEventSchema }
   from './child-request.ts';
 
 export { childActivatedDataSchema, childActivatedEventSchema } from './child-activation.ts';
+
+export { toolCredentialReleaseSchema } from './credential-release.ts';
