@@ -154,6 +154,11 @@ async function accessReceipts(store: History, silo: string, memberId: string) {
       }
       receipts.push(event.id);
     }
+    // Keep completed membership facts for check(); ownership cannot restore membership.
+    // Skip that later read so its failure cannot replace a saved removal with unavailable.
+    if (role === '') {
+      break;
+    }
   }
   return { active: role !== '', receipts, positions };
 }

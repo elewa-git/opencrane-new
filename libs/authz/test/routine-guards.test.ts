@@ -59,6 +59,27 @@ async function removedWithStalePermissions() {
 it('requires saved active membership even when receipts and stale FGA permissions allow',
   removedWithStalePermissions);
 
+async function removedBeforeOwnershipFailure() {
+  const context = access();
+  const removed = { ...event('removed', 'member-alice', 'member.removed'),
+    data: { memberId: 'alice', removedBy: 'admin' } };
+  context.events.push(removed);
+  const healthyRefusal = await context.read();
+  expect(healthyRefusal).toEqual(refused);
+
+  const read = context.store.readStream;
+  async function* failedOwnership(subject: string, fromSequence = 1) {
+    if (subject === 'ownership-test') {
+      throw new Error('private ownership history failure');
+    }
+    yield* read(subject, fromSequence);
+  }
+  context.store.readStream = failedOwnership;
+  expect(await context.read()).toEqual(healthyRefusal);
+}
+it('keeps a saved membership refusal when later ownership history is unavailable',
+  removedBeforeOwnershipFailure);
+
 const historySubjects = ['routine-orders', 'member-alice', 'ownership-test'];
 async function unavailableHistory(subject: string) {
   const context = access();

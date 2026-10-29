@@ -2811,8 +2811,14 @@ checks the source's occurrence, routine root, input, turn and revisions against 
 It retains each completed run while reading history. A repeated completion must match that
 original run before it is ignored, so it cannot replace or block Stop for the current run.
 The due's conversation, turn, frozen owner, assistant and payer must match the budget root.
-Pause and retirement evidence must come from the recorded current owner, name the occupied
+Owner pause and retirement evidence must come from the recorded current owner, name the occupied
 run in `affectedRun`, retain definition/schedule revisions and increment control revision once.
+An admin pause uses those same run/revision checks and reason `admin_requested`.
+`root-stop-evidence.ts` validates member and ownership history strictly before the pause
+with the existing membership calculation. It requires a joining event before any role change
+used as proof. The actor must have been an active Owner/Admin.
+Later demotion or removal cannot invalidate that saved prohibition. Malformed, foreign,
+missing or later role evidence refuses; cleanup does not require current IAM access.
 The due's `rootId` is a routine reference, not the allocated budget root id.
 Later edits or reassignment do not replace those frozen facts. Both owner and admin sources
 use `routine_stop`, retaining the exact source reference and the first saved budget reason.

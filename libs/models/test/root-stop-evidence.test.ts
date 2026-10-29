@@ -636,3 +636,32 @@ async function foreignLifecycle(type: string) {
 }
 it.each(['routine.paused', 'routine.retired'])(
   'refuses foreign %s evidence without stopping its allocation', foreignLifecycle);
+
+async function forgedAdminPause(kind: string) {
+  const source = await lifecycleEvidence('routine.paused');
+  let member = envelope('test', 'member-admin', 'member.joined',
+    { memberId: 'admin', email: 'admin@example.test', displayName: 'Admin',
+      role: 'admin' });
+  if (kind === 'unjoined promotion') {
+    member = envelope('test', 'member-admin', 'member.role_changed',
+      { memberId: 'admin', previousRole: 'member', newRole: 'admin', changedBy: 'alice' });
+  }
+  if (kind === 'foreign role') member.silo = 'other';
+  if (kind === 'wrong member') member.subject = 'member-bob';
+  if (kind !== 'missing role' && kind !== 'later role') await nats.seed([member]);
+  if (kind === 'demoted') {
+    const demotion = envelope('test', 'member-admin', 'member.role_changed',
+      { memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'alice' });
+    await nats.seed([demotion]);
+  }
+  const affectedRun = kind === 'occurrence' ? 'other' : 'occurrence';
+  const changed = { ...source, data: { ...source.data, source: 'admin',
+    reason: 'admin_requested', actorId: 'admin', affectedRun } };
+  const saved = await save(changed);
+  if (kind === 'later role') await nats.seed([member]);
+  await refuses(changed, saved.position);
+  await reserve();
+}
+it.each(['missing role', 'foreign role', 'wrong member', 'later role', 'demoted',
+  'unjoined promotion', 'occurrence'])(
+  'refuses forged admin pause evidence: %s', forgedAdminPause);

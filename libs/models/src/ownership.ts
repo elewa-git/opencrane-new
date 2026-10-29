@@ -2,7 +2,8 @@ import { registerHandler } from '@opencrane/handlers';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { legacyMemberRole, ownershipSeededSchema, ownershipTransferredSchema,
   ownershipSteppedDownSchema, ownershipConfirmedSchema } from '@opencrane/events';
-import { envelope, history } from './actor.ts';
+import { envelope } from './budget-migration.ts';
+import { history } from './event-history.ts';
 import { data } from './state.ts';
 
 export function ownershipSubject(silo: string) {
