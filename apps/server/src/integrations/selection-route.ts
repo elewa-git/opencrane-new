@@ -46,7 +46,8 @@ export function registerConnectionSelection(app: FastifyInstance, config: AuthCo
         throw new MemberAccessRefused('Active membership required');
       }
       const input = { ...body, ...reference };
-      const receipt = await changeConnectionSelection(options.store, options.binding, memberId, input);
+      const receipt = await changeConnectionSelection(options.store, options.binding, memberId,
+        input, options.loadOAuthConfiguration);
       return reply.send(receipt);
     } catch (error) {
       if (error instanceof MemberAccessRefused) {

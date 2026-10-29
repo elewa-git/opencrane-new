@@ -16,6 +16,7 @@ import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
+import { oauthSelectionFixture } from '../../../libs/models/test/support/oauth-selection.ts';
 
 const config = testAuthConfig({ expectedOrgId: 'org-test' });
 const privateCanary = 'private-custody-canary';
@@ -31,12 +32,14 @@ function write(line: string) {
   logs.push(line);
 }
 const logDestination = { write };
-function startApp(store = nats.store, silo = 'test') {
+function startApp(store = nats.store, silo = 'test',
+  loadOAuthConfiguration?: (serverId: string) => Promise<unknown>) {
   function memberId(_silo: string, _issuer: string, subject: string) {
     return Promise.resolve(subject);
   }
   const memberReads = { silo, store, binding,
-    db: pgDb(storage.queue), feed: { memberId } };
+    db: pgDb(storage.queue), feed: { memberId },
+    ...(loadOAuthConfiguration ? { loadOAuthConfiguration } : {}) };
   return buildServer(config, { memberReads, logDestination });
 }
 
@@ -161,6 +164,27 @@ async function savesOnce() {
   expect(JSON.stringify(rows)).not.toContain(privateCanary);
 }
 it('saves an explicit select and clear once and returns their original receipts', savesOnce);
+
+async function selectsOAuth() {
+  const fixture = await saved();
+  const oauth = await oauthSelectionFixture(nats, 'alice', fixture.serverId);
+  const { serverId: _serverId, ...input } = oauth.command;
+  expect((await post(fixture.url, input)).statusCode).toBe(409);
+  await app.close();
+  app = startApp(nats.store, 'test', oauth.loadConfiguration);
+  try {
+    expect((await post(fixture.url, input)).statusCode).toBe(200);
+    const recovered = await app.inject({ url: `${fixture.url}/changes/choice`, headers: headers() });
+    expect(recovered.json()).toMatchObject({ action: 'select', profileId: 'oauth',
+      profileRevision: oauth.revision });
+    expect(recovered.body).not.toContain('synthetic');
+    expect((await post(fixture.url, input, headers('bob'))).statusCode).toBe(403);
+  } finally {
+    await app.close();
+    app = startApp();
+  }
+}
+it('selects verified OAuth through trusted configuration and recovers a safe receipt', selectsOAuth);
 
 async function rejectsInput(patch: object) {
   const fixture = await saved();

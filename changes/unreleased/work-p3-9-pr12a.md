@@ -1,0 +1,2 @@
+- Members can explicitly choose a verified personal OAuth account when trusted settings are supplied. The choice survives same-account refresh; internal tool checks use current expiry and granted scopes. Credential release and dispatch remain unavailable.
+- OAuth eligibility reads tolerate unchanged tool catalogue renewals. Saved membership removal and grant revocation keep their access refusal when history or permission receipts fail.

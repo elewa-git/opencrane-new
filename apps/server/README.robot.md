@@ -5963,7 +5963,10 @@ Unknown appends stay unavailable. The existing selection receipt GET recovers a 
 missing evidence remains unknown and never permits a resend. Exact retries retain the first
 receipt after later choices and broker deduplication expiry. No provider, custody, release,
 wake, automatic selection or company fallback is added. HTTP tests use disposable services.
-Identity verification, credential use, company selection, UI and live qualification remain later.
+Verified OAuth selection uses the optional trusted `memberReads.loadOAuthConfiguration`
+loader; without it OAuth selection refuses. Request bodies and receipt fields are unchanged.
+No runtime settings loader is installed by this slice. Credential use, company selection,
+UI and live qualification remain later.
 
 ## Company opt-in read (Part of #49; P3-8 PR 7e)
 
