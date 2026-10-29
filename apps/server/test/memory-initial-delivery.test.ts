@@ -433,3 +433,18 @@ async function changesDuringLastQualification(kind: string) {
 it.each(['access', 'qualification'])(
   'refuses %s changes in the final qualification and access checks before saving',
   changesDuringLastQualification);
+
+async function confirmsCapturedMembership() {
+  const access = await initialMemoryAccess(options, 'alice', performance.now() + 10_000);
+  const reads = vi.spyOn(options.store, 'readStream');
+  await access.confirm();
+  function membershipRead(args: Parameters<typeof options.store.readStream>) {
+    return args[0] === 'member-alice' || args[0] === 'ownership-test';
+  }
+  const membershipReads = reads.mock.calls.filter(membershipRead);
+  expect(membershipReads).toHaveLength(0);
+  await setup.append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'alice' });
+  await expect(access.confirm()).rejects.toThrow(MemberAccessRefused);
+}
+it('confirms unchanged membership by position and reads a saved removal when it changes',
+  confirmsCapturedMembership);
