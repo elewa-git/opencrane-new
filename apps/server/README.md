@@ -117,7 +117,8 @@ waking a computer. One slow chat cannot delay another chat's check or connection
 The reaction needs no read access from the former user. Polling also checks their membership
 and the memory and tool grants required by the saved requester and assistant.
 A saved member removal, confirmed denial or saved assistant deactivation clears the reply
-even when another permission check is unavailable. Unavailable checks alone never confirm access loss.
+even when another permission check is unavailable. Unavailable checks or delayed permission
+receipts alone never confirm access loss or close the reader.
 Retries recover the same saved receipt after the old fact expires. A competing recall
 keeps its added references when the server reloads and records the invalidation.
 After a restart, memory recovery uses the existing private keys and saved command records.
@@ -157,7 +158,7 @@ flowchart LR
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
   server -->|waits briefly for Forget locks| postgres
-  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, routine Stops even when evidence reads fail, saved memory Stops, reply removal receipts after completion and checked reports| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, routine Stops even when evidence reads fail, memory Stops after confirmed loss, reply removal receipts after completion and checked reports| computer["apps/computer<br/>assistant computers"]
   computer -.->|records private thread for memory discovery| server
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime

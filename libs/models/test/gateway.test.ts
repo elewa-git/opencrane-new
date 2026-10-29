@@ -229,10 +229,13 @@ it('upgrade then OpenFGA replay restores Phase 2 chat without duplicate grants',
 }, 40_000);
 
 it.each([
-  { name: 'revocation after a delayed history read exceeds two seconds', pauseMs: 2200, revoke: true },
-  { name: 'revocation during a history read within the freshness budget', pauseMs: 20, revoke: true },
-  { name: 'a history read exceeds the freshness budget without a revocation', pauseMs: 2200, revoke: false },
-])('does not dispatch a running decision: $name', async ({ pauseMs, revoke }) => {
+  { name: 'revocation after a delayed history read exceeds two seconds',
+    pauseMs: 2200, revoke: true, expectedStatus: 503 },
+  { name: 'revocation during a history read within the freshness budget',
+    pauseMs: 20, revoke: true, expectedStatus: 403 },
+  { name: 'a history read exceeds the freshness budget without a revocation',
+    pauseMs: 2200, revoke: false, expectedStatus: 503 },
+])('does not dispatch a running decision: $name', async ({ pauseMs, revoke, expectedStatus }) => {
   const f = await fixture();
   try {
     expect((await f.call()).status).toBe(200); await f.settled();
@@ -268,7 +271,7 @@ it.each([
       const response = await pending;
       if (pauseMs > 2000) expect(performance.now() - started).toBeGreaterThan(2000);
       expect(f.received()).toBe(1);
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(expectedStatus);
       expect(f.actor.state.reservations).toHaveLength(1);
     } finally { resume(); slowHistory.mockRestore(); }
   } finally { await f.close(); }

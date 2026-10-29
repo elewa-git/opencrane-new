@@ -85,6 +85,13 @@ A timeout establishes no access denial, so it reports unavailable. Both model an
 timeout tests retain their no-reservation and no-send assertions. History still loads
 before the short access check, and neither deadline nor watched stream changes.
 
+The gateway's delayed-grant tests also require 503 when their 2,200 ms pause prevents
+the grant read from completing before the original deadline. This includes a revocation
+saved during that pause: the decision has not read it before timing out. A revocation
+read within the deadline still requires 403. Both cases retain the exact send and
+reservation counts. The server's IAM-outage integration case requires 503 at decision
+admission; its later dispatch refusal and saved no-send evidence remain unchanged.
+
 ## Local OAuth revocation (Part of #50)
 
 PR 11a is split at the saved local revocation to stay below about 600 changed lines.

@@ -75,7 +75,7 @@ their existing separate deadlines, including memory's fifteen-second gateway wai
 `test/integration-access-gateway.test.ts` checks an ordinary tool call, 2,100 ms spent
 on history, and 1,900 ms on history followed by 200 ms on access. It advances the
 monotonic clock while real service timers keep running. The ordinary call must send
-once. Both over-budget calls must return 403 with one saved refusal, no remote
+once. Both over-budget calls must return 503 with one saved refusal, no remote
 connection and no reservation. All require full history to precede access reads.
 
 [The investigation](../../docs/process/evidence/ci-flakes-8.md) records the
@@ -6555,6 +6555,10 @@ denial takes priority over another unavailable permission result. A saved inacti
 assistant also confirms access loss, including when the saved requester was removed.
 An IAM outage alone, missing receipt or access change during checking returns unavailable.
 It neither records a revocation nor authorises use. Later polls try again.
+The access-loss helper excludes `AuthorityRefused('IAM projection behind')` from
+confirmed loss. That error stops a decision but proves only that a receipt is missing.
+The lag regression keeps the reader open and saves no invalidation even when every
+grant remains present. After receipts recover, the same check returns `unchanged`.
 
 The existing exact-thread Stop and clearance receipt remove running and completed
 private output. A completed context keeps its ended status and loaded references.

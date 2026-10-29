@@ -38,6 +38,10 @@ export async function lostMemoryAccess(options: Options, saved: MemoryContextRec
     await loadedMemoryRights(store, binding, claims, scopeId, fresh, conversation, applied);
     await readActiveMember(store, binding, saved.requesterId, 'member', applied);
   } catch (error) {
+    // Keep receipt lag separate from proof that the reader lost permission.
+    if (error instanceof AuthorityRefused && error.message === 'IAM projection behind') {
+      throw error;
+    }
     if (!(error instanceof AuthorityRefused) && !(error instanceof MemberAccessRefused) &&
         !(error instanceof PayingGroupRefused)) {
       throw error;
