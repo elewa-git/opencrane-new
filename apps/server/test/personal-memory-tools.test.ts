@@ -8,6 +8,7 @@ import { natsFixture } from '@opencrane/event-store/testing';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { envelope, MemberAccessRefused, privateCallers } from '@opencrane/models';
 import { memoryScopeId } from '@opencrane/projections';
+import { privateToolOffer } from './support/private-catalogue.ts';
 import { preparePersonalMemoryTools } from '../src/chat/personal-memory-tools.ts';
 import { checkPrivateTurnTools, type TurnToolServerState } from '../src/chat/turn-tools.ts';
 import { correctTool, forgetTool, recallTool, rememberTool } from '../src/memory/mcp.ts';
@@ -289,7 +290,7 @@ async function changesDuringRead(change: typeof changes[number], stage: 'catalog
       expect(outcome.value).toHaveLength(change === 'activity' ? 1 : 0);
       if (change === 'activity') {
         expect(checkPrivateTurnTools(outcome.value, setup.input)).toBe(true);
-        if (operation === 'all') expect(outcome.value).toEqual(combinedTools());
+        if (operation === 'all') expect(outcome.value).toEqual(privateToolOffer('all'));
       }
     }
   }
@@ -405,18 +406,10 @@ async function changesDuringConfirmation(change: 'caller' | 'generation' | 'qual
 it.each(['caller', 'generation', 'qualification', 'turn'] as const)(
   'rejects changed %s during final access confirmation', changesDuringConfirmation);
 
-function combinedTools() {
-  return [expect.objectContaining({
-    definitions: [JSON.stringify(recallTool), JSON.stringify(rememberTool),
-      JSON.stringify(correctTool), JSON.stringify(forgetTool)],
-    modes: { recall: 'allow', remember: 'allow', correct: 'allow', forget: 'allow' },
-  })];
-}
-
 async function preparesCombined() {
   const { input, check, use } = await fixture('all');
   const tools = await preparePersonalMemoryTools(input);
-  expect(tools).toEqual(combinedTools());
+  expect(tools).toEqual(privateToolOffer('all'));
   expect(checkPrivateTurnTools(tools, input)).toBe(true);
   expect(checkPrivateTurnTools([...tools], input)).toBe(false);
   expect(check).toHaveBeenCalledExactlyOnceWith('alice', 'member');
