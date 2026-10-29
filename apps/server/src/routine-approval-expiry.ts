@@ -97,6 +97,15 @@ export async function expireRoutineApproval(store: EventStore, silo: string, raw
     const command = { event: checked.event, expectedSequence: checked.expectedSequence,
       deadline: performance.now() + 2000, historyChecked: true as const };
     const result = await store.append(command);
+    if (result.status === 'appended' && result.outcome?.kind === 'appended') {
+      // Keep the acknowledged reference available for Stop even if later reads fail.
+      // Require a new append; duplicate recovery does not prove this proposed event was saved.
+      return {
+        status: 'confirmed' as const,
+        eventId: checked.event.id,
+        position: result.sequence,
+      };
+    }
     if (result.status !== 'appended' && result.status !== 'conflict') {
       throw new Error('Expiry not saved');
     }

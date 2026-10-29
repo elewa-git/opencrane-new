@@ -16,6 +16,7 @@ flowchart LR
   server["apps/server<br/>back end"] -.-> expiry["routine-approval-expiry<br/>ends one approval"]
   expiry -.-> models["libs/models<br/>approval rules"]
   expiry -->|saves expiry| events["event store<br/>saved history"]
+  events -->|confirms saved position| expiry
   stop["routine-approval-stop<br/>ends routine work"] -->|reads saved expiry| events
 ```
 
@@ -31,7 +32,9 @@ Routine execution remains disabled.
 ## Processes it handles
 
 A caller supplies one saved request reference. Once its time runs out, the command
-checks the routine history and saves expiry. Another command can then save Stop;
+checks the routine history and saves expiry. Once the event store confirms the save,
+the command returns its reference even if later reads become unavailable.
+Another command can then save Stop;
 budget cleanup keeps uncertain holds and charges the full late cost.
 
 ## How to run or test it

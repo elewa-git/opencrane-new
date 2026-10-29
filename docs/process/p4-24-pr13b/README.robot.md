@@ -16,8 +16,12 @@ History has a ten-second deadline before the two-second conditional append.
 `readApproval` uses deferred invalidation and never opens the encrypted review.
 A read-only view adds the proposed expiry after a captured log position so
 `readRoutineApproval` can validate the same complete evidence that Stop requires.
-This proposed row is never a saved receipt. The command appends once, then reads
-again. Conflict causes a read, never a second append. An uncertain append returns
+This proposed row is never a saved receipt. The command appends once. When the
+store reports `status: appended` with `outcome.kind: appended`, it returns that
+event's id and acknowledged position immediately. A later read outage or expired
+history deadline cannot discard this proven result. Duplicate recovery, an append
+without an explicit outcome and conflict still require reading saved history.
+Conflict causes a read, never a second append. An uncertain append returns
 a fixed error; retry reads the original saved result. Saved expiry or denial
 returns `confirmed`, eventId and position. Other states return `unchanged`.
 A confirmed historical result remains readable after later Stop or completion.
