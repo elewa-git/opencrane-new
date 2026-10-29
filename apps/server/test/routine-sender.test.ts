@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -28,6 +28,7 @@ import { BudgetActor, history, priceTableId, rootTotals } from '@opencrane/model
 import { conversationKeys } from '@opencrane/projections';
 import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
+import * as routineSession from '../src/routine-session.ts';
 import { prepareRoutineComputer } from '../src/routine-computer.ts';
 import { admitRoutineActivation } from '../src/routine-activation.ts';
 import { inspectRoutineSender } from '../src/routine-sender.ts';
@@ -69,6 +70,8 @@ async function apply(events: EventEnvelope[]) {
   const db = { query: forbidden };
   for (const saved of events) await auth.handler.handle(saved, db);
 }
+let afterProjection = projectionComplete;
+function projectionComplete() {}
 async function setup() {
   nats = await natsFixture();
   fga = await openfga();
@@ -114,24 +117,45 @@ async function setup() {
   actor = new BudgetActor(nats.store, 'test');
   await actor.start(10_000, 10_000, 'sales');
   preparedComputer = await startComputer();
-  const append = nats.store.append.bind(nats.store);
-  async function projectCreation(...args: Parameters<typeof append>) {
-    const result = await append(...args);
-    if (proposedEvent.parse(args[0].event).type === 'conversation.created') {
-      expect(preparedComputer.nativeStarts).toBe(1);
-      const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
-      const auth = memberAuthorisation(binding, nats.store);
-      await auth.handler.handle(rows[0]!.event, { query: forbidden });
-    }
+  const preparedSelection = await prepareSenderFixture();
+  Object.assign(selection, preparedSelection);
+}
+async function projectPreparedSession() {
+  expect(preparedComputer.nativeStarts).toBe(1);
+  const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
+  const creation = rows[0]!.event;
+  const auth = memberAuthorisation(binding, nats.store);
+  await auth.handler.handle(creation, { query: forbidden });
+  async function sessionReady() {
+    const receipt = await auth.checkApplied(creation.id);
+    const access = await auth.conversation('alice', conversationId, 'post');
+    return receipt.allowed && access.allowed;
+  }
+  await until(sessionReady, 10_000);
+  afterProjection();
+}
+async function prepareSenderFixture() {
+  const prepareSession = routineSession.prepareRoutineSession;
+  let stage = 'preparation';
+  async function projectSession(...args: Parameters<typeof prepareSession>) {
+    stage = 'session';
+    const result = await prepareSession(...args);
+    stage = 'projection';
+    // Run the real command first. Apply test permissions outside its two-second write check.
+    await projectPreparedSession();
+    stage = 'preparation';
     return result;
   }
-  const projection = vi.spyOn(nats.store, 'append');
-  projection.mockImplementation(projectCreation);
-  const link = await preparedComputer.wake();
-  const preparedSelection = await prepareRoutineComputer(nats.store, keys, worker(),
-    input, actor, link, 1);
-  Object.assign(selection, preparedSelection);
-  projection.mockRestore();
+  const projection = vi.spyOn(routineSession, 'prepareRoutineSession');
+  projection.mockImplementation(projectSession);
+  try {
+    const link = await preparedComputer.wake();
+    return await prepareRoutineComputer(nats.store, keys, worker(), input, actor, link, 1);
+  } catch {
+    throw new Error(`Sender fixture stage: ${stage}`);
+  } finally {
+    projection.mockRestore();
+  }
 }
 async function cleanup() {
   vi.restoreAllMocks();
@@ -1380,3 +1404,38 @@ async function finishWithNativeEvidence(kind: 'terminal' | 'timeout' | 'connecti
 it.each(['terminal', 'timeout', 'connection loss'] as const)(
   'finishes only after saved native termination through the bridge: %s', finishWithNativeEvidence,
   25_000);
+
+function delayedFixtureProjection() {
+  function delayProjectionClock() {
+    const monotonic = performance.now.bind(performance);
+    function afterWait() {
+      return monotonic() + 2100;
+    }
+    vi.spyOn(performance, 'now').mockImplementation(afterWait);
+  }
+  function delayProjection() {
+    afterProjection = delayProjectionClock;
+  }
+  function restoreProjection() {
+    afterProjection = projectionComplete;
+  }
+  beforeAll(delayProjection);
+  afterAll(restoreProjection);
+
+  async function preparesAfterProjection() {
+    await admit();
+    expect(await inspect()).toMatchObject({ status: 'unknown', executionAvailable: false });
+    const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
+    const types: string[] = [];
+    for (const row of rows) types.push(row.event.type);
+    expect(types).toEqual(['conversation.created', 'message.posted']);
+    expect(actor.state.roots).toHaveLength(1);
+    expect(actor.state.roots[0]!.allowanceCents).toBe(1000);
+    expect(actor.state.reservations).toEqual([]);
+    expect(preparedComputer.nativeStarts).toBe(1);
+    expect(preparedComputer.starts).toBe(0);
+  }
+  it('prepares the sender after fixture projection takes longer than a write deadline',
+    preparesAfterProjection);
+}
+describe('delayed fixture projection', delayedFixtureProjection);

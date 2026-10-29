@@ -1,0 +1,1 @@
+- Prepare routine sender test permissions after session creation finishes, so delayed fixture projection does not consume the session's write deadline.
