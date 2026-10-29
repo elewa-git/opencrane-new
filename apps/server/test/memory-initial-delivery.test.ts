@@ -1,0 +1,169 @@
+import { dirname } from 'node:path';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { grantStream } from '@opencrane/authz';
+import { createEventStore } from '@opencrane/event-store';
+import { history } from '@opencrane/models';
+import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from '@opencrane/models/testing';
+import { computers, groups, memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
+import { readChatFacts } from '../src/chat/chat-summary.ts';
+import { memoryAdmission } from '../src/chat/memory-admission.ts';
+import { prepareInitialMemory } from '../src/memory/initial-delivery.ts';
+import type { MemoryOptions } from '../src/memory/access.ts';
+
+let setup: Awaited<ReturnType<typeof fixture>>;
+let options: MemoryOptions;
+const claims = { silo: 'test', requester: 'alice', assistant: 'assistant', computer: 'computer',
+  generation: 1, conversation: 'conversation', turn: 'turn', thread: 'thread' };
+const scopeId = memoryScopeId('test', 'person', 'alice');
+const runtime = { sourceSha: 'a'.repeat(40), imageDigest: `sha256:${'b'.repeat(64)}`,
+  environmentId: 'synthetic-test' };
+const qualification = { ...runtime, result: 'PASS', checks: { privateTurns: 'PASS',
+  nativeRecall: 'PASS', requesterIsolation: 'PASS', sessionIsolation: 'PASS',
+  invalidation: 'PASS', unrelatedActivity: 'PASS', stopReconnect: 'PASS',
+  replacementReload: 'PASS', persistence: 'PASS' } };
+const evidence = { runtime, qualification };
+const canary = 'Initial personal memory canary';
+function memberId() { return Promise.resolve('alice'); }
+async function start() {
+  setup = await fixture(2000, 20000, false, 'gpt-6-luna', false, 'manual', 'sales', 'restricted');
+  await setup.stopDispatch();
+  await setup.runtime.stop();
+  const tool = toolEvidence({ name: 'recall', reviewed: true, costCents: 0 });
+  await setup.append('mcp-memory', 'mcp.server_registered', { serverId: 'memory', kind: 'hosted',
+    registeredBy: 'alice', locator: `registry.example.test/memory@sha256:${'a'.repeat(64)}` });
+  await setup.append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory',
+    connectionId: 'server', accountMode: 'none', ...catalogueEvidence([tool]) });
+  await reviewCatalogue(setup, 'memory');
+  await setup.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',
+    connectionId: 'server', toolName: 'recall', toolRevision: tool.revision,
+    mode: 'allow', setBy: 'alice' });
+  await setup.append('mcp-memory', 'mcp.server_published', { serverId: 'memory', publishedBy: 'alice' });
+  for (const [resourceType, resourceId] of [['mcp_server', 'memory'], ['memory_read', scopeId]]) {
+    for (const [granteeKind, granteeId] of [['member', 'alice'], ['assistant', 'assistant']]) {
+      const saved = await setup.append(grantStream(resourceType!, resourceId!), 'grant.given',
+        { resourceType, resourceId, granteeKind, granteeId, grantedBy: 'alice' });
+      await setup.auth.handler.handle(saved, setup.db);
+    }
+  }
+  options = { silo: 'test', store: setup.nats.store, db: setup.db, binding: setup.binding,
+    keyDirectory: dirname(setup.options.configFile), feed: { memberId } };
+  const keys = memoryKeys(options.keyDirectory!);
+  for (const projection of [groups, computers, memoryProjection({ decrypt: keys.decrypt })]) {
+    await setup.runner.initialise(projection);
+    await setup.runner.run(projection);
+  }
+}
+async function close() {
+  vi.restoreAllMocks();
+  await setup?.close();
+}
+beforeEach(start, 120_000);
+afterEach(close);
+async function fact(memoryId = 'fact', text = canary) {
+  const keys = memoryKeys(options.keyDirectory!);
+  const identity = { silo: 'test', scopeId, scopeKind: 'person' as const,
+    ownerId: 'alice', memoryId, revision: 1 };
+  keys.provision(identity);
+  await setup.append(`scope-${scopeId}`, 'memory.written', { ...identity, schemaVersion: 1,
+    kind: 'preference', pinned: true, expiresAt: null, sources: [], dependsOn: [],
+    ...keys.encrypt(identity, text) });
+  await setup.runner.run(memoryProjection({ decrypt: keys.decrypt }));
+}
+function prepare() { return prepareInitialMemory(options, claims, evidence); }
+async function state(store = options.store) {
+  const chat = await readChatFacts(store, 'test', 'conversation', 'turn');
+  return chat.memoryContext;
+}
+async function noQualification(qualification: unknown) {
+  const before = await setup.nats.store.head();
+  await expect(prepareInitialMemory(options, claims, { runtime, qualification })).rejects
+    .toThrow('memory_context_unavailable');
+  expect(await setup.nats.store.head()).toBe(before);
+}
+it.each([undefined, {}, { ...qualification, sourceSha: 'c'.repeat(40) },
+  { ...qualification, checks: { privateTurns: 'PASS' } }])(
+  'refuses absent, incomplete or mismatched qualification: %j', noQualification);
+async function mismatch(patch: object) {
+  await expect(prepareInitialMemory(options, { ...claims, ...patch }, evidence)).rejects
+    .toThrow('memory_context_unavailable');
+  expect(await state()).toBeUndefined();
+}
+it.each([{ requester: 'bob' }, { assistant: 'other' }, { computer: 'other' },
+  { generation: 2 }, { conversation: 'other' }, { turn: 'other' }, { thread: 'other' }])(
+  'refuses substituted turn identity: %j', mismatch);
+async function recordsBeforeRelease() {
+  await fact();
+  const pending = await prepare();
+  expect(await state()).toMatchObject({ status: 'prepared', references: [] });
+  const receipt = await pending.load();
+  expect(receipt).toEqual({ status: 'loaded', dispatch: 'disabled' });
+  expect(await state()).toMatchObject({ status: 'loaded', initialLoaded: true,
+    references: [{ scopeId, memoryId: 'fact', revision: 1 }], executionAvailable: false });
+  const cold = createEventStore(setup.nats.log, setup.nats.control);
+  expect(await state(cold)).toEqual(await state());
+  const rows = await history(cold, 'conversation-conversation', 'test');
+  expect(JSON.stringify(rows)).not.toContain(canary);
+  await expect(pending.load()).rejects.toThrow('memory_context_unavailable');
+  await expect(prepare()).rejects.toThrow('memory_context_unavailable');
+  expect(memoryAdmission.state).toBe('disabled');
+}
+it('records references once, returns no text and cold replay grants nothing', recordsBeforeRelease);
+async function limits(count: number, text: string) {
+  for (let index = 0; index < count; index++) await fact(`fact-${index}`, text);
+  const pending = await prepare();
+  await pending.load();
+  const saved = await state();
+  expect(saved?.initialBytes).toBeLessThanOrEqual(16384);
+  expect(saved?.references.length).toBeLessThanOrEqual(32);
+  expect(saved?.hasOmissions).toBe(count > 32 || text.length > 1000);
+  if (count === 0) expect(saved?.references).toEqual([]);
+  if (count === 33) expect(saved?.references).toHaveLength(32);
+}
+it.each([[0, ''], [33, 'short'], [5, '界'.repeat(1300)]] as const)(
+  'records bounded initial selection (%i facts)', limits);
+async function closure(action: string) {
+  const append = options.store.append.bind(options.store);
+  async function closeDuring(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    const data = command.event.data as { action?: string };
+    if (data.action === action) {
+      await setup.append('participation-conversation', 'conversation.closed',
+        { conversationId: 'conversation', closedBy: 'alice' });
+    }
+    return result;
+  }
+  vi.spyOn(options.store, 'append').mockImplementation(closeDuring);
+  async function attempt() { const pending = await prepare(); await pending.load(); }
+  await expect(attempt()).rejects.toThrow('memory_context_unavailable');
+  expect((await state())?.executionAvailable).toBe(false);
+}
+it.each(['prepared', 'loaded'])('refuses closure during the %s append', closure);
+async function lostAppend(action: string, saved: boolean) {
+  const append = options.store.append.bind(options.store);
+  async function lose(command: Parameters<typeof append>[0]) {
+    const data = command.event.data as { action?: string };
+    if (data.action !== action) return append(command);
+    if (saved) await append(command);
+    throw new Error('Private upstream error must not escape');
+  }
+  vi.spyOn(options.store, 'append').mockImplementation(lose);
+  async function attempt() { const pending = await prepare(); await pending.load(); }
+  await expect(attempt()).rejects.toThrow('memory_context_unavailable');
+  if (saved) expect((await state())?.status).toBe(action);
+}
+it.each([['prepared', false], ['prepared', true], ['loaded', false], ['loaded', true]] as const)(
+  'returns no text after an uncertain %s append (saved=%s)', lostAppend);
+async function changedBeforeLoad(kind: string) {
+  await fact();
+  const pending = await prepare();
+  if (kind === 'removed') {
+    await setup.append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'alice' });
+  } else {
+    const identity = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
+      memoryId: 'fact', expectedRevision: 1, revision: 2 };
+    await setup.append(`scope-${scopeId}`, 'memory.forgotten', identity);
+  }
+  await expect(pending.load()).rejects.toThrow('memory_context_unavailable');
+  expect((await state())?.initialLoaded).toBe(false);
+}
+it.each(['forgotten', 'removed'])('refuses %s facts before loading', changedBeforeLoad);
