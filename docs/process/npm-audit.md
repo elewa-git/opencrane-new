@@ -45,3 +45,49 @@ critical shipped findings while allowing the documented moderate parser finding.
 | `npm audit --omit=dev --json` | Two moderate entries for MinIO and its parser remain and are accepted above; no high or critical findings |
 | Computer runtime lock audit | PASS, zero findings |
 | `npm audit --json` | Development-tool findings and the two accepted moderate shipped entries remain; npm exits non-zero |
+
+## 29 October 2026 update
+
+The root production audit initially reported six affected package entries: one
+low, two moderate and three high. The separate computer runtime audit reported
+zero findings, so its package files do not change.
+
+| Package | Shipped path | Change | Licence |
+| --- | --- | --- | --- |
+| `decode-uri-component` | server → MinIO → query-string → decoder | 0.5.0 → 0.5.1 | MIT |
+| `fastify` | server, demo tool server and Odoo tool server; also auth test provider | 5.12.5 → 5.12.6 | MIT |
+| `fast-uri` | server → Ajv; Fastify → Ajv compiler / JSON serialiser → Ajv | 3.1.8 → 3.1.9 | BSD-3-Clause |
+| `fast-uri` | Fastify → Ajv compiler / JSON serialiser | 4.2.1 → 4.2.3 | BSD-3-Clause |
+
+The same lockfile update fixes the development copies of fast-uri under Angular,
+the MCP SDK and OpenFGA's syntax transformer. Registry licence metadata and each
+changed package's installed licence file were checked; all are OSI-approved.
+No package was added.
+
+Keep the decoder override because MinIO's latest release, 8.0.7, still requires
+query-string 7.1.3, which requires decode-uri-component `^0.2.2`. No compatible
+patched parent release is available. The override selects the patched decoder
+without replacing MinIO or query-string. Fast-uri updates stay within their
+parents' existing ranges and need no override.
+
+The decoder update fixes
+[GHSA-qr28-fpjm-wq7f](https://github.com/advisories/GHSA-qr28-fpjm-wq7f).
+The Fastify update fixes
+[GHSA-389g-gv7q-r4x8](https://github.com/advisories/GHSA-389g-gv7q-r4x8).
+The fast-uri updates fix
+[GHSA-w74x-v6f9-j3xg](https://github.com/advisories/GHSA-w74x-v6f9-j3xg),
+[GHSA-xhq7-xmqj-769h](https://github.com/advisories/GHSA-xhq7-xmqj-769h),
+[GHSA-wjr9-j795-jxcr](https://github.com/advisories/GHSA-wjr9-j795-jxcr) and
+[GHSA-333x-w4r6-6crp](https://github.com/advisories/GHSA-333x-w4r6-6crp).
+
+The remaining root findings are two moderate package entries: MinIO and its
+stream-json 1.9.1 dependency. The parser advisories are
+[GHSA-528h-pc64-c93x](https://github.com/advisories/GHSA-528h-pc64-c93x),
+[GHSA-hqr4-qq8f-hg3x](https://github.com/advisories/GHSA-hqr4-qq8f-hg3x) and
+[GHSA-mjw6-4jj6-33hc](https://github.com/advisories/GHSA-mjw6-4jj6-33hc).
+Version 3.6.0 fixes all three, but replaces the `jsonl/Parser.js` import that
+MinIO loads with `jsonl/parser.js`. Forcing that version
+would break server startup. The server does not call MinIO's bucket notification
+listener. This keeps the existing documented moderate finding visible; no audit
+ignore or threshold change is added. A compatible upstream MinIO release is
+still needed to remove it safely.

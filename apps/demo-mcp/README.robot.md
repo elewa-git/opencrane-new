@@ -53,6 +53,6 @@ checks, concurrent accepted calls, id echo, JSON HTTP replies and reset on resta
 The oversized, malformed UTF-8 and tools/list argument fixtures otherwise satisfy the request
 contract, so each test fails when its corresponding guard is removed. Tests need no external
 services.
-Source and reused `@opencrane/events`: repository AGPL-3.0-or-later. Fastify 5.12.5 and
+Source and reused `@opencrane/events`: repository AGPL-3.0-or-later. Fastify 5.12.6 and
 Zod 4.6.5: MIT, checked in installed LICENSE files. Node uses its standard library.
 No new third-party dependency, runtime image or product API/event is introduced.

@@ -37,6 +37,9 @@ flowchart LR
 
 ## How to run or test it
 
+The tool server uses the patched Fastify HTTP server. Its request limits and
+checks also run in the ordinary tests.
+
 Tests use the server’s test helper to check the demo catalogue with the real inventory parser.
 Without TLS settings, startup binds only to the local machine on port 18445.
 

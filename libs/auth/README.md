@@ -63,6 +63,8 @@ flowchart LR
 
 ## How to run or test it
 
+Sign-in tests use the same patched Fastify HTTP server as the back end.
+
 ```sh
 nice -n 10 npm test -- libs/auth
 nice -n 10 npm run typecheck -w libs/auth

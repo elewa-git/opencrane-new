@@ -44,6 +44,9 @@ flowchart LR
 
 ## How to run or test it
 
+The tool server uses the patched Fastify HTTP server. Its request limits and
+checks also run in the ordinary tests.
+
 The server uses the shared events package to read JSON without losing number precision.
 
 The server listens only on the local machine. Reading orders needs an Odoo address
