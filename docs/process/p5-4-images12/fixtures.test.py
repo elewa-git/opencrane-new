@@ -94,11 +94,20 @@ class BuildTests(unittest.TestCase):
                 self.checker.check_report(report, self.review)
 
     def test_complete_notice_patent_grant_and_partial_record_are_required(self):
+        self.assertIn("memmove_amd64.s", self.review["files"])
         for name, data in self.inputs.items():
             changed = dict(self.inputs)
             changed[name] = data[30:]
             with self.assertRaises(ValueError):
                 self.checker.check_inputs(self.review, changed)
+        for name in ("LICENSE", "PATENTS", "memmove_amd64.s"):
+            for line in self.inputs[name].splitlines(keepends=True):
+                if not line.strip():
+                    continue
+                changed = dict(self.inputs)
+                changed[name] = changed[name].replace(line, b"", 1)
+                with self.assertRaises(ValueError):
+                    self.checker.check_inputs(self.review, changed)
         for field in self.review:
             changed = copy.deepcopy(self.review)
             changed[field] = "Apache-2.0; approved"
@@ -114,6 +123,9 @@ class BuildTests(unittest.TestCase):
             path.write_bytes(binary)
             with self.assertRaises(ValueError):
                 checker.check_binary(path, self.review)
+            with patch.object(checker.candidate, "checked_bytes"):
+                checker.check_binary(path, self.review)
+            self.assertEqual(path.read_bytes(), binary)
             for copies in ([binary], [], [binary, b"changed"], [binary, binary]):
                 layers = []
                 for index, data in enumerate(copies):
@@ -135,11 +147,16 @@ class BuildTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     method(path, self.review)
             path.write_bytes(archive_bytes([
+                ("infra/package/Dockerfile", self.inputs["Dockerfile"] + b"# changed")]))
+            with self.assertRaises(ValueError):
+                checker.check_recipe(path, self.review)
+            path.write_bytes(archive_bytes([
                 ("infra/package/Dockerfile", self.inputs["Dockerfile"])]))
             checker.check_recipe(path, self.review)
             rows = []
             for name in ("VERSION", "LICENSE", "PATENTS"):
                 rows.append(("go/" + name, self.inputs[name]))
+            rows.append(("go/src/runtime/memmove_amd64.s", self.inputs["memmove_amd64.s"]))
             source = archive_bytes(rows)
             path.write_bytes(source)
             with patch.object(checker.candidate, "checked_bytes", return_value=source):
@@ -179,11 +196,24 @@ class BuildTests(unittest.TestCase):
             with patch.object(checker.candidate, "checked_bytes", return_value=b"corrupt tar"):
                 with self.assertRaises(tarfile.TarError):
                     checker.check_source(path, self.review)
+            def invalid_binary(*arguments):
+                checker.extract_buildinfo(path)
+
+            with patch.object(checker, "check_evidence", side_effect=invalid_binary):
+                self.run_main(False)
+                def failed_child(arguments, **options):
+                    output = arguments[2].split("=", 1)[1]
+                    Path(output).write_bytes(self.inputs["buildinfo.bin"])
+                    return subprocess.CompletedProcess(arguments, 1, b"/private/out", b"/private/err")
+
+                with patch.object(checker.subprocess, "run", side_effect=failed_child):
+                    self.run_main(False)
             with patch.object(checker.subprocess, "run", side_effect=OSError("/private/child")):
                 with self.assertRaises(OSError):
                     checker.extract_buildinfo(path)
-        with patch.object(checker.gzip, "decompress", side_effect=ValueError("/private/decoder")):
-            self.run_main(False)
+        with patch.object(checker.candidate, "check_evidence"):
+            with patch.object(checker.gzip, "decompress", side_effect=ValueError("/private/decoder")):
+                self.run_main(False)
         result = subprocess.run([sys.executable, str(CHECKER)], capture_output=True)
         self.assertEqual((result.returncode, result.stdout, result.stderr),
                          (1, b"", (checker.REFUSAL + "\n").encode()))

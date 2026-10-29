@@ -100,6 +100,8 @@ with made-up services and settings. This checks that the packaged code loads and
 finishes the fixture; a running installation needs its own checks.
 A separate candidate record checks the proposed package list, saved image bytes
 and Debian main package versions. It keeps checksums for the shipped notices.
+A separate check reads kubectl's saved build information and retains the Go project
+and runtime terms. Reported module names do not prove their source.
 A separate Node record lists the shipped notice's declarations and individual
 acceptance reasons. References without enough terms stay blocked. This checks only
 that notice; other bundled licences and installation approval still need work.
