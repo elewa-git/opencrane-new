@@ -279,7 +279,6 @@ it.each([false, true])('hides configuration errors after checking access (remove
 
 async function catalogueDuringRead(kind: string) {
   const test = await fixture();
-  const selected = await test.select();
   const subject = `mcp-${test.serverId}`;
   const rows = await history(nats.store, subject, 'test');
   const policy = toolPolicyFromRows(rows);
@@ -288,6 +287,14 @@ async function catalogueDuringRead(kind: string) {
     serverId: test.serverId, outcome: 'unchanged', schemaDigest: policy.catalogue!.schemaDigest,
     checkedAt: new Date(now).toISOString(), expiresAt: new Date(now + 300_000).toISOString(),
   });
+  if (kind === 'renewed expiry') {
+    const shortCatalogue = envelope('test', subject, 'mcp.catalogue_checked', {
+      serverId: test.serverId, outcome: 'unchanged', schemaDigest: policy.catalogue!.schemaDigest,
+      checkedAt: new Date(now).toISOString(), expiresAt: new Date(now + 10_000).toISOString(),
+    });
+    await nats.seed([shortCatalogue]);
+  }
+  const selected = await test.select();
   if (kind === 'failed') {
     event = envelope('test', subject, 'mcp.catalogue_checked', {
       serverId: test.serverId, outcome: 'failed', checkedAt: new Date(now).toISOString(),
@@ -305,11 +312,14 @@ async function catalogueDuringRead(kind: string) {
   async function changeAfterPermission(...args: Parameters<typeof use>) {
     const permission = await use(...args);
     await nats.seed([event]);
+    if (kind === 'renewed expiry') {
+      vi.spyOn(Date, 'now').mockReturnValue(now + 10_000);
+    }
     return permission;
   }
   const permission = vi.spyOn(auth, 'use').mockImplementationOnce(changeAfterPermission);
   const result = await test.read('read');
-  if (kind === 'unchanged') {
+  if (kind === 'unchanged' || kind === 'renewed expiry') {
     expect(result).toEqual({ status: 'verified', sequence: selected.sequence,
       profileId: 'oauth', profileRevision: test.revision, generation: 1 });
   } else {
@@ -317,7 +327,7 @@ async function catalogueDuringRead(kind: string) {
   }
   expect(permission).toHaveBeenCalledTimes(1);
 }
-it.each(['unchanged', 'failed', 'policy'])(
+it.each(['unchanged', 'renewed expiry', 'failed', 'policy'])(
   'checks relevant evidence when a %s catalogue event arrives during a read', catalogueDuringRead);
 
 async function savedRefusalWithFailure(kind: string, failure: string, operation: string) {
