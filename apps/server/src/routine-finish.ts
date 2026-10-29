@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
-import { computerSummary, type ComputerSummary } from '@opencrane/auth';
+import { computerSummary, isComputerLifecycle, type ComputerSummary } from '@opencrane/auth';
 import { foldRoutineHistory } from '@opencrane/authz';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import type { AppendResult, EventStore, StoredEvent } from '@opencrane/event-store';
 import { budgetRootAllowanceSetDataSchema, budgetRootStoppedDataSchema,
   computerTurnStartedDataSchema, computerTurnClosedDataSchema,
   type EventEnvelope, type RoutineState } from '@opencrane/events';
@@ -170,6 +170,79 @@ async function load(store: EventStore, subject: string, silo: string, deadline: 
   return rows;
 }
 
+function requireUnchangedAllocation(row: StoredEvent, root: Root) {
+  if (row.event.type !== 'budget.root_allowance_set') {
+    return;
+  }
+  const allocation = budgetRootAllowanceSetDataSchema.parse(row.event.data);
+  if (allocation.rootId === root.rootId ||
+      (allocation.conversationId === root.conversationId && allocation.turnId === root.turnId)) {
+    throw new Error('Allocation changed');
+  }
+}
+function requireUnchangedTurn(row: StoredEvent, root: Root) {
+  if (isComputerLifecycle(row.event.type)) {
+    throw new Error('Computer lifecycle changed');
+  }
+  const type = row.event.type;
+  if (type !== 'computer.turn_started' && type !== 'computer.turn_closed') {
+    return;
+  }
+  const schema = type === 'computer.turn_started'
+    ? computerTurnStartedDataSchema : computerTurnClosedDataSchema;
+  const turn = schema.parse(row.event.data);
+  if (turn.rootId === root.rootId || turn.turnId === root.turnId ||
+      turn.threadId === root.threadId) {
+    throw new Error('Root or private thread changed');
+  }
+}
+async function changesSince(store: EventStore, subject: string, silo: string,
+  position: number, deadline: number) {
+  const rows: StoredEvent[] = [];
+  for await (const row of store.readStream(subject, position + 1, deadline)) {
+    if (row.event.silo !== silo || row.event.subject !== subject) {
+      throw new Error('Wrong execution history');
+    }
+    rows.push(row);
+  }
+  if (performance.now() >= deadline) {
+    throw new Error('Execution check expired');
+  }
+  return rows;
+}
+function executionCheck(store: EventStore, silo: string, root: Root,
+  budgetRows: StoredEvent[], computerRows: StoredEvent[], deadline: number) {
+  let budgetPosition = budgetRows.at(-1)!.sequence;
+  let computerPosition = computerRows.at(-1)!.sequence;
+  async function check() {
+    // Read only new records. Unrelated spending and chats cannot invalidate this ended turn.
+    const budgetChanges = await changesSince(store, `budget-${silo}`, silo,
+      budgetPosition, deadline);
+    for (const row of budgetChanges) {
+      requireUnchangedAllocation(row, root);
+      budgetPosition = row.sequence;
+    }
+    const computerChanges = await changesSince(store, `computer-${root.assistantId}`, silo,
+      computerPosition, deadline);
+    for (const row of computerChanges) {
+      requireUnchangedTurn(row, root);
+      computerPosition = row.sequence;
+    }
+  }
+  return check;
+}
+function provenUnsaved(result: AppendResult) {
+  if (result.status !== 'conflict') {
+    return false;
+  }
+  const outcome = result.outcome;
+  if (outcome?.kind !== 'conditional_rejection_unchanged' &&
+      outcome?.kind !== 'conditional_rejection_changed') {
+    return false;
+  }
+  return !outcome.possiblyPublished;
+}
+
 /** Release only an ended, stopped run. Leave scheduling and money to their own commands. */
 export async function finishRoutine(store: EventStore, silo: string, raw: unknown,
   options: { enabled?: boolean; replay?: boolean } = {}) {
@@ -206,18 +279,26 @@ export async function finishRoutine(store: EventStore, silo: string, raw: unknow
       principal: { kind: 'system', id: 'opencrane-server' },
       time: new Date().toISOString(), correlation: {}, data };
     const writeDeadline = performance.now() + 2000;
-    async function checkExecution() {
-      // Keep execution histories outside access streams. The store binds this check to publication.
-      const budgetPosition = await store.head(budgetSubject, writeDeadline);
-      const computerPosition = await store.head(computerSubject, writeDeadline);
-      if (budgetPosition !== budgetRows.at(-1)?.sequence ||
-          computerPosition !== computerRows.at(-1)?.sequence) {
-        throw new Error('Execution changed');
-      }
-    }
+    const checkExecution = executionCheck(store, silo, allocation.root,
+      budgetRows, computerRows, writeDeadline);
     const command = { event, expectedSequence: rows.at(-1)!.sequence,
       deadline: writeDeadline, historyChecked: true as const, checkAccess: checkExecution };
-    const result = await store.append(command);
+    let result = await store.append(command);
+    // Retry only a proven unsaved publication, keeping the original deadline and event identity.
+    while (provenUnsaved(result) && performance.now() < writeDeadline) {
+      const changed = await changesSince(store, subject, silo,
+        command.expectedSequence, writeDeadline);
+      rows.push(...changed);
+      const current = savedRun(rows, input);
+      if (current.previous) {
+        return receipt(current.previous);
+      }
+      if (!isDeepStrictEqual(current.run, run)) {
+        throw new Error('Occurrence changed');
+      }
+      command.expectedSequence = rows.at(-1)!.sequence;
+      result = await store.append(command);
+    }
     if (result.status !== 'appended' && result.status !== 'conflict') {
       throw new Error('Finish not saved');
     }

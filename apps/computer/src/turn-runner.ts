@@ -475,7 +475,9 @@ class TurnRunner {
         reason = 'stop_interrupted';
       }
       const extra: Partial<BridgeReport> = { reason };
-      if (nativeTermination) extra.nativeTermination = nativeTermination;
+      if (nativeTermination) {
+        extra.nativeTermination = nativeTermination;
+      }
       if (this.state.refusedTools.has(input.id)) extra.reason = 'restricted_tool_refused';
       this.appendReport(input, 'agent.turn_failed', extra);
     }

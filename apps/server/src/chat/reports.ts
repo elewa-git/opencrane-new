@@ -357,14 +357,22 @@ function reportData(report: z.infer<typeof reportSchema>, silo: string, assistan
     if (report.sharingClass) data.sharingClass = report.sharingClass;
     return data;
   } else if (report.type === 'agent.turn_failed') {
-    return { ...common, reason: report.reason ?? 'bridge_interrupted',
-      ...(report.nativeTermination ? { nativeTermination: report.nativeTermination } : {}) };
+    return failedTurnData(report);
   } else if (report.type === 'agent.turn_completed' || report.type === 'agent.output_lost') {
     return common;
   } else {
     return { ...common, messageId: z.string().parse(report.messageId), contentType: 'text',
       ...keys.encrypt(silo, report.conversationId, z.string().parse(report.text)) };
   }
+}
+
+function failedTurnData(report: z.infer<typeof existingReportSchema>) {
+  const data = { conversationId: report.conversationId, turnId: report.turnId,
+    reason: report.reason ?? 'bridge_interrupted' };
+  if (report.nativeTermination) {
+    return { ...data, nativeTermination: report.nativeTermination };
+  }
+  return data;
 }
 
 function isLostOutputReplay(previous: StoredEvent, report: z.infer<typeof reportSchema>) {

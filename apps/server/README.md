@@ -46,7 +46,8 @@ An internal completion command can release a stopped run after its exact native 
 has returned a matching terminal reply and closed as failed. A connection failure alone
 does not release the run. It refuses runs with descendants or incomplete evidence. It leaves
 the schedule, stopped spending allowance and held money unchanged. It stays disabled
-by default and during replay.
+by default and during replay. Activity in other chats or spending roots does not
+prevent completion.
 
 A current silo owner or admin can also save an internal safety pause. It keeps the
 routine owner, payer and active run unchanged and grants no private chat access.

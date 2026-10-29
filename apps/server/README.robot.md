@@ -6655,16 +6655,21 @@ reply. A transport failure, cancellation request or admission refusal has no suc
 evidence. Older closures without it remain insufficient. Process-exit reporting is
 not added; an unconfirmed disconnect keeps the occurrence occupied.
 
-History has a separate ten-second limit. The conditional append rechecks the budget
-and computer positions within two seconds, outside access streams. Changed execution
-history refuses; retry reads it again. One existing routine.run_finished records
+History has a separate ten-second limit. Before publication, the command reads only
+new budget and computer records within two seconds, outside access streams. It refuses
+a changed allocation for this root or turn, activity on this root or private thread,
+and computer lifecycle changes. Neighbouring allocations, settlements and chats do
+not refuse completion. A proven unsaved publication conflict retries after checking
+new routine records, using the same event identity and original two-second deadline.
+An uncertain publication is never retried. One existing routine.run_finished records
 interrupted and the exact closure reference. Concurrent calls, lost replies and retries
 after duplicate expiry or restart retain the first outcome. Schedule state, the stopped
 root, uncertain holds and late settlement remain unchanged. Old closure evidence cannot
 finish a newer occurrence. No route, subscription, wake, call or cleanup is added.
 
 `test/routine-finish.test.ts` uses real NATS and disposable PostgreSQL. It checks recovery,
-identity refusals, execution races and two projection rebuilds with 210 held cents and
+identity refusals, withheld process exit after timeout or disconnect, neighbouring
+activity, publication conflicts, execution races and two projection rebuilds with 210 held cents and
 late settlement. Execution stays disabled. Tree and success completion remain later work.
 Fresh-install live qualification: NOT RUN.
 
