@@ -1107,9 +1107,10 @@ async function stopWriteChecks(kind: string) {
     const confirmed = await result;
     vi.restoreAllMocks();
     const saved = await nats.store.readEvent(confirmed.position);
-    expect(saved.event).toMatchObject({ id: confirmed.eventId,
+    const expectedStop = { id: confirmed.eventId,
       type: 'routine.run_stop_requested', subject: 'routine-orders',
-      data: { source: 'owner', actorId: 'alice', affectedRun: 'occurrence' } });
+      data: { source: 'owner', actorId: 'alice', affectedRun: 'occurrence' } };
+    expect(saved.event).toMatchObject(expectedStop);
     await refuses();
   } else {
     await expect(result).rejects.toThrow();

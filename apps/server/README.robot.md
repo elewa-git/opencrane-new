@@ -6347,6 +6347,7 @@ The `fractional-clock` case starts at 128000.004 ms and reproduces that rounding
 history advances the clock to 131000.004 ms. Both successful slow-history cases require
 a saved owner Stop and refuse further session preparation. Expiry, membership removal
 and owner changes still prevent the write. No production deadline changes.
+[Own checks and the load runs](../../docs/process/evidence/ci-flakes-26.md).
 
 `applyRoutineStop(store, silo, reference, actor, options)` is a separate internal operation.
 The reference contains routineId, eventId and position. Only `enabled: true` without replay
