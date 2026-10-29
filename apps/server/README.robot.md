@@ -6638,3 +6638,30 @@ hidden and cleanup-pending; only saved completion confirms erasure. Failed clean
 reports unavailable. Agent status reads recover the original id without resending,
 decrypting old text, creating keys or starting any work. Human semantics stay unchanged.
 Native admission and shared writes remain disabled. Live qualification: NOT RUN.
+
+## Personal memory preparation membership (P4-15 PR 4i; Part of #97)
+
+`chat/personal-memory-tools.ts` supplies `preparePersonalMemoryTools`. Trusted server
+code supplies the real event store, same-silo OpenFGA binding and the existing private
+turn inputs. The operation selects one existing recall, remember, correct or forget
+builder. There is no caller-supplied permission result or production caller.
+
+Saved active membership precedes catalogue and permission reads. The builder keeps
+its qualification, own-person scope, recorded turn, caller and generation checks.
+The adapter checks membership and both MCP-use permissions once per attempt. It
+requires applied membership, tool grant and relevant team-stream receipts. It keeps
+the captured access positions and a single ten-second read deadline across waits.
+It reads no conversation history and starts no two-second write check.
+
+After waits, changed access or expired reads return no tools. Saved membership loss
+throws `MemberAccessRefused`, including when another dependency fails. An established
+refusal is never replaced by another membership read. Successful preparation returns
+the original approved array, preserving the existing RAM approval identity. No fact
+is decrypted, event appended or native process started. Backend per-call checks and
+production admission are unchanged.
+
+`test/personal-memory-tools.test.ts` uses disposable NATS and OpenFGA. It covers
+removal before outages, stale IAM, missing and late receipts, owner operations, admin
+scope and demotion, changed access during waits, unchanged chat/upload activity,
+original approval identity and no effects. Qualification values in these tests are
+synthetic. Fresh-install qualification and live native delivery are NOT RUN.
