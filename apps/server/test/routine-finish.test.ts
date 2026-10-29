@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { AppendCommand } from '@opencrane/event-store';
 import { event, lostReplyStore } from '@opencrane/event-store/testing';
 import { foldRoutineHistory } from '@opencrane/authz';
-import { getEventDefinition, routineDueSchema, type EventEnvelope,
+import { getEventDefinition, foldRoutine, type EventEnvelope,
   type RoutineState } from '@opencrane/events';
 import { budgets, history, readBudget, rebuildBudgetProjection } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
@@ -15,7 +15,14 @@ let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
 let serial: number;
 let input: { routineId: string; occurrenceId: string;
   terminalEvidence: { eventId: string; position: number } };
-const run = routineDueSchema.parse(getEventDefinition('routine.due')!.example);
+const definition = getEventDefinition('routine.created')!.example as object;
+const created = { ...event('created', 'routine-orders', 'routine.created'),
+  commandId: 'created', source: 'opencrane-server',
+  principal: { kind: 'human' as const, id: 'alice' }, data: { ...definition, status: 'active' } };
+const due = { ...created, id: 'due', commandId: 'due', type: 'routine.due',
+  principal: { kind: 'system' as const, id: 'opencrane-server' },
+  data: getEventDefinition('routine.due')!.example };
+const run = foldRoutine(foldRoutine(undefined, created), due).activeRun!;
 const root = { rootId: 'allocated-root', conversationId: run.conversationId,
   turnId: run.turnId, threadId: 'private-thread', requesterId: run.definition.ownerId,
   assistantId: run.definition.assistantId, payingGroupId: run.definition.payingGroupId,
@@ -240,7 +247,7 @@ async function rebuild() {
   const logger = createLogger('routine-finish-test', { level: 'silent' });
   try {
     const modelCall = { ...root, model: 'gpt-6-luna', priceTableId: 'openai-2026-10-02-all-eur95',
-      contextDigest: 'a'.repeat(64), maxOutputTokens: 2000 };
+      contextDigest: 'a'.repeat(64) };
     const { allowanceCents: _cents, rootId: _root, ...call } = modelCall;
     await save('budget-test', 'budget.reserved', { reservationId: 'hold', permitId: 'permit',
       amountCents: 210, payingGroupId: root.payingGroupId, assistantId: root.assistantId,
