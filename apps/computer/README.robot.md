@@ -1691,3 +1691,12 @@ interruption can retry, while failed private interruption closes its private ses
 The maps use weak keys, so finished turn objects are not retained for deduplication.
 The server may resend Stop after uncertain delivery. No server receipt claims that
 interruption has completed.
+
+## Native termination in failed turn reports
+
+The journal keeps `nativeTermination: turn_completed` on `agent.turn_failed` only
+when `turn/completed` names the recorded native turn and a terminal status
+(`completed`, `interrupted` or `failed`). The field survives journal reload and replay.
+A closed private socket, a failed RPC, admission refusal, restart and a cancellation
+request omit it. Socket closure still lets the supervisor stop the private process,
+but does not prove process exit. No supervisor process-exit reporting is added.

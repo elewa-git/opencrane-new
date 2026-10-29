@@ -97,7 +97,8 @@ function requireMatchingClosure(start: StoredEvent, row: StoredEvent) {
     throw new Error('Wrong task');
   }
   const { executionMode: _startMode, ...expected } = started;
-  const { executionMode: _closeMode, status: _status, budgetStopId: _stop, ...actual } = closed;
+  const { executionMode: _closeMode, status: _status, budgetStopId: _stop,
+    nativeTermination: _termination, ...actual } = closed;
   if (!isDeepStrictEqual(expected, actual)) {
     throw new Error('Changed closure binding');
   }
@@ -120,6 +121,10 @@ function requireFailedClosure(closed: StoredEvent | undefined, input: Input,
       closed.sequence !== input.terminalEvidence.position || thread?.startedTurnIds.size !== 1 ||
       computerTurnClosedDataSchema.parse(closed.event.data).status !== 'failed') {
     throw new Error('Missing failed closure');
+  }
+  const termination = computerTurnClosedDataSchema.parse(closed.event.data);
+  if (termination.task !== 'chat_turn' || termination.nativeTermination !== 'turn_completed') {
+    throw new Error('Missing native termination');
   }
 }
 function closure(rows: StoredEvent[], allocation: ReturnType<typeof stoppedAllocation>,

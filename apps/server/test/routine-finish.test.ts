@@ -86,7 +86,7 @@ async function evidence(changes: Record<string, unknown> = {}, kind = '') {
   }
   if (kind !== 'no closure') {
     input.terminalEvidence = await save(computerSubject, 'computer.turn_closed',
-      { ...closedIdentity, status: 'failed', ...changes });
+      { ...closedIdentity, status: 'failed', nativeTermination: 'turn_completed', ...changes });
   }
 }
 function finish(store = nats.store, request: unknown = input, silo = 'test') {
@@ -319,7 +319,7 @@ it.each(['agent completed', 'socket loss', 'timeout', 'output clearance'])(
   'does not use %s as termination evidence', nonTerminal);
 async function forgedServerRecord(kind: string) {
   await evidence({}, 'no closure');
-  const closed = record(computerSubject, 'computer.turn_closed', { ...started, status: 'failed' });
+  const closed = record(computerSubject, 'computer.turn_closed', { ...started, status: 'failed', nativeTermination: 'turn_completed' });
   if (kind === 'source') closed.source = 'computer';
   if (kind === 'principal') closed.principal = { kind: 'system', id: 'computer' };
   await nats.seed([closed]);

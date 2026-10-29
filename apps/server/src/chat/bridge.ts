@@ -48,6 +48,7 @@ const reportDetails = z.object({
   turnId: z.string(), type: z.string(), messageId: z.string().optional(),
   rootId: z.string().optional(), senderAttemptId: z.string().optional(),
   text: z.string().optional(),
+  nativeTermination: z.literal('turn_completed').optional(),
   executionMode: z.enum(['restricted', 'memory_free']).optional(), threadId: z.string().optional(),
 });
 

@@ -6649,7 +6649,11 @@ follow the claim. The server-recorded start and failed closure must match that a
 the frozen people, message, private thread and computer generation at both records.
 Any descendant admission for that root refuses, including an admission whose delegation
 agreement has not yet been saved. Stop, timeout, socket loss, output clearance and an
-agent completion report cannot replace the native closure.
+agent completion report cannot replace the native closure. The failed closure must
+carry `nativeTermination: turn_completed`, copied from a matching native terminal
+reply. A transport failure, cancellation request or admission refusal has no such
+evidence. Older closures without it remain insufficient. Process-exit reporting is
+not added; an unconfirmed disconnect keeps the occurrence occupied.
 
 History has a separate ten-second limit. The conditional append rechecks the budget
 and computer positions within two seconds, outside access streams. Changed execution

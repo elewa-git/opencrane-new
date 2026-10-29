@@ -29,6 +29,7 @@ export interface BridgeReport {
   sharingClass?: 'shared_only';
   reason?: 'restricted_tool_refused' | 'unsupported_native_consent'
     | 'stop_interrupted' | 'model_error' | 'bridge_restarted';
+  nativeTermination?: 'turn_completed';
   memoryOnly?: boolean;
 }
 
@@ -306,6 +307,11 @@ function readStorageDetails(value: Record<string, unknown>, report: BridgeReport
       throw new Error('Invalid journal reason');
     }
     report.reason = reason;
+  }
+  const nativeTermination = value['nativeTermination'];
+  if (nativeTermination !== undefined) {
+    if (nativeTermination !== 'turn_completed') throw new Error('Invalid native termination');
+    report.nativeTermination = nativeTermination;
   }
   const memoryOnly = value['memoryOnly'];
   if (memoryOnly !== undefined) {

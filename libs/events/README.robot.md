@@ -910,3 +910,12 @@ digests and integer issue/expiry times. The writer limits lifetime to 30 seconds
 without it cannot support confirmation. Existing request correlation links the decision
 id and approval correlation remains unchanged. No event gains a reaction or material.
 A confirmed audit proves neither custody delivery nor a successful outside call.
+
+## Confirmed native termination
+
+`agent.turn_failed` and the chat variant of `computer.turn_closed` accept optional
+`nativeTermination: turn_completed`. This records a matching native terminal reply.
+The computer omits it for transport failure, cancellation requests and admission
+refusals. The server copies it only onto an admitted turn's failed closure. Old
+records remain readable but cannot prove native termination for routine completion.
+No process-exit report or new event type is added.
