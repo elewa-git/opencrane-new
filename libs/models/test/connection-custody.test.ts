@@ -6031,7 +6031,9 @@ it.each([false, true])('prepares one private company OAuth attempt, lost reply: 
 
 async function refusesCompanyConsentChange(field: string) {
   const test = await companyConsentFixture(field !== 'opt-in');
-  if (field !== 'opt-in') expect((await test.prepare()).status).toBe('prepared');
+  const needsOriginal = !['opt-in', 'memberRevision', 'policy', 'registration',
+    'optInRevision', 'installation'].includes(field);
+  if (needsOriginal) expect((await test.prepare()).status).toBe('prepared');
   const input = { ...test.input };
   const session = { ...test.session };
   if (field === 'session') session.sessionDigest = 'c'.repeat(64);
@@ -6047,7 +6049,7 @@ async function refusesCompanyConsentChange(field: string) {
   else if (field === 'scopes') test.configuration.toolScopes['data.write'] = ['extra'];
   else if (field === 'unknown') test.store.failReads();
   expect(await test.prepare(input, session)).toEqual({ status: 'unknown' });
-  expect(test.store.creates).toBe(field === 'opt-in' ? 0 : 1);
+  expect(test.store.creates).toBe(needsOriginal ? 1 : 0);
 }
 it.each(['session', 'memberRevision', 'profile', 'installation', 'registration', 'optInRevision',
   'issuer', 'callback', 'client', 'policy', 'scopes', 'unknown', 'opt-in'])(
@@ -6056,8 +6058,10 @@ it.each(['session', 'memberRevision', 'profile', 'installation', 'registration',
 async function refusesCompanyConsentAccess(kind: string, invalid: boolean) {
   const test = await companyConsentFixture();
   const type = kind === 'removed' ? 'member.removed' : 'member.role_changed';
-  const changed = envelope('test', `member-${test.userId}`, type,
-    { memberId: test.userId, role: 'member', changedBy: 'owner', removedBy: 'owner' });
+  const data = kind === 'removed'
+    ? { memberId: test.userId, removedBy: 'owner' }
+    : { memberId: test.userId, previousRole: 'admin', newRole: 'member', changedBy: 'owner' };
+  const changed = envelope('test', `member-${test.userId}`, type, data);
   await events.seed([changed]);
   const access = vi.spyOn(memberAuthority, 'activeMember');
   const read = events.store.readStream.bind(events.store);
@@ -6107,30 +6111,33 @@ async function companyConsentExpiry(boundary: string) {
   const test = await companyConsentFixture();
   const first = await test.prepare();
   if (first.status !== 'prepared') throw new Error('Fixture preparation failed');
+  const appendUntil = first.stage.appendUntil;
   // Keep the catalogue live so only the attempt's immutable expiry decides this case.
-  const checkedAt = first.stage.appendUntil - 1000;
+  const checkedAt = appendUntil - 1000;
   const renewed = envelope('test', `mcp-${test.input.serverId}`, 'mcp.catalogue_checked', {
-    serverId: test.input.serverId, connectionId: test.input.connectionId,
-    schemaDigest: toolPolicyFromRows(test.serverRows).schemaDigest,
+    serverId: test.input.serverId, outcome: 'unchanged',
+    schemaDigest: toolPolicyFromRows(test.serverRows).catalogue!.schemaDigest,
     checkedAt: new Date(checkedAt).toISOString(),
     expiresAt: new Date(checkedAt + 300_000).toISOString(),
   });
   await events.seed([renewed]);
-  const clock = vi.spyOn(Date, 'now').mockReturnValue(first.stage.appendUntil - 1);
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(appendUntil - 1);
   const restarted = test.store.restart();
   const read = restarted.readAttempt.bind(restarted);
   async function delayedRead(...args: Parameters<typeof read>) {
     const contents = await read(...args);
     expect(contents).toBeDefined();
-    clock.mockReturnValue(first.stage.appendUntil);
+    clock.mockReturnValue(appendUntil);
     return contents;
   }
-  if (boundary === 'at') clock.mockReturnValue(first.stage.appendUntil);
+  if (boundary === 'at') clock.mockReturnValue(appendUntil);
   if (boundary === 'private read') vi.spyOn(restarted, 'readAttempt').mockImplementation(delayedRead);
   const head = events.store.head.bind(events.store);
+  let finalRead = false;
   async function delayedHead(...args: Parameters<typeof head>) {
     const position = await head(...args);
-    if (args[0] === undefined) clock.mockReturnValue(first.stage.appendUntil);
+    if (args[0] === `connection-company-${test.input.serverId}`) finalRead = true;
+    if (args[0] === undefined && finalRead) clock.mockReturnValue(appendUntil);
     return position;
   }
   if (boundary === 'final read') vi.spyOn(events.store, 'head').mockImplementation(delayedHead);
@@ -6150,11 +6157,12 @@ async function isolatesCompanyConsent() {
   for (const patch of [{ siloId: 'foreign' }, { custodianId: 'other' },
     { profileId: 'other' }, { connectionId: 'other' }, { userId: 'test' },
     { purpose: 'personal' }, { purpose: 'validation' }]) {
-    const changed = { ...first.stage, ...patch };
+    const changed = { ...first.stage };
+    Object.assign(changed, patch);
     expect(await test.store.custody.readAttempt(changed, first.identity)).toBeUndefined();
   }
   const personal = oauthFixture(true, test.input.serverId);
-  const context = { ...personal.context, siloId: 'test', userId: test.userId,
+  const context = { ...personal.context, siloId: 'test', userId: 'company',
     profileId: test.input.profileId, changeRef: test.input.changeRef };
   for (const row of personal.rows) row.event.silo = 'test';
   const own = await prepareOAuthAttempt(test.store.custody, context,
@@ -6169,3 +6177,74 @@ async function isolatesCompanyConsent() {
 }
 it('isolates company OAuth custody from other owners, purposes and personal attempts',
   isolatesCompanyConsent);
+
+async function companyConsentOtherActor(role: 'admin' | 'member') {
+  const test = await companyConsentFixture();
+  const first = await test.prepare();
+  const actor = `${test.userId}-other`;
+  const joined = envelope('test', `member-${actor}`, 'member.joined', {
+    memberId: actor, role, email: `${actor}@example.test`, displayName: actor,
+  });
+  await events.seed([joined]);
+  await memberAuthorisation(consentBinding).handler.handle(joined, pgDb(storage.queue));
+  const session = { ...test.session, memberRevision: await events.store.head(`member-${actor}`) };
+  const access = vi.spyOn(memberAuthority, 'activeMember');
+  try {
+    const attempt = test.prepare(test.input, session, test.store.restart(), actor);
+    if (role === 'admin') expect(await attempt).toEqual({ status: 'unknown' });
+    else await expect(attempt).rejects.toBeInstanceOf(MemberAccessRefused);
+    expect(access).toHaveBeenCalledTimes(1);
+    expect(test.store.creates).toBe(1);
+    expect(await test.prepare()).toEqual(first);
+  } finally { access.mockRestore(); }
+}
+it.each(['admin', 'member'] as const)(
+  'refuses company OAuth recovery by another %s', companyConsentOtherActor);
+
+async function companyConsentUnprovedCreate() {
+  const test = await companyConsentFixture();
+  test.store.loseCreate();
+  expect(await test.prepare()).toEqual({ status: 'unknown' });
+  expect(await test.prepare(test.input, test.session, test.store.restart()))
+    .toEqual({ status: 'unknown' });
+  expect(test.store.creates).toBe(1);
+}
+it('keeps company OAuth unknown when a lost create reply never pinned its identity',
+  companyConsentUnprovedCreate);
+
+async function companyConsentFinalWait(kind: string) {
+  const test = await companyConsentFixture();
+  const head = events.store.head.bind(events.store);
+  const clock = vi.spyOn(performance, 'now');
+  let finalRead = false;
+  let changed = false;
+  async function wait(...args: Parameters<typeof head>) {
+    const position = await head(...args);
+    if (args[0] === `connection-company-${test.input.serverId}`) finalRead = true;
+    if (args[0] === undefined && finalRead && !changed) {
+      changed = true;
+      if (kind === 'deadline') {
+        clock.mockReturnValue(args[1]! + 1);
+        return position;
+      }
+      if (kind === 'admin') await test.removeAdmin();
+      else {
+        const activity = envelope('test', 'member-unrelated', 'member.invited', {
+          memberId: 'unrelated', invitationId: 'invitation',
+          email: 'unrelated@example.test', role: 'member', invitedBy: test.userId,
+        });
+        await events.seed([activity]);
+      }
+      return head(...args);
+    }
+    return position;
+  }
+  const fault = vi.spyOn(events.store, 'head').mockImplementation(wait);
+  try {
+    const result = await test.prepare();
+    expect(changed).toBe(true);
+    expect(result.status).toBe(kind === 'activity' ? 'prepared' : 'unknown');
+  } finally { fault.mockRestore(); clock.mockRestore(); }
+}
+it.each(['deadline', 'admin', 'activity'])(
+  'rechecks company OAuth after final position wait: %s', companyConsentFinalWait);

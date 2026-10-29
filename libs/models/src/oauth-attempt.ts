@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import type { StoredEvent } from '@opencrane/event-store';
-import type { connectionCustody } from './connection-custody.ts';
+import type { connectionCustody, ConnectionStage, CompanyConnectionStage, CustodyStage }
+  from './connection-custody.ts';
 import { connectionOperationId } from './bearer-connections.ts';
 import { connectionServer } from './connection-server.ts';
 import { remoteEndpoint } from './address-policy.ts';
@@ -17,6 +18,16 @@ const contextSchema = z.strictObject({
   sessionDigest: digestSchema, expectedSequence: z.int().nonnegative(),
   memberRevision: z.int().positive().optional(),
 });
+const companyContextSchema = contextSchema.omit({ userId: true }).extend({
+  ownerKind: z.literal('company'), custodianId: id, memberRevision: z.int().positive(),
+  registrationRevision: z.int().positive(), optInRevision: z.int().positive(),
+});
+type Custody = Pick<ReturnType<typeof connectionCustody>, 'prepareAttempt'>;
+type Preparation<Stage extends CustodyStage> = { status: 'unknown' } | {
+  status: 'prepared'; stage: Stage;
+  identity: { reference: string; uid: string; resourceVersion: string };
+  stateDigest: string; challenge: string; requestedScopes: string[];
+};
 export const oauthConfigurationSchema = z.strictObject({
   serverId: id, connectionId: id, endpointDigest: digestSchema, policyRevision: z.int().positive(),
   issuer: z.string().max(2048), consentEndpoint: z.string().max(2048),
@@ -70,18 +81,33 @@ function requiredScopes(configuration: z.infer<typeof oauthConfigurationSchema>,
   return scopes.parse(result);
 }
 
+function attemptOwner(context: z.infer<typeof contextSchema> | z.infer<typeof companyContextSchema>) {
+  if ('custodianId' in context) {
+    return { ownerKind: 'company' as const, purpose: 'company' as const,
+      custodianId: context.custodianId, registrationRevision: context.registrationRevision,
+      optInRevision: context.optInRevision };
+  }
+  return { userId: context.userId, purpose: 'personal' as const };
+}
+
 /** Prepare custody only. The caller must supply trusted session context and loaded server history. */
-export async function prepareOAuthAttempt(custody: Pick<ReturnType<typeof connectionCustody>,
-  'prepareAttempt'>, rawContext: unknown, rawConfiguration: unknown, rows: StoredEvent[]) {
+export function prepareOAuthAttempt(custody: Custody, rawContext: unknown,
+  rawConfiguration: unknown, rows: StoredEvent[]): Promise<Preparation<ConnectionStage>>;
+export function prepareOAuthAttempt(custody: Custody, rawContext: unknown,
+  rawConfiguration: unknown, rows: StoredEvent[], purpose: 'company'):
+  Promise<Preparation<CompanyConnectionStage>>;
+export async function prepareOAuthAttempt(custody: Custody, rawContext: unknown,
+  rawConfiguration: unknown, rows: StoredEvent[], purpose: 'personal' | 'company' = 'personal') {
   try {
-    const context = contextSchema.parse(rawContext);
+    const schema = purpose === 'company' ? companyContextSchema : contextSchema;
+    const context = schema.parse(rawContext);
     const configuration = oauthConfigurationSchema.parse(rawConfiguration);
     for (const value of [configuration.issuer, configuration.consentEndpoint,
       configuration.redirectUri]) {
       exactHttps(value);
     }
     const policy = toolPolicyFromRows(rows);
-    const server = connectionServer(rows, context.connectionId);
+    const server = connectionServer(rows, context.connectionId, purpose);
     if (!server.available || Date.now() >= server.expiresAt || policy.silo !== context.siloId ||
         policy.serverId !== context.serverId || configuration.serverId !== context.serverId ||
         configuration.connectionId !== context.connectionId ||
@@ -91,11 +117,17 @@ export async function prepareOAuthAttempt(custody: Pick<ReturnType<typeof connec
     }
     const requestedScopes = requiredScopes(configuration, policy);
     // Keep the reference fixed when a retry changes its target profile or server.
-    const subject = `connection-oauth-${context.userId}`;
+    let subject: string;
+    if ('custodianId' in context) {
+      subject = 'connection-oauth-company:';
+    } else {
+      subject = `connection-oauth-${context.userId}`;
+    }
     const operationId = connectionOperationId(context.siloId, subject, context.changeRef);
     const attemptDigest = digest(JSON.stringify([context, configuration, requestedScopes]));
-    const stage = { siloId: context.siloId, userId: context.userId, serverId: context.serverId,
-      connectionId: context.connectionId, profileId: context.profileId, purpose: 'personal' as const,
+    const owner = attemptOwner(context);
+    const stage = { ...owner, siloId: context.siloId, serverId: context.serverId,
+      connectionId: context.connectionId, profileId: context.profileId,
       generation: 1, endpointDigest: configuration.endpointDigest, operationId,
       expectedSequence: context.expectedSequence, attemptId: operationId, attemptDigest };
     const prepared = await custody.prepareAttempt(stage, privateMaterial);
@@ -114,7 +146,7 @@ export async function prepareOAuthAttempt(custody: Pick<ReturnType<typeof connec
 
 /** Build the private browser handoff only after the caller confirms the saved start and access. */
 export function oauthConsentUrl(configuration: z.infer<typeof oauthConfigurationSchema>,
-  prepared: Extract<Awaited<ReturnType<typeof prepareOAuthAttempt>>, { status: 'prepared' }>,
+  prepared: Extract<Preparation<ConnectionStage>, { status: 'prepared' }>,
   contents: string) {
   const material = privateSchema.parse(JSON.parse(contents));
   if (digest(material.state) !== prepared.stateDigest ||

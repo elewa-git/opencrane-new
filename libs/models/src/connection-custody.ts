@@ -3,7 +3,7 @@
 // Adapt the OC1 Secret and HMAC checks. Keep their notice in connection-custody.NOTICE.
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
-import { readResponse, decodeToken } from './connection-custody-response.ts';
+import { readResponse, decodeToken, matchesMetadata } from './connection-custody-response.ts';
 import { connectionStageJournal } from './connection-stage-journal.ts';
 
 const identifier = z.string().min(1).max(200);
@@ -96,8 +96,8 @@ class ConnectionCustody {
     const metadata = metadataFor(input);
     const name = nameFor(input);
     if (secret.metadata.name !== name || secret.metadata.namespace !== this.namespace
-        || !matches(secret.metadata.labels, metadata.labels)
-        || !matches(secret.metadata.annotations, metadata.annotations)) {
+        || !matchesMetadata(secret.metadata.labels, metadata.labels)
+        || !matchesMetadata(secret.metadata.annotations, metadata.annotations)) {
       return undefined;
     }
     const identity = { reference: name, uid: secret.metadata.uid,
@@ -230,12 +230,13 @@ class ConnectionCustody {
     return this.journal.revokeOnce(operationId, send);
   }
   /** Prepare private consent material once. A saved create claim prevents another create. */
-  async prepareAttempt(input: Omit<ConnectionStage, 'appendUntil'>, material: () => string) {
+  async prepareAttempt(input: Omit<ConnectionStage, 'appendUntil'> |
+    Omit<CompanyConnectionStage, 'appendUntil'>, material: () => string) {
     try {
       const record = await this.journal.preparation(input.operationId);
       const appendUntil = record?.appendUntil ?? Date.now() + 600_000;
       const stage = checkedStage({ ...input, appendUntil });
-      if (stage.purpose !== 'personal' || !stage.attemptId || Date.now() >= appendUntil) {
+      if (stage.purpose === 'validation' || !stage.attemptId || Date.now() >= appendUntil) {
         return { status: 'unknown' as const };
       }
       if (!record) {
@@ -298,7 +299,7 @@ class ConnectionCustody {
     // Keep ordinary attempt and refresh readers blocked by their deletion markers.
     return this.readMaterial(input, expected, 'revocation');
   }
-  private async unreadable(stage: ConnectionStage) {
+  private async unreadable(stage: CustodyStage) {
     return await this.journal.deletion(nameFor(stage)) !== undefined ||
       (stage.attemptId !== undefined && Date.now() >= stage.appendUntil);
   }
@@ -306,7 +307,7 @@ class ConnectionCustody {
     purpose: 'attempt' | 'active' | 'revocation') {
     try {
       const stage = checkedStage(input);
-      if (stage.purpose === 'company' || !expected || (purpose === 'attempt' && !stage.attemptId) ||
+      if (!canReadMaterial(stage, purpose) || !expected ||
           (purpose !== 'revocation' && await this.unreadable(stage))) {
         return undefined;
       }
@@ -459,6 +460,13 @@ class ConnectionCustody {
   }
 }
 
+function canReadMaterial(stage: CustodyStage, purpose: 'attempt' | 'active' | 'revocation') {
+  if (stage.purpose === 'company') {
+    return purpose === 'attempt' && stage.attemptId !== undefined;
+  }
+  return purpose !== 'attempt' || stage.attemptId !== undefined;
+}
+
 function checkedStage(input: unknown): CustodyStage {
   const checked = custodyStageSchema.safeParse(input);
   if (!checked.success) {
@@ -467,7 +475,7 @@ function checkedStage(input: unknown): CustodyStage {
   const stage = checked.data;
   if (stage.attemptId !== undefined || stage.attemptDigest !== undefined) {
     if (stage.attemptId !== stage.operationId || !stage.attemptDigest ||
-        stage.generation !== 1 || stage.purpose !== 'personal') {
+        stage.generation !== 1 || stage.purpose === 'validation') {
       throw new Error('Connection stage invalid');
     }
   }
@@ -499,14 +507,6 @@ function metadataFor(input: CustodyStage) {
     }
   }
   return { labels, annotations };
-}
-function matches(actual: Record<string, string>, expected: Record<string, string>) {
-  for (const [key, value] of Object.entries(expected)) {
-    if (actual[key] !== value) {
-      return false;
-    }
-  }
-  return true;
 }
 function digest(key: Buffer, input: CustodyStage, material: string) {
   const hmac = createHmac('sha256', key);
