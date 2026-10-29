@@ -8,6 +8,7 @@ import { envelope, history } from '../src/actor.ts';
 import { connectionOperationId, foldConnection } from '../src/bearer-connections.ts';
 import { readOwnSelectionChange } from '../src/connection-selection-change-read.ts';
 import { changeConnectionSelection, readConnectionSelection } from '../src/connection-selection.ts';
+import { MemberAccessRefused } from '../src/member-authority.ts';
 import { toolPolicyFromRows } from '../src/tool-policy.ts';
 import { oauthSelectionFixture } from './support/oauth-selection.ts';
 
@@ -318,3 +319,68 @@ async function catalogueDuringRead(kind: string) {
 }
 it.each(['unchanged', 'failed', 'policy'])(
   'checks relevant evidence when a %s catalogue event arrives during a read', catalogueDuringRead);
+
+async function savedRefusalWithFailure(kind: string, failure: string, operation: string) {
+  const test = await fixture();
+  const selected = await test.select();
+  const memberSubject = `member-${test.userId}`;
+  const selectionSubject = `connection-selection-${test.userId}-${test.serverId}`;
+  const grantsSubject = grantStream('mcp_server', test.serverId);
+  let event = envelope('test', memberSubject, 'member.removed', {
+    memberId: test.userId, removedBy: 'admin',
+  });
+  if (kind === 'grant') {
+    event = envelope('test', grantsSubject, 'grant.revoked', {
+      resourceType: 'mcp_server', resourceId: test.serverId, granteeKind: 'member',
+      granteeId: test.userId, revokedBy: 'admin',
+    });
+  }
+  await nats.seed([event]);
+  const auth = memberAuthorisation(binding);
+  const use = vi.spyOn(auth, 'use');
+  const readStream = nats.store.readStream.bind(nats.store);
+  let membershipReads = 0;
+  async function* failHistory(subject: string, from?: number, deadline?: number) {
+    if (subject === memberSubject) {
+      membershipReads += 1;
+    }
+    if ((failure === 'selection' && subject === selectionSubject) ||
+        (failure === 'grant' && subject === grantsSubject)) {
+      throw new Error('private-history-canary');
+    }
+    yield* readStream(subject, from, deadline);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(failHistory);
+  if (failure === 'receipt' || failure === 'membership receipt') {
+    const applied = auth.applied.bind(auth);
+    function failReceipt(eventId: string) {
+      if (eventId === event.id || failure === 'membership receipt') {
+        throw new Error('private-receipt-canary');
+      }
+      return applied(eventId);
+    }
+    vi.spyOn(auth, 'applied').mockImplementation(failReceipt);
+  }
+  const writes = vi.spyOn(nats.store, 'append');
+  let pending: Promise<unknown>;
+  if (operation === 'write') {
+    pending = test.select({ ...test.command, expectedSequence: selected.sequence,
+      changeRef: 'another-choice' });
+  } else {
+    pending = test.read('read');
+  }
+  await expect(pending).rejects.toBeInstanceOf(MemberAccessRefused);
+  expect(membershipReads).toBe(1);
+  expect(use).not.toHaveBeenCalled();
+  expect(writes).not.toHaveBeenCalled();
+}
+const refusalCases = [
+  ['member', 'selection', 'read'], ['member', 'grant', 'read'],
+  ['member', 'selection', 'write'], ['member', 'grant', 'write'],
+  ['grant', 'none', 'read'], ['grant', 'selection', 'read'],
+  ['grant', 'receipt', 'read'], ['grant', 'none', 'write'],
+  ['grant', 'selection', 'write'], ['grant', 'receipt', 'write'],
+  ['grant', 'membership receipt', 'read'], ['grant', 'membership receipt', 'write'],
+];
+it.each(refusalCases)(
+  'preserves saved %s refusal with failed %s preparation on %s', savedRefusalWithFailure);

@@ -807,6 +807,8 @@ async function delayedRevocation(kind: string) {
     expect((await auth.use('person', test.userId, 'mcp_server', 'server')).allowed).toBe(true);
     await expect(test.select(command)).rejects.toThrow('Selection access unavailable');
     await expect(test.read()).rejects.toThrow('Selection access unavailable');
+    await expect(test.read()).rejects.toBeInstanceOf(MemberAccessRefused);
+    await expect(test.select(command)).rejects.toBeInstanceOf(MemberAccessRefused);
   } finally {
     await auth.handler.handle(event, pgDb(storage.queue));
   }
