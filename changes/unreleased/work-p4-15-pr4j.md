@@ -1,1 +1,2 @@
 - Prepare permitted personal recall, remember, Correct and Forget tools together for one private thread. Keep exact reviewed definitions, caller checks and byte limits; production memory admission remains disabled.
+- Check saved membership before preparing all four personal memory tools together. Refuse removed members and changed access, preserve removal when dependencies fail, and keep unrelated chat and upload activity usable.

@@ -153,8 +153,11 @@ async function refusesBeforeFailure(service: 'catalogue' | 'permission',
   expect(setup.check).not.toHaveBeenCalled();
   expect(setup.use).not.toHaveBeenCalled();
 }
+async function singleFailureBefore(service: 'catalogue' | 'permission') {
+  await refusesBeforeFailure(service);
+}
 it.each(['catalogue', 'permission'] as const)(
-  'preserves saved removal before the unavailable %s is called', refusesBeforeFailure);
+  'preserves saved removal before the unavailable %s is called', singleFailureBefore);
 
 async function refusesMissingReceipt(subject: 'membership' | 'grant') {
   const setup = await fixture();
@@ -313,8 +316,11 @@ async function removalDuringFailure(service: 'catalogue' | 'permission',
   expect(setup.check).toHaveBeenCalledTimes(1);
   expect(setup.use.mock.calls.length).toBeLessThanOrEqual(2);
 }
+async function singleFailureDuring(service: 'catalogue' | 'permission') {
+  await removalDuringFailure(service);
+}
 it.each(['catalogue', 'permission'] as const)(
-  'preserves removal saved during a failing %s read without another decision', removalDuringFailure);
+  'preserves removal saved during a failing %s read without another decision', singleFailureDuring);
 
 async function preservesConfirmedRefusal() {
   const setup = await fixture();

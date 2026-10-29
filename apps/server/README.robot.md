@@ -6678,7 +6678,8 @@ Fresh-install live qualification: NOT RUN.
 `chat/personal-memory-tools.ts` supplies `preparePersonalMemoryTools`. Trusted server
 code supplies the real event store, same-silo OpenFGA binding and the existing private
 turn inputs. The operation selects one existing recall, remember, correct or forget
-builder. There is no caller-supplied permission result or production caller.
+builder, or uses `all` to prepare all four together. There is no caller-supplied
+permission result or production caller.
 
 Saved active membership precedes catalogue and permission reads. The builder keeps
 its qualification, own-person scope, recorded turn, caller and generation checks.
@@ -6744,10 +6745,16 @@ Assembly reads the catalogue once and checks each subject once. It retains the
 48 KiB tool and 120 KiB turn byte limits, including JSON encoding. Qualification,
 recorded turn, caller and generations are checked again after waits. Approval remains
 in RAM on the original list and caller identity; a copy or changed list is refused.
-Single-tool exports remain available. The saved-membership adapter still selects
-one operation and is unchanged; connecting it to combined preparation is separate work.
+Single-tool exports remain available. Use `preparePersonalMemoryTools` with operation
+`all` for combined preparation through the saved-membership adapter. It reads saved
+membership before the catalogue and IAM, makes one membership decision and checks
+each MCP-use permission once. Saved removal takes precedence over dependency failures.
+Changes to access during reads refuse the list; unrelated chat and upload activity
+leaves it usable. The same ten-second read deadline and original approval checks apply.
 Ordinary assembly, public discovery, backend writes and production admission are unchanged.
 
+`personal-memory-tools.test.ts` checks combined removal, demotion during waits,
+dependency failure precedence, refused MCP-use permissions and unrelated activity.
 `private-memory-catalogue.test.ts` covers ordered and partial selection, refusals,
 byte boundaries and stale preparation. Computer tests load the complete catalogue
 through the real proxy and pinned native discovery without calls. No event or API

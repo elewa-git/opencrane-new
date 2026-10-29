@@ -3,11 +3,12 @@ import type { EventStore } from '@opencrane/event-store';
 import { grantGivenDataSchema, grantRevokedDataSchema } from '@opencrane/events';
 import { currentMembership, history, MemberAccessRefused } from '@opencrane/models';
 import { buildPrivateTurnCorrectTools, buildPrivateTurnForgetTools,
-  buildPrivateTurnRecallTools, buildPrivateTurnRememberTools,
+  buildPrivateTurnMemoryTools, buildPrivateTurnRecallTools, buildPrivateTurnRememberTools,
   checkPrivateTurnTools } from './turn-tools.ts';
 
 const builders = { recall: buildPrivateTurnRecallTools, remember: buildPrivateTurnRememberTools,
-  correct: buildPrivateTurnCorrectTools, forget: buildPrivateTurnForgetTools };
+  correct: buildPrivateTurnCorrectTools, forget: buildPrivateTurnForgetTools,
+  all: buildPrivateTurnMemoryTools };
 type Input = Omit<Parameters<typeof buildPrivateTurnRecallTools>[0], 'canUse'> & {
   store: EventStore;
   binding: Binding;

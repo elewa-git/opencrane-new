@@ -7,7 +7,7 @@ It runs as a Node.js service. The website sends it requests to sign in, chat, up
 files and manage the organisation.
 Internal personal memory tool preparation checks saved membership before reading
 the catalogue or permissions. It keeps each person in their own scope and refuses
-a delayed list if access changed. A separate internal builder can prepare all four
+a delayed list if access changed. The same checks apply when preparing all four
 reviewed personal tools together: recall, remember, Correct and Forget. It leaves
 out operations without permission or a reviewed free Allow policy.
 Live private tool delivery remains disabled.
@@ -165,7 +165,7 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks saved membership before personal memory tools, private callers, original tool reviews, and access before history errors; prepares and allocates child and routine allowances; checks saved routine admission and dispatch prohibition; applies saved Stop, Pause and Retire intent; verifies confirmed native termination for stopped turns and admin authority at a pause, owner removal and Ask termination; shares types| libs["libs/*<br/>shared code and chat keys"]
+  server -.->|checks saved membership before single or combined personal memory tools, private callers, original tool reviews, and access before history errors; prepares and allocates child and routine allowances; checks saved routine admission and dispatch prohibition; applies saved Stop, Pause and Retire intent; verifies confirmed native termination for stopped turns and admin authority at a pause, owner removal and Ask termination; shares types| libs["libs/*<br/>shared code and chat keys"]
   server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; detects saved personal corrections, forgets, loaded expiry and lost access, records invalid contexts and personal account revocations, bearer and verified OAuth choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, encrypted inputs and checked admission receipts, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
