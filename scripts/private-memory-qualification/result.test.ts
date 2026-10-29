@@ -10,7 +10,11 @@ async function collectorOutput() {
   const deployment = await initialQualificationFixture();
   expect(deployment.result.result).toBe('PASS');
   if (deployment.result.result !== 'PASS') throw new Error('Fixture collection failed');
-  await expect(readDeploymentQualification('test')).resolves.toBe(deployment.result.runId);
+  const proof = await readDeploymentQualification('test');
+  expect(proof.runId).toBe(deployment.result.runId);
+  expect(proof.confirm).not.toThrow();
+  deployment.remove();
+  expect(proof.confirm).toThrow();
 }
 it('reads the real collector output for the current deployment', collectorOutput);
 

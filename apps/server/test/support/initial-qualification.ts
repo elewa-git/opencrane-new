@@ -16,6 +16,10 @@ export async function initialQualificationFixture() {
   const imageDigest = `sha256:${'b'.repeat(64)}`;
   const sourceSha = 'a'.repeat(40);
   let host = 'fixture-host';
+  function unchanged() {
+    return Promise.resolve();
+  }
+  let observation = unchanged;
   const created = new Date(Date.now() - 3000).toISOString();
   const started = new Date(Date.now() - 2000).toISOString();
   let streamCreated = new Date(Date.now() - 1000).toISOString();
@@ -77,10 +81,12 @@ export async function initialQualificationFixture() {
     const stderr = new PassThrough();
     const child = Object.assign(new processes.ChildProcess(), { stdin, stdout, stderr });
     function input(buffer: Buffer) {
-      function reply() {
+      async function reply() {
         const command = z.array(z.string()).parse(JSON.parse(args.at(-1)!));
         let result: unknown = { created: streamCreated, eventCount: 0, lastSequence: 0 };
-        if (!command.includes('--eval')) {
+        if (command.includes('--eval')) {
+          await observation();
+        } else {
           const raw = z.string().parse(JSON.parse(buffer.toString('utf8')));
           const request = z.record(z.string(), z.unknown()).parse(JSON.parse(raw));
           result = { ...request, result: 'PASS', complete: true, observedAt: Date.now() };
@@ -88,7 +94,13 @@ export async function initialQualificationFixture() {
         stdout.emit('data', Buffer.from(JSON.stringify(result)));
         child.emit('close', 0);
       }
-      queueMicrotask(reply);
+      function failed() {
+        child.emit('close', 1);
+      }
+      function respond() {
+        void reply().catch(failed);
+      }
+      queueMicrotask(respond);
     }
     stdin.on('data', input);
     return child;
@@ -114,5 +126,8 @@ export async function initialQualificationFixture() {
   function remove() {
     files.delete(resultPath);
   }
-  return { result, replace, changeHost, changeInstallation, remove };
+  function observe(callback: () => Promise<void>) {
+    observation = callback;
+  }
+  return { result, replace, changeHost, changeInstallation, remove, observe };
 }

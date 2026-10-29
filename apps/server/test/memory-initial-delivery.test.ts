@@ -403,3 +403,33 @@ async function nestedMembershipRefusal() {
   await expect(memory.confirm(fresh)).rejects.toThrow(MemberAccessRefused);
 }
 it('preserves saved removal discovered while confirming loaded references', nestedMembershipRefusal);
+
+
+async function changesDuringLastQualification(kind: string) {
+  const pending = await prepare();
+  let observations = 0;
+  async function observe() {
+    observations += 1;
+    if (observations === 6 && kind === 'access') {
+      const saved = await setup.append('member-alice', 'member.role_changed', {
+        memberId: 'alice', previousRole: 'owner', newRole: 'member', changedBy: 'alice',
+      });
+      await setup.auth.handler.handle(saved, setup.db);
+    }
+  }
+  deployment.observe(observe);
+  const head = options.store.head.bind(options.store);
+  async function withdraw(...args: Parameters<typeof head>) {
+    if (observations === 6 && kind === 'qualification' && args[0] === 'member-alice') {
+      deployment.replace({ result: 'FAIL', reason: 'collection_failed' });
+    }
+    return head(...args);
+  }
+  vi.spyOn(options.store, 'head').mockImplementation(withdraw);
+  await expect(pending.load()).rejects.toThrow('memory_context_unavailable');
+  expect(observations).toBe(6);
+  expect((await state())?.initialLoaded).toBe(false);
+}
+it.each(['access', 'qualification'])(
+  'refuses %s changes in the final qualification and access checks before saving',
+  changesDuringLastQualification);
