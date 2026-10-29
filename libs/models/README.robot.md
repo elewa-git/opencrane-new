@@ -16,8 +16,12 @@ that choice, while returned generation and revision advance. Old approvals canno
 release through this path: the bearer fold and release helper still refuse OAuth.
 Changed configuration or policy requires reconsent. Expiry, removal, revoke, admin block,
 clear and mismatched account evidence refuse. Receipt recovery confirms only the past save.
-History loads before access. Reads check permission once, then compare exact data positions
-and configuration; writes repeat these checks inside the conditional append. No conversation
+History loads before access. Reads check permission once, then compare selection, profile
+and control positions, current policy and configuration. An unchanged catalogue renewal
+does not refuse the read. Writes keep exact position checks inside the conditional append.
+Selection and grant history failures wait for the membership decision. Saved direct and
+team grants determine refusal even before OpenFGA applies a revocation. Established
+refusals survive later receipt failures. No conversation
 is read or watched. Tests use disposable NATS, PostgreSQL and OpenFGA with saved OAuth
 fixture events. Replay performs no custody or provider work. Injector, authenticated turn
 binding, final permit wiring, company OAuth and live qualification remain NOT RUN.

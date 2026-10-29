@@ -108,6 +108,7 @@ async function grantFacts(store: EventStore, binding: Binding, userId: string, s
   const positions = new Map([[subject, grants.at(-1)?.sequence ?? 0]]);
   const teams = new Set<string>();
   const receipts: StoredEvent[] = [];
+  let allowed = savedGrant(grants, serverId, 'member', userId);
   for (const row of grants) {
     const fields = data(row.event);
     if (fields['granteeKind'] === 'team') {
@@ -122,28 +123,89 @@ async function grantFacts(store: EventStore, binding: Binding, userId: string, s
     const teamSubject = `team-${team}`;
     const rows = await history(store, teamSubject, binding.silo, deadline);
     positions.set(teamSubject, rows.at(-1)?.sequence ?? 0);
-    for (const row of rows) {
-      if (data(row.event)['memberId'] === userId) {
-        receipts.push(row);
-      }
+    const membership = savedTeamMembership(rows, userId);
+    receipts.push(...membership.receipts);
+    if (membership.member && savedGrant(grants, serverId, 'team', team)) {
+      allowed = true;
     }
   }
-  return { positions, receipts };
+  return { positions, receipts, allowed };
+}
+function savedTeamMembership(rows: StoredEvent[], userId: string) {
+  let member = false;
+  const receipts: StoredEvent[] = [];
+  for (const row of rows) {
+    if (data(row.event)['memberId'] !== userId) {
+      continue;
+    }
+    receipts.push(row);
+    if (row.event.type === 'team.member_added') {
+      member = true;
+    } else if (row.event.type === 'team.member_removed') {
+      member = false;
+    }
+  }
+  return { member, receipts };
+}
+function savedGrant(rows: StoredEvent[], serverId: string, kind: 'member' | 'team',
+  granteeId: string) {
+  let allowed = false;
+  for (const row of rows) {
+    const fields = data(row.event);
+    if (fields['resourceType'] !== 'mcp_server' || fields['resourceId'] !== serverId ||
+        fields['granteeId'] !== granteeId) {
+      continue;
+    }
+    const untypedRevoke = row.event.type === 'grant.revoked' &&
+      fields['granteeKind'] === undefined;
+    if (fields['granteeKind'] !== kind && !untypedRevoke) {
+      continue;
+    }
+    if (row.event.type === 'grant.given') {
+      allowed = true;
+    } else if (row.event.type === 'grant.revoked') {
+      allowed = false;
+    }
+  }
+  return allowed;
 }
 async function access(store: EventStore, binding: Binding, userId: string, serverId: string,
   writing = false) {
-  const { positions, receipts } = await grantFacts(store, binding, userId, serverId);
+  let grants;
+  let failure: unknown;
+  try {
+    grants = await grantFacts(store, binding, userId, serverId);
+  } catch (error) {
+    failure = error;
+  }
   let fresh: Awaited<ReturnType<typeof authorityFence>> | undefined;
-  if (writing) {
-    fresh = await authorityFence(store, performance.now(), [...positions.keys()]);
-    const options = { requiredRole: 'member' as const, fresh };
-    await activeMember(store, binding, userId, options);
-    await confirmPositions(store, positions, fresh.deadline);
-  } else {
-    await readActiveMember(store, binding, userId);
+  try {
+    if (writing && grants) {
+      fresh = await authorityFence(store, performance.now(), [...grants.positions.keys()]);
+      const options = { requiredRole: 'member' as const, fresh };
+      await activeMember(store, binding, userId, options);
+      await confirmPositions(store, grants.positions, fresh.deadline);
+    } else {
+      await readActiveMember(store, binding, userId);
+    }
+  } catch (error) {
+    if (error instanceof MemberAccessRefused) {
+      throw error;
+    }
+    if (grants?.allowed === false) {
+      throw new MemberAccessRefused('Selection access unavailable');
+    }
+    throw error;
+  }
+  if (!grants) {
+    throw failure;
+  }
+  // Refuse from saved grants before asking projections that may still allow a revoked grant.
+  if (!grants.allowed) {
+    throw new MemberAccessRefused('Selection access unavailable');
   }
   const auth = memberAuthorisation(binding);
-  for (const row of receipts) {
+  for (const row of grants.receipts) {
     if (!await auth.applied(row.event.id)) {
       throw new Error('Selection access unavailable');
     }
@@ -282,21 +344,29 @@ export async function readConnectionSelection(store: EventStore, binding: Bindin
     throw new SelectionInputInvalid('Selection input invalid');
   }
   const subject = selectionSubject(userId, serverId);
-  const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
-  const state = foldConnectionSelection(rows);
-  const unavailable = { status: 'unavailable' as const, sequence: state.sequence };
-  if (!state.selected || state.selected.userId !== userId ||
-      state.selected.serverId !== serverId) {
-    await readActiveMember(store, binding, userId);
-    return unavailable;
+  async function prepare() {
+    const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
+    const state = foldConnectionSelection(rows);
+    let checked;
+    if (state.selected?.userId === userId && state.selected.serverId === serverId) {
+      checked = await facts(store, binding.silo, state.selected, loadConfiguration, toolName);
+    }
+    return { state, checked };
   }
-  let checked;
+  let prepared;
   try {
-    checked = await facts(store, binding.silo, state.selected, loadConfiguration, toolName);
+    prepared = await prepare();
   } finally {
-    await access(store, binding, userId, serverId);
+    // Decide access once, including when selection or profile history could not be loaded.
+    if (prepared && !prepared.checked) {
+      await readActiveMember(store, binding, userId);
+    } else {
+      await access(store, binding, userId, serverId);
+    }
   }
-  if (!checked.available) {
+  const { state, checked } = prepared;
+  const unavailable = { status: 'unavailable' as const, sequence: state.sequence };
+  if (!checked?.available || !state.selected) {
     return unavailable;
   }
   if (checked.oauth) {
