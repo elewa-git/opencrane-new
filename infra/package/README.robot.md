@@ -262,6 +262,26 @@ is only part of image review. Approved pins and licence rules are unchanged.
 Registry publication, promotion, vulnerability clearance and fresh R3 installation
 remain NOT RUN.
 
+The separate [libtabe attribution record](../../docs/process/p5-4-images10/libtabe.json)
+checks only `libtabe Chih-Hao Tsai attribution`. Its complete ICU licence and version
+header match Git and the signed Node source archive. Copyright and contact details
+give no grant. The neighbouring BSD grants name other holders and do not establish
+permission for Tsai's contribution. The record stays BLOCKED with the missing proof
+stated. Seven references remain unresolved; no licence allowance changes.
+
+```sh
+nice -n 10 python3 docs/process/p5-4-images10/check-libtabe.py \
+  /tmp/p5-4-images4 /tmp/p5-4-images6
+```
+
+This reuses the signed release/tag, official Node binary, Debian main and archived
+Dockerfile checks, and checks every candidate layer. A passing comparison approves no grant.
+The [receipt](../../docs/process/p5-4-images10/receipt.md) explains the exact files
+and limits. `scripts/p5-4-images10.test.mjs` runs offline Python fixtures through the
+existing CI test list. Historical records, checkers, pins and promotion gates stay
+unchanged. Complete licensing, vulnerability clearance and fresh/live approval remain
+outstanding.
+
 The separate [PCRE record](../../docs/process/p5-4-images6/pcre.json) resolves only
 `V8 PCRE test suite` by reviewing the actual source file's embedded BSD-3-Clause
 terms for Cambridge and Google. It keeps the historical ten-reference checker and

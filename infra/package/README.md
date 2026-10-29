@@ -18,7 +18,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>image contents and installs"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>image contents, notices and installs"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
@@ -101,6 +101,9 @@ and Debian main package versions. It keeps checksums for the shipped notices.
 A separate Node record lists the shipped notice's declarations and individual
 acceptance reasons. References without enough terms stay blocked. This checks only
 that notice; other bundled licences and installation approval still need work.
+A separate source check follows the Chinese dictionary attribution through ICU,
+the Unicode library bundled with Node. It retains the complete terms and keeps
+permission blocked where an author's copyright and contact details give no grant.
 Three-peer installation also needs an exact source revision in its compatibility
 review. The current image has no such approval.
 
