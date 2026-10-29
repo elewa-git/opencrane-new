@@ -1,0 +1,1 @@
+An internal company-account operation can replace a bearer credential once while keeping its admin custodian. Retries recover the same saved generation; replacements remain unverified and unavailable for use.

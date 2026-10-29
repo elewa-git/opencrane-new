@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import * as connections from './connections.ts';
 import { hostedImageCheckedSchema, hostedImageCheckRequestedSchema } from './hosted-image.ts';
 import { event } from './definition.ts';
 import * as data from './data.ts';
@@ -109,21 +110,21 @@ export const mcpEvents = [
   event(
     'connection.company_opt_in_set', 'connection',
     'An admin recorded or removed company account opt-in for one exact installation.',
-    data.companyOptInSetDataSchema,
+    connections.companyOptInSetDataSchema,
     { serverId: 'mcp_1', connectionId: 'installed_1', registrationRevision: 1,
       enabled: true, changedBy: 'mem_1', expectedSequence: 0 },
   ),
   event(
     'connection.selected', 'connection',
     'A person explicitly selected a personal account revision or cleared their choice.',
-    data.connectionSelectedDataSchema,
+    connections.connectionSelectedDataSchema,
     { userId: 'mem_1', serverId: 'mcp_1', connectionId: 'installed_1',
       action: 'select', profileId: 'personal_1', profileRevision: 1, expectedSequence: 0 },
   ),
   event(
     'connection.refresh_started', 'connection',
     'A member started one refresh attempt for the current OAuth generation.',
-    data.connectionRefreshStartedDataSchema,
+    connections.connectionRefreshStartedDataSchema,
     { userId: 'mem_1', serverId: 'mcp_1', connectionId: 'installed_1', profile: 'personal_1',
       attemptId: DIGEST_EXAMPLE, configurationDigest: DIGEST_EXAMPLE,
       generation: 1, expectedSequence: 3, scopes: ['read'] },
@@ -131,7 +132,7 @@ export const mcpEvents = [
   event(
     'connection.oauth_started', 'connection',
     'A member recorded a private consent attempt without activating a profile.',
-    data.connectionOAuthStartedDataSchema,
+    connections.connectionOAuthStartedDataSchema,
     { userId: 'mem_1', serverId: 'mcp_1', connectionId: 'installed_1', profile: 'personal_1',
       attemptId: DIGEST_EXAMPLE, attemptDigest: DIGEST_EXAMPLE, stateDigest: DIGEST_EXAMPLE,
       secretRef: 'secret:attempt_1', uid: 'uid_1', resourceVersion: '1',
@@ -140,7 +141,7 @@ export const mcpEvents = [
   event(
     'connection.oauth_exchange_claimed', 'connection',
     'One live worker claimed a private consent attempt; no provider send is confirmed.',
-    data.connectionOAuthExchangeClaimedDataSchema,
+    connections.connectionOAuthExchangeClaimedDataSchema,
     { userId: 'mem_1', serverId: 'mcp_1', connectionId: 'installed_1', profile: 'personal_1',
       attemptId: DIGEST_EXAMPLE, workerId: 'worker_1', purpose: 'consent',
       secretRef: 'secret:exchange_1', uid: 'uid_1', resourceVersion: '1',
@@ -150,27 +151,27 @@ export const mcpEvents = [
     'connection.created',
     'connection',
     'A person or company saved a staged connection reference; identity may remain unverified.',
-    z.union([data.connectionCreatedDataSchema, data.companyConnectionCreatedDataSchema]),
+    z.union([connections.connectionCreatedDataSchema, connections.companyConnectionCreatedDataSchema]),
     { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', secretRef: 'secret:1' },
   ),
   event(
     'connection.refreshed',
     'connection',
     "A command rotated a bearer reference, or a reaction refreshed an OAuth connection.",
-    data.connectionRefreshedDataSchema,
+    connections.connectionRefreshedRecordSchema,
     { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', secretRef: 'secret:2' },
   ),
   event(
     'connection.revoked',
     'connection',
     'An owner revoked a connection. Secret cleanup is separate.',
-    data.connectionRevokedDataSchema,
+    connections.connectionRevokedDataSchema,
     { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', revokedBy: 'mem_1' },
   ),
   event(
     'connection.operation_closed', 'connection',
     'An expired unsaved bearer operation was closed before exact secret cleanup.',
-    data.connectionOperationClosedDataSchema,
+    connections.connectionOperationClosedDataSchema,
     { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', operationId: 'operation_1',
       generation: 1, expectedSequence: 0, appendUntil: 1, reason: 'append_deadline_passed' },
   ),
@@ -178,7 +179,7 @@ export const mcpEvents = [
     'connection.disabled',
     'connection',
     'An admin blocked personal connections for one member and server.',
-    data.connectionDisabledDataSchema,
+    connections.connectionDisabledDataSchema,
     { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', disabledBy: 'admin_1',
       expectedSequence: 0, reason: 'admin_disabled' },
   ),

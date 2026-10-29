@@ -536,11 +536,6 @@ export const grantRevokedDataSchema = z
     granteeKind: z.enum(['member', 'team', 'assistant']).optional(), revokedBy: id })
   .strict();
 
-export { companyConnectionCreatedDataSchema, connectionCreatedDataSchema, connectionRefreshedDataSchema,
-  connectionRevokedDataSchema, connectionDisabledDataSchema,
-  connectionOperationClosedDataSchema, connectionSelectedDataSchema,
-  companyOptInSetDataSchema, connectionOAuthStartedDataSchema, connectionRefreshStartedDataSchema,
-  connectionOAuthExchangeClaimedDataSchema } from './connections.ts';
 
 // --- Budgets (single-writer actor per silo) -----------------------------
 

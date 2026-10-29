@@ -1,4 +1,5 @@
-import { centsSchema, connectionCreatedDataSchema } from './data.ts';
+import { centsSchema } from './data.ts';
+import { connectionCreatedDataSchema } from './connections.ts';
 import { z } from 'zod';
 import { event } from './definition.ts';
 

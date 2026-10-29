@@ -119,7 +119,7 @@ flowchart LR
   models -->|tests private sign-in, refresh and revocation requests, revokes refresh and access tokens; checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains reply withdrawal after expiry or access loss; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models and checks private callers; native child calls refused| models
   models -.->|checks receipts and preserves confirmed refusals during permission outages| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
-  models -->|stages credentials, callback codes and replies, confirms first accounts, starts, joins, claims and sends refresh attempts, saves replacements, retains old access tokens until expiry and removes revoked tokens even after member removal, recovers replies and checks signed accounts, shares a database lock for personal and company saves and personal cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
+  models -->|stages credentials, callback codes and replies, confirms first accounts, starts, joins, claims and sends refresh attempts, saves replacements, retains old access tokens until expiry and removes revoked tokens even after member removal, recovers replies and checks signed accounts, shares a database lock for personal and company saves and rotations, and personal cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
   models -->|saves events, local account revocations, remote starts and unsent proof; recovers budgets in order and applies saved routine Stops, pauses with saved admin authority, verified owner removal or assistant deactivation, Ask denial or expiry and retirements; reads spending and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
@@ -507,6 +507,9 @@ custodian. Saving keeps the account unverified and grants no tool access.
 The save checks permission once, including when its history could not be loaded.
 A permission refusal takes precedence over a history or lock-release failure.
 After staging, membership changes still prevent the save from being published.
+The current admin custodian can replace a company credential for the same installation
+and opt-in. Each replacement keeps that custodian and saves the next generation once.
+Both private copies are retained. The replacement stays unverified and unselected.
 
 An internal confirmation checks the original verified account and saved provider reply again.
 It stores one private generation, then saves its exact reference, account, scopes and expiry.
