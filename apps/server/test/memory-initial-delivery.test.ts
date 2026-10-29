@@ -1,4 +1,5 @@
 import { dirname } from 'node:path';
+import { z } from 'zod';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
 import { createEventStore } from '@opencrane/event-store';
@@ -23,7 +24,9 @@ const qualification = { ...runtime, result: 'PASS', checks: { privateTurns: 'PAS
   replacementReload: 'PASS', persistence: 'PASS' } };
 const evidence = { runtime, qualification };
 const canary = 'Initial personal memory canary';
-function memberId() { return Promise.resolve('alice'); }
+function memberId() {
+  return Promise.resolve('alice');
+}
 async function start() {
   setup = await fixture(2000, 20000, false, 'gpt-6-luna', false, 'manual', 'sales', 'restricted');
   await setup.stopDispatch();
@@ -64,12 +67,15 @@ async function fact(memoryId = 'fact', text = canary) {
   const identity = { silo: 'test', scopeId, scopeKind: 'person' as const,
     ownerId: 'alice', memoryId, revision: 1 };
   keys.provision(identity);
-  await setup.append(`scope-${scopeId}`, 'memory.written', { ...identity, schemaVersion: 1,
+  await setup.append(`scope-${scopeId}`, 'memory.written', { scopeId, scopeKind: 'person', ownerId: 'alice',
+    memoryId, revision: 1, schemaVersion: 1,
     kind: 'preference', pinned: true, expiresAt: null, sources: [], dependsOn: [],
     ...keys.encrypt(identity, text) });
   await setup.runner.run(memoryProjection({ decrypt: keys.decrypt }));
 }
-function prepare() { return prepareInitialMemory(options, claims, evidence); }
+function prepare() {
+  return prepareInitialMemory(options, claims, evidence);
+}
 async function state(store = options.store) {
   const chat = await readChatFacts(store, 'test', 'conversation', 'turn');
   return chat.memoryContext;
@@ -99,7 +105,7 @@ async function recordsBeforeRelease() {
   expect(receipt).toEqual({ status: 'loaded', dispatch: 'disabled' });
   expect(await state()).toMatchObject({ status: 'loaded', initialLoaded: true,
     references: [{ scopeId, memoryId: 'fact', revision: 1 }], executionAvailable: false });
-  const cold = createEventStore(setup.nats.log, setup.nats.control);
+  const cold = await createEventStore(setup.nats.connection);
   expect(await state(cold)).toEqual(await state());
   const rows = await history(cold, 'conversation-conversation', 'test');
   expect(JSON.stringify(rows)).not.toContain(canary);
@@ -125,7 +131,8 @@ async function closure(action: string) {
   const append = options.store.append.bind(options.store);
   async function closeDuring(command: Parameters<typeof append>[0]) {
     const result = await append(command);
-    const data = command.event.data as { action?: string };
+    const input = z.object({ data: z.object({ action: z.string().optional() }) });
+    const data = input.parse(command.event).data;
     if (data.action === action) {
       await setup.append('participation-conversation', 'conversation.closed',
         { conversationId: 'conversation', closedBy: 'alice' });
@@ -133,23 +140,34 @@ async function closure(action: string) {
     return result;
   }
   vi.spyOn(options.store, 'append').mockImplementation(closeDuring);
-  async function attempt() { const pending = await prepare(); await pending.load(); }
+  async function attempt() {
+    const pending = await prepare();
+    await pending.load();
+  }
   await expect(attempt()).rejects.toThrow('memory_context_unavailable');
   expect((await state())?.executionAvailable).toBe(false);
 }
 it.each(['prepared', 'loaded'])('refuses closure during the %s append', closure);
 async function lostAppend(action: string, saved: boolean) {
+  await fact();
   const append = options.store.append.bind(options.store);
   async function lose(command: Parameters<typeof append>[0]) {
-    const data = command.event.data as { action?: string };
+    const input = z.object({ data: z.object({ action: z.string().optional() }) });
+    const data = input.parse(command.event).data;
     if (data.action !== action) return append(command);
     if (saved) await append(command);
     throw new Error('Private upstream error must not escape');
   }
   vi.spyOn(options.store, 'append').mockImplementation(lose);
-  async function attempt() { const pending = await prepare(); await pending.load(); }
+  async function attempt() {
+    const pending = await prepare();
+    await pending.load();
+  }
   await expect(attempt()).rejects.toThrow('memory_context_unavailable');
   if (saved) expect((await state())?.status).toBe(action);
+  if (saved && action === 'loaded') {
+    expect((await state())?.references).toEqual([{ scopeId, memoryId: 'fact', revision: 1 }]);
+  }
 }
 it.each([['prepared', false], ['prepared', true], ['loaded', false], ['loaded', true]] as const)(
   'returns no text after an uncertain %s append (saved=%s)', lostAppend);
@@ -158,6 +176,16 @@ async function changedBeforeLoad(kind: string) {
   const pending = await prepare();
   if (kind === 'removed') {
     await setup.append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'alice' });
+  } else if (kind === 'corrected') {
+    const keys = memoryKeys(options.keyDirectory!);
+    const identity = { silo: 'test', scopeId, scopeKind: 'person' as const,
+      ownerId: 'alice', memoryId: 'fact', revision: 2 };
+    keys.provision(identity);
+    await setup.append(`scope-${scopeId}`, 'memory.corrected', { scopeId, scopeKind: 'person', ownerId: 'alice',
+      memoryId: 'fact', revision: 2, schemaVersion: 1,
+      expectedRevision: 1, supersedes: { memoryId: 'fact', revision: 1 }, reason: 'human',
+      kind: 'preference', pinned: true, expiresAt: null, sources: [], dependsOn: [],
+      ...keys.encrypt(identity, 'Replacement') });
   } else {
     const identity = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
       memoryId: 'fact', expectedRevision: 1, revision: 2 };
@@ -166,4 +194,39 @@ async function changedBeforeLoad(kind: string) {
   await expect(pending.load()).rejects.toThrow('memory_context_unavailable');
   expect((await state())?.initialLoaded).toBe(false);
 }
-it.each(['forgotten', 'removed'])('refuses %s facts before loading', changedBeforeLoad);
+it.each(['corrected', 'forgotten', 'removed'])('refuses %s facts before loading', changedBeforeLoad);
+
+async function qualificationChanges() {
+  const mutable = structuredClone(evidence);
+  const pending = await prepareInitialMemory(options, claims, mutable);
+  mutable.qualification.result = 'FAIL';
+  await expect(pending.load()).rejects.toThrow('memory_context_unavailable');
+  expect((await state())?.initialLoaded).toBe(false);
+}
+it('refuses qualification withdrawn between commands', qualificationChanges);
+
+async function historyBeforeAccess() {
+  const readStream = options.store.readStream.bind(options.store);
+  async function* inspect(...args: Parameters<typeof readStream>) {
+    if (args[0] === 'conversation-conversation' && args[1] === 1) {
+      expect(args[2]! - performance.now()).toBeGreaterThan(2000);
+    }
+    yield* readStream(...args);
+  }
+  vi.spyOn(options.store, 'readStream').mockImplementation(inspect);
+  const pending = await prepare();
+  await setup.append('conversation-conversation', 'agent.turn_started', {
+    assistantId: 'assistant', conversationId: 'conversation', turnId: 'unrelated' });
+  await expect(pending.load()).resolves.toEqual({ status: 'loaded', dispatch: 'disabled' });
+}
+it('loads history outside the short check and permits unrelated turn activity', historyBeforeAccess);
+
+async function memoryFree() {
+  await setup.append('computer-assistant', 'computer.turn_started', { assistantId: 'assistant',
+    computerId: 'computer', conversationId: 'conversation', turnId: 'free', threadId: 'free-thread',
+    requesterId: 'alice', task: 'chat_turn', executionMode: 'memory_free' });
+  const free = { ...claims, turn: 'free', thread: 'free-thread' };
+  await expect(prepareInitialMemory(options, free, evidence)).rejects
+    .toThrow('memory_context_unavailable');
+}
+it('does not upgrade a memory-free turn', memoryFree);

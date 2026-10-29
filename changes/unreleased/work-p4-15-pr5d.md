@@ -1,0 +1,1 @@
+- Record initial personal memory references in separate preparation and load commands. Failed or uncertain saves return no text; native memory delivery remains disabled.
