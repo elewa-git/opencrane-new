@@ -23,7 +23,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
   package -->|uses local cluster| devbox
-  package -->|starts services and checks coordinated capture and restored data| apps["apps<br/>product services and replay"]
+  package -->|starts services and checks capture and restored file and home bytes| apps["apps<br/>product services and replay"]
   package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
@@ -73,6 +73,7 @@ rendering cannot prove that the saved data is readable.
 - Encrypts all required homes together while checking that their ownership stays unchanged.
 - Captures matching events, files and homes within one time limit while writers stay stopped.
 - Restores checked events and files in order into empty disposable targets.
+- Writes authenticated home bytes into separate temporary files and reads them back.
 - Checks event and budget recovery after an interrupted change to handler subscriptions.
 - Checks current memory deletion records before replaying older events.
 - Checks company journey records against the full acceptance checklist.
@@ -82,8 +83,9 @@ rendering cannot prove that the saved data is readable.
 The recovery fixture captures events, files and two computer homes together before
 interrupting a handler upgrade. It checks those same archives before rebuilding
 rows, rights and spending twice, then checks who can read the restored files.
-Checking encrypted homes does not put them back on mounted volumes. The fixture
-uses disposable services and does not reopen a running installation.
+A separate fixture restores the exact home bytes to new temporary files after
+checking current memory deletion records. This does not put homes back on mounted
+volumes. The fixtures use disposable services and do not reopen a running installation.
 The event and file targets keep private directory paths out of command arguments
 and errors, including when setup or cleanup fails.
 

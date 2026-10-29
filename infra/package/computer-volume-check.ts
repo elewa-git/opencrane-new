@@ -12,6 +12,8 @@ import { checkHistory, readBackupKey, readPrivateFile } from './event-restore.ts
 
 type Bounds = ReturnType<typeof captureBounds>;
 type Descriptor = z.infer<typeof volumeExportDescriptorSchema>;
+type Delivery = (descriptor: Descriptor, plaintext: Buffer[], recheck: () => Promise<void>)
+  => Promise<void>;
 interface Options {
   eventDirectory: string;
   volumeDirectory: string;
@@ -73,7 +75,7 @@ function checkComputers(descriptor: Descriptor, required: ReturnType<typeof requ
 }
 
 async function authenticate(directory: string, descriptor: Descriptor,
-  entry: Descriptor['exports'][number], key: Buffer, bounds: Bounds) {
+  entry: Descriptor['exports'][number], key: Buffer, bounds: Bounds, output?: Buffer) {
   bounds.check();
   const bytes = readPrivateFile(join(directory, entry.file), entry.byteCount + 28);
   if (bytes.length !== entry.byteCount + 28) throw refusal();
@@ -88,8 +90,9 @@ async function authenticate(directory: string, descriptor: Descriptor,
       byteCount += plaintext.length;
       if (byteCount > entry.byteCount) throw refusal();
       hash.update(plaintext);
+      if (output) plaintext.copy(output, byteCount - plaintext.length);
     } finally {
-      // Erase each chunk even when authentication later fails. Never extract or return a home.
+      // Erase each chunk even when a later authentication tag fails.
       plaintext.fill(0);
     }
   }
@@ -105,7 +108,8 @@ async function authenticate(directory: string, descriptor: Descriptor,
 
 /** Check every home before recovery writes anything, using the caller's original time limit. */
 export async function checkComputerVolumeBackup(source: NatsConnection, options: Options,
-  bounds: Bounds): Promise<void> {
+  bounds: Bounds, deliver?: Delivery): Promise<void> {
+  const plaintext: Buffer[] = [];
   let key: Buffer | undefined;
   try {
     bounds.check();
@@ -143,17 +147,29 @@ export async function checkComputerVolumeBackup(source: NatsConnection, options:
     checkComputers(descriptor, required);
     inputs.unchanged();
     for (const entry of descriptor.exports) {
-      await authenticate(options.volumeDirectory, descriptor, entry, key, bounds);
+      let output: Buffer | undefined;
+      if (deliver) {
+        output = Buffer.alloc(entry.byteCount);
+        plaintext.push(output);
+      }
+      await authenticate(options.volumeDirectory, descriptor, entry, key, bounds, output);
     }
-    await checkHistory(sourceBounds, events, maximumBytes);
-    inputs.unchanged();
-    const current = readPrivateFile(path, 2 * 1024 * 1024);
-    if (!current.equals(original)) throw refusal();
-    inputs.unchanged();
+    async function recheck() {
+      await checkHistory(sourceBounds, events, maximumBytes);
+      inputs.unchanged();
+      const current = readPrivateFile(path, 2 * 1024 * 1024);
+      if (!current.equals(original)) throw refusal();
+      inputs.unchanged();
+      bounds.check();
+    }
+    await recheck();
+    // Keep ownership of these buffers until delivery settles, including cancellation.
+    if (deliver) await deliver(descriptor, plaintext, recheck);
     bounds.check();
   } catch {
     throw refusal();
   } finally {
     key?.fill(0);
+    for (const bytes of plaintext) bytes.fill(0);
   }
 }
