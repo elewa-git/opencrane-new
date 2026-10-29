@@ -61,7 +61,8 @@ It checks the exact saved removal, even when the permissions service is unavaila
 An internal owner command saves Stop intent for the active run. A separate operation
 stops its existing spending allowance and can recover after a failed save. A repeated
 completion for an older run does not block Stop for the current run. The run stays
-occupied until termination is proved. The connected bridge checks saved Stop,
+occupied until termination is proved. Stop reads routine history before starting its
+short write check. The connected bridge checks saved Stop,
 Pause and Retire records and cancels only the accepted private routine turn.
 After seeing a matching saved record, it still stops that turn within two seconds
 if further evidence reads time out or fail.

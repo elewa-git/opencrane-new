@@ -1075,6 +1075,10 @@ async function stopWriteChecks(kind: string) {
   const append = nats.store.append.bind(nats.store);
   const read = nats.store.readStream.bind(nats.store);
   let clock = performance.now();
+  if (kind === 'fractional-clock') {
+    // Cross a floating-point precision boundary when the write deadline is added.
+    clock = 128_000.004;
+  }
   function monotonic() { return clock; }
   vi.spyOn(performance, 'now').mockImplementation(monotonic);
   async function* slowHistory(target: string, from?: number, deadline?: number) {
@@ -1086,7 +1090,8 @@ async function stopWriteChecks(kind: string) {
   }
   vi.spyOn(nats.store, 'readStream').mockImplementation(slowHistory);
   async function beforeAppend(change: AppendCommand) {
-    expect(change.deadline! - clock).toBeLessThanOrEqual(2000);
+    // Compare absolute times so subtraction cannot round a two-second limit upwards.
+    expect(change.deadline).toBe(clock + 2000);
     if (kind === 'expiry') clock = change.deadline! + 1;
     if (kind === 'member') {
       await nats.seed([record('removed-stop', 'member-alice', 'member.removed',
@@ -1097,10 +1102,21 @@ async function stopWriteChecks(kind: string) {
   }
   vi.spyOn(nats.store, 'append').mockImplementationOnce(beforeAppend);
   const result = requestRoutineStop(nats.store, binding, 'alice', request);
-  if (kind === 'slow') await expect(result).resolves.toMatchObject({ status: 'confirmed' });
-  else await expect(result).rejects.toThrow();
+  if (kind === 'slow' || kind === 'fractional-clock') {
+    await expect(result).resolves.toMatchObject({ status: 'confirmed' });
+    const confirmed = await result;
+    vi.restoreAllMocks();
+    const saved = await nats.store.readEvent(confirmed.position);
+    const expectedStop = { id: confirmed.eventId,
+      type: 'routine.run_stop_requested', subject: 'routine-orders',
+      data: { source: 'owner', actorId: 'alice', affectedRun: 'occurrence' } };
+    expect(saved.event).toMatchObject(expectedStop);
+    await refuses();
+  } else {
+    await expect(result).rejects.toThrow();
+  }
 }
-it.each(['slow', 'expiry', 'member', 'owner'])(
+it.each(['slow', 'fractional-clock', 'expiry', 'member', 'owner'])(
   'owner Stop reads history before its bounded write check: %s', stopWriteChecks);
 
 function routineRootTests() {
