@@ -3,11 +3,12 @@ import { z } from 'zod';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { grantStream, memberAuthorisation } from '@opencrane/authz';
 import { createEventStore } from '@opencrane/event-store';
-import { history, MemberAccessRefused } from '@opencrane/models';
+import { authorityFence, history, MemberAccessRefused, prepareLoadedMemory } from '@opencrane/models';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from '@opencrane/models/testing';
 import { computers, groups, memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { memoryAdmission } from '../src/chat/memory-admission.ts';
+import { initialMemoryAccess } from '../src/memory/initial-access.ts';
 import { prepareInitialMemory } from '../src/memory/initial-delivery.ts';
 import { initialQualificationFixture } from './support/initial-qualification.ts';
 import type { MemoryOptions } from '../src/memory/access.ts';
@@ -104,6 +105,10 @@ it.each([undefined, {}, { ...qualification, sourceSha: 'c'.repeat(40) },
   { ...qualification, checks: { privateTurns: 'PASS' } }])(
   'refuses absent, incomplete or mismatched qualification: %j', noQualification);
 async function mismatch(patch: object) {
+  const joined = await setup.append('member-bob', 'member.joined', {
+    memberId: 'bob', email: 'bob@example.test', displayName: 'Bob', role: 'member',
+  });
+  await setup.auth.handler.handle(joined, setup.db);
   await expect(prepareInitialMemory(options, { ...claims, ...patch })).rejects
     .toThrow('memory_context_unavailable');
   expect(await state()).toBeUndefined();
@@ -253,8 +258,12 @@ async function oneDecisionPerCommand() {
   const auth = memberAuthorisation(options.binding);
   const check = vi.spyOn(auth, 'check');
   const use = vi.spyOn(auth, 'use');
+  const actsFor = vi.spyOn(auth, 'actsFor');
+  const conversation = vi.spyOn(auth, 'conversation');
   const pending = await prepare();
   expect(check).toHaveBeenCalledExactlyOnceWith('alice', 'member');
+  expect(actsFor).toHaveBeenCalledExactlyOnceWith('alice', 'assistant');
+  expect(conversation).toHaveBeenCalledExactlyOnceWith('alice', 'conversation', 'post');
   expect(use.mock.calls).toEqual([
     ['person', 'alice', 'mcp_server', 'memory'],
     ['assistant', 'assistant', 'mcp_server', 'memory'],
@@ -263,9 +272,13 @@ async function oneDecisionPerCommand() {
   ]);
   check.mockClear();
   use.mockClear();
+  actsFor.mockClear();
+  conversation.mockClear();
   await expect(pending.load()).resolves.toEqual({ status: 'loaded', dispatch: 'disabled' });
   expect(check).toHaveBeenCalledExactlyOnceWith('alice', 'member');
   expect(use).toHaveBeenCalledTimes(4);
+  expect(actsFor).toHaveBeenCalledExactlyOnceWith('alice', 'assistant');
+  expect(conversation).toHaveBeenCalledExactlyOnceWith('alice', 'conversation', 'post');
   expect((await state())?.initialLoaded).toBe(true);
 }
 it('keeps one membership and permission decision per successful command', oneDecisionPerCommand);
@@ -334,3 +347,59 @@ async function staleCollector(kind: string) {
 }
 it.each(['host', 'installation', 'incomplete'])(
   'refuses stale or incomplete deployment evidence: %s', staleCollector);
+
+async function removalDuringCatalogueFailure() {
+  const read = options.store.readStream.bind(options.store);
+  async function* unavailable(...args: Parameters<typeof read>) {
+    if (args[0] === 'mcp-memory') {
+      await setup.append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'alice' });
+      throw new Error('Private catalogue failure');
+    }
+    yield* read(...args);
+  }
+  vi.spyOn(options.store, 'readStream').mockImplementation(unavailable);
+  await expect(prepare()).rejects.toThrow(MemberAccessRefused);
+  expect(await state()).toBeUndefined();
+}
+it('keeps removal saved during a failed catalogue read', removalDuringCatalogueFailure);
+
+async function establishedRemovalSurvives() {
+  await setup.append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'alice' });
+  const read = options.store.readStream.bind(options.store);
+  let membershipReads = 0;
+  async function* unavailableAfterRemoval(...args: Parameters<typeof read>) {
+    if (args[0] === 'member-alice') {
+      membershipReads += 1;
+      if (membershipReads > 1) throw new Error('Membership history unavailable');
+    }
+    yield* read(...args);
+  }
+  vi.spyOn(options.store, 'readStream').mockImplementation(unavailableAfterRemoval);
+  await expect(prepare()).rejects.toThrow(MemberAccessRefused);
+  expect(membershipReads).toBe(1);
+  expect(await state()).toBeUndefined();
+}
+it('never replaces an established membership refusal with another read', establishedRemovalSurvives);
+
+async function changedDeploymentBeforeLoad() {
+  const pending = await prepare();
+  deployment.changeInstallation();
+  await expect(pending.load()).rejects.toThrow('memory_context_unavailable');
+  expect((await state())?.initialLoaded).toBe(false);
+}
+it('refuses an installation replacement between preparation and loading', changedDeploymentBeforeLoad);
+
+async function nestedMembershipRefusal() {
+  await fact();
+  const pending = await prepare();
+  await pending.load();
+  const deadline = performance.now() + 10_000;
+  const access = await initialMemoryAccess(options, 'alice', deadline);
+  const rows = await history(options.store, 'conversation-conversation', 'test');
+  const memory = await prepareLoadedMemory(options.store, options.binding, claims,
+    rows, deadline, access);
+  await setup.append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'alice' });
+  const fresh = await authorityFence(options.store, performance.now());
+  await expect(memory.confirm(fresh)).rejects.toThrow(MemberAccessRefused);
+}
+it('preserves saved removal discovered while confirming loaded references', nestedMembershipRefusal);
