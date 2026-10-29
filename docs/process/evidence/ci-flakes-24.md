@@ -2,6 +2,62 @@
 
 Part of #576. Own checks on 29 October 2026.
 
+## Fourth failure follow-up
+
+Fetched origin and completed the rebase onto
+`b7db73b36a769bee3422da01e36ffcf26b6023b6`. Verified that commit is an ancestor
+and that neither rebase state directory remains.
+
+The owner supplied the missing decision: require the existing fixed outage text
+when the provider-history timeout returns 503. The shared dependency-outage handler
+returns exactly `Decision service unavailable`, without the underlying cause.
+The focused test first reproduced the old exact-message failure. Test-only commit
+`a2999e592` replaces that expected text with the shared outage message. It retains
+the exact string comparison, 503 status, ten-second lower and twelve-second upper
+limits, zero reservations, zero reserved and spent cents, and no provider call.
+No product behaviour changes in this follow-up.
+
+All commands used `nice -n 10`. Tests used
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and normal disposable
+service fixtures. No full root suite or fresh-install journey was run.
+
+| Check | Result |
+| --- | --- |
+| Focused provider test before the correction | FAIL as expected: old refusal text differs from the fixed outage text |
+| Full lint | PASS: 34 warnings, no errors |
+| Full typecheck | PASS |
+| Event catalogue | PASS: 157 event types agree |
+| Separate Knip and changelog lint | PASS |
+| First eight-file test run | FAIL: 338 passed, one concurrent-credential case failed |
+| Second eight-file test run | FAIL: 338 passed, one large-cache case failed |
+| Routine timeout cases, first and second runs | PASS: all three cases in each run |
+| Full root suite, fresh-install qualification and post-push CI | NOT RUN |
+
+The eight complete files cover decision cost, grants, refusal, precedence, activity,
+fence, managed decisions and MCP dispatch. The routine selection covers stalled
+history and unavailable event-store reads during preparation and confirmation.
+
+The first run's unchanged `keeps concurrent calls tied to their own connection
+credential` case received 503 instead of 200 at `managed-decision.test.ts:163`.
+Its exact success, separate credentials, reservation and send assertions remain
+unchanged. The run does not establish the cause. The corrected provider timeout
+passed, including its later timing, money and no-send checks.
+
+The second run passed all managed-decision cases, including the corrected provider
+timeout and the concurrent-credential case. It failed the unchanged large-cache
+case at `decision-cost.test.ts:708`, which returned 503 with the fixed outage text
+instead of the required 200. This case passed in the first run and also failed
+during the previous follow-up. Its success, timing, access, read-volume and money
+assertions remain unchanged. No cause is established by this run.
+
+The corrected provider timeout, decision fence, refusal, precedence, activity,
+grants and complete MCP dispatch file passed twice. Overall qualification remains
+PARTIAL because the two broader runs failed. No retry erases either failure.
+
+Local logs use `/tmp/ci-flakes-24-fix4-`: `before.log`, `tests-1.log`, `tests-2.log`,
+`routine-1.log`, `routine-2.log`, `lint.log`, `typecheck.log`, `events.log`,
+`knip.log`, `changelog.log` and `docs.log`.
+
 ## Third failure follow-up
 
 Fetched origin and completed the rebase onto
