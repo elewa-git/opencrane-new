@@ -1,6 +1,6 @@
 import { createLogger, type Logger } from '@opencrane/observability';
 import { prepareRoutineDispatch, RoutineDispatchRefused } from './routine-dispatch.ts';
-import { privateDecisionReason, decisionError, decisionUnavailable } from './decision-refusal.ts';
+import { privateDecisionReason, decisionError, respondDecisionUnavailable } from './decision-refusal.ts';
 import { prepareMemoryDecision, memoryAccessStarted } from './memory-prepare-request.ts';
 import { requestSchema } from './model-request.ts';
 import { authoriseEgress } from './egress-admission.ts';
@@ -388,11 +388,7 @@ export async function startDecision(
         }
       }
       res.setHeader('x-request-id', requestId);
-      if (decisionUnavailable(error)) {
-        res.writeHead(503);
-        res.end(JSON.stringify({ requestId, error: 'Decision service unavailable' }));
-        return;
-      }
+      if (respondDecisionUnavailable(res, error, requestId)) return;
       res.setHeader('x-opencrane-decision', 'refused');
       res.writeHead(capped ? 402 : 403);
       const refusal = error instanceof MemoryToolRefused &&

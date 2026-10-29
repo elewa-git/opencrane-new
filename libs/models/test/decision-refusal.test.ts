@@ -106,7 +106,9 @@ async function requestDecision(setup: Fixture, url = setup.options.decisionUrl) 
 
 function expectUnavailable(result: Awaited<ReturnType<typeof requestDecision>>, setup: Fixture) {
   expect(result.response.status, JSON.stringify(result.body)).toBe(503);
-  expect(result.body).toEqual({ requestId: expect.any(String), error: 'Decision service unavailable' });
+  const schema = z.object({ requestId: z.string(), error: z.literal('Decision service unavailable') });
+  const body = schema.strict().parse(result.body);
+  expect(body.requestId).toBe(result.response.headers.get('x-request-id'));
   expect(result.response.headers.get('x-opencrane-decision')).toBeNull();
   expect(result.response.headers.get('x-reservation-id')).toBeNull();
   expect(setup.actor.state.reservations).toHaveLength(0);

@@ -1,3 +1,4 @@
+import type { ServerResponse } from 'node:http';
 import { errors } from 'jose';
 import { ZodError } from 'zod';
 import { isEventStoreUnavailable } from '@opencrane/event-store';
@@ -26,9 +27,18 @@ const unavailableReasons = new Set([
   'Budget writer unavailable',
 ]);
 
-export function decisionUnavailable(error: unknown): boolean {
+function decisionUnavailable(error: unknown): boolean {
   if (isEventStoreUnavailable(error)) return true;
   return error instanceof Error && unavailableReasons.has(error.message);
+}
+
+export function respondDecisionUnavailable(response: ServerResponse, error: unknown,
+  requestId: string): boolean {
+  if (!decisionUnavailable(error)) return false;
+  const body = { requestId, error: 'Decision service unavailable' };
+  response.writeHead(503);
+  response.end(JSON.stringify(body));
+  return true;
 }
 
 const refusalReasons = new Map([
