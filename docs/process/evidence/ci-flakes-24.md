@@ -2,6 +2,151 @@
 
 Part of #576. Own checks on 29 October 2026.
 
+## Third failure follow-up
+
+Fetched origin and completed the rebase onto
+`52cec3f67e396daf0597f614dbaba59238526cc8`. Verified that commit is an ancestor
+and that neither rebase state directory remains. The rebased comparison head was
+`bdbcce9c164ee684159123b91dac4da6cc5b98c4`.
+
+The provider-history case from CI run `40843426477` reproduced 503 instead of 403.
+Commit `231298d04` changes only that status, as requested. The status-only version
+then failed twice on its existing exact message: it expects
+`Request refused or decision service unavailable`, while the established 503 reply
+is `Decision service unavailable`. The message assertion remains unchanged pending
+the requested clarification. Its timing, no-money and no-send assertions are retained,
+but those later assertions are not reached in these failing runs.
+
+The repository search found an additional product error: routine preparation and
+confirmation caught recognised dependency failures and changed them into
+`RoutineDispatchRefused`. Test-only commit `1e0560450` reproduced three incorrect
+403 replies: stalled history and event-store read timeouts during preparation and
+confirmation. Commit `2cbc1bf28` preserves those failures through both catches.
+The existing completion deadline still applies. A complete but expired read also
+uses the existing deadline error. Missing or mismatched routine evidence, saved
+Stop, Pause, Retire and access loss retain their refusals.
+The focused follow-up passed all 21 cases, including the unchanged saved-refusal
+and failed-audit checks. No source dependency or event type was added.
+
+### Repository status audit
+
+The repository search covered every `*.test.ts`, `*.spec.ts`, `*.test.mjs` and
+`*.test.js`, including apps, libraries, infrastructure and spikes. It found 1,173
+lines containing `403` or `forbidden`. I compared those with timeout, outage,
+unavailable, deadline, stall, pause, delay, slow and expiry terms, then followed
+shared assertion helpers and the decision endpoint callers.
+
+| Case | Decision |
+| --- | --- |
+| Managed provider history exceeds ten seconds | No refusal was read. Require 503; retain every timing, money and no-send assertion. |
+| Routine history stalls beyond ten seconds | No refusal was read. The helper wrongly converted its timer error to `RoutineDispatchRefused`. Preserve the unavailable error and require 503, no refusal marker and no reservation. |
+| Routine event-store failure during preparation or confirmation | The same catch hid recognised event-store failures. Add both failing-first cases and preserve their errors. |
+| Gateway delayed grant history; model/MCP shared request deadline; integration tool history; paused IAM; uncertain budget save | Already require 503 in this PR. Keep those corrections and their exact money/send checks. |
+| Gateway grant revocation read within the deadline; saved member removal; inactive assistant; missing IAM receipt; routine Stop/Pause/Retire/access prohibition | Confirmed refusal. Keep 403, including when another dependency or the deny audit fails. |
+| MCP catalogue check failure or stall, recovery after a failed check, and held changed tools | Saved failed catalogue evidence or a local catalogue hold prevents use. Keep 403; recovery still needs fresh reviewed publication. |
+| Approval renewal after failure/drift and Codex approval timeout | The saved approval is cancelled or expired. Keep 403 and its saved-state assertions. |
+| Encrypted approval review cannot be read | The approval is still requested, not approved. Keep the unsent call at 403 and the approval write at 503; no approval is granted. |
+| MCP dispatch IAM outage, lost start, unavailable budget admission, DNS/permit timeout and catalogue hold | Final dispatch has its separate 403/no-send contract. Keep exact refusal and evidence assertions. Remote response timeouts remain 504; response failures remain 502. |
+| MCP or egress retries after an uncertain send or closure | The permit was consumed or closed. Keep 403 and the one-send rule. |
+| Gateway recovery with an old budget actor | The replacement writer has taken ownership. Keep the old writer's 403 and the held money. |
+| Native delegation's unavailable or late agreement read | The public native route remains disabled and uses its existing agreement-refusal contract. Keep 403; this PR does not enable native calls. |
+| Memory backend admission timeout, uncertain evidence, signing/verification configuration and expired memory | These assert the memory backend's separate refusal contract or missing required capability, not a recognised outage at model/MCP decision admission. Keep the exact assertions; no memory check changes. |
+| Decision diagnostic test's generic `Private backend error` | This injects an untyped exception, not a recognised event-store outage/timeout. Keep its existing 403 and private-log assertions. The typed service-failure cases separately require 503. |
+
+No authority test, access limit, money check or memory assertion changed.
+
+### MCP dispatch comparison
+
+Every batch repeated the original `savesRemoteResponse('result')` test twenty times
+with fresh normal fixtures. Temporary test registration supplied repetition numbers;
+its assertions were unchanged. Temporary logging recorded the refusing dispatch stage,
+fixed reason, elapsed time, remaining time and source locations. The two checkouts
+used their own workspace package links and the same installed dependency versions.
+No product delay, clock mock, deadline extension or bypass was introduced.
+
+| Load | Rebased head | Main |
+| --- | --- | --- |
+| Concurrent repeats under existing shared-box load | 20 passed | 18 passed; two failed while preparing gateway delivery/witness fixtures |
+| Both test processes and their child fixtures confined to CPU 0 | 19 passed; one dispatch failure | 20 passed |
+| Same CPU 0 with four competing low-priority CPU workers | 1 passed; 18 dispatch failures and one fixture failure | 19 dispatch failures and one fixture failure |
+
+All three batches used `nice -n 10` and one Vitest worker per revision. The deliberate
+CPU load was confined to one core and removed when the comparison ended.
+The requested success case remains exactly HTTP 200; these load runs are FAIL.
+
+The second head batch failed repetition 18 at `mcp_admission`, with
+`event_store_unavailable`, after 1,915 ms of dispatch and 305 ms beyond its original
+access deadline. The source was `EventStore.head` from the authority position check
+inside `confirmDecisionAccess`, reached through `currentAuthority`.
+
+The third batch reproduced the same stage and error on both revisions. For example,
+head repetition 3 failed at `mcp_admission` after 1,103 ms, 217 ms beyond the access
+deadline; main repetition 9 failed there after 1,261 ms, 283 ms beyond the deadline.
+Both stacks identify the timeout in `libs/event-store/src/jetstream.ts:158`.
+There were three `mcp_admission` event-store timeouts on each revision in that batch.
+Both also failed at access confirmation during budget admission, at the same
+`withinBudgetDeadline` timer. Main's older diagnostic map uses a generic label for
+that budget error; the source location agrees.
+
+This proves that a permitted call can exhaust its original deadline at the same
+dispatch stage on main. It does not recover the missing trace from the earlier fix2
+run or claim identical failure rates. No dispatch code or assertion was changed.
+Temporary logging and the two comparison worktrees were removed.
+
+Logs are local files with the `/tmp/ci-flakes-24-fix3-` prefix:
+`head-20.log`, `main-20.log`, `head-pinned20.log`, `main-pinned20.log`,
+`head-loaded20.log`, `main-loaded20.log`, and `load-summary.log`.
+`probe.patch` retains the exact temporary instrumentation. The audit search results
+are `status-audit.txt`, `timeouts.txt`, `audit.txt` and `decision-callers.txt`.
+Provider reproduction logs are `provider-before.log`, `provider-status-only.log`
+and `provider-status-only-repeat.log`. Routine logs are `routine-red.log` and
+`routine-green.log`.
+
+### Own checks for this follow-up
+
+Source: `231298d0443151d9ee819e83e04ef078d0e28dfe`. The following receipt-only
+commit does not change tested code. Tests used the supplied PostgreSQL test service
+on port 55432 and normal disposable NATS, PostgreSQL databases, OpenFGA and gateway
+fixtures. All checks ran under `nice -n 10`. No full root suite was run.
+
+| Check | Result |
+| --- | --- |
+| Full lint | PASS: 34 warnings, no errors |
+| Full typecheck | PASS |
+| Event catalogue | PASS: 157 event types agree |
+| Separate Knip, changelog lint and documentation checks | PASS |
+| Routine regressions before the fix | FAIL as expected: all three returned 403 rather than 503 |
+| Focused routine follow-up | PASS: 21 cases, including saved refusals and audit failures |
+| First eight-file pass | FAIL: 218 passed, two decision-cost cases failed |
+| Second eight-file pass | PASS: all 220 cases |
+| First gateway/MCP/routine selection | FAIL: 26 passed, five routine fixture setup failures |
+| Second gateway/MCP/routine selection | FAIL: 30 passed, one routine fixture setup failure |
+| Provider status-only correction, twice | FAIL: both reach the stale exact-message assertion |
+| Full root suite, live qualification and post-push CI | NOT RUN |
+
+The eight complete files are integration access, memory delivery, decision cost,
+fence, precedence and refusal, plus both authority files. The separate 31-case
+selection covers every changed gateway and MCP test, the three remote reply modes,
+the routine regressions and saved-refusal/audit cases. Every changed test ran twice;
+the provider case still fails as described above. The changed gateway, MCP and
+routine dependency assertions passed in both selections. Both unchanged authority
+files passed twice. No retry erases an earlier failure.
+
+The first complete pass failed the cold-model catch-up case with an event-store
+`TimeoutError`, and the large-cache success case with 503 instead of 200. Both passed
+in the second pass. Their success, timing, read-volume and money assertions are unchanged.
+The selected routine failures occurred in `allocateRoutineRoot`, while preparing the
+fixture and before reaching the changed dispatch helper. The first selection affected
+Stop, Pause, Retire, Access and Expired model cases; the second affected Access alone.
+The earlier focused run passed all of these refusal cases. No fixture assertion or
+root-allocation check was changed. These setup failures remain recorded as FAIL.
+
+Logs use the same `/tmp/ci-flakes-24-fix3-` prefix: `changed-1.log`, `changed-2.log`,
+`selected-1.log`, `selected-2.log`, `lint.log`, `typecheck.log`, `events.log`,
+`knip.log`, `changelog.log` and `docs.log`. Overall qualification is PARTIAL:
+the status-only provider correction still needs an exact-message decision, and the
+load and fixture failures above remain explicit. This is not a source-ready claim.
+
 ## CI failure follow-up
 
 Fetched `origin` and rebased onto `f973912f887319e62f3bb723fceddb40cd529a1f`.
