@@ -2,6 +2,95 @@
 
 Part of #576. Own checks on 29 October 2026.
 
+## CI failure follow-up
+
+Fetched `origin` and rebased onto `f973912f887319e62f3bb723fceddb40cd529a1f`.
+The rebase finished with a clean worktree, and that main commit is an ancestor.
+CI run `40832728271` used the earlier head `dd15d5f0f`.
+
+The focused baseline reproduced all six reported failures. The ordinary tool call
+and revocation read within the deadline passed. The decisions for each failure are:
+
+| Case | Decision and fix |
+| --- | --- |
+| Tool history: 1,900 ms history plus 200 ms access | Timeout before access can be confirmed. Require exactly 503. Keep history order, saved refusal, no remote connection, no send and no reservation. |
+| Tool history: 2,100 ms history plus no access delay | The shared request deadline has expired. Require exactly 503 and keep the same other assertions. |
+| IAM outage at admission and final send | Admission cannot establish permission or refusal while IAM is paused. Require 503 there. The later dispatch check still requires its existing 403 and exact saved no-send evidence. |
+| Memory delivery with permission lag | A missing receipt proves no loss of permission. Keep the exact `unavailable` result, no new memory record and no Stop. Fix the helper that mistook `AuthorityRefused('IAM projection behind')` for confirmed loss. |
+| Gateway history timeout without revocation | No refusal is established. Require 503, retaining one earlier send and one earlier reservation. |
+| Gateway revocation after the delayed history read | The grant read pauses for 2,200 ms. Its request deadline expires before it returns any new grant facts, so the decision has not observed the revocation. Require 503 and retain the exact send and reservation counts. The 20 ms revocation case still requires 403. |
+
+`readStreamSummary` bounds the waiting caller with `readBeforeDeadline`, while its
+history catch-up can continue separately. A saved event that this caller has not yet
+read is not an established refusal. No deadline, access check or watched stream changed.
+
+Test-only commit `c177cc86c` added the memory regression before fix `b1dbd00bb`.
+It reproduced an invalidation with every grant still present and only receipts delayed.
+The fix keeps this uncertainty separate from actual permission denial. Existing saved
+member removal, assistant deactivation and grant-loss tests retain their assertions.
+The focused follow-up passed all 12 selected cases. Both authority files are unchanged.
+
+The complete gateway file found three further old status expectations. A separate
+focused run reproduced each one at its fault-injection assertion:
+
+- `settles streamed gateway usage exactly...`: paused IAM returns 503. The later
+  applied member removal still requires 403, and provider calls stay at one.
+- `does not duplicate exhaustion after its append succeeds but the acknowledgement
+  is lost`: the uncertain budget save returns 503. Recovery still requires 402,
+  one saved exhaustion, the same full budget history and no second provider call.
+- `enforces reviewed tool modes...`: paused IAM returns 503. Grant revocations,
+  inactive assistants and blocked tools still require 403. Saved decision records,
+  privacy checks and send counts are unchanged.
+
+These are status-only test corrections. The complete gateway file is repeated
+after them, so every changed test runs twice with its final assertions.
+
+The complete selected group has 12 files: server integration access and memory delivery;
+models gateway, decision activity, grants, cost, refusal, precedence and fence;
+MCP dispatch; and both authority files. There is no `decision.test.ts`.
+All tests use the supplied PostgreSQL test URL on port 55432 and normal disposable
+fixtures. Commands run under `nice -n 10`; complete passes use two workers.
+Full root tests and fresh-install qualification are NOT RUN.
+
+| Own check | Result |
+| --- | --- |
+| Initial complete pass | FAIL: 495 passed, three old gateway status expectations failed, one opt-in real-API test skipped |
+| Corrected complete gateway file | PASS: 82 passed, the same real-API test skipped |
+| Second complete pass | FAIL: 496 passed, two unchanged success cases failed, one opt-in real-API test skipped |
+| Full lint | PASS: 33 warnings, no errors |
+| Changed source and test lint after the status corrections | PASS |
+| Full typecheck and final models typecheck | PASS |
+| `check:events` | PASS: 157 event types agree |
+| Separate Knip and `lint:changelog` | PASS |
+
+The initial complete pass took 1,125.32 seconds. The corrected gateway repeat took
+406.08 seconds. The second complete pass took 1,343.67 seconds.
+`MODELS_REAL_CALL` was not enabled; that opt-in test is NOT RUN.
+The first run loaded the earlier gateway assertions. Its final failure excerpts
+show the subsequently edited source lines; the separate focused failure log preserves
+the original 403 assertions. No production code changed during these runs.
+
+All reported CI cases and the three additional gateway status corrections passed
+with their final assertions twice. Both unchanged authority files passed twice.
+The second complete pass still failed these unchanged success cases:
+
+- `decision-cost.test.ts:708`, `keeps 10,000 members on one model and eight models
+  with 1,000 members cached in one process`: HTTP 503 with `Decision service unavailable`
+  instead of 200. Its two-second, read-volume and reservation assertions are unchanged.
+- `mcp-dispatch.test.ts:2848`, `saves a checked remote response against its consumed
+  permit once: result`: HTTP 403 instead of 200. Its exact response, saved evidence,
+  consumed-permit and single-send assertions are unchanged.
+
+Both cases passed in the first complete pass. These results do not establish their
+underlying causes, and no retry erases the failures. Overall test qualification remains
+FAIL; this follow-up does not claim to fix the earlier load failures or every intermittent
+dependency failure. Full root tests, real-API calls and fresh-install qualification are NOT RUN.
+
+Logs use the `/tmp/ci-flakes-24-` prefix: `followup-red.log`, `memory-red.log`,
+`followup-green.log`, `extra-status-red.log`, `followup-run1.log`,
+`gateway-final-run1.log`, `followup-run2.log`, `followup-lint.log`,
+`followup-changed-lint.log`, `followup-typecheck.log` and `final-models-typecheck.log`.
+
 ## Refusals during dependency failures
 
 Rebased onto `68428e46e133df2c10c88c28b9356ff80681f85f` after fetching `origin`.
