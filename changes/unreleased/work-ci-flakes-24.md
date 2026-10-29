@@ -1,0 +1,4 @@
+- Gateway permission requests now return HTTP 503 for event-store outages and timeouts, unavailable permission or budget checks and expired access checks. Confirmed access refusals and spending limits remain enforced.
+- Confirmed access refusals stay HTTP 403 when another receipt check or the deny audit fails. Inactive assistants are refused before checking permission receipts.
+- Delayed permission receipts no longer withdraw loaded memory. Confirmed access loss still clears private output.
+- Routine history timeouts and event-store outages return HTTP 503 without a permit. Saved routine Stops and other confirmed refusals remain HTTP 403.

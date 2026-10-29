@@ -229,10 +229,13 @@ it('upgrade then OpenFGA replay restores Phase 2 chat without duplicate grants',
 }, 40_000);
 
 it.each([
-  { name: 'revocation after a delayed history read exceeds two seconds', pauseMs: 2200, revoke: true },
-  { name: 'revocation during a history read within the freshness budget', pauseMs: 20, revoke: true },
-  { name: 'a history read exceeds the freshness budget without a revocation', pauseMs: 2200, revoke: false },
-])('does not dispatch a running decision: $name', async ({ pauseMs, revoke }) => {
+  { name: 'revocation after a delayed history read exceeds two seconds',
+    pauseMs: 2200, revoke: true, expectedStatus: 503 },
+  { name: 'revocation during a history read within the freshness budget',
+    pauseMs: 20, revoke: true, expectedStatus: 403 },
+  { name: 'a history read exceeds the freshness budget without a revocation',
+    pauseMs: 2200, revoke: false, expectedStatus: 503 },
+])('does not dispatch a running decision: $name', async ({ pauseMs, revoke, expectedStatus }) => {
   const f = await fixture();
   try {
     expect((await f.call()).status).toBe(200); await f.settled();
@@ -268,7 +271,7 @@ it.each([
       const response = await pending;
       if (pauseMs > 2000) expect(performance.now() - started).toBeGreaterThan(2000);
       expect(f.received()).toBe(1);
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(expectedStatus);
       expect(f.actor.state.reservations).toHaveLength(1);
     } finally { resume(); slowHistory.mockRestore(); }
   } finally { await f.close(); }
@@ -434,7 +437,7 @@ it('settles streamed gateway usage exactly, strips identity, rebuilds PostgreSQL
       body: '{"model":"gpt-6.1-sol","model":"gpt-6-luna","input":"OK","max_output_tokens":128,"stream":true}' });
     expect(duplicate.status).toBe(403); expect(f.received()).toBe(1);
     await fga.pause();
-    try { expect((await f.call()).status).toBe(403); expect(f.received()).toBe(1); } finally { await fga.resume(); }
+    try { expect((await f.call()).status).toBe(503); expect(f.received()).toBe(1); } finally { await fga.resume(); }
     const removed = await f.append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'owner' });
     await f.db.transaction(tx => f.auth.handler.handle(removed, tx));
     expect((await f.call()).status).toBe(403); expect(f.received()).toBe(1);
@@ -625,7 +628,7 @@ it('does not duplicate exhaustion after its append succeeds but the acknowledgem
       }
       return result;
     });
-    try { expect((await f.call()).status).toBe(403); } finally { fault.mockRestore(); }
+    try { expect((await f.call()).status).toBe(503); } finally { fault.mockRestore(); }
     expect((await f.call()).status).toBe(402); // Recovery retains the saved spending cap.
     const recovered = new BudgetActor(f.nats.store, 'test'); await recovered.start();
     await expect(recovered.reserve(f.actor.state.reservations[0]!.call, 25)).rejects.toThrow('spending cap');
@@ -983,7 +986,7 @@ it('enforces reviewed tool modes at the real gateway, including the first automa
     expect(f.received()).toBe(1);
     await f.append('assistant-assistant', 'assistant.settings_changed', { assistantId: 'assistant', changedBy: 'alice', changedFields: ['active'], active: true });
     await fga.pause();
-    try { expect((await call('write')).status).toBe(403); } finally { await fga.resume(); }
+    try { expect((await call('write')).status).toBe(503); } finally { await fga.resume(); }
     const events = [];
     for await (const row of f.nats.store.subscribe()) {
       if (row.event.type === 'decision.recorded') events.push(row.event.data);

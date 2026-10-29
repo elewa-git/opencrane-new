@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { foldRoutineHistory } from '@opencrane/authz';
-import { readEventAt, type StoredEvent } from '@opencrane/event-store';
+import { isEventStoreUnavailable, readEventAt, type StoredEvent } from '@opencrane/event-store';
 import { budgetRootAllowanceSetDataSchema, conversationCreatedDataSchema,
   type RoutineState } from '@opencrane/events';
 import type { BudgetActor } from './actor.ts';
@@ -15,6 +15,15 @@ export class RoutineDispatchRefused extends Error {
   constructor() {
     super('Routine dispatch refused');
   }
+}
+
+function refuseRoutineDispatch(error: unknown): never {
+  // Preserve failed reads and the timer's error without claiming a saved refusal.
+  if (isEventStoreUnavailable(error) ||
+      (error instanceof Error && error.message === 'Budget append unavailable')) {
+    throw error;
+  }
+  throw new RoutineDispatchRefused();
 }
 
 function preparation(conversation: StoredEvent[], claims: Identity, silo: string) {
@@ -81,8 +90,8 @@ export async function prepareRoutineDispatch(actor: BudgetActor, claims: Identit
     }
     const deadline = performance.now() + 10_000;
     return await withinBudgetDeadline(load(actor, claims, saved, turn, deadline), deadline);
-  } catch {
-    throw new RoutineDispatchRefused();
+  } catch (error) {
+    refuseRoutineDispatch(error);
   }
 }
 
@@ -122,8 +131,11 @@ async function load(actor: BudgetActor, claims: Identity,
         claim = row;
       }
     }
-    if (position !== latest || performance.now() >= deadline) {
+    if (position !== latest) {
       throw new Error('Routine dispatch refused');
+    }
+    if (performance.now() >= deadline) {
+      throw new Error('Budget append unavailable');
     }
   }
   await readChanges(deadline);
@@ -154,8 +166,8 @@ async function load(actor: BudgetActor, claims: Identity,
   async function confirm(deadline: number) {
     try {
       await withinBudgetDeadline(check(deadline), deadline);
-    } catch {
-      throw new RoutineDispatchRefused();
+    } catch (error) {
+      refuseRoutineDispatch(error);
     }
   }
   return { confirm };

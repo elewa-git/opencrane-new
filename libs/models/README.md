@@ -2,6 +2,12 @@
 
 ## What this is
 
+Gateway permission requests report an unavailable service (HTTP 503) for event-store
+outages and timeouts, failed permission-service checks, unavailable budget writes
+and expired access checks. This includes routine history reads. They grant no permit
+or extra spending. A confirmed access
+refusal stays HTTP 403. A retry must pass the normal access and spending checks again.
+
 Personal account saves and cleanup share a database lock. They wait up to one second
 for it before reading the saved history and checking current access. A failed or expired
 wait refuses the work. This allows brief delays when the server is busy.
@@ -109,7 +115,7 @@ flowchart LR
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks release audit bindings, public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal bearer and verified OAuth choices with current access and owner revocation from HTTP, admin company opt-in, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
   models -->|tests private sign-in, refresh and revocation requests, revokes refresh and access tokens; checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains reply withdrawal after expiry or access loss; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models and checks private callers; native child calls refused| models
-  models -.->|checks receipt status for relays| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
+  models -.->|checks receipts and preserves confirmed refusals during permission outages| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|stages credentials, callback codes and replies, confirms first accounts, starts, joins, claims and sends refresh attempts, saves replacements, retains old access tokens until expiry and removes revoked tokens even after member removal, recovers replies and checks signed accounts, shares a database lock for personal and company saves and personal cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
@@ -692,6 +698,9 @@ Gateway configuration checks do not count as model or tool calls. Their access l
 create no call observations and do not compete with saving a budget reservation.
 Ordinary tool calls load conversation history before checking access. History and
 access share the original two-second request budget and gateway timeout.
+An expired check returns HTTP 503 and grants no permission to send or spend.
+Confirmed access refusals keep HTTP 403 during another permission outage or a failed
+audit save. Missing receipts and inactive assistants still stop the call.
 The admission timing tests wait for cold history and applied model grant receipts
 before measuring a call. They issue a fresh turn token after preparation, with the
 normal two-minute lifetime.

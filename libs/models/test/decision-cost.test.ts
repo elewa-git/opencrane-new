@@ -137,7 +137,7 @@ async function coldProcessEventuallyReadsOnlyTheTail() {
       // Stop history before admission so the timeout cannot move to the final access check.
       const refused = await decide(setup);
       expect(historyPaused).toBe(true);
-      expect(refused.status, refused.text).toBe(403);
+      expect(refused.status, refused.text).toBe(503);
       expect(setup.actor.state.reservations).toHaveLength(0);
       expect(setup.received()).toBe(0);
       resumeHistory.resolve();
@@ -524,7 +524,7 @@ async function readsLongGrantsBeforeAccessCheck(grantEvents: number, oneGrantee:
     const coldHeaders = await freshDecisionHeaders(setup);
     const warmed = await decide(setup, setup.options.decisionUrl, coldHeaders);
     expect(coldReadPaused).toBe(true);
-    expect(warmed.status, warmed.text).toBe(403);
+    expect(warmed.status, warmed.text).toBe(503);
     expect(setup.actor.state.reservations).toHaveLength(0);
     const warmUpDecision = z.object({ requestId: z.string() }).parse(JSON.parse(warmed.text));
     const warmUpDecisions = await history(store, `decision-${warmUpDecision.requestId}`, 'test');

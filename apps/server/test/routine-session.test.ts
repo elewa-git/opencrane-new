@@ -2046,8 +2046,9 @@ function routineRootTests() {
         expect(readDeadline).toBeDefined();
         expect(performance.now()).toBeLessThan(readDeadline! + 1000);
         expect(readFinished).toBe(false);
-        expect(response!.status, await response!.text()).toBe(403);
-        expect(response!.headers.get('x-opencrane-decision')).toBe('refused');
+        expect(response!.status).toBe(503);
+        expect(await response!.json()).toMatchObject({ error: 'Decision service unavailable' });
+        expect(response!.headers.get('x-opencrane-decision')).toBeNull();
         expect(response!.headers.get('x-reservation-id')).toBeNull();
         expect(actor.state.reservations).toEqual([]);
         expect(actor.state.dispatches).toEqual([]);
@@ -2059,6 +2060,41 @@ function routineRootTests() {
       }
     }
     it('refuses a stalled routine history read within its deadline', refusesStalledRoutineHistory);
+
+    async function unavailableRoutineRead(stage: 'preparation' | 'confirmation') {
+      const fixture = await dispatchFixture();
+      const head = nats.store.head.bind(nats.store);
+      let routineReads = 0;
+      let injected = false;
+      async function failedHead(...args: Parameters<typeof head>) {
+        if (args[0] === 'routine-orders') {
+          routineReads += 1;
+          const selectedRead = stage === 'preparation' ? 1 : 2;
+          if (routineReads === selectedRead) {
+            injected = true;
+            return head(args[0], performance.now() - 1);
+          }
+        }
+        return head(...args);
+      }
+      vi.spyOn(nats.store, 'head').mockImplementation(failedHead);
+      try {
+        const response = await fixture.model();
+        expect(injected).toBe(true);
+        expect(response.status).toBe(503);
+        expect(await response.json()).toMatchObject({ error: 'Decision service unavailable' });
+        expect(response.headers.get('x-opencrane-decision')).toBeNull();
+        expect(response.headers.get('x-reservation-id')).toBeNull();
+        expect(response.headers.get('x-opencrane-mcp-permit')).toBeNull();
+        expect(actor.state.reservations).toEqual([]);
+        expect(actor.state.dispatches).toEqual([]);
+        expect(fixture.received()).toBe(0);
+      } finally {
+        await fixture.close();
+      }
+    }
+    it.each(['preparation', 'confirmation'] as const)(
+      'reports an unavailable routine read during %s', unavailableRoutineRead);
 
     async function allowsSustainedUnrelatedActivity() {
       const fixture = await dispatchFixture();

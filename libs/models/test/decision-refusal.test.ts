@@ -1,4 +1,9 @@
 import { expect, it, vi } from 'vitest';
+import { once } from 'node:events';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { setTimeout as delay } from 'node:timers/promises';
+import { grantStream } from '@opencrane/authz';
+import { z } from 'zod';
 import { createEventStore } from '@opencrane/event-store';
 import { createLogger } from '@opencrane/observability';
 import { BudgetActor, history } from '../src/actor.ts';
@@ -87,3 +92,189 @@ async function resumesWithPrivateDiagnostics() {
 }
 it('admits a resumed turn after restart and logs only fixed private refusal reasons',
   resumesWithPrivateDiagnostics, 60_000);
+
+
+type Fixture = Awaited<ReturnType<typeof fixture>>;
+const decisionBody = { model: 'gpt-6-luna', input: 'OK', max_output_tokens: 128, stream: true };
+
+async function requestDecision(setup: Fixture, url = setup.options.decisionUrl) {
+  const request = { method: 'POST', headers: setup.headers, body: JSON.stringify(decisionBody) };
+  const response = await fetch(`${url}/authorize`, request);
+  const body: unknown = await response.json();
+  return { response, body };
+}
+
+function expectUnavailable(result: Awaited<ReturnType<typeof requestDecision>>, setup: Fixture) {
+  expect(result.response.status, JSON.stringify(result.body)).toBe(503);
+  const schema = z.object({ requestId: z.string(), error: z.literal('Decision service unavailable') });
+  const body = schema.strict().parse(result.body);
+  expect(body.requestId).toBe(result.response.headers.get('x-request-id'));
+  expect(result.response.headers.get('x-opencrane-decision')).toBeNull();
+  expect(result.response.headers.get('x-reservation-id')).toBeNull();
+  expect(setup.actor.state.reservations).toHaveLength(0);
+  expect(setup.received()).toBe(0);
+}
+
+const storeFailures = ['history', 'access', 'grants', 'budget'] as const;
+async function reportsStoreUnavailable(stage: typeof storeFailures[number]) {
+  const setup = await fixture();
+  const store = setup.nats.store;
+  const head = store.head.bind(store);
+  const read = store.readStream.bind(store);
+  const append = store.append.bind(store);
+  let injected = false;
+  async function failedHead(...args: Parameters<typeof head>) {
+    const target = stage === 'history' ? undefined : 'member-alice';
+    if (!injected && args[0] === target) {
+      injected = true;
+      return head(args[0], performance.now() - 1);
+    }
+    return head(...args);
+  }
+  async function* failedGrantRead(...args: Parameters<typeof read>) {
+    if (!injected && args[0] === grantStream('model', 'gpt-6-luna')) {
+      injected = true;
+      yield* read(args[0], args[1], performance.now() - 1, args[3]);
+      return;
+    }
+    yield* read(...args);
+  }
+  async function failedReservation(command: Parameters<typeof append>[0]) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'budget.reserved') {
+      injected = true;
+      const outcome = { kind: 'transport_failure' as const, possiblyPublished: false };
+      return { status: 'unavailable' as const, cause: new Error('Scripted budget transport outage'), outcome };
+    }
+    return append(command);
+  }
+  try {
+    await setup.stopDispatch();
+    if (stage === 'grants') {
+      vi.spyOn(store, 'readStream').mockImplementation(failedGrantRead);
+    } else if (stage === 'budget') {
+      vi.spyOn(store, 'append').mockImplementation(failedReservation);
+    } else {
+      vi.spyOn(store, 'head').mockImplementation(failedHead);
+    }
+    const result = await requestDecision(setup);
+    expect(injected).toBe(true);
+    expectUnavailable(result, setup);
+    vi.restoreAllMocks();
+    const recovered = await requestDecision(setup);
+    expect(recovered.response.status, JSON.stringify(recovered.body)).toBe(200);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+  } finally {
+    vi.restoreAllMocks();
+    await setup.close();
+  }
+}
+it.each(storeFailures)('reports unavailable when the %s dependency fails', reportsStoreUnavailable);
+
+const permissionFailures = ['member', 'applied', 'use', 'slow_member'] as const;
+async function reportsPermissionsUnavailable(relation: typeof permissionFailures[number]) {
+  const setup = await fixture();
+  let failing = true;
+  let injected = false;
+  async function forward(req: IncomingMessage, res: ServerResponse) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+      const bytes: unknown = chunk;
+      if (!Buffer.isBuffer(bytes)) throw new Error('Invalid test proxy request');
+      chunks.push(bytes);
+    }
+    const bytes = Buffer.concat(chunks);
+    const body = bytes.toString('utf8');
+    const check = z.object({ tuple_key: z.object({ relation: z.string() }) }).parse(JSON.parse(body));
+    const target = relation === 'slow_member' ? 'member' : relation;
+    if (failing && check.tuple_key.relation === target) {
+      injected = true;
+      if (relation === 'slow_member') await delay(1500);
+      res.writeHead(503);
+      res.end('{"error":"Private permission backend canary"}');
+      return;
+    }
+    const request = { method: 'POST', headers: { 'content-type': 'application/json' }, body };
+    const reply = await fetch(`${setup.binding.apiUrl}${req.url}`, request);
+    res.writeHead(reply.status, { 'content-type': 'application/json' });
+    res.end(await reply.text());
+  }
+  function receive(req: IncomingMessage, res: ServerResponse) {
+    function failed() {
+      res.writeHead(503);
+      res.end();
+    }
+    void forward(req, res).catch(failed);
+  }
+  const proxy = createServer(receive);
+  proxy.listen(0, '127.0.0.1');
+  await once(proxy, 'listening');
+  const address = proxy.address();
+  if (!address || typeof address === 'string') throw new Error('No test permission proxy');
+  const binding = { ...setup.binding, apiUrl: `http://127.0.0.1:${address.port}` };
+  const decision = await startDecision(setup.actor, setup.identity, binding);
+  try {
+    await setup.stopDispatch();
+    const result = await requestDecision(setup, decision.url);
+    expect(injected).toBe(true);
+    expectUnavailable(result, setup);
+    failing = false;
+    const recovered = await requestDecision(setup, decision.url);
+    expect(recovered.response.status, JSON.stringify(recovered.body)).toBe(200);
+    const before = structuredClone(setup.actor.state.reservations);
+    const removed = await setup.append('member-alice', 'member.removed',
+      { memberId: 'alice', removedBy: 'alice' });
+    await setup.auth.handler.handle(removed, setup.db);
+    const refused = await requestDecision(setup, decision.url);
+    expect(refused.response.status).toBe(403);
+    expect(refused.response.headers.get('x-opencrane-decision')).toBe('refused');
+    expect(setup.actor.state.reservations).toEqual(before);
+    expect(setup.received()).toBe(0);
+  } finally {
+    await decision.close();
+    proxy.closeAllConnections();
+    const closed = once(proxy, 'close');
+    proxy.close();
+    await closed;
+    await setup.close();
+  }
+}
+it.each(permissionFailures)('reports unavailable when the %s permission service check fails',
+  reportsPermissionsUnavailable);
+
+async function reportsUncertainBudgetWriter() {
+  const setup = await fixture();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  let failedWrites = 0;
+  async function loseReservationReply(command: Parameters<typeof append>[0]) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'budget.reserved') {
+      failedWrites++;
+      const outcome = { kind: 'transport_failure' as const, possiblyPublished: true };
+      return { status: 'unavailable' as const,
+        cause: new Error('Scripted lost reservation reply'), outcome };
+    }
+    return append(command);
+  }
+  try {
+    await setup.stopDispatch();
+    vi.spyOn(setup.nats.store, 'append').mockImplementation(loseReservationReply);
+    const lostReply = await requestDecision(setup);
+    expectUnavailable(lostReply, setup);
+    expect(failedWrites).toBe(1);
+    vi.restoreAllMocks();
+    // Keep the uncertain write unresolved. A retry cannot assume the money is free.
+    const retry = await requestDecision(setup);
+    expectUnavailable(retry, setup);
+    const budget = await history(setup.nats.store, 'budget-test', 'test');
+    function isReservation(row: typeof budget[number]) {
+      return row.event.type === 'budget.reserved';
+    }
+    expect(budget.filter(isReservation)).toHaveLength(0);
+  } finally {
+    vi.restoreAllMocks();
+    await setup.close();
+  }
+}
+it('reports unavailable while the budget writer cannot resolve an earlier append',
+  reportsUncertainBudgetWriter);

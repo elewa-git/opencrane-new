@@ -272,9 +272,9 @@ async function refusesExpiredProviderHistory() {
   const started = performance.now();
   try {
     const response = await managedDecision(setup);
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({
-      error: 'Request refused or decision service unavailable',
+      error: 'Decision service unavailable',
     });
     expect(reading).toBe(true);
     expect(performance.now() - started).toBeGreaterThanOrEqual(10_000);

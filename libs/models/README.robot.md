@@ -46,6 +46,56 @@ Both refresh references must recover the same receipt, and claim copies and rest
 must remain unable to send. The checks still require one saved start or claim, the
 same private copies and no further provider requests. No deadline is extended.
 
+## Decision dependency failures
+
+The gateway authorisation endpoint returns HTTP 503 and the fixed message
+`Decision service unavailable` for recognised NATS outages and timeouts,
+`Current authority unavailable`, `Authority snapshot expired`, and unavailable
+budget appends or writers. The response includes the request id but no
+`x-opencrane-decision: refused`, reservation or tool permit header.
+An audit failure returns HTTP 503 unless access or routine execution has already
+been refused. Confirmed refusals keep HTTP 403 even if saving the deny audit fails.
+No deadline is extended,
+failed call is sent, or uncertain hold is released by this response change.
+
+Membership and receipt checks preserve OpenFGA's unavailable status. A confirmed
+missing receipt still stops the request, even when another receipt check fails first
+or finishes in another batch. Inactive assistants are refused before receipt checks.
+Confirmed membership or resource denials remain HTTP 403. Budget exhaustion remains HTTP 402. The same request can succeed
+after recovery only by passing the normal access and spending checks again.
+
+`decision-refusal.test.ts` injects failures at event-store reads and budget writes,
+and forwards real OpenFGA traffic through a local proxy that can return errors or
+delay selected permission checks. It checks 503, absent permits, unchanged spending,
+recovery to 200 and a saved member removal returning 403. Cold-history tests now
+require 503 when their deliberately paused read expires; their access, money and
+read-volume assertions remain in place. The authority suites are unchanged.
+
+`decision-precedence.test.ts` keeps the permission outage active while testing
+missing team-removal receipts, both response orders and a later receipt batch,
+silo mismatch, inactive assistants and mixed permission denial/outage results.
+It also checks that a member removal stays refused when saving the deny audit fails.
+The budget retry test leaves an uncertain append unresolved, and the MCP test
+requires no permit when the access dependency is unavailable.
+
+The shared history/access request timeout returns exactly HTTP 503. The design in
+`plan.md` requires an unreadable context to stop the call; it does not prescribe 403.
+The engineering standard distinguishes unavailable dependencies from rejected input.
+A timeout establishes no access denial, so it reports unavailable. Both model and MCP
+timeout tests retain their no-reservation and no-send assertions. History still loads
+before the short access check, and neither deadline nor watched stream changes.
+
+The gateway's delayed-grant tests also require 503 when their 2,200 ms pause prevents
+the grant read from completing before the original deadline. This includes a revocation
+saved during that pause: the decision has not read it before timing out. A revocation
+read within the deadline still requires 403. Both cases retain the exact send and
+reservation counts. The server's IAM-outage integration case requires 503 at decision
+admission; its later dispatch refusal and saved no-send evidence remain unchanged.
+
+The managed provider-history timeout also requires 503. Its ten-second read limit
+expires before access is checked, so it establishes no refusal. The test keeps the
+exact time limits, zero reservations, zero reserved and spent cents, and no provider call.
+
 ## Local OAuth revocation (Part of #50)
 
 PR 11a is split at the saved local revocation to stay below about 600 changed lines.
@@ -530,7 +580,7 @@ It checks history plus access exceeding two seconds, and a late decision after t
 gateway has timed out. The latter must record a refusal and leave no reservation or
 uncertain hold. `apps/server/test/integration-access-gateway.test.ts` also advances
 the monotonic clock by 2,100 ms after history, or by 1,900 ms after history and
-200 ms during access. Both must return 403 with no remote call. Its ordinary call
+200 ms during access. Both must return 503 with no remote call. Its ordinary call
 still requires 200, one remote call and the same request bytes. All cases require
 full history to load before access reads.
 
@@ -4544,8 +4594,9 @@ budget root and recorded computer turn. Routine history has a separate ten-secon
 limit before access starts. `authorityFence` watches no routine or conversation
 stream. Later routine checks read only new events and compare exact
 positions separately before model admission and final MCP send, including free calls.
-Saved Stop, Pause or Retire refuses without `applyRoutineStop`. Missing, mismatched
-or unavailable evidence refuses too. Ordinary chats keep their existing deadlines.
+Saved Stop, Pause or Retire refuses without `applyRoutineStop`. Missing or mismatched
+evidence refuses too. Event-store outages and expired routine read limits return 503
+without a refusal header or permit. Ordinary chats keep their existing deadlines.
 `RoutineDispatchRefused` preserves HTTP 403, the `x-opencrane-decision: refused`
 header and fixed `Routine dispatch refused` message if a later deny-audit append fails
 or an earlier audit was already attempted. Other audit failures keep their existing handling.
@@ -4559,7 +4610,8 @@ Tests extend the real internal routine admissions in `routine-session.test.ts`, 
 use the model decision endpoint and a recording MCP server. They check delayed cleanup,
 prohibition during admission and before send, altered evidence and consumed permits.
 They also fail the deny audit after a saved owner Stop for both model and free-tool
-requests, stall routine history beyond its deadline, and keep unrelated routine,
+requests, require 503 for stalled history and failed preparation or confirmation reads,
+and keep unrelated routine,
 conversation and computer-thread activity arriving throughout dispatch.
 Full root suite and fresh-install/live qualification: NOT RUN.
 

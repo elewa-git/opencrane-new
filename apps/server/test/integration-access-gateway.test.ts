@@ -250,11 +250,11 @@ async function allowed(context: Context) {
   expect(context.setup.received()).toBe(0);
 }
 
-async function denied(context: Context) {
+async function denied(context: Context, expectedStatus = 403) {
   const before = context.remote.received.length;
   const connections = context.remote.connections();
   const result = await context.call();
-  expect(result.status).toBe(403);
+  expect(result.status).toBe(expectedStatus);
   expect(result.evidence).toHaveLength(1);
   const admission = { outcome: 'deny' };
   expect(result.evidence[0]!.event.data).toMatchObject(admission);
@@ -412,7 +412,7 @@ async function refusesIamOutage() {
   try {
     const pauseIam = fga.pause.bind(fga);
     await heldCall(context, pauseIam);
-    await denied(context);
+    await denied(context, 503);
   } finally {
     await fga.resume();
   }
@@ -809,7 +809,7 @@ async function boundsToolHistory(historyMs: number, accessMs: number, expectedAl
     if (expectedAllowed) {
       await allowed(context);
     } else {
-      await denied(context);
+      await denied(context, 503);
     }
     expect(elapsed).toBe(historyMs + accessMs);
     expect(historyAccessStates).toEqual([false]);

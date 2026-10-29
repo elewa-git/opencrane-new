@@ -3261,3 +3261,40 @@ async function verifyCatalogueRecoveryReplay(setup: Fixture, received = 1) {
   expect(await setup.nats.store.head()).toBe(position);
   expect(setup.received()).toBe(received);
 }
+
+async function withholdsPermitDuringAccessOutage() {
+  const setup = await fixture();
+  const head = setup.nats.store.head.bind(setup.nats.store);
+  let injected = false;
+  async function unavailableMember(...args: Parameters<typeof head>) {
+    if (args[0] === 'member-alice') {
+      injected = true;
+      return head(args[0], performance.now() - 1);
+    }
+    return head(...args);
+  }
+  try {
+    const headers = await prepare(setup);
+    await setup.stopDispatch();
+    vi.spyOn(setup.nats.store, 'head').mockImplementation(unavailableMember);
+    const request = { method: 'POST', headers, body };
+    const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+      request);
+    expect(injected).toBe(true);
+    expect(response.status).toBe(503);
+    const requestId: unknown = expect.any(String);
+    expect(await response.json()).toEqual({
+      requestId, error: 'Decision service unavailable',
+    });
+    expect(response.headers.get('x-opencrane-decision')).toBeNull();
+    expect(response.headers.get('x-opencrane-mcp-permit')).toBeNull();
+    expect(response.headers.get('x-reservation-id')).toBeNull();
+    expect(setup.actor.state.reservations).toHaveLength(0);
+    expect(setup.received()).toBe(0);
+  } finally {
+    vi.restoreAllMocks();
+    await setup.close();
+  }
+}
+it('withholds the MCP permit when current access cannot be checked',
+  withholdsPermitDuringAccessOutage, 40_000);
