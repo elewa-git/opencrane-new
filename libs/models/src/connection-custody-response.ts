@@ -24,3 +24,11 @@ export async function readResponse(response: Response, maximumBytes = 32768): Pr
     await reader.cancel();
   }
 }
+
+export function decodeToken(encoded: string) {
+  const token = Buffer.from(encoded, 'base64');
+  if (token.length === 0 || token.length > 8192 || token.toString('base64') !== encoded) {
+    return undefined;
+  }
+  return token;
+}

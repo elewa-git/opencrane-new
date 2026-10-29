@@ -131,7 +131,7 @@ The steps below govern normal tool calls. Discovery and identity-check requests 
 2. Check current requester ∩ assistant rights, member/team/payer/grant authority, reviewed publication/policy revision, tool mode and scope, explicit selected profile/generation, company opt-in if applicable, and budget hard stops.
 3. Require `costCents === 0` for this scope. Secure any applicable reservation through its existing single-append command before consuming approval, then preserve the recorded allowance/hard stop; do not invent a paid-tool tariff or a dummy charge. Money is always integer euro cents.
 4. For Confirm, consume a single-use approval bound to requester, turn, tool/arguments, policy revision and exact profile/generation/account owner. Auto skips approval only when its current mode allows it.
-5. Confirm `decision.recorded`, read exact custody and prepare the one-request lease, then confirm `credential.released` with all required identities before any upstream request bytes leave. Audit or secret-store failure denies forwarding.
+5. Confirm `decision.recorded` and current permission, then confirm `credential.released` with all required identities before reading exact custody and preparing the one-request lease. Audit failure means no material read. Audit or secret-store failure denies forwarding.
 6. At final send, recheck the small watched authority positions plus exact profile/selection/policy revision; synchronise generation invalidation with this dispatch. Burn the permit/lease once, overwrite credential headers and forward exactly one request.
 7. Record gateway dispatch/effect evidence independently. A release proves a credential was authorised, not that an external effect succeeded. Unknown dispatch remains unknown; do not replay a lease or resend the tool call.
 
@@ -319,3 +319,17 @@ Record source-ready versus fresh-live results explicitly. A fixture-only pass is
 | Which dependencies/licences? | Node standard library and installed packages first; narrowly reuse OC1 under its existing OSI licence. Check any newly introduced runtime component and bundled notices before adding it; no source-available runtime services. No SDK is assumed necessary. |
 
 No tools in this scope charge money: record zero integer cents and respect current allowances/hard stops. Do not call paid upstream APIs or models for qualification. Do not introduce a generic OAuth service, secret platform, SQL business engine or startup-only deployment in these issues.
+
+## 7. Left for later
+
+The orchestrator decision of 29 October 2026 changes section 2, step 5 from
+decision → custody → release audit to decision → release audit → custody → one
+guarded forward. The private broker saves the audit before reading any secret.
+A custody failure can therefore leave a confirmed release audit without a material
+read or send. That receipt confirms authorisation only; recovery cannot resend.
+Preparation errors wait behind one permission decision, and an established typed
+permission refusal survives later failures.
+
+Gateway destination and header checks, production callers and fresh-install
+provider qualification remain later work. Public tool routes stay closed.
+The private callback tests do not qualify a guarded upstream forward.

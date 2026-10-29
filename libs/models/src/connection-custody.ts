@@ -3,7 +3,7 @@
 // Adapt the OC1 Secret and HMAC checks. Keep their notice in connection-custody.NOTICE.
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
-import { readResponse } from './connection-custody-response.ts';
+import { readResponse, decodeToken } from './connection-custody-response.ts';
 import { connectionStageJournal } from './connection-stage-journal.ts';
 
 const identifier = z.string().min(1).max(200);
@@ -258,22 +258,33 @@ class ConnectionCustody {
   async readAttempt(input: CustodyStage, expected: ConnectionIdentity) {
     return this.readMaterial(input, expected, 'attempt');
   }
+  /** Read access material only under the broker's profile lock. */
+  async readAccessMaterial(input: ConnectionStage, expected: ConnectionIdentity) {
+    if (input.purpose !== 'personal') {
+      return undefined;
+    }
+    return this.readOAuthToken(input, expected, 'access_token');
+  }
   /** Check private refresh availability without returning any material to the command. */
   async hasRefreshMaterial(input: CustodyStage, expected: ConnectionIdentity) {
     return await this.readRefreshMaterial(input, expected) !== undefined;
   }
   /** Read an exact generation only for the private refresh worker. */
   async readRefreshMaterial(input: CustodyStage, expected: ConnectionIdentity) {
+    return this.readOAuthToken(input, expected, 'refresh_token');
+  }
+  private async readOAuthToken(input: CustodyStage, expected: ConnectionIdentity,
+    field: 'access_token' | 'refresh_token') {
     try {
       if (input.attemptId) {
         return undefined;
       }
       const contents = await this.readMaterial(input, expected, 'active');
-      const schema = z.object({ refresh_token: z.string().regex(/^[\x21-\x7e]{1,4096}$/u) });
+      const schema = z.object({ [field]: z.string().regex(/^[\x21-\x7e]{1,4096}$/u) });
       if (contents === undefined) {
         return undefined;
       }
-      return schema.parse(JSON.parse(contents)).refresh_token;
+      return schema.parse(JSON.parse(contents))[field];
     } catch {
       return undefined;
     }
@@ -512,13 +523,6 @@ function equalDigest(actual: string, expected: string) {
   return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
 }
 
-function decodeToken(encoded: string) {
-  const token = Buffer.from(encoded, 'base64');
-  if (token.length === 0 || token.length > 8192 || token.toString('base64') !== encoded) {
-    return undefined;
-  }
-  return token;
-}
 function sameIdentity(actual: ConnectionIdentity, expected: ConnectionIdentity) {
   return actual.reference === expected.reference && actual.uid === expected.uid
     && actual.resourceVersion === expected.resourceVersion;

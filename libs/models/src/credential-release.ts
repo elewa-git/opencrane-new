@@ -9,9 +9,11 @@ import { foldConnection } from './bearer-connections.ts';
 import { foldConnectionSelection } from './connection-selection.ts';
 import { connectionServer } from './connection-server.ts';
 import { MemberAccessRefused } from './member-authority.ts';
+import { selectedOAuth, type OAuthConfigurationLoader } from './oauth-selection.ts';
 
 type Release = z.infer<typeof toolCredentialReleaseSchema>;
 type Access = { deadline: number; checkAccess: () => Promise<void> };
+type Activation = NonNullable<ReturnType<typeof foldConnection>['data']>['activation'];
 
 function digest(value: unknown) {
   const hash = createHash('sha256');
@@ -48,7 +50,9 @@ function requireDecision(rows: StoredEvent[], decisionId: string, release: Relea
   }
   return event;
 }
-async function loadEvidence(store: EventStore, silo: string, decisionId: string, release: Release) {
+export async function credentialReleaseEvidence(store: EventStore, silo: string,
+  decisionId: string, release: Release, loadConfiguration?: OAuthConfigurationLoader) {
+  requireLifetime(release);
   const deadline = performance.now() + 10_000;
   const positions = new Map<string, number>();
   async function read(subject: string) {
@@ -68,25 +72,37 @@ async function loadEvidence(store: EventStore, silo: string, decisionId: string,
   positions.set(control, controlPosition);
   const serverRows = await read(`mcp-${release.serverId}`);
   const server = connectionServer(serverRows, release.connectionId);
-  requireSelection(selection, controlPosition, release);
-  requireProfile(profile, server, release);
+  let oauth: Awaited<ReturnType<typeof selectedOAuth>> = null;
+  if (loadConfiguration && selection.selected?.action === 'select') {
+    oauth = await selectedOAuth(profileRows, serverRows, selection.selected,
+      loadConfiguration, release.toolName);
+    if (!oauth || Date.now() >= oauth.expiresAt) {
+      refuse();
+    }
+  }
+  requireSelection(selection, controlPosition, release, oauth?.profileRevision);
+  requireProfile(profile, server, release, oauth !== null);
   const receipts = await read(`credential-${release.requestId}`);
-  return { decision, positions, receipts, expiresAt: server.expiresAt };
+  return { decision, positions, receipts, profile: profile.data!, oauth,
+    expiresAt: Math.min(server.expiresAt, oauth?.expiresAt ?? Infinity) };
 }
 function requireSelection(selection: ReturnType<typeof foldConnectionSelection>,
-  controlPosition: number, release: Release) {
+  controlPosition: number, release: Release, oauthRevision?: number) {
   const selected = selection.selected;
   if (!selected || selected.action !== 'select' || selected.userId !== release.userId ||
       selected.serverId !== release.serverId || selected.connectionId !== release.connectionId ||
       selected.profileId !== release.profileId || selection.sequence !== release.selectionRevision ||
-      selected.profileRevision !== release.profileRevision || controlPosition !== 0) {
+      (oauthRevision ?? selected.profileRevision) !== release.profileRevision || controlPosition !== 0) {
     refuse();
   }
 }
 function requireProfile(profile: ReturnType<typeof foldConnection>,
-  server: ReturnType<typeof connectionServer>, release: Release) {
+  server: ReturnType<typeof connectionServer>, release: Release, verified: boolean) {
   const saved = profile.data;
-  if (!saved || profile.status !== 'saved_unverified' ||
+  if (!verified && profile.status !== 'saved_unverified') {
+    refuse();
+  }
+  if (!saved ||
       profile.sequence !== release.profileRevision || saved.userId !== release.ownerId ||
       saved.serverId !== release.serverId || saved.profile !== release.profileId ||
       saved.activation.connectionId !== release.connectionId ||
@@ -96,11 +112,11 @@ function requireProfile(profile: ReturnType<typeof foldConnection>,
     refuse();
   }
   // Bind the account and granted scopes to saved metadata, never to caller labels.
-  const account = 'account' in saved.activation ? saved.activation.account : null;
-  const scopes = account?.scopes ?? [];
-  requireAccountBinding(account, scopes, release);
+  requireSavedAccount(saved.activation, release);
 }
-function requireAccountBinding(account: unknown, scopes: string[], release: Release) {
+function requireSavedAccount(activation: Activation, release: Release) {
+  const account = 'account' in activation ? activation.account : null;
+  const scopes = account?.scopes ?? [];
   if (release.accountDigest !== digest(account) || release.scopeDigest !== digest(scopes)) {
     refuse();
   }
@@ -126,7 +142,8 @@ function confirmed(rows: StoredEvent[], expected: EventEnvelope) {
 /** Audit an already authorised call. The trusted caller supplies live dispatch checks. */
 export async function confirmCredentialRelease(store: EventStore, silo: string,
   requesterId: string, decisionId: string, raw: unknown,
-  prepareAccess: () => Promise<Access>, action: 'append' | 'recover' = 'append') {
+  prepareAccess: () => Promise<Access>, action: 'append' | 'recover' | 'claim' = 'append',
+  loadConfiguration?: OAuthConfigurationLoader) {
   let refusal: MemberAccessRefused | undefined;
   async function prepare() {
     const access = await prepareAccess();
@@ -144,7 +161,8 @@ export async function confirmCredentialRelease(store: EventStore, silo: string,
     return { deadline: access.deadline, checkAccess };
   }
   try {
-    const receipt = await confirm(store, silo, requesterId, decisionId, raw, prepare, action);
+    const receipt = await confirm(store, silo, requesterId, decisionId, raw, prepare, action,
+      loadConfiguration);
     if (refusal) {
       throw refusal;
     }
@@ -161,13 +179,14 @@ export async function confirmCredentialRelease(store: EventStore, silo: string,
   }
 }
 async function prepareEvidence(store: EventStore, silo: string, requesterId: string,
-  decisionId: string, raw: unknown) {
+  decisionId: string, raw: unknown, loadConfiguration?: OAuthConfigurationLoader) {
   try {
     const release = toolCredentialReleaseSchema.parse(raw);
     if (release.userId !== requesterId || release.ownerId !== requesterId) {
       refuse();
     }
-    const evidence = await loadEvidence(store, silo, decisionId, release);
+    const evidence = await credentialReleaseEvidence(store, silo, decisionId, release,
+      loadConfiguration);
     return { release, evidence };
   } catch {
     return null;
@@ -175,9 +194,9 @@ async function prepareEvidence(store: EventStore, silo: string, requesterId: str
 }
 async function confirm(store: EventStore, silo: string, requesterId: string,
   decisionId: string, raw: unknown, prepareAccess: () => Promise<Access>,
-  action: 'append' | 'recover') {
+  action: 'append' | 'recover' | 'claim', loadConfiguration?: OAuthConfigurationLoader) {
   // Finish validation and history before the caller starts its two-second access check.
-  const prepared = await prepareEvidence(store, silo, requesterId, decisionId, raw);
+  const prepared = await prepareEvidence(store, silo, requesterId, decisionId, raw, loadConfiguration);
   const access = await prepareAccess();
   // Report the caller's permission refusal before any validation or saved-evidence failure.
   if (!prepared) {
@@ -191,6 +210,9 @@ async function confirm(store: EventStore, silo: string, requesterId: string,
   }
   async function checkAccess() {
     await access.checkAccess();
+    if (evidence.oauth && !await evidence.oauth.configurationCurrent()) {
+      refuse();
+    }
     for (const [subject, position] of evidence.positions) {
       if (await store.head(subject, deadline) !== position) {
         refuse();
@@ -205,6 +227,9 @@ async function confirm(store: EventStore, silo: string, requesterId: string,
   const event = auditEvent(silo, release, evidence.decision);
   await checkAccess();
   if (evidence.receipts.length !== 0) {
+    if (action === 'claim') {
+      refuse();
+    }
     return confirmed(evidence.receipts, event);
   }
   if (action === 'recover') {
@@ -215,6 +240,9 @@ async function confirm(store: EventStore, silo: string, requesterId: string,
   const result = await store.append(command);
   if (result.status === 'unavailable') {
     throw result.cause;
+  }
+  if (action === 'claim' && result.outcome?.kind !== 'appended') {
+    refuse();
   }
   // An ambiguous append returns no receipt. A later invocation reads the original id.
   const rows = await history(store, event.subject, silo, deadline);
