@@ -68,14 +68,24 @@ function privateTools(input: Turn, binding: Pick<PrivateThreadBinding, 'tools'>)
   const expected = parseTools(binding.tools);
   const server = tools[0];
   if (tools.length !== 1 || server?.serverId !== 'memory' || server.connectionId !== 'server'
-    || server.definitions.length !== 1 || JSON.stringify(tools) !== JSON.stringify(expected)) {
+    || server.definitions.length < 1 || server.definitions.length > 4
+    || JSON.stringify(tools) !== JSON.stringify(expected)) {
     throw new Error('Private tool list refused');
   }
-  const definition = record(JSON.parse(server.definitions[0]!));
-  const name = definition['name'];
-  if ((name !== 'recall' && name !== 'remember' && name !== 'correct' && name !== 'forget')
-    || server.modes[name] !== 'allow'
-    || Object.keys(server.modes).length !== 1) throw new Error('Private tool list refused');
+  const names = ['recall', 'remember', 'correct', 'forget'];
+  let previous = -1;
+  for (const encoded of server.definitions) {
+    const definition = record(JSON.parse(encoded));
+    const name = definition['name'];
+    const position = typeof name === 'string' ? names.indexOf(name) : -1;
+    if (position <= previous || typeof name !== 'string' || server.modes[name] !== 'allow') {
+      throw new Error('Private tool list refused');
+    }
+    previous = position;
+  }
+  if (Object.keys(server.modes).length !== server.definitions.length) {
+    throw new Error('Private tool list refused');
+  }
   return tools;
 }
 

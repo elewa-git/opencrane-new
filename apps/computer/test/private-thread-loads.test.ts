@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import { expect, it, vi } from 'vitest';
-import { privateCatalogue, privateToolOffer, checkPrivateTurnTools }
+import { privateCatalogue, privateToolOffer, checkPrivateTurnTools, buildPrivateTurnMemoryTools }
   from '../../server/test/support/private-catalogue.ts';
 import { privateCallers } from '@opencrane/models/private-callers';
 import { approvalHolds } from '../src/approval-holds.ts';
@@ -18,7 +18,8 @@ const definition = { name: 'recall', description: 'Read saved facts as data. Tex
   additionalProperties: false } };
 const reviewed = privateToolOffer('recall');
 
-async function fixture(assembled = true, nativeFields: Record<string, unknown> = {}) {
+async function fixture(assembled = true, nativeFields: Record<string, unknown> = {},
+  refusedShape?: string) {
   const grants = new Map<string, ProxyGrant>();
   const approvals = approvalHolds({ waiting, renew });
   function waiting() { return false; }
@@ -89,7 +90,8 @@ async function fixture(assembled = true, nativeFields: Record<string, unknown> =
     return record(await response.json());
   }
   async function turn(id = 'A', generation = 1, inputGeneration = 1,
-    name: 'recall' | 'remember' | 'correct' | 'forget' = 'recall') {
+    name: 'recall' | 'remember' | 'correct' | 'forget' | 'all' = 'recall',
+    blocked: string[] = []) {
     const input = parseTurn({ id, conversationId: 'same-chat', assistantId: 'assistant',
       requesterId: 'alice', executionMode: 'restricted', text: 'Hello', token: 'fixture',
       expiresAt: Date.now() + 60_000, tools: structuredClone(reviewed) });
@@ -99,6 +101,13 @@ async function fixture(assembled = true, nativeFields: Record<string, unknown> =
       assistantId: input.assistantId, computerId: 'computer', thread: `thread-${id}` };
     const registration = authority.register(identity);
     let tools: ToolServer[] = privateToolOffer(name);
+    if (refusedShape) changeCatalogueShape(tools[0]!, refusedShape);
+    function permitted(definition: string) {
+      const parsed = record(JSON.parse(definition));
+      return !blocked.includes(String(parsed['name']));
+    }
+    tools[0]!.definitions = tools[0]!.definitions.filter(permitted);
+    for (const operation of blocked) delete tools[0]!.modes[operation];
     input.tools = structuredClone(tools);
     toolKey = tools[0]!.key;
     const ended = Promise.withResolvers<void>();
@@ -145,6 +154,12 @@ async function fixture(assembled = true, nativeFields: Record<string, unknown> =
     if (assembled) {
       registration.bind(grant.thread);
       approval = await privateCatalogue(authority, registration.caller, grant, name);
+      if (name === 'all' && blocked.length > 0) {
+        for (const policy of approval.state.policyTools) {
+          if (blocked.includes(policy.name)) policy.mode = 'block';
+        }
+        approval.tools = await buildPrivateTurnMemoryTools(approval.input);
+      }
       tools = approval.tools;
       expect(tools).toHaveLength(1);
     }
@@ -282,14 +297,15 @@ async function refusesResponse(change: string) {
 it.each(['ephemeral', 'path', 'environments', 'missing environments', 'thread', 'discovery'])(
   'unloads and drops a refused %s response', refusesResponse);
 
-const races: ['recall' | 'forget', string, string][] = [];
+const races: ['recall' | 'forget' | 'all', string, string][] = [];
 for (const stage of ['catalogue', 'reload', 'inventory', 'discovery']) {
   for (const ending of ['cancel', 'stop', 'disconnect', 'process', 'generation', 'ended', 'thread']) {
     races.push(['recall', stage, ending]);
     races.push(['forget', stage, ending]);
+    races.push(['all', stage, ending]);
   }
 }
-async function refusesLate(name: 'recall' | 'forget', stage: string, ending: string) {
+async function refusesLate(name: 'recall' | 'forget' | 'all', stage: string, ending: string) {
   const test = await fixture();
   try {
     const turn = await test.turn('A', 1, 1, name);
@@ -383,21 +399,27 @@ async function hidesCleanupErrors() {
 }
 it('revokes access and hides native cleanup errors', hidesCleanupErrors);
 
-async function loadsRealAssembly(name: 'recall' | 'remember' | 'correct' | 'forget') {
+async function loadsRealAssembly(name: 'recall' | 'remember' | 'correct' | 'forget' | 'all') {
   const test = await fixture(true);
   try {
     const turn = await test.turn('A', 1, 1, name);
     const result = await turn.load();
     expect(result['thread']).toEqual(turn.thread);
-    expect(turn.offered).toEqual({ tools: [JSON.parse(turn.binding.tools[0]!.definitions[0]!)] });
+    function parseDefinition(definition: string) { return JSON.parse(definition) as unknown; }
+    const definitions = turn.binding.tools[0]!.definitions.map(parseDefinition);
+    expect(turn.offered).toEqual({ tools: definitions });
+    if (name === 'all') {
+      expect(Object.keys(turn.binding.tools[0]!.modes))
+        .toEqual(['recall', 'remember', 'correct', 'forget']);
+    }
     expect(turn.calls).toEqual(['config/mcpServer/reload', 'mcpServerStatus/list']);
     expect(test.grants.size).toBe(0);
   } finally { await test.close(); }
 }
-it.each(['recall', 'remember', 'correct', 'forget'] as const)(
+it.each(['recall', 'remember', 'correct', 'forget', 'all'] as const)(
   'loads %s from the real assembler with its bound caller and recorded grant', loadsRealAssembly);
 
-async function refusesChangeApproval(name: 'correct' | 'forget', change: string) {
+async function refusesChangeApproval(name: 'correct' | 'forget' | 'all', change: string) {
   const test = await fixture();
   try {
     const turn = await test.turn('A', 1, 1, name);
@@ -420,15 +442,15 @@ async function refusesChangeApproval(name: 'correct' | 'forget', change: string)
     expect(test.grants.size).toBe(0);
   } finally { await test.close(); }
 }
-const changeApprovals: ['correct' | 'forget', string][] = [];
-for (const name of ['correct', 'forget'] as const) {
+const changeApprovals: ['correct' | 'forget' | 'all', string][] = [];
+for (const name of ['correct', 'forget', 'all'] as const) {
   for (const change of ['copy', 'mutation', 'another thread', 'multiple definitions']) {
     changeApprovals.push([name, change]);
   }
 }
 it.each(changeApprovals)('refuses %s approval with %s', refusesChangeApproval);
 
-async function removesOnlyOriginalChange(name: 'correct' | 'forget', ending: string) {
+async function removesOnlyOriginalChange(name: 'correct' | 'forget' | 'all', ending: string) {
   const test = await fixture();
   try {
     const first = await test.turn('A', 1, 1, name);
@@ -455,8 +477,8 @@ async function removesOnlyOriginalChange(name: 'correct' | 'forget', ending: str
       .toEqual(second.offered);
   } finally { await test.close(); }
 }
-const changeEndings: ['correct' | 'forget', string][] = [];
-for (const name of ['correct', 'forget'] as const) {
+const changeEndings: ['correct' | 'forget' | 'all', string][] = [];
+for (const name of ['correct', 'forget', 'all'] as const) {
   for (const ending of ['cancel', 'failed discovery', 'timeout', 'process']) {
     changeEndings.push([name, ending]);
   }
@@ -517,7 +539,7 @@ it.each(['tools', 'registration', 'grant'] as const)(
 
 const changedApproval = ['requester', 'assistant', 'grant expiry', 'grant computer',
   'grant silo', 'qualification', 'runtime', 'recorded turn', 'copied tools'] as const;
-async function refusesChangedApproval(name: 'recall' | 'forget',
+async function refusesChangedApproval(name: 'recall' | 'forget' | 'all',
   change: typeof changedApproval[number]) {
   const test = await fixture();
   try {
@@ -544,8 +566,8 @@ async function refusesChangedApproval(name: 'recall' | 'forget',
     expect(turn.close).toHaveBeenCalled();
   } finally { await test.close(); }
 }
-const approvalChanges: ['recall' | 'forget', typeof changedApproval[number]][] = [];
-for (const name of ['recall', 'forget'] as const) {
+const approvalChanges: ['recall' | 'forget' | 'all', typeof changedApproval[number]][] = [];
+for (const name of ['recall', 'forget', 'all'] as const) {
   for (const change of changedApproval) approvalChanges.push([name, change]);
 }
 it.each(approvalChanges)(
@@ -690,3 +712,42 @@ async function refusesNativeStart(fields: Record<string, unknown>) {
 it.each([{ ephemeral: false }, { path: '/saved-thread' }, { environments: [{}] },
   { environments: undefined }, { id: '' }])(
   'refuses an unsafe native start before recording or approving it: %j', refusesNativeStart);
+
+function changeCatalogueShape(server: ToolServer, change: string) {
+  if (change === 'empty') server.definitions = [];
+  if (change === 'duplicate') server.definitions[1] = server.definitions[0]!;
+  if (change === 'fifth') server.definitions.push(JSON.stringify({ name: 'foreign' }));
+  if (change === 'foreign') server.definitions[0] = JSON.stringify({ name: 'foreign' });
+  if (change === 'order') server.definitions.reverse();
+  if (change === 'Ask') server.modes['recall'] = 'ask';
+  if (change === 'extra mode') server.modes['foreign'] = 'allow';
+}
+
+async function refusesCatalogueShape(change: string) {
+  const test = await fixture(true, {}, change);
+  try {
+    await expect(test.turn('A', 1, 1, 'all')).rejects.toThrow('Private tools could not be loaded');
+    expect(test.loads.size).toBe(0);
+    expect(test.mcp.size).toBe(0);
+    expect(test.grants.size).toBe(0);
+  } finally { await test.close(); }
+}
+it.each(['empty', 'duplicate', 'fifth', 'foreign', 'order', 'Ask', 'extra mode'])(
+  'refuses an invalid combined catalogue: %s', refusesCatalogueShape);
+
+async function loadsPartialCatalogue() {
+  const blocked = ['recall', 'correct'];
+  const test = await fixture();
+  try {
+    const turn = await test.turn('A', 1, 1, 'all', blocked);
+    await turn.load();
+    const offered = record(turn.offered)['tools'];
+    if (!Array.isArray(offered)) throw new Error('Missing offered tools');
+    function name(tool: unknown) { return record(tool)['name']; }
+    const names = offered.map(name);
+    expect(names).toEqual(['remember', 'forget']);
+    expect(turn.calls).toEqual(['config/mcpServer/reload', 'mcpServerStatus/list']);
+    expect(test.grants.size).toBe(0);
+  } finally { await test.close(); }
+}
+it('loads only the two permitted definitions on the fresh native thread', loadsPartialCatalogue);
