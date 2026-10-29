@@ -491,6 +491,12 @@ must match the Stop's occurrence, routine root, input, turn and revisions. Its f
 assistant, payer, conversation and turn must match the allocated budget root. The routine
 root reference differs from the allocated budget root id. Owner, admin and system pause sources use
 `routine_stop`; later valid evidence cannot replace the first reason or source.
+An access pause may also use reason `assistant_inactive`. Its exact saved
+`assistant.settings_changed` must set `active: false` for the occupied run’s assistant
+in the same silo, after due and admission and before the pause. Changed occurrence or
+revisions refuse. The internal command checks only that assistant’s position before its
+conditional append, within two seconds. Later reactivation cannot erase accepted evidence
+or prevent Stop cleanup. No subscription or automatic execution is added.
 The first stop stays permanent and refunds nothing. Dispatch checks follow separately.
 Explicitly enabled internal cleanup applies these saved routine records to an existing
 allocation. The connected bridge polls verified routine Stop/Pause/Retire records and
@@ -716,7 +722,7 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` / `routine.reassigned` | server for checked actor | routine facts | `update-openfga` applies creation, reassignment and retirement permissions and receipts; explicitly enabled internal cleanup applies verified owner Pause/Retire, admin safety pause or system owner-removal pause evidence to the occupied run’s existing budget root; the connected bridge polls verified prohibitions to interrupt the accepted private turn; no execution |
+| `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` / `routine.reassigned` | server for checked actor | routine facts | `update-openfga` applies creation, reassignment and retirement permissions and receipts; explicitly enabled internal cleanup applies verified owner Pause/Retire, admin safety pause or system owner-removal or assistant-deactivation pause evidence to the occupied run’s existing budget root; the connected bridge polls verified prohibitions to interrupt the accepted private turn; no execution |
 | `routine.due` | server system | frozen occurrence facts (pure fold only) | none; no input or root is started |
 | `routine.occurrence_skipped` / `routine.occurrences_missed` | server system | saved cursor/next facts | none |
 | `routine.run_activation_admitted` | internal server conditional command | saved exact admission and sender attempt | none; receipt only, execution remains disabled |

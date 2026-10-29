@@ -76,6 +76,9 @@ and spending allowance. Expiry can also stop the routine after an approved attem
 when saved evidence proves the tool call was not sent. Verification never opens the
 private review or starts work.
 
+A saved assistant deactivation can also justify stopping its occupied routine.
+Switching the assistant back on cannot erase the saved pause or its charges.
+
 An admin safety pause checks the actor’s saved role at the time of the pause.
 Later demotion cannot prevent cleanup of that run or erase uncertain charges.
 A system pause can stop a routine after its recorded owner is removed. The library
@@ -119,7 +122,7 @@ flowchart LR
   models -->|stages credentials, callback codes and replies, confirms first accounts, starts, joins, claims and sends refresh attempts, saves replacements, retains old access tokens until expiry and removes revoked tokens even after member removal, recovers replies and checks signed accounts, shares a database lock for personal and company saves and personal cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves events, local account revocations, remote starts and unsent proof; recovers budgets in order and applies saved routine Stops, pauses with saved admin authority, verified owner removal, Ask denial or expiry and retirements; reads spending and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
+  models -->|saves events, local account revocations, remote starts and unsent proof; recovers budgets in order and applies saved routine Stops, pauses with saved admin authority, verified owner removal or assistant deactivation, Ask denial or expiry and retirements; reads spending and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also

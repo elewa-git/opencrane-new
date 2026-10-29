@@ -168,7 +168,7 @@ flowchart LR
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
   server -->|waits briefly for Forget locks| postgres
-  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, routine Stops even when evidence reads fail, memory Stops after confirmed loss, reply removal receipts after completion and checked reports| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, routine Stops after deactivation or failed evidence reads, memory Stops after confirmed loss, reply removal receipts after completion and checked reports| computer["apps/computer<br/>assistant computers"]
   computer -.->|records private thread for memory discovery| server
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime
@@ -210,6 +210,10 @@ for current permissions and memory revisions.
 Provider dependency requests use the database to check for saved routines before checking
 current administrator and provider permissions. Missing or changing data returns unavailable.
 Older and retired routines still mean that complete dependency information is unsupported.
+
+An internal command can pause an occupied routine after its assistant is deactivated.
+It checks the saved deactivation and keeps the original run and schedule. Switching the
+assistant back on does not undo that pause or prevent cleanup of the stopped run.
 
 ## What it is responsible for
 

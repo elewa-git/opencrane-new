@@ -6699,3 +6699,34 @@ removal before outages, stale IAM, missing and late receipts, owner operations, 
 scope and demotion, changed access during waits, unchanged chat/upload activity,
 original approval identity and no effects. Qualification values in these tests are
 synthetic. Fresh-install qualification and live native delivery are NOT RUN.
+
+## Routine pause after assistant deactivation
+
+`pauseRoutineAfterDeactivation` is an internal command in `routine-assistant-pause.ts`.
+It accepts routineId, occurrenceId, expectedPosition, the three expected revisions and
+`cause: { eventId, position }`. It derives the assistant from the occupied run and verifies
+that exact saved `assistant.settings_changed` with `active: false`, after due and admission.
+It saves one `routine.paused` with source `access` and fixed reason `assistant_inactive`.
+Routine history finishes before the two-second write check watches only the assistant stream.
+Changed positions or an expired deadline refuse publication. A saved pause survives retries,
+deduplication expiry, restart and later reactivation. Identity, schedule and money stay intact.
+The existing `applyRoutineStop` and bridge reader validate the same cause for cleanup.
+Tests: `routine-assistant-pause.test.ts` and `routine-assistant-evidence.test.ts`.
+No route, subscription, scheduler or execution switch is added. Live qualification: NOT RUN.
+
+Validation on 29 October 2026, code at `9e1a3afc3`, on the shared development host:
+
+- PASS: both focused assistant-pause files, 42 tests twice, using disposable NATS.
+- PASS: 76 existing root-stop evidence tests and 460 event security tests. PostgreSQL
+  used a disposable database; its container and volume were removed afterwards.
+- FAIL: unchanged routine-sender tests, 62 passed and 23 failed. Eighteen failed during
+  computer preparation, four while waiting for service outcomes and one on a NATS
+  authentication timeout. Their cause remains unproved; no retry was run.
+- PASS: typecheck after correcting fixture types; code lint after rechecking those
+  fixtures and the rebased decision file; dependency checks, Knip, documentation,
+  links, fixtures, licences, changelog and event catalogue checks. Earlier full runs
+  read older fixture and decision code and failed; their errors were rechecked.
+- NOT RUN: full root suite and fresh-install live qualification. Execution stays disabled.
+
+All lint, typecheck and test commands used `nice -n 10`. Logs are in
+`/tmp/p4-24-pr12g-*.log` on that host. The broader test failure prevents a source-ready claim.
