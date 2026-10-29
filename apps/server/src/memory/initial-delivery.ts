@@ -19,9 +19,11 @@ type Identity = Pick<MemoryContext, 'silo' | 'requester' | 'assistant' | 'comput
 type RecordEvent = z.infer<typeof memoryContextRecordedEventSchema>;
 
 async function requireQualification(silo: string, runId: string) {
-  if (await readDeploymentQualification(silo) !== runId) {
+  const current = await readDeploymentQualification(silo);
+  if (current.runId !== runId) {
     throw new LoadedMemoryRefused();
   }
+  return current.confirm;
 }
 function requestFor(identity: Identity, scopeId: string) {
   const metadata = { threadId: identity.thread, callId: 'initial-memory',
@@ -49,7 +51,8 @@ export async function prepareInitialMemory(options: MemoryOptions, identity: Ide
   try {
     const access = await initialMemoryAccess(options, identity.requester, deadline);
     if (unexpectedArguments.length !== 0) throw new LoadedMemoryRefused();
-    const qualification = await readDeploymentQualification(options.silo);
+    const measured = await readDeploymentQualification(options.silo);
+    const qualification = measured.runId;
     const scope = scopeFor(options.silo, 'person', identity.requester);
     const parsed = requestFor(identity, scope.scopeId);
     await memoryRights(options.store, options.binding, identity, parsed, deadline,
@@ -172,7 +175,11 @@ async function appendInitialRecord(options: MemoryOptions, selection: Selection,
     }
     await fresh();
     await permissions.confirm();
-    await requireQualification(options.silo, qualification);
+    const confirmQualification = await requireQualification(options.silo, qualification);
+    // Check access after the deployment read, then check its protected files without waiting.
+    await permissions.confirm();
+    await fresh();
+    confirmQualification();
   }
   await confirm();
   event.time = new Date().toISOString();

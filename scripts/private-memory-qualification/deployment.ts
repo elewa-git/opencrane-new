@@ -80,7 +80,7 @@ function savedResult(): string {
 }
 
 // Read the collector's protected output and measure the deployment again on every use.
-export async function readDeploymentQualification(silo: string): Promise<string> {
+export async function readDeploymentQualification(silo: string) {
   const target = deploymentTarget();
   if (target.siloId !== silo) throw new Error('wrong_silo');
   const saved = savedResult();
@@ -97,8 +97,12 @@ export async function readDeploymentQualification(silo: string): Promise<string>
   assertSame(expected, result);
   await assertInstallation(target.containerId, before, state.created);
   assertSame(target, deploymentTarget());
-  if (savedResult() !== saved) throw new Error('qualification_changed');
-  return result.runId;
+  function confirm() {
+    assertSame(target, deploymentTarget());
+    if (savedResult() !== saved) throw new Error('qualification_changed');
+  }
+  confirm();
+  return { runId: result.runId, confirm };
 }
 
 function hash(value: string): string {
