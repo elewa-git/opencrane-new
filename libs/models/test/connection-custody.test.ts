@@ -408,6 +408,9 @@ async function useDuplicateExpiryBroker() {
     await isolatedEvents.close();
   }
   onTestFinished(restoreEvents);
+  // Set the short window before publishing: changing an active NATS timer can keep its old delay.
+  const manager = await jetstreamManager(isolatedEvents.connection);
+  await manager.streams.update('EVENTS', { duplicate_window: 100_000_000 });
   events = isolatedEvents;
 }
 
