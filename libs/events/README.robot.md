@@ -919,6 +919,7 @@ The computer omits it for transport failure, cancellation requests and admission
 refusals. The server copies it only onto an admitted turn's failed closure. Old
 records remain readable but cannot prove native termination for routine completion.
 No process-exit report or new event type is added.
+
 ## Company bearer rotation (P3-8 PR 4e; Part of #49)
 
 `connection.refreshed` also accepts `companyConnectionRefreshedDataSchema`. This strict

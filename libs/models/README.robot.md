@@ -4743,6 +4743,7 @@ Later reactivation cannot erase that evidence. Cleanup still matches the frozen 
 assistant, payer, conversation and turn to the allocated root. Uncertain holds and full
 late settlement remain unchanged. The focused server evidence tests exercise this reader
 through `applyRoutineStop`, including disabled and replay calls without writes or dispatch.
+
 ## Company bearer rotation (P3-8 PR 4e; Part of #49)
 
 The internal company save accepts strict `action: rotate` input with positive
