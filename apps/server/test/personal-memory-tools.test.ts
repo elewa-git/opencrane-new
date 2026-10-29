@@ -344,3 +344,38 @@ async function checksTeamReceipts() {
 }
 it('requires applied team membership when a team supplies the personal tool grant',
   checksTeamReceipts);
+
+async function changesDuringConfirmation(change: 'caller' | 'generation' | 'qualification' | 'turn') {
+  const setup = await fixture();
+  const started = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  const readHead = setup.input.store.head.bind(setup.input.store);
+  let catalogueRead = false;
+  function readServer() {
+    catalogueRead = true;
+    return Promise.resolve(setup.state);
+  }
+  async function delayedHead(...args: Parameters<typeof readHead>) {
+    const position = await readHead(...args);
+    if (catalogueRead) {
+      catalogueRead = false;
+      started.resolve();
+      await resume.promise;
+    }
+    return position;
+  }
+  setup.input.readServer.mockImplementation(readServer);
+  vi.spyOn(setup.input.store, 'head').mockImplementation(delayedHead);
+  const preparing = preparePersonalMemoryTools(setup.input);
+  await started.promise;
+  if (change === 'caller') setup.registration.close();
+  if (change === 'generation') setup.input.grant.inputGeneration += 1;
+  if (change === 'qualification') setup.input.qualification.checks.persistence = 'FAIL';
+  if (change === 'turn') setup.input.turn.firstClose = setup.input.turn.firstStart;
+  resume.resolve();
+  expect(await preparing).toEqual([]);
+  expect(setup.check).toHaveBeenCalledTimes(1);
+  expect(setup.use).toHaveBeenCalledTimes(2);
+}
+it.each(['caller', 'generation', 'qualification', 'turn'] as const)(
+  'rejects changed %s during final access confirmation', changesDuringConfirmation);
