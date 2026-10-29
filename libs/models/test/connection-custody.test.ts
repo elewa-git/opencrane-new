@@ -1,4 +1,5 @@
 import { saveCompanyBearerConnection, foldCompanyConnection } from '../src/company-bearer.ts';
+import { prepareCompanyOAuthAttempt } from '../src/company-oauth.ts';
 import { changeCompanyOptIn } from '../src/company-opt-in.ts';
 import { exportSPKI, generateKeyPair, SignJWT } from 'jose';
 import { OpenFgaClient } from '@openfga/sdk';
@@ -5283,7 +5284,7 @@ it.each([false, true])(
   'automatically retires retained access at its exact expiry after restart, removed=%s',
   expiresRetainedAccess);
 
-async function companyFixture(enable = true, accountMode = 'company') {
+async function companyFixture(enable = true, accountMode = 'company', withTools = false) {
   const store = await fixture();
   candidateCount += 1;
   const userId = `custodian${candidateCount}`;
@@ -5293,7 +5294,7 @@ async function companyFixture(enable = true, accountMode = 'company') {
   });
   await events.seed([joined]);
   await memberAuthorisation(consentBinding).handler.handle(joined, pgDb(storage.queue));
-  const setup = oauthFixture(false, serverId);
+  const setup = oauthFixture(withTools, serverId);
   let registrationRevision = 0;
   for (const row of setup.rows) {
     row.event.silo = 'test';
@@ -5960,3 +5961,211 @@ async function rotationSchemas() {
   expect(companyConnectionRefreshedDataSchema.safeParse(oauth).success).toBe(false);
 }
 it('keeps company rotation separate from strict personal and OAuth schemas', rotationSchemas);
+
+async function companyConsentFixture(enable = true) {
+  const test = await companyFixture(enable, 'company', true);
+  const { appendUntil: unused, ...input } = test.input;
+  void unused;
+  const memberRevision = await events.store.head(`member-${test.userId}`);
+  const session = { sessionDigest: 'b'.repeat(64), memberRevision };
+  const rows = await history(events.store, `mcp-${input.serverId}`, 'test');
+  const configuration = oauthFixture(true, input.serverId).configuration;
+  configuration.policyRevision = toolPolicyFromRows(rows).policyRevision;
+  const loader = { loadConfiguration };
+  function loadConfiguration() { return configuration; }
+  async function prepare(raw: unknown = input, currentSession: unknown = session,
+    custody = test.store.custody, actor = test.userId) {
+    return prepareCompanyOAuthAttempt(events.store, consentBinding, actor, currentSession,
+      custody, raw, loader.loadConfiguration);
+  }
+  return { ...test, input, session, configuration, loader, prepare, serverRows: rows };
+}
+async function preparesCompanyConsent(lostReply: boolean) {
+  const test = await companyConsentFixture();
+  const before = Date.now();
+  const writes = vi.spyOn(events.store, 'append');
+  const access = vi.spyOn(memberAuthority, 'activeMember');
+  const stage = test.store.custody.prepareAttempt.bind(test.store.custody);
+  async function loseReply(...args: Parameters<typeof stage>) {
+    await stage(...args);
+    return { status: 'unknown' as const };
+  }
+  try {
+    if (lostReply) {
+      const fault = vi.spyOn(test.store.custody, 'prepareAttempt').mockImplementationOnce(loseReply);
+      expect(await test.prepare()).toEqual({ status: 'unknown' });
+      fault.mockRestore();
+      access.mockClear();
+    }
+    const first = await test.prepare();
+    expect(first.status).toBe('prepared');
+    if (first.status !== 'prepared') throw new Error('Fixture preparation failed');
+    expect(first.stage).toMatchObject({ ownerKind: 'company', purpose: 'company',
+      siloId: 'test', custodianId: test.userId, registrationRevision: test.input.registrationRevision,
+      optInRevision: test.input.optInRevision });
+    expect(first.stage).not.toHaveProperty('userId');
+    expect(first.stage.appendUntil).toBeGreaterThanOrEqual(before + 600_000);
+    expect(first.stage.appendUntil).toBeLessThanOrEqual(Date.now() + 600_000);
+    expect(first.requestedScopes).toEqual(['openid', 'read']);
+    const contents = await test.store.custody.readAttempt(first.stage, first.identity);
+    const secrets = z.object({ state: z.string(), verifier: z.string(), nonce: z.string() })
+      .parse(JSON.parse(contents!));
+    for (const value of Object.values(secrets)) {
+      expect(value).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+      expect(JSON.stringify(first)).not.toContain(value);
+    }
+    const hash = createHash('sha256');
+    hash.update(secrets.verifier);
+    expect(first.challenge).toBe(hash.digest('base64url'));
+    expect(access).toHaveBeenCalledTimes(1);
+    expect(await test.prepare(test.input, test.session, test.store.restart())).toEqual(first);
+    expect(access).toHaveBeenCalledTimes(2);
+    expect(test.store.creates).toBe(1);
+    expect(test.store.deletes).toBe(0);
+    expect(writes).not.toHaveBeenCalled();
+    expect(await test.rows()).toEqual([]);
+  } finally { vi.restoreAllMocks(); }
+}
+it.each([false, true])('prepares one private company OAuth attempt, lost reply: %s',
+  preparesCompanyConsent);
+
+async function refusesCompanyConsentChange(field: string) {
+  const test = await companyConsentFixture(field !== 'opt-in');
+  if (field !== 'opt-in') expect((await test.prepare()).status).toBe('prepared');
+  const input = { ...test.input };
+  const session = { ...test.session };
+  if (field === 'session') session.sessionDigest = 'c'.repeat(64);
+  else if (field === 'memberRevision') session.memberRevision += 1;
+  else if (field === 'profile') input.profileId = 'other';
+  else if (field === 'installation') input.connectionId = 'other';
+  else if (field === 'registration') input.registrationRevision += 1;
+  else if (field === 'optInRevision') input.optInRevision += 1;
+  else if (field === 'issuer') test.configuration.issuer = 'https://other.example.test/';
+  else if (field === 'callback') test.configuration.redirectUri = 'https://other.example.test/callback';
+  else if (field === 'client') test.configuration.clientId = 'other';
+  else if (field === 'policy') test.configuration.policyRevision += 1;
+  else if (field === 'scopes') test.configuration.toolScopes['data.write'] = ['extra'];
+  else if (field === 'unknown') test.store.failReads();
+  expect(await test.prepare(input, session)).toEqual({ status: 'unknown' });
+  expect(test.store.creates).toBe(field === 'opt-in' ? 0 : 1);
+}
+it.each(['session', 'memberRevision', 'profile', 'installation', 'registration', 'optInRevision',
+  'issuer', 'callback', 'client', 'policy', 'scopes', 'unknown', 'opt-in'])(
+  'refuses changed company OAuth %s without another private copy', refusesCompanyConsentChange);
+
+async function refusesCompanyConsentAccess(kind: string, invalid: boolean) {
+  const test = await companyConsentFixture();
+  const type = kind === 'removed' ? 'member.removed' : 'member.role_changed';
+  const changed = envelope('test', `member-${test.userId}`, type,
+    { memberId: test.userId, role: 'member', changedBy: 'owner', removedBy: 'owner' });
+  await events.seed([changed]);
+  const access = vi.spyOn(memberAuthority, 'activeMember');
+  const read = events.store.readStream.bind(events.store);
+  async function* failedHistory(subject: string, from?: number, deadline?: number) {
+    if (subject === test.subject) throw new Error(material);
+    yield* read(subject, from, deadline);
+  }
+  vi.spyOn(events.store, 'readStream').mockImplementation(failedHistory);
+  try {
+    await expect(test.prepare(invalid ? { ...test.input, userId: 'test' } : test.input))
+      .rejects.toBeInstanceOf(MemberAccessRefused);
+    expect(access).toHaveBeenCalledTimes(1);
+    expect(test.store.creates).toBe(0);
+  } finally { vi.restoreAllMocks(); }
+}
+it.each([['removed', false], ['removed', true], ['demoted', false], ['demoted', true]] as const)(
+  'preserves company OAuth %s refusal with failed history and invalid input %s',
+  refusesCompanyConsentAccess);
+
+async function companyConsentStageRace(kind: string) {
+  const test = await companyConsentFixture();
+  const stage = test.store.custody.prepareAttempt.bind(test.store.custody);
+  async function changedStage(...args: Parameters<typeof stage>) {
+    const prepared = await stage(...args);
+    if (kind === 'admin') await test.removeAdmin();
+    else if (kind === 'opt-in') await test.disable();
+    else if (kind === 'configuration') test.configuration.clientId = 'changed';
+    else if (kind === 'profile') await test.save();
+    else {
+      const event = envelope('test', `mcp-${test.input.serverId}`, 'mcp.server_withdrawn',
+        { serverId: test.input.serverId, withdrawnBy: test.userId });
+      await events.seed([event]);
+    }
+    return prepared;
+  }
+  const fault = vi.spyOn(test.store.custody, 'prepareAttempt').mockImplementation(changedStage);
+  const access = vi.spyOn(memberAuthority, 'activeMember');
+  try {
+    expect(await test.prepare()).toEqual({ status: 'unknown' });
+    if (kind !== 'opt-in' && kind !== 'profile') expect(access).toHaveBeenCalledTimes(1);
+  } finally { fault.mockRestore(); access.mockRestore(); }
+}
+it.each(['admin', 'opt-in', 'configuration', 'profile', 'policy'])(
+  'refuses company OAuth after %s changes during staging', companyConsentStageRace);
+
+async function companyConsentExpiry(boundary: string) {
+  const test = await companyConsentFixture();
+  const first = await test.prepare();
+  if (first.status !== 'prepared') throw new Error('Fixture preparation failed');
+  // Keep the catalogue live so only the attempt's immutable expiry decides this case.
+  const checkedAt = first.stage.appendUntil - 1000;
+  const renewed = envelope('test', `mcp-${test.input.serverId}`, 'mcp.catalogue_checked', {
+    serverId: test.input.serverId, connectionId: test.input.connectionId,
+    schemaDigest: toolPolicyFromRows(test.serverRows).schemaDigest,
+    checkedAt: new Date(checkedAt).toISOString(),
+    expiresAt: new Date(checkedAt + 300_000).toISOString(),
+  });
+  await events.seed([renewed]);
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(first.stage.appendUntil - 1);
+  const restarted = test.store.restart();
+  const read = restarted.readAttempt.bind(restarted);
+  async function delayedRead(...args: Parameters<typeof read>) {
+    const contents = await read(...args);
+    expect(contents).toBeDefined();
+    clock.mockReturnValue(first.stage.appendUntil);
+    return contents;
+  }
+  if (boundary === 'at') clock.mockReturnValue(first.stage.appendUntil);
+  if (boundary === 'private read') vi.spyOn(restarted, 'readAttempt').mockImplementation(delayedRead);
+  const head = events.store.head.bind(events.store);
+  async function delayedHead(...args: Parameters<typeof head>) {
+    const position = await head(...args);
+    if (args[0] === undefined) clock.mockReturnValue(first.stage.appendUntil);
+    return position;
+  }
+  if (boundary === 'final read') vi.spyOn(events.store, 'head').mockImplementation(delayedHead);
+  try {
+    const result = await test.prepare(test.input, test.session, restarted);
+    expect(result).toEqual(boundary === 'before' ? first : { status: 'unknown' });
+    expect(test.store.creates).toBe(1);
+  } finally { vi.restoreAllMocks(); }
+}
+it.each(['before', 'at', 'private read', 'final read'])(
+  'keeps company OAuth expiry fixed at the %s boundary', companyConsentExpiry);
+
+async function isolatesCompanyConsent() {
+  const test = await companyConsentFixture();
+  const first = await test.prepare();
+  if (first.status !== 'prepared') throw new Error('Fixture preparation failed');
+  for (const patch of [{ siloId: 'foreign' }, { custodianId: 'other' },
+    { profileId: 'other' }, { connectionId: 'other' }, { userId: 'test' },
+    { purpose: 'personal' }, { purpose: 'validation' }]) {
+    const changed = { ...first.stage, ...patch };
+    expect(await test.store.custody.readAttempt(changed, first.identity)).toBeUndefined();
+  }
+  const personal = oauthFixture(true, test.input.serverId);
+  const context = { ...personal.context, siloId: 'test', userId: test.userId,
+    profileId: test.input.profileId, changeRef: test.input.changeRef };
+  for (const row of personal.rows) row.event.silo = 'test';
+  const own = await prepareOAuthAttempt(test.store.custody, context,
+    personal.configuration, personal.rows);
+  expect(own.status).toBe('prepared');
+  if (own.status !== 'prepared') throw new Error('Fixture preparation failed');
+  expect(own.identity.reference).not.toBe(first.identity.reference);
+  expect(own.stage.operationId).not.toBe(first.stage.operationId);
+  expect(own.challenge).not.toBe(first.challenge);
+  expect(await test.store.custody.readAttempt(first.stage, own.identity)).toBeUndefined();
+  expect(await test.prepare()).toEqual(first);
+}
+it('isolates company OAuth custody from other owners, purposes and personal attempts',
+  isolatesCompanyConsent);
