@@ -38,7 +38,9 @@ function rejectSql(): never { throw new Error('Unexpected SQL'); }
 const noSql = { query: rejectSql };
 function dropped() { /* No proxy runs in this preparation fixture. */ }
 
-async function fixture(operation: typeof operations[number] = 'recall', role = 'owner') {
+type Operation = typeof operations[number] | 'all';
+
+async function fixture(operation: Operation = 'recall', role = 'owner') {
   const nats = await natsFixture();
   onTestFinished(nats.close);
   const binding = await createStore(fga.apiUrl, 'test');
@@ -77,14 +79,18 @@ async function fixture(operation: typeof operations[number] = 'recall', role = '
   const sequence = await nats.store.head('computer-assistant');
   const turn: TurnSummary = { hasStart: true, firstStart: { event, sequence },
     firstClose: undefined };
-  const definition = JSON.stringify(definitions[operation]);
-  const revision = losslessJson(definition).digest;
+  const selected = operation === 'all' ? operations : [operation];
   const state: TurnToolServerState = {
     serverId: 'memory', connectionId: 'server', published: true, accountMode: 'none',
     serverInfo: { name: 'OpenCrane memory', version: '1' },
-    discoveryTools: [{ name: operation, definition, revision }],
-    policyTools: [{ name: operation, revision, reviewed: true, costCents: 0, mode: 'allow' }],
+    discoveryTools: [], policyTools: [],
   };
+  for (const name of selected) {
+    const definition = JSON.stringify(definitions[name]);
+    const revision = losslessJson(definition).digest;
+    state.discoveryTools.push({ name, definition, revision });
+    state.policyTools.push({ name, revision, reviewed: true, costCents: 0, mode: 'allow' });
+  }
   function readServer() { return Promise.resolve(state); }
   const runtime = { sourceSha: 'a'.repeat(40), imageDigest: `sha256:${'b'.repeat(64)}`,
     environmentId: 'disposable-test-host' };
@@ -133,8 +139,9 @@ async function removal(setup: Awaited<ReturnType<typeof fixture>>) {
   await setup.save('member-alice', 'member.removed',
     { memberId: 'alice', removedBy: 'owner' }, false);
 }
-async function refusesBeforeFailure(service: 'catalogue' | 'permission') {
-  const setup = await fixture();
+async function refusesBeforeFailure(service: 'catalogue' | 'permission',
+  operation: Operation = 'recall') {
+  const setup = await fixture(operation);
   await removal(setup);
   expect((await setup.auth.check('alice', 'member')).allowed).toBe(true);
   setup.check.mockClear();
@@ -215,9 +222,10 @@ async function adminScope() {
 }
 it('limits admins to their own scope and keeps only granted rights after demotion', adminScope);
 
-const changes = ['removal', 'grant', 'activity', 'caller', 'generation', 'qualification', 'deadline'] as const;
-async function changesDuringRead(change: typeof changes[number], stage: 'catalogue' | 'permission') {
-  const setup = await fixture();
+const changes = ['removal', 'demotion', 'grant', 'activity', 'caller', 'generation', 'qualification', 'deadline'] as const;
+async function changesDuringRead(change: typeof changes[number], stage: 'catalogue' | 'permission',
+  operation: Operation = 'recall') {
+  const setup = await fixture(operation);
   const started = Promise.withResolvers<void>();
   const resume = Promise.withResolvers<void>();
   async function readServer() {
@@ -238,6 +246,11 @@ async function changesDuringRead(change: typeof changes[number], stage: 'catalog
   const result = Promise.allSettled([preparing]);
   await started.promise;
   if (change === 'removal') await removal(setup);
+  if (change === 'demotion') {
+    await setup.save('member-alice', 'member.role_changed', {
+      memberId: 'alice', previousRole: 'owner', newRole: 'member', changedBy: 'owner',
+    });
+  }
   if (change === 'grant') {
     await setup.save(grantSubject, 'grant.revoked', {
       resourceType: 'mcp_server', resourceId: 'memory', granteeKind: 'assistant',
@@ -271,7 +284,10 @@ async function changesDuringRead(change: typeof changes[number], stage: 'catalog
     expect(outcome?.status).toBe('fulfilled');
     if (outcome?.status === 'fulfilled') {
       expect(outcome.value).toHaveLength(change === 'activity' ? 1 : 0);
-      if (change === 'activity') expect(checkPrivateTurnTools(outcome.value, setup.input)).toBe(true);
+      if (change === 'activity') {
+        expect(checkPrivateTurnTools(outcome.value, setup.input)).toBe(true);
+        if (operation === 'all') expect(outcome.value).toEqual(combinedTools());
+      }
     }
   }
   expect(setup.check).toHaveBeenCalledTimes(1);
@@ -284,8 +300,9 @@ for (const stage of ['catalogue', 'permission'] as const) {
   it.each(changes)(`confirms %s after a delayed ${stage} read`, checksChange);
 }
 
-async function removalDuringFailure(service: 'catalogue' | 'permission') {
-  const setup = await fixture();
+async function removalDuringFailure(service: 'catalogue' | 'permission',
+  operation: Operation = 'recall') {
+  const setup = await fixture(operation);
   async function failsAfterRemoval(): Promise<never> {
     await removal(setup);
     throw new Error('private-upstream-canary');
@@ -381,3 +398,76 @@ async function changesDuringConfirmation(change: 'caller' | 'generation' | 'qual
 }
 it.each(['caller', 'generation', 'qualification', 'turn'] as const)(
   'rejects changed %s during final access confirmation', changesDuringConfirmation);
+
+function combinedTools() {
+  return [expect.objectContaining({
+    definitions: [JSON.stringify(recallTool), JSON.stringify(rememberTool),
+      JSON.stringify(correctTool), JSON.stringify(forgetTool)],
+    modes: { recall: 'allow', remember: 'allow', correct: 'allow', forget: 'allow' },
+  })];
+}
+
+async function preparesCombined() {
+  const { input, check, use } = await fixture('all');
+  const tools = await preparePersonalMemoryTools(input);
+  expect(tools).toEqual(combinedTools());
+  expect(checkPrivateTurnTools(tools, input)).toBe(true);
+  expect(checkPrivateTurnTools([...tools], input)).toBe(false);
+  expect(check).toHaveBeenCalledExactlyOnceWith('alice', 'member');
+  expect(use.mock.calls).toEqual([
+    ['person', 'alice', 'mcp_server', 'memory'],
+    ['assistant', 'assistant', 'mcp_server', 'memory'],
+  ]);
+  expect(input.readServer).toHaveBeenCalledExactlyOnceWith('memory');
+}
+it('prepares all four approved tools with one membership decision', preparesCombined);
+
+async function refusesCombinedRemoval() {
+  const setup = await fixture('all');
+  await removal(setup);
+  expect((await setup.realCheck('alice', 'member')).allowed).toBe(true);
+  expect((await setup.realUse('person', 'alice', 'mcp_server', 'memory')).allowed).toBe(true);
+  expect((await setup.realUse('assistant', 'assistant', 'mcp_server', 'memory')).allowed).toBe(true);
+  expect(setup.input.callers.check(setup.input.grant)).toBe(true);
+  await expect(preparePersonalMemoryTools(setup.input)).rejects.toThrow(MemberAccessRefused);
+  expect(setup.check).not.toHaveBeenCalled();
+  expect(setup.use).not.toHaveBeenCalled();
+  expect(setup.input.readServer).not.toHaveBeenCalled();
+}
+it('refuses combined preparation after removal despite a live turn and stale grants',
+  refusesCombinedRemoval);
+
+async function combinedFailureBefore(service: 'catalogue' | 'permission') {
+  await refusesBeforeFailure(service, 'all');
+}
+async function combinedFailureDuring(service: 'catalogue' | 'permission') {
+  await removalDuringFailure(service, 'all');
+}
+it.each(['catalogue', 'permission'] as const)(
+  'preserves combined removal before %s failure', combinedFailureBefore);
+it.each(['catalogue', 'permission'] as const)(
+  'preserves combined removal during %s failure', combinedFailureDuring);
+
+for (const stage of ['catalogue', 'permission'] as const) {
+  async function combinedChange(change: typeof changes[number]) {
+    await changesDuringRead(change, stage, 'all');
+  }
+  it.each(changes)(`confirms combined %s after a delayed ${stage} read`, combinedChange);
+}
+
+async function refusesCombinedPermission(kind: 'person' | 'assistant') {
+  const setup = await fixture('all');
+  const granteeKind = kind === 'person' ? 'member' : 'assistant';
+  const granteeId = kind === 'person' ? 'alice' : 'assistant';
+  await setup.save(grantSubject, 'grant.revoked', {
+    resourceType: 'mcp_server', resourceId: 'memory', granteeKind, granteeId,
+    revokedBy: 'owner',
+  });
+  expect((await setup.realUse(kind, granteeId, 'mcp_server', 'memory')).allowed).toBe(false);
+  expect(await preparePersonalMemoryTools(setup.input)).toEqual([]);
+  expect(setup.check).toHaveBeenCalledExactlyOnceWith('alice', 'member');
+  expect(setup.use).toHaveBeenCalledTimes(kind === 'person' ? 1 : 2);
+  expect(setup.input.readServer).not.toHaveBeenCalled();
+}
+it.each(['person', 'assistant'] as const)(
+  'refuses all four tools when the %s permission callback denies access', refusesCombinedPermission);
