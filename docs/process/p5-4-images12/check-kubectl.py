@@ -14,7 +14,7 @@ from pathlib import Path
 
 REFUSAL = "FAIL kubectl build evidence is missing, changed or unsupported"
 RECORD = Path(__file__).with_name("build.json")
-REVIEW_SHA256 = "3391df5c5914e166122162ef5b546e661cf8d7e262b487a46ffeee66c1b2f57a"
+REVIEW_SHA256 = "9f1c3f7055acc03d9fb5a50ab6771cf909170b6ed1fd7442c028d8c1de85dcc4"
 SOURCE_FILES = {"VERSION": "VERSION", "LICENSE": "LICENSE", "PATENTS": "PATENTS",
                 "src/runtime/memmove_amd64.s": "memmove_amd64.s"}
 try:
@@ -146,8 +146,47 @@ def check_recipe(path, review):
         raise ValueError("Candidate kubectl version or checksum changed")
 
 
+def check_source_signature(source, review):
+    inputs = load_inputs(review)
+    names = ("go-source.asc", "google-signing-key.gpg")
+    for name in names:
+        digest = hashlib.sha256(inputs[name])
+        actual_sha256 = digest.hexdigest()
+        if actual_sha256 != review["files"][name]:
+            raise ValueError("Go source signing evidence changed")
+    with tempfile.TemporaryDirectory() as temporary:
+        directory = Path(temporary)
+        archive = directory / "source.tar.gz"
+        archive.write_bytes(source)
+        for name in names:
+            (directory / name).write_bytes(inputs[name])
+        # Use only the retained public key. Keep personal keyrings out of this check.
+        result = subprocess.run(
+            ["gpgv", "--homedir", temporary, "--keyring",
+             str(directory / "google-signing-key.gpg"), "--status-fd", "1",
+             str(directory / "go-source.asc"), str(archive)],
+            capture_output=True, check=False)
+    if result.returncode != 0:
+        raise ValueError("Go source signature refused")
+    signatures = []
+    status_text = result.stdout.decode()
+    status_lines = status_text.splitlines()
+    for line in status_lines:
+        fields = line.split()
+        if fields[:2] == ["[GNUPG:]", "VALIDSIG"]:
+            signatures.append(fields)
+    if len(signatures) != 1:
+        raise ValueError("Require one verified Go source signature")
+    signature = signatures[0]
+    if len(signature) != 12 or signature[2] != review["sourceSignerFingerprint"]:
+        raise ValueError("Go source signing key differs")
+    if signature[11] != review["sourcePrimaryFingerprint"]:
+        raise ValueError("Go source primary key differs")
+
+
 def check_source(path, review):
     source = candidate.checked_bytes(path, review["sourceSha256"])
+    check_source_signature(source, review)
     found = {}
     with tarfile.open(fileobj=io.BytesIO(source), mode="r|*") as archive:
         for member in archive:
@@ -182,6 +221,7 @@ def main(arguments):
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             check_evidence(Path(arguments[0]), Path(arguments[1]))
         print("PASS kubectl build information and complete Go BSD, amd64 MIT and patent notices")
+        print("PASS Go source archive signature and signer identity")
         print("PARTIAL source ancestry, module grants and complete image approval remain BLOCKED")
     except Exception:
         # Withhold archive, parser and child errors, including private paths.

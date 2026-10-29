@@ -391,8 +391,12 @@ binary hash, archived Dockerfile, reported Go compiler, 89 module rows and build
 settings. It preserves `(devel)` versions and requires the exact replacements;
 none are reported. The scan also lists the Go standard library as its 90th row.
 The complete Go project BSD-3-Clause notice, patent grant and amd64 runtime MIT
-attribution match the official Go 1.26.8 source archive. This checks the reported compiler against source
-with a fixed checksum. It does not prove which source produced kubectl.
+attribution match the official Go 1.26.8 source archive. The checker verifies the
+archive's retained detached signature with `gpgv` and the retained Google public key.
+It requires the exact signing and primary key fingerprints recorded in `build.json`.
+It also checks the fixed archive checksum. Debian signature checks authenticate only
+Debian packages. They do not authenticate Go source.
+The Go archive signature does not prove which source produced kubectl.
 
 ```sh
 nice -n 10 python3 docs/process/p5-4-images12/check-kubectl.py \

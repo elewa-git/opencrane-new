@@ -12,6 +12,12 @@
   "compiler": "go1.26.8",
   "upstreamCommit": "c293dd49cbe25e1fe8d97d94a5cb618e7b6d831e",
   "sourceUrl": "https://go.dev/dl/go1.26.8.src.tar.gz",
+  "sourceAuthentication": "PASS",
+  "sourceSignatureUrl": "https://dl.google.com/go/go1.26.8.src.tar.gz.asc",
+  "sourceKeyUrl": "https://dl.google.com/linux/linux_signing_key.pub",
+  "sourceKeyIdentityUrl": "https://www.google.com/linuxrepositories/",
+  "sourceSignerFingerprint": "0E225917414670F4442C250DFD533C07C264648F",
+  "sourcePrimaryFingerprint": "EB4C1BFD4F042F6DDDCCEC917721F63BD38B4796",
   "sourceSha256": "4e39b98e42f946fa05ac8bc5b71877df97dbdb7cbb1a777b541667ad7117fd2e",
   "candidateSha256": "365bc4d4c4039ba62a6ce982aaae68508b2986df5edb7605355b92055457a2da",
   "binarySha256": "65691ff77eb6fa44c908b77a1082c9f092c3b9733b5cefabec0d1104890e21a8",
@@ -24,7 +30,9 @@
     "buildinfo.bin": "27d3130439637237c49ef4bb0fd1bcdee3877ff459ae8159b7c59e9360347e54",
     "buildinfo.elf": "6d6557866f281b1999ec73242a891a305a6964643550c8d229b57d614f2259da",
     "Dockerfile": "1d14a7ec8dbc86c4438551408efad9caa837eda60a94d5c6c9e2f045446bb323",
-    "memmove_amd64.s": "1d239c1a965baf43cbdfb82a5144d33aadd95d20ff95becf8347a93ddf08985d"
+    "memmove_amd64.s": "1d239c1a965baf43cbdfb82a5144d33aadd95d20ff95becf8347a93ddf08985d",
+    "go-source.asc": "46fcad64fc1f40556cfbb30437ff99e23bc6f917e41ff185b32a4c35fc39f976",
+    "google-signing-key.gpg": "0631021cd0efb5ebe428b09b003e4dc45f9c8cd1c47befd5196906768eff96e0"
   },
   "modules": [
     ["mod", "k8s.io/kubernetes", "v1.37.1", ""],

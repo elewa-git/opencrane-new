@@ -1,1 +1,1 @@
-Retain kubectl's exact reported build information and complete Go project licence and patent grant, while keeping source ancestry, module grants and image promotion blocked.
+Retain kubectl's exact reported build information and complete Go project licence and patent grant, and verify the Go source archive's signature and signer identity. Source ancestry, module grants and image promotion stay blocked.

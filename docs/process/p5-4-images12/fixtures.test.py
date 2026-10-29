@@ -1,5 +1,6 @@
 """Check authentic Go build information offline without running kubectl."""
 
+import base64
 import contextlib
 import copy
 import hashlib
@@ -206,7 +207,11 @@ class BuildTests(unittest.TestCase):
     def test_wrong_signature_is_cryptographically_refused_with_matching_record_hash(self):
         checker = self.checker
         changed = dict(self.inputs)
-        changed["go-source.asc"] = b"not a signature\n"
+        signature_lines = self.inputs["go-source.asc"].splitlines()
+        encoded_signature = b"".join(signature_lines[2:-2])
+        signature = bytearray(base64.b64decode(encoded_signature, validate=True))
+        signature[-1] ^= 1
+        changed["go-source.asc"] = bytes(signature)
         review = copy.deepcopy(self.review)
         review["files"]["go-source.asc"] = hashlib.sha256(changed["go-source.asc"]).hexdigest()
         with patch.object(checker, "load_inputs", return_value=changed):
@@ -270,7 +275,8 @@ class BuildTests(unittest.TestCase):
 
                 with patch.object(checker, "check_evidence", side_effect=corrupt_input):
                     self.run_main(False)
-            with patch.object(checker.candidate, "checked_bytes", return_value=b"corrupt tar"):
+            with patch.object(checker.candidate, "checked_bytes", return_value=b"corrupt tar"), \
+                    patch.object(checker, "check_source_signature"):
                 with self.assertRaises(tarfile.TarError):
                     checker.check_source(path, self.review)
             def invalid_binary(*arguments):
