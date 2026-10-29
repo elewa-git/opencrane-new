@@ -3655,6 +3655,55 @@ async function correctionPublicationActivity(change: 'loaded' | 'closed' | 'unre
 it.each(['loaded', 'closed', 'unrelated'] as const)(
   'checks %s conversation activity before publishing a correction', correctionPublicationActivity);
 
+async function closedBeforePublicationWithUnavailableMembership(operation: 'correct' | 'forget') {
+  const request = await changeRequest(operation, false);
+  const eventType = operation === 'correct' ? 'memory.corrected' : 'memory.forgotten';
+  const token = await changeToken(request);
+  const before = await setup.nats.store.head(`scope-${scopeId}`);
+  const originalAppend = setup.nats.store.append.bind(setup.nats.store);
+  const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
+  let publishing = false;
+  let closureSeen = false;
+  async function append(command: Parameters<typeof originalAppend>[0]) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === eventType) {
+      await setup.append('participation-conversation', 'conversation.closed', {
+        conversationId: 'conversation', closedBy: 'alice' });
+      publishing = true;
+    }
+    return originalAppend(command);
+  }
+  async function* readStream(...args: Parameters<typeof originalRead>) {
+    if (closureSeen && args[0] === 'member-alice') {
+      throw new Error('Membership store unavailable');
+    }
+    for await (const row of originalRead(...args)) {
+      if (publishing && row.event.type === 'conversation.closed') {
+        closureSeen = true;
+      }
+      yield row;
+    }
+  }
+  const appends = vi.spyOn(setup.nats.store, 'append').mockImplementation(append);
+  const reads = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(readStream);
+  // Keep the signed deadline valid while testing the saved closure refusal.
+  vi.useFakeTimers({ toFake: ['Date', 'performance'] });
+  try {
+    const response = await sendChange(request, token);
+    expect(closureSeen).toBe(true);
+    expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(before);
+    expect(response.statusCode, response.body).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
+  } finally {
+    vi.useRealTimers();
+    reads.mockRestore();
+    appends.mockRestore();
+  }
+}
+it.each(['correct', 'forget'] as const)(
+  'keeps %s refused after closure when a later membership read is unavailable',
+  closedBeforePublicationWithUnavailableMembership);
+
 async function removedBeforePublication(throws: boolean,
   operation: 'correct' | 'forget' = 'correct') {
   const request = await changeRequest(operation, false);
