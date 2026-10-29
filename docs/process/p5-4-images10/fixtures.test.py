@@ -35,6 +35,8 @@ class AttributionTests(unittest.TestCase):
             self.inputs[name] = gzip.decompress(CHECKER.with_name(name + ".gz").read_bytes())
         historical = ROOT / "docs/process/p5-4-images5/node-LICENSE.gz"
         self.inputs["node-LICENSE"] = gzip.decompress(historical.read_bytes())
+        version = ROOT / "docs/process/p5-4-images6/node-version.h.gz"
+        self.inputs["node-version.h"] = gzip.decompress(version.read_bytes())
 
     def test_exact_linkage_preserves_blocked_status_and_promotion(self):
         self.assertEqual(self.checker.check_review(self.review, self.inputs),
@@ -128,8 +130,13 @@ class AttributionTests(unittest.TestCase):
                                                          return_value=self.inputs))
                 review = stack.enter_context(patch.object(checker, "check_review"))
                 candidate = stack.enter_context(patch.object(checker.pcre, "check_candidate"))
+                def failed_dependency(*arguments):
+                    print("/private/dependency secret")
+                    print("/private/dependency secret", file=sys.stderr)
+                    raise RuntimeError("/private/dependency secret")
+
                 if stage in ("signed", "git"):
-                    signed.side_effect = RuntimeError("/private/dependency secret")
+                    signed.side_effect = failed_dependency
                 elif stage == "review":
                     review.side_effect = ValueError("/private/review")
                 elif stage == "candidate":
@@ -145,6 +152,50 @@ class AttributionTests(unittest.TestCase):
                 else:
                     self.assertEqual((result, output.getvalue(), error.getvalue()),
                                      (1, "", checker.REFUSAL + "\n"))
+
+    def test_extra_or_changed_copies_in_earlier_layers_refuse(self):
+        checker = self.checker
+        harness = load_module("layer_fixtures", ROOT / "infra/package/licences.test.py")
+        write_tar = harness.LicenceTests().write_licence_tar
+        binary = b"synthetic Node binary"
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            base = (b"FROM node:22.23.1-bookworm-slim@sha256:"
+                    b"6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3\n")
+            write_tar(directory / "source.tar", {"infra/package/Dockerfile": base * 2})
+            for extra in ({}, {"usr/local/bin/node": binary},
+                          {"usr/local/LICENSE": self.inputs["node-LICENSE"]},
+                          {"usr/local/bin/node": b"changed hidden copy"}):
+                write_tar(directory / "earlier.tar", extra)
+                write_tar(directory / "later.tar", {"usr/local/bin/node": binary,
+                          "usr/local/LICENSE": self.inputs["node-LICENSE"]})
+                manifest = [{"Layers": ["earlier.tar", "later.tar"]}]
+                write_tar(directory / "candidate.tar", {
+                    "manifest.json": json.dumps(manifest).encode(),
+                    "earlier.tar": (directory / "earlier.tar").read_bytes(),
+                    "later.tar": (directory / "later.tar").read_bytes()})
+                with patch.object(checker.candidate, "check_evidence"):
+                    with patch.object(checker.pcre, "BINARY", hashlib.sha256(binary).hexdigest()):
+                        if extra:
+                            with self.assertRaises(ValueError):
+                                checker.pcre.check_candidate({}, directory)
+                        else:
+                            checker.pcre.check_candidate({}, directory)
+
+    def test_malformed_source_archive_and_failed_git_withhold_paths(self):
+        checker = self.checker
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            (directory / "node-v22.23.1.tar.xz").write_bytes(b"truncated compressed archive")
+            for failure in (None, OSError("/private/git failed")):
+                results = [self.inputs[name] for name in checker.SOURCES]
+                with patch.object(checker.pcre, "check_upstream", return_value=dict(self.inputs)):
+                    with patch.object(checker.pcre, "run_checked", side_effect=failure or results):
+                        output, error = io.StringIO(), io.StringIO()
+                        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
+                            result = checker.main([str(directory), str(directory)])
+                        self.assertEqual((result, output.getvalue(), error.getvalue()),
+                                         (1, "", checker.REFUSAL + "\n"))
 
     def test_malformed_compressed_evidence_withholds_every_failure(self):
         checker = self.checker

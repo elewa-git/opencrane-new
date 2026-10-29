@@ -1,0 +1,33 @@
+{
+  "status": "BLOCKED",
+  "method": "reviewed attribution; grant unproved",
+  "references": [
+    [
+      "1dcebd6ab53b3562845796912ab65afb45186883808e692d8d38a87631ed9d48",
+      "libtabe Chih-Hao Tsai attribution"
+    ]
+  ],
+  "nodeVersion": "22.23.1",
+  "upstreamCommit": "bd96dfbf0361576724b65322046e2ca9f9609cb9",
+  "sourcePath": "deps/icu-small/LICENSE",
+  "candidateSha256": "365bc4d4c4039ba62a6ce982aaae68508b2986df5edb7605355b92055457a2da",
+  "nodeNoticesSha256": "f1782b5d555567bccf789e55ebb6bc3ade518e519ec988ba13049a47c4678bcc",
+  "nodeBinarySha256": "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068",
+  "files": {
+    "node-v22.23.1.tar.xz": "b27385d6845089bdb91285d94b06c2a5cf1c37f8173a3c4e10824cc1ffadeaba",
+    "node-v22.23.1-linux-x64.tar.xz": "9749e988f437343b7fa832c69ded82a312e41a03116d766797ac14f6f9eee578",
+    "SHASUMS256.txt.asc": "8bf8cd2085e1c25cc750386c2253715b13867c65e2fa9c9c4abc47967420ec28",
+    "node-release-keys.kbx": "610b8d249da3d5733f5a128def2dd0294dbbf5b5713e6ca2529db8db419dee00",
+    "node-tag": "970c701965a2487ccaa5978cd9d97d879fe7d51a0aab59fa5672210bab2254dd"
+  },
+  "declarations": [],
+  "sourceFiles": {
+    "deps/icu-small/LICENSE": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af",
+    "deps/icu-small/source/common/unicode/uvernum.h": "be53eaf56f3f03870639ec0b40d4c16f9b60fa5d44196b96ed3084717084882f"
+  },
+  "missingProof": "No grant from Chih-Hao Tsai or proof that another holder may license his contribution. Copyright and contact details grant nothing. Neither other authors’ BSD terms nor final-filesystem absence establishes permission.",
+  "compressedFiles": {
+    "icu-LICENSE.gz": "f4ee489f2f40b9f325c8a64bf2964a98b97653491cb66e2520a36be6e5c85247",
+    "icu-uvernum.h.gz": "50694d20b838ef1bc9cb78b9b59b56e987f52d7a3085ec3f67d1efbb831c0de8"
+  }
+}
