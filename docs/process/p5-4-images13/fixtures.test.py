@@ -65,11 +65,15 @@ class GrantTests(unittest.TestCase):
                  ("license.md", self.inputs["license.md"].replace(
                      b'THE SOFTWARE IS PROVIDED "AS IS"', b""))]
         cases.append(("package.json", self.inputs["package.json"].replace(
-            b"Vercel, Inc.", b"Other Author")))
+            b"vercel/ms", b"other/ms_")))
+        for omitted in (b"Copyright (c) 2020 Vercel, Inc.\n",
+                        b"Permission is hereby granted, free of charge, to any person obtaining a copy\n"):
+            cases.append(("license.md", self.inputs["license.md"].replace(omitted, b"")))
         for name, data in self.inputs.items():
             cases.extend([(name, data + b"!"), (name, b"X" + data[1:])])
         for name, value in cases:
             with self.subTest(name=name, value=value[:25]):
+                self.assertNotEqual(self.inputs[name], value)
                 changed = dict(self.inputs)
                 changed[name] = value
                 with self.assertRaises(ValueError):
@@ -225,6 +229,14 @@ class GrantTests(unittest.TestCase):
 
             with patch.object(checker.candidate, "checked_bytes", side_effect=damaged_archive):
                 self.run_main(False)
+            for damaged in (b"bad gzip", gzip.compress(b'{"ranges": [}')):
+                def damaged_regions(path, digest):
+                    if path.name == "regions.json.gz":
+                        return damaged
+                    return actual(path, digest)
+
+                with patch.object(checker.candidate, "checked_bytes", side_effect=damaged_regions):
+                    self.run_main(False)
         with patch.object(checker, "RECORD", Path("/missing/grant.json")):
             self.run_main(False)
         result = subprocess.run([sys.executable, str(CHECKER)], capture_output=True)

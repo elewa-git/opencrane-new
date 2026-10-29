@@ -386,6 +386,22 @@ nice -n 10 python3 docs/process/p5-4-images11/check-is-windows.py \
 This reuses signed Node, all-layer candidate and Corepack inventory checks.
 `scripts/p5-4-images11.test.mjs` runs offline Python fixtures in the existing CI glob.
 
+The separate [ms review](../../docs/process/p5-4-images13/grant.json) checks
+version 2.1.3 against upstream Git commit `1c6264b795492e8fdecbc82cb8802fcfbfc08d26`.
+Its reviewed text changes must reproduce every ms range in the earlier inventory.
+The complete Vercel MIT licence stays with the source and package metadata fixtures.
+The bundled module has no licence notice; complete terms must accompany distribution.
+The checker reuses the signed Node, official archive and all-layer comparisons unchanged.
+Other dependency decisions, vulnerabilities and exact-source R3 remain separate blockers.
+The [receipt](../../docs/process/p5-4-images13/receipt.md) records the local checks.
+
+```sh
+nice -n 10 python3 docs/process/p5-4-images13/check-ms.py \
+  /tmp/p5-4-images4 /tmp/p5-4-images6
+```
+
+`scripts/p5-4-images13.test.mjs` runs its offline refusal fixtures in the existing CI glob.
+
 The [kubectl record](../../docs/process/p5-4-images12/build.json) binds the saved
 binary hash, archived Dockerfile, reported Go compiler, 89 module rows and build
 settings. It preserves `(devel)` versions and requires the exact replacements;
