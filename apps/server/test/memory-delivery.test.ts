@@ -1160,6 +1160,21 @@ async function accessUnavailable(mode: 'lag' | 'outage' | 'mixed' | 'denial') {
 it.each(['lag', 'outage', 'mixed', 'denial'] as const)(
   'distinguishes permission %s before recording access loss', accessUnavailable);
 
+async function receiptLagWithoutAccessLoss() {
+  const auth = memberAuthorisation(iam);
+  vi.spyOn(auth, 'applied').mockResolvedValue(false);
+  expect(await accessReceipt()).toEqual({ status: 'unavailable' });
+  await poll();
+  const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(facts.memoryContext?.events.size).toBe(2);
+  expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
+  expect(link.socket.readyState).toBe(WebSocket.OPEN);
+  vi.spyOn(auth, 'applied').mockResolvedValue(true);
+  expect(await accessReceipt()).toEqual({ status: 'unchanged' });
+}
+it('keeps memory and its reader when only permission receipts are delayed',
+  receiptLagWithoutAccessLoss);
+
 async function delayedAccessPreparation(source: 'receipts' | 'history') {
   if (source === 'receipts') {
     async function slowReceipt() { await delay(2100); return true; }
