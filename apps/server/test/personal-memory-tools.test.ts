@@ -85,7 +85,7 @@ async function fixture(operation: typeof operations[number] = 'recall', role = '
     discoveryTools: [{ name: operation, definition, revision }],
     policyTools: [{ name: operation, revision, reviewed: true, costCents: 0, mode: 'allow' }],
   };
-  async function readServer() { return state; }
+  function readServer() { return Promise.resolve(state); }
   const runtime = { sourceSha: 'a'.repeat(40), imageDigest: `sha256:${'b'.repeat(64)}`,
     environmentId: 'disposable-test-host' };
   const qualification = { ...runtime, result: 'PASS', checks: {
@@ -98,6 +98,8 @@ async function fixture(operation: typeof operations[number] = 'recall', role = '
     scopeId: memoryScopeId('test', 'person', 'alice'), baseMessageBytes: 100,
     turn, grant, caller: registration.caller, callers, runtime, qualification,
     readServer: vi.fn(readServer) };
+  const realCheck = auth.check.bind(auth);
+  const realUse = auth.use.bind(auth);
   const check = vi.spyOn(auth, 'check');
   const use = vi.spyOn(auth, 'use');
   const append = vi.spyOn(nats.store, 'append');
@@ -109,7 +111,7 @@ async function fixture(operation: typeof operations[number] = 'recall', role = '
     expect(processes.spawn).not.toHaveBeenCalled();
   }
   onTestFinished(noEffects);
-  return { input, auth, check, use, save, registration, state };
+  return { input, auth, check, use, realCheck, realUse, save, registration, state };
 }
 
 async function preparesOwner(operation: typeof operations[number]) {
@@ -180,16 +182,19 @@ async function refusesLateReceipt() {
   const { input, auth, check, use } = await fixture();
   const applied = auth.applied.bind(auth);
   const now = performance.now();
+  const clock = vi.spyOn(performance, 'now');
+  // Freeze the start too so service scheduling cannot move the expected expiry.
+  clock.mockReturnValue(now);
   async function late(eventId: string) {
     const result = await applied(eventId);
-    vi.spyOn(performance, 'now').mockReturnValue(now + 10_001);
+    clock.mockReturnValue(now + 10_001);
     return result;
   }
   vi.spyOn(auth, 'applied').mockImplementationOnce(late);
   expect(await preparePersonalMemoryTools(input)).toEqual([]);
   expect(check.mock.calls.length).toBeLessThanOrEqual(1);
   expect(use.mock.calls.length).toBeLessThanOrEqual(2);
-  vi.mocked(performance.now).mockRestore();
+  clock.mockRestore();
 }
 it('does not renew the read deadline for a late applied receipt', refusesLateReceipt);
 
@@ -210,8 +215,8 @@ async function adminScope() {
 }
 it('limits admins to their own scope and keeps only granted rights after demotion', adminScope);
 
-const changes = ['removal', 'grant', 'activity', 'caller', 'generation', 'qualification'] as const;
-async function changesDuringRead(change: typeof changes[number]) {
+const changes = ['removal', 'grant', 'activity', 'caller', 'generation', 'qualification', 'deadline'] as const;
+async function changesDuringRead(change: typeof changes[number], stage: 'catalogue' | 'permission') {
   const setup = await fixture();
   const started = Promise.withResolvers<void>();
   const resume = Promise.withResolvers<void>();
@@ -220,7 +225,15 @@ async function changesDuringRead(change: typeof changes[number]) {
     await resume.promise;
     return setup.state;
   }
-  setup.input.readServer.mockImplementation(readServer);
+  const use = setup.realUse;
+  async function delayedUse(...args: Parameters<typeof use>) {
+    const permission = await use(...args);
+    started.resolve();
+    await resume.promise;
+    return permission;
+  }
+  if (stage === 'catalogue') setup.input.readServer.mockImplementation(readServer);
+  if (stage === 'permission') setup.use.mockImplementationOnce(delayedUse);
   const preparing = preparePersonalMemoryTools(setup.input);
   const result = Promise.allSettled([preparing]);
   await started.promise;
@@ -237,7 +250,7 @@ async function changesDuringRead(change: typeof changes[number]) {
     }, false);
     await setup.save('conversation-conversation', 'file.uploaded', {
       conversationId: 'conversation', fileId: 'file', uploadedBy: 'alice', name: 'safe.txt',
-      size: 1, sha256: 'a'.repeat(64), mime: 'text/plain',
+      size: 1, sha256: 'a'.repeat(64), mime: 'text/plain', objectKey: 'test/conversation/file',
     }, false);
   }
   if (change === 'caller') setup.registration.close();
@@ -245,10 +258,15 @@ async function changesDuringRead(change: typeof changes[number]) {
   if (change === 'qualification') setup.input.qualification = {
     ...setup.input.qualification, result: 'FAIL',
   };
+  if (change === 'deadline') {
+    const late = performance.now() + 10_001;
+    vi.spyOn(performance, 'now').mockReturnValue(late);
+  }
   resume.resolve();
   const [outcome] = await result;
   if (change === 'removal') {
-    expect(outcome).toMatchObject({ status: 'rejected', reason: expect.any(MemberAccessRefused) });
+    expect(outcome?.status).toBe('rejected');
+    if (outcome?.status === 'rejected') expect(outcome.reason).toBeInstanceOf(MemberAccessRefused);
   } else {
     expect(outcome?.status).toBe('fulfilled');
     if (outcome?.status === 'fulfilled') {
@@ -256,10 +274,15 @@ async function changesDuringRead(change: typeof changes[number]) {
       if (change === 'activity') expect(checkPrivateTurnTools(outcome.value, setup.input)).toBe(true);
     }
   }
-  expect(setup.check.mock.calls.length).toBeLessThanOrEqual(1);
-  expect(setup.use.mock.calls.length).toBeLessThanOrEqual(2);
+  expect(setup.check).toHaveBeenCalledTimes(1);
+  expect(setup.use).toHaveBeenCalledTimes(2);
 }
-it.each(changes)('confirms %s after a delayed catalogue read', changesDuringRead);
+for (const stage of ['catalogue', 'permission'] as const) {
+  async function checksChange(change: typeof changes[number]) {
+    await changesDuringRead(change, stage);
+  }
+  it.each(changes)(`confirms %s after a delayed ${stage} read`, checksChange);
+}
 
 async function removalDuringFailure(service: 'catalogue' | 'permission') {
   const setup = await fixture();
@@ -275,3 +298,49 @@ async function removalDuringFailure(service: 'catalogue' | 'permission') {
 }
 it.each(['catalogue', 'permission'] as const)(
   'preserves removal saved during a failing %s read without another decision', removalDuringFailure);
+
+async function preservesConfirmedRefusal() {
+  const setup = await fixture();
+  const check = setup.realCheck;
+  const failure = new Error('private-upstream-canary');
+  function unavailableHistory(): never { throw failure; }
+  async function deny(...args: Parameters<typeof check>) {
+    await setup.save('member-alice', 'member.removed', {
+      memberId: 'alice', removedBy: 'owner',
+    });
+    const permission = await check(...args);
+    vi.spyOn(setup.input.store, 'readStream').mockImplementation(unavailableHistory);
+    return permission;
+  }
+  setup.check.mockImplementationOnce(deny);
+  await expect(preparePersonalMemoryTools(setup.input)).rejects.toThrow(MemberAccessRefused);
+  expect(setup.check).toHaveBeenCalledTimes(1);
+  expect(setup.input.readServer).not.toHaveBeenCalled();
+}
+it('keeps a confirmed membership refusal when further history reads would fail',
+  preservesConfirmedRefusal);
+
+async function checksTeamReceipts() {
+  const setup = await fixture();
+  await setup.save('team-group', 'team.created', {
+    teamId: 'group', name: 'Group', createdBy: 'alice',
+  });
+  await setup.save('team-group', 'team.member_added', {
+    teamId: 'group', memberId: 'alice', addedBy: 'alice',
+  });
+  await setup.save(grantSubject, 'grant.given', {
+    resourceType: 'mcp_server', resourceId: 'memory', granteeKind: 'team',
+    granteeId: 'group', grantedBy: 'alice',
+  });
+  await setup.save(grantSubject, 'grant.revoked', {
+    resourceType: 'mcp_server', resourceId: 'memory', granteeKind: 'member',
+    granteeId: 'alice', revokedBy: 'alice',
+  });
+  expect(await preparePersonalMemoryTools(setup.input)).toHaveLength(1);
+  await setup.save('team-group', 'team.member_removed', {
+    teamId: 'group', memberId: 'alice', removedBy: 'alice',
+  }, false);
+  expect(await preparePersonalMemoryTools(setup.input)).toEqual([]);
+}
+it('requires applied team membership when a team supplies the personal tool grant',
+  checksTeamReceipts);

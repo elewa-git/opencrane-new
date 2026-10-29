@@ -1,0 +1,1 @@
+- Internal personal memory tool preparation checks saved membership before catalogue and permission reads. Removed members cannot receive tools through stale permissions, and delayed lists refuse changed access. Live private tool delivery remains disabled.

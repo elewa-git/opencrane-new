@@ -25,6 +25,10 @@ waiting for tool definitions and permissions. A separate internal remember build
 uses the same privacy evidence, saved-turn, caller and policy checks without reading
 or saving facts.
 Recall privacy evidence cannot enable writes. Live private tool delivery remains disabled.
+The internal personal memory adapter checks saved membership before the catalogue or
+permissions. It checks each permission once, then confirms that the access records
+have not changed while waiting. A saved removal keeps its refusal even when another
+service fails. Ordinary chat messages and uploads do not invalidate the list.
 
 **Messages and access.** Two members can exchange private messages without starting assistant work. Members can start group chats with reviewed people. Offered groups are limited to those they belong to. Creators can add or remove participants; others can leave. Changes reject stale choices, and saved retries cannot add someone again. New chats can report that permissions are still applying so the website keeps the draft. A saved removal stops reads and live connections before the permissions service catches up. Later joiners see only messages from their latest join onwards. Lists reuse permission facts within a request and check for changes after each answer from the permissions service.
 
