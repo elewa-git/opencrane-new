@@ -44,8 +44,9 @@ export async function initialQualificationFixture() {
   function stat(...args: Parameters<typeof fs.fstatSync>) {
     const path = descriptors.get(args[0]);
     if (!path) return originalStat(...args);
-    return Object.assign(Object.create(Object.getPrototypeOf(template)) as fs.Stats,
-      template, { uid: 0, mode: 0o100600, size: Buffer.byteLength(files.get(path)!) });
+    const metadata = { uid: 0, mode: 0o100600, size: Buffer.byteLength(files.get(path)!) };
+    const copy = Object.create(Object.getPrototypeOf(template)) as fs.Stats;
+    return Object.assign(copy, template, metadata);
   }
   function close(descriptor: number) {
     if (!descriptors.has(descriptor)) originalClose(descriptor);
@@ -102,10 +103,17 @@ export async function initialQualificationFixture() {
   vi.spyOn(processes, 'execFileSync').mockImplementation(docker);
   vi.spyOn(processes, 'spawn').mockImplementation(spawn);
   const result = await collectDeployment();
-  files.set(resultPath, JSON.stringify(result));
-  function replace(value: unknown) { files.set(resultPath, JSON.stringify(value)); }
-  function changeHost() { host = 'replacement-host'; }
-  function changeInstallation() { streamCreated = new Date().toISOString(); }
-  function remove() { files.delete(resultPath); }
+  function replace(value: unknown) {
+    files.set(resultPath, JSON.stringify(value));
+  }
+  function changeHost() {
+    host = 'replacement-host';
+  }
+  function changeInstallation() {
+    streamCreated = new Date().toISOString();
+  }
+  function remove() {
+    files.delete(resultPath);
+  }
   return { result, replace, changeHost, changeInstallation, remove };
 }

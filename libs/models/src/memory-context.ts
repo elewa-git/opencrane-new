@@ -4,7 +4,8 @@ import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { grantStream, type Binding } from '@opencrane/authz';
 import { memoryScopeId } from '@opencrane/projections';
 import { assistantCreatedDataSchema, type MemoryIdentity } from '@opencrane/events';
-import { type AuthorityPermissions, type authorityFence, decisionAuthorityFence, currentAuthority, AuthorityRefused } from './authority.ts';
+import { type AuthorityPermissions, type authorityFence, decisionAuthorityFence,
+  currentAuthority, AuthorityRefused } from './authority.ts';
 import { confirmDecisionAccess, decisionActivity } from './decision-activity.ts';
 import { mcpPolicy, parseMcpCall, parseMemoryRequest, toolDecision } from './mcp.ts';
 import { closesDecisionTurn } from './approvals.ts';
@@ -341,11 +342,13 @@ export async function loadedMemoryRights(store: EventStore, binding: Binding,
   conversation: StoredEvent[], applied: (eventId: string) => Promise<boolean>,
   permissions?: AuthorityPermissions) {
   await currentAuthority(store, binding, claims.requester, claims.assistant,
-    claims.conversation, 'mcp_server', 'memory', fresh, conversation, undefined, applied, undefined, permissions);
+    claims.conversation, 'mcp_server', 'memory', fresh, conversation, undefined,
+    applied, undefined, permissions);
   const selected = await selectedMemoryScope(store, binding, claims, scopeId, fresh, applied);
   await requireRecordedGrants(store, binding.silo, claims, 'mcp_server', 'memory', fresh);
   await currentAuthority(store, binding, claims.requester, claims.assistant,
-    claims.conversation, 'memory_read', scopeId, fresh, conversation, undefined, applied, undefined, permissions);
+    claims.conversation, 'memory_read', scopeId, fresh, conversation, undefined,
+    applied, undefined, permissions);
   await requireRecordedGrants(store, binding.silo, claims, 'memory_read', scopeId,
     fresh, selected.requesterGroup);
 }

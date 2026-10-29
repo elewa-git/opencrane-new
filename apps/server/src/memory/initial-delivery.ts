@@ -7,7 +7,8 @@ import { approvalActivity, confirmDecisionAccess, decisionAuthorityFence, foldMe
   type MemoryContext } from '@opencrane/models';
 import { readChatFacts } from '../chat/chat-summary.ts';
 import { creationEvent } from '../chat/private-session.ts';
-import { personalRecallQualified } from '../chat/recall-qualification.ts';
+import { readDeploymentQualification } from
+  '../../../../scripts/private-memory-qualification/deployment.ts';
 import { scopeFor, type MemoryOptions } from './access.ts';
 import { initialMemoryAccess, refuseInitialMemory } from './initial-access.ts';
 import { memorySnapshot } from './reads.ts';
@@ -15,11 +16,10 @@ import { turnMemoryPreview } from './turn-preview.ts';
 
 type Identity = Pick<MemoryContext, 'silo' | 'requester' | 'assistant' | 'computer' |
   'generation' | 'conversation' | 'turn' | 'thread'>;
-type Evidence = { runtime: unknown; qualification: unknown };
 type RecordEvent = z.infer<typeof memoryContextRecordedEventSchema>;
 
-function requireQualification(evidence: Evidence) {
-  if (!personalRecallQualified(evidence.runtime, evidence.qualification)) {
+async function requireQualification(silo: string, runId: string) {
+  if (await readDeploymentQualification(silo) !== runId) {
     throw new LoadedMemoryRefused();
   }
 }
@@ -44,11 +44,12 @@ function recordEvent(silo: string, data: MemoryContextRecord) {
 
 // Record evidence only. This workflow cannot return text or authorise bridge release.
 export async function prepareInitialMemory(options: MemoryOptions, identity: Identity,
-  evidence: Evidence) {
+  ...unexpectedArguments: unknown[]) {
   const deadline = performance.now() + 10_000;
   try {
     const access = await initialMemoryAccess(options, identity.requester, deadline);
-    requireQualification(evidence);
+    if (unexpectedArguments.length !== 0) throw new LoadedMemoryRefused();
+    const qualification = await readDeploymentQualification(options.silo);
     const scope = scopeFor(options.silo, 'person', identity.requester);
     const parsed = requestFor(identity, scope.scopeId);
     await memoryRights(options.store, options.binding, identity, parsed, deadline,
@@ -88,7 +89,7 @@ export async function prepareInitialMemory(options: MemoryOptions, identity: Ide
       additions: preview.references, byteCount: preview.bytes, hasOmissions: preview.hasOmissions };
     const loaded = recordEvent(options.silo, loadedData);
     const binding = structuredClone(identity);
-    const selection = { scope, snapshot, loaded, evidence, binding };
+    const selection = { scope, snapshot, loaded, qualification, binding };
     await appendInitialRecord(options, selection, prepared, access, deadline);
     let consumed = false;
     async function load() {
@@ -114,13 +115,13 @@ export async function prepareInitialMemory(options: MemoryOptions, identity: Ide
 
 type Selection = { scope: ReturnType<typeof scopeFor>;
   snapshot: Awaited<ReturnType<typeof memorySnapshot>>; loaded: RecordEvent;
-  evidence: Evidence; binding: Identity };
+  qualification: string; binding: Identity };
 
 async function appendInitialRecord(options: MemoryOptions, selection: Selection,
   event: RecordEvent, permissions: Awaited<ReturnType<typeof initialMemoryAccess>>,
   deadline: number, preparedId?: string) {
-  const { binding, scope, snapshot, loaded, evidence } = selection;
-  requireQualification(evidence);
+  const { binding, scope, snapshot, loaded, qualification } = selection;
+  await requireQualification(options.silo, qualification);
   // Load conversation and supporting history before starting the short write check.
   const parsed = requestFor(binding, scope.scopeId);
   const activity = await approvalActivity(options.store, options.silo, binding.assistant,
@@ -162,7 +163,7 @@ async function appendInitialRecord(options: MemoryOptions, selection: Selection,
   const fresh = Object.assign(confirmAccess, access);
   async function confirm() {
     await permissions.confirm();
-    requireQualification(evidence);
+    await requireQualification(options.silo, qualification);
     await rights.confirm(fresh.deadline);
     await memory.confirm(fresh);
     const current = await memorySnapshot(options, scope);
@@ -171,7 +172,7 @@ async function appendInitialRecord(options: MemoryOptions, selection: Selection,
     }
     await fresh();
     await permissions.confirm();
-    requireQualification(evidence);
+    await requireQualification(options.silo, qualification);
   }
   await confirm();
   event.time = new Date().toISOString();

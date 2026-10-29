@@ -5,6 +5,7 @@ import type { AuthorityPermissions, authorityFence } from './authority.ts';
 import { foldMemoryContext, type MemoryContextState } from './memory-context-fold.ts';
 import { loadedMemoryRights, type MemoryContext } from './memory-context.ts';
 import { prepareMemoryReceipts } from './memory-preparation.ts';
+import { MemberAccessRefused } from './member-authority.ts';
 import { memoryReferences } from './memory-lineage.ts';
 
 type Identity = Pick<MemoryContext, 'silo' | 'requester' | 'assistant' | 'computer' |
@@ -114,12 +115,14 @@ export async function prepareLoadedMemory(store: EventStore, binding: Binding | 
         await fresh();
         if (performance.now() >= fresh.deadline) throw new LoadedMemoryRefused();
         confirmReferences(scopes.values(), references, claims.silo);
-      } catch {
+      } catch (error) {
+        if (error instanceof MemberAccessRefused) throw error;
         throw new LoadedMemoryRefused();
       }
     }
     return { confirm, loaded: references.length > 0 };
-  } catch {
+  } catch (error) {
+    if (error instanceof MemberAccessRefused) throw error;
     throw new LoadedMemoryRefused();
   }
 }

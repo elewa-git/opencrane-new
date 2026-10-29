@@ -77,7 +77,10 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   requirePermissions(decisions);
   await permissions?.confirm();
   await fresh();
-  return createHash('sha256').update(JSON.stringify({ facts, permissions: decisions, memoryScopes: [], credential: null })).digest('hex');
+  const input = { facts, permissions: decisions, memoryScopes: [], credential: null };
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(input));
+  return hash.digest('hex');
 }
 
 async function requireReceipts(receipts: string[], checkApplied: (id: string) => Promise<boolean>) {
