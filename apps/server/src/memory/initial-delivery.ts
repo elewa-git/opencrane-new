@@ -9,6 +9,7 @@ import { readChatFacts } from '../chat/chat-summary.ts';
 import { creationEvent } from '../chat/private-session.ts';
 import { personalRecallQualified } from '../chat/recall-qualification.ts';
 import { scopeFor, type MemoryOptions } from './access.ts';
+import { initialMemoryAccess, refuseInitialMemory } from './initial-access.ts';
 import { memorySnapshot } from './reads.ts';
 import { turnMemoryPreview } from './turn-preview.ts';
 
@@ -44,12 +45,14 @@ function recordEvent(silo: string, data: MemoryContextRecord) {
 // Record evidence only. This workflow cannot return text or authorise bridge release.
 export async function prepareInitialMemory(options: MemoryOptions, identity: Identity,
   evidence: Evidence) {
+  const deadline = performance.now() + 10_000;
   try {
+    const access = await initialMemoryAccess(options, identity.requester, deadline);
     requireQualification(evidence);
     const scope = scopeFor(options.silo, 'person', identity.requester);
     const parsed = requestFor(identity, scope.scopeId);
-    const deadline = performance.now() + 10_000;
-    await memoryRights(options.store, options.binding, identity, parsed, deadline);
+    await memoryRights(options.store, options.binding, identity, parsed, deadline,
+      undefined, undefined, access);
     const assistant = await creationEvent(options.store, options.silo,
       `assistant-${identity.assistant}`, 'assistant.created');
     const personal = z.object({ kind: z.literal('personal'), ownerId: z.literal(identity.requester) });
@@ -67,7 +70,7 @@ export async function prepareInitialMemory(options: MemoryOptions, identity: Ide
     }
     const snapshot = await memorySnapshot(options, scope);
     const params = { conversationId: identity.conversation, turnId: identity.turn };
-    const preview = await turnMemoryPreview(options, identity.requester, params);
+    const preview = await turnMemoryPreview(options, identity.requester, params, access);
     for (const reference of preview.references) {
       if (reference.scopeId !== scope.scopeId) {
         throw new LoadedMemoryRefused();
@@ -86,24 +89,26 @@ export async function prepareInitialMemory(options: MemoryOptions, identity: Ide
     const loaded = recordEvent(options.silo, loadedData);
     const binding = structuredClone(identity);
     const selection = { scope, snapshot, loaded, evidence, binding };
-    await appendInitialRecord(options, selection, prepared);
+    await appendInitialRecord(options, selection, prepared, access, deadline);
     let consumed = false;
     async function load() {
+      const loadDeadline = performance.now() + 10_000;
       try {
         if (consumed) {
           throw new LoadedMemoryRefused();
         }
         // Consume before awaiting anything. Unknown saves and lost replies cannot resend.
         consumed = true;
-        await appendInitialRecord(options, selection, loaded, prepared.id);
+        const loadAccess = await initialMemoryAccess(options, binding.requester, loadDeadline);
+        await appendInitialRecord(options, selection, loaded, loadAccess, loadDeadline, prepared.id);
         return { status: 'loaded' as const, dispatch: 'disabled' as const };
-      } catch {
-        throw new LoadedMemoryRefused();
+      } catch (error) {
+        return refuseInitialMemory(options, binding.requester, loadDeadline, error);
       }
     }
     return { load };
-  } catch {
-    throw new LoadedMemoryRefused();
+  } catch (error) {
+    return refuseInitialMemory(options, identity.requester, deadline, error);
   }
 }
 
@@ -112,11 +117,11 @@ type Selection = { scope: ReturnType<typeof scopeFor>;
   evidence: Evidence; binding: Identity };
 
 async function appendInitialRecord(options: MemoryOptions, selection: Selection,
-  event: RecordEvent, preparedId?: string) {
+  event: RecordEvent, permissions: Awaited<ReturnType<typeof initialMemoryAccess>>,
+  deadline: number, preparedId?: string) {
   const { binding, scope, snapshot, loaded, evidence } = selection;
   requireQualification(evidence);
   // Load conversation and supporting history before starting the short write check.
-  const deadline = performance.now() + 10_000;
   const parsed = requestFor(binding, scope.scopeId);
   const activity = await approvalActivity(options.store, options.silo, binding.assistant,
     binding.conversation, binding.turn, deadline);
@@ -142,9 +147,10 @@ async function appendInitialRecord(options: MemoryOptions, selection: Selection,
     conversation.push(pendingLoad);
   }
   const memory = await prepareLoadedMemory(options.store, options.binding, binding,
-    conversation, deadline);
+    conversation, deadline, permissions);
   // Require recall access even when the selected personal block is empty.
-  const rights = await memoryRights(options.store, options.binding, binding, parsed, deadline);
+  const rights = await memoryRights(options.store, options.binding, binding, parsed, deadline,
+    undefined, undefined, permissions);
   const subjects = [`member-${binding.requester}`, `assistant-${binding.assistant}`, 'mcp-memory',
     grantStream('mcp_server', 'memory'), grantStream('memory_read', scope.scopeId)];
   const authority = await decisionAuthorityFence(options.store, performance.now(), subjects,
@@ -155,6 +161,7 @@ async function appendInitialRecord(options: MemoryOptions, selection: Selection,
   const access = { include: authority.include, head: authority.head, deadline: authority.deadline };
   const fresh = Object.assign(confirmAccess, access);
   async function confirm() {
+    await permissions.confirm();
     requireQualification(evidence);
     await rights.confirm(fresh.deadline);
     await memory.confirm(fresh);
@@ -163,6 +170,7 @@ async function appendInitialRecord(options: MemoryOptions, selection: Selection,
       throw new LoadedMemoryRefused();
     }
     await fresh();
+    await permissions.confirm();
     requireQualification(evidence);
   }
   await confirm();
