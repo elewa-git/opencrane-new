@@ -18,7 +18,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>image contents, notices and installs"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, npm, notices and installs"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
@@ -162,6 +162,10 @@ A separate Corepack inventory compares its files, launcher link and bundled code
 with signed Node inputs and every saved layer. Separate reviews check two dependencies'
 source, bundled code and full MIT terms. Those terms must accompany image distribution.
 The other dependencies’ licences still need review.
+A separate npm inventory compares its package details, files and launcher links
+with the signed Node source, official download and every saved image layer.
+It records the source files omitted from the official download and refuses the
+candidate’s missing npm tree. Licence labels, missing details and copied code need review.
 They do not claim that this code is absent. The
 [operator notes](README.robot.md#package-image-promotion) explain the saved files
 needed to repeat these checks. Other licence reviews and installation approval
