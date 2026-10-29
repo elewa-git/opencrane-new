@@ -18,6 +18,7 @@ import { pauseRoutineAfterRemoval } from '../src/routine-access-pause.ts';
 import { pauseRoutineAsAdmin } from '../src/routine-admin-pause.ts';
 import { pauseRoutine } from '../src/routine-pause.ts';
 import { retireRoutine } from '../src/routine-retire.ts';
+import { finishRoutine } from '../src/routine-finish.ts';
 import { requestRoutineStop } from '../src/routine-stop.ts';
 import { createRoutineSender } from '../src/routine-sender.ts';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
@@ -341,6 +342,7 @@ async function startComputer(computerId = 'computer') {
     return { value: 'fixture-bridge', expiresAt: Date.now() + 120_000 };
   }
   const executedThreads: string[] = [];
+  const runningProcesses = new Set<string>();
   const interruptedThreads: string[] = [];
   const closedThreads: string[] = [];
   let closedSessions = 0;
@@ -376,6 +378,7 @@ async function startComputer(computerId = 'computer') {
         expect(params['threadId']).toBe(threadId);
         expect(JSON.stringify(params)).toContain('Private routine instructions');
         executedThreads.push(String(threadId));
+        runningProcesses.add(String(threadId));
         starts++;
         if (faults.delayStart) {
           await startReply.promise;
@@ -427,6 +430,7 @@ async function startComputer(computerId = 'computer') {
     trackFrames();
   }
   function finish(threadId: string, nativeTurnId = 'recorded-turn') {
+    if (nativeTurnId === 'recorded-turn') runningProcesses.delete(threadId);
     channel.notification({ method: 'turn/completed', params: {
       threadId, turn: { id: nativeTurnId, status: 'completed' } } });
   }
@@ -450,7 +454,7 @@ async function startComputer(computerId = 'computer') {
   return { wake, restart, close, executed, get starts() { return starts; },
     get sends() { return sends; }, get nativeStarts() { return nativeStarts; },
     get closedSessions() { return closedSessions; }, executedThreads, interruptedThreads, closedThreads, tokens, faults,
-    releaseStart: startReply.resolve, finish, get channel() { return channel; } };
+    runningProcesses, releaseStart: startReply.resolve, finish, get channel() { return channel; } };
 }
 async function savedStarts() {
   const rows = await history(nats.store, 'computer-sales-assistant', 'test');
@@ -1323,3 +1327,56 @@ async function failedProhibitionValidation(failure: 'slow' | 'error', kind: 'Pau
 it.each([['slow', 'Pause'], ['error', 'Pause'], ['slow', 'Access'], ['slow', 'Admin']] as const)(
   'interrupts the exact routine within two seconds despite %s %s prohibition evidence reads',
   failedProhibitionValidation);
+
+async function finishWithNativeEvidence(kind: 'terminal' | 'timeout' | 'connection loss') {
+  const link = await startRunning();
+  const stop = await saveProhibition('Stop');
+  await actor.stopRoot(actor.state.roots[0]!.rootId, 'routine_stop',
+    'routine-orders', stop.position);
+  await pollRoutine();
+  await vi.waitFor(interruptedOnce);
+  if (kind === 'terminal') {
+    preparedComputer.finish(selection.threadId);
+  } else if (kind === 'connection loss') {
+    link.socket.terminate();
+    await once(link.socket, 'close');
+    await preparedComputer.restart();
+  }
+  let closure: Awaited<ReturnType<typeof history>>[number] | undefined;
+  async function savedClosure() {
+    const rows = await history(nats.store, 'computer-sales-assistant', 'test');
+    function closesTurn(row: typeof rows[number]) {
+      return row.event.type === 'computer.turn_closed';
+    }
+    closure = rows.find(closesTurn);
+    expect(closure).toBeDefined();
+  }
+  await vi.waitFor(savedClosure, { timeout: 12_000, interval: 50 });
+  const request = { ...input,
+    terminalEvidence: { eventId: closure!.event.id, position: closure!.sequence } };
+  function complete() {
+    return finishRoutine(nats.store, 'test', request, { enabled: true });
+  }
+  if (kind === 'terminal') {
+    expect(closure!.event.data).toMatchObject({ nativeTermination: 'turn_completed' });
+    await expect(complete()).resolves.toMatchObject({ status: 'confirmed' });
+  } else {
+    // Keep process exit withheld after the private transport has closed.
+    expect(preparedComputer.runningProcesses.has(selection.threadId)).toBe(true);
+    expect(closure!.event.data).not.toHaveProperty('nativeTermination');
+    await expect(complete()).rejects.toThrow(/^Routine finish refused$/u);
+  }
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  let state;
+  for (const row of rows) state = foldRoutine(state, row.event);
+  if (kind === 'terminal') {
+    expect(state?.activeRun).toBeNull();
+    expect(state?.lastRun?.outcome).toBe('interrupted');
+  } else {
+    expect(state?.activeRun?.occurrenceId).toBe('occurrence');
+    expect(state?.lastRun).toBeNull();
+  }
+}
+it.each(['terminal', 'timeout', 'connection loss'] as const)(
+  'finishes only after saved native termination through the bridge: %s', finishWithNativeEvidence,
+  25_000);

@@ -336,3 +336,10 @@ async function reusedAllocation() {
   expect((await folded()).activeRun?.occurrenceId).toBe('reused');
 }
 it('refuses an allocation saved before the occurrence', reusedAllocation);
+
+async function unconfirmedClosure() {
+  await evidence({ nativeTermination: undefined });
+  await refused();
+}
+it('keeps the occurrence occupied when failure has no confirmed native termination',
+  unconfirmedClosure);
