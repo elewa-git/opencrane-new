@@ -92,7 +92,7 @@ async function fixture(fault = '') {
     return restoreComputerVolumeBackup(source.connection, options, targets, bounds);
   }
   return { source, options, bounds, targets, restore, writes, opens, originalWrite,
-    controller, custody: custodySetup, quiet };
+    controller, custody: custodySetup, quiet, description };
 }
 
 async function deliversOnlyAuthenticatedBytes() {
@@ -250,7 +250,22 @@ async function isolatesUncertainWrite(fault: string) {
   await expect(setup.restore()).rejects.toEqual(new Error(refusal));
   expect(setup.writes.mock.calls.length).toBe(1);
   expect(setup.opens.mock.calls.length).toBe(1);
-  expect((await readFile(join(setup.targets[0]!.directory, 'home-image'))).equals(saved)).toBe(true);
+  const retained = await readFile(join(setup.targets[0]!.directory, 'home-image'));
+  expect(retained.equals(saved)).toBe(true);
+  const binding = { silo: setup.options.silo, attempt: setup.options.attempt,
+    home: setup.description.binding.volumes[0]! };
+  const fresh = provisionComputerHomeTarget(binding);
+  async function cleanupFresh() {
+    await rm(fresh.directory, { recursive: true, force: true });
+  }
+  onTestFinished(cleanupFresh);
+  setup.targets[0] = fresh;
+  const retryBounds = captureBounds(setup.source.connection, {});
+  onTestFinished(retryBounds.dispose);
+  await expect(restoreComputerVolumeBackup(setup.source.connection, setup.options,
+    setup.targets, retryBounds)).rejects.toEqual(new Error(refusal));
+  expect(setup.writes.mock.calls.length).toBe(1);
+  expect(setup.opens.mock.calls.length).toBe(1);
   setup.quiet();
 }
 it.each(['failed', 'short-write', 'write', 'readback', 'abort', 'queued-abort'])('isolates an uncertain %s without a later writer',

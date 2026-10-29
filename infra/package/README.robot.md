@@ -1560,7 +1560,6 @@ real NKeys and the shipped configuration. Separate cases change each mounted
 identity's key, dates, names, usages, CA status and issuer, then check refusal
 before any Helm command. Expired and future fixtures use explicit ordered dates.
 
-
 ## Raw computer home restoration fixture
 
 P5-9 PR 5a adds `computer-volume-restore.ts` and `upgrade-recovery-home.test.ts`.
