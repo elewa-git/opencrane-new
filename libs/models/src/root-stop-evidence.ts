@@ -1,7 +1,8 @@
 import { foldRoutineHistory } from '@opencrane/authz';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
-import { parseEventByType, routineControlSchema, type EventEnvelope, type RoutineState }
-  from '@opencrane/events';
+import { parseEventByType, routineControlSchema, routineStopSchema,
+  type EventEnvelope, type RoutineState } from '@opencrane/events';
+import { readRoutineApproval } from './routine-approval-evidence.ts';
 import { data, type BudgetState } from './state.ts';
 import { withinBudgetDeadline } from './budget-writer.ts';
 
@@ -59,8 +60,27 @@ function lifecycleRun(state: RoutineState | undefined, event: EventEnvelope) {
   return { control, state };
 }
 
+async function requireApprovalStop(store: EventStore, state: RoutineState | undefined,
+  source: StoredEvent, claimPosition: number, deadline: number) {
+  const stop = routineStopSchema.parse(source.event.data);
+  if (stop.source !== 'approval') {
+    return;
+  }
+  if (!stop.cause || stop.cause.position >= source.sequence) {
+    throw new Error('Invalid routine prohibition');
+  }
+  const reason = await readRoutineApproval(store, state, stop.cause, claimPosition, deadline);
+  if (reason !== stop.reason || stop.affectedRun !== state?.activeRun?.occurrenceId) {
+    throw new Error('Invalid routine prohibition');
+  }
+}
+
 async function requireLifecycleRun(store: EventStore, state: RoutineState | undefined,
   source: StoredEvent, claimPosition: number, deadline: number) {
+  if (source.event.type === 'routine.run_stop_requested') {
+    await requireApprovalStop(store, state, source, claimPosition, deadline);
+    return;
+  }
   if (!isLifecycleProhibition(source.event)) {
     return;
   }

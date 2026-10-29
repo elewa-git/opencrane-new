@@ -1,0 +1,1 @@
+- An internal routine command records Stop after its owner's saved Ask denial or a saved expiry, including expiry after an approved tool call was proved unsent, refuses further calls before cleanup, and cancels only that run. Automatic firing and company Ask creation remain unavailable.

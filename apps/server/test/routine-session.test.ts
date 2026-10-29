@@ -36,6 +36,8 @@ import { calculateRoutineOccurrence } from '@opencrane/events/routine-schedule';
 import { claimScheduledRoutine } from '../../ops/test/support/routine-claim.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { applyRoutineStop } from '../src/routine-stop-budget.ts';
+import { routineAsk, routineUsedAsk } from './support/routine-ask.ts';
+import { stopRoutineAfterApproval } from '../src/routine-approval-stop.ts';
 import { pauseRoutineAfterRemoval } from '../src/routine-access-pause.ts';
 import { pauseRoutine } from '../src/routine-pause.ts';
 import { retireRoutine } from '../src/routine-retire.ts';
@@ -978,6 +980,11 @@ function finishedStopRun(occurrenceId: string) {
 }
 async function prohibit(kind: string, request: Awaited<ReturnType<typeof stopRequest>>,
   memberId = 'alice') {
+  if (['Denied', 'DeniedLate', 'Expired', 'ExpiredApproved'].includes(kind)) {
+    const cause = await routineAsk(nats.store, kind);
+    const { changeId: _change, ...expected } = request;
+    return stopRoutineAfterApproval(nats.store, 'test', { ...expected, cause });
+  }
   if (kind === 'Access') {
     const removed = event('removed-alice', 'member-alice', 'member.removed');
     await nats.seed([removed]);
@@ -1208,6 +1215,10 @@ function routineRootTests() {
   async function budgetStopRecovery(kind: string) {
     stopping = true;
     await prepare();
+    if (kind === 'Denied' || kind === 'Expired') {
+      activationMode = true;
+      await prepare();
+    }
     const root = actor.state.roots[0]!;
     const call = { requesterId: 'alice', conversationId, turnId: root.turnId,
       assistantId: 'sales-assistant', payingGroupId: 'sales', ...selection,
@@ -1217,7 +1228,7 @@ function routineRootTests() {
     let request = await stopRequest();
     if (kind === 'Access') {
       await fga.pause();
-    } else {
+    } else if (kind !== 'Denied' && kind !== 'Expired') {
       await apply([joinedMember('bob'), routine('routine.reassigned', 'bob')]);
       request = { ...await stopRequest(), expectedDefinitionRevision: 2, expectedControlRevision: 2 };
     }
@@ -1270,7 +1281,7 @@ function routineRootTests() {
       .toEqual({ status: 'confirmed' });
     expect(actor.state.roots[0]!.stop?.reason).toBe('routine_stop');
   }
-  it.each(['Stop', 'Pause', 'Retire', 'Access'])(
+  it.each(['Stop', 'Pause', 'Retire', 'Access', 'Denied', 'Expired'])(
     'saved %s retains frozen people and uncertain cents through budget failure and restart',
     budgetStopRecovery);
 
@@ -1632,6 +1643,190 @@ function routineRootTests() {
       activationMode = true;
     }
     beforeEach(allocated);
+    async function approvalInput(cause: { eventId: string; position: number }) {
+      const { changeId: _change, ...expected } = await stopRequest();
+      return { ...expected, cause };
+    }
+    async function invalidApproval(kind: string) {
+      await prepare();
+      const changed: Record<string, unknown> = {};
+      const terminal: Partial<EventEnvelope> = {};
+      let state = 'Denied';
+      if (['Requested', 'Approved', 'Used'].includes(kind)) {
+        state = kind;
+      } else if (kind === 'early expiry') {
+        state = 'Expired';
+        terminal.time = '2026-10-11T07:14:59.999Z';
+      } else if (kind === 'admin' || kind === 'non-owner') {
+        const person = kind === 'admin' ? 'admin' : 'bob';
+        terminal.principal = { kind: 'human', id: person };
+        terminal.data = { approvalId: 'ask-Denied', decision: 'rejected', decidedBy: person };
+      } else if (kind === 'another request') {
+        terminal.data = { approvalId: 'another', decision: 'rejected', decidedBy: 'alice' };
+      } else if (kind === 'hold length') {
+        changed['expiresAt'] = '2026-10-11T07:16:00.000Z';
+      } else if (kind === 'silo') {
+        terminal.silo = 'foreign';
+      } else if (['requesterId', 'assistantId', 'conversationId', 'turnId'].includes(kind)) {
+        changed[kind] = 'another';
+      }
+      const cause = await routineAsk(nats.store, state, changed, terminal);
+      if (kind === 'event id') {
+        cause.eventId = 'forged';
+      }
+      if (kind === 'position') {
+        cause.position--;
+      }
+      if (kind === 'Requested') {
+        vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-11T08:00:00Z'));
+      }
+      if (kind.startsWith('root ')) {
+        const read = nats.store.readStream.bind(nats.store);
+        const field = kind.slice(5);
+        async function* alteredRoot(...args: Parameters<typeof read>) {
+          for await (const row of read(...args)) {
+            if (row.event.type !== 'budget.root_allowance_set') {
+              yield row;
+              continue;
+            }
+            const data = z.record(z.string(), z.unknown()).parse(row.event.data);
+            yield { ...row, event: { ...row.event, data: { ...data, [field]: 'another' } } };
+          }
+        }
+        vi.spyOn(nats.store, 'readStream').mockImplementation(alteredRoot);
+      }
+      const request = await approvalInput(cause);
+      if (kind === 'routine') {
+        request.routineId = 'another';
+      }
+      if (kind === 'occurrence') {
+        request.occurrenceId = 'another';
+      }
+      const before = await nats.store.head();
+      await expect(stopRoutineAfterApproval(nats.store, 'test', request))
+        .rejects.toThrow(/^Routine approval Stop refused$/u);
+      expect(await nats.store.head()).toBe(before);
+    }
+    it.each(['Requested', 'Approved', 'Used', 'early expiry', 'admin', 'non-owner', 'silo',
+      'another request', 'hold length',
+      'requesterId', 'assistantId', 'conversationId', 'turnId', 'event id', 'position',
+      'routine', 'occurrence', 'root requesterId', 'root assistantId', 'root payingGroupId',
+      'root conversationId', 'root turnId'])(
+      'refuses Ask termination with %s evidence without appending', invalidApproval);
+
+    async function approvalRecovery(mode: string) {
+      await prepare();
+      const denial = await routineAsk(nats.store, 'Denied');
+      const expiry = await routineAsk(nats.store, 'Expired');
+      const first = await approvalInput(denial);
+      const second = { ...first, cause: expiry };
+      const append = nats.store.append.bind(nats.store);
+      async function loseReply(change: AppendCommand): Promise<never> {
+        await append(change);
+        throw new Error('private-service-canary');
+      }
+      if (mode === 'lost reply') {
+        vi.spyOn(nats.store, 'append').mockImplementationOnce(loseReply);
+        await expect(stopRoutineAfterApproval(nats.store, 'test', first))
+          .rejects.toThrow(/^Routine approval Stop refused$/u);
+      } else {
+        const race = await Promise.all([
+          stopRoutineAfterApproval(nats.store, 'test', first),
+          stopRoutineAfterApproval(nats.store, 'test', second),
+        ]);
+        expect(race[0]).toEqual(race[1]);
+      }
+      const original = await nats.store.readEvent(await nats.store.head('routine-orders'));
+      vi.restoreAllMocks();
+      await waitForDuplicateWindow(nats);
+      await nats.stop();
+      await nats.restart();
+      const before = await nats.store.head();
+      const results = await Promise.all([
+        stopRoutineAfterApproval(nats.store, 'test', second),
+        stopRoutineAfterApproval(nats.store, 'test', first),
+      ]);
+      expect(results[0]).toEqual(results[1]);
+      const source = await nats.store.readEvent(results[0].position);
+      expect(source).toEqual(original);
+      expect(await nats.store.head()).toBe(before);
+      const reference = { routineId: 'orders', ...results[0] };
+      const { status: _status, ...stop } = reference;
+      expect(await applyRoutineStop(nats.store, 'test', stop, actor, { replay: true, enabled: true }))
+        .toEqual({ status: 'disabled' });
+      const rows = await history(nats.store, 'routine-orders', 'test');
+      let state;
+      for (const row of rows) {
+        state = foldRoutine(state, row.event);
+      }
+      expect(state).toMatchObject({ status: 'active', stopRequested: true,
+        activeRun: { occurrenceId: 'occurrence' }, lastRun: null, executionAvailable: false });
+      expect(await nats.store.head()).toBe(before);
+      const finished = finishedStopRun('occurrence');
+      const nextDue = due();
+      const nextData = z.record(z.string(), z.unknown()).parse(nextDue.data);
+      const next = { ...nextDue, id: 'next-due', commandId: 'next-due',
+        data: { ...nextData, ...stopRunBinding('next') } };
+      const late = { ...finished, id: 'late-finish', commandId: 'late-finish' };
+      await nats.seed([finished, next, late]);
+      const afterCompletion = await nats.store.head();
+      expect(await stopRoutineAfterApproval(nats.store, 'test', first)).toEqual(results[0]);
+      expect(await nats.store.head()).toBe(afterCompletion);
+      expect(await applyRoutineStop(nats.store, 'test', stop, actor, { enabled: true }))
+        .toEqual({ status: 'confirmed' });
+      expect(actor.state.roots[0]!.stop).toMatchObject({ sourceEventId: original.event.id });
+      const budgetPosition = await nats.store.head('budget-test');
+      expectedStop = (await nats.store.readEvent(budgetPosition)).event;
+    }
+    it.each(['lost reply', 'race'])(
+      'Ask termination keeps the first cause after %s, duplicates and restart', approvalRecovery);
+
+    async function usedApprovalExpiry(kind: string, restart: boolean) {
+      await prepare();
+      const cause = await routineUsedAsk(nats.store, kind);
+      const request = await approvalInput(cause);
+      if (restart) {
+        await nats.stop();
+        await nats.restart();
+      }
+      const before = await nats.store.head();
+      const stopped = await stopRoutineAfterApproval(nats.store, 'test', request);
+      expect(stopped.status).toBe('confirmed');
+      expect(await nats.store.head()).toBe(before + 1);
+      const saved = await nats.store.readEvent(stopped.position);
+      expect(saved.event.data).toMatchObject({ source: 'approval', reason: 'approval_expired',
+        cause, occurrenceId: 'occurrence', conversationId, turnId: 'routine-turn-occurrence' });
+      const reference = { routineId: 'orders', eventId: stopped.eventId, position: stopped.position };
+      expect(await applyRoutineStop(nats.store, 'test', reference, actor,
+        { enabled: true, replay: true })).toEqual({ status: 'disabled' });
+      await nats.stop();
+      await nats.restart();
+      expect(await stopRoutineAfterApproval(nats.store, 'test', request)).toEqual(stopped);
+      const savedRows = await history(nats.store, 'routine-orders', 'test');
+      let state;
+      for (const row of savedRows) {
+        state = foldRoutine(state, row.event);
+      }
+      expect(state).toMatchObject({ stopRequested: true, executionAvailable: false,
+        activeRun: { occurrenceId: 'occurrence' } });
+      expect(await nats.store.head()).toBe(before + 1);
+      expect(actor.state.dispatches).toEqual([]);
+    }
+    it.each([['expired', false], ['expired', true], ['retry', true], ['retry used', true]] as const)(
+      'stops after proved-unsent use and saved expiry: %s, cold replay %s', usedApprovalExpiry);
+
+    async function invalidUsedApproval(kind: string) {
+      await prepare();
+      const cause = await routineUsedAsk(nats.store, kind);
+      const request = await approvalInput(cause);
+      const before = await nats.store.head();
+      await expect(stopRoutineAfterApproval(nats.store, 'test', request))
+        .rejects.toThrow(/^Routine approval Stop refused$/u);
+      expect(await nats.store.head()).toBe(before);
+    }
+    it.each(['used only', 'missing proof', 'foreign proof', 'uncertain', 'foreign retry'])(
+      'refuses used Ask expiry with %s', invalidUsedApproval);
+
     async function routineTool() {
       await apply([joinedMember('admin')]);
       const definition = { name: 'read', inputSchema: { type: 'object' },
@@ -1771,7 +1966,10 @@ function routineRootTests() {
     }
     it.each([
       ['Stop', 'model'], ['Pause', 'model'], ['Retire', 'model'], ['Access', 'model'],
+      ['Denied', 'model'], ['Expired', 'model'], ['DeniedLate', 'model'],
+      ['ExpiredApproved', 'model'],
       ['Stop', 'free tool'], ['Pause', 'free tool'], ['Retire', 'free tool'], ['Access', 'free tool'],
+      ['Denied', 'free tool'], ['Expired', 'free tool'],
     ])('refuses routine dispatch after saved %s before cleanup: %s', refusesSavedProhibition);
     async function preservesRefusalAfterAuditFailure(route: string) {
       const fixture = await dispatchFixture();

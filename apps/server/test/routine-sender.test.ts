@@ -12,6 +12,8 @@ import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { assistantProcessor } from '../src/chat/bridge-poll.ts';
 import { createLogger } from '@opencrane/observability';
+import { routineAsk } from './support/routine-ask.ts';
+import { stopRoutineAfterApproval } from '../src/routine-approval-stop.ts';
 import { pauseRoutineAfterRemoval } from '../src/routine-access-pause.ts';
 import { pauseRoutine } from '../src/routine-pause.ts';
 import { retireRoutine } from '../src/routine-retire.ts';
@@ -883,10 +885,16 @@ async function refusesExpiredPreparation() {
 it('refuses delivery after the empty private session expires', refusesExpiredPreparation);
 
 
-async function saveProhibition(kind: 'Stop' | 'Pause' | 'Retire' | 'Access') {
+async function saveProhibition(kind: 'Stop' | 'Pause' | 'Retire' | 'Access' | 'Denied' | 'Expired') {
   const request = { routineId: 'orders', changeId: 'orders:bridge-stop',
     expectedPosition: await nats.store.head('routine-orders'),
     expectedDefinitionRevision: 1, expectedScheduleRevision: 1, expectedControlRevision: 1 };
+  if (kind === 'Denied' || kind === 'Expired') {
+    const cause = await routineAsk(nats.store, kind);
+    const { changeId: _change, ...expected } = request;
+    return stopRoutineAfterApproval(nats.store, 'test',
+      { ...expected, occurrenceId: 'occurrence', cause });
+  }
   if (kind === 'Access') {
     const removed = event('removed-alice', 'member-alice', 'member.removed');
     await nats.seed([removed]);
@@ -917,7 +925,7 @@ async function pollRoutine() {
     mode: 'agent_session' as const, createdAt: new Date().toISOString(), assistantKind: 'team' as const }];
   await Promise.all(processor.pollRoutines(sessions));
 }
-async function runningProhibition(kind: 'Stop' | 'Pause' | 'Retire' | 'Access') {
+async function runningProhibition(kind: 'Stop' | 'Pause' | 'Retire' | 'Access' | 'Denied' | 'Expired') {
   expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
   await until(preparedComputer.executed);
   await saveProhibition(kind);
@@ -939,7 +947,7 @@ async function runningProhibition(kind: 'Stop' | 'Pause' | 'Retire' | 'Access') 
   expect(state?.activeRun?.occurrenceId).toBe('occurrence');
   expect(state?.lastRun).toBeNull();
 }
-it.each(['Stop', 'Pause', 'Retire', 'Access'] as const)(
+it.each(['Stop', 'Pause', 'Retire', 'Access', 'Denied', 'Expired'] as const)(
   'polls saved owner %s and interrupts only the accepted native routine turn once', runningProhibition);
 
 
@@ -1162,7 +1170,7 @@ async function prohibitionBeforeAdmission() {
 it('prohibition before start admission refuses only the routine and keeps the shared bridge',
   prohibitionBeforeAdmission);
 
-async function completedRoutineClearsOutput(kind: 'Stop' | 'Access') {
+async function completedRoutineClearsOutput(kind: 'Stop' | 'Access' | 'Denied' | 'Expired') {
   const link = await startRunning();
   const send = WebSocket.prototype.send.bind(link.socket);
   let stops = 0;
@@ -1202,7 +1210,7 @@ async function completedRoutineClearsOutput(kind: 'Stop' | 'Access') {
   expect({ stops, privateTextReplayedAfterProhibition: replayed })
     .toEqual({ stops: 1, privateTextReplayedAfterProhibition: false });
 }
-it.each(['Stop', 'Access'] as const)(
+it.each(['Stop', 'Access', 'Denied', 'Expired'] as const)(
   'clears private routine output when completion precedes %s polling',
   completedRoutineClearsOutput);
 

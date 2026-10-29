@@ -6497,6 +6497,21 @@ Unavailable services alone are not removal evidence. Replay only rebuilds the pa
 No subscription, route, scheduler or automatic execution is enabled. Other access causes,
 company profiles and fresh-install live qualification remain NOT RUN in this slice.
 
+## Routine Stop after a denied or expired Ask
+
+Part of #107. Prerequisite: #802 merged as `5b5d82b68`.
+`stopRoutineAfterApproval(store, silo, input)` saves one conditional Stop for the occupied
+occurrence. Input names routineId, occurrenceId, expectedPosition, the three expected
+revisions and `cause: { eventId, position }`. Only an exact saved owner rejection or
+saved expiry of a 15-minute Ask is accepted. Verification uses event reads, never
+`readApproval`, credential access or review decryption. The request must match the
+trusted routinePreparation, frozen owner/assistant/payer and admitted allocation.
+The first Stop survives competing causes, lost replies and restart. It keeps the schedule
+and occupied slot. Budget cleanup and connected-thread interruption remain separate;
+cleanup failure cannot restore dispatch or enlarge the allowance. Replay starts no work.
+The credential-free fixture proves termination only, not a company account review.
+Company Ask creation/use, offline expiry discovery, firing and live qualification are later.
+
 ## Governed personal corrections (P4-15 PR 4f)
 
 Part of #97. Prepared Correct calls reuse `memory/correct.ts`, its journal, shared fact
@@ -6554,3 +6569,16 @@ are unavailable without a saved denial.
 No event or HTTP API field, dependency, routine file or loader changed. Browser
 reply delivery, group/notes withdrawal and native launch remain later work.
 Admission remains disabled. Fresh-install live qualification: NOT RUN.
+
+Part of #107. Prerequisite: #802 merged as `5b5d82b68`.
+`stopRoutineAfterApproval(store, silo, input)` saves one conditional Stop for the occupied
+occurrence. Input names routineId, occurrenceId, expectedPosition, the three expected
+revisions and `cause: { eventId, position }`. Only an exact saved owner rejection or
+saved expiry of a 15-minute Ask is accepted. Verification uses event reads, never
+`readApproval`, credential access or review decryption. The request must match the
+trusted routinePreparation, frozen owner/assistant/payer and admitted allocation.
+The first Stop survives competing causes, lost replies and restart. It keeps the schedule
+and occupied slot. Budget cleanup and connected-thread interruption remain separate;
+cleanup failure cannot restore dispatch or enlarge the allowance. Replay starts no work.
+The credential-free fixture proves termination only, not a company account review.
+Company Ask creation/use, offline expiry discovery, firing and live qualification are later.

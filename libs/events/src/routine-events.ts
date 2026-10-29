@@ -44,7 +44,7 @@ export const routineEvents = [
     schemas.routineMissedSchema, missed),
   event('routine.run_activation_admitted', 'routine', 'A run admission and sender attempt were saved.',
     schemas.routineActivationSchema, admitted),
-  event('routine.run_stop_requested', 'routine', 'The owner or an admin requested a run stop.',
+  event('routine.run_stop_requested', 'routine', 'A person or saved approval outcome requested a run stop.',
     schemas.routineStopSchema, stop),
   event('routine.run_finished', 'routine', 'A run ended with recorded evidence.',
     schemas.routineFinishedSchema, finished),
