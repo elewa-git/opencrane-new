@@ -11,6 +11,7 @@ import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.
 import { database } from '../../../libs/projections/test/database.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow } from './support/duplicate-window.ts';
 import { reassignRoutine } from '../src/routine-reassign.ts';
+import { retireRoutine } from '../src/routine-retire.ts';
 
 let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -215,6 +216,36 @@ async function recovery() {
   expect(await rows()).toHaveLength(2);
 }
 it('recovers a lost reply after duplicate expiry and restart, but conflicts on changed intent', recovery);
+
+async function recoveryAfterRetirement() {
+  const append = nats.store.append.bind(nats.store);
+  async function lost(change: AppendCommand): Promise<never> {
+    await append(change);
+    throw new Error('private-service-canary');
+  }
+  vi.spyOn(nats.store, 'append').mockImplementationOnce(lost);
+  await expect(reassign()).rejects.toThrow(/^Routine reassignment unavailable$/u);
+  await applySaved();
+  const reassignedRows = await rows();
+  const reassigned = reassignedRows.at(-1)!;
+  expect(reassigned.event.type).toBe('routine.reassigned');
+  const originalReceipt = { status: 'confirmed', changeId: input.changeId,
+    eventId: reassigned.event.id, position: reassigned.sequence };
+  const retirement = { changeId: 'orders:retire', routineId: 'orders',
+    expectedPosition: reassigned.sequence, expectedDefinitionRevision: 2,
+    expectedScheduleRevision: 1, expectedControlRevision: 2 };
+  await expect(retireRoutine(nats.store, binding, 'bob', retirement))
+    .resolves.toMatchObject({ status: 'confirmed', changeId: 'orders:retire' });
+  await applySaved();
+  const before = await nats.store.head();
+  const retiredRows = await rows();
+  expect(retiredRows.at(-1)!.event.type).toBe('routine.retired');
+  expect(await reassign()).toEqual(originalReceipt);
+  expect(await nats.store.head()).toBe(before);
+  expect(await rows()).toHaveLength(3);
+}
+it('recovers the original lost reassignment receipt after the new owner retires the routine',
+  recoveryAfterRetirement);
 
 async function writeWindow(kind: string) {
   const read = nats.store.readStream.bind(nats.store);
