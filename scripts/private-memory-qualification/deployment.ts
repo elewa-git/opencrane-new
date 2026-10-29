@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
+import { closeSync, constants, fstatSync, openSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { checks, qualifications } from './collect.ts';
 
@@ -159,11 +160,37 @@ function runCheck(containerId: string, binding: Binding, name: string): string {
   return hash(JSON.stringify(receipt));
 }
 
-// Accept only a running container id. Evidence files are never an input to qualification.
-export function collectDeployment(containerId: string): Result {
+function deploymentTarget() {
+  const path = '/etc/opencrane/private-memory-qualification.json';
+  const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
-    z.string().regex(/^[a-f0-9]{64}$/u).parse(containerId);
+    const stat = fstatSync(descriptor);
+    if (!stat.isFile() || stat.uid !== 0 || (stat.mode & 0o022) !== 0 || stat.size > 1024) {
+      throw new Error('unsafe_target_configuration');
+    }
+    const content = readFileSync(descriptor, 'utf8');
+    const targetSchema = z.strictObject({
+      containerId: z.string().regex(/^[a-f0-9]{64}$/u),
+      siloId: z.string().min(1).max(200),
+    });
+    return targetSchema.parse(JSON.parse(content));
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+// Read the permitted deployment from a root-owned file, never from the caller.
+export function collectDeployment(...unexpectedArguments: unknown[]): Result {
+  try {
+    if (unexpectedArguments.length !== 0) {
+      throw new Error('unexpected_argument');
+    }
+    const target = deploymentTarget();
+    const containerId = target.containerId;
     const before = measure(containerId);
+    if (before.siloId !== hash(target.siloId)) {
+      throw new Error('wrong_silo');
+    }
     const streamCreated = assertFresh(containerId, before.created);
     const installationId = hash(JSON.stringify([before.installationId, streamCreated]));
     const binding = bindingSchema.parse({

@@ -82,7 +82,7 @@ beforeEach(prepare);
 afterEach(vi.useRealTimers);
 
 function qualifiesObservedDeployment(): void {
-  const result = collectDeployment(containerId);
+  const result = collectDeployment();
   expect(result.result).toBe('PASS');
   expect(result).toMatchObject({ sourceSha, imageDigest });
   expect(responses.map(responseName)).toEqual(names);
@@ -112,7 +112,7 @@ function substitutes(field: string): void {
     response[field] = foreign[field];
   }
   alter = change;
-  expect(collectDeployment(containerId).result).toBe('FAIL');
+  expect(collectDeployment().result).toBe('FAIL');
 }
 it.each(['sourceSha', 'imageDigest', 'environmentId', 'siloId', 'installationId', 'runId'])(
   'refuses a receipt from another %s', substitutes,
@@ -134,7 +134,7 @@ function staleOrReplayed(kind: string): void {
     }
   }
   alter = change;
-  expect(collectDeployment(containerId).result).toBe('FAIL');
+  expect(collectDeployment().result).toBe('FAIL');
 }
 it.each(['stale', 'future', 'replayed', 'edited'])('refuses %s receipts', staleOrReplayed);
 
@@ -145,12 +145,12 @@ function refusesMissingCheck(name: string): void {
     }
   }
   alter = change;
-  expect(collectDeployment(containerId).result).toBe('FAIL');
+  expect(collectDeployment().result).toBe('FAIL');
 }
 it.each(names)('refuses missing check %s', refusesMissingCheck);
 
 function refusesCopiedRun(): void {
-  expect(collectDeployment(containerId).result).toBe('PASS');
+  expect(collectDeployment().result).toBe('PASS');
   const copied = structuredClone(responses);
   let index = 0;
   function replay(response: Record<string, unknown>): void {
@@ -158,7 +158,7 @@ function refusesCopiedRun(): void {
     index += 1;
   }
   alter = replay;
-  expect(collectDeployment(containerId).result).toBe('FAIL');
+  expect(collectDeployment().result).toBe('FAIL');
 }
 it('refuses a complete copied bundle on the same deployment', refusesCopiedRun);
 
@@ -181,7 +181,7 @@ function refusesDeploymentChange(field: string): void {
     }
   }
   alter = change;
-  expect(collectDeployment(containerId).result).toBe('FAIL');
+  expect(collectDeployment().result).toBe('FAIL');
 }
 it.each(['image', 'host', 'silo', 'restart', 'event-store'])(
   'refuses a deployment whose %s changes during a run', refusesDeploymentChange,
@@ -200,7 +200,7 @@ function refusesOldInstallation(kind: string): void {
   if (kind === 'future') {
     stream.created = '2027-01-01T00:00:00Z';
   }
-  expect(collectDeployment(containerId).result).toBe('FAIL');
+  expect(collectDeployment().result).toBe('FAIL');
   expect(responses).toHaveLength(0);
 }
 it.each(['events', 'purged', 'old', 'future'])(
@@ -214,13 +214,13 @@ function refusesMutableRunner(kind: string): void {
   if (kind === 'mounted') {
     container['Mounts'] = [{ Destination: '/app/scripts' }];
   }
-  expect(collectDeployment(containerId).result).toBe('FAIL');
+  expect(collectDeployment().result).toBe('FAIL');
 }
 it.each(['writable', 'mounted'])('refuses %s deployment code', refusesMutableRunner);
 
 function hidesFailures(): void {
   failChild = true;
-  expect(collectDeployment(containerId)).toEqual({ result: 'FAIL', reason: 'collection_failed' });
+  expect(collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });
 }
 it('keeps child output out of failures', hidesFailures);
 
@@ -229,7 +229,7 @@ function refusesNonPassingChild(status: string): void {
     response['result'] = status;
   }
   alter = change;
-  expect(collectDeployment(containerId)).toEqual({ result: 'FAIL', reason: 'collection_failed' });
+  expect(collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });
 }
 it.each(['FAIL', 'PARTIAL'])('refuses a child reporting %s', refusesNonPassingChild);
 
@@ -238,7 +238,7 @@ function refusesExtraChildOutput(): void {
     response['extra'] = 'fixture output that must stay private';
   }
   alter = change;
-  expect(collectDeployment(containerId)).toEqual({ result: 'FAIL', reason: 'collection_failed' });
+  expect(collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });
 }
 it('refuses extra child fields without exposing their values', refusesExtraChildOutput);
 
