@@ -2,10 +2,10 @@
 
 ## What this is
 
-Gateway permission requests report an unavailable service (HTTP 503) when event reads,
-permission checks or budget writes fail, or the access check runs out of time.
-They grant no permit or extra spending. A confirmed access refusal stays HTTP 403.
-The caller can try again after the dependency recovers; every check runs again.
+Gateway permission requests report an unavailable service (HTTP 503) for event-store
+outages and timeouts, failed permission-service checks, unavailable budget writes
+and expired access checks. They grant no permit or extra spending. A confirmed access
+refusal stays HTTP 403. A retry must pass the normal access and spending checks again.
 
 Personal account saves and cleanup share a database lock. They wait up to one second
 for it before reading the saved history and checking current access. A failed or expired

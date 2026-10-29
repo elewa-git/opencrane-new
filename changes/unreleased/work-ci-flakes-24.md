@@ -1,1 +1,1 @@
-- Gateway permission requests now report an unavailable service instead of an access refusal when event reads, permission checks or budget writes fail or time out. Access and spending limits remain enforced.
+- Gateway permission requests now return HTTP 503 for event-store outages and timeouts, unavailable permission or budget checks and expired access checks. Confirmed access refusals and spending limits remain enforced.
