@@ -96,7 +96,11 @@ Calls and turn renewal prepare access receipts for every memory scope already lo
 Correct can save one checked personal replacement and return a receipt without text.
 Before saving, it checks for new loaded facts, an ended conversation and saved member removal.
 A later service error cannot turn a known removal into an uncertain save.
-Forget through the assistant remains disabled.
+The governed backend can also hide a personal fact through Forget. Its receipt stays
+cleanup-pending until the worker confirms deletion. A lost reply can be checked without
+sending Forget again. Native memory tools remain disabled.
+Correct and Forget keep a confirmed refusal even when a later membership read is unavailable.
+They return a refusal and save no memory change.
 An internal command can record that a personal turn's loaded memory became invalid
 after a saved correction, forget, expiry or loss of access. It keeps every loaded reference for replay and
 returns a receipt without fact text. An internal reaction can send Stop after confirming
@@ -157,7 +161,7 @@ flowchart LR
   computer -.->|records private thread for memory discovery| server
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|checks upload bytes over HTTPS| runtime
-  runtime -->|checks memory access for recall, remember and personal corrections| server
+  runtime -->|checks memory reads and personal changes| server
 ```
 
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) handles sign-in.

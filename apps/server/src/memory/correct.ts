@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { authorityFence, currentMembership, isAuthorityChanged, MemberAccessRefused,
-  memoryReferences, readActiveMember } from '@opencrane/models';
+import { authorityFence, memoryReferences, readActiveMember } from '@opencrane/models';
 import { memoryKeys, memoryIdentity } from '@opencrane/projections';
 import { memoryCorrectedEventSchema, memoryValueEventSchema, memoryTextSchema,
   memoryWrittenDataSchema } from '@opencrane/events';
@@ -13,6 +12,8 @@ import { commandJournal } from './journal.ts';
 import { commandReference, commandHistory } from './command-history.ts';
 import { acquireMemoryWrite, MemoryBusy } from './admission.ts';
 import { changeReceipt } from './forget.ts';
+import { confirmChange, changeRefused, type AgentChange, type WriteAuthority }
+  from './change-authority.ts';
 
 const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const targetParams = z.strictObject({ scopeId: z.string(), memoryId: identifier });
@@ -22,9 +23,6 @@ const inputSchema = fields.extend({ commandId: identifier, expectedRevision: z.i
 type Input = z.infer<typeof inputSchema>;
 type State = Awaited<ReturnType<typeof commandHistory>>;
 const agentInputSchema = inputSchema.extend({ dependsOn: memoryWrittenDataSchema.shape.dependsOn });
-type WriteAuthority = (() => Promise<unknown>) & { deadline: number };
-type AgentCorrection = { rows: StoredEvent[]; checkAccess: WriteAuthority;
-  confirm: () => Promise<unknown>; conversation: string; turn: string; requestId: string };
 
 function factReservation(options: MemoryOptions, scopeId: string, requester: string, memoryId: string) {
   const reference = commandReference(options.silo, scopeId, requester, memoryId);
@@ -75,7 +73,7 @@ function originalReceipt(row: StoredEvent, rows: StoredEvent[], input: Input, me
   return receipt;
 }
 async function correctionTarget(options: MemoryOptions, requester: string, params: unknown,
-  agent?: AgentCorrection) {
+  agent?: AgentChange) {
   const target = targetParams.safeParse(params);
   if (!target.success) {
     throw new MemoryRefused();
@@ -97,7 +95,7 @@ async function correctionTarget(options: MemoryOptions, requester: string, param
   return { scope, memoryId };
 }
 export async function correct(options: MemoryOptions, requester: string, params: unknown,
-  raw: unknown, agent?: AgentCorrection) {
+  raw: unknown, agent?: AgentChange) {
   const { scope, memoryId } = await correctionTarget(options, requester, params, agent);
   const input = agent ? agentInputSchema.parse(raw) : inputSchema.parse(raw);
   const principalKind: 'agent' | 'human' = agent ? 'agent' : 'human';
@@ -162,7 +160,7 @@ function checkReservation(reservation: ReturnType<typeof factReservation>, posit
 }
 async function correctLocked(options: MemoryOptions, requester: string, scope: Scope, input: Input,
   reference: string, state: State, previous: ReturnType<typeof targetValue>,
-  fresh: WriteAuthority, agent?: AgentCorrection) {
+  fresh: WriteAuthority, agent?: AgentChange) {
   const principalKind: 'agent' | 'human' = agent ? 'agent' : 'human';
   const dependencies = agent ? agentInputSchema.parse(input).dependsOn : previous.dependsOn;
   const journal = commandJournal(options.keyDirectory!, reference);
@@ -206,7 +204,7 @@ async function correctLocked(options: MemoryOptions, requester: string, scope: S
 }
 function correctionEvent(options: MemoryOptions, input: Input,
   entry: NonNullable<ReturnType<ReturnType<typeof commandJournal>['read']>>,
-  previous: ReturnType<typeof targetValue>, agent?: AgentCorrection) {
+  previous: ReturnType<typeof targetValue>, agent?: AgentChange) {
   const { identity, requester } = entry;
   const { scopeId, memoryId } = identity;
   const reference = commandReference(options.silo, scopeId, requester, input.commandId,
@@ -229,38 +227,10 @@ function correctionEvent(options: MemoryOptions, input: Input,
     correlation, data };
   return memoryCorrectedEventSchema.parse(proposed);
 }
-function correctionRefused(error: unknown): error is Error {
-  return error instanceof MemoryRefused || error instanceof MemberAccessRefused ||
-    isAuthorityChanged(error);
-}
-async function requireCorrectionMember(options: MemoryOptions, requester: string, deadline: number) {
-  const membership = await currentMembership(options.store, options.silo, requester,
-    undefined, deadline);
-  if (!membership.role) {
-    throw new MemberAccessRefused('Active silo membership required');
-  }
-}
-async function confirmCorrection(options: MemoryOptions, requester: string,
-  fresh: WriteAuthority, agent?: AgentCorrection) {
-  if (!agent) {
-    await fresh();
-    return;
-  }
-  // Check saved membership before a failed dependency can hide a removal.
-  await requireCorrectionMember(options, requester, fresh.deadline);
-  try {
-    await fresh();
-    await agent.confirm();
-  } catch (error) {
-    // Catch removals saved during the check without repeating permission checks.
-    await requireCorrectionMember(options, requester, fresh.deadline);
-    throw error;
-  }
-}
 async function appendCorrection(options: MemoryOptions, input: Input,
   entry: NonNullable<ReturnType<ReturnType<typeof commandJournal>['read']>>,
   previous: ReturnType<typeof targetValue>, fresh: WriteAuthority,
-  rows: StoredEvent[], agent?: AgentCorrection) {
+  rows: StoredEvent[], agent?: AgentChange) {
   const { identity, requester, expectedSequence } = entry;
   const { scopeId, memoryId } = identity;
   const event = correctionEvent(options, input, entry, previous, agent);
@@ -275,10 +245,10 @@ async function appendCorrection(options: MemoryOptions, input: Input,
   keys.provision(identity);
   const encrypted = keys.encrypt(identity, input.text);
   event.data = { ...event.data, ...encrypted };
-  await confirmCorrection(options, requester, fresh, agent);
+  await confirmChange(options, requester, fresh, agent);
   async function checkAccess() {
     // Check expiry and custody again after the store prepares publication.
-    await confirmCorrection(options, requester, fresh, agent);
+    await confirmChange(options, requester, fresh, agent);
     const references = memoryReferences(rows, options.silo, scopeId, keys);
     const loaded = [...previous.dependsOn, previous];
     for (const reference of loaded) {
@@ -303,13 +273,13 @@ async function appendCorrection(options: MemoryOptions, input: Input,
   try {
     result = await options.store.append(command);
   } catch (error) {
-    if (agent && correctionRefused(error)) {
+    if (agent && changeRefused(error)) {
       throw error;
     }
     return { outcome: 'unknown' };
   }
   if (result.status === 'unavailable') {
-    if (agent && correctionRefused(result.cause)) {
+    if (agent && changeRefused(result.cause)) {
       throw result.cause;
     }
     return { outcome: 'unknown' };
@@ -330,18 +300,4 @@ async function appendCorrection(options: MemoryOptions, input: Input,
   journal.save(failed);
   reservation.save(failed);
   throw new MemoryConflict();
-}
-
-export async function readAgentCorrection(options: MemoryOptions, requester: string, scope: Scope,
-  commandId: string) {
-  if (scope.scopeKind !== 'person' || scope.ownerId !== requester) {
-    throw new MemoryRefused();
-  }
-  const state = await commandHistory(options, scope.scopeId, requester, commandId,
-    performance.now() + 10_000, [], 'agent');
-  if (state.original?.event.type !== 'memory.corrected') {
-    return { outcome: 'unknown' };
-  }
-  const audience = { kind: 'person', ownerId: requester };
-  return changeReceipt(state.original, state.rows, audience, options.keyDirectory);
 }

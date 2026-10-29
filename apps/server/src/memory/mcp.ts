@@ -5,6 +5,7 @@ import { MemoryToolRefused, type MemoryContext, memoryRights,
 import type { AuthConfig } from '@opencrane/auth';
 import type { MemoryOptions } from './access.ts';
 import { correct } from './correct.ts';
+import { forget } from './forget.ts';
 import { remember } from './commands.ts';
 import { checkRecallProof, recallProof } from './recall-proof.ts';
 import { memoryPreparations } from './preparation.ts';
@@ -143,12 +144,13 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
     }
     const change = await checkAgentChange(options!, context, evidence, parsed.input, config.cookieSecret,
       rights.confirm, deadline, prepared?.rows);
-    if (parsed.input?.operation === 'correct' && change) {
-      const { operation: _operation, scopeId, memoryId, recallProof: _proof, ...command } = parsed.input;
+    if (change) {
+      const { operation, scopeId, memoryId, recallProof: _proof, ...command } = change.input;
       const agent = { ...change, checkAccess: rights.writeAuthority!,
         conversation: context.conversation, turn: context.turn, requestId: context.requestId };
       const target = { scopeId, memoryId };
-      const receipt = await correct(options!, context.requester, target, command, agent);
+      const save = operation === 'correct' ? correct : forget;
+      const receipt = await save(options!, context.requester, target, command, agent);
       result = { content: [], structuredContent: receipt };
     }
     if (parsed.input?.operation === 'remember') {

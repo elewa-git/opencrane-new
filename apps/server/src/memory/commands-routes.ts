@@ -6,8 +6,8 @@ import { sessionFor } from '../members/routes.ts';
 import { scopeAccess, resolveScope, memoryAccessChecks, MemoryRefused,
   type MemoryOptions } from './access.ts';
 import { remember, readCommand, changeParams, reconcileCommands } from './commands.ts';
-import { correct, readAgentCorrection } from './correct.ts';
-import { forget } from './forget.ts';
+import { correct } from './correct.ts';
+import { forget, readAgentChange } from './forget.ts';
 import { bindMaintenance } from './maintenance.ts';
 import { MemoryBusy } from './admission.ts';
 import { MemoryConflict, readParams } from './reads.ts';
@@ -115,7 +115,7 @@ async function handleCommand(request: FastifyRequest, options: MemoryOptions, re
     if (!access.canCorrect) {
       throw new MemoryRefused();
     }
-    return { status: 200, body: await readAgentCorrection(options, requester, scope, params.commandId) };
+    return { status: 200, body: await readAgentChange(options, requester, scope, params.commandId) };
   }
   return { status: 200, body: await readCommand(options, requester, scope,
     params.commandId, access) };
