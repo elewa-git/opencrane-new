@@ -70,10 +70,17 @@ async function expectRefused(setup: Fixture, url: string) {
   expect(setup.received()).toBe(0);
 }
 
-const completionOrders = ['refusal first', 'outage first'] as const;
+const completionOrders = ['refusal first', 'outage first', 'refusal in a later batch'] as const;
 async function preservesMissingReceipt(order: typeof completionOrders[number]) {
   const setup = await fixture(2000, 20000, false, 'gpt-6-luna', true);
   await setup.stopDispatch();
+  if (order === 'refusal in a later batch') {
+    for (let index = 0; index < 16; index++) {
+      await setup.append('team-sales', 'team.member_added', {
+        teamId: 'sales', memberId: 'alice', addedBy: 'alice',
+      });
+    }
+  }
   // Leave IAM's old team membership in place to prove the missing receipt refuses access.
   const removed = await setup.append('team-sales', 'team.member_removed', {
     teamId: 'sales', memberId: 'alice', removedBy: 'alice',
@@ -88,7 +95,8 @@ async function preservesMissingReceipt(order: typeof completionOrders[number]) {
     if (!missing && outageObject === undefined) outageObject = check.object;
     if (!missing && check.object !== outageObject) return undefined;
     const label = missing ? 'refusal' : 'outage';
-    const first = order === `${label} first`;
+    const refusalFirst = order === 'refusal first';
+    const first = missing === refusalFirst;
     if (!first) {
       await firstFinished.promise;
       await delay(50);
@@ -154,7 +162,7 @@ async function preservesRefusalDuringOutage(refusal: typeof refusalCases[number]
       await setup.auth.handler.handle(revoked, setup.db);
     }
     await expectRefused(setup, decision.url);
-    if (refusal !== 'inactive assistant') expect(unavailable).toBe(true);
+    expect(unavailable).toBe(refusal !== 'inactive assistant');
     if (refusal === 'permission denial') expect(denied).toBe(true);
   } finally {
     await decision.close();

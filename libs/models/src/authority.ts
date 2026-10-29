@@ -60,21 +60,34 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
       if (typeof d['active'] === 'boolean') active = d['active'];
     }
   }
-  for (let offset = 0; offset < receipts.length; offset += 16) {
-    const batch = receipts.slice(offset, offset + 16);
-    const receiptReads = batch.map(checkApplied);
-    const appliedReceipts = await Promise.all(receiptReads);
-    if (!appliedReceipts.every(Boolean)) {
-      throw new Error('IAM projection behind');
-    }
-  }
   if (!active) throw new AuthorityRefused('Assistant inactive');
+  await requireReceipts(receipts, checkApplied);
   const permissions = await Promise.all([auth.check(requester, 'member'), auth.actsFor(requester, assistant),
     auth.conversation(requester, conversation, 'post'), auth.use('person', requester, resourceType, resourceId),
     auth.use('assistant', assistant, resourceType, resourceId)]);
   requirePermissions(permissions);
   await fresh();
   return createHash('sha256').update(JSON.stringify({ facts, permissions, memoryScopes: [], credential: null })).digest('hex');
+}
+
+async function requireReceipts(receipts: string[], checkApplied: (id: string) => Promise<boolean>) {
+  const results: PromiseSettledResult<boolean>[] = [];
+  for (let offset = 0; offset < receipts.length; offset += 16) {
+    const batch = receipts.slice(offset, offset + 16);
+    const reads = batch.map(checkApplied);
+    results.push(...await Promise.allSettled(reads));
+  }
+  // Keep a missing receipt decisive even if another batch could not be checked.
+  for (const result of results) {
+    if (result.status === 'fulfilled' && !result.value) {
+      throw new AuthorityRefused('IAM projection behind');
+    }
+  }
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      throw new Error('Current authority unavailable', { cause: result.reason });
+    }
+  }
 }
 
 function requirePermissions(permissions: { status: 'ok' | 'unavailable'; allowed: boolean }[]) {

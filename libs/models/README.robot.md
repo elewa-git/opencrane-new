@@ -45,6 +45,7 @@ on a separate test stream. The original connection history must stay unchanged.
 Both refresh references must recover the same receipt, and claim copies and restart
 must remain unable to send. The checks still require one saved start or claim, the
 same private copies and no further provider requests. No deadline is extended.
+
 ## Decision dependency failures
 
 The gateway authorisation endpoint returns HTTP 503 and the fixed message
@@ -52,12 +53,15 @@ The gateway authorisation endpoint returns HTTP 503 and the fixed message
 `Current authority unavailable`, `Authority snapshot expired`, and unavailable
 budget appends or writers. The response includes the request id but no
 `x-opencrane-decision: refused`, reservation or tool permit header.
-The existing audit-failure response remains HTTP 503. No deadline is extended,
+An audit failure returns HTTP 503 unless access or routine execution has already
+been refused. Confirmed refusals keep HTTP 403 even if saving the deny audit fails.
+No deadline is extended,
 failed call is sent, or uncertain hold is released by this response change.
 
 Membership and receipt checks preserve OpenFGA's unavailable status. A confirmed
-missing receipt still stops the request, and confirmed membership or resource denials
-remain HTTP 403. Budget exhaustion remains HTTP 402. The same request can succeed
+missing receipt still stops the request, even when another receipt check fails first
+or finishes in another batch. Inactive assistants are refused before receipt checks.
+Confirmed membership or resource denials remain HTTP 403. Budget exhaustion remains HTTP 402. The same request can succeed
 after recovery only by passing the normal access and spending checks again.
 
 `decision-refusal.test.ts` injects failures at event-store reads and budget writes,
@@ -66,6 +70,20 @@ delay selected permission checks. It checks 503, absent permits, unchanged spend
 recovery to 200 and a saved member removal returning 403. Cold-history tests now
 require 503 when their deliberately paused read expires; their access, money and
 read-volume assertions remain in place. The authority suites are unchanged.
+
+`decision-precedence.test.ts` keeps the permission outage active while testing
+missing team-removal receipts, both response orders and a later receipt batch,
+silo mismatch, inactive assistants and mixed permission denial/outage results.
+It also checks that a member removal stays refused when saving the deny audit fails.
+The budget retry test leaves an uncertain append unresolved, and the MCP test
+requires no permit when the access dependency is unavailable.
+
+The shared history/access request timeout returns exactly HTTP 503. The design in
+`plan.md` requires an unreadable context to stop the call; it does not prescribe 403.
+The engineering standard distinguishes unavailable dependencies from rejected input.
+A timeout establishes no access denial, so it reports unavailable. Both model and MCP
+timeout tests retain their no-reservation and no-send assertions. History still loads
+before the short access check, and neither deadline nor watched stream changes.
 
 ## Local OAuth revocation (Part of #50)
 

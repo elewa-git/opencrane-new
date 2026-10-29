@@ -19,7 +19,7 @@ import { configureBudget } from './budget-config.ts';
 import { respondBudgetRefusal } from './budget-scope.ts';
 import { approvalDecision, type ReviewKeys } from './approvals.ts';
 import { losslessJson } from '@opencrane/events/lossless-json';
-import { authorityFence, decisionAuthorityFence, currentAuthority, authorityHistoryReader }
+import { AuthorityRefused, authorityFence, decisionAuthorityFence, currentAuthority, authorityHistoryReader }
   from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
 import { confirmDecisionAccess, decisionActivity, decisionHistoryDeadline,
@@ -66,9 +66,9 @@ async function context(actor: BudgetActor, binding: Binding,
   turn: StoredEvent, grants?: DecisionGrants,
   readAuthorityHistory?: ReturnType<typeof authorityHistoryReader>): Promise<ModelCall> {
   const permission = await memberAuthorisation(binding).check(turnToken.requester, 'member');
-  if (binding.silo !== actor.silo) throw new Error('Membership unavailable or refused');
+  if (binding.silo !== actor.silo) throw new AuthorityRefused('Membership unavailable or refused');
   if (permission.status === 'unavailable') throw new Error('Current authority unavailable');
-  if (!permission.allowed) throw new Error('Membership unavailable or refused');
+  if (!permission.allowed) throw new AuthorityRefused('Membership unavailable or refused');
   const assistantRead = history(
     actor.store, `assistant-${computer.assistant}`, actor.silo, fresh.deadline);
   const authorityRead = currentAuthority(actor.store, binding, turnToken.requester,
@@ -367,21 +367,22 @@ export async function startDecision(
       if (refuseCallRetry(error, res, auditAttempted)) return;
       const capped = error instanceof BudgetRefused;
       const routineRefused = error instanceof RoutineDispatchRefused;
+      const accessRefused = error instanceof AuthorityRefused;
       const reason = capped ? 'budget_exhausted' : privateDecisionReason(error);
       const elapsedMs = Math.round(performance.now() - started);
       const diagnostic = { requestId, route, stage, reason, elapsedMs };
       logger.warn(diagnostic, 'Gateway request refused');
       try {
         if (!auditAttempted) await audit('deny', capped ? 'budget_exhausted' : 'request_refused');
-        else if (!(error instanceof LoadedMemoryRefused) && !routineRefused) {
+        else if (!(error instanceof LoadedMemoryRefused) && !routineRefused && !accessRefused) {
           res.writeHead(503);
           res.end('{"error":"Decision audit unavailable"}');
           return;
         }
       }
       catch {
-        // Preserve the routine refusal even when its deny audit cannot be saved.
-        if (!routineRefused) {
+        // Preserve confirmed access and routine refusals when their deny audit cannot be saved.
+        if (!routineRefused && !accessRefused) {
           res.writeHead(503);
           res.end('{"error":"Decision audit unavailable"}');
           return;

@@ -279,7 +279,7 @@ async function readsConversationBeforeAccessCheck() {
 it('reads full conversation history once before the short access check',
   readsConversationBeforeAccessCheck, 40_000);
 
-async function refusesHistoryAndAccessOverBudget(route: 'model' | 'mcp') {
+async function reportsHistoryAndAccessTimeout(route: 'model' | 'mcp') {
   const setup = await fixture();
   const read = setup.nats.store.readStream.bind(setup.nats.store);
   let historyDelayed = false;
@@ -302,7 +302,11 @@ async function refusesHistoryAndAccessOverBudget(route: 'model' | 'mcp') {
     try {
       const response = await decide(setup, route);
       expect(historyDelayed).toBe(true);
-      expect(response.status, response.body).toBe(403);
+      expect(response.status, response.body).toBe(503);
+      expect(JSON.parse(response.body)).toEqual({
+        requestId: expect.any(String), error: 'Decision service unavailable',
+      });
+      expect(response.reservationId).toBeNull();
       expect(setup.actor.state.reservations).toHaveLength(0);
       expect(setup.received()).toBe(0);
     } finally {
@@ -313,8 +317,8 @@ async function refusesHistoryAndAccessOverBudget(route: 'model' | 'mcp') {
   }
 }
 const historyRoutes = ['model', 'mcp'] as const;
-it.each(historyRoutes)('%s refuses when history and access exceed the shared two-second budget',
-  refusesHistoryAndAccessOverBudget, 40_000);
+it.each(historyRoutes)('%s reports unavailable when history and access exceed the shared two-second budget',
+  reportsHistoryAndAccessTimeout, 40_000);
 
 async function refusesDisconnectedClient() {
   const setup = await fixture();

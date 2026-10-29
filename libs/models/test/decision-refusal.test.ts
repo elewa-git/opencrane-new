@@ -241,3 +241,40 @@ async function reportsPermissionsUnavailable(relation: typeof permissionFailures
 }
 it.each(permissionFailures)('reports unavailable when the %s permission service check fails',
   reportsPermissionsUnavailable);
+
+async function reportsUncertainBudgetWriter() {
+  const setup = await fixture();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  let failedWrites = 0;
+  async function loseReservationReply(command: Parameters<typeof append>[0]) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'budget.reserved') {
+      failedWrites++;
+      const outcome = { kind: 'transport_failure' as const, possiblyPublished: true };
+      return { status: 'unavailable' as const,
+        cause: new Error('Scripted lost reservation reply'), outcome };
+    }
+    return append(command);
+  }
+  try {
+    await setup.stopDispatch();
+    vi.spyOn(setup.nats.store, 'append').mockImplementation(loseReservationReply);
+    const lostReply = await requestDecision(setup);
+    expectUnavailable(lostReply, setup);
+    expect(failedWrites).toBe(1);
+    vi.restoreAllMocks();
+    // Keep the uncertain write unresolved. A retry cannot assume the money is free.
+    const retry = await requestDecision(setup);
+    expectUnavailable(retry, setup);
+    const budget = await history(setup.nats.store, 'budget-test', 'test');
+    function isReservation(row: typeof budget[number]) {
+      return row.event.type === 'budget.reserved';
+    }
+    expect(budget.filter(isReservation)).toHaveLength(0);
+  } finally {
+    vi.restoreAllMocks();
+    await setup.close();
+  }
+}
+it('reports unavailable while the budget writer cannot resolve an earlier append',
+  reportsUncertainBudgetWriter);
