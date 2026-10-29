@@ -63,9 +63,13 @@ async function assertNoJourney(): Promise<void> {
     }
     await delay(100);
   }
-  expect(processes()).not.toContain('/usr/local/bin/node');
-  expect(processes()).not.toContain('fixture-child');
-  expect(processes()).not.toContain('fixture-grandchild');
+  assertNoRunningJourney();
+}
+function assertNoRunningJourney(): void {
+  const output = processes();
+  expect(output).not.toContain('/usr/local/bin/node');
+  expect(output).not.toContain('fixture-child');
+  expect(output).not.toContain('fixture-grandchild');
 }
 async function cancelledJourney(source: string): Promise<void> {
   let failed = false;
@@ -75,8 +79,8 @@ async function cancelledJourney(source: string): Promise<void> {
     failed = true;
   }
   expect(failed).toBe(true);
+  assertNoRunningJourney();
   docker(['exec', containerId, 'test', '-f', '/run/fixture-grandchild']);
-  await assertNoJourney();
 }
 async function cancelsTimeout(): Promise<void> {
   await cancelledJourney(journey);
@@ -131,7 +135,7 @@ async function cleansUpSuccessfulJourney(): Promise<void> {
   `;
   const result = await runInContainer(containerId, ['/usr/local/bin/node', '--eval', complete]);
   expect(result).toEqual({ result: 'PASS' });
+  assertNoRunningJourney();
   docker(['exec', containerId, 'test', '-f', '/run/fixture-grandchild']);
-  await assertNoJourney();
 }
 it('returns complete output only after stopping leftover children', cleansUpSuccessfulJourney, 30_000);
