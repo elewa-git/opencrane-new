@@ -898,6 +898,7 @@ The pure fold retains the occupied run, pauses scheduling and enables no executi
 `opencrane-server` and required `cause: { eventId, position }`. The command and Stop reader
 verify `approval_denied` or `approval_expired` against exact saved approval evidence.
 The fold keeps the schedule and occupied run, sets stopRequested, and performs no effects.
+
 ## Normal tool-call release audit
 
 `credential.released` accepts the old strict six-field shape for replay, or the strict

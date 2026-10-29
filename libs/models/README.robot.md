@@ -4588,6 +4588,7 @@ routines and silos refuse.
 `readRootStopEvidence` repeats these checks before budget or bridge cleanup. No approval
 read mutates state, opens review ciphertext, reads credentials, wakes or sends work.
 Existing routine dispatch checks refuse the saved Stop before cleanup, including free calls.
+
 ## Release audit confirmation (P3-8 PR 5a; Part of #49)
 
 `confirmCredentialRelease` is internal and has no route or public package export.
