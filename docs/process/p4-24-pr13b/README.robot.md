@@ -62,3 +62,43 @@ and the corresponding lint/typecheck logs with the same prefix.
 Company use, lifecycle/recovery completion and live qualification still block
 execution. The caller must compose saved expiry, Stop intent and budget cleanup
 as separate commands. Offline replay must not invoke the live command.
+
+## Own checks for acknowledged saves
+
+2026-10-29. Fixed source: `81ecc0726bf9c5ae3e570e59a82c27e22e302a2c`,
+rebased onto `3eb99aacf`. Both rebases completed with no remaining rebase state.
+The test commit precedes the implementation commit. Node 22.23.3; isolated worktree
+with disposable NATS, OpenFGA and PostgreSQL fixtures. This was not a fresh install.
+
+- Expected FAIL before the fix: all three acknowledged-save cases lost the receipt
+  after a position-read outage, history outage or expired read deadline. The two
+  duplicate/conflict refusal checks passed. PASS after the fix: all five cases.
+- PASS: all 36 expiry and expiry-to-Stop tests in each broad run. The approval suites
+  had no failures; their existing 390px browser-control case remained skipped.
+- FAIL: first `npm test -- routine approvals --maxWorkers=1` run on `5dc0b7806`
+  after rebasing onto `e34543d5c`: 1,067 passed, five failed and one skipped.
+  The failures were in unchanged routine-due, routine-sender and routine-session
+  preparation steps, before their intended denial assertions.
+- FAIL: second run on the fixed source above, with two workers and the verbose
+  reporter: 1,065 passed, nine failed and one skipped. All five earlier failures
+  passed. Four sender cases failed while starting their test turn; five session
+  cases failed during their initial root allocation. These tests and their
+  production code match the rebased main branch.
+- PASS: all nine second-run failures when selected alone with one worker, using
+  the same source, fixtures, deadlines and assertions. The other 463 cases in those
+  two files were excluded by the name filter. This does not turn either broad
+  run into a pass or establish the cause of the intermittent failures.
+- PASS on the final base: lint, typecheck, check:events (157 types), Knip through
+  lint:unused, and lint:changelog. No access, money or memory checks were weakened.
+- NOT RUN: the full root suite, the skipped browser case and fresh-install qualification.
+
+Every test, lint and typecheck command used `nice -n 10`. The broad and isolated
+runs used `PG_TEST_URL` for a throwaway PostgreSQL container. It was removed with
+its volume after testing. The focused failing-first run used the supplied test database URL.
+
+Logs use the prefix `/tmp/p4-24-pr13b-fix-`: `red.log`, `green.log`, `tests1.log`,
+`tests2.log`, `isolated.log`, `lint2.log`, `typecheck2.log` and `events2.log`.
+The second-run failures cover exact-turn stopping, expired-output clearance,
+clearance retries, slow admin evidence, lost manage access, Stop after allocation,
+the 700-cent cap, an old permit after restart and the original access deadline.
+Execution remains disabled. Hosted CI is left to the watcher after the push.
