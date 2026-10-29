@@ -1,0 +1,1 @@
+- Members can explicitly choose a verified personal OAuth account when trusted settings are supplied. The choice survives same-account refresh; internal tool checks use current expiry and granted scopes. Credential release and dispatch remain unavailable.

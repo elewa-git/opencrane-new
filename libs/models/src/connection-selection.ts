@@ -9,6 +9,7 @@ import { foldConnection } from './bearer-connections.ts';
 import { activeMember, readActiveMember, MemberAccessRefused } from './member-authority.ts';
 import { connectionServer } from './connection-server.ts';
 import { data } from './state.ts';
+import { selectedOAuth, type OAuthConfigurationLoader } from './oauth-selection.ts';
 
 export class SelectionInputInvalid extends Error {}
 export class SelectionConflict extends Error {}
@@ -56,7 +57,8 @@ export function foldConnectionSelection(rows: StoredEvent[]) {
   }
   return { sequence, selected };
 }
-async function facts(store: EventStore, silo: string, selection: Selection) {
+async function facts(store: EventStore, silo: string, selection: Selection,
+  loadConfiguration?: OAuthConfigurationLoader, toolName?: string) {
   const deadline = performance.now() + 10_000;
   const serverSubject = `mcp-${selection.serverId}`;
   const rows = await history(store, serverSubject, silo, deadline);
@@ -65,17 +67,22 @@ async function facts(store: EventStore, silo: string, selection: Selection) {
   const controlSequence = await store.head(control, deadline);
   const positions = new Map([[serverSubject, server.sequence], [control, controlSequence]]);
   let available = false;
+  let oauth: Awaited<ReturnType<typeof selectedOAuth>> = null;
+  let expiresAt = server.expiresAt;
   if (selection.action === 'select') {
     const subject = `connection-${selection.userId}-${selection.serverId}-${selection.profileId}`;
     const profileRows = await history(store, subject, silo, deadline);
     const profile = foldConnection(profileRows);
+    oauth = await selectedOAuth(profileRows, rows, selection, loadConfiguration, toolName);
+    if (oauth) {
+      expiresAt = Math.min(expiresAt, oauth.expiresAt);
+    }
     positions.set(subject, profile.sequence);
     available = controlSequence === 0 && server.available &&
-      profileMatchesSelection(profile, selection) &&
+      (oauth !== null || (toolName === undefined && profileMatchesSelection(profile, selection))) &&
       profile.data?.activation.endpointDigest === server.endpointDigest;
   }
-  return { available, positions, connectionId: server.connectionId,
-    expiresAt: server.expiresAt };
+  return { available, positions, connectionId: server.connectionId, expiresAt, oauth };
 }
 function profileMatchesSelection(profile: ReturnType<typeof foldConnection>,
   selection: Extract<Selection, { action: 'select' }>) {
@@ -174,14 +181,15 @@ function requireCurrentSelection(selection: Selection, rows: StoredEvent[],
   }
   if (selection.expectedSequence !== (rows.at(-1)?.sequence ?? 0) ||
       selection.connectionId !== connectionId ||
-      (selection.action === 'select' && !checked.available)) {
+      (selection.action === 'select' && (!checked.available ||
+        (checked.oauth !== null && checked.oauth.profileRevision !== selection.profileRevision)))) {
     throw new SelectionConflict('Selection conflict');
   }
 }
 
 /** Save one choice for the authenticated caller; never accept an owner from the request. */
 export async function changeConnectionSelection(store: EventStore, binding: Binding,
-  userId: string, raw: unknown) {
+  userId: string, raw: unknown, loadConfiguration?: OAuthConfigurationLoader) {
   const parsed = inputSchema.safeParse(raw);
   if (!parsed.success || !id.safeParse(userId).success) {
     throw new SelectionInputInvalid('Selection input invalid');
@@ -203,7 +211,7 @@ export async function changeConnectionSelection(store: EventStore, binding: Bind
       if (original) {
         sameReceipt(original, event);
       }
-      const checked = await facts(store, binding.silo, selected);
+      const checked = await facts(store, binding.silo, selected, loadConfiguration);
       return { status: 'loaded' as const, rows, original, checked };
     } catch (error) {
       let failure = new Error('Selection history unavailable', { cause: error });
@@ -231,6 +239,9 @@ export async function changeConnectionSelection(store: EventStore, binding: Bind
   const confirmAuthority = fresh;
   async function checkAccess() {
     await confirmAuthority();
+    if (checked.oauth && !await checked.oauth.configurationCurrent()) {
+      throw new SelectionConflict('Selection conflict');
+    }
     await confirmPositions(store, checked.positions, confirmAuthority.deadline);
     if (input.action === 'select' && Date.now() >= checked.expiresAt) {
       throw new Error('Selection unavailable');
@@ -257,7 +268,7 @@ export async function changeConnectionSelection(store: EventStore, binding: Bind
 }
 
 export async function readConnectionSelection(store: EventStore, binding: Binding,
-  userId: string, serverId: string) {
+  userId: string, serverId: string, loadConfiguration?: OAuthConfigurationLoader, toolName?: string) {
   if (!id.safeParse(userId).success || !id.safeParse(serverId).success) {
     throw new SelectionInputInvalid('Selection input invalid');
   }
@@ -270,10 +281,35 @@ export async function readConnectionSelection(store: EventStore, binding: Bindin
     await readActiveMember(store, binding, userId);
     return unavailable;
   }
-  const checked = await facts(store, binding.silo, state.selected);
-  await access(store, binding, userId, serverId);
+  let checked;
+  try {
+    checked = await facts(store, binding.silo, state.selected, loadConfiguration, toolName);
+  } finally {
+    await access(store, binding, userId, serverId);
+  }
   if (!checked.available) {
     return unavailable;
+  }
+  if (checked.oauth) {
+    // Check data changes after the single permission decision, without a read authority fence.
+    checked.positions.set(subject, state.sequence);
+    if (!await checked.oauth.configurationCurrent()) {
+      return unavailable;
+    }
+    try {
+      await confirmPositions(store, checked.positions, performance.now() + 10_000);
+    } catch (error) {
+      if (error instanceof SelectionConflict) {
+        return unavailable;
+      }
+      throw error;
+    }
+    if (Date.now() >= checked.expiresAt) {
+      return unavailable;
+    }
+    return { status: 'verified' as const, sequence: state.sequence,
+      profileId: state.selected.profileId, profileRevision: checked.oauth.profileRevision,
+      generation: checked.oauth.generation };
   }
   return { status: 'saved_unverified' as const, sequence: state.sequence,
     profileId: state.selected.profileId, profileRevision: state.selected.profileRevision };

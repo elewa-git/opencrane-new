@@ -148,7 +148,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks private callers, reads original tool reviews, checks access before history errors, prepares and allocates child and routine allowances, checks saved routine admission and dispatch prohibition, applies saved Stop, Pause and Retire intent and verifies admin authority at a pause, owner removal and Ask termination, and shares types| libs["libs/*<br/>shared code and chat keys"]
-  server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; detects saved personal corrections, forgets, loaded expiry and lost access, records invalid contexts and personal account revocations, choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, encrypted inputs and checked admission receipts, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; detects saved personal corrections, forgets, loaded expiry and lost access, records invalid contexts and personal account revocations, bearer and verified OAuth choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, encrypted inputs and checked admission receipts, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
@@ -283,6 +283,7 @@ The server checks current admin access after preparing the review, even if prepa
 
 Members can explicitly save or clear their own personal account choice through the server.
 The reply confirms the saved choice without claiming the account can be used.
+Verified OAuth choices require current operator settings supplied by the server.
 Members can recover their own original account selection or clear receipt by its
 change reference. Later choices do not replace it. Reading requires current silo
 membership and changes nothing. Missing evidence stays unknown and never permits a resend.

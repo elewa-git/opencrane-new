@@ -37,7 +37,10 @@ export async function oauthSelectionFixture(nats: Awaited<ReturnType<typeof nats
     schemaDigest: catalogueDigest(tools), checkedAt: new Date(now).toISOString(),
     expiresAt: new Date(now + 300_000).toISOString(),
   });
-  await nats.seed([registered, discovered]);
+  const existing = await nats.store.head(serverSubject);
+  if (existing === 0) {
+    await nats.seed([registered, discovered]);
+  }
   const reviewed = envelope('test', serverSubject, 'mcp.server_reviewed', {
     serverId, connectionId: 'installed', accountMode: 'personal', tools: choices,
     catalogueDigest: catalogueDigest(tools), policyRevision: await nats.store.head(serverSubject),
@@ -46,7 +49,9 @@ export async function oauthSelectionFixture(nats: Awaited<ReturnType<typeof nats
   reviewed.principal = { kind: 'human', id: 'admin' };
   const published = envelope('test', serverSubject, 'mcp.server_published',
     { serverId, publishedBy: 'admin' });
-  await nats.seed([reviewed, published]);
+  if (existing === 0) {
+    await nats.seed([reviewed, published]);
+  }
   const rows = await history(nats.store, serverSubject, 'test');
   const policy = toolPolicyFromRows(rows);
   const configuration = { serverId, connectionId: 'installed', endpointDigest,
@@ -58,6 +63,7 @@ export async function oauthSelectionFixture(nats: Awaited<ReturnType<typeof nats
   const appendUntil = now + 60_000;
   async function seed(type: string, data: object, eventId: string, commandId = eventId) {
     const event = envelope('test', subject, type, data, eventId);
+    event.time = new Date(Date.now()).toISOString();
     event.source = 'opencrane-server';
     event.principal = { kind: 'human', id: userId };
     event.commandId = commandId;
@@ -83,8 +89,8 @@ export async function oauthSelectionFixture(nats: Awaited<ReturnType<typeof nats
       expiresAt: now + 120_000 } };
   const saved = { userId, serverId, profile: profileId, secretRef: 'secret:synthetic', activation };
   const revision = await seed('connection.created', saved, operationId, 'consent');
-  async function loadConfiguration() {
-    return configuration;
+  function loadConfiguration() {
+    return Promise.resolve(configuration);
   }
   const command = { action: 'select', serverId, connectionId: 'installed', profileId,
     profileRevision: revision, expectedSequence: 0, changeRef: 'choice' };

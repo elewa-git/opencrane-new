@@ -14,6 +14,7 @@ export interface GroupOptions {
   db: Query;
   binding: Binding;
   feed: Pick<Awaited<ReturnType<typeof connectMemberFeed>>, 'memberId'>;
+  loadOAuthConfiguration?: (serverId: string) => Promise<unknown>;
 }
 export function registerGroupRoutes(
   app: FastifyInstance, config: AuthConfig, options?: GroupOptions,

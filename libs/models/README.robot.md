@@ -2,6 +2,26 @@
 
 For people, read [README.md](README.md) first.
 
+## Verified OAuth selection (Part of #50)
+
+`changeConnectionSelection` optionally takes a trusted configuration loader. OAuth
+selection stays unavailable without it. New choices require the current profile revision.
+`readConnectionSelection` takes the same loader and an optional tool name for internal
+eligibility checks. It checks that exact reviewed tool against the typed scope map and
+actual saved scopes. It returns verified status, selection sequence, profile id, current
+profile revision and generation only. It creates no permit or approval.
+
+The original selected revision pins the account. Valid same-account refresh preserves
+that choice, while returned generation and revision advance. Old approvals cannot gain
+release through this path: the bearer fold and release helper still refuse OAuth.
+Changed configuration or policy requires reconsent. Expiry, removal, revoke, admin block,
+clear and mismatched account evidence refuse. Receipt recovery confirms only the past save.
+History loads before access. Reads check permission once, then compare exact data positions
+and configuration; writes repeat these checks inside the conditional append. No conversation
+is read or watched. Tests use disposable NATS, PostgreSQL and OpenFGA with saved OAuth
+fixture events. Replay performs no custody or provider work. Injector, authenticated turn
+binding, final permit wiring, company OAuth and live qualification remain NOT RUN.
+
 ## OAuth recovery tests under load
 
 The seven callback, refresh-start and refresh-claim duplicate-expiry cases in
