@@ -1,0 +1,24 @@
+{
+  "status": "BLOCKED",
+  "nodeVersion": "22.23.1",
+  "nodeCommit": "bd96dfbf0361576724b65322046e2ca9f9609cb9",
+  "npmVersion": "10.9.8",
+  "nodeFiles": {
+    "node-v22.23.1.tar.xz": "b27385d6845089bdb91285d94b06c2a5cf1c37f8173a3c4e10824cc1ffadeaba",
+    "node-v22.23.1-linux-x64.tar.xz": "9749e988f437343b7fa832c69ded82a312e41a03116d766797ac14f6f9eee578",
+    "SHASUMS256.txt.asc": "8bf8cd2085e1c25cc750386c2253715b13867c65e2fa9c9c4abc47967420ec28",
+    "node-release-keys.kbx": "610b8d249da3d5733f5a128def2dd0294dbbf5b5713e6ca2529db8db419dee00",
+    "node-tag": "970c701965a2487ccaa5978cd9d97d879fe7d51a0aab59fa5672210bab2254dd"
+  },
+  "candidateSha256": "365bc4d4c4039ba62a6ce982aaae68508b2986df5edb7605355b92055457a2da",
+  "inventorySha256": "e45e886f8d283fce0c70246fc28b3e882bf8a8b7780f0e468a172bd68ad0e6a3",
+  "sampleSha256": "ae24a1c0d27197d91ea6e94360b27178b3084b400a34aa6b051d2a3ef70bd591",
+  "blocked": [
+    "Dependency grants are unreviewed; licence labels are observations only.",
+    "Missing package metadata and packages without their own notice need review.",
+    "Copied code ancestry and source/official tree differences need review.",
+    "Service, logo, font and trademark findings remain unresolved.",
+    "Complete image licences, vulnerabilities, exact-source R3 and promotion remain blocked.",
+    "Both candidate layers contain none of the expected npm paths; the missing tree refuses."
+  ]
+}

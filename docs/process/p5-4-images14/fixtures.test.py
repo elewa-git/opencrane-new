@@ -44,8 +44,10 @@ def archive_bytes(entries):
 class NpmTests(unittest.TestCase):
     def setUp(self):
         self.checker = load_checker()
-        self.inventory = self.checker.read_inventory()
-        with tarfile.open(HERE / "npm-sample.tar.gz") as archive:
+        self.inventory = self.checker.read_inventory()["official"]
+        fixture = self.checker.checked_bytes(HERE / "npm-sample.tar.gz",
+                                             self.checker.read_record()["sampleSha256"])
+        with tarfile.open(fileobj=io.BytesIO(fixture)) as archive:
             self.rows, self.contents = self.checker.scan(archive, "")
         self.sample = self.checker.observe(self.rows, self.contents)
 
@@ -60,6 +62,9 @@ class NpmTests(unittest.TestCase):
             self.assertIn(package, self.inventory["packages"])
         self.assertEqual(self.checker.check_tree(self.rows, self.contents, self.sample), "10.9.8")
         self.assertEqual(self.checker.read_record()["status"], "BLOCKED")
+        complete = self.checker.read_inventory()
+        self.assertEqual(complete["candidate"], {"files": [], "packages": [], "notices": []})
+        self.assertEqual(complete["differences"]["missingFromCandidate"], self.inventory["files"])
         inherited = self.checker.pcre.candidate.checker
         reviewed = inherited.read_json(ROOT / "infra/package/reviewed-images.json")
         inventory = inherited.read_json(ROOT / "infra/package/licence-inventory.json")
@@ -81,20 +86,42 @@ class NpmTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.checker.check_tree(changed, self.contents, self.sample)
         for name, data in self.contents.items():
-            changed = dict(self.contents)
-            changed[name] = data + b"changed"
-            with self.assertRaises(ValueError):
-                self.checker.check_tree(self.rows, changed, self.sample)
+            for replacement in (data + b"changed", None):
+                changed = dict(self.contents)
+                if replacement is None:
+                    del changed[name]
+                else:
+                    changed[name] = replacement
+                with self.assertRaises(ValueError):
+                    self.checker.check_tree(self.rows, changed, self.sample)
 
-    def test_source_official_and_candidate_names_compare_exactly(self):
-        entries = []
+    def test_source_and_official_archive_mismatches_refuse(self):
+        source = []
+        official = []
         for name, data in self.contents.items():
-            source_name = name.replace("lib/node_modules/", "deps/", 1)
-            entries.append((source_name, data, "file"))
-        rows, contents = self.scan_bytes(archive_bytes(entries), "deps/", "lib/node_modules/")
-        self.checker.check_tree(rows, contents, self.sample, source_only=True)
-        with self.assertRaises(ValueError):
-            self.checker.check_tree(rows[:-1], contents, self.sample, source_only=True)
+            source.append(("deps/" + name.removeprefix("lib/node_modules/"), data, "file"))
+            official.append(("node-v22.23.1-linux-x64/" + name, data, "file"))
+        for row in self.rows:
+            if row[1] == "link":
+                official.append(("node-v22.23.1-linux-x64/" + row[0], row[3], tarfile.SYMTYPE))
+        source_bytes = archive_bytes(source)
+        rows, contents = self.scan_bytes(source_bytes, "deps/", "lib/node_modules/")
+        inventory = {"source": self.checker.observe(rows, contents), "official": self.sample}
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            release = []
+            for name, data, kind in source:
+                release.append(("node-v22.23.1/" + name, data, kind))
+            (directory / "node-v22.23.1.tar.xz").write_bytes(archive_bytes(release))
+            for entries in (official, official[1:], []):
+                (directory / "node-v22.23.1-linux-x64.tar.xz").write_bytes(archive_bytes(entries))
+                if entries == official:
+                    self.checker.check_sources(directory, source_bytes, inventory)
+                else:
+                    with self.assertRaises(ValueError):
+                        self.checker.check_sources(directory, source_bytes, inventory)
+            with self.assertRaises(ValueError):
+                self.checker.check_sources(directory, archive_bytes(source[1:]), inventory)
 
     def test_unsafe_paths_links_types_and_duplicate_entries_refuse(self):
         path = "lib/node_modules/npm/package.json"
@@ -131,6 +158,9 @@ class NpmTests(unittest.TestCase):
                 else:
                     with self.assertRaises(ValueError):
                         self.checker.check_layers(path, self.sample)
+                if earlier == archive_bytes([]):
+                    with self.assertRaises(ValueError):
+                        self.checker.check_layers(path, self.sample, {"files": []})
                 for hostile in [("manifest.json", "/outside", tarfile.SYMTYPE),
                                 ("../outside", b"", "file"), outer[0]]:
                     path.write_bytes(archive_bytes(outer + [hostile]))
@@ -138,19 +168,39 @@ class NpmTests(unittest.TestCase):
                         self.checker.check_layers(path, self.sample)
 
     def test_record_and_compressed_inventory_cannot_change(self):
-        for field in self.checker.read_record():
-            changed = self.checker.read_record()
-            changed[field] = "changed"
-            with patch.object(self.checker, "read_record", return_value=changed):
-                with self.assertRaises(ValueError):
-                    self.checker.read_inventory()
-        for data in (b"bad gzip", gzip.compress(b'{"files": [}')):
-            with patch.object(self.checker, "checked_bytes", return_value=data):
+        with tempfile.TemporaryDirectory() as temporary:
+            record = Path(temporary) / "npm.json"
+            for field in self.checker.read_record():
+                changed = self.checker.read_record()
+                changed[field] = "changed"
+                record.write_text(json.dumps(changed))
+                with patch.object(self.checker, "RECORD", record):
+                    with self.assertRaises(ValueError):
+                        self.checker.read_inventory()
+        original = self.checker.checked_bytes
+        malformed = (b"bad gzip", gzip.compress(b'{"files": [}'),
+                     gzip.compress(b"\xff"), gzip.compress(b"{}")[:17])
+        for data in malformed:
+            def changed_compressed_bytes(path, digest):
+                if path.name == "inventory.json.gz":
+                    return data
+                return original(path, digest)
+
+            with patch.object(self.checker, "checked_bytes", side_effect=changed_compressed_bytes):
                 output, error = io.StringIO(), io.StringIO()
                 with contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
                     result = self.checker.main(["candidate", "upstream"])
                 self.assertEqual((result, output.getvalue(), error.getvalue()),
                                  (1, "", self.checker.REFUSAL + "\n"))
+
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            (directory / "inventory.json.gz").write_bytes(b"changed compressed bytes")
+            with patch.object(self.checker, "HERE", directory):
+                with patch.object(self.checker.gzip, "decompress") as decoder:
+                    with self.assertRaises(ValueError):
+                        self.checker.read_inventory()
+                    decoder.assert_not_called()
 
     def test_cli_checks_all_sources_and_hides_every_failure(self):
         checker = self.checker
@@ -166,8 +216,13 @@ class NpmTests(unittest.TestCase):
                 calls = {"signed": signed, "git": git, "archive": source,
                          "candidate": candidate, "layers": layers}
                 for failure in failures:
+                    def failed_dependency(*arguments):
+                        print("private dependency output")
+                        print("private dependency output", file=sys.stderr)
+                        raise failure
+
                     if stage != "matching":
-                        calls[stage].side_effect = failure
+                        calls[stage].side_effect = failed_dependency
                     output, error = io.StringIO(), io.StringIO()
                     with contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
                         result = checker.main(["candidate", "upstream"])
@@ -179,10 +234,14 @@ class NpmTests(unittest.TestCase):
                     else:
                         self.assertEqual((result, output.getvalue(), error.getvalue()),
                                          (1, "", checker.REFUSAL + "\n"))
-        result = subprocess.run([sys.executable, str(CHECKER), "/private/missing"],
-                                capture_output=True, check=False)
-        self.assertEqual((result.returncode, result.stdout, result.stderr),
-                         (1, b"", (checker.REFUSAL + "\n").encode()))
+        with tempfile.TemporaryDirectory() as temporary:
+            isolated = Path(temporary) / "check-npm.py"
+            isolated.write_bytes(CHECKER.read_bytes())
+            for path in (CHECKER, isolated):
+                result = subprocess.run([sys.executable, str(path), "/private/missing"],
+                                        capture_output=True, check=False)
+                self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                 (1, b"", (checker.REFUSAL + "\n").encode()))
 
 
 if __name__ == "__main__":

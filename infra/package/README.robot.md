@@ -1674,3 +1674,24 @@ The [receipt](../../docs/process/p5-9-pr5a/receipt.md) records this PARTIAL resu
 Mounted filesystem restoration, CNPG/WAL, package upgrade, reopening and fresh-install
 qualification remain NOT RUN. Existing image pins, preflight gates and chart settings
 are unchanged. Synthetic home readers do not establish live volume ownership.
+
+## npm inventory
+
+The [npm record](../../docs/process/p5-4-images14/npm.json) keeps approval BLOCKED.
+Its compressed inventory lists exact source, official and candidate paths, packages, versions,
+licence labels and notice hashes. Labels grant no approval. The
+[receipt](../../docs/process/p5-4-images14/receipt.md) explains missing metadata and differences.
+
+```sh
+nice -n 10 python3 docs/process/p5-4-images14/check-npm.py \
+  /tmp/p5-4-images4 /tmp/p5-4-images6
+```
+
+The checker reuses unchanged candidate and signed Node checks. It compares Git,
+release source, the official Linux x64 archive and every candidate layer without
+extracting paths or following links. Changed sets and malformed inputs refuse with
+fixed text. The saved candidate has none of the expected npm paths, so its check
+refuses. This is no copied-code absence proof. `scripts/p5-4-images14.test.mjs`
+runs the small authentic fixtures in CI.
+Dependency grants, copied-code origins, source differences, service/logo/font/trademark
+questions, vulnerabilities, source-bound R3 and fresh/live approval remain unresolved.
