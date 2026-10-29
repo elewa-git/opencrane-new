@@ -20,7 +20,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { once } from 'node:events';
 import { mkdtemp, rm, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, expect, it, onTestFinished, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { jetstreamManager } from '@nats-io/jetstream';
 import { databases, openfga, until } from '@opencrane/authz/testing';
@@ -400,11 +400,21 @@ async function callbackFixture(identityVerification?: IdentityVerification) {
   return { ...test, input, callback, claims, started };
 }
 
+async function useDuplicateExpiryBroker() {
+  const sharedEvents = events;
+  const isolatedEvents = await natsFixture();
+  async function restoreEvents() {
+    events = sharedEvents;
+    await isolatedEvents.close();
+  }
+  onTestFinished(restoreEvents);
+  events = isolatedEvents;
+}
+
 async function claimsCallbackOnce(failure: string) {
+  await useDuplicateExpiryBroker();
   const test = await callbackFixture();
   const originalMaterial = test.store.secret.data.token;
-  const manager = await jetstreamManager(events.connection);
-  const stream = await manager.streams.info('EVENTS');
   const append = events.store.append.bind(events.store);
   async function loseReply(command: AppendCommand) {
     await append(command);
@@ -433,7 +443,6 @@ async function claimsCallbackOnce(failure: string) {
     const effects = vi.spyOn(globalThis, 'fetch');
     expect(foldConnection(rows).status).toBe('unavailable');
     expect(effects).not.toHaveBeenCalled();
-    await manager.streams.update('EVENTS', { duplicate_window: 100_000_000 });
     const probe = envelope('test', `member-dedup-${test.session.userId}`, 'member.joined', {
       memberId: 'probe', email: 'probe@example.test', displayName: 'Probe',
       role: 'member' }, claims[0]!.event.id);
@@ -446,7 +455,6 @@ async function claimsCallbackOnce(failure: string) {
     expect(test.store.creates).toBe(2);
   } finally {
     vi.restoreAllMocks();
-    await manager.streams.update('EVENTS', { duplicate_window: stream.config.duplicate_window });
   }
 }
 it.each(['race', 'lost-reply'])(
@@ -3701,9 +3709,8 @@ async function refreshFixture(mode = 'valid') {
 }
 
 async function refreshRaceAndRecovery(mode: string) {
+  await useDuplicateExpiryBroker();
   const test = await refreshFixture();
-  const manager = await jetstreamManager(events.connection);
-  const stream = await manager.streams.info('EVENTS');
   try {
     const append = events.store.append.bind(events.store);
     async function loseReply(command: AppendCommand): Promise<never> {
@@ -3721,7 +3728,6 @@ async function refreshRaceAndRecovery(mode: string) {
     const rows = await history(events.store, test.subject, 'test');
     expect(rows).toHaveLength(4);
     expect(rows[3]!.event.type).toBe('connection.refresh_started');
-    await manager.streams.update('EVENTS', { duplicate_window: 100_000_000 });
     const probe = envelope('test', `member-probe-${test.session.userId}`, 'member.joined', {
       memberId: 'probe', email: 'probe@example.test', displayName: 'Probe', role: 'member',
     }, rows[3]!.event.id);
@@ -3743,7 +3749,6 @@ async function refreshRaceAndRecovery(mode: string) {
     expect(test.store.creates).toBe(4);
     expect(JSON.stringify({ rows, results })).not.toMatch(/result-canary|refresh-canary/);
   } finally {
-    await manager.streams.update('EVENTS', { duplicate_window: stream.config.duplicate_window });
     await test.close();
   }
 }
@@ -3932,9 +3937,8 @@ async function claimRefresh(test: Awaited<ReturnType<typeof refreshFixture>>,
 }
 
 async function claimsRefreshOnce(mode: string) {
+  await useDuplicateExpiryBroker();
   const test = await refreshFixture();
-  const manager = await jetstreamManager(events.connection);
-  const stream = await manager.streams.info('EVENTS');
   try {
     const start = await test.start();
     const { takePersonalOAuthRefreshClaim } = await import('../src/oauth-refresh.ts');
@@ -3979,7 +3983,6 @@ async function claimsRefreshOnce(mode: string) {
     expect(rebuilt.refreshClaim).toEqual(claimed);
     expect(rebuilt.status).toBe('unavailable');
     expect(effects).not.toHaveBeenCalled();
-    await manager.streams.update('EVENTS', { duplicate_window: 100_000_000 });
     const probe = envelope('test', `member-claim-probe-${test.session.userId}`, 'member.joined', {
       memberId: 'probe', email: 'probe@example.test', displayName: 'Probe', role: 'member',
     }, claimed.event.id);
@@ -4000,7 +4003,6 @@ async function claimsRefreshOnce(mode: string) {
       expect(publicValues).not.toContain(digest.digest('hex'));
     }
   } finally {
-    await manager.streams.update('EVENTS', { duplicate_window: stream.config.duplicate_window });
     await test.close();
   }
 }
