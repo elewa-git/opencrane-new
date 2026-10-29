@@ -1,0 +1,53 @@
+{
+  "status": "PARTIAL",
+  "grant": "MIT for the exact ms module only",
+  "sourceCommit": "1c6264b795492e8fdecbc82cb8802fcfbfc08d26",
+  "sourceURL": "https://github.com/vercel/ms/tree/1c6264b795492e8fdecbc82cb8802fcfbfc08d26",
+  "sourceTag": "2.1.3",
+  "attribution": "Copyright (c) 2020 Vercel, Inc.",
+  "reason": "MIT is OSI-approved. Retain the complete copyright, permission notice and disclaimer with image distribution.",
+  "transformation": "Remove documentation comments and blank lines; change quotes, bindings, numeric spelling, undefined and error-line wrapping; add indentation and CommonJS wrapper. No licence notice is present in the bundled ms range.",
+  "sourceFiles": [
+    [
+      "index.js",
+      3024,
+      "e5f0b6a946a9b2b356a28557728410717df54ea2f599edb619f9839df6b7b0e9"
+    ],
+    [
+      "license.md",
+      1079,
+      "1662fae9b5314d11cf51284e2dcd1f006a354f7343f08712a730fcff9a359801"
+    ],
+    [
+      "package.json",
+      732,
+      "1a6b4d9739790c0b94ab96c8cc0507e281c164c311ff4fbf5e57fb8d26290b40"
+    ]
+  ],
+  "compressedFiles": {
+    "index.js.gz": "5f10d66d1295ad5f2dd8933d07c75cd3b225ab6feaebea5b95fc77428c8b021f",
+    "license.md.gz": "8b9f2810bf3f3d9d448a1753d7cade19b10dd7fe8de7af057ff62b877d87f007",
+    "package.json.gz": "a32b6ac43d6d9bfc187f8ff47fe7ceceec0b0fd8727873322e3d3c66445088e9"
+  },
+  "inventorySha256": "076e9fb77d031a7a138c4e39c54299670ddc241fe4b43d600c84ed3b6a838f87",
+  "sourceFixtureSha256": "9fe2ff11cd60f04de8fadc7021165336cd1c5a4918347c181ef14fa3b1b1d5fb",
+  "regionsFixtureSha256": "4286a20cc5b9bf718f8c34071a88b29a1a75d49534673848f762b232ba406c96",
+  "module": [
+    "ms",
+    "2.1.3",
+    ".yarn/cache/ms-npm-2.1.3-81ff3cfac1-d924b57e73.zip",
+    1,
+    "4923ee89533c070866a34628ea4d0ca3e2724c06ae4796103403160d9d38928e",
+    "BLOCKED"
+  ],
+  "ranges": [
+    [
+      84609,
+      87633,
+      ".yarn/cache/ms-npm-2.1.3-81ff3cfac1-d924b57e73.zip/node_modules/ms/index.js",
+      "4923ee89533c070866a34628ea4d0ca3e2724c06ae4796103403160d9d38928e"
+    ]
+  ],
+  "distribution": "BLOCKED: retain complete license.md with image distribution before promotion",
+  "unresolved": "BLOCKED: all other dependency decisions remain separate; embedded Wasm, unknown ranges, historical references, vulnerabilities, exact-source R3 and image approval are not resolved here"
+}
