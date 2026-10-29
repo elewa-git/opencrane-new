@@ -48,14 +48,17 @@ export async function initialMemoryAccess(options: MemoryOptions, requester: str
   async function confirm() {
     if (performance.now() >= deadline) throw new LoadedMemoryRefused();
     // Preserve removal before another unavailable access stream can hide it.
-    const current = await savedMember(options, requester, deadline);
-    for (const [subject, position] of current.positions) {
-      if (membership.positions.get(subject) !== position) throw new LoadedMemoryRefused();
+    for (const [subject, position] of membership.positions) {
+      const current = await options.store.head(subject, deadline);
+      if (current !== position) {
+        await savedMember(options, requester, deadline);
+        throw new LoadedMemoryRefused();
+      }
     }
     for (const subject of subjects) {
+      if (membership.positions.has(subject)) continue;
       const position = await options.store.head(subject, deadline);
-      const original = membership.positions.get(subject) ?? head;
-      if (position > original) throw new LoadedMemoryRefused();
+      if (position > head) throw new LoadedMemoryRefused();
     }
     if (performance.now() >= deadline) throw new LoadedMemoryRefused();
   }
