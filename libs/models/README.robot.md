@@ -92,6 +92,10 @@ read within the deadline still requires 403. Both cases retain the exact send an
 reservation counts. The server's IAM-outage integration case requires 503 at decision
 admission; its later dispatch refusal and saved no-send evidence remain unchanged.
 
+The managed provider-history timeout also requires 503. Its ten-second read limit
+expires before access is checked, so it establishes no refusal. The test keeps the
+exact time limits, zero reservations, zero reserved and spent cents, and no provider call.
+
 ## Local OAuth revocation (Part of #50)
 
 PR 11a is split at the saved local revocation to stay below about 600 changed lines.
@@ -576,7 +580,7 @@ It checks history plus access exceeding two seconds, and a late decision after t
 gateway has timed out. The latter must record a refusal and leave no reservation or
 uncertain hold. `apps/server/test/integration-access-gateway.test.ts` also advances
 the monotonic clock by 2,100 ms after history, or by 1,900 ms after history and
-200 ms during access. Both must return 403 with no remote call. Its ordinary call
+200 ms during access. Both must return 503 with no remote call. Its ordinary call
 still requires 200, one remote call and the same request bytes. All cases require
 full history to load before access reads.
 
@@ -4590,8 +4594,9 @@ budget root and recorded computer turn. Routine history has a separate ten-secon
 limit before access starts. `authorityFence` watches no routine or conversation
 stream. Later routine checks read only new events and compare exact
 positions separately before model admission and final MCP send, including free calls.
-Saved Stop, Pause or Retire refuses without `applyRoutineStop`. Missing, mismatched
-or unavailable evidence refuses too. Ordinary chats keep their existing deadlines.
+Saved Stop, Pause or Retire refuses without `applyRoutineStop`. Missing or mismatched
+evidence refuses too. Event-store outages and expired routine read limits return 503
+without a refusal header or permit. Ordinary chats keep their existing deadlines.
 `RoutineDispatchRefused` preserves HTTP 403, the `x-opencrane-decision: refused`
 header and fixed `Routine dispatch refused` message if a later deny-audit append fails
 or an earlier audit was already attempted. Other audit failures keep their existing handling.
@@ -4605,7 +4610,8 @@ Tests extend the real internal routine admissions in `routine-session.test.ts`, 
 use the model decision endpoint and a recording MCP server. They check delayed cleanup,
 prohibition during admission and before send, altered evidence and consumed permits.
 They also fail the deny audit after a saved owner Stop for both model and free-tool
-requests, stall routine history beyond its deadline, and keep unrelated routine,
+requests, require 503 for stalled history and failed preparation or confirmation reads,
+and keep unrelated routine,
 conversation and computer-thread activity arriving throughout dispatch.
 Full root suite and fresh-install/live qualification: NOT RUN.
 

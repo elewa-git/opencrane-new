@@ -4,7 +4,8 @@
 
 Gateway permission requests report an unavailable service (HTTP 503) for event-store
 outages and timeouts, failed permission-service checks, unavailable budget writes
-and expired access checks. They grant no permit or extra spending. A confirmed access
+and expired access checks. This includes routine history reads. They grant no permit
+or extra spending. A confirmed access
 refusal stays HTTP 403. A retry must pass the normal access and spending checks again.
 
 Personal account saves and cleanup share a database lock. They wait up to one second
