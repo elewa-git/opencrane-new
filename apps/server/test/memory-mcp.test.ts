@@ -2505,10 +2505,7 @@ async function changeRequest(operation: 'correct' | 'forget', checkControl = tru
   const body = { ...call, params: { ...call.params, name: operation, arguments: input } };
   const requestHeaders = { ...headers, 'mcp-name': operation };
   const request = { body, requestHeaders, catalogue };
-  if (checkControl && operation === 'forget') {
-    const control = await sendChange(request);
-    expect(control.json()).toEqual({ status: 'refused', reason: 'memory_tool_unavailable' });
-  } else if (checkControl) {
+  if (checkControl) {
     await changeToken(request);
   }
   return request;
@@ -2631,29 +2628,6 @@ async function sendChange(request: ChangeRequest, token?: string) {
   const requestHeaders = { ...request.requestHeaders, 'x-memory-context': signed };
   return app.inject({ method: 'POST', url: route, headers: requestHeaders, payload: request.body });
 }
-async function unavailableChange(operation: 'correct' | 'forget') {
-  const request = await changeRequest(operation, false);
-  const position = await setup.nats.store.head(`scope-${scopeId}`);
-  const directory = dirname(setup.options.configFile);
-  const files = readdirSync(directory);
-  const response = await sendChange(request);
-  expect(response.statusCode).toBe(403);
-  expect(response.json()).toEqual({ status: 'refused', reason: 'memory_tool_unavailable' });
-  const gateway = await setup.call(request.requestHeaders, request.body, route);
-  expect(gateway.status, gateway.text).toBe(403);
-  expect(JSON.parse(gateway.text)).toEqual(response.json());
-  expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(position);
-  expect(readdirSync(directory)).toEqual(files);
-  const discovery = { ...call, method: 'tools/list', params: { _meta: metadata } };
-  const discoveryHeaders = { ...headers, 'mcp-method': 'tools/list', 'mcp-name': '' };
-  const listed = await setup.call(discoveryHeaders, discovery, route);
-  expect(listed.status, listed.text).toBe(200);
-  expect(listed.text).toContain('recall');
-  expect(listed.text).not.toMatch(/correct|forget/u);
-}
-it.each(['forget'] as const)(
-  'checks %s completely but keeps it switched off without files or events', unavailableChange);
-
 async function refusedChange(request: ChangeRequest, reason?: string) {
   const response = await sendChange(request);
   expect(response.statusCode).toBe(403);
@@ -2995,10 +2969,8 @@ async function delayedBackend(operation: 'recall' | 'correct' | 'forget',
     if (revoke) {
       expect(response.statusCode).toBe(403);
       expect(response.json()).toEqual({ status: 'refused' });
-    } else if (operation !== 'forget') {
-      expect(response.statusCode).toBe(200);
     } else {
-      expect(response.json()).toEqual({ status: 'refused', reason: 'memory_tool_unavailable' });
+      expect(response.statusCode, response.body).toBe(200);
     }
   } finally {
     timing.restore();
@@ -3054,13 +3026,7 @@ async function gatewayPreparation(operation: 'recall' | 'correct' | 'forget',
   try {
     const response = await setup.call(requestHeaders, body, route);
     expect(timing.delayed()).toBe(true);
-    if (operation !== 'forget') {
-      expect(response.status, response.text).toBe(200);
-    } else {
-      expect(response.status).toBe(403);
-      expect(JSON.parse(response.text)).toEqual({
-        status: 'refused', reason: 'memory_tool_unavailable' });
-    }
+    expect(response.status, response.text).toBe(200);
     expect(decodeJwt(capability)['preparationId']).toEqual(expect.any(String));
   } finally {
     timing.restore();
@@ -3089,7 +3055,7 @@ async function reusedForgetPreparation() {
   const request = await changeRequest('forget', false);
   const original = await changeToken(request);
   const first = await sendChange(request, original);
-  expect(first.json()).toEqual({ status: 'refused', reason: 'memory_tool_unavailable' });
+  expect(first.statusCode, first.body).toBe(200);
   const claims = decodeJwt(original);
   claims['dispatch'] = await memoryBinding(setup);
   const reused = await setup.tokens.memoryContext(claims, Date.now() + 2000);
@@ -3162,11 +3128,7 @@ async function usesPreparedChangeReads(operation: 'correct' | 'forget') {
   const reads = vi.spyOn(setup.nats.store, 'readStream');
   try {
     const response = await sendChange(request, signed);
-    if (operation === 'correct') {
-      expect(response.statusCode, response.body).toBe(200);
-    } else {
-      expect(response.json()).toEqual({ status: 'refused', reason: 'memory_tool_unavailable' });
-    }
+    expect(response.statusCode, response.body).toBe(200);
     expect(receipts).not.toHaveBeenCalled();
     for (const [subject, from] of reads.mock.calls) {
       if (subject === `scope-${scopeId}` || subject === 'conversation-conversation') {
@@ -3230,13 +3192,7 @@ async function gatewayLoadedReceipts(operation: 'recall' | 'correct' | 'forget',
   try {
     const response = await setup.call(requestHeaders, body, route);
     expect(accessStarted).toBe(true);
-    if (operation !== 'forget') {
-      expect(response.status, response.text).toBe(200);
-    } else {
-      expect(response.status).toBe(403);
-      expect(JSON.parse(response.text)).toEqual({
-        status: 'refused', reason: 'memory_tool_unavailable' });
-    }
+    expect(response.status, response.text).toBe(200);
     expect(lateReceipts).toBe(0);
     for (const eventId of requiredReceipts) expect(preparedReceipts.has(eventId)).toBe(true);
   } finally {
@@ -3734,3 +3690,60 @@ async function removedBeforeCorrectionPublication(throws: boolean) {
 it.each([false, true])(
   'keeps saved removal ahead of publication dependency errors (throws=%s)',
   removedBeforeCorrectionPublication);
+
+async function savedAgentForget(lostReply: boolean) {
+  const request = await changeRequest('forget', false);
+  const scope = { scopeId, scopeKind: 'person' as const, ownerId: 'alice' };
+  const { remember } = await import('../src/memory/commands.ts');
+  await remember(correctionOptions(), 'alice', scope, { commandId: 'change', text: 'Human fact',
+    kind: 'fact', pinned: false, expiresAt: null, sources: [], dependsOn: [] });
+  expect((await correctionStatus()).json()).toEqual({ outcome: 'unknown' });
+  const before = await history(setup.nats.store, `scope-${scopeId}`, 'test');
+  const original = setup.nats.store.append.bind(setup.nats.store);
+  async function append(command: Parameters<typeof original>[0]) {
+    const result = await original(command);
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'memory.forgotten' && lostReply) throw new Error('Lost reply');
+    return result;
+  }
+  const appends = vi.spyOn(setup.nats.store, 'append').mockImplementation(append);
+  const response = await setup.call(request.requestHeaders, request.body, route);
+  appends.mockRestore();
+  expect(response.status, response.text).toBe(200);
+  const received = JSON.parse(response.text) as { result: { structuredContent: { outcome: string } } };
+  expect(received.result.structuredContent.outcome).toBe(lostReply ? 'unknown' : 'accepted');
+  const rows = await history(setup.nats.store, `scope-${scopeId}`, 'test');
+  expect(rows).toHaveLength(before.length + 1);
+  const saved = rows.at(-1)!;
+  expect(saved.event).toMatchObject({ type: 'memory.forgotten',
+    principal: { kind: 'agent', id: 'alice' }, correlation: {
+      conversation: 'conversation', turn: 'turn', request: decodeJwt(capability)['requestId'] },
+    data: { memoryId: 'fact_21', revision: 2, expectedRevision: 1 } });
+  const files = readdirSync(dirname(setup.options.configFile));
+  const status = await correctionStatus();
+  expect(status.statusCode, status.body).toBe(200);
+  expect(status.json()).toMatchObject({ operation: 'forget', outcome: 'accepted',
+    changeId: saved.event.id, hidden: true, cleanupStatus: 'pending' });
+  expect(status.body).not.toMatch(/canary|ciphertext|keyId|recallProof|forgottenAt/u);
+  expect((await correctionStatus('changes')).json()).toMatchObject({ outcome: 'saved', revision: 1 });
+  const { readAgentCorrection } = await import('../src/memory/correct.ts');
+  const decrypts = vi.spyOn(crypto, 'createDecipheriv');
+  const writes = vi.spyOn(setup.nats.store, 'append');
+  await readAgentCorrection(correctionOptions(), 'alice', scope, 'change');
+  expect(decrypts).not.toHaveBeenCalled();
+  expect(writes).not.toHaveBeenCalled();
+  decrypts.mockRestore();
+  writes.mockRestore();
+  expect(readdirSync(dirname(setup.options.configFile))).toEqual(files);
+  const { detailFact } = await import('../src/memory/reads.ts');
+  await setup.runner.rebuild(projection);
+  expect(await detailFact(correctionOptions(), 'alice', scope, 'fact_21')).toMatchObject({
+    status: 'unavailable', reason: 'forgotten' });
+  const next = await setup.call(headers, call, route);
+  expect(next.status).toBe(403);
+  const retry = await setup.call(request.requestHeaders, request.body, route);
+  expect(retry.status).toBe(403);
+  expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(saved.sequence);
+}
+it.each([false, true])('saves one agent Forget and recovers without resending (lost=%s)',
+  savedAgentForget);
