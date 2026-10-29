@@ -68,6 +68,78 @@ async function recovery(kind: string) {
 }
 it.each(['lost reply', 'workers'])('recovers one reference after %s, dedupe expiry and restart',
   recovery);
+async function acknowledgedExpiry(readFailure: string) {
+  fixture.advance(900_000);
+  const store = fixture.nats.store;
+  const append = store.append.bind(store);
+  const before = await store.head();
+  const expected = { status: 'confirmed', eventId: '', position: 0 };
+  async function acknowledgeThenFailReads(change: AppendCommand) {
+    const result = await append(change);
+    expect(result.outcome?.kind).toBe('appended');
+    if (result.status !== 'appended') throw new Error('Missing saved expiry');
+    const event = z.object({ id: z.string() }).parse(change.event);
+    expected.eventId = event.id;
+    expected.position = result.sequence;
+    if (readFailure === 'head outage') {
+      vi.spyOn(store, 'head').mockRejectedValue(new Error('private-service-canary'));
+    } else if (readFailure === 'history outage') {
+      function refuseHistory(): never {
+        throw new Error('private-service-canary');
+      }
+      vi.spyOn(store, 'readStream').mockImplementation(refuseHistory);
+    } else {
+      const afterDeadline = performance.now() + 10_001;
+      vi.spyOn(performance, 'now').mockReturnValue(afterDeadline);
+    }
+    return result;
+  }
+  vi.spyOn(store, 'append').mockImplementationOnce(acknowledgeThenFailReads);
+  const result = await expire();
+  expect(result).toEqual(expected);
+  vi.restoreAllMocks();
+  const saved = await store.readEvent(expected.position);
+  expect(saved.event).toMatchObject({ id: expected.eventId, type: 'approval.expired' });
+  expect(await expire()).toEqual(result);
+  expect(await store.head()).toBe(before + 1);
+}
+it.each(['head outage', 'history outage', 'expired read deadline'])(
+  'retains the acknowledged expiry reference after %s', acknowledgedExpiry);
+async function unprovenExpiry(kind: string) {
+  fixture.advance(900_000);
+  const store = fixture.nats.store;
+  const append = store.append.bind(store);
+  async function competeThenFailReads(change: AppendCommand) {
+    if (kind === 'duplicate recovery') {
+      expect((await expire()).status).toBe('confirmed');
+    } else {
+      await fixture.decision();
+    }
+    const result = await append(change);
+    if (kind === 'duplicate recovery') {
+      expect(result.status).toBe('appended');
+      expect(result.outcome?.kind).toBe('duplicate_saved');
+    } else {
+      expect(result.status).toBe('conflict');
+    }
+    vi.spyOn(store, 'head').mockRejectedValue(new Error('private-service-canary'));
+    return result;
+  }
+  vi.spyOn(store, 'append').mockImplementationOnce(competeThenFailReads);
+  await expect(expire()).rejects.toThrow(/^Routine approval expiry refused$/u);
+  vi.restoreAllMocks();
+  const position = await store.head('approval-ask-Requested');
+  const saved = await store.readEvent(position);
+  if (kind === 'duplicate recovery') {
+    expect(saved.event.type).toBe('approval.expired');
+    expect(await expire()).toEqual({ status: 'confirmed', eventId: saved.event.id, position });
+  } else {
+    expect(saved.event.type).toBe('approval.decided');
+  }
+  expect(await store.head('approval-ask-Requested')).toBe(position);
+}
+it.each(['duplicate recovery', 'conflict'])(
+  'requires saved history after %s when reads fail', unprovenExpiry);
 async function race(kind: string) {
   fixture.advance(900_000);
   const append = fixture.nats.store.append.bind(fixture.nats.store);
