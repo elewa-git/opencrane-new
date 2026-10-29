@@ -2,6 +2,7 @@
 
 import contextlib
 import copy
+import hashlib
 import importlib.util
 import io
 import json
@@ -14,6 +15,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 CHECKER = Path(__file__).with_name("check-kubectl.py")
+SIGNER = "0E225917414670F4442C250DFD533C07C264648F"
+PRIMARY = "EB4C1BFD4F042F6DDDCCEC917721F63BD38B4796"
+VALID_SIGNATURE = (
+    f"[GNUPG:] VALIDSIG {SIGNER} 2026-08-28 1787947652 0 4 0 1 8 00 {PRIMARY}\n"
+).encode()
 
 
 def archive_bytes(rows):
@@ -40,6 +46,7 @@ class BuildTests(unittest.TestCase):
             result = self.checker.main(["/private/candidate", "/private/source.tar.gz"])
         self.assertEqual(result, 0 if success else 1)
         if success:
+            self.assertIn("PASS Go source archive signature and signer identity\n", stdout.getvalue())
             self.assertIn("PARTIAL", stdout.getvalue())
             self.assertEqual(stderr.getvalue(), "")
         else:
@@ -159,8 +166,78 @@ class BuildTests(unittest.TestCase):
             rows.append(("go/src/runtime/memmove_amd64.s", self.inputs["memmove_amd64.s"]))
             source = archive_bytes(rows)
             path.write_bytes(source)
-            with patch.object(checker.candidate, "checked_bytes", return_value=source):
+            with patch.object(checker.candidate, "checked_bytes", return_value=source), \
+                    patch.object(checker, "check_source_signature", create=True):
                 checker.check_source(path, self.review)
+
+    def source_fixture(self):
+        rows = []
+        for path, name in self.checker.SOURCE_FILES.items():
+            rows.append(("go/" + path, self.inputs[name]))
+        return archive_bytes(rows)
+
+    def test_source_requires_signature_even_when_all_notice_hashes_match(self):
+        source = self.source_fixture()
+        with patch.object(self.checker.candidate, "checked_bytes", return_value=source):
+            with self.assertRaises(ValueError):
+                self.checker.check_source(Path("/private/source.tar.gz"), self.review)
+
+    def test_missing_or_changed_signature_and_keyring_refuse_without_paths(self):
+        checker = self.checker
+        source = self.source_fixture()
+
+        def check_source_only(*arguments):
+            checker.check_source(Path("/private/source.tar.gz"), self.review)
+
+        self.assertEqual(self.review["sourceAuthentication"], "PASS")
+        for name in ("go-source.asc", "google-signing-key.gpg"):
+            for change in ("missing", "changed"):
+                changed = dict(self.inputs)
+                if change == "missing":
+                    del changed[name]
+                else:
+                    changed[name] = b"/private/changed signing evidence"
+                with self.subTest(name=name, change=change), \
+                        patch.object(checker.candidate, "checked_bytes", return_value=source), \
+                        patch.object(checker, "load_inputs", return_value=changed), \
+                        patch.object(checker, "check_evidence", side_effect=check_source_only):
+                    self.run_main(False)
+
+    def test_wrong_signature_is_cryptographically_refused_with_matching_record_hash(self):
+        checker = self.checker
+        changed = dict(self.inputs)
+        changed["go-source.asc"] = b"not a signature\n"
+        review = copy.deepcopy(self.review)
+        review["files"]["go-source.asc"] = hashlib.sha256(changed["go-source.asc"]).hexdigest()
+        with patch.object(checker, "load_inputs", return_value=changed):
+            with self.assertRaises(ValueError):
+                checker.check_source_signature(self.source_fixture(), review)
+
+    def test_verifier_requires_success_and_exact_signing_and_primary_keys(self):
+        checker = self.checker
+        self.assertEqual(self.review["sourceSignerFingerprint"], SIGNER)
+        self.assertEqual(self.review["sourcePrimaryFingerprint"], PRIMARY)
+        source = self.source_fixture()
+        accepted = subprocess.CompletedProcess([], 0, VALID_SIGNATURE, b"/private/gpg")
+        with patch.object(checker.subprocess, "run", return_value=accepted):
+            checker.check_source_signature(source, self.review)
+        statuses = [b"", VALID_SIGNATURE + VALID_SIGNATURE]
+        statuses.append(VALID_SIGNATURE.replace(SIGNER.encode(), b"0" * 40))
+        statuses.append(VALID_SIGNATURE.replace(PRIMARY.encode(), b"0" * 40))
+        statuses.append(VALID_SIGNATURE.replace(b" 00 ", b" "))
+        results = []
+        for status in statuses:
+            results.append(subprocess.CompletedProcess([], 0, status, b"/private/gpg"))
+        results.append(subprocess.CompletedProcess([], 1, VALID_SIGNATURE, b"/private/gpg"))
+        for result in results:
+            def check_source_only(*arguments):
+                checker.check_source(Path("/private/source.tar.gz"), self.review)
+
+            with self.subTest(result=result), \
+                    patch.object(checker.candidate, "checked_bytes", return_value=source), \
+                    patch.object(checker.subprocess, "run", return_value=result), \
+                    patch.object(checker, "check_evidence", side_effect=check_source_only):
+                self.run_main(False)
 
     def test_required_stages_and_child_errors_withhold_output(self):
         checker = self.checker
