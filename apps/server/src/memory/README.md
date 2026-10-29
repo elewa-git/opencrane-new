@@ -20,6 +20,10 @@ A memory fact is one saved piece of information. Its scope says whose memory it 
 
 **Forgetting.** A person can forget their own fact through HTTP. Group members can forget group facts and their group's assistant notes with both read and write grants. Personal assistant notes also require the assistant's owner and both grants. The fact is hidden immediately; the result says whether cleanup is pending, unavailable or finished. After a lost reply or restart, the person can check the original result with current rights without saving another change.
 
+Forget can wait up to one second for each database lock when the database is slow.
+Each wait also stops at the end of the original two-second access check. The server
+checks access again after taking the locks and before saving the forget request.
+
 **Assistant access.** A turn is one message and the assistant's reply. The memory tool server checks the AI gateway's signed [access token](../../../../GLOSSARY.md#access-token), a short-lived pass, alongside saved grants, current permissions, the bound assistant and recorded turn mode. It can return personal facts and permitted group facts or assistant notes. Every call checks the previously loaded references. The memory tool server checks each signed description of the turn once. It also checks whose memory the call may use and the proof required for a write.
 
 The fixed recall, remember and Correct definitions also check the internal private chat tool lists.

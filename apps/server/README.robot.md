@@ -916,8 +916,11 @@ A slow append holds one shared connection for that member, leaving the default
 10-connection pool room for other queries. Separate server processes each have their
 own limit and pool.
 A PostgreSQL advisory lock keeps attempts for the same command together across servers.
-Memory commands wait at most 100 ms for this lock; a busy lock returns 503. Work inside the
-lock holds one database client. It reads only scope events newer than the earlier history,
+Remember and Correct wait at most 100 ms for a database lock. Forget allows up to
+1,000 ms for each command and fact lock, capped by the time left in the original
+two-second access check. This covers connection setup and PostgreSQL replies as well
+as contention. A busy lock still returns 503. Access is checked again after taking
+the locks and before append. Work inside the lock holds one database client. It reads only scope events newer than the earlier history,
 with a 100 ms deadline. Refusal checks use the same read limit and the remaining write
 deadline. No conversation content or OpenFGA checks run inside the lock.
 
@@ -954,6 +957,97 @@ The correction restart test holds a real recovery lock beyond the competing scan
 must remain readable and the append count must stay at one. The original saved,
 delayed and forgotten cases retain their assertions.
 Fresh-install memory journeys and native turns remain NOT RUN.
+
+### Forget database delays
+
+Part of #576. The load check used this worktree's own `npm ci` installation,
+NATS binary and disposable PostgreSQL container. All test commands used `nice -n 10`
+and `PG_TEST_URL` pointed to that container. No root suite or live journey ran.
+
+The group cleanup completion case at base `b95a15cce` returned 503 before its worker
+started.
+Temporary diagnostics recorded `Database lock acquisition cancelled or expired`
+from `acquireProjectionLock` in `libs/projections/src/pg.ts`. The 100 ms limit covers
+pool connection setup and PostgreSQL replies, even for an uncontended lock. The
+fixture had already waited for service health and applied its access records.
+The correction-versus-Forget case passed in this diagnostic run; its older failure
+was not reproduced separately.
+
+The regression tests hold real command and fact locks for 150 ms after Forget tries
+to acquire them. Both returned 503 before the fix. The test commit `cf5d92efe` precedes the
+product change. The fixed requests return 200 and append exactly once. A separate
+case spends 2,100 ms in the lock work and checks for 503, no append and an intact key.
+The original permission, memory and status assertions remain in place.
+
+Diagnostic checks before the repeated verification:
+
+- FAIL: the original group-completion case returned 503 under concurrent test load.
+  The same partial baseline later hit a separate nightly binding-status timeout.
+  It was stopped after diagnosis and is excluded from the 20 verification runs.
+- PASS: a focused trace of the original group-completion and correction-versus-Forget
+  cases passed both tests before the fix; this confirms the failure was intermittent.
+- FAIL as expected: both new short-lock tests returned 503 before the fix.
+- FAIL: the first focused run after the fix passed both short-lock tests but the
+  expiry test passed extra fixture fields to the strict key-status validator.
+  The test now supplies only the memory identity fields.
+- PASS: the next focused run passed all three lock tests.
+- NOT RUN: the first MCP load companion could not complete its gateway setup because
+  the gateway binary was absent. One setup also timed out contacting OpenFGA.
+  The verification below uses two concurrent HTTP memory suites instead.
+
+Checks completed before the repeated verification finished:
+
+- PASS: `nice -n 10 npm run lint`.
+- PASS: `nice -n 10 npm run typecheck`.
+- PASS: `nice -n 10 npm run check:events` (157 event types).
+- PASS: `nice -n 10 npm run lint:unused` (knip).
+- PASS: `nice -n 10 npm run lint:changelog`.
+- PASS: `libs/events/test/security-rules.test.ts`, 460/460 tests, one worker.
+
+The repeated runs use the complete `apps/server/test/memory.test.ts` file, two
+separate Vitest processes at a time, with one worker each. Each process has its own
+service fixtures and database. Logs and the per-run exit codes are kept in
+`/tmp/ci-flakes-22/` on the build machine. This is test-fixture evidence only;
+fresh-install and live memory qualification remain NOT RUN.
+
+The full-file verification result is FAIL: 18 runs passed all 245 tests. Runs 11
+and 12 each passed 244 tests and exceeded the 30-second limit in
+`rebuilds binding status without any key, model, tool, computer or scheduler port`.
+That same test timed out in the pre-fix baseline. It rebuilds the memory projection
+twice and does not call Forget. These failures remain FAIL; neither run was retried.
+
+Both reported Forget cases and all three new lock regression tests passed in every
+run. The lock change is verified, but the full-file load check is not green.
+
+Each process ran this command with `PG_TEST_URL` set to the disposable database:
+
+```sh
+nice -n 10 node node_modules/vitest/vitest.mjs run \
+  apps/server/test/memory.test.ts --maxWorkers=1 --reporter=verbose
+```
+
+| Run | Result | Tests passed | Duration |
+| --- | --- | --- | --- |
+| 01 | PASS | 245/245 | 563.19 s |
+| 02 | PASS | 245/245 | 558.22 s |
+| 03 | PASS | 245/245 | 414.31 s |
+| 04 | PASS | 245/245 | 411.41 s |
+| 05 | PASS | 245/245 | 374.20 s |
+| 06 | PASS | 245/245 | 374.40 s |
+| 07 | PASS | 245/245 | 369.18 s |
+| 08 | PASS | 245/245 | 370.76 s |
+| 09 | PASS | 245/245 | 412.53 s |
+| 10 | PASS | 245/245 | 411.98 s |
+| 11 | FAIL | 244/245 | 572.25 s |
+| 12 | FAIL | 244/245 | 578.43 s |
+| 13 | PASS | 245/245 | 496.20 s |
+| 14 | PASS | 245/245 | 496.77 s |
+| 15 | PASS | 245/245 | 387.99 s |
+| 16 | PASS | 245/245 | 387.32 s |
+| 17 | PASS | 245/245 | 379.10 s |
+| 18 | PASS | 245/245 | 381.22 s |
+| 19 | PASS | 245/245 | 389.25 s |
+| 20 | PASS | 245/245 | 389.69 s |
 
 The Node service exposes sign-in routes, invitation acceptance, the organisation MCP
 register, a health check and authenticated WebSocket routes. It does not serve static

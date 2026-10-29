@@ -113,6 +113,8 @@ After a restart, memory recovery uses the existing private keys and saved comman
 Overlapping recovery calls wait for the same scan to finish before reporting completion.
 A new assistant with no access to notes does not block personal memory.
 Notes with access grants still need the assistant's permissions to be ready.
+Human Forget requests allow a short database lock wait when the database is busy.
+They keep the original two-second access limit and check permissions again before saving.
 Memory reads give the website a safe setup reply while saved membership permissions
 are still being applied. Every later read checks access again.
 Saved evidence that memory was prepared for a turn prevents its reply and reasoning
@@ -143,6 +145,7 @@ flowchart LR
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
+  server -->|waits briefly for Forget locks| postgres
   server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, routine Stops even when evidence reads fail, saved memory Stops, reply removal receipts after completion and checked reports| computer["apps/computer<br/>assistant computers"]
   computer -.->|records private thread before tool approval| server
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
