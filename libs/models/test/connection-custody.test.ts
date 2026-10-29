@@ -3,6 +3,7 @@ import { changeCompanyOptIn } from '../src/company-opt-in.ts';
 import { exportSPKI, generateKeyPair, SignJWT } from 'jose';
 import { OpenFgaClient } from '@openfga/sdk';
 import { MemberAccessRefused } from '../src/member-authority.ts';
+import * as memberAuthority from '../src/member-authority.ts';
 import { exchangePersonalOAuth } from '../src/oauth-worker.ts';
 import { remoteFixture } from './support/remote-mcp.ts';
 import { open } from 'node:fs/promises';
@@ -5721,6 +5722,63 @@ async function rotatesCompanyOnce() {
   expect(test.store.deletes).toBe(0);
 }
 it('rotates one company generation once without selecting or releasing it', rotatesCompanyOnce);
+
+async function rotationValidationRefusal(membership: string, invalid: string) {
+  const test = await companyRotationFixture();
+  if (membership === 'removed') {
+    await test.removeAdmin();
+  } else if (membership === 'demoted') {
+    const demoted = envelope('test', `member-${test.userId}`, 'member.role_changed', {
+      memberId: test.userId, previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+    });
+    await events.seed([demoted]);
+  }
+  let input = test.input;
+  let supplied = 'synthetic-replacement';
+  if (invalid === 'generation') {
+    input = { ...input, expectedGeneration: 0 };
+  } else if (invalid === 'empty material') {
+    supplied = '';
+  } else {
+    supplied = 'x'.repeat(8193);
+  }
+  const before = await test.rows();
+  const permission = vi.spyOn(memberAuthority, 'activeMember');
+  const reads = vi.spyOn(events.store, 'readStream');
+  const writes = vi.spyOn(events.store, 'append');
+  const stages = vi.spyOn(test.store.custody, 'stage');
+  function readsMembership(args: Parameters<typeof events.store.readStream>) {
+    return args[0] === `member-${test.userId}`;
+  }
+  try {
+    const pending = test.save(input, supplied);
+    if (membership === 'admin') {
+      await expect(pending).rejects.toThrow(/^Company connection unavailable$/u);
+    } else {
+      await expect(pending).rejects.toBeInstanceOf(MemberAccessRefused);
+      const message = membership === 'removed'
+        ? 'Active silo membership required' : 'Owner or Admin required';
+      await expect(pending).rejects.toThrow(message);
+    }
+    expect(permission).toHaveBeenCalledTimes(1);
+    const membershipReads = reads.mock.calls.filter(readsMembership);
+    expect(membershipReads).toHaveLength(1);
+    expect(stages).not.toHaveBeenCalled();
+    expect(writes).not.toHaveBeenCalled();
+    expect(test.store.creates).toBe(1);
+    expect(test.store.deletes).toBe(0);
+    expect(await test.rows()).toEqual(before);
+    expect(foldCompanyConnection(before).status).toBe('saved_unverified');
+    expect(foldConnection(before).status).toBe('unavailable');
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each([
+  ['removed', 'generation'], ['removed', 'empty material'], ['removed', 'oversized material'],
+  ['demoted', 'generation'], ['demoted', 'empty material'], ['demoted', 'oversized material'],
+  ['admin', 'generation'], ['admin', 'empty material'], ['admin', 'oversized material'],
+])('checks company rotation permission once for %s with invalid %s', rotationValidationRefusal);
 
 async function rotationPreparationRefusal(historyFailed: boolean, releaseFailed: boolean) {
   await companyPreparationRefusal(historyFailed, releaseFailed, true);
