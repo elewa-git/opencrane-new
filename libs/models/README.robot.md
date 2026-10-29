@@ -4622,3 +4622,9 @@ eventId and sequence. It is audit evidence, never a lease or permission to send.
 There is no custody reader, network adapter, event reaction, budget allocation or charge.
 Restart/replay cannot construct a sending capability. Tests use real NATS/OpenFGA and
 PostgreSQL fixtures. Live qualification and production dispatch integration are NOT RUN.
+
+Dependency-error checks distinguish `Release unavailable` from `MemberAccessRefused`.
+After a history outage, a new attempt checks permission again and saves one exact audit.
+Append recovery stays read-only.
+The [decision request checks](../../docs/process/evidence/p3-8-pr5a-decision-path.md)
+record the repeated comparison with main and the retained access-refusal checks.
