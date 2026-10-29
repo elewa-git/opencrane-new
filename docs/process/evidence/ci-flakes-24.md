@@ -2,6 +2,83 @@
 
 Part of #576. Own checks on 29 October 2026.
 
+## Refusals during dependency failures
+
+Rebased onto `68428e46e133df2c10c88c28b9356ff80681f85f` after fetching `origin`.
+The rebase finished, and that main commit is an ancestor of this branch.
+The documentation conflict kept both the OAuth test notes and decision failure notes.
+
+Test-only commit `931a920b2` came before implementation commit `9bb134403`.
+Before the fix, both missing-receipt response orders, an inactive assistant and a
+removed member followed by an audit failure returned 503 instead of 403.
+The silo mismatch and mixed permission denial/outage tests already passed.
+The two existing history/access timeout assertions also reproduced their 503/403 mismatch.
+After the fix, all eight selected checks passed. Further focused coverage passed
+for a missing receipt in a later batch, an unresolved budget write and an MCP outage.
+Commit `3a6b52368` fixed test lint errors without changing the assertions.
+
+Receipt checks now finish before their results are classified. A confirmed missing
+receipt takes priority over an unavailable check, including across batches.
+A saved inactive assistant is refused before receipt checks. Membership and authority
+refusals retain 403 if saving the deny audit fails. The removal tests keep the outage
+active and leave the old team membership in IAM.
+
+The shared history/access timeout requires exactly 503. `plan.md` requires the call
+to stop when context cannot be read; it does not require 403. The engineering standard
+separates unavailable dependencies from refused input. A timeout confirms no access
+denial, and neither deadline changes. Both timeout tests still require no reservation
+and no send; they also check the unavailable response body and absent reservation header.
+`authority.test.ts` and `authority-volume.test.ts` remain unchanged from main.
+
+### Follow-up checks
+
+All commands used `nice -n 10`. Tests used one worker and the supplied test PostgreSQL
+service on port 55432. Their normal disposable NATS, OpenFGA and gateway fixtures ran.
+No root suite, secondary development stack or fresh-install journey was started.
+
+The nine-file comparison group contains: `decision-activity`, `decision-grants`,
+`decision-fence`, `decision-cost`, `decision-refusal`, `decision-precedence`,
+`mcp-dispatch`, `authority` and `authority-volume`, all under `libs/models/test/`.
+There is no `decision.test.ts`; the first pass added activity and grants in a second
+command. The repeat selects the whole group together and also includes the three
+`authority-standalone` cases. A separate command repeated those three cases successfully in 20.98 seconds.
+Every selected case therefore ran twice.
+
+| Check | Result |
+| --- | --- |
+| First complete test pass | FAIL: 319 passed, 1 failed, none skipped |
+| Second complete test pass | PASS: 323 passed across 10 files, none skipped |
+| Additional standalone-authority repeat | PASS: 3 cases; these also passed in the second complete command |
+| Full lint | PASS: 33 warnings, no errors |
+| Full typecheck and models typecheck after test lint fixes | PASS |
+| `check:events` | PASS: 157 event types agree |
+| Separate Knip and `lint:changelog` | PASS |
+
+The first test failure was the large-cache case at `decision-cost.test.ts:708`:
+`Decision service unavailable` (503) instead of the required 200. Its success and
+sub-two-second assertions are unchanged. The seven-file command took 1,864.26 seconds;
+the additional two files passed 15 cases in 49.35 seconds. The same named case appears
+in the earlier load failures below. These checks do not establish its underlying cause.
+
+The second complete command passed all 323 cases in 1,702.65 seconds, including
+the large-cache case. Its slowest measured call was 1,898 ms. This later pass does
+not erase the earlier failure or establish that the intermittent failure is fixed.
+
+Local logs are `/tmp/ci-flakes-24-run1.log`, `/tmp/ci-flakes-24-run1-extra.log`,
+`/tmp/ci-flakes-24-run2.log`, `/tmp/ci-flakes-24-authority-standalone-repeat.log`,
+`/tmp/ci-flakes-24-red.log`,
+`/tmp/ci-flakes-24-green.log` and `/tmp/ci-flakes-24-added.log`.
+The final lint log is `/tmp/ci-flakes-24-lint-final.log`.
+The initial lint run found three test errors; the changed files and full lint passed
+after fixing them. No assertion was relaxed. Final documentation checks also passed.
+
+The earlier load qualification remains FAIL. Full root tests and fresh-install live
+qualification are NOT RUN. CI will not be awaited after pushing.
+
+## Earlier investigation
+
+The following sections preserve the earlier measurements and their limits.
+
 ## Change and environment
 
 Base: `8b93ce3c155382bc681622e8e62a948216400f16`, fetched from `origin/main`.
