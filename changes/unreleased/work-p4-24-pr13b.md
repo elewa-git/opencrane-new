@@ -1,0 +1,1 @@
+- An internal command can expire one routine approval at its original deadline while its owner and computer bridge are offline. It recovers the saved expiry after restart and supplies evidence to the separate Stop commands. Discovery and production wiring remain later work; routine execution stays disabled.
