@@ -16,12 +16,15 @@ It uses Docker on the deployment host and reads the deployment's event store.
 flowchart LR
   scripts["scripts<br/>developer tools"] -.-> collector["private-memory-qualification<br/>collects observed results"]
   scripts -.-> sibling["check-local-qualification<br/>checks local results"]
-  collector --> docker["Docker<br/>running image and host"]
-  docker --> deployment["deployment<br/>event store and journey runner"]
+  config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
+  collector -->|measures and starts checks| docker["Docker<br/>running image and host"]
+  docker -->|runs supervised checks| deployment["deployment<br/>event store and journey runner"]
 ```
 
 ## What it is responsible for
 
+- Read the permitted container and silo from deployment-owned configuration.
+- Stop each journey and its children when it exceeds a limit or the collector exits.
 - Measure the source revision, image, host, silo and installation before collecting results.
 - Refuse an old or used event store, changed deployment, or missing check.
 - Accept results only from processes it starts in the measured image.
@@ -30,21 +33,23 @@ flowchart LR
 
 ## Processes it handles
 
-The deployment owner supplies a full running Docker container id. The collector
-reads Docker and the event store, then starts each required check with a new random
+The deployment owner records the permitted container and silo in a protected file.
+The collector reads that file, Docker and the event store, then starts each check with a new random
 challenge. It checks the deployment again around every run. Each child must complete
-within two minutes. Only complete, matching results can pass.
+within two minutes. A supervisor inside the container stops the journey and its
+children on timeout, excessive output or collector exit. A retry cannot start until
+the previous journey has stopped. Only complete, matching results can pass.
 
 The fixed journey runner must be part of the deployment image. It is still pending,
-so current installations cannot pass. Tests use a fixture at the Docker command
-boundary; they do not run live memory journeys or enable memory.
+so current installations cannot pass. Tests use simulated receipts and disposable Docker containers to check refusal
+and process cleanup. They do not run live memory journeys or enable memory.
 
 ## How to run or test it
 
 From the repository root, on the deployment host:
 
 ```sh
-nice -n 10 node --experimental-strip-types scripts/private-memory-qualification/run.mjs "$CONTAINER_ID"
+nice -n 10 node --experimental-strip-types scripts/private-memory-qualification/run.mjs
 nice -n 10 npx vitest run --config scripts/private-memory-qualification/vitest.config.mjs
 nice -n 10 npx tsc -p scripts/private-memory-qualification/tsconfig.json
 ```

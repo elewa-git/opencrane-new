@@ -111,14 +111,14 @@ function assertSame(expected: object, actual: object): void {
   }
 }
 
-function readEventState(containerId: string) {
+async function readEventState(containerId: string) {
   const args = ['/usr/local/bin/node', '--experimental-strip-types',
     '--input-type=module', '--eval', freshProbe];
-  return freshSchema.parse(runInContainer(containerId, args));
+  return freshSchema.parse(await runInContainer(containerId, args));
 }
 
-function assertFresh(containerId: string, containerCreated: string): string {
-  const observation = readEventState(containerId);
+async function assertFresh(containerId: string, containerCreated: string): Promise<string> {
+  const observation = await readEventState(containerId);
   if (observation.lastSequence !== 0 || observation.eventCount !== 0) {
     throw new Error('installation_used');
   }
@@ -132,23 +132,23 @@ function assertFresh(containerId: string, containerCreated: string): string {
   return observation.created;
 }
 
-function assertInstallation(
+async function assertInstallation(
   containerId: string, before: ReturnType<typeof measure>, streamCreated: string,
-): void {
+): Promise<void> {
   assertSame(before, measure(containerId));
-  if (readEventState(containerId).created !== streamCreated) {
+  if ((await readEventState(containerId)).created !== streamCreated) {
     throw new Error('event_store_replaced');
   }
 }
 
-function runCheck(containerId: string, binding: Binding, name: string): string {
+async function runCheck(containerId: string, binding: Binding, name: string): Promise<string> {
   const challengeId = randomUUID();
   const request = { ...binding, name, challengeId };
   const input = JSON.stringify(request);
   const startedAt = Date.now();
   const args = ['/usr/local/bin/node', '--experimental-strip-types',
     '/app/scripts/private-memory-qualification/journey.mjs'];
-  const receipt = receiptSchema.parse(runInContainer(containerId, args, input));
+  const receipt = receiptSchema.parse(await runInContainer(containerId, args, input));
   assertSame(request, receipt);
   if (receipt.observedAt < startedAt || receipt.observedAt > Date.now()) {
     throw new Error('stale_receipt');
@@ -176,7 +176,7 @@ function deploymentTarget() {
 }
 
 // Read the permitted deployment from a root-owned file, never from the caller.
-export function collectDeployment(...unexpectedArguments: unknown[]): Result {
+export async function collectDeployment(...unexpectedArguments: unknown[]): Promise<Result> {
   try {
     if (unexpectedArguments.length !== 0) {
       throw new Error('unexpected_argument');
@@ -187,7 +187,7 @@ export function collectDeployment(...unexpectedArguments: unknown[]): Result {
     if (before.siloId !== hash(target.siloId)) {
       throw new Error('wrong_silo');
     }
-    const streamCreated = assertFresh(containerId, before.created);
+    const streamCreated = await assertFresh(containerId, before.created);
     const installationId = hash(JSON.stringify([before.installationId, streamCreated]));
     const binding = bindingSchema.parse({
       sourceSha: before.sourceSha, imageDigest: before.imageDigest,
@@ -198,9 +198,10 @@ export function collectDeployment(...unexpectedArguments: unknown[]): Result {
     const complete: Record<string, 'PASS'> = {};
     const receiptDigests: string[] = [];
     for (const name of [...checks, ...qualifications]) {
-      assertInstallation(containerId, before, streamCreated);
-      receiptDigests.push(runCheck(containerId, binding, name));
-      assertInstallation(containerId, before, streamCreated);
+      await assertInstallation(containerId, before, streamCreated);
+      const receiptDigest = await runCheck(containerId, binding, name);
+      receiptDigests.push(receiptDigest);
+      await assertInstallation(containerId, before, streamCreated);
       if (checks.includes(name)) {
         results[name] = 'PASS';
       } else {

@@ -4,14 +4,21 @@ For people, read [README.md](README.md) first.
 
 ## Deployment collection
 
-P4-15 PR 5e adds `collectDeployment(containerId)` and `run.mjs`. The older file
+P4-15 PR 5e adds `await collectDeployment()` and `run.mjs`. The older file
 parser below remains refusal-only. No admission caller or receipt importer is added.
 
 The collector uses `/usr/bin/docker` and the local `/var/run/docker.sock` only.
 The deployment owner controls Docker, the image build and the collector process.
 Browser, model and application users must have no access to these. Infrastructure
-operators remain outside the application privacy promise. The container id is the
-only input; no expected identity, bundle, executable or observation callback is accepted.
+operators remain outside the application privacy promise. The collector accepts no arguments. Any supplied argument refuses before Docker runs.
+The fixed `/etc/opencrane/private-memory-qualification.json` file contains exactly
+`containerId` (64 lowercase hex characters) and `siloId` (the expected raw `SILO_ID`).
+It must be a root-owned regular file, at most 1 KiB, with no group or world write
+permission. Final symlinks are refused. Root must also own and protect its parent
+directories. The deployment owner installs this file; neither its path nor target
+can be selected through command-line arguments or environment variables. The
+measured container id and silo must match it. Replacement requires the owner to
+update the configured container id. No evidence bundle or caller observation is accepted.
 
 Docker supplies the full container id, running image content digest, image revision
 label, daemon identity, start time and `SILO_ID`. The source label must be a full
@@ -35,7 +42,20 @@ The runner receives one JSON object on stdin: measured binding, `name`, fresh
 `runId` and fresh per-check `challengeId`. It must perform that named journey,
 then return only the same fields plus `observedAt` (epoch milliseconds),
 `result: PASS` and `complete: true`. Partial, missing, extra, stale or mismatched
-results refuse. Every process has a two-minute timeout and 64 KiB output limit.
+results refuse. Every process has a two-minute timeout and a combined stdout/stderr
+limit of 64 KiB. The collector injects `supervisor.mjs` into each Docker exec. This
+supervisor starts the fixed command in a new Linux process group and keeps stdin
+open as a connection to the collector. EOF, including collector SIGTERM or SIGKILL,
+cancels the group. The supervisor also enforces the timeout and output limit inside
+the container, independent of the Docker client. Normal completion kills any
+remaining children before returning output.
+
+The supervisor holds `/run/opencrane-memory-qualification.lock` until all running
+group members have stopped. A concurrent run refuses; it cannot remove another
+run's lock. The runner must keep its children in that group. The image needs a
+writable `/run` and Linux `/proc`. A failed cleanup keeps the lock and refuses
+retries; the deployment owner must resolve the failure before retrying. The host
+also bounds Docker attachment to 130 seconds, allowing ten seconds for cleanup.
 The collector measures identity and event-stream creation before and after every child. A copied response
 cannot match the new challenge. It does not accept detached receipts or signatures.
 
@@ -49,9 +69,9 @@ back into this collector. The older file parser still cannot return PASS.
 **Live qualification: NOT RUN.** The image-owned journey runner is deliberately
 left to P4-15 PR 5d, with its claimed dev stack and enable-and-journey work. It must
 bootstrap the empty silo and implement the complete journeys listed below, including
-safe cancellation when a collector exits. A missing runner refuses today. A fixture
-at the Docker process boundary proves collection and refusals only; it does not
-qualify an actual image or host. Kubernetes collection is outside this first part.
+the private-memory cleanup required by those journeys. The collector owns process cancellation. A missing runner refuses today. Simulated Docker responses prove collection and refusals. Disposable Node containers
+prove process cancellation on timeout, output overflow and collector exit. These
+tests do not qualify an actual application image or host. Kubernetes collection is outside this first part.
 
 ## File parser scope and invocation
 
@@ -116,7 +136,7 @@ Codex/gVisor checks must pass. Missing launch leaves these journeys NOT RUN.
 Run the commands in README.md. The root Vitest include list does not discover this
 folder, so the explicit config is required; no CI fixture list is changed.
 The root lint and Knip projects include these files. The local TypeScript command
-checks them directly. Settings: none. Dependencies: existing MIT Zod and Node built-ins.
+checks them directly. The only setting is the protected target file described above. Dependencies: existing MIT Zod and Node built-ins.
 No events or public API fields are added. All JSON field names were checked against
 the unchanged `RISKY_FIELD_NAME` rule. Receipt digests contain no private text hashes.
 Own results and outstanding live work: [receipt](../../docs/process/p4-15-pr5c/receipt.md).

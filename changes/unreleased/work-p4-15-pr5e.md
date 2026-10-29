@@ -1,1 +1,2 @@
 - Collect private memory qualification from a measured deployment and newly observed checks; refuse copied or foreign results. Memory admission stays off, and live journeys remain NOT RUN until the deployment runner is added.
+- Restrict memory qualification to the deployment-owned container and silo. Stop journeys and their children on timeout, excessive output or collector exit, and block overlapping retries.

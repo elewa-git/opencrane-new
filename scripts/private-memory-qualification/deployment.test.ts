@@ -1,11 +1,12 @@
-import { openSync, fstatSync, readFileSync, closeSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { statSync, openSync, fstatSync, readFileSync, closeSync } from 'node:fs';
+import { ChildProcess, execFileSync, spawn } from 'node:child_process';
+import { PassThrough } from 'node:stream';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { collectDeployment } from './deployment.ts';
 
-vi.mock('node:child_process');
-vi.mock('node:fs');
+vi.mock('node:child_process', { spy: true });
+vi.mock('node:fs', { spy: true });
 const containerId = 'c'.repeat(64);
 const imageDigest = `sha256:${'b'.repeat(64)}`;
 const sourceSha = 'a'.repeat(40);
@@ -57,11 +58,13 @@ function docker(_file: unknown, args: unknown, options: unknown): string {
 
 function prepare(): void {
   vi.mocked(execFileSync).mockReset();
+  vi.mocked(spawn).mockImplementation(spawnDocker);
   vi.mocked(openSync).mockReturnValue(42);
   vi.mocked(closeSync).mockReturnValue(undefined);
-  vi.mocked(fstatSync).mockReturnValue({
-    uid: 0, mode: 0o100600, size: 150, isFile: () => true,
-  } as ReturnType<typeof fstatSync>);
+  const stat = Object.assign(statSync(import.meta.filename), {
+    uid: 0, mode: 0o100600, size: 150, isFile: regularFile,
+  });
+  vi.mocked(fstatSync).mockReturnValue(stat);
   vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ containerId, siloId: 'fixture-silo' }));
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-01-01T00:00:03Z'));
@@ -81,8 +84,8 @@ function prepare(): void {
 beforeEach(prepare);
 afterEach(vi.useRealTimers);
 
-function qualifiesObservedDeployment(): void {
-  const result = collectDeployment();
+async function qualifiesObservedDeployment(): Promise<void> {
+  const result = await collectDeployment();
   expect(result.result).toBe('PASS');
   expect(result).toMatchObject({ sourceSha, imageDigest });
   expect(responses.map(responseName)).toEqual(names);
@@ -95,14 +98,14 @@ function responseName(response: Record<string, unknown>): unknown {
 it('qualifies the fixture deployment only after all eleven observed runs',
   qualifiesObservedDeployment);
 
-function refusesInventedBundle(): void {
+async function refusesInventedBundle(): Promise<void> {
   const invented = JSON.stringify({ result: 'PASS', sourceSha, imageDigest, checks: names });
-  expect(collectDeployment(invented)).toEqual({ result: 'FAIL', reason: 'collection_failed' });
+  expect(await collectDeployment(invented)).toEqual({ result: 'FAIL', reason: 'collection_failed' });
   expect(execFileSync).not.toHaveBeenCalled();
 }
 it('refuses an invented evidence bundle before executing anything', refusesInventedBundle);
 
-function substitutes(field: string): void {
+async function substitutes(field: string): Promise<void> {
   const foreign: Record<string, string> = {
     sourceSha: 'd'.repeat(40), imageDigest: `sha256:${'d'.repeat(64)}`,
     environmentId: 'd'.repeat(64), siloId: `sha256:${'d'.repeat(64)}`,
@@ -112,13 +115,13 @@ function substitutes(field: string): void {
     response[field] = foreign[field];
   }
   alter = change;
-  expect(collectDeployment().result).toBe('FAIL');
+  expect((await collectDeployment()).result).toBe('FAIL');
 }
 it.each(['sourceSha', 'imageDigest', 'environmentId', 'siloId', 'installationId', 'runId'])(
   'refuses a receipt from another %s', substitutes,
 );
 
-function staleOrReplayed(kind: string): void {
+async function staleOrReplayed(kind: string): Promise<void> {
   function change(response: Record<string, unknown>): void {
     if (kind === 'stale') {
       response['observedAt'] = Date.now() - 1;
@@ -134,23 +137,23 @@ function staleOrReplayed(kind: string): void {
     }
   }
   alter = change;
-  expect(collectDeployment().result).toBe('FAIL');
+  expect((await collectDeployment()).result).toBe('FAIL');
 }
 it.each(['stale', 'future', 'replayed', 'edited'])('refuses %s receipts', staleOrReplayed);
 
-function refusesMissingCheck(name: string): void {
+async function refusesMissingCheck(name: string): Promise<void> {
   function change(response: Record<string, unknown>): void {
     if (response['name'] === name) {
       response['result'] = 'NOT RUN';
     }
   }
   alter = change;
-  expect(collectDeployment().result).toBe('FAIL');
+  expect((await collectDeployment()).result).toBe('FAIL');
 }
 it.each(names)('refuses missing check %s', refusesMissingCheck);
 
-function refusesCopiedRun(): void {
-  expect(collectDeployment().result).toBe('PASS');
+async function refusesCopiedRun(): Promise<void> {
+  expect((await collectDeployment()).result).toBe('PASS');
   const copied = structuredClone(responses);
   let index = 0;
   function replay(response: Record<string, unknown>): void {
@@ -158,11 +161,11 @@ function refusesCopiedRun(): void {
     index += 1;
   }
   alter = replay;
-  expect(collectDeployment().result).toBe('FAIL');
+  expect((await collectDeployment()).result).toBe('FAIL');
 }
 it('refuses a complete copied bundle on the same deployment', refusesCopiedRun);
 
-function refusesDeploymentChange(field: string): void {
+async function refusesDeploymentChange(field: string): Promise<void> {
   function change(): void {
     if (field === 'image') {
       container['Image'] = `sha256:${'d'.repeat(64)}`;
@@ -181,13 +184,13 @@ function refusesDeploymentChange(field: string): void {
     }
   }
   alter = change;
-  expect(collectDeployment().result).toBe('FAIL');
+  expect((await collectDeployment()).result).toBe('FAIL');
 }
 it.each(['image', 'host', 'silo', 'restart', 'event-store'])(
   'refuses a deployment whose %s changes during a run', refusesDeploymentChange,
 );
 
-function refusesOldInstallation(kind: string): void {
+async function refusesOldInstallation(kind: string): Promise<void> {
   if (kind === 'events') {
     stream.eventCount = 1;
   }
@@ -200,68 +203,70 @@ function refusesOldInstallation(kind: string): void {
   if (kind === 'future') {
     stream.created = '2027-01-01T00:00:00Z';
   }
-  expect(collectDeployment().result).toBe('FAIL');
+  expect((await collectDeployment()).result).toBe('FAIL');
   expect(responses).toHaveLength(0);
 }
 it.each(['events', 'purged', 'old', 'future'])(
   'refuses %s event-store state before journeys start', refusesOldInstallation,
 );
 
-function refusesMutableRunner(kind: string): void {
+async function refusesMutableRunner(kind: string): Promise<void> {
   if (kind === 'writable') {
     container['HostConfig'] = { ReadonlyRootfs: false };
   }
   if (kind === 'mounted') {
     container['Mounts'] = [{ Destination: '/app/scripts' }];
   }
-  expect(collectDeployment().result).toBe('FAIL');
+  expect((await collectDeployment()).result).toBe('FAIL');
 }
 it.each(['writable', 'mounted'])('refuses %s deployment code', refusesMutableRunner);
 
-function hidesFailures(): void {
+async function hidesFailures(): Promise<void> {
   failChild = true;
-  expect(collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });
+  expect(await collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });
 }
 it('keeps child output out of failures', hidesFailures);
 
-function refusesNonPassingChild(status: string): void {
+async function refusesNonPassingChild(status: string): Promise<void> {
   function change(response: Record<string, unknown>): void {
     response['result'] = status;
   }
   alter = change;
-  expect(collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });
+  expect(await collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });
 }
 it.each(['FAIL', 'PARTIAL'])('refuses a child reporting %s', refusesNonPassingChild);
 
-function refusesExtraChildOutput(): void {
+async function refusesExtraChildOutput(): Promise<void> {
   function change(response: Record<string, unknown>): void {
     response['extra'] = 'fixture output that must stay private';
   }
   alter = change;
-  expect(collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });
+  expect(await collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });
 }
 it('refuses extra child fields without exposing their values', refusesExtraChildOutput);
 
-function refusesAnotherLocalSilo(): void {
+async function refusesAnotherLocalSilo(): Promise<void> {
   const otherContainerId = 'd'.repeat(64);
   container['Id'] = otherContainerId;
   container['Config'] = { Env: ['SILO_ID=other-local-silo'] };
-  expect(collectDeployment(otherContainerId)).toEqual({
+  expect(await collectDeployment(otherContainerId)).toEqual({
     result: 'FAIL', reason: 'collection_failed',
   });
   expect(execFileSync).not.toHaveBeenCalled();
 }
 it('refuses a caller selecting another local silo before Docker runs', refusesAnotherLocalSilo);
 
-function refusesWrongConfiguredSilo(): void {
+async function refusesWrongConfiguredSilo(): Promise<void> {
   container['Config'] = { Env: ['SILO_ID=other-local-silo'] };
-  expect(collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });
+  expect(await collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });
   expect(responses).toHaveLength(0);
 }
 it('refuses a configured container whose silo does not match', refusesWrongConfiguredSilo);
 
-function refusesUnsafeConfiguration(kind: string): void {
-  const stat = { uid: 0, mode: 0o100600, size: 150, isFile: regularFile };
+async function refusesUnsafeConfiguration(kind: string): Promise<void> {
+  const stat = Object.assign(statSync(import.meta.filename), {
+    uid: 0, mode: 0o100600, size: 150, isFile: regularFile,
+  });
   if (kind === 'owner') {
     stat.uid = 1000;
   }
@@ -274,8 +279,8 @@ function refusesUnsafeConfiguration(kind: string): void {
   if (kind === 'non-file') {
     stat.isFile = notRegularFile;
   }
-  vi.mocked(fstatSync).mockReturnValue(stat as ReturnType<typeof fstatSync>);
-  expect(collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });
+  vi.mocked(fstatSync).mockReturnValue(stat);
+  expect(await collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });
   expect(execFileSync).not.toHaveBeenCalled();
   expect(closeSync).toHaveBeenCalledWith(42);
 }
@@ -288,3 +293,28 @@ function notRegularFile(): boolean {
 it.each(['owner', 'writable', 'oversized', 'non-file'])(
   'refuses unsafe target configuration: %s', refusesUnsafeConfiguration,
 );
+
+function spawnDocker(_file: string, args: readonly string[] = []): ReturnType<typeof spawn> {
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  const child = Object.assign(new ChildProcess(), { stdin, stdout, stderr });
+  function inputReceived(buffer: Buffer): void {
+    function reply(): void {
+      try {
+        const innerArgs = z.array(z.string()).parse(JSON.parse(args.at(-1)!));
+        const containerIndex = args.indexOf('-i') + 1;
+        const command = [...args.slice(0, containerIndex + 1), ...innerArgs];
+        const input: unknown = JSON.parse(buffer.toString('utf8'));
+        const output = docker(_file, command, { input });
+        stdout.emit('data', Buffer.from(output));
+        child.emit('close', 0);
+      } catch {
+        child.emit('close', 1);
+      }
+    }
+    queueMicrotask(reply);
+  }
+  stdin.on('data', inputReceived);
+  return child;
+}

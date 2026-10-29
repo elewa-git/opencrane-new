@@ -6,7 +6,10 @@ import { runInContainer } from './container-process.ts';
 
 let containerId: string;
 const image = 'node:22.23.1-bookworm-slim';
-const descendant = `setInterval(() => {}, 1000);`;
+const descendant = `
+  require('node:fs').writeFileSync('/run/fixture-grandchild', 'started');
+  setInterval(() => {}, 1000);
+`;
 const child = `
   const { spawn } = require('node:child_process');
   spawn(process.execPath, ['--eval', ${JSON.stringify(descendant)}, 'fixture-grandchild']);
@@ -22,7 +25,8 @@ const journey = `
 
 function docker(args: string[]): string {
   const options = { encoding: 'utf8' as const, timeout: 20_000, stdio: 'pipe' as const };
-  return execFileSync('/usr/bin/docker', args, options).trim();
+  const output = execFileSync('/usr/bin/docker', args, options);
+  return output.trim();
 }
 function startContainer(): void {
   containerId = docker(['run', '-d', '--init', '--network=none', '--read-only',
@@ -42,7 +46,8 @@ function isGrandchild(line: string): boolean {
 }
 async function waitForDescendants(): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const lines = processes().split('\n');
+    const output = processes();
+    const lines = output.split('\n');
     if (lines.some(isGrandchild)) {
       return;
     }
@@ -70,6 +75,7 @@ async function cancelledJourney(source: string): Promise<void> {
     failed = true;
   }
   expect(failed).toBe(true);
+  docker(['exec', containerId, 'test', '-f', '/run/fixture-grandchild']);
   await assertNoJourney();
 }
 async function cancelsTimeout(): Promise<void> {
@@ -92,14 +98,22 @@ async function cancelsCollectorExit(signal: NodeJS.Signals): Promise<void> {
     await runInContainer(${JSON.stringify(containerId)},
       ['/usr/local/bin/node', '--eval', ${JSON.stringify(journey)}]);
   `;
+  const options = { stdio: 'ignore' as const };
   const collector = spawn(process.execPath, ['--experimental-strip-types',
-    '--input-type=module', '--eval', source], { stdio: 'ignore' });
+    '--input-type=module', '--eval', source], options);
   try {
     await waitForDescendants();
+    const retry = "require('node:fs').writeFileSync('/run/retry-started', 'started');";
+    await expect(runInContainer(containerId, ['/usr/local/bin/node', '--eval', retry]))
+      .rejects.toThrow();
+    docker(['exec', containerId, 'test', '!', '-e', '/run/retry-started']);
     const exited = once(collector, 'exit');
     collector.kill(signal);
     await exited;
     await assertNoJourney();
+    const result = await runInContainer(containerId, ['/usr/local/bin/node', '--eval',
+      'process.stdout.write(JSON.stringify({ complete: true }));']);
+    expect(result).toEqual({ complete: true });
   } finally {
     collector.kill('SIGKILL');
   }
@@ -107,3 +121,17 @@ async function cancelsCollectorExit(signal: NodeJS.Signals): Promise<void> {
 it.each(['SIGTERM', 'SIGKILL'] as const)(
   'kills the journey and descendants when the collector receives %s', cancelsCollectorExit, 30_000,
 );
+
+async function cleansUpSuccessfulJourney(): Promise<void> {
+  const complete = `${journey}
+    setTimeout(() => {
+      process.stdout.write(JSON.stringify({ result: 'PASS' }));
+      process.exit(0);
+    }, 1000);
+  `;
+  const result = await runInContainer(containerId, ['/usr/local/bin/node', '--eval', complete]);
+  expect(result).toEqual({ result: 'PASS' });
+  docker(['exec', containerId, 'test', '-f', '/run/fixture-grandchild']);
+  await assertNoJourney();
+}
+it('returns complete output only after stopping leftover children', cleansUpSuccessfulJourney, 30_000);
