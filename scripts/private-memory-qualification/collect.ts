@@ -4,9 +4,9 @@ import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import { personalRecallQualified } from '../../apps/server/src/chat/recall-qualification.ts';
 
-const checks = ['privateTurns', 'nativeRecall', 'requesterIsolation', 'sessionIsolation',
+export const checks = ['privateTurns', 'nativeRecall', 'requesterIsolation', 'sessionIsolation',
   'invalidation', 'unrelatedActivity', 'stopReconnect', 'replacementReload', 'persistence'];
-const qualifications = ['P4-14', 'P4-15'];
+export const qualifications = ['P4-14', 'P4-15'];
 const digestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const bindingSchema = z.strictObject({
   sourceSha: z.string(), imageDigest: z.string(), environmentId: z.string(),
