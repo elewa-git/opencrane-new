@@ -8,6 +8,7 @@ import { envelope, history } from '../src/actor.ts';
 import { connectionOperationId, foldConnection } from '../src/bearer-connections.ts';
 import { readOwnSelectionChange } from '../src/connection-selection-change-read.ts';
 import { changeConnectionSelection, readConnectionSelection } from '../src/connection-selection.ts';
+import { toolPolicyFromRows } from '../src/tool-policy.ts';
 import { oauthSelectionFixture } from './support/oauth-selection.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -274,3 +275,46 @@ async function unavailableConfiguration(removed: boolean) {
 }
 it.each([false, true])('hides configuration errors after checking access (removed: %s)',
   unavailableConfiguration);
+
+async function catalogueDuringRead(kind: string) {
+  const test = await fixture();
+  const selected = await test.select();
+  const subject = `mcp-${test.serverId}`;
+  const rows = await history(nats.store, subject, 'test');
+  const policy = toolPolicyFromRows(rows);
+  const now = Date.now();
+  let event = envelope('test', subject, 'mcp.catalogue_checked', {
+    serverId: test.serverId, outcome: 'unchanged', schemaDigest: policy.catalogue!.schemaDigest,
+    checkedAt: new Date(now).toISOString(), expiresAt: new Date(now + 300_000).toISOString(),
+  });
+  if (kind === 'failed') {
+    event = envelope('test', subject, 'mcp.catalogue_checked', {
+      serverId: test.serverId, outcome: 'failed', checkedAt: new Date(now).toISOString(),
+      reason: 'discovery_failed',
+    });
+  }
+  if (kind === 'policy') {
+    event = envelope('test', subject, 'mcp.tool_mode_set', {
+      serverId: test.serverId, connectionId: 'installed', toolName: 'read',
+      toolRevision: policy.tools[0]!.revision, mode: 'block', setBy: 'admin',
+    });
+  }
+  const auth = memberAuthorisation(binding);
+  const use = auth.use.bind(auth);
+  async function changeAfterPermission(...args: Parameters<typeof use>) {
+    const permission = await use(...args);
+    await nats.seed([event]);
+    return permission;
+  }
+  const permission = vi.spyOn(auth, 'use').mockImplementationOnce(changeAfterPermission);
+  const result = await test.read('read');
+  if (kind === 'unchanged') {
+    expect(result).toEqual({ status: 'verified', sequence: selected.sequence,
+      profileId: 'oauth', profileRevision: test.revision, generation: 1 });
+  } else {
+    expect(result).toEqual({ status: 'unavailable', sequence: selected.sequence });
+  }
+  expect(permission).toHaveBeenCalledTimes(1);
+}
+it.each(['unchanged', 'failed', 'policy'])(
+  'checks relevant evidence when a %s catalogue event arrives during a read', catalogueDuringRead);
