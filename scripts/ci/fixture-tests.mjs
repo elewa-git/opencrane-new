@@ -6,6 +6,7 @@ const fixtureGroups = {
     'apps/computer/test/codex-config.test.ts',
     'apps/computer/test/display-attacks.test.ts',
     'apps/computer/test/private-recall-call.test.ts',
+    'apps/computer/test/private-write-call.test.ts',
     'apps/computer/test/supervisor-identity.test.ts',
     'apps/computer/test/supervisor-stop.test.ts',
     'apps/server/test/bridge-credentials.test.ts',
