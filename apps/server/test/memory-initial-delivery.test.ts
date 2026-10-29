@@ -9,10 +9,12 @@ import { computers, groups, memoryKeys, memoryProjection, memoryScopeId } from '
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { memoryAdmission } from '../src/chat/memory-admission.ts';
 import { prepareInitialMemory } from '../src/memory/initial-delivery.ts';
+import { initialQualificationFixture } from './support/initial-qualification.ts';
 import type { MemoryOptions } from '../src/memory/access.ts';
 
 let setup: Awaited<ReturnType<typeof fixture>>;
 let options: MemoryOptions;
+let deployment: Awaited<ReturnType<typeof initialQualificationFixture>>;
 const claims = { silo: 'test', requester: 'alice', assistant: 'assistant', computer: 'computer',
   generation: 1, conversation: 'conversation', turn: 'turn', thread: 'thread' };
 const scopeId = memoryScopeId('test', 'person', 'alice');
@@ -23,6 +25,15 @@ const qualification = { ...runtime, result: 'PASS', checks: { privateTurns: 'PAS
   invalidation: 'PASS', unrelatedActivity: 'PASS', stopReconnect: 'PASS',
   replacementReload: 'PASS', persistence: 'PASS' } };
 const evidence = { runtime, qualification };
+vi.mock('node:fs', async function filesystem(importOriginal) {
+  const original = await importOriginal<typeof import('node:fs')>();
+  return { ...original };
+});
+vi.mock('node:child_process', async function processes(importOriginal) {
+  const original = await importOriginal<typeof import('node:child_process')>();
+  return { ...original };
+});
+
 const canary = 'Initial personal memory canary';
 function memberId() {
   return Promise.resolve('alice');
@@ -55,6 +66,8 @@ async function start() {
     await setup.runner.initialise(projection);
     await setup.runner.run(projection);
   }
+  deployment = await initialQualificationFixture();
+  expect(deployment.result.result).toBe('PASS');
 }
 async function close() {
   vi.restoreAllMocks();
@@ -74,7 +87,7 @@ async function fact(memoryId = 'fact', text = canary) {
   await setup.runner.run(memoryProjection({ decrypt: keys.decrypt }));
 }
 function prepare() {
-  return prepareInitialMemory(options, claims, evidence);
+  return prepareInitialMemory(options, claims);
 }
 async function state(store = options.store) {
   const chat = await readChatFacts(store, 'test', 'conversation', 'turn');
@@ -82,7 +95,8 @@ async function state(store = options.store) {
 }
 async function noQualification(qualification: unknown) {
   const before = await setup.nats.store.head();
-  await expect(prepareInitialMemory(options, claims, { runtime, qualification })).rejects
+  deployment.replace(qualification);
+  await expect(prepareInitialMemory(options, claims)).rejects
     .toThrow('memory_context_unavailable');
   expect(await setup.nats.store.head()).toBe(before);
 }
@@ -90,7 +104,7 @@ it.each([undefined, {}, { ...qualification, sourceSha: 'c'.repeat(40) },
   { ...qualification, checks: { privateTurns: 'PASS' } }])(
   'refuses absent, incomplete or mismatched qualification: %j', noQualification);
 async function mismatch(patch: object) {
-  await expect(prepareInitialMemory(options, { ...claims, ...patch }, evidence)).rejects
+  await expect(prepareInitialMemory(options, { ...claims, ...patch })).rejects
     .toThrow('memory_context_unavailable');
   expect(await state()).toBeUndefined();
 }
@@ -191,15 +205,18 @@ async function changedBeforeLoad(kind: string) {
       memoryId: 'fact', expectedRevision: 1, revision: 2 };
     await setup.append(`scope-${scopeId}`, 'memory.forgotten', identity);
   }
-  await expect(pending.load()).rejects.toThrow('memory_context_unavailable');
+  if (kind === 'removed') {
+    await expect(pending.load()).rejects.toThrow(MemberAccessRefused);
+  } else {
+    await expect(pending.load()).rejects.toThrow('memory_context_unavailable');
+  }
   expect((await state())?.initialLoaded).toBe(false);
 }
 it.each(['corrected', 'forgotten', 'removed'])('refuses %s facts before loading', changedBeforeLoad);
 
 async function qualificationChanges() {
-  const mutable = structuredClone(evidence);
-  const pending = await prepareInitialMemory(options, claims, mutable);
-  mutable.qualification.result = 'FAIL';
+  const pending = await prepare();
+  deployment.replace({ ...deployment.result, result: 'FAIL' });
   await expect(pending.load()).rejects.toThrow('memory_context_unavailable');
   expect((await state())?.initialLoaded).toBe(false);
 }
@@ -226,7 +243,7 @@ async function memoryFree() {
     computerId: 'computer', conversationId: 'conversation', turnId: 'free', threadId: 'free-thread',
     requesterId: 'alice', task: 'chat_turn', executionMode: 'memory_free' });
   const free = { ...claims, turn: 'free', thread: 'free-thread' };
-  await expect(prepareInitialMemory(options, free, evidence)).rejects
+  await expect(prepareInitialMemory(options, free)).rejects
     .toThrow('memory_context_unavailable');
 }
 it('does not upgrade a memory-free turn', memoryFree);
@@ -291,3 +308,29 @@ async function demotionDuringSnapshot() {
   expect(await state()).toBeUndefined();
 }
 it('refuses an applied demotion during the first snapshot read', demotionDuringSnapshot);
+
+async function fabricatedQualification() {
+  deployment.remove();
+  await expect(prepareInitialMemory(options, claims, evidence)).rejects.toThrow('memory_context_unavailable');
+  expect(await state()).toBeUndefined();
+}
+it('refuses matching caller PASS objects without deployment evidence', fabricatedQualification);
+
+async function realCollectorShape() {
+  const pending = await prepareInitialMemory(options, claims);
+  await expect(pending.load()).resolves.toEqual({ status: 'loaded', dispatch: 'disabled' });
+  expect((await state())?.initialLoaded).toBe(true);
+}
+it('accepts the real collector output from the protected deployment file', realCollectorShape);
+
+async function staleCollector(kind: string) {
+  if (kind === 'host') deployment.changeHost();
+  if (kind === 'installation') deployment.changeInstallation();
+  if (kind === 'incomplete') {
+    deployment.replace({ ...deployment.result, qualifications: { 'P4-14': 'PASS' } });
+  }
+  await expect(prepare()).rejects.toThrow('memory_context_unavailable');
+  expect(await state()).toBeUndefined();
+}
+it.each(['host', 'installation', 'incomplete'])(
+  'refuses stale or incomplete deployment evidence: %s', staleCollector);
