@@ -1,3 +1,5 @@
+import { readDeploymentQualification } from
+  '../../../../scripts/private-memory-qualification/deployment.ts';
 import { computerSummary, type ComputerSummary, type TurnSummary,
   type ThreadSummary } from '@opencrane/auth';
 import type { Binding } from '@opencrane/authz';
@@ -40,9 +42,16 @@ const sessionDetails = z.object({
 type TurnBinding = z.infer<typeof binding>;
 export type ExecutionMode = 'restricted' | 'memory_free';
 export type ContextClass = 'shared_only';
-export function requiredExecutionMode(assistantKind: string, requested: unknown): ExecutionMode {
-  if (assistantKind !== 'team' || requested === 'memory_free') return 'memory_free';
-  return 'restricted';
+export async function requiredExecutionMode(assistantKind: string, requested: unknown,
+  silo: string): Promise<ExecutionMode> {
+  if (requested === 'memory_free') return 'memory_free';
+  if (assistantKind === 'team') return 'restricted';
+  try {
+    await readDeploymentQualification(silo);
+    return 'restricted';
+  } catch {
+    return 'memory_free';
+  }
 }
 
 type TurnInput = {
@@ -443,7 +452,7 @@ function requireFreshPrivateThread(facts: ComputerFacts, input: TurnBinding, mod
 async function admitTurn(store: EventStore, context: TurnContext, conversation: ChatFacts,
   facts: ComputerFacts, data: TurnBinding, requested: unknown, mode: ExecutionMode) {
   const details = await assistantDetailsFor(store, context);
-  const required = requiredExecutionMode(details.kind, requested);
+  const required = await requiredExecutionMode(details.kind, requested, context.silo);
   if (mode !== required) throw new TurnAdmissionRejected('Execution mode mismatch');
   requireFreshPrivateThread(facts, data, mode);
   const queued = { conversationId: data.conversationId, turnId: data.turnId,

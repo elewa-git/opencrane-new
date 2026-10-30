@@ -1,3 +1,4 @@
+import { initialQualificationFixture } from './support/initial-qualification.ts';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { createServer } from 'node:http';
@@ -313,3 +314,32 @@ async function refusesQueuedTurnAndToolsAfterRemoval() {
 }
 it('refuses a queued turn and its tool list after removal and a later invitation',
   refusesQueuedTurnAndToolsAfterRemoval);
+
+async function filesystem(importOriginal: <Module>() => Promise<Module>) {
+  const original = await importOriginal<typeof import('node:fs')>();
+  return { ...original };
+}
+async function processes(importOriginal: <Module>() => Promise<Module>) {
+  const original = await importOriginal<typeof import('node:child_process')>();
+  return { ...original };
+}
+vi.mock('node:fs', filesystem);
+vi.mock('node:child_process', processes);
+async function sendsQualifiedStart(memoryFree: boolean) {
+  const fixture = bridgeFixture({ binding: true, memoryFree });
+  try {
+    await initialQualificationFixture();
+    await fixture.process();
+    expect(fixture.sent).toHaveLength(1);
+    const frame = z.record(z.string(), z.unknown()).parse(JSON.parse(fixture.sent[0]!));
+    expect(frame).toHaveProperty('executionMode', memoryFree ? 'memory_free' : 'restricted');
+    expect(frame).not.toHaveProperty('tools');
+    expect(frame).not.toHaveProperty('context');
+    expect(frame).not.toHaveProperty('initialInput');
+    expect(fixture.rows).not.toHaveBeenCalled();
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each([false, true])('selects qualified personal work and separates explicit memory-free=%s',
+  sendsQualifiedStart);

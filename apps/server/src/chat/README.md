@@ -1,5 +1,7 @@
 # Chat
 
+The [qualified start contract](README.robot.md) explains initial personal memory delivery.
+
 This folder handles conversations between people and with assistants. It saves messages, sends assistant work to the right computer and returns replies and live updates while checking who may read each chat.
 
 ## What it is responsible for
@@ -50,7 +52,7 @@ recall. Human messages remain saved. Private delivery without saving the reply i
 
 **Live updates.** Open chat pages keep checking access when installation or group membership changes. Removing someone from a group closes their private session with its assistant within two seconds. If another permission update takes too long, the page reconnects after five seconds and resumes from saved messages. The server checks each open chat's feed position every 100 ms and loads content only when it changes. Computer status comes from a small read-table record updated by background workers. A sleeping or waking computer shows Starting; recovery lasts until a new ready record appears.
 
-**Private and shared work.** Each assistant has one [computer](../../../../GLOSSARY.md#computer); a group shares its assistant's computer. Each member gets a separate private session and a [private turn](../../../../GLOSSARY.md#private-turn) by default. That turn gets earlier completed replies from the same member and starts a fresh [Codex](../../../../GLOSSARY.md#codex), the AI agent, without local tools. Live disk isolation remains unproven, so private-turn memory stays off. A [memory-free turn](../../../../GLOSSARY.md#memory-free-turn) can use the shared disk and browser but receives no earlier private context. Losing spending access does not remove the right to read or stop existing work.
+**Private and shared work.** Each assistant has one [computer](../../../../GLOSSARY.md#computer); a group shares its assistant's computer. Each member gets a separate private session and a [private turn](../../../../GLOSSARY.md#private-turn) by default. That turn gets earlier completed replies from the same member and starts a fresh [Codex](../../../../GLOSSARY.md#codex), the AI agent, without local tools. Personal memory starts require the deployment’s own passing checks. Native memory tools and private reply delivery remain unavailable. A [memory-free turn](../../../../GLOSSARY.md#memory-free-turn) can use the shared disk and browser but receives no earlier private context. Losing spending access does not remove the right to read or stop existing work.
 
 Personal memory-free turns can receive a short list of reviewed, free tools available to both the person and assistant. Ask tools also need reviewed approval details. The gateway checks rights again for each call. The computer and gateway keep the reviewed Allow mode, so changing a tool to Ask refuses an old automatic call. The server checks whether a computer supports approval messages first; older computers get Allow tools only. Private turns with a group assistant stay restricted and receive no tools. [Memory](../memory/README.md) explains fact references and the extra checks before renewing a pass. Invalid older memory records do not prevent ordinary messages or stop requests.
 
@@ -95,3 +97,12 @@ The server renews computer passes through authenticated Kubernetes management ac
 ## How it connects
 
 The [server](../../README.md) registers chat requests and live connections for the [website](../../../web/README.md). [Members](../members/README.md) checks membership; [assistants](../assistants/README.md) defines shared assistants. [Files](../files/README.md), [computers](../computers/README.md), [memory](../memory/README.md) and [providers](../providers/README.md) supply attachments, desktop access, remembered facts and model choices. [The assistant computer](../../../computer/README.md) runs the work. [Shared models code](../../../../libs/models/README.md) decides spending and tool access; [background workers](../../../ops/README.md) keep read tables and permissions current.
+
+```mermaid
+flowchart LR
+  server[Server] --> chat[Chat]
+  server --> memory[Memory]
+  chat -->|selects and checks input| memory
+  chat -->|one-use private input| computer[Assistant computer]
+  chat -->|checks access and spending| models[Models]
+```

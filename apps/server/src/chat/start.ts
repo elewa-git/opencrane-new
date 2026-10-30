@@ -24,7 +24,9 @@ export async function startBridges(options: ChatOptions & {
     });
   });
   const stop = new AbortController();
-  const work = watchBridges(options, tokens, new SandboxClient(kubeconfig, namespace), url, stop.signal);
+  const keyDirectory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
+  const bridgeOptions = { ...options, ...(keyDirectory ? { keyDirectory } : {}) };
+  const work = watchBridges(bridgeOptions, tokens, new SandboxClient(kubeconfig, namespace), url, stop.signal);
   function watcherFailed(error: unknown) {
     const logger = createLogger('bridge');
     const details = { err: error };
