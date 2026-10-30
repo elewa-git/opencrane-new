@@ -18,16 +18,16 @@ const request = {
   runId: '11111111-1111-4111-8111-111111111111',
   challengeId: '22222222-2222-4222-8222-222222222222',
 };
-async function observesStore(name: string, role = 'command'): Promise<void> {
+async function observesStore(name: string, role = 'command', silo = 'test'): Promise<void> {
   const fixture = await natsFixture();
   const directory = await mkdtemp('.tools/memory-journey-');
   vi.stubEnv('MEMORY_KEY_DIRECTORY', directory);
   vi.mocked(probeHost).mockReturnValue(true);
   for (const [key, value] of Object.entries(fixture.env(role))) vi.stubEnv(key, value);
-  vi.stubEnv('SILO_ID', 'test');
+  vi.stubEnv('SILO_ID', silo);
   try {
     const result = await runJourney(JSON.stringify({ ...request, name }));
-    if (role === 'command') {
+    if (role === 'command' && silo === 'test') {
       expect(result).toMatchObject({ ...request, name, result: 'PARTIAL', complete: false });
       const position = await fixture.store.head();
       const changes: string[] = [];
@@ -48,7 +48,7 @@ async function observesStore(name: string, role = 'command'): Promise<void> {
     await rm(directory, { recursive: true, force: true });
   }
 }
-it.each(['invalidation', 'unrelatedActivity'])(
+it.each(['invalidation', 'unrelatedActivity', 'requesterIsolation', 'sessionIsolation'])(
   'executes %s on the configured event store without claiming live qualification', observesStore, 30_000);
 
 async function failedJourney(): Promise<void> {
@@ -60,7 +60,14 @@ async function failedJourney(): Promise<void> {
 }
 it('refuses a journey that cannot execute without exposing connection settings', failedJourney);
 
-async function deniedAppend(): Promise<void> {
-  await observesStore('invalidation', 'projection');
+async function deniedAppend(name: string): Promise<void> {
+  await observesStore(name, 'projection');
 }
-it('refuses when the measured store rejects the journey append', deniedAppend, 30_000);
+it.each(['invalidation', 'requesterIsolation', 'sessionIsolation'])(
+  'refuses when the measured store rejects %s', deniedAppend, 30_000);
+
+async function wrongSilo(name: string): Promise<void> {
+  await observesStore(name, 'command', 'foreign');
+}
+it.each(['requesterIsolation', 'sessionIsolation'])(
+  'refuses %s before writes when the configured silo differs', wrongSilo, 30_000);

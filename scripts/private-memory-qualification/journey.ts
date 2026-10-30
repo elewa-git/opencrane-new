@@ -31,7 +31,8 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
     return { result: 'FAIL', reason: 'host_refused' };
   }
   let result: Receipt['result'] = 'NOT RUN';
-  if (request.name === 'invalidation' || request.name === 'unrelatedActivity') {
+  if (request.name === 'invalidation' || request.name === 'unrelatedActivity' ||
+      request.name === 'requesterIsolation' || request.name === 'sessionIsolation') {
     try {
       const { checkMemory } = await import('./memory-checks.ts');
       await checkMemory(request.name, request.siloId);

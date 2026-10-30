@@ -6829,3 +6829,13 @@ the last awaited read. The retained block is removed immediately before calling 
 consumer. A failed validation can retry with all checks repeated, but concurrent
 consumers and failed or lost consumer replies cannot resend.
 See [the delivery contract and checks](../../docs/process/p4-15-pr5f/README.robot.md).
+
+## Recorded memory isolation checks
+
+The invalidation tests and packaged qualification runner both call
+`memoryJourney.isolatedContext` in `scripts/private-memory-qualification/memory-journey.ts`.
+It checks Correct and Forget beside an unrelated loaded context, for the same
+requester in two sessions and for two requesters on one assistant and computer.
+The other context must retain its saved state, including after a fresh event read.
+The runner records PARTIAL; native isolation and full qualification remain NOT RUN.
+The server's runtime behaviour and authority checks are unchanged.
