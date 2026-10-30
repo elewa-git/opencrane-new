@@ -18,7 +18,7 @@ export type { PrivateSession } from './routine-threads.ts';
 
 const MAX_PRIVATE_TURNS = 2;
 const PRIVATE_ITEM_TYPES = new Set(['userMessage', 'agentMessage', 'reasoning', 'contextCompaction']);
-type Grant = { token: string; expiresAt: number; model?: string | undefined; context?: unknown };
+type Grant = { token: string; expiresAt: number; model?: string | undefined; context?: unknown; initialInput?: unknown };
 
 export interface TurnDriver extends ThreadLoadDriver {
   privateSession?(): Promise<PrivateSession>;
@@ -84,7 +84,7 @@ function readAcknowledgedGrant(value: Record<string, unknown>,
     || !/^[\w.-]{1,200}$/u.test(model))) {
     return new Error('Invalid turn model');
   }
-  return { token, expiresAt, context: value['context'], model };
+  return { token, expiresAt, context: value['context'], model, initialInput: value['initialInput'] };
 }
 
 class TurnRunner {
@@ -572,7 +572,7 @@ class TurnRunner {
       return;
     }
 
-    const inputText = await this.inputFor(input, grant.context);
+    const inputText = await this.inputFor(input, grant.context, grant.initialInput);
     if (!this.isActiveTurn(input.id)) return;
     if (this.gate.closed || this.state.cancelled.has(input.id)) throw new Error('Turn ended');
     // Mark execution after validating the input. Memory-free prepared turns can still retry.
@@ -587,7 +587,14 @@ class TurnRunner {
     await this.rememberTurn(input, threadId, turnResponse);
   }
 
-  private async inputFor(input: Turn, context: unknown) {
+  private async inputFor(input: Turn, context: unknown, initialInput: unknown) {
+    if (initialInput !== undefined) {
+      if (input.executionMode !== 'restricted' || input.sharingClass || context !== undefined ||
+          typeof initialInput !== 'string' || Buffer.byteLength(initialInput) > 120 * 1024) {
+        throw new Error('memory_context_unavailable');
+      }
+      return initialInput;
+    }
     if (input.executionMode === 'restricted') {
       if ((input.attachments !== undefined
         && (!Array.isArray(input.attachments) || input.attachments.length > 0))

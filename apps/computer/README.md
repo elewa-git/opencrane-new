@@ -21,7 +21,7 @@ flowchart LR
   ops -->|starts and pauses| computer
   server -->|messages, private routine preparation, turns, files and targeted Stops| computer
   computer -->|preparation replies, reply removal receipts, native termination, progress and results| server
-  server -.->|prepares private memory tools and one-use input| computer
+  server -->|qualified one-use private input| computer
   computer -.->|records private thread before tool approval| server
   computer -->|checks command ownership| executor["socket-denied executor"]
   computer -->|runs| desktop["Codex, browser and desktop"]
@@ -45,7 +45,8 @@ private reply buffers are cleared before waiting for interruption to finish.
 - Sends AI model calls and reviewed [tool server](../../GLOSSARY.md#mcp-server-tool-server)
   calls through agentgateway. Shell and file tools run locally inside the computer.
 - Runs a [private turn](../../GLOSSARY.md#private-turn) on a shared computer in a fresh,
-  short-lived Codex process with no tools. Memory stays disabled until isolation is proven live.
+  short-lived Codex process with no tools. Initial personal memory requires deployment checks.
+  The server supplies its complete input once; the runner keeps it out of the journal.
   The proxy can now check a separate caller for each turn. Private process launches
   still need to be connected to these checks before they provide isolation.
   Each tool call checks the caller against the pass it will send, including after

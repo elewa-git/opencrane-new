@@ -1594,7 +1594,8 @@ it('returns the saved provider model in a bridge token after reconnect and a bin
   reissuesSavedProviderModel);
 
 async function deliversSavedModelToComputer(mode: 'memory_free' | 'restricted') {
-  const fixture = await replayFixture(['alice']);
+  const kind = mode === 'restricted' ? 'team' : 'personal';
+  const fixture = await replayFixture(['alice'], kind);
   const server = createServer();
   const requests: Record<string, unknown>[] = [];
   const grants: string[] = [];
@@ -1735,7 +1736,8 @@ async function prepareCloseRace(fixture: ReplayFixture, test: CloseCase) {
     const saved = { assistantId: 'assistant', computerId: 'computer',
       conversationId: 'alice', turnId: 'current-alice',
       threadId: 'thread-alice', requesterId: 'alice', task: 'chat_turn',
-      executionMode: 'restricted', payingGroupId: 'personal-default' };
+      executionMode: test.timing === 'token' ? 'memory_free' : 'restricted',
+      payingGroupId: 'personal-default' };
     const hash = createHash('sha256');
     hash.update('computer:current-alice:computer.turn_started');
     const id = hash.digest('hex');

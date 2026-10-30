@@ -1,3 +1,6 @@
+import { releaseTurnCredentials } from '../src/chat/turn-credentials.ts';
+import { recordReport } from '../src/chat/reports.ts';
+import { turnCommand } from '../src/chat/turns.ts';
 import { randomUUID } from 'node:crypto';
 import { initialMemoryInput } from '../../computer/test/server.ts';
 import { turnMemoryPreview } from '../src/memory/turn-preview.ts';
@@ -6,7 +9,7 @@ import { z } from 'zod';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { grantStream, memberAuthorisation } from '@opencrane/authz';
 import { createEventStore } from '@opencrane/event-store';
-import { authorityFence, history, MemberAccessRefused, prepareLoadedMemory } from '@opencrane/models';
+import { authorityFence, history, MemberAccessRefused, prepareLoadedMemory, requestReservationCents } from '@opencrane/models';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from '@opencrane/models/testing';
 import { computers, groups, memoryKeys, memoryProjection, memoryScopeId } from '@opencrane/projections';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
@@ -763,3 +766,201 @@ async function lateStreamReadChange(kind: string) {
 it.each(['removed', 'corrected', 'forgotten', 'closed', 'replacement',
   'withdrawn', 'expired', 'unrelated'])(
   'checks %s during the final relevant stream read', lateStreamReadChange);
+
+const admitted = { conversationId: 'conversation', turnId: 'turn', threadId: 'thread',
+  requesterId: 'alice', model: 'gpt-6-luna', task: 'chat_turn' as const,
+  executionMode: 'restricted' as const };
+const bridgeContext = { silo: 'test', assistantId: 'assistant', computerId: 'computer' };
+async function credentialMessage(text = 'New question') {
+  const data = { conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
+    contentType: 'text', ...setup.keys.encrypt('test', 'conversation', text) };
+  const saved = await setup.append('conversation-conversation', 'message.posted', data);
+  const message = { ...saved, id: 'turn', commandId: 'turn' };
+  await setup.nats.seed([message]);
+}
+async function credentials(acknowledgement: Record<string, unknown>,
+  executionMode: 'restricted' | 'memory_free' = 'restricted', replay = false) {
+  const bridgeOptions = { ...options, keys: setup.keys };
+  const turn = { ...admitted, executionMode };
+  function release(reply: object) {
+    Object.assign(acknowledgement, reply);
+  }
+  await releaseTurnCredentials(bridgeOptions, bridgeContext, setup.tokens, { ...admitted, replay },
+    turn, acknowledgement, release);
+}
+async function initialCredentials(count: number) {
+  if (count) await fact();
+  await credentialMessage();
+  const sign = setup.tokens.turn.bind(setup.tokens);
+  async function signing(input: Parameters<typeof sign>[0]) {
+    expect((await state())?.initialLoaded).toBe(true);
+    return sign(input);
+  }
+  const signed = vi.spyOn(setup.tokens, 'turn').mockImplementation(signing);
+  const acknowledgement: Record<string, unknown> = {};
+  await credentials(acknowledgement);
+  expect(acknowledgement).not.toHaveProperty('refused');
+  expect(acknowledgement['token']).toBeTruthy();
+  expect(acknowledgement['initialInput']).toContain('New question');
+  expect(acknowledgement['initialInput']).toContain('Initial personal memory follows');
+  if (count) expect(acknowledgement['initialInput']).toContain(canary);
+  expect(acknowledgement).not.toHaveProperty('context');
+  expect(setup.received()).toBe(0);
+  const cold = await createEventStore(setup.nats.connection);
+  options.store = cold;
+  const repeated: Record<string, unknown> = {};
+  await credentials(repeated);
+  expect(repeated).toEqual({ refused: 'memory_context_unavailable' });
+  expect(signed).toHaveBeenCalledTimes(1);
+  expect(JSON.stringify(await history(cold, 'conversation-conversation', 'test')))
+    .not.toContain(canary);
+}
+it.each([0, 1])('loads %i facts before signing and never resends on cold reconnect',
+  initialCredentials);
+async function changedWhileSigning(kind: string) {
+  await fact();
+  await credentialMessage();
+  const sign = setup.tokens.turn.bind(setup.tokens);
+  async function signing(input: Parameters<typeof sign>[0]) {
+    const grant = await sign(input);
+    await deploymentChange(kind);
+    return grant;
+  }
+  vi.spyOn(setup.tokens, 'turn').mockImplementation(signing);
+  const acknowledgement: Record<string, unknown> = {};
+  await credentials(acknowledgement);
+  expect(acknowledgement).toHaveProperty('refused');
+  expect(acknowledgement).not.toHaveProperty('token');
+  expect(acknowledgement).not.toHaveProperty('initialInput');
+  expect(acknowledgement).not.toHaveProperty('context');
+}
+it.each(['corrected', 'forgotten', 'removed', 'replacement', 'withdrawn', 'closed'])(
+  'releases neither input nor credentials after %s during signing', changedWhileSigning);
+async function oversizedCredentials() {
+  await fact();
+  await credentialMessage('"'.repeat(65_000));
+  const acknowledgement: Record<string, unknown> = {};
+  await credentials(acknowledgement);
+  expect(acknowledgement).toEqual({ refused: 'memory_context_unavailable' });
+}
+it('refuses the complete escaped credential frame above 120 KiB', oversizedCredentials);
+
+async function memoryFreeCredentials() {
+  await fact();
+  await credentialMessage();
+  deployment.remove();
+  const acknowledgement: Record<string, unknown> = {};
+  await credentials(acknowledgement, 'memory_free');
+  expect(acknowledgement['token']).toBeTruthy();
+  expect(acknowledgement).not.toHaveProperty('context');
+  expect(acknowledgement).not.toHaveProperty('initialInput');
+  expect(await state()).toBeUndefined();
+}
+it('gives explicit memory-free work no history or memory block', memoryFreeCredentials);
+async function admitsCompleteInput() {
+  await fact('fact', 'Remember these words. '.repeat(150));
+  await credentialMessage();
+  const acknowledgement: Record<string, unknown> = {};
+  await credentials(acknowledgement);
+  expect(acknowledgement).not.toHaveProperty('refused');
+  const body = { model: admitted.model, input: acknowledgement['initialInput'],
+    max_output_tokens: 2000, stream: true };
+  const request = { method: 'POST', headers: setup.headers, body: JSON.stringify(body) };
+  const response = await fetch(`${setup.options.decisionUrl}/authorize`, request);
+  expect(response.status).toBe(200);
+  const reservation = setup.actor.state.reservations[0]!;
+  expect(reservation.amountCents).toBe(requestReservationCents(body));
+  expect(Number.isSafeInteger(reservation.amountCents)).toBe(true);
+  const rootBinding = { requesterId: 'alice', conversationId: 'conversation', turnId: 'next',
+    threadId: 'next-thread', assistantId: 'assistant', computerId: 'computer', generation: 1,
+    payingGroupId: 'personal-default', allowanceCents: 1000 };
+  const root = await setup.actor.setRootAllowance(rootBinding, reservation.amountCents);
+  expect(Number.isSafeInteger(root.allowanceCents)).toBe(true);
+  const nextCall = { ...reservation.call, turnId: 'next', threadId: 'next-thread' };
+  await expect(setup.actor.reserve(nextCall, root.allowanceCents + 1,
+    undefined, undefined, root.rootId)).rejects.toThrow('Root budget refused');
+  expect(setup.received()).toBe(0);
+}
+it('counts the complete request and keeps integer-cent root ceilings without a selection call',
+  admitsCompleteInput);
+async function slowHistoryCredentials() {
+  await fact();
+  await credentialMessage();
+  const read = options.store.readStream.bind(options.store);
+  let delayed = false;
+  async function* slowRead(...args: Parameters<typeof read>) {
+    if (args[0] === 'conversation-conversation' && !delayed) {
+      delayed = true;
+      expect(args[2]! - performance.now()).toBeGreaterThan(2000);
+      function wait(resolve: () => void) {
+        setTimeout(resolve, 2100);
+      }
+      await new Promise<void>(wait);
+    }
+    yield* read(...args);
+  }
+  vi.spyOn(options.store, 'readStream').mockImplementation(slowRead);
+  const sign = setup.tokens.turn.bind(setup.tokens);
+  async function signing(input: Parameters<typeof sign>[0]) {
+    const grant = await sign(input);
+    const text = setup.keys.encrypt('test', 'conversation', 'Unrelated message');
+    await setup.append('conversation-conversation', 'message.posted', {
+      conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
+      contentType: 'text', ...text });
+    await deploymentChange('unrelated');
+    await setup.append('conversation-conversation', 'file.uploaded', {
+      conversationId: 'conversation', fileId: 'unrelated', uploadedBy: 'alice', name: 'notes.txt',
+      size: 5, sha256: 'a'.repeat(64), mime: 'text/plain', objectKey: 'test/conversation/unrelated' });
+    return grant;
+  }
+  vi.spyOn(setup.tokens, 'turn').mockImplementation(signing);
+  const acknowledgement: Record<string, unknown> = {};
+  await credentials(acknowledgement);
+  expect(delayed).toBe(true);
+  expect(acknowledgement).not.toHaveProperty('refused');
+  expect(acknowledgement['initialInput']).toContain(canary);
+}
+it('reads slow history before access checks and permits unrelated activity while signing',
+  slowHistoryCredentials);
+
+async function refusesUncertainStart() {
+  await credentialMessage();
+  const acknowledgement: Record<string, unknown> = {};
+  await credentials(acknowledgement, 'restricted', true);
+  expect(acknowledgement).toEqual({ refused: 'memory_context_unavailable' });
+  expect(await state()).toBeUndefined();
+}
+it('never upgrades a replayed private start even before initial evidence exists',
+  refusesUncertainStart);
+
+async function refusesLaterStartAfterQualificationLoss() {
+  const message = { conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
+    contentType: 'text', ...setup.keys.encrypt('test', 'conversation', 'Numbered question') };
+  const saved = await setup.append('conversation-conversation', 'message.posted', message);
+  const report = { conversationId: 'conversation', turnId: saved.id, threadId: 'numbered-thread',
+    assistantId: 'assistant', sequence: 1, previousSequence: 0,
+    type: 'agent.turn_started', executionMode: 'restricted' as const };
+  await recordReport(options.store, setup.keys, bridgeContext, report);
+  const input = { ...report, status: 'started' as const };
+  const turn = await turnCommand(options.store, bridgeContext, input);
+  expect(turn?.executionMode).toBe('restricted');
+  if (!turn) throw new Error('Missing admitted fixture turn');
+  deployment.remove();
+  const signed = vi.spyOn(setup.tokens, 'turn');
+  const delivered = vi.fn();
+  const bridgeOptions = { ...options, keys: setup.keys };
+  for (const sequence of [1, 2]) {
+    const retry = { ...report, sequence, previousSequence: sequence - 1 };
+    if (sequence > 1) await recordReport(options.store, setup.keys, bridgeContext, retry);
+    const acknowledgement: Record<string, unknown> = {};
+    await releaseTurnCredentials(bridgeOptions, bridgeContext, setup.tokens, retry,
+      turn, acknowledgement, delivered);
+    expect(acknowledgement).toEqual({ refused: 'memory_context_unavailable' });
+    const facts = await readChatFacts(options.store, 'test', 'conversation', saved.id);
+    expect(facts.memoryContext).toBeUndefined();
+  }
+  expect(signed).not.toHaveBeenCalled();
+  expect(delivered).not.toHaveBeenCalled();
+}
+it('refuses a later numbered start after qualification disappears before preparation',
+  refusesLaterStartAfterQualificationLoss);
