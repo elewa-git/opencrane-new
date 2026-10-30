@@ -1,1 +1,2 @@
 - Accept ordinary Office files with checked chart workbooks, printer settings and web or email links. Keep refusing macros, other embedded files and links that load outside content.
+- Accept Office relationship XML with namespace prefixes. Refuse Word files disguised as embedded Excel workbooks, including those with a decoy workbook part.

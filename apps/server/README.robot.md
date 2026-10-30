@@ -1089,6 +1089,7 @@ Disabling secure cookies or allowing insecure OIDC HTTP is only for local testin
 
 Office ZIP inspection accepts `.xlsx` directly under `ppt/embeddings/`,
 `word/embeddings/` or `xl/embeddings/`. Each workbook passes the same XLSX checks.
+A Word package renamed to XLSX is refused even if it contains a workbook part.
 A workbook inside an embedded workbook is refused. The parent ZIP, embedded ZIP
 bytes and their unpacked parts share the existing 2,000-part and 80 MiB limits.
 The existing 8 MiB XML limit and worker time and memory limits still apply.
@@ -1099,6 +1100,8 @@ refused. Decoded external relationships must use an Office hyperlink type and an
 HTTP, HTTPS or mailto target. External images, templates, connections, frames and
 packages remain refused. Encryption, XML entity declarations, path traversal and
 legacy Office checks remain in force.
+Relationship elements can use the default package namespace or a declared prefix.
+The worker resolves each element's namespace before checking its attributes.
 
 `test/office-upload.test.ts` builds synthetic ZIP documents in memory and checks
 acceptance and refusal through `inspectFile`. Upload storage, extraction, events,

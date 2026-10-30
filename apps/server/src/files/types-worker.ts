@@ -21,8 +21,8 @@ type OfficeBudget = { bytes: number; parts: number };
 async function office(
   bytes: Buffer,
   extension: string,
-  budget: OfficeBudget = { bytes: 0, parts: 0 },
-  depth = 0,
+  budget: OfficeBudget,
+  depth: number,
 ) {
   const mainParts = new Map([
     ['docx', 'word/document.xml'], ['xlsx', 'xl/workbook.xml'], ['pptx', 'ppt/presentation.xml'],
@@ -133,8 +133,8 @@ function readOfficePart(zip: ZipFile, entry: Entry): Promise<Buffer> {
 async function inspectFile(
   name: string,
   bytes: Buffer,
-  budget: OfficeBudget = { bytes: 0, parts: 0 },
-  depth = 0,
+  budget: OfficeBudget,
+  depth: number,
 ): Promise<string> {
   const extension = extname(name).slice(1).toLowerCase();
   if (!bytes.length || !/^[\w][\w .()-]{0,119}$/u.test(name)) throw new Error('Unsupported file type');
@@ -207,23 +207,59 @@ const relationshipSchema = z.strictObject({
   '@_Target': z.string(),
   '@_TargetMode': z.enum(['Internal', 'External']).optional(),
 });
-const relationshipsSchema = z.strictObject({
-  '?xml': z.unknown().optional(),
-  Relationships: z.union([
-    z.literal(''),
-    z.strictObject({
-      '@_xmlns': z.string().optional(),
-      Relationship: z.union([relationshipSchema, z.array(relationshipSchema)]).optional(),
-    }),
-  ]),
-});
+const xmlObjectSchema = z.record(z.string(), z.unknown());
+const relationshipNamespace = 'http://schemas.openxmlformats.org/package/2006/relationships';
+
+function resolveRelationshipElement(
+  qualifiedName: string,
+  value: unknown,
+  expectedName: string,
+  inheritedNamespaces: Map<string, string>,
+) {
+  const content = xmlObjectSchema.parse(value === '' ? {} : value);
+  const namespaces = new Map(inheritedNamespaces);
+  for (const [name, declaration] of Object.entries(content)) {
+    if (name === '@_xmlns') {
+      namespaces.set('', z.string().parse(declaration));
+      delete content[name];
+    } else if (name.startsWith('@_xmlns:')) {
+      namespaces.set(name.slice('@_xmlns:'.length), z.string().parse(declaration));
+      delete content[name];
+    }
+  }
+  const names = qualifiedName.split(':');
+  const localName = names.pop();
+  const prefix = names.pop() ?? '';
+  const namespace = namespaces.get(prefix);
+  // Resolve each declaration where it applies; stripping prefixes would hide wrong namespaces.
+  const unqualified = !prefix && namespace === undefined;
+  if (names.length || localName !== expectedName ||
+      (!unqualified && namespace !== relationshipNamespace)) {
+    throw new Error('Unsafe Office document');
+  }
+  return { content, namespaces };
+}
+
+function readRelationships(metadata: unknown) {
+  const document = xmlObjectSchema.parse(metadata);
+  delete document['?xml'];
+  const roots = Object.entries(document);
+  if (roots.length !== 1) throw new Error('Unsafe Office document');
+  const [rootName, rootValue] = roots[0]!;
+  const root = resolveRelationshipElement(rootName, rootValue, 'Relationships', new Map());
+  const entries: z.infer<typeof relationshipSchema>[] = [];
+  for (const [name, value] of Object.entries(root.content)) {
+    const children = Array.isArray(value) ? value : [value];
+    for (const child of children) {
+      const resolved = resolveRelationshipElement(name, child, 'Relationship', root.namespaces);
+      entries.push(relationshipSchema.parse(resolved.content));
+    }
+  }
+  return entries;
+}
 
 function inspectRelationships(metadata: unknown) {
-  const result = relationshipsSchema.safeParse(metadata);
-  if (!result.success) throw new Error('Unsafe Office document');
-  const root = result.data.Relationships;
-  if (root === '' || !root.Relationship) return;
-  const entries = Array.isArray(root.Relationship) ? root.Relationship : [root.Relationship];
+  const entries = readRelationships(metadata);
   for (const entry of entries) {
     if (entry['@_TargetMode'] !== 'External') continue;
     const type = entry['@_Type'];
@@ -247,7 +283,8 @@ function inspectWorkbook(bytes: Buffer) {
 
 parentPort!.postMessage('ready');
 const input = z.object({ name: z.string(), bytes: z.instanceof(Uint8Array) }).parse(workerData as unknown);
-void inspectFile(input.name, Buffer.from(input.bytes)).then(
+const budget: OfficeBudget = { bytes: 0, parts: 0 };
+void inspectFile(input.name, Buffer.from(input.bytes), budget, 0).then(
   mime => parentPort!.postMessage(mime),
   (error: unknown) => parentPort!.postMessage(error instanceof Error ? error : new Error('File inspection failed')),
 );
