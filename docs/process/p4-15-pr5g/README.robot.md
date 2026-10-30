@@ -69,3 +69,39 @@ All checks use `nice -n 10`; tests use an explicit `PG_TEST_URL`.
   paid model calls and CI. No owner or secondary development stack was started.
 
 Logs are under `/tmp/p4-15-pr5g-*.log` on the build host.
+
+## Numbered renewal fix checks
+
+30 October 2026. Rebased onto `origin/main` at `3391faf4f` and checked that the
+rebase finished. The failing-first test commit is `6823f8995`; the production fix
+is `8b1ca52d9`. Commit `ad7173202` corrects JSON types in the new acknowledgement
+assertion and requires a non-empty token. It does not change production behaviour.
+
+The first full run began on `8b1ca52d9`; the assertion correction was made during
+that run. The second full run used `ad7173202`. Both used the four requested files:
+`turn-credentials.test.ts`, `memory-dispatch.test.ts`, `memory-delivery.test.ts`
+and `memory-initial-delivery.test.ts`. The expected result was no failures.
+Tests used disposable service fixtures, simulated deployment qualification,
+an explicit `PG_TEST_URL` and `nice -n 10`. This was not a fresh installation.
+
+- PASS: three new defect probes failed before the production fix. The repeated
+  report without delivery evidence was already refused. All four new regression
+  cases passed in both full runs after the fix.
+- FAIL: run 1, one worker, 282/285. Initial loading refused in the saved-reference
+  and empty-selection cases. The final-await closure case refused during preparation,
+  before it reached the intended closure change.
+- FAIL: run 2, two workers, 282/285. The completed-withdrawal retry and corrected-cause
+  polling cases did not reach the native turn start during setup. The expiry case
+  did not reach its injected clock change during final confirmation.
+- PARTIAL: each of these six cases passed in the other full run. This shows varying
+  results, but does not identify every cause or clear either full-run failure.
+- PASS: the final focused run on `ad7173202`, one worker, 10/10. It repeated all six
+  affected cases and all four new regressions with unchanged assertions.
+- PASS: final lint, typecheck, event catalogue, Knip and `npm run lint:changelog`.
+  The final lint run includes the corrected acknowledgement assertion.
+- NOT RUN: full root suite, fresh-install qualification, persistence scans, paid
+  model calls and CI. Admission remains disabled. No development stack was started.
+
+Logs: `/tmp/p4-15-pr5g-fix2-targeted-1.log`,
+`/tmp/p4-15-pr5g-fix2-targeted-2.log`, `/tmp/p4-15-pr5g-fix2-focused-final.log`
+and `/tmp/p4-15-pr5g-fix2-*.log`.
