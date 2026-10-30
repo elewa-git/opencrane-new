@@ -184,7 +184,7 @@ flowchart LR
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
   server -->|waits briefly for Forget locks| postgres
-  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, routine Stops after deactivation or failed evidence reads, memory Stops after confirmed loss, reply removal receipts after completion and checked reports| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, routine Stops after deactivation or failed evidence reads, memory Stops after confirmed loss, reply removal receipts after completion, checked reports and publication files| computer["apps/computer<br/>assistant computers"]
   computer -.->|records private thread for memory discovery| server
   server -.->|prepares up to four private memory tools| computer
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
@@ -306,6 +306,10 @@ can be used now is checked separately. Missing evidence never means it is safe t
 | [models](src/models/README.md) | Manages access to AI models for people, groups and assistants. |
 | [onboarding](src/onboarding/README.md) | Saves and resumes a member's private welcome survey. |
 | [providers](src/providers/README.md) | Connects model providers and manages keys, checks and provider choices. |
+
+The server checks files the assistant creates through the same type checks, virus
+scanner and storage as uploads. Accepted files appear as assistant file cards.
+People need current conversation access to preview or download them.
 
 ## Processes it handles
 

@@ -1348,3 +1348,9 @@ Approval details and status announcements use “Done: the tool replied” only 
 The drawer retains the saved use times and cannot reuse a consumed approval.
 `npm run visual:stage-b-polish` checks both drawer states and complete waiting-card
 captures at 1280 and 390 pixels against the built app with ordinary browser fixtures.
+
+## Assistant files
+
+Uploaded file records with a `turnId` supply file details without making a second card.
+The corresponding `agent.file_changed` event puts the card in the assistant's reply.
+Refusals reuse the upload reason wording. Inline images and reply links are not included.

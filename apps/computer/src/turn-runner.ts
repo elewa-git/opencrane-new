@@ -21,6 +21,8 @@ const PRIVATE_ITEM_TYPES = new Set(['userMessage', 'agentMessage', 'reasoning', 
 type Grant = { token: string; expiresAt: number; model?: string | undefined; context?: unknown };
 
 export interface TurnDriver extends ThreadLoadDriver {
+  artifactList?(): Promise<NonNullable<BridgeReport['artifacts']>>;
+  readArtifact?(id: string, offset: number): Promise<Buffer>;
   privateSession?(): Promise<PrivateSession>;
   file?(file: WorkspaceFile, bytes: Buffer): Promise<void | 'kept_existing'>;
   grant(thread: string, conversation: string, token: string, expiresAt: number,
@@ -89,6 +91,8 @@ function readAcknowledgedGrant(value: Record<string, unknown>,
 
 class TurnRunner {
   readonly gate = new BridgeGate();
+  private readonly artifactStarts = new Map<string, string>();
+  private readonly finishing = new Set<string>();
   private preparingCount = 0;
   private readonly stoppedTurns = new Set<string>();
   private readonly routineStopTimers = new Map<string, NodeJS.Timeout>();
@@ -432,6 +436,7 @@ class TurnRunner {
     deleteTurn(this.state, turnId);
     this.state.codexTurns.delete(turnId);
     this.turnModels.delete(turnId);
+    this.artifactStarts.delete(turnId);
     this.state.cancelled.delete(turnId);
     this.stoppedTurns.delete(turnId);
     this.state.refusedTools.delete(turnId);
@@ -536,6 +541,9 @@ class TurnRunner {
     if (this.gate.closed || this.state.cancelled.has(input.id)) {
       this.failTurn(input);
       return;
+    }
+    if (input.executionMode === 'memory_free' && this.driver.artifactList) {
+      this.artifactStarts.set(input.id, JSON.stringify(await this.driver.artifactList()));
     }
     await this.runThread(input, threadValue);
   }
@@ -887,6 +895,36 @@ class TurnRunner {
     return true;
   }
 
+  async readArtifact(value: Record<string, unknown>) {
+    const id = requiredString(value, 'id');
+    const offset = value['offset'];
+    if (typeof offset !== 'number' || !this.driver.readArtifact) {
+      throw new Error('Artifact read unavailable');
+    }
+    const bytes = await this.driver.readArtifact(id, offset);
+    return { type: 'artifact_chunk', id, offset, chunk: bytes.toString('base64') };
+  }
+
+  private async finishArtifacts(input: Turn) {
+    try {
+      const before = this.artifactStarts.get(input.id);
+      const artifacts: NonNullable<BridgeReport['artifacts']> = [];
+      if (before !== undefined && this.driver.artifactList) {
+        const current = await this.driver.artifactList();
+        for (const file of current) {
+          if ('reason' in file || !before.includes(JSON.stringify(file))) artifacts.push(file);
+        }
+      }
+      if (!this.isActiveTurn(input.id) || this.state.cancelled.has(input.id)) return;
+      this.appendReport(input, 'agent.turn_completed', { artifacts });
+      this.releaseTurn(input.id);
+    } catch {
+      this.failTurn(input);
+    } finally {
+      this.finishing.delete(input.id);
+    }
+  }
+
   private completeTurn(input: Turn, _threadId: string, params: Record<string, unknown>) {
     const turn = record(params['turn']);
     if (!this.confirmedTerminal(input, turn)) return;
@@ -905,8 +943,14 @@ class TurnRunner {
       this.failTurn(input, reason, nativeTermination);
       return;
     }
-    this.appendReport(input, 'agent.turn_completed');
-    this.releaseTurn(input.id);
+    if (!this.artifactStarts.has(input.id)) {
+      this.appendReport(input, 'agent.turn_completed');
+      this.releaseTurn(input.id);
+      return;
+    }
+    if (this.finishing.has(input.id)) return;
+    this.finishing.add(input.id);
+    void this.gate.track(this.finishArtifacts(input));
   }
 }
 

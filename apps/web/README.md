@@ -18,6 +18,7 @@ flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages and file drops where Attach is available"] --> web
   web -->|requests and live updates| server["apps/server<br/>the back end"]
+  server -->|assistant file cards and file refusal codes| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
   web -->|saved reply status| capture["Reply formatting<br/>workspace and viewer"]
@@ -103,6 +104,9 @@ A spending stop keeps its reason beside saved call statuses. A reservation, an u
 outcome, a recorded charge and a released reservation have different labels. Check status
 reads the original turn again and politely announces its progress and result. Participants
 see the status and reference without amounts.
+
+Files published by the assistant appear once, with an assistant badge, preview and
+download. Refused files show the reason in plain words.
 
 ## Processes it handles
 

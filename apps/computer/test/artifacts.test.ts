@@ -1,3 +1,4 @@
+import { artifactListSchema } from '@opencrane/events';
 import { execFile } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, symlink, rm, truncate } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,11 +9,12 @@ const execute = promisify(execFile);
 async function boundsArtifactReads() {
   const root = await mkdtemp(`${tmpdir()}/artifacts-`);
   async function scan() {
-    const args = ['apps/computer/src/artifacts.py', root];
+    const args = ['apps/computer/src/artifacts.py', `${root}/workspace`];
     const result = await execute('python3', args);
-    return JSON.parse(result.stdout) as { id: string; name?: string; reason?: string }[];
+    return artifactListSchema.parse(JSON.parse(result.stdout) as unknown);
   }
   try {
+    await symlink(root, `${root}/workspace`);
     await mkdir(`${root}/artifacts/nested`, { recursive: true });
     await writeFile(`${root}/outside.txt`, 'Outside');
     await writeFile(`${root}/artifacts/nested/report.txt`, 'A report');
@@ -21,13 +23,13 @@ async function boundsArtifactReads() {
     await truncate(`${root}/artifacts/large.txt`, 20 * 1024 * 1024 + 1);
     const entries = await scan();
     expect(entries).toHaveLength(3);
-    function named(entry: typeof entries[number]) { return entry.name === 'report.txt'; }
+    function named(entry: typeof entries[number]) { return 'name' in entry && entry.name === 'report.txt'; }
     const report = entries.find(named)!;
     expect(report).toBeDefined();
-    expect(entries).toContainEqual({ id: expect.any(String), reason: 'too_large' });
-    expect(entries).toContainEqual({ id: expect.any(String), reason: 'unsafe_name' });
+    expect(entries.some(isTooLarge)).toBe(true);
+    expect(entries.some(isUnsafe)).toBe(true);
     expect(JSON.stringify(entries)).not.toContain('nested');
-    const args = ['apps/computer/src/artifacts.py', root, report.id, '0'];
+    const args = ['apps/computer/src/artifacts.py', `${root}/workspace`, report.id, '0'];
     const read = await execute('python3', args);
     expect(read.stdout).toBe('A report');
     await writeFile(`${root}/artifacts/nested/report.txt`, 'Changed');
@@ -37,9 +39,14 @@ async function boundsArtifactReads() {
     }
     const limited = await scan();
     expect(limited.length).toBeLessThanOrEqual(17);
-    expect(limited).toContainEqual({ id: expect.any(String), reason: 'too_many_parts' });
+    expect(limited.some(isTooMany)).toBe(true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 }
 it('bounds artifact files and refuses symlinks without reporting private paths', boundsArtifactReads);
+
+type Artifact = ReturnType<typeof artifactListSchema.parse>[number];
+function isTooLarge(file: Artifact) { return 'reason' in file && file.reason === 'too_large'; }
+function isUnsafe(file: Artifact) { return 'reason' in file && file.reason === 'unsafe_name'; }
+function isTooMany(file: Artifact) { return 'reason' in file && file.reason === 'too_many_parts'; }

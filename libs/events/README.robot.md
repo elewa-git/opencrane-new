@@ -932,3 +932,10 @@ one complete personal or company variant; mixed ownership fields refuse.
 No field name was added; all names were checked against RISKY_FIELD_NAME.
 The existing secretRef is an approved opaque reference. No event type or subscription
 changed. Company cleanup and use remain closed.
+
+## Assistant files
+
+File upload and rejection data accept an optional `turnId` for assistant publication.
+`agent.file_changed` accepts a fixed `reason`; refused files have `changeType: deleted`
+and `path: unavailable`, so they cannot become download links. The bounded artifact list
+validates bridge input only; it is not stored as event data.

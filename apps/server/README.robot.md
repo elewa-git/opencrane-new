@@ -6875,3 +6875,14 @@ requester in two sessions and for two requesters on one assistant and computer.
 The other context must retain its saved state, including after a fresh event read.
 The runner records PARTIAL; native isolation and full qualification remain NOT RUN.
 The server's runtime behaviour and authority checks are unchanged.
+
+## Assistant file publication
+
+Part of #850. Completed turn reports can include bounded artifact metadata. The server
+checks the report's requested conversation and author before pulling bytes. Publication
+uses the upload type checks, scanner, storage and current access rules. Stable request ids
+keep retries from creating extra cards. File records carry an optional `turnId`; these files
+are not delivered back to the computer. `agent.file_changed` names the downloadable upload
+or carries a fixed refusal reason. No workspace path or file bytes enter the event log.
+Inline image thumbnails and reply links remain for the next part. SVG stays refused because
+this part reuses the current upload formats without adding active image handling.

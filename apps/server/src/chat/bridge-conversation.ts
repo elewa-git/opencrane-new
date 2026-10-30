@@ -1,3 +1,4 @@
+import type { ArtifactPublication } from '../files/artifacts.ts';
 import { childRequestHeld } from './child-hold.ts';
 import { pendingBudgetStops, sendBudgetStops } from './bridge-budget-stops.ts';
 import { chatMembership } from './participation.ts';
@@ -24,7 +25,7 @@ import { cleanClosedConversation, recoverTerminalTurns } from './close-cleanup.t
 type ChatRows = Awaited<ReturnType<typeof chatHistory>>;
 type Upload = z.infer<typeof fileUploadedDataSchema>;
 type Tokens = Parameters<typeof resumeComputer>[1];
-export type WatchOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'> &
+export type WatchOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'> &
   Partial<Pick<ChatOptions, 'binding'>> & {
     objects?: Client;
     catalogue?: Pick<ReturnType<typeof connectMcpCatalogue>, 'rows'>;
@@ -451,7 +452,7 @@ function conversationUploads(rows: ChatRows, assistantKind: string) {
   if (assistantKind === 'team') return [];
   const uploads = rows.filter(isUpload);
   function isUpload(row: typeof rows[number]) {
-    return row.event.type === 'file.uploaded';
+    return row.event.type === 'file.uploaded' && !fileUploadedDataSchema.parse(row.event.data).turnId;
   }
   function uploadedFile(row: typeof rows[number]) {
     return fileUploadedDataSchema.parse(row.event.data);

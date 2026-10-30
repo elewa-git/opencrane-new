@@ -441,3 +441,23 @@ it.each(failureAfterStopCases)(
   'keeps the saved failure outcome live and on replay: $reason, Stop=$stopRequested',
   assertFailureAfterStop,
 );
+
+function showsAssistantFileOnce() {
+  const data = { conversationId: 'chat', fileId: 'file', uploadedBy: 'me', name: 'report.txt',
+    size: 10, mime: 'text/plain', turnId: 'request' };
+  const rows: ChatRow[] = [
+    { id: 'request', position: 0, type: 'message.posted', time: '',
+      data: { authorId: 'me', text: 'Create a file' } },
+    { id: 'upload', position: 1, type: 'file.uploaded', time: '', data },
+    { id: 'card', position: 2, type: 'agent.file_changed', time: '',
+      data: { turnId: 'request', path: 'uploads/chat/file/report.txt', changeType: 'created' } },
+    { id: 'refused', position: 3, type: 'agent.file_changed', time: '',
+      data: { turnId: 'request', path: 'unavailable', changeType: 'deleted', reason: 'macros' } },
+  ];
+  const turns = transcript(rows, 'me');
+  expect(turns).toHaveLength(2);
+  expect(turns[1]?.author).toBe('agent');
+  expect(turns[1]?.files).toEqual(['uploads/chat/file/report.txt']);
+  expect(turns[1]?.tools[0]?.detail).toContain('contains macros');
+}
+it('shows one assistant file card and a plain refusal', showsAssistantFileOnce);

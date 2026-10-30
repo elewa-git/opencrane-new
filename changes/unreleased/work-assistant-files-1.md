@@ -1,0 +1,1 @@
+- Completed assistant replies publish new or changed files as file cards with preview and download. Files pass the upload checks and virus scanner; refusals explain why. SVG remains refused; inline images and reply links will follow separately.

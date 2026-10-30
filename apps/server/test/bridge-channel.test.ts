@@ -1,3 +1,4 @@
+import { artifactListSchema } from '@opencrane/events';
 import { generateKeyPairSync } from 'node:crypto';
 import { BudgetActor, envelope } from '@opencrane/models';
 import { isEventStoreUnavailable } from '@opencrane/event-store';
@@ -235,7 +236,9 @@ it('replays reports written before a channel restart without executing the turn 
   const server = createServer();
   const journal = `${directory}/reports`;
   let starts = 0;
+  const artifact = { id: 'a'.repeat(64), name: 'report.txt', size: 5, sha256: 'b'.repeat(64) };
   const driver = {
+    artifactList() { return Promise.resolve(starts ? [artifact] : []); },
     rpc(method: string, _params: Record<string, unknown>) {
       if (method === 'thread/start') {
         return Promise.resolve({ thread: { id: 'thread' } });
@@ -286,6 +289,8 @@ it('replays reports written before a channel restart without executing the turn 
     expect(replayedReports).toEqual([
       { sequence: 2, type: 'agent.message_delta', text: 'Saved' },
     ]);
+    await until(reportContainsType(reports, 'agent.turn_completed'));
+    expect(reports.at(-1)?.artifacts).toEqual([artifact]);
     expect(starts).toBe(1);
     const journalContents = await readFile(journal, 'utf8');
     const journalText = journalContents.trim();
@@ -518,6 +523,7 @@ it('refuses turn dispatch before the socket has resumed', async () => {
 });
 
 interface BridgeReportSummary {
+  artifacts?: ReturnType<typeof artifactListSchema.parse> | undefined;
   sequence: number;
   type: string;
   text?: string | undefined;
@@ -567,6 +573,7 @@ function addReportCollector(
 ) {
   const reportSchema = z.object({
     sequence: z.number(),
+    artifacts: artifactListSchema.optional(),
     type: z.string(),
     text: z.string().optional(),
   });

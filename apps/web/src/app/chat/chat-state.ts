@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { fileRefusalWords } from './file-refusal-words.ts';
 import type { ChatConversation, ChatRow } from '@opencrane/protocol';
 
 export interface Turn {
@@ -83,6 +84,7 @@ export function isBudgetStop(row: ChatRow): boolean {
 }
 
 export interface ChatAttachment {
+  turnId?: string | undefined;
   conversationId: string;
   fileId: string;
   name: string;
@@ -233,6 +235,7 @@ function setBudgetStopState(turn: Turn, time: string): void {
 function addStandaloneTurn(row: ChatRow, memberId: string, turns: Turn[]): boolean {
   const file = uploadedFile(row);
   if (file) {
+    if (row.data.turnId) return true;
     turns.push({ id: row.id, author: file.uploadedBy === memberId ? 'you' : 'person',
       text: '', time: row.time, state: 'done', tools: [], files: [file.path] });
     return true;
@@ -256,7 +259,7 @@ function updateTurn(turn: Turn, row: ChatRow, parts: Map<string, string>,
   lostOutput: Set<string>): void {
   updateTurnOutcome(turn, row, lostOutput);
   updateTurnTools(turn, row);
-  if (row.type === 'agent.file_changed') addAvailableFile(turn, row.data);
+  if (row.type === 'agent.file_changed') addAvailableFile(turn, row);
   updateTurnText(turn, row, parts);
 }
 
@@ -421,12 +424,19 @@ function updateTurnText(turn: Turn, row: ChatRow, parts: Map<string, string>): v
   turn.text = [...parts.values()].join('\n\n');
 }
 
-function addAvailableFile(turn: Turn, data: ChatRow['data']): void {
+function addAvailableFile(turn: Turn, row: ChatRow): void {
+  const data = row.data;
+  if (data.reason) {
+    const refusal = { id: row.id, label: 'File not published',
+      detail: fileRefusalWords(data.reason), failed: true, time: row.time };
+    turn.tools.push(refusal);
+    return;
+  }
   if (!data.path || data['changeType'] === 'deleted') return;
   turn.files.push(data.path);
 }
 
-const attachment = z.object({ conversationId: z.string(), fileId: z.string(), name: z.string(),
+const attachment = z.object({ turnId: z.string().optional(), conversationId: z.string(), fileId: z.string(), name: z.string(),
   size: z.number(), mime: z.string(), uploadedBy: z.string(), screenshot: z.object({
     computerId: z.string(), generation: z.number(), capturedAt: z.string(), width: z.number(),
     height: z.number(),

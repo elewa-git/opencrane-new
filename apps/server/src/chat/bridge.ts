@@ -1,3 +1,4 @@
+import { pullArtifact, type ArtifactPublication } from '../files/artifacts.ts';
 import { routineBridge, routineStartRefusal } from '../routine-bridge.ts';
 import { memoryBridge } from '../memory/bridge.ts';
 import { releaseTurnCredentials } from './turn-credentials.ts';
@@ -30,7 +31,7 @@ import { bridgeApprovals } from './bridge-approvals.ts';
 import { resumeBridgeReports } from './bridge-resume.ts';
 import type { ChatOptions } from './routes.ts';
 
-type BridgeOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
+type BridgeOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
   Partial<Pick<ChatOptions, 'binding'>> &
   Pick<Parameters<typeof bridgeControl>[0], 'stopExecution'>;
 type RoutineStart = NonNullable<Parameters<typeof turnCommand>[1]['routineStart']>;
@@ -41,7 +42,7 @@ type ReportBatch = { values: unknown[]; sequences: number[]; textLength: number;
   bytes: number; started: boolean };
 type ReportQueue = { pending: Promise<void>; count: number; bytes: number;
   last?: ReportBatch };
-const receiptData = z.object({ type: z.enum(['file_received', 'routine_prepared',
+const receiptData = z.object({ type: z.enum(['artifact_chunk', 'file_received', 'routine_prepared',
   'routine_prepare_refused']) });
 const reportDetails = z.object({
   sequence: z.int(), previousSequence: z.int().optional(), conversationId: z.string(),
@@ -86,9 +87,8 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
   report: z.infer<typeof reportDetails>, batch: ReportBatch) {
   // Save reports already accepted into the bounded queue after a disconnect.
   // Otherwise a replay can fill the queue again before its saved position advances.
-  const context: Parameters<typeof turnCommand>[1] = { silo: options.silo, ...input };
-  if (options.binding) context.binding = options.binding;
-  context.routineStart = options.routineStart;
+  const context = { ...input, ...options,
+    readArtifact: pullArtifact.bind(undefined, socket), routineStart: options.routineStart };
   if (report.type === 'agent.turn_started') {
     const facts = await readChatFacts(options.store, options.silo,
       report.conversationId, report.turnId);

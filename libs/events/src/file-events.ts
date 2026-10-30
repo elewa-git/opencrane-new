@@ -3,7 +3,7 @@ import { event } from './definition.ts';
 const id = z.string().regex(/^[\w-]{1,200}$/u);
 const screenshot = z.object({ computerId: id, generation: z.int().positive(), capturedAt: z.iso.datetime(),
   width: z.int().positive().max(4096), height: z.int().positive().max(4096) }).strict();
-const identity = { conversationId: id, fileId: id, uploadedBy: id, name: z.string().regex(/^[\w][\w .()-]{0,119}$/u),
+const identity = { turnId: id.optional(), conversationId: id, fileId: id, uploadedBy: id, name: z.string().regex(/^[\w][\w .()-]{0,119}$/u),
   size: z.int().positive().max(20 * 1024 * 1024), sha256: z.string().regex(/^[a-f0-9]{64}$/u), screenshot: screenshot.optional() };
 export const fileUploadedDataSchema = z.object({ ...identity, mime: z.string().min(1), objectKey: z.string().regex(/^[\w/-]{1,800}$/u) }).strict();
 export const fileRejectedDataSchema = z.object({ ...identity, reason: z.literal('infected') }).strict();
@@ -15,3 +15,20 @@ export const fileEvents = [
   event('file.rejected', 'conversation', 'The scanner refused an infected upload.', fileRejectedDataSchema, { ...example, reason: 'infected' }),
   event('file.delivered', 'conversation', 'The computer acknowledged a verified workspace file.', fileDeliveredDataSchema, { conversationId: 'conv_1', fileId: 'file_1', computerId: 'computer_1', sha256: example.sha256 }),
 ] as const;
+
+export const artifactRefusalSchema = z.enum([
+  'unsupported_type', 'content_mismatch', 'macros', 'embedded_object', 'external_link',
+  'encrypted', 'too_large', 'too_many_parts', 'invalid_file', 'unsafe_name', 'infected',
+]);
+const artifactId = z.string().regex(/^[a-f0-9]{64}$/u);
+export const artifactListSchema = z.array(z.union([
+  z.object({ id: artifactId, name: z.string().regex(/^[\w][\w .()-]{0,119}$/u),
+    size: z.int().positive().max(20 * 1024 * 1024), sha256: artifactId }).strict(),
+  z.object({ id: artifactId, reason: artifactRefusalSchema }).strict(),
+])).max(17).refine(hasBoundedArtifactCount);
+
+function hasBoundedArtifactCount(files: object[]) {
+  if (files.length <= 16) return true;
+  const last = files[16];
+  return last !== undefined && 'reason' in last;
+}

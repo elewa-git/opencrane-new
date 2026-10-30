@@ -19,6 +19,7 @@ interface TurnRunnerPort {
   start(turn: ReturnType<typeof parseTurn>): Promise<void>;
   prepareRoutine(value: Record<string, unknown>): Promise<Record<string, unknown>>;
   interrupt(value: Record<string, unknown>, cleared?: () => void): Promise<void>;
+  readArtifact?(value: Record<string, unknown>): Promise<Record<string, unknown>>;
   connectionLost(): void;
   acknowledge(sequence: unknown, value?: Record<string, unknown>): void;
 }
@@ -230,6 +231,14 @@ function terminateSocket(next: WebSocket) {
   };
 }
 
+async function replyArtifact(runner: TurnRunnerPort, next: WebSocket,
+  input: Record<string, unknown>) {
+  try {
+    if (!runner.readArtifact || runner.gate.closed) throw new Error('Artifact read refused');
+    sendFileReceipt(next, await runner.readArtifact(input));
+  } catch { next.close(1011, 'Artifact read unavailable'); }
+}
+
 function receiveMessage(
   next: WebSocket,
   state: BridgeSocketState,
@@ -244,6 +253,10 @@ function receiveMessage(
         return;
       }
       const input = parseMessage(bytes);
+      if (state.resumed && input['type'] === 'artifact_read') {
+        void replyArtifact(runner, next, input);
+        return;
+      }
       dispatch(input, next, state, runner, receiveFile, sendReports, approvals);
     } catch {
       next.close(1008, 'Invalid bridge message');
@@ -319,6 +332,7 @@ export function bridgeSocket(
 
   const pacedRunner: TurnRunnerPort = {
     gate: runner.gate,
+    ...(runner.readArtifact ? { readArtifact: runner.readArtifact.bind(runner) } : {}),
     stopBridge: runner.stopBridge.bind(runner),
     start: runner.start.bind(runner),
     prepareRoutine: runner.prepareRoutine.bind(runner),

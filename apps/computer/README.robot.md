@@ -1756,3 +1756,13 @@ The [delivery contract](../../docs/process/p4-15-pr5f/README.robot.md) owns
 `initialMemoryInput`, its identity checks and byte limits. It renders only a live internal
 block from `prepareInitialMemory().consume`; it neither journals input nor starts Codex.
 The existing private and memory-free start paths are unchanged.
+
+## Assistant publication files
+
+Completed memory-free turns compare files before and after execution. The bounded reader
+walks at most 128 entries, eight directory levels and 16 files under `/workspace/artifacts`,
+with a 20 MiB total budget. It refuses links, special files and unsafe names. Reports carry
+basenames and digests, never private paths or bytes. Authenticated bridge requests pull
+32 KiB chunks. Changed or missing bytes cannot pass the server's digest check.
+The journal preserves reports for replay. Restricted and interrupted turns publish no files.
+The assistant is instructed to convert SVG to PNG; SVG remains refused.

@@ -133,3 +133,5 @@ export { childRetryRequestedDataSchema, childRetryRequestedEventSchema }
 export { childActivatedDataSchema, childActivatedEventSchema } from './child-activation.ts';
 
 export { toolCredentialReleaseSchema } from './credential-release.ts';
+
+export { artifactListSchema } from './file-events.ts';

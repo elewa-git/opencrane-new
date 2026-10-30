@@ -20,7 +20,7 @@ flowchart LR
   apps --> server["apps/server<br/>back end"]
   ops -->|starts and pauses| computer
   server -->|messages, private routine preparation, turns, files and targeted Stops| computer
-  computer -->|preparation replies, reply removal receipts, native termination, progress and results| server
+  computer -->|preparation replies, reply removal receipts, native termination, progress, results and publication files| server
   server -.->|prepares private memory tools and one-use input| computer
   computer -.->|records private thread before tool approval| server
   computer -->|checks command ownership| executor["socket-denied executor"]
@@ -90,6 +90,9 @@ closes that turn's private connection so its existing supervisor can remove the 
 A matched native terminal reply is recorded separately from a connection failure.
 Closing the private connection does not confirm that the process has exited.
 Automatic routine execution remains disabled.
+
+Completed replies report new or changed files in the publication folder. The server
+pulls those files for checking and shows accepted files in the conversation.
 
 ## Processes it handles
 

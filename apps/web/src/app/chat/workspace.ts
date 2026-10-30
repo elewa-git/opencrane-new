@@ -98,7 +98,7 @@ export class Workspace implements OnInit {
   protected readonly panelOverlay = signal(false);
   protected readonly searchDialog = viewChild<ElementRef<HTMLDialogElement>>('searchDialog');
   protected readonly screenshots = computed(this.screenshotFiles.bind(this));
-  protected readonly uploads = computed(() => this.chat.attachments().filter(file => !file.screenshot));
+  protected readonly uploads = computed(this.memberUploads.bind(this));
   protected readonly screenshotIds = computed(this.screenshotFileIds.bind(this));
   protected readonly rejectedScreenshotIds = computed(() => rejectedScreenshotIds(this.chat.rows()));
   protected readonly captureViewModel = computed(this.capturePresentation.bind(this));
@@ -333,6 +333,12 @@ export class Workspace implements OnInit {
   protected screenshotFactsForPath(path: string): ScreenshotFacts | undefined {
     return screenshotFactsForPath(path, this.chat.attachments());
   }
+  private memberUploads() {
+    function isMemberUpload(file: ChatAttachment) { return !file.screenshot && !file.turnId; }
+    const attachments = this.chat.attachments();
+    return attachments.filter(isMemberUpload);
+  }
+
   protected capturedLine(file: ChatAttachment): string {
     const facts = this.screenshotFacts(file);
     if (!facts) return 'Saved';

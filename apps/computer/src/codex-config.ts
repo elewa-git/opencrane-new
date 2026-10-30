@@ -21,6 +21,11 @@ sandbox_mode = "danger-full-access"
 web_search = "disabled"
 tool_output_token_limit = 2000
 project_doc_max_bytes = 0
+developer_instructions = """
+Save files to publish under /workspace/artifacts.
+Publish at most 16 files and 20 MiB in total per turn.
+Convert SVG images to PNG before publishing.
+"""
 [model_providers.local]
 name = "local authenticated proxy"
 base_url = "http://127.0.0.1:8080/v1"

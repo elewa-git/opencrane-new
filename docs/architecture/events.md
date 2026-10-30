@@ -309,12 +309,17 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | `tool.dispatch_recorded` | gateway log ingest or models process | linked request id, call, server, UTC times, duration and dispatch evidence; strict adapter binding names the decision, start, connection, generation, record digest and review revision; adapter_response_received proves responded, not tool success; adapter_transport_uncertain stays outcome_unknown; adapter_dispatch_refused proves not_dispatched before any connection opens and permits a requester retry; generic gateway evidence cannot settle a remote_https start; `not_dispatched` with `dispatch_refused` closes a confirmed start when a later check refuses before sending; no arguments | conversation feed; browser (WebSocket) |
 | `approval.retry_requested` | requester command | unchanged approval after verified non-dispatch | approval read state; one replacement permit |
 | `agent.tool_call_finished` | bridge (reported) | call id, server id, tool name, completed/failed status and optional duration; no result or error text | conversation feed; browser (WebSocket) |
-| `file.uploaded` | upload or explicit screenshot command after a clean scan and promotion | conversation files, conversations | deliver bytes over the bridge; wake a suspended computer |
+| `file.uploaded` | upload, assistant publication or explicit screenshot command after a clean scan and promotion | conversation files, conversations | deliver uploaded bytes over the bridge; assistant publications already exist on the computer |
 | `file.rejected` | upload or screenshot command after an infected verdict | conversations | refuse the upload clearly; no bytes stored |
 | `file.delivered` | command after the computer acknowledges verified bytes | conversation files, conversations | browser may show the workspace path and delivery outcome (`saved` or `kept_existing`); reconnects skip acknowledged files |
 | `conversation.closed` | saved on `conversation-<id>`; older `participation-<id>` closes remain readable | conversations | queue cancellation, turn Stop and terminal repair through the bridge watcher |
 | `conversation.archive_set` | own state POST: conversationId, memberId, joinEventId, archived; exact human principal and member subject | conversation_list_state in the conversations projection; set this join’s archive choice | none; excludes shared feeds and OpenFGA |
 | `conversation.read_advanced` | own state POST: conversationId, memberId, joinEventId, throughPosition, throughEventId; exact human principal and member subject | conversation_list_state; verify the visible row’s identity and keep the furthest read position within this join | none; excludes shared feeds and OpenFGA |
+
+Assistant publications carry `turnId` on their file records. After the upload checks,
+`agent.file_changed` names the published upload path. A refused publication instead
+uses `path: unavailable`, `changeType: deleted` and a fixed `reason` from the upload
+inspection codes or `infected`. Refusal records contain no workspace paths or bytes.
 
 Screenshot files use the same `file.uploaded` / `file.rejected` contract. Their
 optional `screenshot` metadata records `computerId`, positive `generation`, UTC
