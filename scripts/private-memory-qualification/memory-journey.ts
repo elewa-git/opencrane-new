@@ -6,8 +6,8 @@ import { memoryContextRecordedEventSchema, memoryWrittenDataSchema, parseEventBy
   type MemoryIdentity } from '@opencrane/events';
 import { history } from '@opencrane/models';
 import { memoryScopeId } from '@opencrane/projections';
-import { readChatFacts } from '../../src/chat/chat-summary.ts';
-import { invalidateMemoryContext } from '../../src/memory/invalidation.ts';
+import { readChatFacts } from '../../apps/server/src/chat/chat-summary.ts';
+import { invalidateMemoryContext } from '../../apps/server/src/memory/invalidation.ts';
 
 export function memoryJourney(store: EventStore, silo: string, conversationId = 'chat',
   requesterId = 'alice', causeId = 'cause', encode?: (identity: MemoryIdentity) => object) {

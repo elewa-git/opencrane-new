@@ -3,7 +3,7 @@ import { memoryContextRecordedEventSchema } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { createEventStore } from '@opencrane/event-store';
 import { history } from '@opencrane/models';
-import { memoryJourney } from './support/memory-journey.ts';
+import { memoryJourney } from '../../../scripts/private-memory-qualification/memory-journey.ts';
 import { invalidateMemoryContext } from '../src/memory/invalidation.ts';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 

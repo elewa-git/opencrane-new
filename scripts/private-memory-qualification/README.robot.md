@@ -125,7 +125,9 @@ Own checks: [host-runner receipt](../../docs/process/p4-15-pr5h/receipt.md).
 
 ## Image-owned memory checks
 
-P4-15 PR 5j, Part of #97, reuses `apps/server/test/support/memory-journey.ts`.
+P4-15 PR 5j, Part of #97, owns the shared assertions in `memory-journey.ts`.
+The server invalidation suite imports this same file. The package image includes the
+runner code and excludes repository test folders and test files.
 The runner connects to the measured deployment through its existing NATS settings and
 checks SILO_ID against the collector's hash before writing. Each case uses new random
 conversation, requester and command ids. MEMORY_KEY_DIRECTORY must name the deployment's
@@ -148,6 +150,14 @@ process termination, persistence scans and real native recall remain NOT RUN. No
 process starts, and no admission setting changes. The existing supervisor still owns
 timeout and process-group cleanup. Tests run shared assertions on disposable NATS and
 check denied appends, incomplete results and refusal by the qualification reader.
+
+`memory-image.test.ts` builds the actual `infra/package/Dockerfile` with the root
+`.dockerignore`. It checks that repository tests are absent, then calls both memory
+checks inside read-only containers against disposable NATS. Only temporary credentials
+are mounted; all executable modules come from the image. Both Correct and Forget must
+be saved, and invalidation must occur only for the affected context. Admission must
+remain disabled. This test calls the memory checks directly, so it does not claim safe
+host settings or live qualification. The separate entry-point test checks host refusal.
 
 ## File parser scope and invocation
 

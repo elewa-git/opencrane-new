@@ -1,1 +1,2 @@
 - Private memory checks can exercise saved correction, forgetting and unrelated fact changes inside the measured image. Incomplete journeys remain PARTIAL or NOT RUN and cannot enable memory.
+- Packaged memory checks include their shared assertions without shipping repository tests or their private fixtures.

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { connectEventStore } from '@opencrane/event-store';
 import { memoryKeys } from '@opencrane/projections';
 import type { MemoryIdentity } from '@opencrane/events';
-import { memoryJourney } from '../../apps/server/test/support/memory-journey.ts';
+import { memoryJourney } from './memory-journey.ts';
 
 export async function checkMemory(name: 'invalidation' | 'unrelatedActivity', siloId: string) {
   const silo = process.env['SILO_ID'];

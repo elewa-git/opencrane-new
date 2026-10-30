@@ -17,3 +17,32 @@ Successful server checks remain PARTIAL. Seven other journeys and both complete
 qualifications remain NOT RUN. All nine complete live memory journeys, native launch,
 volatile replies and immutable deployment qualification remain outstanding.
 Admission and both authority test files are unchanged. No admission is enabled.
+
+## Packaged runner fix, 30 October 2026
+
+Source: the fix commit containing this receipt, following test commit `32a9c3ceb`.
+The new package-image test first failed in all three cases: repository tests were
+present, and both memory checks could not import the excluded server test helper.
+The helper now lives in shipped runner code. Server tests import the same file;
+all assertions are unchanged. The Docker build excludes repository test folders
+and test files, including JavaScript tests and library fixtures.
+The next image run found nested dependency tests and an absent fixture key directory.
+The Dockerfile now removes those dependency test folders, and the test creates its
+temporary key directory before calling the runner. No assertion was weakened.
+
+The package test builds `infra/package/Dockerfile` with the real `.dockerignore`.
+It calls each memory check from that image against fresh disposable NATS, using
+temporary credentials and memory keys. No executable code is mounted. It checks
+saved Correct and Forget events, affected-context invalidation, and disabled
+admission. This is fixture evidence only; it does not qualify host safety or native
+memory delivery. The existing entry-point test still checks the real host probe.
+
+- PASS: 47 server invalidation tests, twice, under `nice -n 10` with one worker.
+  A throwaway PostgreSQL container supplied `PG_TEST_URL` and was removed with its volume.
+- PASS: all 192 collector and runner tests across nine files, twice, under `nice -n 10`.
+  Both runs built the package image and executed both memory checks inside it.
+  The suite also checked host refusal, timeouts, descendant cleanup and collector loss.
+- PASS: lint, including Knip, dependency rules, documentation and licence checks;
+  full workspace and collector typechecks; event catalogue and changelog checks.
+  CPU-heavy checks ran under `nice -n 10`. Lint used the existing CI heap allowance.
+- NOT RUN: full root suite and fresh-install live qualification. Admission stays disabled.

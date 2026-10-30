@@ -6810,8 +6810,9 @@ Delivery remains disabled. Fresh-install native qualification: NOT RUN.
 
 ## Shared memory runner assertions
 
-Part of #97, P4-15 PR 5j. `test/support/memory-journey.ts` supplies the existing
-invalidation suite and image-owned runner with the same setup and assertions.
+Part of #97, P4-15 PR 5j. `scripts/private-memory-qualification/memory-journey.ts`
+supplies the existing invalidation suite and image-owned runner with the same setup
+and assertions. Server tests import this shipped helper; no test folder ships in the image.
 The runner supplies deployment encryption and unique identities. Server assertions
 are PARTIAL evidence only; native delivery and admission remain disabled.
 See the [runner contract](../../scripts/private-memory-qualification/README.robot.md).

@@ -49,6 +49,8 @@ async function executesMemoryCheck(name: 'invalidation' | 'unrelatedActivity'): 
       import { checkMemory } from './scripts/private-memory-qualification/memory-checks.ts';
       import { memoryAdmission } from './apps/server/src/chat/memory-admission.ts';
       import assert from 'node:assert/strict';
+      import { mkdirSync } from 'node:fs';
+      mkdirSync('/run/memory-keys', { mode: 0o700 });
       await checkMemory(${JSON.stringify(name)}, ${JSON.stringify(siloId)});
       assert.equal(memoryAdmission.state, 'disabled');
       process.stdout.write('memory check completed');
