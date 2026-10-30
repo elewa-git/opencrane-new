@@ -1,7 +1,8 @@
+import { initialQualificationFixture } from './support/initial-qualification.ts';
 import { afterEach, expect, it, vi } from 'vitest';
 import { readEventAt, type AppendCommand, type StoredEvent } from '@opencrane/event-store';
 import { event as fixtureEvent, countReads, expectNoWholeReads, natsFixture } from '@opencrane/event-store/testing';
-import { turnCommand } from '../src/chat/turns.ts';
+import { requiredExecutionMode, turnCommand } from '../src/chat/turns.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 const context = { silo: 'test', assistantId: 'assistant', computerId: 'computer' };
@@ -309,3 +310,45 @@ async function refusesRemovedTurnRequester(repeat: boolean) {
 it.each(removedTurnCases)(
   'refuses personal turn admission after removal and invitation, repeated start=%s',
   refusesRemovedTurnRequester);
+
+vi.mock('node:fs', async function filesystem(importOriginal) {
+  return { ...await importOriginal<typeof import('node:fs')>() };
+});
+vi.mock('node:child_process', async function processes(importOriginal) {
+  return { ...await importOriginal<typeof import('node:child_process')>() };
+});
+async function qualifiedStart(change: string) {
+  await setup();
+  const deployment = await initialQualificationFixture();
+  const selected = await requiredExecutionMode('personal', undefined, 'test');
+  expect(selected).toBe('restricted');
+  if (change === 'withdrawn') deployment.remove();
+  if (change === 'foreign') deployment.changeInstallation();
+  const mode = change === 'disagreement' ? 'memory_free' : selected;
+  const request = { ...input, executionMode: mode };
+  if (change !== 'none') {
+    await expect(turnCommand(nats.store, context, request)).rejects.toThrow();
+    return;
+  }
+  expect(await turnCommand(nats.store, context, request)).toMatchObject({
+    executionMode: 'restricted', threadId: 'thread',
+  });
+  const next = { ...event('next-private', 'conversation-chat', 'message.posted'),
+    data: { conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text' } };
+  await nats.seed([next]);
+  await expect(turnCommand(nats.store, context, { ...request, turnId: 'next-private' }))
+    .rejects.toThrow('Private thread reused');
+}
+it.each(['none', 'withdrawn', 'foreign', 'disagreement'])(
+  'checks personal qualification at selection and admission: %s', qualifiedStart);
+async function explicitMemoryFree() {
+  await setup();
+  const deployment = await initialQualificationFixture();
+  expect(await requiredExecutionMode('personal', 'memory_free', 'test')).toBe('memory_free');
+  deployment.remove();
+  expect(await requiredExecutionMode('personal', undefined, 'test')).toBe('memory_free');
+  await expect(turnCommand(nats.store, context, { ...input, executionMode: 'restricted' }))
+    .rejects.toThrow('Execution mode mismatch');
+}
+it('keeps an explicit memory-free choice and refuses unqualified restricted admission',
+  explicitMemoryFree);
