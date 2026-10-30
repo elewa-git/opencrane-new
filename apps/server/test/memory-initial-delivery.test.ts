@@ -674,3 +674,27 @@ async function sustainedUnrelatedActivity(conversationId: string) {
 }
 it.each(['other', 'conversation'])(
   'delivers once during sustained unrelated activity in %s', sustainedUnrelatedActivity);
+
+async function retryBeforeRelease() {
+  await fact();
+  const params = { conversationId: 'conversation', turnId: 'turn' };
+  const selected = await turnMemoryPreview(options, 'alice', params);
+  const pending = await prepare();
+  await pending.load();
+  let unavailable = true;
+  function temporaryOutage() {
+    if (unavailable) throw new Error('Temporary deployment read failure');
+    return Promise.resolve();
+  }
+  deployment.observe(temporaryOutage);
+  const receive = vi.fn();
+  await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+  expect(receive).not.toHaveBeenCalled();
+  unavailable = false;
+  await fact('later', 'Do not select this on retry');
+  await expect(pending.consume(receive)).resolves.toBeUndefined();
+  expect(receive).toHaveBeenCalledExactlyOnceWith(selected.block);
+  await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+  expect(receive).toHaveBeenCalledTimes(1);
+}
+it('retains the exact block for a checked retry before release begins', retryBeforeRelease);
