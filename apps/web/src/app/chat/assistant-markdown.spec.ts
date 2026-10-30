@@ -86,6 +86,33 @@ async function handlesCopyRefusal() {
   vi.unstubAllGlobals();
 }
 
+async function keepsIndentedCodeMarkers() {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal('navigator', { clipboard: { writeText } });
+  for (const indentation of ['    ', '\t', '   \t']) {
+    const code = 'keep\n' + indentation + '```\n    [outside](https://example.test)';
+    const { root, fixture } = mount('```text\n' + code + '\n```');
+    expect(root.querySelectorAll('pre')).toHaveLength(1);
+    expect(root.querySelector('pre code')?.textContent).toBe(code);
+    expect(root.querySelector('a')).toBeNull();
+    root.querySelector('button')?.click();
+    await fixture.whenStable();
+    expect(writeText).toHaveBeenLastCalledWith(code);
+  }
+}
+
+function closesIndentedCodeBlocks() {
+  for (const indentation of ['', ' ', '  ', '   ']) {
+    for (const marker of ['```', '~~~']) {
+      const text = marker + 'text\nkeep\n' + indentation + marker + ' \t\n\nAfter';
+      const { root } = mount(text);
+      expect(root.querySelectorAll('pre')).toHaveLength(1);
+      expect(root.querySelector('pre code')?.textContent).toBe('keep');
+      expect(root.querySelector('p')?.textContent).toBe('After');
+    }
+  }
+}
+
 function updatesStreamedReply() {
   const { root, fixture } = mount('```js\nconst value = 1;');
   expect(root.querySelector('code')?.textContent).toBe('const value = 1;');
@@ -119,6 +146,12 @@ it('keeps HTML and unsafe links as text', keepsHostileText);
 it('keeps nested fences, HTML and Mermaid inside code, with exact copying', copiesCode);
 
 it('offers another try when copying is refused', handlesCopyRefusal);
+
+it('keeps deeply indented code markers and following links inside copied code',
+  keepsIndentedCodeMarkers);
+
+it('allows up to three leading spaces and trailing whitespace on closing code markers',
+  closesIndentedCodeBlocks);
 
 it('renders unfinished streamed code and updates when the reply grows', updatesStreamedReply);
 
