@@ -698,3 +698,68 @@ async function retryBeforeRelease() {
   expect(receive).toHaveBeenCalledTimes(1);
 }
 it('retains the exact block for a checked retry before release begins', retryBeforeRelease);
+
+
+async function lateStreamReadChange(kind: string) {
+  await fact('fact', canary, new Date(Date.now() + 60_000).toISOString());
+  const pending = await prepare();
+  await pending.load();
+  let observed = false;
+  async function unrelated() {
+    observed = true;
+    await setup.append('conversation-other', 'agent.turn_started', {
+      assistantId: 'other', conversationId: 'other', turnId: randomUUID() });
+  }
+  deployment.observe(unrelated);
+  const head = options.store.head.bind(options.store);
+  let releaseReads = 0;
+  let readingTails = false;
+  async function capture(...args: Parameters<typeof head>) {
+    if (observed && args[0] === undefined) {
+      releaseReads += 1;
+    }
+    const position = await head(...args);
+    if (releaseReads === 2) {
+      readingTails = true;
+    }
+    return position;
+  }
+  vi.spyOn(options.store, 'head').mockImplementation(capture);
+  let subject = `scope-${scopeId}`;
+  if (kind === 'removed') {
+    subject = 'member-alice';
+  } else if (kind === 'closed' || kind === 'unrelated') {
+    subject = 'conversation-conversation';
+  } else if (kind === 'replacement') {
+    subject = 'computer-assistant';
+  }
+  const readStream = options.store.readStream.bind(options.store);
+  let changed = false;
+  async function* interrupt(...args: Parameters<typeof readStream>) {
+    // Save the change after the global position read, before this stream returns its events.
+    if (readingTails && !changed && args[0] === subject) {
+      expect(args[1]).toBeGreaterThan(1);
+      changed = true;
+      await deploymentChange(kind);
+    }
+    yield* readStream(...args);
+  }
+  vi.spyOn(options.store, 'readStream').mockImplementation(interrupt);
+  const receive = vi.fn();
+  if (kind === 'unrelated') {
+    await expect(pending.consume(receive)).resolves.toBeUndefined();
+    expect(receive).toHaveBeenCalledTimes(1);
+    expect(receive.mock.calls[0]?.[0]).toContain(canary);
+    await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+    expect(receive).toHaveBeenCalledTimes(1);
+  } else {
+    const refusal = kind === 'removed' ? MemberAccessRefused : 'memory_context_unavailable';
+    await expect(pending.consume(receive)).rejects.toThrow(refusal);
+    await expect(pending.consume(receive)).rejects.toThrow(refusal);
+    expect(receive).not.toHaveBeenCalled();
+  }
+  expect(changed).toBe(true);
+}
+it.each(['removed', 'corrected', 'forgotten', 'closed', 'replacement',
+  'withdrawn', 'expired', 'unrelated'])(
+  'checks %s during the final relevant stream read', lateStreamReadChange);
