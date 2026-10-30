@@ -96,6 +96,7 @@ async function requireOpenConversation(options: BridgeOptions,
   const facts = await readChatFacts(options.store, options.silo,
     report.conversationId, report.turnId);
   if (facts.conversationClosed) throw new TurnAdmissionRejected('Conversation is closed');
+  return facts;
 }
 
 class TurnContextUnavailable extends Error {}
@@ -110,7 +111,7 @@ async function turnContextFor(options: BridgeOptions,
     return options.keys.decrypt(options.silo, report.conversationId, data);
   }
   try {
-    await requireOpenConversation(options, report);
+    const facts = await requireOpenConversation(options, report);
     // Check the saved creation before choosing either reader, including on retries.
     const event = await creationEvent(options.store, options.silo,
       `conversation-${report.conversationId}`, 'conversation.created');
@@ -128,7 +129,8 @@ async function turnContextFor(options: BridgeOptions,
     const text = binding.rootId === undefined ? decrypt(message.event.data) : '';
     const history = shared ? sharedContext(rows, message, decrypt)
       : privateContext(rows, message, binding.requesterId, decrypt);
-    return { text, history, renewal: hasEarlierTurnStart(rows, report) };
+    const renewal = canRenewTurnStart(rows, report, facts.memoryContext?.initialLoaded === true);
+    return { text, history, renewal };
   } catch (error) {
     if (error instanceof TurnContextUnavailable || error instanceof TurnAdmissionRejected) throw error;
     const reason = binding.sharingClass === 'shared_only'
@@ -137,7 +139,7 @@ async function turnContextFor(options: BridgeOptions,
   }
 }
 
-function hasEarlierTurnStart(rows: ChatRows, report: Report) {
+function canRenewTurnStart(rows: ChatRows, report: Report, initialLoaded: boolean) {
   if (report.sequence === undefined) return false;
   function isStart(row: ChatRows[number]) {
     if (row.event.type !== 'agent.turn_started') return false;
@@ -146,9 +148,11 @@ function hasEarlierTurnStart(rows: ChatRows, report: Report) {
   }
   const first = rows.find(isStart);
   if (!first) return false;
-  // Keep repeats of the first report on the one-use initial delivery path.
   // Older starts without report numbers predate the bridge report journal.
-  return !first.event.report || first.event.report.sequence < report.sequence;
+  if (!first.event.report) return true;
+  // Require saved initial loading before a numbered start can renew. Saving a start
+  // alone does not prove that preparation succeeded. The runner resends the same number.
+  return initialLoaded && first.event.report.sequence <= report.sequence;
 }
 
 async function initialMemoryFor(options: BridgeOptions,
