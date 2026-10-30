@@ -7,9 +7,13 @@ import { z } from 'zod';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { memoryContextRecordedEventSchema, parseEventByType } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { history } from '@opencrane/models';
+import { history, readToolPolicy } from '@opencrane/models';
 import { grantStream, memberAuthorisation } from '@opencrane/authz';
-import { memoryScopeId } from '@opencrane/projections';
+import { memoryKeys, memoryProjection, memoryScopeId, ProjectionRunner } from '@opencrane/projections';
+import { database } from '@opencrane/projections/testing';
+import { catalogueEvidence, toolEvidence } from '@opencrane/models/testing';
+import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
+import { initialQualificationFixture } from './support/initial-qualification.ts';
 import { fixture } from '../../computer/test/bridge-gate-fixture.ts';
 import { createLogger } from '@opencrane/observability';
 import { assistantProcessor } from '../src/chat/bridge-poll.ts';
@@ -19,6 +23,7 @@ import { connectBridge } from '../src/chat/bridge.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
 import { invalidateMemoryAccess, invalidateMemoryContext } from '../src/memory/invalidation.ts';
 
+let storage: Awaited<ReturnType<typeof database>>;
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let computer: Awaited<ReturnType<typeof fixture>>;
 let link: Awaited<ReturnType<typeof connectBridge>>;
@@ -34,18 +39,60 @@ const scopeId = memoryScopeId('test', 'person', 'alice');
 const binding = { conversationId: 'chat', turnId: 'turn', requesterId: 'alice',
   assistantId: 'assistant', computerId: 'computer', generation: 1,
   threadId: 'thread-1', inputGeneration: '1' };
-const prepared = { ...binding, projectionGeneration: 'projection', action: 'prepared',
+let prepared = { ...binding, projectionGeneration: 'projection', action: 'prepared',
   delivery: null, callDigest: null, dispatchDigest: null, additions: [], scopePositions: [],
   byteCount: 0, hasOmissions: false, reason: 'none' };
+vi.mock('node:fs', async function filesystem(importOriginal) {
+  const original = await importOriginal<typeof import('node:fs')>();
+  return { ...original };
+});
+vi.mock('node:child_process', async function processes(importOriginal) {
+  const original = await importOriginal<typeof import('node:child_process')>();
+  return { ...original };
+});
+function memberId() {
+  return Promise.resolve('alice');
+}
+async function prepareInitialDelivery() {
+  storage = await database('pg');
+  const keyDirectory = dirname(nats.env().NATS_CA_FILE);
+  const memory = memoryKeys(keyDirectory);
+  const logger = createLogger('memory-delivery', { level: 'silent' });
+  const runner = new ProjectionRunner(storage.db, nats.store, logger);
+  const projection = memoryProjection({ decrypt: memory.decrypt });
+  await runner.initialise(projection);
+  await runner.run(projection);
+  const tool = toolEvidence({ name: 'recall', reviewed: true, costCents: 0 });
+  const catalogue = catalogueEvidence([tool]);
+  await append('mcp-memory', 'mcp.server_registered', { serverId: 'memory', kind: 'hosted',
+    registeredBy: 'alice', locator: `registry.example.test/memory@sha256:${'a'.repeat(64)}` });
+  const checkedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
+  await append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory',
+    connectionId: 'server', accountMode: 'none', checkedAt, expiresAt, ...catalogue });
+  const policy = await readToolPolicy(nats.store, 'test', 'memory');
+  const choice = { name: tool.name, revision: tool.revision,
+    reviewDigest: toolReviewDigest(tool), mode: 'allow' };
+  await append('mcp-memory', 'mcp.server_reviewed', { serverId: 'memory',
+    catalogueDigest: catalogue.schemaDigest, connectionId: 'server', accountMode: 'none',
+    policyRevision: policy.policyRevision, reviewedBy: 'alice', tools: [choice] });
+  await append('mcp-memory', 'mcp.server_published', { serverId: 'memory', publishedBy: 'alice' });
+  const deployment = await initialQualificationFixture();
+  expect(deployment.result.result).toBe('PASS');
+  return { db: storage.db, keyDirectory, feed: { memberId } };
+}
 async function flush() {
   const pong = once(link.socket, 'pong');
   link.socket.ping();
   await pong;
 }
 async function append(subject: string, type: string, data: object, id: string = randomUUID()) {
+  const principal = type === 'mcp.server_reviewed'
+    ? { kind: 'human' as const, id: 'alice' }
+    : { kind: 'system' as const, id: 'server' };
   const event = { id, commandId: id, silo: 'test', subject, type, data,
     source: 'opencrane-server', time: new Date().toISOString(), correlation: {},
-    principal: { kind: 'system' as const, id: 'server' } };
+    principal };
   expect(parseEventByType(event).success).toBe(true);
   const expectedSequence = await nats.store.head(subject);
   // Use each fixture id once, without rereading growing streams while seeding history.
@@ -59,18 +106,20 @@ async function startTurn(id = 'turn', conversationId = 'chat', requesterId = 'al
     executionMode: 'restricted', text: 'Hello', token: 'fixture', expiresAt: Date.now() + 60_000 };
   link.socket.send(JSON.stringify(frame));
   function running() { expect(computer.calls).toContain(`turn/start:${threadId}`); }
-  await vi.waitFor(running);
+  await vi.waitFor(running, { timeout: 10_000 });
   await flush();
 }
 async function writeFact(memoryId: string, dependsOn: { scopeId: string;
   memoryId: string; revision: number }[] = [], ownerId = 'alice', expiresAt: string | null = null, pinned = false) {
   const personalScope = memoryScopeId('test', 'person', ownerId);
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(['test', personalScope, 'person', ownerId, memoryId, 1]));
+  const memory = memoryKeys(dirname(nats.env().NATS_CA_FILE));
+  const identity = { silo: 'test', scopeId: personalScope, scopeKind: 'person' as const,
+    ownerId, memoryId, revision: 1 };
+  memory.provision(identity);
   await append(`scope-${personalScope}`, 'memory.written', { schemaVersion: 1,
-    scopeId: personalScope, scopeKind: 'person', ownerId, memoryId, revision: 1, kind: 'fact',
-    pinned, expiresAt, sources: [], dependsOn,
-    keyId: `key:${hash.digest('hex')}`, ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' });
+    scopeId: personalScope, scopeKind: 'person', ownerId, memoryId, revision: 1,
+    kind: 'fact', pinned, expiresAt, sources: [], dependsOn,
+    ...memory.encrypt(identity, 'Fixture memory fact') });
   return { scopeId: personalScope, memoryId, revision: 1 };
 }
 async function setup() {
@@ -101,6 +150,7 @@ async function setup() {
   function applied() { return Promise.resolve(true); }
   function allowed() { return Promise.resolve({ allowed: true, status: 'ok' as const }); }
   vi.spyOn(memberAuthorisation(iam), 'applied').mockImplementation(applied);
+  vi.spyOn(memberAuthorisation(iam), 'checkApplied').mockImplementation(allowed);
   vi.spyOn(memberAuthorisation(iam), 'check').mockImplementation(allowed);
   vi.spyOn(memberAuthorisation(iam), 'actsFor').mockImplementation(allowed);
   vi.spyOn(memberAuthorisation(iam), 'conversation').mockImplementation(allowed);
@@ -111,7 +161,11 @@ async function setup() {
         { resourceType, resourceId, granteeKind, granteeId, grantedBy: 'alice' });
     }
   }
-  const options = { silo: 'test', store: nats.store, keys, binding: iam };
+  await writeFact('root');
+  await writeFact('base', [{ scopeId, memoryId: 'root', revision: 1 }]);
+  await writeFact('fact', [{ scopeId, memoryId: 'base', revision: 1 }], 'alice', null, true);
+  const initial = await prepareInitialDelivery();
+  const options = { silo: 'test', store: nats.store, keys, binding: iam, ...initial };
   const input = { url: computer.socket.url, computerId: 'computer',
     assistantId: 'assistant', bearer: 'test' };
   link = await connectBridge(options, input, computer.issuer);
@@ -127,15 +181,17 @@ async function setup() {
   processor = assistantProcessor(watch, computer.issuer, new Set(), opening,
     connectionId, createLogger('memory-delivery', { level: 'silent' }), connected);
   opening.mockClear();
-  await writeFact('root');
-  await writeFact('base', [{ scopeId, memoryId: 'root', revision: 1 }]);
-  await writeFact('fact', [{ scopeId, memoryId: 'base', revision: 1 }]);
-  await append('conversation-chat', 'agent.memory_context_recorded', prepared);
-  const position = await nats.store.head(`scope-${scopeId}`);
-  await append('conversation-chat', 'agent.memory_context_recorded', { ...prepared,
-    action: 'loaded', delivery: 'initial', byteCount: 50,
-    additions: [{ scopeId, memoryId: 'fact', revision: 1 }],
-    scopePositions: [{ scopeId, position }] });
+  const rows = await history(nats.store, 'conversation-chat', 'test');
+  function isPreparation(row: typeof rows[number]) {
+    if (row.event.type !== 'agent.memory_context_recorded') return false;
+    return memoryContextRecordedEventSchema.parse(row.event).data.action === 'prepared';
+  }
+  const saved = memoryContextRecordedEventSchema.parse(rows.find(isPreparation)!.event);
+  prepared = { ...prepared, inputGeneration: saved.data.inputGeneration,
+    projectionGeneration: saved.data.projectionGeneration };
+  const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(facts.memoryContext?.initialLoaded).toBe(true);
+  expect(facts.memoryContext?.references).toEqual([{ scopeId, memoryId: 'fact', revision: 1 }]);
 }
 async function cleanup() {
   vi.useRealTimers();
@@ -144,6 +200,7 @@ async function cleanup() {
   await link?.settled();
   await computer?.close();
   await nats?.close();
+  await storage?.close();
 }
 beforeEach(setup);
 afterEach(cleanup);
@@ -164,7 +221,7 @@ async function invalidated(kind: 'corrected' | 'forgotten' = 'forgotten') {
   const cause = await changed(kind);
   const options = { silo: 'test', store: nats.store };
   const request = { conversationId: 'chat', turnId: 'turn', threadId: 'thread-1',
-    inputGeneration: '1', causeId: cause.id };
+    inputGeneration: prepared.inputGeneration, causeId: cause.id };
   expect(await invalidateMemoryContext(options, request)).toMatchObject({ status: 'invalidated' });
   const rows = await history(nats.store, 'conversation-chat', 'test');
   return memoryContextRecordedEventSchema.parse(rows.at(-1)!.event);
@@ -214,6 +271,9 @@ async function otherTurn(requesterId = 'alice') {
   await append('computer-assistant', 'computer.turn_started', { conversationId: 'other',
     turnId: 'other-turn', requesterId, assistantId: 'assistant', computerId: 'computer',
     threadId: 'thread-2', task: 'chat_turn', executionMode: 'restricted' });
+  // Seed an already running turn to test withdrawal isolation from older admitted work.
+  await append('conversation-other', 'agent.turn_started', { conversationId: 'other',
+    turnId: 'other-turn', assistantId: 'assistant', threadId: 'thread-2' });
   await startTurn('other-turn', 'other', requesterId, 'thread-2');
   await link.settled();
   sessions.push({ conversationId: 'other', assistantId: 'assistant', createdBy: requesterId,
@@ -312,7 +372,7 @@ async function doesNotBlockOther() {
   await invalidated();
   const causes = await history(nats.store, `scope-${scopeId}`, 'test');
   const request = { conversationId: 'other', turnId: 'other-turn', threadId: 'thread-2',
-    inputGeneration: '1', causeId: causes.at(-1)!.event.id };
+    inputGeneration: prepared.inputGeneration, causeId: causes.at(-1)!.event.id };
   expect(await invalidateMemoryContext({ silo: 'test', store: nats.store }, request))
     .toMatchObject({ status: 'invalidated' });
   const held = holdHistory();
@@ -385,6 +445,9 @@ async function startReplacement() {
   await append('computer-assistant', 'computer.turn_started', { conversationId: 'chat',
     turnId: 'replacement', requesterId: 'alice', assistantId: 'assistant', computerId: 'computer',
     threadId: 'thread-2', task: 'chat_turn', executionMode: 'restricted' });
+  // Resume older admitted work so its access does not depend on the withdrawn turn's memory.
+  await append('conversation-chat', 'agent.turn_started', { conversationId: 'chat',
+    turnId: 'replacement', assistantId: 'assistant', threadId: 'thread-2' });
   await startTurn('replacement', 'chat', 'alice', 'thread-2');
 }
 
@@ -972,7 +1035,7 @@ async function loseAccess(kind: AccessLoss, granteeKind = 'member', granteeId = 
 function accessReceipt() {
   const options = { silo: 'test', store: nats.store, binding: iam };
   const request = { conversationId: 'chat', turnId: 'turn', threadId: 'thread-1',
-    inputGeneration: '1' };
+    inputGeneration: prepared.inputGeneration };
   return invalidateMemoryAccess(options, request);
 }
 async function accessEvidence(ended = false) {
@@ -1248,7 +1311,7 @@ async function accessAppendRace(kind: 'lost' | 'recall' | 'expiry') {
     if (attempts === 1 && kind === 'expiry') {
       vi.spyOn(Date, 'now').mockReturnValue(expiresAt!);
       const request = { conversationId: 'chat', turnId: 'turn', threadId: 'thread-1',
-        inputGeneration: '1' };
+        inputGeneration: prepared.inputGeneration };
       await invalidateMemoryContext({ silo: 'test', store: nats.store }, request);
     }
     const result = await appendSaved(command);
