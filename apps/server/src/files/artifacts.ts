@@ -24,8 +24,9 @@ export async function publishArtifacts(context: ArtifactPublication, memberId: s
     hash.update(JSON.stringify([conversationId, turnId, artifact]));
     const key = `artifact-${hash.digest('hex')}`;
     function alreadyPublished(row: typeof rows[number]) { return row.event.id === key; }
-    if (rows.some(alreadyPublished)) continue;
+    // Count saved files too, so replay keeps the original turn allowance.
     if ('size' in artifact) remaining -= artifact.size;
+    if (rows.some(alreadyPublished)) continue;
     const fileId = uploadIdentity(files.silo, conversationId, memberId, key);
     function savedUpload(row: typeof rows[number]) { return row.event.id === `file-upload-${fileId}`; }
     const previous = rows.find(savedUpload);
