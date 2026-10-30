@@ -45,17 +45,18 @@ async function refusesRealHost(): Promise<void> {
     '/app/scripts/private-memory-qualification/journey.mjs'];
   const options = { input: JSON.stringify(request), encoding: 'utf8' as const, timeout: 5000 };
   const direct = spawnSync('/usr/bin/docker', ['exec', '-i', containerId, ...args], options);
-  expect(direct.status).toBe(1);
   expect(direct.stderr).toBe('');
-  const refusal: unknown = JSON.parse(direct.stdout);
-  const expected = [
-    { result: 'FAIL', reason: 'host_refused' },
-    { result: 'FAIL', reason: 'journey_incomplete' },
-  ];
-  expect(expected).toContainEqual(refusal);
-  await expect(runInContainer(containerId, args, JSON.stringify(request))).rejects.toThrow();
-  // Confirm cleanup permits another attempt without replacing the image's code.
-  await expect(runInContainer(containerId, args, JSON.stringify(request))).rejects.toThrow();
+  const result: unknown = JSON.parse(direct.stdout);
+  if (direct.status === 0) {
+    expect(result).toMatchObject({ ...request, result: 'NOT RUN', complete: false });
+    const repeated = await runInContainer(containerId, args, JSON.stringify(request));
+    expect(repeated).toMatchObject({ ...request, result: 'NOT RUN', complete: false });
+  } else {
+    expect(direct.status).toBe(1);
+    expect(result).toEqual({ result: 'FAIL', reason: 'host_refused' });
+    await expect(runInContainer(containerId, args, JSON.stringify(request))).rejects.toThrow();
+    await expect(runInContainer(containerId, args, JSON.stringify(request))).rejects.toThrow();
+  }
   docker(['exec', containerId, 'test', '!', '-e', '/run/opencrane-memory-qualification.lock']);
   const processes = docker(['top', containerId, '-eo', 'pid,args']);
   expect(processes).not.toContain('/usr/local/bin/node');

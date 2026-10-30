@@ -6808,6 +6808,14 @@ access positions survive preparation. MemberAccessRefused remains decisive.
 See [the initial-load contract](../../docs/process/p4-15-pr5d/README.robot.md).
 Delivery remains disabled. Fresh-install native qualification: NOT RUN.
 
+## Shared memory runner assertions
+
+Part of #97, P4-15 PR 5j. `test/support/memory-journey.ts` supplies the existing
+invalidation suite and image-owned runner with the same setup and assertions.
+The runner supplies deployment encryption and unique identities. Server assertions
+are PARTIAL evidence only; native delivery and admission remain disabled.
+See the [runner contract](../../scripts/private-memory-qualification/README.robot.md).
+
 ## Initial personal memory release
 
 `prepareInitialMemory().consume` checks only new access, scope and turn events through

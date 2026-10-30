@@ -601,6 +601,9 @@ Uploads go to the configured private scanner over HTTPS before storage. The serv
 checks the exact file and a fresh result again after checking access. Missing trust
 settings, expired results and scanner outages leave uploads unavailable.
 
+The memory evidence runner reuses the server's correction and forgetting checks against
+its deployment. These checks do not qualify native memory or enable it.
+
 ## How to run or test it
 
 The HTTP server uses packages with security fixes. The

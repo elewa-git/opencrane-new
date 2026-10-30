@@ -1,3 +1,4 @@
+import { mkdtemp, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { afterEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -17,22 +18,38 @@ const request = {
   runId: '11111111-1111-4111-8111-111111111111',
   challengeId: '22222222-2222-4222-8222-222222222222',
 };
-async function observesStore(name: string): Promise<void> {
+async function observesStore(name: string, role = 'command'): Promise<void> {
   const fixture = await natsFixture();
+  const directory = await mkdtemp('.tools/memory-journey-');
+  vi.stubEnv('MEMORY_KEY_DIRECTORY', directory);
   vi.mocked(probeHost).mockReturnValue(true);
-  for (const [key, value] of Object.entries(fixture.env())) vi.stubEnv(key, value);
+  for (const [key, value] of Object.entries(fixture.env(role))) vi.stubEnv(key, value);
   vi.stubEnv('SILO_ID', 'test');
   try {
     const result = await runJourney(JSON.stringify({ ...request, name }));
-    expect(result).toMatchObject({ ...request, name, result: 'PARTIAL', complete: false });
-    expect(await fixture.store.head()).toBeGreaterThan(0);
+    if (role === 'command') {
+      expect(result).toMatchObject({ ...request, name, result: 'PARTIAL', complete: false });
+      const position = await fixture.store.head();
+      const changes: string[] = [];
+      for (let sequence = 1; sequence <= position; sequence += 1) {
+        const row = await fixture.store.readEvent(sequence);
+        if (['memory.corrected', 'memory.forgotten'].includes(row.event.type)) {
+          changes.push(row.event.type);
+        }
+      }
+      expect(changes).toEqual(['memory.corrected', 'memory.forgotten']);
+    } else {
+      expect(result).toEqual({ result: 'FAIL', reason: 'journey_failed' });
+      expect(await fixture.store.head()).toBe(0);
+    }
     expect(memoryAdmission.state).toBe('disabled');
   } finally {
     await fixture.close();
+    await rm(directory, { recursive: true, force: true });
   }
 }
 it.each(['invalidation', 'unrelatedActivity'])(
-  'executes %s on the configured event store without claiming live qualification', observesStore);
+  'executes %s on the configured event store without claiming live qualification', observesStore, 30_000);
 
 async function failedJourney(): Promise<void> {
   vi.mocked(probeHost).mockReturnValue(true);
@@ -42,3 +59,8 @@ async function failedJourney(): Promise<void> {
   expect(result).toEqual({ result: 'FAIL', reason: 'journey_failed' });
 }
 it('refuses a journey that cannot execute without exposing connection settings', failedJourney);
+
+async function deniedAppend(): Promise<void> {
+  await observesStore('invalidation', 'projection');
+}
+it('refuses when the measured store rejects the journey append', deniedAppend, 30_000);

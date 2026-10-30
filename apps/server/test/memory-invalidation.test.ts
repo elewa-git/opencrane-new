@@ -1,104 +1,44 @@
-import { z } from 'zod';
-import { createHash, randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { memoryContextRecordedEventSchema, memoryWrittenDataSchema, parseEventByType } from '@opencrane/events';
+import { memoryContextRecordedEventSchema } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { createEventStore } from '@opencrane/event-store';
 import { history } from '@opencrane/models';
-import { memoryScopeId } from '@opencrane/projections';
-import { readChatFacts } from '../src/chat/chat-summary.ts';
+import { memoryJourney } from './support/memory-journey.ts';
 import { invalidateMemoryContext } from '../src/memory/invalidation.ts';
+import { readChatFacts } from '../src/chat/chat-summary.ts';
 
 let setup: Awaited<ReturnType<typeof natsFixture>>;
-const scopeId = memoryScopeId('test', 'person', 'alice');
-const memoryWrittenExample = { schemaVersion: 1, scopeKind: 'person', ownerId: 'alice',
-  revision: 1, kind: 'fact', pinned: false, expiresAt: null, sources: [], dependsOn: [],
-  ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' };
-const reference = { scopeId, memoryId: 'fact', revision: 1 };
-const input = { conversationId: 'chat', turnId: 'turn', threadId: 'thread',
-  inputGeneration: 'input', causeId: 'cause' };
-const prepared = { conversationId: 'chat', turnId: 'turn', requesterId: 'alice',
-  assistantId: 'assistant', computerId: 'computer', generation: 1, threadId: 'thread',
-  inputGeneration: 'input', projectionGeneration: 'projection', action: 'prepared',
-  delivery: null, callDigest: null, dispatchDigest: null, additions: [], scopePositions: [],
-  byteCount: 0, hasOmissions: false, reason: 'none' };
-async function append(subject: string, type: string, data: object, id?: string) {
-  const eventId = id ?? randomUUID();
-  const fields: Record<string, unknown> = { ...data };
-  if (type === 'memory.written' || type === 'memory.corrected') {
-    const identitySchema = memoryWrittenDataSchema.pick({ scopeId: true, scopeKind: true,
-      ownerId: true, memoryId: true });
-    const schema = identitySchema.extend({ revision: z.int().positive() });
-    const fieldsSchema = schema.strip();
-    const value = fieldsSchema.parse(fields);
-    const hash = createHash('sha256');
-    hash.update(JSON.stringify(['test', value.scopeId, value.scopeKind, value.ownerId,
-      value.memoryId, value.revision]));
-    fields['keyId'] = `key:${hash.digest('hex')}`;
-  }
-  const event = { id: eventId, commandId: eventId, silo: 'test', subject, type, data: fields,
-    source: 'opencrane-server', time: new Date().toISOString(), correlation: {},
-    principal: { kind: 'system' as const, id: 'server' } };
-  expect(parseEventByType(event).success).toBe(true);
-  const expectedSequence = await setup.store.head(subject);
-  const result = await setup.store.append({ event, expectedSequence });
-  expect(result.status).toBe('appended');
-  return event;
-}
-async function load(additions = [reference], patch = {}) {
-  const position = await setup.store.head(`scope-${scopeId}`);
-  const data = { ...prepared, action: 'loaded', delivery: 'recall',
-    callDigest: 'a'.repeat(64), dispatchDigest: 'b'.repeat(64), byteCount: 100,
-    additions, scopePositions: [{ scopeId, position }], ...patch };
-  await append('conversation-chat', 'agent.memory_context_recorded', data);
-}
+type Journey = ReturnType<typeof memoryJourney>;
+let scopeId: Journey['scopeId'];
+let memoryWrittenExample: Journey['memoryWrittenExample'];
+let reference: Journey['reference'];
+let input: Journey['input'];
+let prepared: Journey['prepared'];
+let append: Journey['append'];
+let load: Journey['load'];
+let change: Journey['change'];
+let invalidate: Journey['invalidate'];
+let checkInvalidation: Journey['exactInvalidation'];
+let checkUnrelated: Journey['unrelatedChange'];
 async function start() {
   setup = await natsFixture();
-  await append('conversation-chat', 'conversation.created', { conversationId: 'chat',
-    createdBy: 'alice', assistantId: 'assistant', mode: 'agent_session' });
-  await append(`scope-${scopeId}`, 'memory.written', { ...memoryWrittenExample,
-    scopeId, memoryId: 'base' });
-  await append(`scope-${scopeId}`, 'memory.written', { ...memoryWrittenExample,
-    scopeId, memoryId: 'fact', dependsOn: [{ scopeId, memoryId: 'base', revision: 1 }] });
-  await append('conversation-chat', 'agent.memory_context_recorded', prepared);
-  await load();
+  const journey = memoryJourney(setup.store, 'test');
+  ({ scopeId, memoryWrittenExample, reference, input, prepared, append, load, change,
+    invalidate, exactInvalidation: checkInvalidation, unrelatedChange: checkUnrelated } = journey);
+  await journey.start();
 }
 async function close() {
   vi.restoreAllMocks();
   await setup?.close();
 }
+function exactInvalidation(kind: 'corrected' | 'forgotten') {
+  return checkInvalidation(kind);
+}
+function unrelatedChange(kind: 'corrected' | 'forgotten') {
+  return checkUnrelated(kind);
+}
 beforeEach(start);
 afterEach(close);
-async function change(kind: 'corrected' | 'forgotten', memoryId = 'fact') {
-  const identity = { scopeId, scopeKind: 'person', ownerId: 'alice', memoryId,
-    schemaVersion: 1, revision: 2, expectedRevision: 1 };
-  let data: object = identity;
-  if (kind === 'corrected') {
-    data = { ...memoryWrittenExample, ...identity, revision: 2,
-      supersedes: { memoryId, revision: 1 }, reason: 'human' };
-  }
-  return append(`scope-${scopeId}`, `memory.${kind}`, data, 'cause');
-}
-function invalidate(patch = {}) {
-  const options = { silo: 'test', store: setup.store };
-  return invalidateMemoryContext(options, { ...input, ...patch });
-}
-async function exactInvalidation(kind: 'corrected' | 'forgotten') {
-  await change(kind);
-  const causePosition = await setup.store.head(`scope-${scopeId}`);
-  const receipt = await invalidate();
-  expect(receipt).toMatchObject({ status: 'invalidated', inputGeneration: 'input' });
-  expect('eventId' in receipt && typeof receipt.eventId).toBe('string');
-  const facts = await readChatFacts(setup.store, 'test', 'chat', 'turn');
-  expect(facts.memoryContext).toMatchObject({ status: 'invalidated', references: [reference],
-    executionAvailable: false, recallCalls: 1 });
-  const rows = await history(setup.store, 'conversation-chat', 'test');
-  const saved = memoryContextRecordedEventSchema.parse(rows.at(-1)!.event);
-  expect(saved.data).toMatchObject({ ...prepared, action: 'invalidated',
-    reason: 'content_changed', scopePositions: [{ scopeId, position: causePosition }] });
-  expect(await invalidate()).toEqual(receipt);
-  expect(await setup.store.head('conversation-chat')).toBe(rows.at(-1)!.sequence);
-}
 it.each(['corrected', 'forgotten'] as const)(
   'records one exact invalidation after a loaded fact is %s', exactInvalidation);
 
@@ -212,14 +152,6 @@ async function dependencyInvalidation(kind: 'corrected' | 'forgotten') {
 it.each(['corrected', 'forgotten'] as const)(
   'retains every loaded reference when its dependency is %s', dependencyInvalidation);
 
-async function unrelatedChange(kind: 'corrected' | 'forgotten') {
-  await append(`scope-${scopeId}`, 'memory.written', { ...memoryWrittenExample,
-    scopeId, memoryId: 'other' });
-  await change(kind, 'other');
-  const position = await setup.store.head('conversation-chat');
-  expect(await invalidate()).toEqual({ status: 'unchanged' });
-  expect(await setup.store.head('conversation-chat')).toBe(position);
-}
 it.each(['corrected', 'forgotten'] as const)(
   'leaves loaded memory unchanged after an unrelated fact is %s', unrelatedChange);
 
@@ -532,13 +464,16 @@ async function correctionRacesExpiry(expiryFirst: boolean) {
 }
 it.each([false, true])('keeps the first durable invalidation, expiry first=%s', correctionRacesExpiry);
 
-async function refusesExpiryProof(patch: object) {
+async function refusesExpiryProof(field: string) {
+  const values: Record<string, unknown> = { checkedAt: 9999999999999,
+    references: [reference], reason: 'expired' };
+  const patch = { [field]: values[field] };
   await loadExpiringFact();
   expect(await invalidate({ causeId: undefined, ...patch })).toEqual({ status: 'refused' });
   const facts = await readChatFacts(setup.store, 'test', 'chat', 'turn');
   expect(facts.memoryContext?.status).toBe('loaded');
 }
-it.each([{ checkedAt: 9999999999999 }, { references: [reference] }, { reason: 'expired' }])(
+it.each(['checkedAt', 'references', 'reason'])(
   'refuses caller expiry proof %j', refusesExpiryProof);
 
 async function unavailableExpiryHistory() {
