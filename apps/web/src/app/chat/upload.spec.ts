@@ -103,3 +103,22 @@ async function refusesFileList() {
   expect(fetcher).toHaveBeenCalledOnce();
 }
 it('does not retry a refused file-list read or mark its upload ready', refusesFileList);
+
+async function keepsStatusWording(status: number, responseText: string, expected: string) {
+  captureUpload();
+  const file = new File(['Sample'], 'sample.txt');
+  function ignoreProgress() {}
+  const upload = sendUpload('chat', file, 'refused', ignoreProgress);
+  const refusal = expect(upload.completed).rejects.toThrow(expected);
+  const request = requests.at(-1)!;
+  Object.defineProperty(request, 'status', { value: status });
+  Object.defineProperty(request, 'responseText', { value: responseText });
+  request.dispatchEvent(new Event('load'));
+  await refusal;
+}
+it.each<[number, string, string]>([
+  [415, '{"reason":"unknown"}', 'File type is unsupported or does not match its contents.'],
+  [415, 'invalid JSON', 'File type is unsupported or does not match its contents.'],
+  [413, '{"reason":"macros"}', 'File too large. Maximum size is 20 MiB.'],
+  [429, '{"reason":"macros"}', 'Upload unavailable. Retry when the connection returns.'],
+])('keeps safe fallback wording for status %s and reply %s', keepsStatusWording);

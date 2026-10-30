@@ -18,6 +18,7 @@ flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages and actions"] --> web
   web -->|requests, saved publication and tool-check facts, and resumable live updates| server["apps/server<br/>the back end"]
+  server -->|file refusal codes| web
   server -.->|recovery tests use the transcript helper| web
   web["apps/web<br/>sign-in, chat, calls, saved spending status and admin pages"] -->|requests, saved call status and live updates| server["apps/server<br/>the back end"]
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
@@ -123,6 +124,9 @@ see the status and reference without amounts.
    sends a change and follows its recorded result. The server checks permissions,
    records changes and applies them; the website shows the confirmed outcome.
    Tool publication uses the saved positions returned by the server.
+
+A refused upload explains why the file was refused and how to try again.
+The person can keep using Retry upload. Size and connection messages stay the same.
 
 ## How to run or test it
 

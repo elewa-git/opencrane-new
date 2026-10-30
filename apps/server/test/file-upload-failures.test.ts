@@ -1,4 +1,5 @@
 import { once } from 'node:events';
+import { z } from 'zod';
 import { createServer } from 'node:net';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
@@ -23,10 +24,12 @@ import { uploadFile, type FileOptions } from '../src/files/routes.ts';
 import { scanFile as scanDaemon } from './support/clamd.ts';
 import { scanFile } from '../src/files/scanner.ts';
 import { buildServer } from '../src/server.ts';
+import { refusalReasons, refusedFile } from './support/refused-files.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 const config = { ...testAuthConfig(), expectedOrgId: 'org' };
 const bytes = Buffer.from('Meeting at ten.');
+const logRecord = z.record(z.string(), z.unknown());
 let options: FileOptions;
 let app: ReturnType<typeof buildServer>;
 const cleanup: (() => Promise<unknown>)[] = [];
@@ -136,7 +139,7 @@ async function closeUploadFixture() {
 }
 afterAll(closeUploadFixture);
 
-function uploadRequest(key: string, payload = bytes) {
+function uploadRequest(key: string, payload: Buffer = bytes) {
   const now = Math.floor(Date.now() / 1000);
   const session = {
     sub: 'alice', orgId: 'org', roles: [], authTime: now, exp: now + 300,
@@ -175,6 +178,52 @@ function failObjectStore(boundary: string, failure: Error) {
   getObject.mockRejectedValue(failure);
   return getObject;
 }
+
+async function reportsRefusalWithoutPrivateDetails(reason: string) {
+  const lines: string[] = [];
+  function write(line: string) {
+    lines.push(line);
+  }
+  vi.stubEnv('LOG_LEVEL', 'info');
+  const serverOptions = { files: options, logDestination: { write } };
+  const server = buildServer(config, serverOptions);
+  try {
+    const file = refusedFile(reason);
+    const request = uploadRequest(reason, file.bytes);
+    request.headers['x-file-name'] = file.name;
+    const response = await server.inject(request);
+    const statusCode = reason === 'unsafe_name' ? 400 : 415;
+    expect(response.statusCode).toBe(statusCode);
+    expect(response.json()).toEqual({ status: 'refused',
+      error: reason === 'unsafe_name' ? 'Invalid request' : 'Unsupported or unsafe file content',
+      reason });
+    function isRefusal(line: string) {
+      return line.includes('"reason"');
+    }
+    const refusals = lines.filter(isRefusal);
+    expect(refusals).toHaveLength(1);
+    const raw: unknown = JSON.parse(refusals[0]!);
+    const log = logRecord.parse(raw);
+    const metadata = ['level', 'time', 'pid', 'hostname', 'name', 'request_id',
+      'trace_id', 'span_id'];
+    for (const field of metadata) {
+      delete log[field];
+    }
+    expect(log).toEqual({ reason, msg: 'Upload refused' });
+    const output = lines.join('');
+    expect(output).not.toContain(file.name);
+    expect(output).not.toContain('presentation.xml');
+    expect(output).not.toContain('example.test/sample');
+    expect(output).not.toContain('Sample');
+    expect(output).not.toContain('cause');
+    expect(output).not.toContain('stack');
+  } finally {
+    await server.close();
+    vi.unstubAllEnvs();
+  }
+}
+it.each(refusalReasons)('returns and logs only the fixed refusal reason %s',
+  reportsRefusalWithoutPrivateDetails);
 
 async function unexpectedStoreFailure(boundary: string) {
   const failure = new TypeError('Private object-store diagnostic');

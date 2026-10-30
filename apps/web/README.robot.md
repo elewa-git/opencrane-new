@@ -9,6 +9,16 @@ The package README names the browser startup files and test helpers. The top-lev
 short guides for people, linked from the package README. These guides keep the
 behaviour explanations moved out of the package overview.
 
+## Upload refusal wording
+
+`chat/upload.ts` maps the upload response's fixed `reason` to plain UK English.
+It reads reasons only for HTTP 400 and 415. Unknown codes and damaged responses
+keep the existing status message; HTTP 413 and 429 keep their existing wording.
+Retry upload keeps the selected file and request key.
+
+`npm run visual:uploads-reasons` builds the app and checks each reason and retry with an intercepted API at 1280 and 390 pixels. Captures are
+under `docs/process/uploads-reasons/`. This does not qualify a fresh installation.
+
 ## Browser behaviour
 
 Angular's disk cache is enabled locally and in CI. The fixture test runner builds

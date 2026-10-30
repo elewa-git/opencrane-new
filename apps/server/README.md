@@ -188,6 +188,7 @@ flowchart LR
   computer -.->|records private thread for memory discovery| server
   server -.->|prepares up to four private memory tools| computer
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
+  server -->|file refusal codes| web
   server -->|checks upload bytes over HTTPS| runtime
   runtime -->|checks memory reads and personal changes| server
 ```
@@ -238,7 +239,8 @@ assistant back on does not undo that pause or prevent cleanup of the stopped run
 - Checks current membership and permissions before returning private information or saving a change.
 - Handles chats, assistant work, live replies, stop requests and tool approvals.
 - Checks uploads and saves clean files and authorised screenshots. Office files can include
-  checked chart workbooks, printer settings and web or email links.
+  checked chart workbooks, printer settings and web or email links. Refusals explain
+  the problem using fixed reason codes, without including document details in logs.
 - Serves assistant desktops to people who may view them.
 - Handles members, groups, ownership, model providers, tool servers and spending settings.
 - Returns permitted change history, saved results and memory facts.

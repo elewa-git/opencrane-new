@@ -38,6 +38,17 @@ committed upload do not repeat scanning or create another event.
 | 500 | unexpected failure or invalid scanner response: `{status:"failed", error:"Unexpected failure"}` |
 | 503 | confirmed storage, scanner or event-store outage; no clean verdict is assumed |
 
+Inspection refusals add a fixed `reason` to the existing response, for example
+`{status:"refused", error:"Unsupported or unsafe file content", reason:"macros"}`.
+The codes are `unsupported_type`, `content_mismatch`, `macros`, `embedded_object`,
+`external_link`, `encrypted`, `too_large`, `too_many_parts`, `invalid_file` and
+`unsafe_name`. An unsafe upload basename keeps HTTP 400 and adds `unsafe_name`;
+inspection refusals keep HTTP 415. `too_large` covers document inspection limits,
+including unpacked size and oversized XML parts. Worker failures without a specific
+rule return `invalid_file`. HTTP 413 and rate-limit responses are unchanged.
+The refused request log includes only the fixed reason alongside ordinary request
+facts, never file names, document part names, bytes or parser errors.
+
 Files refusals carry their kind and HTTP status where detected, including
 `invalid_request` (400) for an empty body or malformed command input. Connection
 refusal, timeout and a dependency's own unavailable status carry a typed 503.

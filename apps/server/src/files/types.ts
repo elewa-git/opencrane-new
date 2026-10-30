@@ -1,3 +1,4 @@
+import { InspectionRefusal, inspectionReason } from './inspection-refusal.ts';
 import { Worker } from 'node:worker_threads';
 
 /** Keep untrusted parsers off the server event loop and bound their CPU time and heap. */
@@ -16,6 +17,9 @@ export function inspectFile(name: string, bytes: Buffer): Promise<string> {
       if (result instanceof Error && !['Unsupported file type', 'Unsafe Office document', 'Invalid Office document',
         'File inspection timed out or exceeded limits', 'File inspection failed or exceeded limits', 'File inspection failed'].includes(result.message)) {
         result = new Error('File inspection failed', { cause: result });
+      }
+      if (result instanceof Error) {
+        result = new InspectionRefusal(inspectionReason(result), result.message);
       }
       void worker.terminate().then(() => {
         if (result instanceof Error) reject(result); else resolve(result);
