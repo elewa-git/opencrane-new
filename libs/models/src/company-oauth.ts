@@ -8,6 +8,7 @@ import { foldCompanyOptIn } from './company-opt-in.ts';
 import { connectionServer } from './connection-server.ts';
 import { activeMember, MemberAccessRefused } from './member-authority.ts';
 import { currentMembership } from './ownership.ts';
+import { toolPolicyFromRows } from './tool-policy.ts';
 import { oauthConfigurationDigest, oauthConfigurationSchema, prepareOAuthAttempt }
   from './oauth-attempt.ts';
 
@@ -72,19 +73,23 @@ export async function prepareCompanyOAuthAttempt(store: EventStore, binding: Bin
     }
     // Compare the admitted membership after custody waits, without another permission decision.
     const fresh = await ownershipWriteAccess(store, membership.positions);
-    const expiresAt = Math.min(prepared.stage.appendUntil, loaded.server.expiresAt);
     const configurationDigest = oauthConfigurationDigest(configuration);
     let position = await store.head(undefined, fresh.deadline);
     while (true) {
       await fresh();
       const current = oauthConfigurationSchema.parse(await loadConfiguration(input.serverId));
+      // Accept renewed catalogue evidence only while the admitted policy remains available.
+      const currentRows = await history(store, loaded.serverSubject, binding.silo, fresh.deadline);
+      const currentServer = connectionServer(currentRows, input.connectionId, 'company');
+      const currentPolicy = toolPolicyFromRows(currentRows);
       if (oauthConfigurationDigest(current) !== configurationDigest ||
+          !currentServer.available || currentPolicy.policyRevision !== configuration.policyRevision ||
           await store.head(loaded.subject, fresh.deadline) !== 0 ||
-          await store.head(loaded.serverSubject, fresh.deadline) !== loaded.server.sequence ||
           await store.head(loaded.optInSubject, fresh.deadline) !== input.optInRevision) {
         return { status: 'unknown' as const };
       }
       const checked = await store.head(undefined, fresh.deadline);
+      const expiresAt = Math.min(prepared.stage.appendUntil, currentServer.expiresAt);
       if (performance.now() >= fresh.deadline || !Number.isFinite(expiresAt) ||
           Date.now() >= expiresAt) {
         return { status: 'unknown' as const };
