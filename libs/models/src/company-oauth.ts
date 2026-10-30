@@ -43,11 +43,23 @@ async function loadPreparation(store: EventStore, silo: string, raw: unknown,
         !optIn.enabled || optIn.sequence !== input.optInRevision) {
       return null;
     }
-    return { input, session, subject, serverSubject, optInSubject, server, rows, configuration };
+    return { input, session, subject, optInSubject, rows, configuration };
   } catch {
     // Defer preparation failures until the current admin permission decision.
     return null;
   }
+}
+
+async function currentServerExpiry(store: EventStore, silo: string,
+  configuration: z.infer<typeof oauthConfigurationSchema>, deadline: number) {
+  const rows = await history(store, `mcp-${configuration.serverId}`, silo, deadline);
+  const server = connectionServer(rows, configuration.connectionId, 'company');
+  const policy = toolPolicyFromRows(rows);
+  // Accept renewed catalogue evidence only while the admitted policy remains available.
+  if (!server.available || policy.policyRevision !== configuration.policyRevision) {
+    return null;
+  }
+  return server.expiresAt;
 }
 
 /** Prepare a new silo-owned attempt privately. No account is saved or made usable. */
@@ -78,18 +90,16 @@ export async function prepareCompanyOAuthAttempt(store: EventStore, binding: Bin
     while (true) {
       await fresh();
       const current = oauthConfigurationSchema.parse(await loadConfiguration(input.serverId));
-      // Accept renewed catalogue evidence only while the admitted policy remains available.
-      const currentRows = await history(store, loaded.serverSubject, binding.silo, fresh.deadline);
-      const currentServer = connectionServer(currentRows, input.connectionId, 'company');
-      const currentPolicy = toolPolicyFromRows(currentRows);
+      const serverExpiresAt = await currentServerExpiry(store, binding.silo,
+        configuration, fresh.deadline);
       if (oauthConfigurationDigest(current) !== configurationDigest ||
-          !currentServer.available || currentPolicy.policyRevision !== configuration.policyRevision ||
+          serverExpiresAt === null ||
           await store.head(loaded.subject, fresh.deadline) !== 0 ||
           await store.head(loaded.optInSubject, fresh.deadline) !== input.optInRevision) {
         return { status: 'unknown' as const };
       }
       const checked = await store.head(undefined, fresh.deadline);
-      const expiresAt = Math.min(prepared.stage.appendUntil, currentServer.expiresAt);
+      const expiresAt = Math.min(prepared.stage.appendUntil, serverExpiresAt);
       if (performance.now() >= fresh.deadline || !Number.isFinite(expiresAt) ||
           Date.now() >= expiresAt) {
         return { status: 'unknown' as const };
