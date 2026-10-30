@@ -139,6 +139,36 @@ async function recordsBeforeRelease() {
   expect(memoryAdmission.state).toBe('disabled');
 }
 it('records references once, returns no text and cold replay grants nothing', recordsBeforeRelease);
+async function boundedAccessHistory() {
+  await fact();
+  const read = options.store.readStream.bind(options.store);
+  let now = performance.now();
+  function clock() {
+    return now;
+  }
+  async function* slowMemberHistory(...args: Parameters<typeof read>) {
+    yield* read(...args);
+    if (args[0] === 'member-alice' && args[1] === 1) {
+      // Charge each complete membership read without relying on host scheduling.
+      now += 600;
+    }
+  }
+  vi.spyOn(performance, 'now').mockImplementation(clock);
+  vi.spyOn(options.store, 'readStream').mockImplementation(slowMemberHistory);
+  const pending = await prepare();
+  await expect(pending.load()).resolves.toEqual({ status: 'loaded', dispatch: 'disabled' });
+  const delivered: string[] = [];
+  function consume(block: string) {
+    delivered.push(block);
+  }
+  await pending.consume(consume);
+  expect(delivered).toHaveLength(1);
+  expect(delivered[0]).toContain(canary);
+  expect(await state()).toMatchObject({ initialLoaded: true,
+    references: [{ scopeId, memoryId: 'fact', revision: 1 }] });
+}
+it('loads initial memory within the access deadline when membership history is slow',
+  boundedAccessHistory);
 async function limits(count: number, text: string) {
   for (let index = 0; index < count; index++) await fact(`fact-${index}`, text);
   const pending = await prepare();
