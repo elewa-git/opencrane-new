@@ -5,7 +5,7 @@
 This developer tool collects private memory test results from a running deployment.
 It reads the deployment identity itself and starts each check inside that image.
 It also checks older evidence files, which cannot qualify a deployment.
-Admission remains off. The live journey runner is not built yet.
+Admission remains off. The runner checks host settings but cannot complete a memory journey.
 
 ## Where it fits
 
@@ -19,7 +19,7 @@ flowchart LR
   server["apps/server<br/>disabled initial loading"] -->|reads and rechecks results| collector
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
   collector -->|measures and starts checks| docker["Docker<br/>running image and host"]
-  docker -->|runs supervised checks| deployment["deployment<br/>event store and journey runner"]
+  docker -->|runs supervised host checks| deployment["deployment<br/>event store and journey runner"]
 ```
 
 ## What it is responsible for
@@ -28,6 +28,7 @@ flowchart LR
 - Stop each journey and its children when it exceeds a limit or the collector exits.
 - Measure the source revision, image, host, silo and installation before collecting results.
 - Refuse an old or used event store, changed deployment, or missing check.
+- Refuse swap, crash dumps, unsafe process limits and unreadable host settings.
 - Accept results only from processes it starts in the measured image.
 - Save its own result in a protected file and recheck the deployment whenever it is used.
 - Refuse copied, edited, stale or foreign receipts.
@@ -42,9 +43,11 @@ within two minutes. A supervisor inside the container stops the journey and its
 children on timeout, excessive output or collector exit. A retry cannot start until
 the previous journey has stopped. Only complete, matching results can pass.
 
-The fixed journey runner must be part of the deployment image. It is still pending,
-so current installations cannot pass. Tests use simulated receipts and disposable Docker containers to check refusal
-and process cleanup. They do not run live memory journeys or enable memory.
+The fixed journey runner is copied into the deployment image by the existing image build.
+It reads kernel settings and process core limits itself. Even safe host settings cannot
+complete a journey: native calls, process isolation and storage checks are still pending.
+Tests use simulated observations and disposable containers to check refusal and cleanup.
+They do not qualify a deployment or enable memory.
 
 ## How to run or test it
 
@@ -56,7 +59,7 @@ nice -n 10 npx vitest run --config scripts/private-memory-qualification/vitest.c
 nice -n 10 npx tsc -p scripts/private-memory-qualification/tsconfig.json
 ```
 
-The first command needs the deployment-owned runner described in the contract below.
+The first command needs the protected deployment configuration described in the contract below.
 It prints safe measurements and results, or one fixed failure reason.
 It also saves its own result in a protected file. Initial loading reads that file
 and checks the current deployment again. Callers cannot upload replacement evidence.

@@ -1,5 +1,5 @@
 import { statSync, openSync, fstatSync, readFileSync, closeSync, writeFileSync, renameSync } from 'node:fs';
-import { ChildProcess, execFileSync, spawn } from 'node:child_process';
+import { ChildProcess, execFileSync, spawn, spawnSync } from 'node:child_process';
 import { PassThrough } from 'node:stream';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -332,3 +332,39 @@ async function savesOwnResult(): Promise<void> {
     '/etc/opencrane/private-memory-qualification-result.json');
 }
 it('writes only its own complete result to the protected deployment file', savesOwnResult);
+
+async function withdrawsPassForPartialRunner(): Promise<void> {
+  let pending = '';
+  let saved = '';
+  function write(_path: unknown, data: unknown): void {
+    pending = z.string().parse(data);
+  }
+  function rename(): void {
+    saved = pending;
+  }
+  vi.mocked(writeFileSync).mockImplementation(write);
+  vi.mocked(renameSync).mockImplementation(rename);
+  expect((await collectDeployment()).result).toBe('PASS');
+  expect(JSON.parse(saved)).toHaveProperty('result', 'PASS');
+  function partial(response: Record<string, unknown>): void {
+    // Strip the fixture's invented success before invoking the actual entry.
+    const request = { ...response };
+    delete request['result'];
+    delete request['complete'];
+    delete request['observedAt'];
+    const options = { input: JSON.stringify(request), encoding: 'utf8' as const, timeout: 5000 };
+    const child = spawnSync(process.execPath, ['--experimental-strip-types',
+      'scripts/private-memory-qualification/journey.mjs'], options);
+    expect(child.status).toBe(1);
+    expect(child.stderr).toBe('');
+    const refusal: unknown = JSON.parse(child.stdout);
+    for (const key of Object.keys(response)) delete response[key];
+    Object.assign(response, refusal);
+  }
+  alter = partial;
+  const failure = { result: 'FAIL', reason: 'collection_failed' };
+  expect(await collectDeployment()).toEqual(failure);
+  expect(JSON.parse(saved)).toEqual(failure);
+  expect(responses).toHaveLength(12);
+}
+it('withdraws earlier saved PASS when the real partial runner refuses', withdrawsPassForPartialRunner);

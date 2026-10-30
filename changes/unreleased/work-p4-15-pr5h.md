@@ -1,0 +1,1 @@
+Private memory qualification now starts an image-owned host probe and refuses unsafe or unreadable swap, crash dump and process core settings. Host checks alone cannot qualify a deployment; live memory journeys remain unavailable.
