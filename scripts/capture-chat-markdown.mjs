@@ -67,6 +67,40 @@ function installClipboard(allowed) {
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
 }
 
+async function captureRegressions(browser, width) {
+  const page = await browser.newPage({ viewport: { width, height: 1100 },
+    reducedMotion: 'reduce' });
+  try {
+    await page.route('**/*', serveAssets);
+    const fixture = await chatFixture(page, 'empty-selected');
+    const question = fixture.add('message.posted',
+      { text: 'Show the formatting and interactive card.', authorId: 'me' });
+    fixture.add('agent.turn_started', { turnId: question.id });
+    const code = 'keep\n    ```\n    [outside](https://example.test)';
+    const text = '**first\nsecond**\n\n```text\n' + code + '\n```\n\n'
+      + '```a2ui\n{}\n```\n\nThe reply continues.';
+    fixture.add('agent.message_delta', { turnId: question.id, messageId: 'reply', text });
+    await page.goto('https://markdown.opencrane.test/workspace?conversation=chat');
+    const markdown = page.locator('oc-assistant-markdown');
+    await markdown.locator('.a2ui .agent-badge').waitFor();
+    await page.evaluate(waitForFonts);
+    assert.equal(await markdown.locator('strong').textContent(), 'first\nsecond');
+    assert.equal(await markdown.locator('pre code').textContent(), code);
+    assert.equal(await markdown.locator('a').count(), 0);
+    await page.evaluate(installClipboard, true);
+    await markdown.getByRole('button', { name: 'Copy code' }).click();
+    await markdown.getByRole('status').filter({ hasText: 'Copied' }).waitFor();
+    fixture.add('agent.message_delta',
+      { turnId: question.id, messageId: 'reply', text: ' More text arrives.' });
+    await markdown.getByText('The reply continues. More text arrives.').waitFor();
+    assert.equal(await markdown.getByRole('status').textContent(), 'Copied');
+    assert(await page.evaluate(pageHasNoOverflow));
+    await page.screenshot({ path: resolve(output, `regressions-${width}.png`), fullPage: true });
+  } finally {
+    await page.close();
+  }
+}
+
 function scrollToStart(element) {
   element.scrollTop = 0;
 }
@@ -74,7 +108,10 @@ function scrollToStart(element) {
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
-  for (const width of [1280, 390]) await capture(browser, width);
+  for (const width of [1280, 390]) {
+    await capture(browser, width);
+    await captureRegressions(browser, width);
+  }
 } finally {
   await browser.close();
 }

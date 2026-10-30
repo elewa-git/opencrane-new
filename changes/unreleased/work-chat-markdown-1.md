@@ -1,1 +1,2 @@
 - Assistant replies now show Markdown headings, lists, quotes, inline formatting and safe links, with copy buttons on code blocks. HTML stays text and diagrams appear as code.
+- Interactive replies keep their assistant badge. Bold text can span lines, indented code markers stay inside code blocks, and copy feedback remains visible while later reply text arrives.

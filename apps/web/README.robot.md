@@ -493,6 +493,10 @@ Only `https:` and `mailto:` links become anchors, with a new tab and
 `rel="noopener noreferrer"`. Other destinations and HTML remain text.
 Mermaid stays code; a2ui keeps its existing unavailable placeholder. Citations keep
 opening the preview. User messages, saved events and streamed messages are unchanged.
+Bold text can continue across a line break. Closing code markers allow at most three
+leading spaces. More deeply indented markers remain code, including when copied.
+The interactive placeholder keeps the `Ag` badge. Copy feedback stays with the same
+code block when later text arrives, and disappears if that block's code changes.
 Incomplete fences show their code while the reply arrives. Parsing reruns only when
 that reply text changes. Copy failures offer another try without logging the text.
 The component specs cover elements, hostile input, copy results, streaming and long replies.
