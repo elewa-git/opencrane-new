@@ -23,6 +23,7 @@ import { uploadFile, type FileOptions } from '../src/files/routes.ts';
 import { scanFile as scanDaemon } from './support/clamd.ts';
 import { scanFile } from '../src/files/scanner.ts';
 import { buildServer } from '../src/server.ts';
+import { refusalReasons, refusedFile } from './support/refused-files.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 const config = { ...testAuthConfig(), expectedOrgId: 'org' };
@@ -175,6 +176,45 @@ function failObjectStore(boundary: string, failure: Error) {
   getObject.mockRejectedValue(failure);
   return getObject;
 }
+
+async function reportsRefusalWithoutPrivateDetails(reason: string) {
+  const lines: string[] = [];
+  function write(line: string) {
+    lines.push(line);
+  }
+  vi.stubEnv('LOG_LEVEL', 'info');
+  const serverOptions = { files: options, logDestination: { write } };
+  const server = buildServer(config, serverOptions);
+  try {
+    const file = refusedFile(reason);
+    const request = uploadRequest(reason, file.bytes);
+    request.headers['x-file-name'] = file.name;
+    const response = await server.inject(request);
+    const statusCode = reason === 'unsafe_name' ? 400 : 415;
+    expect(response.statusCode).toBe(statusCode);
+    expect(response.json()).toEqual({ status: 'refused',
+      error: reason === 'unsafe_name' ? 'Invalid request' : 'Unsupported or unsafe file content',
+      reason });
+    function isRefusal(line: string) {
+      return line.includes('"reason"');
+    }
+    const refusals = lines.filter(isRefusal);
+    expect(refusals).toHaveLength(1);
+    expect(JSON.parse(refusals[0]!) as unknown).toMatchObject({ reason });
+    const output = lines.join('');
+    expect(output).not.toContain(file.name);
+    expect(output).not.toContain('presentation.xml');
+    expect(output).not.toContain('example.test/sample');
+    expect(output).not.toContain('Sample');
+    expect(output).not.toContain('cause');
+    expect(output).not.toContain('stack');
+  } finally {
+    await server.close();
+    vi.unstubAllEnvs();
+  }
+}
+it.each(refusalReasons)('returns and logs only the fixed refusal reason %s',
+  reportsRefusalWithoutPrivateDetails);
 
 async function unexpectedStoreFailure(boundary: string) {
   const failure = new TypeError('Private object-store diagnostic');
