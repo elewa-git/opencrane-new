@@ -2,6 +2,10 @@
 
 For people, read [README.md](README.md) first.
 
+`changesDecisionActivity` is also used by initial memory delivery to classify new
+turn events. It keeps ordinary messages, files and other turns separate from
+closure, replacement and memory changes that refuse the current turn.
+
 ## Private company OAuth preparation (Part of #50)
 
 `prepareCompanyOAuthAttempt` is internal, with no route or package export. Trusted
@@ -30,10 +34,6 @@ release occurs. Company start/URL, callback, exchange, activation and transfer r
 later work. Personal refresh/revoke and exact deletion retain their existing contracts.
 No event/API field or dependency was added; protected security and authority tests are unchanged.
 Fresh-install and live provider qualification: NOT RUN.
-
-`changesDecisionActivity` is also used by initial memory delivery to classify new
-turn events. It keeps ordinary messages, files and other turns separate from
-closure, replacement and memory changes that refuse the current turn.
 
 ## Verified OAuth selection (Part of #50)
 

@@ -108,3 +108,36 @@ Local logs: `/tmp/p4-15-pr5f-fix-red.log`, `/tmp/p4-15-pr5f-retry-red.log`,
 `/tmp/p4-15-pr5f-fix-tests-1.log`, `/tmp/p4-15-pr5f-fix-tests-2.log`,
 `/tmp/p4-15-pr5f-fix-renderer-1.log`, `/tmp/p4-15-pr5f-fix-lint.log`,
 `/tmp/p4-15-pr5f-fix-typecheck.log` and `/tmp/p4-15-pr5f-fix-events.log`.
+
+### Late changes during the final stream reads
+
+2026-10-30. Rebased onto `371087d3c`; the rebase completed. Both complete test runs
+use code at `86eabdfac`. No image was built. Tests use disposable NATS, PostgreSQL
+databases, OpenFGA and gateway fixtures on the shared development host. The supplied
+local `PG_TEST_URL` is set for every service run. Deployment filesystem and Docker
+measurements are simulated; these fixtures are not a fresh silo installation.
+
+- PASS: failing-first proof at test commit `83b20c97e`. All five late changes
+  reproduced delivery before the fix: membership removal, correction, Forget,
+  conversation closure and computer replacement. Qualification withdrawal, expiry
+  and unrelated activity passed their existing expected outcomes in the same run.
+- PASS: all eight focused late-read cases after the fix. The five refusal cases
+  now require no delivery and refuse a second attempt. Unrelated activity still
+  permits exactly one delivery. Qualification withdrawal and expiry still refuse.
+- PASS: both complete runs, 393/393 each across initial delivery (97), memory (245),
+  renderer (22) and worker input (29). Existing assertions were kept unchanged.
+- PASS: lint, typecheck, check:events, Knip and lint:changelog. Code lint reports
+  zero errors and 34 warnings.
+- NOT RUN: full root suite, fresh-install native delivery, persistence scans, paid
+  calls and CI. Admission remains disabled.
+
+All checks use `nice -n 10`. The two complete test runs each use `npx vitest run`
+with the four explicit file paths and `--maxWorkers=1`; they overlap with at most
+two test workers in total. Each stream supplies all events through its own read,
+including events beyond the earlier global position. Relevant access and turn
+changes refuse delivery. Scope changes update the selected-reference check.
+
+Local logs: `/tmp/p4-15-pr5f-fix2-red.log`, `/tmp/p4-15-pr5f-fix2-green.log`,
+`/tmp/p4-15-pr5f-fix2-tests-1.log`, `/tmp/p4-15-pr5f-fix2-tests-2.log`,
+`/tmp/p4-15-pr5f-fix2-lint.log`, `/tmp/p4-15-pr5f-fix2-typecheck.log` and
+`/tmp/p4-15-pr5f-fix2-events.log`.
