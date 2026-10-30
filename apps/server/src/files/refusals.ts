@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { InspectionRefusal } from './inspection-refusal.ts';
 
 const fileRefusals = {
   unauthenticated: { statusCode: 401, message: 'Unauthenticated' },
@@ -21,13 +22,18 @@ type FileRefusalKind = keyof typeof fileRefusals;
 export class FileRefusal extends Error {
   readonly kind: FileRefusalKind;
   readonly statusCode: number;
+  readonly reason: InspectionRefusal['reason'] | undefined;
 
-  constructor(kind: FileRefusalKind, options?: ErrorOptions) {
+  constructor(
+    kind: FileRefusalKind,
+    options?: ErrorOptions & { reason?: InspectionRefusal['reason'] },
+  ) {
     const refusal = fileRefusals[kind];
     super(refusal.message, options);
     this.name = 'FileRefusal';
     this.kind = kind;
     this.statusCode = refusal.statusCode;
+    this.reason = options?.reason;
   }
 }
 

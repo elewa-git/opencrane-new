@@ -2,8 +2,7 @@ import * as cfb from 'cfb';
 import { z } from 'zod';
 
 export function refusedFile(reason: string) {
-  let name = 'sample.pptx';
-  let bytes: Buffer;
+  const name = 'sample.pptx';
   const parts: Record<string, string | Buffer> = {
     '[Content_Types].xml': '<Types/>',
     'ppt/presentation.xml': '<presentation/>',
@@ -30,7 +29,9 @@ export function refusedFile(reason: string) {
       parts['ppt/media/padding.dat'] = Buffer.alloc(81 * 1024 * 1024);
       break;
     case 'too_many_parts':
-      for (let index = 0; index < 2001; index++) parts[`media/${index}.dat`] = 'Sample';
+      for (let index = 0; index < 2001; index++) {
+        parts[`media/${index}.dat`] = 'Sample';
+      }
       break;
     case 'invalid_file':
       parts['ppt/presentation.xml'] = '<presentation>';
@@ -43,9 +44,8 @@ export function refusedFile(reason: string) {
   }
   cfb.utils.cfb_gc(container);
   const options = { type: 'buffer', fileType: 'zip', compression: true } as const;
-  bytes = z.instanceof(Buffer).parse(cfb.write(container, options));
+  const bytes = z.instanceof(Buffer).parse(cfb.write(container, options));
   if (reason === 'encrypted') {
-    name = 'sample.pptx';
     for (let offset = 0; offset < bytes.length - 10; offset++) {
       const signature = bytes.readUInt32LE(offset);
       if (signature === 0x04034b50) bytes.writeUInt16LE(1, offset + 6);

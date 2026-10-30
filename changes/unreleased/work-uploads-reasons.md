@@ -1,0 +1,1 @@
+- Refused uploads explain the problem and how to try again. The response and request log include a fixed reason code without document details; Retry upload stays available.

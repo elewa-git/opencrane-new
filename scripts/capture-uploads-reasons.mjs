@@ -45,7 +45,7 @@ async function capture(browser, width, reason, expected) {
     const file = { name: 'sample.pptx', mimeType: 'application/octet-stream',
       buffer: Buffer.from('Sample fixture') };
     await page.locator('input[type=file]').setInputFiles(file);
-    await page.getByText(expected, { exact: true }).waitFor({ timeout: 5000 });
+    await page.locator('.upload-status').getByText(expected).waitFor({ timeout: 5000 });
     const retry = page.getByRole('button', { name: 'Retry upload', exact: true });
     await retry.waitFor();
     await page.evaluate(waitForFonts);
@@ -53,7 +53,7 @@ async function capture(browser, width, reason, expected) {
     const screenshot = { path: resolve(output, `${reason}-${width}.png`), fullPage: true };
     await page.screenshot(screenshot);
     await retry.click();
-    await page.getByText(expected, { exact: true }).waitFor();
+    await page.locator('.upload-status').getByText(expected).waitFor();
     assert.equal(requests, 2);
   } finally {
     await page.close();

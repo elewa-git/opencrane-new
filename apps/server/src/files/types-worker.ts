@@ -1,3 +1,4 @@
+import { InspectionRefusal, inspectionReason } from './inspection-refusal.ts';
 import { parentPort, workerData } from 'node:worker_threads';
 import { z } from 'zod';
 import * as cfb from 'cfb';
@@ -28,14 +29,16 @@ async function office(
     ['docx', 'word/document.xml'], ['xlsx', 'xl/workbook.xml'], ['pptx', 'ppt/presentation.xml'],
   ]);
   const required = mainParts.get(extension);
-  if (!required) throw new Error('Unsupported file type');
+  if (!required) {
+    throw new InspectionRefusal('unsupported_type', 'Unsupported file type');
+  }
   const zip = await new Promise<ZipFile>(openArchive);
   await new Promise<void>(inspectArchive);
 
   function openArchive(resolve: (zip: ZipFile) => void, reject: (error: Error) => void) {
     function opened(error: Error | null, archive?: ZipFile) {
       if (error || !archive) {
-        reject(new Error('Invalid Office document'));
+        reject(new InspectionRefusal('invalid_file', 'Invalid Office document'));
         return;
       }
       resolve(archive);
@@ -47,15 +50,15 @@ async function office(
   function inspectArchive(resolve: () => void, reject: (error: Error) => void) {
     let content = false;
     let types = false;
-    function refuse() {
+    function refuse(error: unknown) {
       zip.close();
-      reject(new Error('Unsafe Office document'));
+      reject(new InspectionRefusal(inspectionReason(error)));
     }
     function finished() {
       if (content && types) {
         resolve();
       } else {
-        reject(new Error('Invalid Office document'));
+        reject(new InspectionRefusal('invalid_file', 'Invalid Office document'));
       }
     }
     function next() {
@@ -77,7 +80,14 @@ async function office(
       const advancing = inspection.then(next);
       void advancing.catch(refuse);
     }
-    zip.on('error', refuse);
+    function archiveFailed(error: Error) {
+      if (/invalid relative path|absolute path|invalid characters/iu.test(error.message)) {
+        refuse(new InspectionRefusal('unsafe_name'));
+        return;
+      }
+      refuse(error);
+    }
+    zip.on('error', archiveFailed);
     zip.on('entry', received);
     zip.on('end', finished);
     zip.readEntry();
@@ -90,20 +100,31 @@ function checkOfficeEntry(entry: Entry, budget: OfficeBudget, depth: number) {
   budget.parts++;
   const unsafePath = /^\/|(?:^|\/)\.\.(?:\/|$)|\\/u;
   const executable = /\.(?:exe|dll|com|js|vbs|zip|rar|7z)$/iu;
-  const activeContent = /vbaProject|macrosheets\/|dialogSheets\/|activeX|oleObject/iu;
-  const unsafeName = unsafePath.test(entry.fileName) || executable.test(entry.fileName) ||
-    activeContent.test(entry.fileName);
-  if (budget.bytes > 80 * 1024 * 1024 || budget.parts > 2000 ||
-      (entry.generalPurposeBitFlag & 1) || unsafeName) {
-    throw new Error('Unsafe Office document');
+  if (budget.bytes > 80 * 1024 * 1024) {
+    throw new InspectionRefusal('too_large');
+  }
+  if (budget.parts > 2000) {
+    throw new InspectionRefusal('too_many_parts');
+  }
+  if (entry.generalPurposeBitFlag & 1) {
+    throw new InspectionRefusal('encrypted');
+  }
+  if (unsafePath.test(entry.fileName) || executable.test(entry.fileName)) {
+    throw new InspectionRefusal('unsafe_name');
+  }
+  if (/vbaProject|macrosheets\/|dialogSheets\//iu.test(entry.fileName)) {
+    throw new InspectionRefusal('macros');
+  }
+  if (/activeX|oleObject/iu.test(entry.fileName)) {
+    throw new InspectionRefusal('embedded_object');
   }
   if (/embeddings\//iu.test(entry.fileName) &&
       (depth !== 0 || !/^(?:ppt|word|xl)\/embeddings\/[^/]+\.xlsx$/iu.test(entry.fileName))) {
-    throw new Error('Unsafe Office document');
+    throw new InspectionRefusal('embedded_object');
   }
   if (/\.bin$/iu.test(entry.fileName) &&
       !/(?:^|\/)printerSettings\/printerSettings[^/]*\.bin$/iu.test(entry.fileName)) {
-    throw new Error('Unsafe Office document');
+    throw new InspectionRefusal('embedded_object');
   }
 }
 
@@ -119,7 +140,7 @@ function readOfficePart(zip: ZipFile, entry: Entry): Promise<Buffer> {
     }
     function opened(error: Error | null, stream?: NodeJS.ReadableStream) {
       if (error || !stream) {
-        reject(new Error('Invalid Office document'));
+        reject(new InspectionRefusal('invalid_file', 'Invalid Office document'));
         return;
       }
       stream.on('error', reject);
@@ -136,33 +157,86 @@ async function inspectFile(
   budget: OfficeBudget,
   depth: number,
 ): Promise<string> {
-  const extension = extname(name).slice(1).toLowerCase();
-  if (!bytes.length || !/^[\w][\w .()-]{0,119}$/u.test(name)) throw new Error('Unsupported file type');
+  const suffix = extname(name);
+  const bareExtension = suffix.slice(1);
+  const extension = bareExtension.toLowerCase();
+  if (!bytes.length) {
+    throw new InspectionRefusal('invalid_file', 'Unsupported file type');
+  }
+  if (!/^[\w][\w .()-]{0,119}$/u.test(name)) {
+    throw new InspectionRefusal('unsafe_name', 'Unsupported file type');
+  }
   const detected = await fileTypeFromBuffer(bytes);
   if (textTypes.has(extension) && !detected && !bytes.subarray(0, 4).equals(Buffer.from('MZ\0\0'))) {
     const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    if ([...text].some(char => char.charCodeAt(0) < 32 && !'\t\n\r'.includes(char)) || /^\s*(?:#!|<svg|<!doctype html|<html)/iu.test(text)) throw new Error('Unsupported file type');
+    function isControlCharacter(character: string) {
+      return character.charCodeAt(0) < 32 && !'\t\n\r'.includes(character);
+    }
+    const hasControlCharacters = [...text].some(isControlCharacter);
+    const hasActiveContent = /^\s*(?:#!|<svg|<!doctype html|<html)/iu.test(text);
+    if (hasControlCharacters || hasActiveContent) {
+      throw new InspectionRefusal('content_mismatch', 'Unsupported file type');
+    }
     return 'text/plain';
   }
   const mime = allowed.get(extension);
   if (['doc', 'xls', 'ppt'].includes(extension)) return legacyOffice(bytes, extension, mime!);
-  if (!mime || !detected || (detected.mime !== mime && !(detected.ext === 'zip' && ['docx', 'xlsx', 'pptx'].includes(extension)))) throw new Error('Unsupported file type');
+  if (!mime) {
+    throw new InspectionRefusal('unsupported_type', 'Unsupported file type');
+  }
+  if (!detected) {
+    throw new InspectionRefusal('content_mismatch', 'Unsupported file type');
+  }
+  const isOfficeZip = detected.ext === 'zip' && ['docx', 'xlsx', 'pptx'].includes(extension);
+  if (detected.mime !== mime && !isOfficeZip) {
+    throw new InspectionRefusal('content_mismatch', 'Unsupported file type');
+  }
   if (['docx', 'xlsx', 'pptx'].includes(extension)) await office(bytes, extension, budget, depth);
   return mime;
 }
 
 function legacyOffice(bytes: Buffer, extension: string, mime: string) {
-  if (!bytes.subarray(0, 8).equals(Buffer.from('d0cf11e0a1b11ae1', 'hex'))) throw new Error('Unsupported file type');
+  const signature = Buffer.from('d0cf11e0a1b11ae1', 'hex');
+  if (!bytes.subarray(0, 8).equals(signature)) {
+    throw new InspectionRefusal('content_mismatch', 'Unsupported file type');
+  }
   let container: cfb.CFB$Container;
-  try { container = cfb.read(bytes, { type: 'buffer' }); } catch { throw new Error('Invalid Office document'); }
+  try {
+    container = cfb.read(bytes, { type: 'buffer' });
+  } catch {
+    throw new InspectionRefusal('invalid_file', 'Invalid Office document');
+  }
   const paths = container.FullPaths;
   const stream = new Map([['doc', 'WordDocument'], ['xls', 'Workbook'], ['ppt', 'PowerPoint Document']]).get(extension)!;
-  if (!paths.some(path => path.endsWith('/' + stream)) || paths.some(path => /VBA|ObjectPool|EncryptedPackage|EncryptionInfo|EncryptedSummary/iu.test(path))) throw new Error('Unsafe Office document');
-  const entry = container.FileIndex.find(entry => entry.name === stream);
-  if (!entry) throw new Error('Invalid Office document');
+  for (const path of paths) {
+    if (/VBA/iu.test(path)) {
+      throw new InspectionRefusal('macros');
+    }
+    if (/ObjectPool/iu.test(path)) {
+      throw new InspectionRefusal('embedded_object');
+    }
+    if (/EncryptedPackage|EncryptionInfo|EncryptedSummary/iu.test(path)) {
+      throw new InspectionRefusal('encrypted');
+    }
+  }
+  function isMainStream(path: string) {
+    return path.endsWith('/' + stream);
+  }
+  if (!paths.some(isMainStream)) {
+    throw new InspectionRefusal('invalid_file');
+  }
+  function isMainEntry(entry: cfb.CFB$Entry) {
+    return entry.name === stream;
+  }
+  const entry = container.FileIndex.find(isMainEntry);
+  if (!entry) {
+    throw new InspectionRefusal('invalid_file', 'Invalid Office document');
+  }
   const content = Buffer.from(entry.content);
   if (extension === 'xls') inspectWorkbook(content);
-  if (extension === 'doc' && content.length >= 12 && (content.readUInt16LE(10) & 0x8100)) throw new Error('Unsafe Office document');
+  if (extension === 'doc' && content.length >= 12 && (content.readUInt16LE(10) & 0x8100)) {
+    throw new InspectionRefusal('encrypted');
+  }
   return mime;
 }
 
@@ -171,19 +245,19 @@ async function inspectOfficeXml(zip: ZipFile, entry: Entry, main: string) {
   const isMetadata = entry.fileName === '[Content_Types].xml' || isRelationships;
   if (!isMetadata && entry.fileName !== main) return;
   if (entry.uncompressedSize > 8 * 1024 * 1024) {
-    throw new Error('Unsafe Office document');
+    throw new InspectionRefusal('too_large');
   }
   const bytes = await readOfficePart(zip, entry);
   const text = bytes.toString('utf8');
-  const forbidden = /macroEnabled|macrosheet|vbaProject|activeX|oleObject/iu;
-  if (/<!DOCTYPE|<!ENTITY/iu.test(text) || forbidden.test(text)) {
-    throw new Error('Unsafe Office document');
+  if (/<!DOCTYPE|<!ENTITY/iu.test(text)) {
+    throw new InspectionRefusal('invalid_file');
   }
+  inspectActiveContent(text);
   if (!text.trimStart().startsWith('<') || XMLValidator.validate(text) !== true) {
-    throw new Error('Invalid Office document');
+    throw new InspectionRefusal('invalid_file', 'Invalid Office document');
   }
   if (!isRelationships && /TargetMode\s*=\s*["']External["']/iu.test(text)) {
-    throw new Error('Unsafe Office document');
+    throw new InspectionRefusal('external_link');
   }
   if (!isMetadata) return;
   // Parse the small metadata parts so escaped attributes cannot conceal active content.
@@ -191,13 +265,20 @@ async function inspectOfficeXml(zip: ZipFile, entry: Entry, main: string) {
   const parser = new XMLParser(options);
   const metadata: unknown = parser.parse(text);
   const decoded = JSON.stringify(metadata);
-  if (forbidden.test(decoded)) {
-    throw new Error('Unsafe Office document');
-  }
+  inspectActiveContent(decoded);
   if (isRelationships) {
     inspectRelationships(metadata);
   } else if (/External/iu.test(decoded)) {
-    throw new Error('Unsafe Office document');
+    throw new InspectionRefusal('external_link');
+  }
+}
+
+function inspectActiveContent(value: string) {
+  if (/macroEnabled|macrosheet|vbaProject/iu.test(value)) {
+    throw new InspectionRefusal('macros');
+  }
+  if (/activeX|oleObject/iu.test(value)) {
+    throw new InspectionRefusal('embedded_object');
   }
 }
 
@@ -236,7 +317,7 @@ function resolveRelationshipElement(
   const emptyPrefix = qualifiedName.startsWith(':');
   if (emptyPrefix || names.length || localName !== expectedName ||
       (!unqualified && namespace !== relationshipNamespace)) {
-    throw new Error('Unsafe Office document');
+    throw new InspectionRefusal('invalid_file');
   }
   return { content, namespaces };
 }
@@ -245,7 +326,9 @@ function readRelationships(metadata: unknown) {
   const document = xmlObjectSchema.parse(metadata);
   delete document['?xml'];
   const roots = Object.entries(document);
-  if (roots.length !== 1) throw new Error('Unsafe Office document');
+  if (roots.length !== 1) {
+    throw new InspectionRefusal('invalid_file');
+  }
   const [rootName, rootValue] = roots[0]!;
   const root = resolveRelationshipElement(rootName, rootValue, 'Relationships', new Map());
   const entries: z.infer<typeof relationshipSchema>[] = [];
@@ -268,16 +351,24 @@ function inspectRelationships(metadata: unknown) {
     const strict = 'http://purl.oclc.org/ooxml/officeDocument/relationships/';
     if ((type !== `${transitional}hyperlink` && type !== `${strict}hyperlink`) ||
         !/^(?:https?:\/\/|mailto:)/iu.test(entry['@_Target'])) {
-      throw new Error('Unsafe Office document');
+      throw new InspectionRefusal('external_link');
     }
   }
 }
 
 function inspectWorkbook(bytes: Buffer) {
   for (let offset = 0; offset + 4 <= bytes.length;) {
-    const record = bytes.readUInt16LE(offset), length = bytes.readUInt16LE(offset+2);
-    if (offset + 4 + length > bytes.length) throw new Error('Invalid Office document');
-    if (record === 0x002f || (record === 0x0085 && length >= 6 && ![0, 2].includes(bytes[offset+9]!))) throw new Error('Unsafe Office document');
+    const record = bytes.readUInt16LE(offset);
+    const length = bytes.readUInt16LE(offset + 2);
+    if (offset + 4 + length > bytes.length) {
+      throw new InspectionRefusal('invalid_file', 'Invalid Office document');
+    }
+    if (record === 0x002f) {
+      throw new InspectionRefusal('encrypted');
+    }
+    if (record === 0x0085 && length >= 6 && ![0, 2].includes(bytes[offset+9]!)) {
+      throw new InspectionRefusal('macros');
+    }
     offset += 4 + length;
   }
 }
@@ -287,5 +378,14 @@ const input = z.object({ name: z.string(), bytes: z.instanceof(Uint8Array) }).pa
 const budget: OfficeBudget = { bytes: 0, parts: 0 };
 void inspectFile(input.name, Buffer.from(input.bytes), budget, 0).then(
   mime => parentPort!.postMessage(mime),
-  (error: unknown) => parentPort!.postMessage(error instanceof Error ? error : new Error('File inspection failed')),
+  reportRefusal,
 );
+
+function reportRefusal(error: unknown) {
+  if (error instanceof InspectionRefusal) {
+    parentPort!.postMessage(error);
+    return;
+  }
+  const refusal = new InspectionRefusal(inspectionReason(error));
+  parentPort!.postMessage(refusal);
+}

@@ -198,7 +198,9 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
     );
     const malformed = await app.inject(malformedRequest);
     expect(malformed.statusCode).toBe(400);
-    expect(malformed.json()).toEqual({ status: 'refused', error: 'Invalid request' });
+    expect(malformed.json()).toEqual({
+      status: 'refused', error: 'Invalid request', reason: 'unsafe_name',
+    });
     expect((await app.inject({ method: 'POST', url, headers, payload: Buffer.alloc(20 * 1024 * 1024 + 1) })).statusCode).toBe(413);
     const oversizedBytes = Buffer.alloc(20 * 1024 * 1024 + 1);
     const expectedSizeRefusal = {

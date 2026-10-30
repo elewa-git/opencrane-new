@@ -38,6 +38,7 @@
     "visual:screen-p4-19-signin": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-19-signin.mjs",
     "lint:fixtures": "python3 infra/odoo/boundary.py",
     "lint:changelog": "node scripts/changelog-gather.mjs --check",
+    "visual:uploads-reasons": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-uploads-reasons.mjs",
     "visual:chat-markdown": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-chat-markdown.mjs",
     "visual:chat": "NO_COLOR=1 node scripts/check-chat-browser.mjs --capture",
     "test:chat:production": "NO_COLOR=1 node scripts/check-chat-production.mjs",

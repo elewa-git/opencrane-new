@@ -25,6 +25,7 @@ import {
   isDependencyOutage,
   parseFileInput,
 } from './refusals.ts';
+import { inspectionReason } from './inspection-refusal.ts';
 import { inspectFile } from './types.ts';
 import { fileListApplying } from './list.ts';
 
@@ -202,7 +203,7 @@ async function handleFileRequest(
       const response = { rows };
       return reply.send(response);
     }
-    const name = parseFileInput(filename, request.headers['x-file-name']);
+    const name = parseUploadName(request.headers['x-file-name']);
     const key = parseFileInput(id, request.headers['idempotency-key']);
     if (!Buffer.isBuffer(request.body)) {
       throw new FileRefusal('invalid_request');
@@ -283,7 +284,12 @@ function refuse(reply: FastifyReply, error: unknown) {
     return reply.code(error.statusCode).send({ status: error.status });
   }
   if (error instanceof FileRefusal) {
-    const response = { status: 'refused', error: error.message };
+    const response = { status: 'refused', error: error.message,
+      ...(error.reason ? { reason: error.reason } : {}) };
+    if (error.reason) {
+      const details = { reason: error.reason };
+      reply.log.info(details, 'Upload refused');
+    }
     reply.code(error.statusCode);
     return reply.send(response);
   }
@@ -297,13 +303,21 @@ function refuse(reply: FastifyReply, error: unknown) {
   return reply.send(response);
 }
 
+function parseUploadName(value: unknown) {
+  const parsed = filename.safeParse(value);
+  if (!parsed.success) {
+    const details = { reason: 'unsafe_name' as const };
+    throw new FileRefusal('invalid_request', details);
+  }
+  return parsed.data;
+}
+
 async function inspectUpload(name: string, bytes: Buffer) {
   try {
     return await inspectFile(name, bytes);
   } catch (error) {
-    // Parser details stay in the cause; clients receive a stable content refusal.
-    const cause = { cause: error };
-    throw new FileRefusal('unsupported_file', cause);
+    const details = { reason: inspectionReason(error) };
+    throw new FileRefusal('unsupported_file', details);
   }
 }
 

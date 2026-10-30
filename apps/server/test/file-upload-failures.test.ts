@@ -1,4 +1,5 @@
 import { once } from 'node:events';
+import { z } from 'zod';
 import { createServer } from 'node:net';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
@@ -28,6 +29,7 @@ import { testAuthConfig } from './support/test-auth-config.ts';
 
 const config = { ...testAuthConfig(), expectedOrgId: 'org' };
 const bytes = Buffer.from('Meeting at ten.');
+const logRecord = z.record(z.string(), z.unknown());
 let options: FileOptions;
 let app: ReturnType<typeof buildServer>;
 const cleanup: (() => Promise<unknown>)[] = [];
@@ -137,7 +139,7 @@ async function closeUploadFixture() {
 }
 afterAll(closeUploadFixture);
 
-function uploadRequest(key: string, payload = bytes) {
+function uploadRequest(key: string, payload: Buffer = bytes) {
   const now = Math.floor(Date.now() / 1000);
   const session = {
     sub: 'alice', orgId: 'org', roles: [], authTime: now, exp: now + 300,
@@ -200,7 +202,14 @@ async function reportsRefusalWithoutPrivateDetails(reason: string) {
     }
     const refusals = lines.filter(isRefusal);
     expect(refusals).toHaveLength(1);
-    expect(JSON.parse(refusals[0]!) as unknown).toMatchObject({ reason });
+    const raw: unknown = JSON.parse(refusals[0]!);
+    const log = logRecord.parse(raw);
+    const metadata = ['level', 'time', 'pid', 'hostname', 'name', 'request_id',
+      'trace_id', 'span_id'];
+    for (const field of metadata) {
+      delete log[field];
+    }
+    expect(log).toEqual({ reason, msg: 'Upload refused' });
     const output = lines.join('');
     expect(output).not.toContain(file.name);
     expect(output).not.toContain('presentation.xml');

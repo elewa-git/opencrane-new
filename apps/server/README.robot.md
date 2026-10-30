@@ -1085,6 +1085,19 @@ realtime tests keep the production default, including the paused-consumer test.
 `OTEL_EXPORTER_OTLP_ENDPOINT` enables optional trace export when set.
 Disabling secure cookies or allowing insecure OIDC HTTP is only for local testing.
 
+## File refusal reasons
+
+The worker chooses a fixed reason where inspection refuses a file. `types.ts`
+checks the code after the worker copies the error. The upload response adds
+`reason`; the request log records only that code alongside ordinary request facts.
+Parser errors and document details never enter those lines. Refused inspection
+still returns HTTP 415; an unsafe upload name still returns HTTP 400. Request size
+and rate limits keep their existing responses. No event changes.
+
+`test/file-reasons.test.ts` checks all ten codes with synthetic files.
+`test/file-upload-failures.test.ts` checks HTTP status, response and safe logs.
+The [upload API](../../docs/architecture/upload-api.md) owns the code list.
+
 ## Ordinary Office parts
 
 Office ZIP inspection accepts `.xlsx` directly under `ppt/embeddings/`,

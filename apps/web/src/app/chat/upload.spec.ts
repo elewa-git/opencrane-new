@@ -104,9 +104,8 @@ async function refusesFileList() {
 }
 it('does not retry a refused file-list read or mark its upload ready', refusesFileList);
 
-async function keepsStatusWording(testCase: [number, string, string]) {
+async function keepsStatusWording(status: number, responseText: string, expected: string) {
   captureUpload();
-  const [status, responseText, expected] = testCase;
   const file = new File(['Sample'], 'sample.txt');
   function ignoreProgress() {}
   const upload = sendUpload('chat', file, 'refused', ignoreProgress);

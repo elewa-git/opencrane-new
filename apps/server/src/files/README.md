@@ -14,7 +14,9 @@ This folder handles files people attach to conversations. It checks the file's c
 
 Office files can include chart workbooks, printer settings and web or email links.
 Embedded workbooks receive the same checks and share the upload limits. Macros,
-other embedded files and links that load outside content remain refused.
+other embedded files and links that load outside content remain refused. Each
+inspection refusal has a fixed reason code. The response and request log carry
+that code without file names, document part names or parser details.
 
 A file waits in server memory while [ClamAV](../../../../GLOSSARY.md#clamav-virus-scanner) scans it. Only a clean file reaches the files bucket; an infected file receives a rejection. File access follows the latest join, so a later participant cannot fetch older attachments. A later invitation alone does not undo a saved removal. Replies tell browsers and caches not to store private results.
 
