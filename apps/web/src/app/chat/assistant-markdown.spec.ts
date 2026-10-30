@@ -121,6 +121,28 @@ function updatesStreamedReply() {
   expect(root.querySelector('h2')?.textContent).toBe('Finished');
 }
 
+async function keepsCopyFeedbackDuringStreaming() {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal('navigator', { clipboard: { writeText } });
+  const reply = '```text\nsame code\n```\n\n```text\nsame code\n```\n\nLater prose';
+  const { root, fixture } = mount(reply);
+  const codeBlocks = root.querySelectorAll('.code-block');
+  const copiedBlock = codeBlocks[1];
+  copiedBlock?.querySelector('button')?.click();
+  await fixture.whenStable();
+  expect(copiedBlock?.querySelector('[role=status]')?.textContent).toBe('Copied');
+  fixture.componentRef.setInput('text', reply + ' continues.');
+  fixture.detectChanges();
+  expect(root.querySelectorAll('.code-block')[1]).toBe(copiedBlock);
+  expect(copiedBlock?.querySelector('[role=status]')?.textContent).toBe('Copied');
+  expect(codeBlocks[0]?.querySelector('[role=status]')).toBeNull();
+  fixture.componentRef.setInput('text',
+    '```text\nsame code\n```\n\n```text\nchanged code\n```\n\nLater prose continues.');
+  fixture.detectChanges();
+  expect(copiedBlock?.querySelector('[role=status]')).toBeNull();
+  expect(writeText).toHaveBeenCalledWith('same code');
+}
+
 function keepsLongReplies() {
   const longText = 'Long reply\n'.repeat(20000) + '['.repeat(20000) + '*'.repeat(20000);
   const { root } = mount(longText);
@@ -154,6 +176,9 @@ it('allows up to three leading spaces and trailing whitespace on closing code ma
   closesIndentedCodeBlocks);
 
 it('renders unfinished streamed code and updates when the reply grows', updatesStreamedReply);
+
+it('keeps copy feedback on the copied block while unchanged code precedes streamed prose',
+  keepsCopyFeedbackDuringStreaming);
 
 it('keeps very long replies and unmatched markers without truncation', keepsLongReplies);
 
