@@ -233,7 +233,8 @@ function resolveRelationshipElement(
   const namespace = namespaces.get(prefix);
   // Resolve each declaration where it applies; stripping prefixes would hide wrong namespaces.
   const unqualified = !prefix && namespace === undefined;
-  if (names.length || localName !== expectedName ||
+  const emptyPrefix = qualifiedName.startsWith(':');
+  if (emptyPrefix || names.length || localName !== expectedName ||
       (!unqualified && namespace !== relationshipNamespace)) {
     throw new Error('Unsafe Office document');
   }
