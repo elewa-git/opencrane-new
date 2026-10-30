@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { closeSync, constants, fstatSync, openSync, readFileSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 import { checks, qualifications } from './collect.ts';
 import { runInContainer } from './container-process.ts';
@@ -49,6 +49,61 @@ type Result = { result: 'FAIL'; reason: 'collection_failed' } | Binding & {
   result: 'PASS'; checks: Record<string, 'PASS'>; qualifications: Record<string, 'PASS'>;
   receiptDigests: string[];
 };
+
+const resultPath = '/etc/opencrane/private-memory-qualification-result.json';
+const resultSchema = bindingSchema.extend({
+  result: z.literal('PASS'),
+  checks: z.record(z.enum(checks), z.literal('PASS')),
+  qualifications: z.record(z.enum(qualifications), z.literal('PASS')),
+  receiptDigests: z.array(digest).length(checks.length + qualifications.length),
+});
+
+function saveResult(result: Result): void {
+  const temporary = `${resultPath}.${randomUUID()}`;
+  writeFileSync(temporary, JSON.stringify(result), { flag: 'wx', mode: 0o600 });
+  renameSync(temporary, resultPath);
+}
+
+function savedResult(): string {
+  const descriptor = openSync(resultPath,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const stat = fstatSync(descriptor);
+    if (!stat.isFile() || stat.uid !== 0 || (stat.mode & 0o022) !== 0 ||
+        stat.size === 0 || stat.size > 8192) {
+      throw new Error('unsafe_qualification');
+    }
+    return readFileSync(descriptor, 'utf8');
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+// Read the collector's protected output and measure the deployment again on every use.
+export async function readDeploymentQualification(silo: string) {
+  const target = deploymentTarget();
+  if (target.siloId !== silo) throw new Error('wrong_silo');
+  const saved = savedResult();
+  const result = resultSchema.parse(JSON.parse(saved));
+  if (new Set(result.receiptDigests).size !== checks.length + qualifications.length) {
+    throw new Error('incomplete_qualification');
+  }
+  const before = measure(target.containerId);
+  const state = await readEventState(target.containerId);
+  const installationId = hash(JSON.stringify([before.installationId, state.created]));
+  const expected = { sourceSha: before.sourceSha, imageDigest: before.imageDigest,
+    environmentId: before.environmentId, siloId: hash(silo), installationId };
+  if (before.siloId !== expected.siloId) throw new Error('wrong_silo');
+  assertSame(expected, result);
+  await assertInstallation(target.containerId, before, state.created);
+  assertSame(target, deploymentTarget());
+  function confirm() {
+    assertSame(target, deploymentTarget());
+    if (savedResult() !== saved) throw new Error('qualification_changed');
+  }
+  confirm();
+  return { runId: result.runId, confirm };
+}
 
 function hash(value: string): string {
   const hasher = createHash('sha256');
@@ -181,6 +236,7 @@ export async function collectDeployment(...unexpectedArguments: unknown[]): Prom
     if (unexpectedArguments.length !== 0) {
       throw new Error('unexpected_argument');
     }
+    saveResult({ result: 'FAIL', reason: 'collection_failed' });
     const target = deploymentTarget();
     const containerId = target.containerId;
     const before = measure(containerId);
@@ -208,7 +264,10 @@ export async function collectDeployment(...unexpectedArguments: unknown[]): Prom
         complete[name] = 'PASS';
       }
     }
-    return { ...binding, result: 'PASS', checks: results, qualifications: complete, receiptDigests };
+    const result: Result = { ...binding, result: 'PASS', checks: results,
+      qualifications: complete, receiptDigests };
+    saveResult(result);
+    return result;
   } catch {
     return { result: 'FAIL', reason: 'collection_failed' };
   }

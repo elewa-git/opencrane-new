@@ -5,7 +5,8 @@ For people, read [README.md](README.md) first.
 ## Deployment collection
 
 P4-15 PR 5e adds `await collectDeployment()` and `run.mjs`. The older file
-parser below remains refusal-only. No admission caller or receipt importer is added.
+parser below remains refusal-only. The disabled initial-load command reads only the
+collector-owned result described below. No admission switch is added.
 
 The collector uses `/usr/bin/docker` and the local `/var/run/docker.sock` only.
 The deployment owner controls Docker, the image build and the collector process.
@@ -63,8 +64,24 @@ Only validated metadata is hashed into `receiptDigests`; no memory text is hashe
 All child output and errors stay in process memory. Failures expose only
 `FAIL / collection_failed`. Success reports measured identity, the nine checks,
 both qualifications and receipt digests. This output is not an admission token.
-There is no file writer, event append or setting change. Saved JSON cannot be fed
-back into this collector. The older file parser still cannot return PASS.
+The collector atomically writes its own result to
+`/etc/opencrane/private-memory-qualification-result.json`, using a new file with mode 0600.
+A new collection first replaces the prior result with FAIL. Only its own complete run
+can replace that with PASS. The owner runs the collector as root and protects the parent
+directories. No event is appended and no admission setting changes. Saved JSON cannot
+be fed back into this collector. The older file parser still cannot return PASS.
+
+`readDeploymentQualification(silo)` reads that fixed file with no symlink following.
+It requires a root-owned regular file, no group or world writes, and at most 8 KiB.
+It parses the collector's complete output shape and requires nine PASS checks, both
+complete qualifications and eleven distinct receipt digests. It independently measures
+the current deployment and event-stream creation, checks the silo, and rechecks the
+configuration and result after the measurements. It returns the collector run id and a
+synchronous check that those protected files still match. The initial-load command
+retains that id, rechecks access after deployment reads, then checks the files without
+another wait before each append. It repeats the checks after saving.
+This reader requires local Docker access on the deployment host; no HTTP route exposes it.
+Delivery and production admission remain disabled.
 
 **Live qualification: NOT RUN.** The image-owned journey runner is deliberately
 left to P4-15 PR 5d, with its claimed dev stack and enable-and-journey work. It must

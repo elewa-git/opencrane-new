@@ -10,6 +10,9 @@ the catalogue or permissions. It keeps each person in their own scope and refuse
 a delayed list if access changed. The same checks apply when preparing all four
 reviewed personal tools together: recall, remember, Correct and Forget. It leaves
 out operations without permission or a reviewed free Allow policy.
+Initial personal loading also checks the deployment collector's protected results against
+current installation and host measurements. Saved membership comes first, and each command
+keeps its original permission decisions and access positions through preparation.
 Live private tool delivery remains disabled.
 The server checks who is asking and what they may do, saves each change in the
 [event log](../../GLOSSARY.md#event-log-event-store), and passes chat work to each
@@ -166,7 +169,7 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks saved membership before single or combined personal memory tools, private callers, original tool reviews, and access before history errors; prepares and allocates child and routine allowances; checks saved routine admission and dispatch prohibition; applies saved Stop, Pause and Retire intent; verifies confirmed native termination for stopped turns and admin authority at a pause, owner removal and Ask termination; shares types| libs["libs/*<br/>shared code and chat keys"]
+  server -.->|checks saved membership before single or combined personal memory tools, private callers, original tool reviews, and access before history errors; prepares and allocates child and routine allowances; checks saved routine admission and dispatch prohibition; applies saved Stop, Pause and Retire intent; verifies confirmed native termination for stopped turns and admin authority at a pause, owner removal and Ask termination; shares types| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
   server -->|reads and saves company opt-in, own and admin profile metadata and original change, publication and selection receipts; detects saved personal corrections, forgets, loaded expiry and lost access, records invalid contexts and personal account revocations, bearer and verified OAuth choices, changes, catalogue interruptions, checked pauses and retirements, private routine sessions, encrypted inputs and checked admission receipts, cancellations, recovery, proven unsent retries and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]

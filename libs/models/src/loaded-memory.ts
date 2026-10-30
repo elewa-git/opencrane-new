@@ -1,10 +1,11 @@
 import type { Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { memoryContextRecordedEventSchema } from '@opencrane/events';
-import type { authorityFence } from './authority.ts';
+import type { AuthorityPermissions, authorityFence } from './authority.ts';
 import { foldMemoryContext, type MemoryContextState } from './memory-context-fold.ts';
 import { loadedMemoryRights, type MemoryContext } from './memory-context.ts';
 import { prepareMemoryReceipts } from './memory-preparation.ts';
+import { MemberAccessRefused } from './member-authority.ts';
 import { memoryReferences } from './memory-lineage.ts';
 
 type Identity = Pick<MemoryContext, 'silo' | 'requester' | 'assistant' | 'computer' |
@@ -63,7 +64,7 @@ async function readScopeChanges(store: EventStore, scopes: Iterable<Scope>, dead
 
 /** Read scope history before starting the short access check. */
 export async function prepareLoadedMemory(store: EventStore, binding: Binding | undefined,
-  claims: Identity, conversation: StoredEvent[], deadline: number) {
+  claims: Identity, conversation: StoredEvent[], deadline: number, permissions?: AuthorityPermissions) {
   try {
     const state = loadedContext(conversation, claims);
     const references = state?.references ?? [];
@@ -95,7 +96,7 @@ export async function prepareLoadedMemory(store: EventStore, binding: Binding | 
         if (!rightsChecked) {
           for (const scope of scopes.values()) {
             await loadedMemoryRights(store, binding, claims, scope.scopeId, fresh,
-              conversation, applied);
+              conversation, applied, permissions);
           }
           // Keep these grants on the original authority check for every later confirmation.
           rightsChecked = true;
@@ -114,12 +115,14 @@ export async function prepareLoadedMemory(store: EventStore, binding: Binding | 
         await fresh();
         if (performance.now() >= fresh.deadline) throw new LoadedMemoryRefused();
         confirmReferences(scopes.values(), references, claims.silo);
-      } catch {
+      } catch (error) {
+        if (error instanceof MemberAccessRefused) throw error;
         throw new LoadedMemoryRefused();
       }
     }
     return { confirm, loaded: references.length > 0 };
-  } catch {
+  } catch (error) {
+    if (error instanceof MemberAccessRefused) throw error;
     throw new LoadedMemoryRefused();
   }
 }

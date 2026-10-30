@@ -1,0 +1,2 @@
+- Record initial personal memory references in separate preparation and load commands. Failed or uncertain saves return no text; native memory delivery remains disabled.
+- Require the deployment collector's complete results for the current installation and host before initial personal loading. Keep saved membership refusals ahead of dependency failures and retain access decisions through preparation. Delivery remains disabled.

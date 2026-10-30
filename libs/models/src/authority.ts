@@ -15,15 +15,21 @@ export const outputReportTypes: readonly string[] = [
   'agent.native_request_refused',
 ];
 
+export type AuthorityPermissions = Pick<ReturnType<typeof memberAuthorisation>,
+  'check' | 'actsFor' | 'conversation' | 'use'> & {
+  include: (...subjects: string[]) => void;
+  confirm: () => Promise<void>;
+};
+
 /** Shared by model/MCP decisions; destination checks can use this same resource grant. */
 export async function currentAuthority(store: EventStore, binding: Binding, requester: string, assistant: string,
   conversation: string, resourceType: string, resourceId: string,
   fresh?: Awaited<ReturnType<typeof authorityFence>>, conversationRows?: StoredEvent[],
   grants?: DecisionGrants, applied?: (eventId: string) => Promise<boolean>,
-  readHistory?: ReturnType<typeof authorityHistoryReader>) {
+  readHistory?: ReturnType<typeof authorityHistoryReader>, permissions?: AuthorityPermissions) {
   fresh ??= await authorityFence(store, performance.now());
-  const auth = memberAuthorisation(binding);
-  const checkApplied = receiptReader(auth, applied);
+  const auth = await permissionReader(binding, permissions);
+  const checkApplied = receiptReader(memberAuthorisation(binding), applied);
   const facts = [], receipts: string[] = [];
   let active = true;
   const subjects = [`ownership-${binding.silo}`, `member-${requester}`,
@@ -46,6 +52,8 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   const decisionGrantees = grantReceiptGrantees(initialRows, requester, assistant,
     forDecision, grants?.teamGrantees);
   fresh.include(...teams);
+  permissions?.include(...subjects, ...teams,
+    ...(resourceType === 'mcp_server' ? [`mcp-${resourceId}`] : []));
   const teamReads = [...teams].map(readSubject);
   histories.push(...await Promise.all(teamReads));
   for (const row of histories.flat().sort((a, b) => a.sequence - b.sequence)) {
@@ -62,12 +70,24 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   }
   if (!active) throw new AuthorityRefused('Assistant inactive');
   await requireReceipts(receipts, checkApplied);
-  const permissions = await Promise.all([auth.check(requester, 'member'), auth.actsFor(requester, assistant),
+  const decisions = await Promise.all([auth.check(requester, 'member'), auth.actsFor(requester, assistant),
     auth.conversation(requester, conversation, 'post'), auth.use('person', requester, resourceType, resourceId),
     auth.use('assistant', assistant, resourceType, resourceId)]);
-  requirePermissions(permissions);
+  requirePermissions(decisions);
+  await permissions?.confirm();
   await fresh();
-  return createHash('sha256').update(JSON.stringify({ facts, permissions, memoryScopes: [], credential: null })).digest('hex');
+  const input = { facts, permissions: decisions, memoryScopes: [], credential: null };
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(input));
+  return hash.digest('hex');
+}
+
+async function permissionReader(binding: Binding, permissions?: AuthorityPermissions) {
+  if (permissions) {
+    await permissions.confirm();
+    return permissions;
+  }
+  return memberAuthorisation(binding);
 }
 
 async function requireReceipts(receipts: string[], checkApplied: (id: string) => Promise<boolean>) {

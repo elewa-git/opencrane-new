@@ -6775,3 +6775,13 @@ Fastify is pinned to 5.12.6 (MIT). The shared lockfile also updates fast-uri
 to 3.1.9 and 4.2.3 (BSD-3-Clause). Registry metadata and installed licence
 files were checked. The [audit notes](../../docs/process/npm-audit.md#29-october-2026-update)
 record the affected paths and the decoder override.
+
+## Initial personal load gate repair
+
+Part of #97, PR #836. `prepareInitialMemory` accepts identity but no qualification objects.
+It reads the collector-owned file and current deployment measurements through
+`scripts/private-memory-qualification/deployment.ts`. Both complete qualifications are
+required. Saved membership precedes dependencies; command-local permissions and original
+access positions survive preparation. MemberAccessRefused remains decisive.
+See [the initial-load contract](../../docs/process/p4-15-pr5d/README.robot.md).
+Delivery remains disabled. Fresh-install native qualification: NOT RUN.

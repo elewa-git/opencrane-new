@@ -10,6 +10,7 @@ This folder lets people review, save, correct and forget information the assista
 - Records which facts an assistant loaded before returning their text.
 - Allows an assistant to save or correct a personal fact only when all loaded facts are recorded.
 - Previews eligible facts for a saved private turn without sending text to a computer.
+- Records initial personal references in two checked steps, with no text delivery.
 - Records choices and shows saved status for future nightly upkeep; running that upkeep remains disabled.
 
 A memory fact is one saved piece of information. Its scope says whose memory it belongs to: a person, a group or an assistant's notes. [Grants](../../../../GLOSSARY.md#grant) say who may read and write it. Reads return unavailable while the [read table](../../../../GLOSSARY.md#read-table-projection), a database copy built from saved changes, is behind. A later request can succeed after the memory worker catches up. They need the memory worker and its existing private key directory. Destroyed or quarantined facts return status without text.
@@ -65,8 +66,16 @@ Recall saves the time used to check its facts and checks again before returning 
 | [command-history.ts](command-history.ts), [journal.ts](journal.ts) | Track unfinished writes so recovery keeps the right keys. |
 | [mcp.ts](mcp.ts), [recall-delivery.ts](recall-delivery.ts), [recall-proof.ts](recall-proof.ts), [agent-lineage.ts](agent-lineage.ts) | Serve assistant recall, remember and personal correction tools with proof of loaded facts. |
 | [invalidation.ts](invalidation.ts), [access-loss.ts](access-loss.ts), [stop.ts](stop.ts) | Record withdrawn memory context and stop its matching connected turn. |
+| [initial-delivery.ts](initial-delivery.ts), [initial-access.ts](initial-access.ts) | Check deployment results and saved membership before recording initial personal references. |
 | [turn-preview.ts](turn-preview.ts), [maintenance.ts](maintenance.ts) | Preview private-turn memories and record future upkeep choices and history. |
 
 ## How it connects
 
 The [server](../../README.md) registers requests for the [website](../../../web/README.md) and the memory [tool server](../../../../GLOSSARY.md#mcp-server-tool-server). [Members](../members/README.md) and [chat](../chat/README.md) supply current access and turn facts. [Integrations](../integrations/README.md) and the [models library](../../../../libs/models/README.md) apply the same final tool-call checks as other tools. [Background workers](../../../ops/README.md) maintain the encrypted memory read tables and keys.
+
+[Initial personal records](README.robot.md) describe the separate preparation and load commands.
+
+Initial personal loading reads the deployment collector's protected results. It refuses
+missing or stale results and checks saved membership before other dependencies.
+Preparation and loading each keep their original access positions and permission decisions.
+Loading still returns status only; delivery remains disabled.

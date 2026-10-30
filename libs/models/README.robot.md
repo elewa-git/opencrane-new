@@ -4805,3 +4805,11 @@ was added; request context uses existing audited names and digests. Security rul
 both authority test files remain unchanged. Tests use real NATS/PostgreSQL and the real
 custody adapter against a synthetic HTTP transport. Gateway/header integration and
 fresh-install provider qualification remain NOT RUN.
+
+## Initial memory permission decisions
+
+The internal initial-load workflow can pass command-owned `AuthorityPermissions` through
+`memoryRights` and `prepareLoadedMemory`. It checks each permission once and confirms the
+original small access-stream positions after waits. The server establishes saved membership
+first. Existing callers retain their original live permission checks. Full conversation
+history still loads before the two-second access check.

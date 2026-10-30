@@ -4,7 +4,8 @@ import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { grantStream, type Binding } from '@opencrane/authz';
 import { memoryScopeId } from '@opencrane/projections';
 import { assistantCreatedDataSchema, type MemoryIdentity } from '@opencrane/events';
-import { type authorityFence, decisionAuthorityFence, currentAuthority, AuthorityRefused } from './authority.ts';
+import { type AuthorityPermissions, type authorityFence, decisionAuthorityFence,
+  currentAuthority, AuthorityRefused } from './authority.ts';
 import { confirmDecisionAccess, decisionActivity } from './decision-activity.ts';
 import { mcpPolicy, parseMcpCall, parseMemoryRequest, toolDecision } from './mcp.ts';
 import { closesDecisionTurn } from './approvals.ts';
@@ -65,7 +66,7 @@ export async function memoryRights(store: EventStore, binding: Binding,
   claims: Pick<MemoryContext, 'silo' | 'requester' | 'assistant' | 'computer' | 'generation' |
     'conversation' | 'turn' | 'thread'>, parsed: ReturnType<typeof parseMemoryRequest>,
   deadline: number, includeDispatch?: (...subjects: string[]) => void,
-  prepared?: PreparedMemoryReads) {
+  prepared?: PreparedMemoryReads, permissions?: AuthorityPermissions) {
   const activity = prepared?.activity ??
     await prepareMemoryActivity(store, binding, claims, parsed, deadline);
   if (prepared) await activity.confirm(deadline, false, true);
@@ -121,7 +122,7 @@ export async function memoryRights(store: EventStore, binding: Binding,
     await requireRecordedGrants(store, binding.silo, claims, 'mcp_server', 'memory', fresh);
     let contextDigest = await currentAuthority(store, binding, claims.requester,
       claims.assistant, claims.conversation, 'mcp_server', 'memory', fresh,
-      activity.conversation, undefined, applied);
+      activity.conversation, undefined, applied, undefined, permissions);
     // Keep discovery free of fact access. Each recall checks its selected scope separately.
     if (parsed.input) {
       let resourceTypes = ['memory_read'];
@@ -138,7 +139,7 @@ export async function memoryRights(store: EventStore, binding: Binding,
           fresh, selected.requesterGroup);
         contextDigest = await currentAuthority(store, binding, claims.requester,
           claims.assistant, claims.conversation, resourceType, scope.scopeId, fresh,
-          activity.conversation, undefined, applied);
+          activity.conversation, undefined, applied, undefined, permissions);
       }
     }
     await fresh();
@@ -338,13 +339,16 @@ export function prepareMemorySend(payload: Awaited<ReturnType<typeof prepareMemo
 
 export async function loadedMemoryRights(store: EventStore, binding: Binding,
   claims: ThreadIdentity, scopeId: string, fresh: Awaited<ReturnType<typeof authorityFence>>,
-  conversation: StoredEvent[], applied: (eventId: string) => Promise<boolean>) {
+  conversation: StoredEvent[], applied: (eventId: string) => Promise<boolean>,
+  permissions?: AuthorityPermissions) {
   await currentAuthority(store, binding, claims.requester, claims.assistant,
-    claims.conversation, 'mcp_server', 'memory', fresh, conversation, undefined, applied);
+    claims.conversation, 'mcp_server', 'memory', fresh, conversation, undefined,
+    applied, undefined, permissions);
   const selected = await selectedMemoryScope(store, binding, claims, scopeId, fresh, applied);
   await requireRecordedGrants(store, binding.silo, claims, 'mcp_server', 'memory', fresh);
   await currentAuthority(store, binding, claims.requester, claims.assistant,
-    claims.conversation, 'memory_read', scopeId, fresh, conversation, undefined, applied);
+    claims.conversation, 'memory_read', scopeId, fresh, conversation, undefined,
+    applied, undefined, permissions);
   await requireRecordedGrants(store, binding.silo, claims, 'memory_read', scopeId,
     fresh, selected.requesterGroup);
 }

@@ -1,4 +1,4 @@
-import { statSync, openSync, fstatSync, readFileSync, closeSync } from 'node:fs';
+import { statSync, openSync, fstatSync, readFileSync, closeSync, writeFileSync, renameSync } from 'node:fs';
 import { ChildProcess, execFileSync, spawn } from 'node:child_process';
 import { PassThrough } from 'node:stream';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
@@ -61,6 +61,8 @@ function prepare(): void {
   vi.mocked(spawn).mockImplementation(spawnDocker);
   vi.mocked(openSync).mockReturnValue(42);
   vi.mocked(closeSync).mockReturnValue(undefined);
+  vi.mocked(writeFileSync).mockReturnValue(undefined);
+  vi.mocked(renameSync).mockReturnValue(undefined);
   const stat = Object.assign(statSync(import.meta.filename), {
     uid: 0, mode: 0o100600, size: 150, isFile: regularFile,
   });
@@ -318,3 +320,15 @@ function spawnDocker(_file: string, args: readonly string[] = []): ReturnType<ty
   stdin.on('data', inputReceived);
   return child;
 }
+
+async function savesOwnResult(): Promise<void> {
+  const result = await collectDeployment();
+  expect(result.result).toBe('PASS');
+  expect(writeFileSync).toHaveBeenLastCalledWith(
+    expect.stringMatching(/^\/etc\/opencrane\/private-memory-qualification-result\.json\./u),
+    JSON.stringify(result), { flag: 'wx', mode: 0o600 },
+  );
+  expect(renameSync).toHaveBeenLastCalledWith(expect.any(String),
+    '/etc/opencrane/private-memory-qualification-result.json');
+}
+it('writes only its own complete result to the protected deployment file', savesOwnResult);
