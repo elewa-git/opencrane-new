@@ -1490,6 +1490,32 @@ it.each([
 ])('preserves release append refusal %s through a later %s failure', releaseAppendAccessRefusal);
 
 
+async function memberAuthoritySavedRefusalBeforePositionFailure(kind: string) {
+  const test = await fixture();
+  let changed;
+  if (kind === 'removed') {
+    changed = envelope('test', `member-${test.userId}`, 'member.removed', {
+      memberId: test.userId, removedBy: 'owner',
+    });
+  } else {
+    changed = envelope('test', `member-${test.userId}`, 'member.role_changed', {
+      memberId: test.userId, previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+    });
+  }
+  await nats.seed([changed]);
+  const fault = vi.spyOn(nats.store, 'head');
+  fault.mockRejectedValue(new Error('Position read unavailable'));
+  try {
+    const pending = activeMember(nats.store, binding, test.userId, { requiredRole: 'admin' });
+    await expect(pending).rejects.toBeInstanceOf(MemberAccessRefused);
+  } finally {
+    fault.mockRestore();
+  }
+}
+it.each(['removed', 'demoted'])(
+  'preserves member authority %s refusal before a failing position read',
+  memberAuthoritySavedRefusalBeforePositionFailure);
+
 async function releaseReplayAfterRestart() {
   let upstreamBytes = 0;
   function received(bytes: Buffer) {
@@ -1532,29 +1558,3 @@ async function releaseReplayAfterRestart() {
 // Run this case last because restarting closes the shared fixture's original store.
 it('replay and a restarted store recover audit evidence without a sending capability',
   releaseReplayAfterRestart);
-
-async function memberAuthoritySavedRefusalBeforePositionFailure(kind: string) {
-  const test = await fixture();
-  let changed;
-  if (kind === 'removed') {
-    changed = envelope('test', `member-${test.userId}`, 'member.removed', {
-      memberId: test.userId, removedBy: 'owner',
-    });
-  } else {
-    changed = envelope('test', `member-${test.userId}`, 'member.role_changed', {
-      memberId: test.userId, previousRole: 'admin', newRole: 'member', changedBy: 'owner',
-    });
-  }
-  await nats.seed([changed]);
-  const fault = vi.spyOn(nats.store, 'head');
-  fault.mockRejectedValue(new Error('Position read unavailable'));
-  try {
-    const pending = activeMember(nats.store, binding, test.userId, { requiredRole: 'admin' });
-    await expect(pending).rejects.toBeInstanceOf(MemberAccessRefused);
-  } finally {
-    fault.mockRestore();
-  }
-}
-it.each(['removed', 'demoted'])(
-  'preserves member authority %s refusal before a failing position read',
-  memberAuthoritySavedRefusalBeforePositionFailure);
