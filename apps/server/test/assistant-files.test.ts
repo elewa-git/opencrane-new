@@ -107,8 +107,11 @@ async function publishesAssistantFiles() {
       digest.update(currentBytes);
       const changed = { ...artifact, name: refusal.name, size: currentBytes.length,
         sha256: digest.digest('hex') };
+      const turnId = `refusal-${sequence}`;
+      const request = { id: turnId, conversationId: 'chat', text: 'Create another file' };
+      await chatCommand(options.store, fixture.keys, person, request);
       const refused = { ...report, previousSequence: sequence, sequence: ++sequence,
-        artifacts: [changed] };
+        turnId, artifacts: [changed] };
       expect(await recordReport(options.store, fixture.keys, context, refused)).toBe('recorded');
       const saved = await chatHistory(options.store, 'test', 'chat');
       const cards = saved.filter(isCard);

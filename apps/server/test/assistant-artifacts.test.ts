@@ -74,3 +74,47 @@ async function keepsAllowanceAfterPartialPublication() {
 }
 it('keeps the turn byte allowance after a partial publication and exact retries',
   keepsAllowanceAfterPartialPublication, 180_000);
+
+async function refusesChangedPublication(interrupted: boolean) {
+  const fixture = await publicationFixture(Buffer.from('A report'));
+  try {
+    if (interrupted) {
+      const append = fixture.store.append.bind(fixture.store);
+      async function interruptCard(command: Parameters<typeof append>[0]) {
+        const event = z.object({ type: z.string() }).parse(command.event);
+        if (event.type === 'agent.file_changed') throw new Error('Interrupted card');
+        return append(command);
+      }
+      const appends = vi.spyOn(fixture.store, 'append');
+      appends.mockImplementation(interruptCard);
+      await expect(fixture.record(fixture.report)).rejects.toThrow('Interrupted card');
+      appends.mockRestore();
+    } else {
+      expect(await fixture.record(fixture.report)).toBe('recorded');
+    }
+    const changedName = { ...fixture.artifact, name: 'renamed.txt' };
+    const changedDigest = { ...fixture.artifact, sha256: 'c'.repeat(64) };
+    const additional = { ...fixture.artifact, id: 'b'.repeat(64), name: 'additional.txt' };
+    const changedSets = [[changedName], [changedDigest], [additional],
+      [fixture.artifact, additional]];
+    for (const artifacts of changedSets) {
+      const changed = { ...fixture.report, sequence: 2, previousSequence: 1, artifacts };
+      await expect(fixture.record(changed)).rejects.toThrow();
+      const reusedSequence = { ...fixture.report, artifacts };
+      await expect(fixture.record(reusedSequence)).rejects.toThrow();
+    }
+    await fixture.record(fixture.report);
+    expect(await fixture.record(fixture.report)).toBe('duplicate');
+    const rows = await chatHistory(fixture.store, 'test', 'chat');
+    function isUpload(row: typeof rows[number]) { return row.event.type === 'file.uploaded'; }
+    function isCard(row: typeof rows[number]) { return row.event.type === 'agent.file_changed'; }
+    expect(rows.filter(isUpload)).toHaveLength(1);
+    expect(rows.filter(isCard)).toHaveLength(1);
+  } finally {
+    vi.restoreAllMocks();
+    await fixture.close();
+  }
+}
+it.each([false, true])(
+  'refuses changed and additional publication sets while keeping exact retries (interrupted: %s)',
+  refusesChangedPublication, 180_000);
