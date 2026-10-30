@@ -2,6 +2,35 @@
 
 For people, read [README.md](README.md) first.
 
+## Private company OAuth preparation (Part of #50)
+
+`prepareCompanyOAuthAttempt` is internal, with no route or package export. Trusted
+context supplies the silo and admin custodian; strict input names a new profile,
+installation, registration and opt-in revisions. The session supplies its digest and
+current membership revision. History and configuration load before one admin permission
+decision, including when preparation fails. Saved removal and demotion retain
+`MemberAccessRefused`, including when a later position read would fail. An existing
+profile cannot be replaced through preparation.
+
+`prepareOAuthAttempt` accepts company context only through its explicit company variant.
+Personal input remains strict. A typed company operation key binds silo and change reference;
+changed custodians, sessions or targets cannot recover it or stage a second copy.
+Custody binds company ownership without a member userId, the exact configuration,
+reviewed scopes and admission revisions. It reuses immutable PKCE S256, state and nonce,
+with pinned UID/version and a ten-minute expiry. A lost preparation reply recovers the
+same copy; a lost create reply without pinned identity stays unknown.
+
+After staging, the helper compares the admitted membership positions, profile,
+opt-in and current configuration. It reloads the server policy and catalogue evidence.
+An unchanged catalogue renewal is allowed; policy changes or unavailable evidence refuse
+preparation. Concurrent events repeat these checks within the original two-second final
+deadline. The final awaited read cannot extend attempt expiry. Recovery one millisecond before expiry is allowed; recovery at expiry refuses.
+Only safe internal metadata returns. No provider call, event append, selection or
+release occurs. Company start/URL, callback, exchange, activation and transfer remain
+later work. Personal refresh/revoke and exact deletion retain their existing contracts.
+No event/API field or dependency was added; protected security and authority tests are unchanged.
+Fresh-install and live provider qualification: NOT RUN.
+
 ## Verified OAuth selection (Part of #50)
 
 `changeConnectionSelection` optionally takes a trusted configuration loader. OAuth
@@ -2033,8 +2062,10 @@ reads each other successor once to calculate the complete owner set. It keeps
 historical successors out of the positions used for write access checks. Their
 later ordinary role changes cannot remove ownership.
 `activeMember` can reuse a membership read completed before the write check. It
-compares both saved stream positions before checking current permissions and
-applied receipts. A position change or an expired two-second window refuses the write.
+refuses a saved removal or insufficient role before reading stream positions, so a
+position read outage cannot replace that refusal. It then compares both saved stream
+positions before checking current permissions and applied receipts. A position change
+or an expired two-second window refuses the write.
 When a caller has already started its write check, membership reads use that same
 deadline. They never start a new ten-second history window.
 
@@ -4633,7 +4664,7 @@ Exact retries compare the saved data and private material, UID and version. Unkn
 publication retains material. Replay preserves silo ownership and custodian metadata.
 The result is `saved_unverified`. Company revocation, selection, release,
 HTTP routes, routine creation and verified account checks remain unavailable.
-Company material stays outside personal cleanup and private OAuth material reads.
+Company bearer generations stay outside personal cleanup and private OAuth material reads.
 Tests use real NATS, OpenFGA and PostgreSQL with the existing local custody fixture.
 Fresh-install and production Kubernetes qualification: NOT RUN.
 

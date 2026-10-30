@@ -32,3 +32,12 @@ export function decodeToken(encoded: string) {
   }
   return token;
 }
+
+export function matchesMetadata(actual: Record<string, string>, expected: Record<string, string>) {
+  for (const [key, value] of Object.entries(expected)) {
+    if (actual[key] !== value) {
+      return false;
+    }
+  }
+  return true;
+}
