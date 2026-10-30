@@ -1,6 +1,6 @@
 import * as cfb from 'cfb';
 import { z } from 'zod';
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { inspectFile } from '../src/files/types.ts';
 
 const relationshipNamespace = 'http://schemas.openxmlformats.org/package/2006/relationships';
@@ -267,6 +267,74 @@ async function refusesDisguisedWorkbookWithDecoy() {
 }
 it('refuses a Word package with a decoy workbook both directly and embedded',
   refusesDisguisedWorkbookWithDecoy);
+
+function spellRelationships(xml: string, prefix: string) {
+  const tags = xml.replace(/(<\/?)(Relationships?)(?=[\s>])/gu, `$1${prefix}$2`);
+  if (!prefix) return tags;
+  return tags.replace('xmlns=', `xmlns:${prefix.slice(0, -1)}=`);
+}
+
+function checksRelationshipSpelling(prefix: string) {
+  function workbookWithRelationship(type: string, target: string, mode = '') {
+    const parts = documentParts('xl');
+    const xml = relationships(relationship(type, target, mode));
+    parts['xl/_rels/workbook.xml.rels'] = spellRelationships(xml, prefix);
+    return archive(parts);
+  }
+
+  async function acceptsInternalWorksheet() {
+    const bytes = workbookWithRelationship('worksheet', 'worksheets/sheet1.xml');
+    await expect(inspectFile('sample.xlsx', bytes)).resolves.toBe(workbookMime);
+  }
+  it('accepts an internal worksheet relationship', acceptsInternalWorksheet);
+
+  async function acceptsSafeHyperlink(target: string) {
+    const bytes = workbookWithRelationship('hyperlink', target, 'Ext&#101;rnal');
+    await expect(inspectFile('sample.xlsx', bytes)).resolves.toBe(workbookMime);
+  }
+  it.each(['http://example.org/sample', 'https://example.org/sample', 'mailto:a@example.org'])(
+    'accepts an external hyperlink to %s', acceptsSafeHyperlink,
+  );
+
+  async function refusesExternalContent(type: string) {
+    const bytes = workbookWithRelationship(type, 'https://example.org/sample', 'Ext&#101;rnal');
+    await expect(inspectFile('sample.xlsx', bytes)).rejects.toThrow('Unsafe Office document');
+  }
+  it.each(['image', 'attachedTemplate', 'oleObject', 'connection', 'frame', 'package'])(
+    'refuses an external %s relationship', refusesExternalContent,
+  );
+
+  async function refusesUnsafeTarget(target: string) {
+    const bytes = workbookWithRelationship('hyperlink', target, 'External');
+    await expect(inspectFile('sample.xlsx', bytes)).rejects.toThrow('Unsafe Office document');
+  }
+  it.each(['file:///sample', 'javascript:alert(1)', 'data:text/plain,sample', '//example.org/sample'])(
+    'refuses an external hyperlink to %s', refusesUnsafeTarget,
+  );
+}
+describe.each(['', 'r:'])('relationship prefix "%s"', checksRelationshipSpelling);
+
+async function acceptsLocalRelationshipNamespace() {
+  const parts = documentParts('xl');
+  const entry = relationship('worksheet', 'worksheets/sheet1.xml');
+  const prefixed = entry.replace('<Relationship ',
+    `<r:Relationship xmlns:r="${relationshipNamespace}" `);
+  parts['xl/_rels/workbook.xml.rels'] = relationships(prefixed);
+  await expect(inspectFile('sample.xlsx', archive(parts))).resolves.toBe(workbookMime);
+}
+it('accepts a relationship with its namespace declared on the child',
+  acceptsLocalRelationshipNamespace);
+
+async function refusesUnknownRelationshipNamespace(declaration: string) {
+  const parts = documentParts('xl');
+  const entry = relationship('worksheet', 'worksheets/sheet1.xml');
+  const prefixed = entry.replace('<Relationship ', `<r:Relationship ${declaration} `);
+  parts['xl/_rels/workbook.xml.rels'] = relationships(prefixed);
+  await expect(inspectFile('sample.xlsx', archive(parts))).rejects.toThrow('Unsafe Office document');
+}
+it.each(['', 'xmlns:r="https://example.org/other"'])(
+  'refuses an unbound or wrong relationship namespace: %s', refusesUnknownRelationshipNamespace,
+);
 
 async function refusesEmbeddedPartCount() {
   const workbook = documentParts('xl');
