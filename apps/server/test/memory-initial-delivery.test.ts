@@ -1,4 +1,6 @@
 import { releaseTurnCredentials } from '../src/chat/turn-credentials.ts';
+import { recordReport } from '../src/chat/reports.ts';
+import { turnCommand } from '../src/chat/turns.ts';
 import { randomUUID } from 'node:crypto';
 import { initialMemoryInput } from '../../computer/test/server.ts';
 import { turnMemoryPreview } from '../src/memory/turn-preview.ts';
@@ -930,3 +932,35 @@ async function refusesUncertainStart() {
 }
 it('never upgrades a replayed private start even before initial evidence exists',
   refusesUncertainStart);
+
+async function refusesLaterStartAfterQualificationLoss() {
+  const message = { conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
+    contentType: 'text', ...setup.keys.encrypt('test', 'conversation', 'Numbered question') };
+  const saved = await setup.append('conversation-conversation', 'message.posted', message);
+  const report = { conversationId: 'conversation', turnId: saved.id, threadId: 'numbered-thread',
+    assistantId: 'assistant', sequence: 1, previousSequence: 0,
+    type: 'agent.turn_started', executionMode: 'restricted' as const };
+  await recordReport(options.store, setup.keys, bridgeContext, report);
+  const input = { ...report, status: 'started' as const };
+  const turn = await turnCommand(options.store, bridgeContext, input);
+  expect(turn?.executionMode).toBe('restricted');
+  if (!turn) throw new Error('Missing admitted fixture turn');
+  deployment.remove();
+  const signed = vi.spyOn(setup.tokens, 'turn');
+  const delivered = vi.fn();
+  const bridgeOptions = { ...options, keys: setup.keys };
+  for (const sequence of [1, 2]) {
+    const retry = { ...report, sequence, previousSequence: sequence - 1 };
+    if (sequence > 1) await recordReport(options.store, setup.keys, bridgeContext, retry);
+    const acknowledgement: Record<string, unknown> = {};
+    await releaseTurnCredentials(bridgeOptions, bridgeContext, setup.tokens, retry,
+      turn, acknowledgement, delivered);
+    expect(acknowledgement).toEqual({ refused: 'memory_context_unavailable' });
+    const facts = await readChatFacts(options.store, 'test', 'conversation', saved.id);
+    expect(facts.memoryContext).toBeUndefined();
+  }
+  expect(signed).not.toHaveBeenCalled();
+  expect(delivered).not.toHaveBeenCalled();
+}
+it('refuses a later numbered start after qualification disappears before preparation',
+  refusesLaterStartAfterQualificationLoss);
