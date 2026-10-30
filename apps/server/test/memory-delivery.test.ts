@@ -224,8 +224,12 @@ async function renewsNumberedNativeStart() {
   expect(reports).toContainEqual(expect.objectContaining({ type: 'agent.turn_started',
     sequence: start.event.report!.sequence, turnId: 'turn', threadId: 'thread-1' }));
   expect(send).toHaveBeenCalledTimes(1);
-  const reply = JSON.parse(String(send.mock.calls[0]![0])) as unknown;
-  expect(reply).toMatchObject({ type: 'ack', token: expect.any(String) });
+  const raw = send.mock.calls[0]![0];
+  if (typeof raw !== 'string') throw new Error('Expected a JSON acknowledgement');
+  const reply: unknown = JSON.parse(raw);
+  expect(reply).toMatchObject({ type: 'ack' });
+  const grant = z.object({ token: z.string().min(1) }).parse(reply);
+  expect(grant.token).toBeTruthy();
   expect(reply).not.toHaveProperty('initialInput');
   expect(reply).not.toHaveProperty('refused');
   expect(computer.grants.has('thread-1')).toBe(true);
