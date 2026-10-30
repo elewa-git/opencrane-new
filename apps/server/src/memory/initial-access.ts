@@ -45,6 +45,11 @@ export async function initialMemoryAccess(options: MemoryOptions, requester: str
   function include(...added: string[]) {
     for (const subject of added) subjects.add(subject);
   }
+  async function confirmSubject(subject: string) {
+    if (membership.positions.has(subject)) return;
+    const position = await options.store.head(subject, deadline);
+    if (position > head) throw new LoadedMemoryRefused();
+  }
   async function confirm() {
     if (performance.now() >= deadline) throw new LoadedMemoryRefused();
     // Preserve removal before another unavailable access stream can hide it.
@@ -55,11 +60,9 @@ export async function initialMemoryAccess(options: MemoryOptions, requester: str
         throw new LoadedMemoryRefused();
       }
     }
-    for (const subject of subjects) {
-      if (membership.positions.has(subject)) continue;
-      const position = await options.store.head(subject, deadline);
-      if (position > head) throw new LoadedMemoryRefused();
-    }
+    // Read independent positions together after membership has kept its refusal priority.
+    const checks = [...subjects].map(confirmSubject);
+    await Promise.all(checks);
     if (performance.now() >= deadline) throw new LoadedMemoryRefused();
   }
   const actsFor = cached(auth.actsFor.bind(auth));
