@@ -2,25 +2,34 @@
 
 ## Repair checks
 
-Date: 29 October 2026. Code: `6ca39742655093761e72b8820999e8fa7a01d706`.
-The branch was rebased onto the main fetched at the start, `9f12dedaf`.
+Date: 29–30 October 2026. Tested code: `6ca39742655093761e72b8820999e8fa7a01d706`.
+The final rebase finished on fetched main `391d849f66e4ea645312391865fea2f70852f38b`.
+The equivalent code commit is `31c3e8808`. A range comparison confirmed that every
+code and test patch stayed unchanged. Only two README conflicts needed resolution;
+both the new main documentation and the initial-memory documentation were retained.
 Environment: this development worktree, the supplied PostgreSQL test listener, and
 normal disposable NATS, OpenFGA, gateway and Docker fixtures. This was not a fresh
 application installation. Every lint, typecheck and test command used `nice -n 10`.
 
 | Check | Result | Observation |
 | --- | --- | --- |
-| Failing first | PASS | Membership failures were recorded in `d07d4be21`; collector failures in `bbb8ed6b7`; nested membership refusal in `5bef38cea`. Final-read races were recorded in `74fecf0c2`, and repeated membership history in `5cbf999aa`. Each test commit preceded its fix. |
+| Failing first | PASS | Membership failures were recorded in `b1a39dfe6`; collector failures in `d4d9ee73c`; nested membership refusal in `1e2630e63`. Final-read races were recorded in `d1b2afb2b`, and repeated membership history in `6dfa570b3`. Each test commit preceded its fix. |
 | Initial delivery | PASS | 42/42 passed twice, in sequential runs after the final membership change. |
 | Main memory and shared authority suites | PASS | 341 tests passed in both runs across six files. |
 | Collector | PASS | 97 tests passed twice, including the real collector output shape, both complete qualifications, stale bindings and protected-file reading. Docker and filesystem observations were simulated; process cleanup used disposable containers. |
-| Typecheck | PASS | All workspaces and infrastructure, then final server and collector checks. |
-| Full lint | PASS | Full lint passed. The final membership change and its test also passed a focused lint run. |
+| Typecheck | PASS | All workspaces and infrastructure, final server and collector checks, and a full repeat after the final rebase. |
+| Full lint | PASS | Full lint passed, including a full repeat after the final rebase. The final membership change and its test also passed a focused lint run. |
 | Knip, dependencies, docs and links | PASS | No unused-code or dependency violations; documentation, README and offline link checks passed. |
-| Event catalogue and changelog | PASS | All 157 event types agree; the branch fragment is valid. |
+| Event catalogue and changelog | PASS | All 157 event types agree, including after the final rebase; the branch fragment is valid. |
 | Native qualification and delivery | NOT RUN | No live memory journey was run. Delivery and admission stay disabled. |
 | Broader memory batch | FAIL | 966/969 passed. One nested-refusal regression and two MCP publication cases failed. The three selected MCP publication cases passed twice in isolation; no assertion or deadline changed. The full 224-case MCP file was not repeated. |
 | Full root suite | NOT RUN | Only the requested focused suites and related memory/access tests ran. |
+
+The six repeated memory and authority files were `apps/server/test/memory.test.ts`,
+`libs/models/test/memory-context.test.ts`, `libs/models/test/memory-rights.test.ts`,
+`libs/models/test/authority.test.ts`, `libs/models/test/authority-standalone.test.ts`
+and `libs/models/test/authority-volume.test.ts`. The supplied database URL was
+`postgres://postgres:test@127.0.0.1:55432/postgres`.
 
 The membership regressions reproduced repeated permission decisions, a lost saved
 removal and an applied demotion during snapshot preparation. A further regression
@@ -52,7 +61,9 @@ Logs: `/tmp/pr836-memory1.log`, `/tmp/pr836-memory2.log`,
 `/tmp/pr836-collector-final-1.log`, `/tmp/pr836-collector-final-2.log`,
 `/tmp/pr836-mcp-diagnostic-1.log`, `/tmp/pr836-mcp-diagnostic-2.log`,
 `/tmp/pr836-lint-final.log`, `/tmp/pr836-lint-last-files.log`,
-`/tmp/pr836-typecheck.log`, `/tmp/pr836-types-complete.log` and `/tmp/pr836-types-last.log`.
+`/tmp/pr836-typecheck.log`, `/tmp/pr836-types-complete.log`, `/tmp/pr836-types-last.log`,
+`/tmp/pr836-post-rebase-typecheck.log`, `/tmp/pr836-post-rebase-events.log` and
+`/tmp/pr836-post-rebase-lint.log`.
 
 ## Earlier slice checks
 
