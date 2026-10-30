@@ -98,6 +98,7 @@ function keepsLongReplies() {
 function keepsExistingElements() {
   const { root } = mount('Source [1]\n\n```a2ui\n{}\n```');
   expect(root.querySelector('.citation')?.textContent?.trim()).toBe('1');
+  expect(root.querySelector('.a2ui header .agent-badge')?.textContent).toBe('Ag');
   expect(root.textContent).toContain('This interface is not available yet.');
 }
 
