@@ -649,3 +649,28 @@ async function removalAndOutage() {
   expect(receive).not.toHaveBeenCalled();
 }
 it('preserves saved removal ahead of failed release dependencies', removalAndOutage);
+
+async function sustainedUnrelatedActivity(conversationId: string) {
+  await fact();
+  const pending = await prepare();
+  await pending.load();
+  let writes = 0;
+  async function unrelated() {
+    for (let index = 0; index < 3; index++) {
+      writes += 1;
+      await setup.append(`conversation-${conversationId}`, 'agent.turn_started', {
+        assistantId: 'assistant', conversationId, turnId: `unrelated-${writes}` });
+    }
+  }
+  // Keep saving real events on every validation pass until consumption finishes.
+  deployment.observe(unrelated);
+  const receive = vi.fn();
+  await expect(pending.consume(receive)).resolves.toBeUndefined();
+  expect(writes).toBeGreaterThanOrEqual(3);
+  expect(receive).toHaveBeenCalledTimes(1);
+  expect(receive.mock.calls[0]?.[0]).toContain(canary);
+  await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+  expect(receive).toHaveBeenCalledTimes(1);
+}
+it.each(['other', 'conversation'])(
+  'delivers once during sustained unrelated activity in %s', sustainedUnrelatedActivity);
