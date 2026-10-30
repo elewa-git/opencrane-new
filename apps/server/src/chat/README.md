@@ -1,6 +1,8 @@
 # Chat
 
 The [qualified start contract](README.robot.md) explains initial personal memory delivery.
+Renewing a pass for an already started turn checks access and loaded memory again.
+It does not prepare or resend the initial memory.
 
 This folder handles conversations between people and with assistants. It saves messages, sends assistant work to the right computer and returns replies and live updates while checking who may read each chat.
 

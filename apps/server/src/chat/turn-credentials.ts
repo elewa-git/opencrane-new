@@ -17,7 +17,8 @@ import type { ChatOptions } from './routes.ts';
 type BridgeOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
   Partial<Pick<ChatOptions, 'binding' | 'db' | 'feed'>> & { keyDirectory?: string };
 type Tokens = Awaited<ReturnType<typeof tokenIssuer>>;
-type Report = { conversationId: string; turnId: string; threadId?: string | undefined; replay?: boolean };
+type Report = { conversationId: string; turnId: string; threadId?: string | undefined;
+  replay?: boolean; sequence?: number };
 type ChatRows = Awaited<ReturnType<typeof chatHistory>>;
 
 export async function releaseTurnCredentials(options: BridgeOptions,
@@ -31,7 +32,8 @@ export async function releaseTurnCredentials(options: BridgeOptions,
     const input = await turnContextFor(options, report, binding);
     await requireOpenConversation(options, report);
     if (!tokens) throw new Error('Turn issuer unavailable');
-    const initial = await initialMemoryFor(options, context, binding, report.replay === true);
+    const initial = input?.renewal ? undefined
+      : await initialMemoryFor(options, context, binding, report.replay === true);
     const confirmMemory = await turnMemoryCheck(options, context, binding);
     await confirmMemory();
     await requireTurnMember(options.store, options.silo, binding.requesterId);
@@ -126,13 +128,27 @@ async function turnContextFor(options: BridgeOptions,
     const text = binding.rootId === undefined ? decrypt(message.event.data) : '';
     const history = shared ? sharedContext(rows, message, decrypt)
       : privateContext(rows, message, binding.requesterId, decrypt);
-    return { text, history };
+    return { text, history, renewal: hasEarlierTurnStart(rows, report) };
   } catch (error) {
     if (error instanceof TurnContextUnavailable || error instanceof TurnAdmissionRejected) throw error;
     const reason = binding.sharingClass === 'shared_only'
       ? 'Shared context unavailable' : 'Private context unavailable';
     throw new TurnContextUnavailable(reason, { cause: error });
   }
+}
+
+function hasEarlierTurnStart(rows: ChatRows, report: Report) {
+  if (report.sequence === undefined) return false;
+  function isStart(row: ChatRows[number]) {
+    if (row.event.type !== 'agent.turn_started') return false;
+    const start = z.object({ turnId: z.string() }).parse(row.event.data);
+    return start.turnId === report.turnId;
+  }
+  const first = rows.find(isStart);
+  if (!first) return false;
+  // Keep repeats of the first report on the one-use initial delivery path.
+  // Older starts without report numbers predate the bridge report journal.
+  return !first.event.report || first.event.report.sequence < report.sequence;
 }
 
 async function initialMemoryFor(options: BridgeOptions,
