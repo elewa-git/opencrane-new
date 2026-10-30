@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { checks, qualifications } from './collect.ts';
+import { qualifications } from './collect.ts';
 import { probeHost } from './host-probe.ts';
 import { runJourney } from './journey.ts';
 
@@ -18,13 +18,14 @@ function prepare(): void {
 }
 beforeEach(prepare);
 
-function incomplete(name: string): void {
-  expect(runJourney(JSON.stringify({ ...request, name }))).toEqual({
-    result: 'FAIL', reason: 'journey_incomplete',
+async function incomplete(name: string): Promise<void> {
+  expect(await runJourney(JSON.stringify({ ...request, name }))).toEqual({
+    ...request, name, result: 'NOT RUN', complete: false, observedAt: expect.any(Number),
   });
   expect(probeHost).toHaveBeenCalledOnce();
 }
-it.each([...checks, ...qualifications])('never completes %s on host checks alone', incomplete);
+it.each(['privateTurns', 'nativeRecall', 'requesterIsolation', 'sessionIsolation',
+  'stopReconnect', 'replacementReload', 'persistence', ...qualifications])('never completes %s on host checks alone', incomplete);
 
 const invalid: [string, unknown][] = [
   ['sourceSha', 'a'.repeat(39)], ['imageDigest', 'latest'], ['environmentId', '../private'],

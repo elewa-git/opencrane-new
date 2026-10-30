@@ -368,3 +368,17 @@ async function withdrawsPassForPartialRunner(): Promise<void> {
   expect(responses).toHaveLength(12);
 }
 it('withdraws earlier saved PASS when the real partial runner refuses', withdrawsPassForPartialRunner);
+
+async function retainsMissingJourneys(): Promise<void> {
+  function incomplete(response: Record<string, unknown>): void {
+    response['result'] = 'NOT RUN';
+    response['complete'] = false;
+  }
+  alter = incomplete;
+  const result = await collectDeployment();
+  expect(result).toMatchObject({ result: 'PARTIAL',
+    checks: { privateTurns: 'NOT RUN', invalidation: 'NOT RUN' },
+    qualifications: { 'P4-14': 'NOT RUN', 'P4-15': 'NOT RUN' } });
+  expect(responses).toHaveLength(11);
+}
+it('keeps missing journeys NOT RUN without qualifying the deployment', retainsMissingJourneys);
