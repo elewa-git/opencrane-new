@@ -76,7 +76,7 @@ flowchart LR
   server["Server"] -->|handles memory requests| memory["Memory"]
   chat["Chat"] -->|supplies saved turn facts| memory
   memory -->|checks access and references| models["Models library"]
-  memory -.->|supplies internal input| computer["Computer input renderer"]
+  memory -.->|checks then supplies once| computer["Computer input renderer"]
 ```
 
 The [server](../../README.md) registers requests for the [website](../../../web/README.md) and the memory [tool server](../../../../GLOSSARY.md#mcp-server-tool-server). [Members](../members/README.md) and [chat](../chat/README.md) supply current access and turn facts. [Integrations](../integrations/README.md) and the [models library](../../../../libs/models/README.md) apply the same final tool-call checks as other tools. [Background workers](../../../ops/README.md) maintain the encrypted memory read tables and keys.
@@ -87,4 +87,6 @@ Initial personal loading reads the deployment collector's protected results. It 
 missing or stale results and checks saved membership before other dependencies.
 Preparation and loading each keep their original access positions and permission decisions.
 Loading returns status only. A separate internal consumer receives the selected text once,
-after checking current facts, access and deployment results. Native start wiring remains unbuilt.
+after checking current facts, access and deployment results. Other conversations can keep
+writing during these checks. A failed check keeps the same block for a fresh check; a lost
+consumer reply never permits another delivery. Native start wiring remains unbuilt.

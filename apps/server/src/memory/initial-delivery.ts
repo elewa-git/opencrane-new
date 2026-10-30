@@ -134,19 +134,26 @@ function initialCommands(options: MemoryOptions, selection: Selection, preparedI
   async function consume(consumer: (block: string) => void | Promise<void>) {
     const releaseDeadline = performance.now() + 10_000;
     if (releasing) {
-      return refuseInitialMemory(options, binding.requester, releaseDeadline, new LoadedMemoryRefused());
+      const refusal = new LoadedMemoryRefused();
+      return refuseInitialMemory(options, binding.requester, releaseDeadline, refusal);
     }
     releasing = true;
     function release() {
       const block = retainedBlock;
       // Consume immediately before handing text over. Lost consumer replies cannot resend.
       retainedBlock = undefined;
-      if (block === undefined) throw new LoadedMemoryRefused();
+      if (block === undefined) {
+        throw new LoadedMemoryRefused();
+      }
       return consumer(block);
     }
     try {
-      if (!loadedProved) retainedBlock = undefined;
-      if (!loadedProved || retainedBlock === undefined) throw new LoadedMemoryRefused();
+      if (!loadedProved) {
+        retainedBlock = undefined;
+      }
+      if (!loadedProved || retainedBlock === undefined) {
+        throw new LoadedMemoryRefused();
+      }
       const permissions = await initialMemoryAccess(options, binding.requester, releaseDeadline);
       await confirmInitialRelease(options, selection, permissions, releaseDeadline, release);
     } catch (error) {
@@ -244,7 +251,9 @@ async function confirmInitialRelease(options: MemoryOptions, selection: Selectio
   const parsed = requestFor(binding, scope.scopeId);
   const watched = new Set([`ownership-${binding.silo}`, `member-${binding.requester}`]);
   function include(...subjects: string[]) {
-    for (const subject of subjects) watched.add(subject);
+    for (const subject of subjects) {
+      watched.add(subject);
+    }
   }
   const rights = await memoryRights(options.store, options.binding, binding, parsed, deadline,
     include, undefined, permissions);
@@ -306,7 +315,9 @@ async function releaseChanges(options: MemoryOptions, selection: Selection,
     const rows: StoredEvent[] = [];
     const includeCloses = subject === conversation;
     for await (const row of options.store.readStream(subject, from + 1, deadline, includeCloses)) {
-      if (row.sequence > to) break;
+      if (row.sequence > to) {
+        break;
+      }
       rows.push(row);
     }
     return { subject, rows };
