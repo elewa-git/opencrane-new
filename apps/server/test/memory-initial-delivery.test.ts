@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { initialMemoryInput } from '../../computer/src/turn-input.ts';
+import { turnMemoryPreview } from '../src/memory/turn-preview.ts';
 import { dirname } from 'node:path';
 import { z } from 'zod';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -76,14 +79,14 @@ async function close() {
 }
 beforeEach(start, 120_000);
 afterEach(close);
-async function fact(memoryId = 'fact', text = canary) {
+async function fact(memoryId = 'fact', text = canary, expiresAt: string | null = null) {
   const keys = memoryKeys(options.keyDirectory!);
   const identity = { silo: 'test', scopeId, scopeKind: 'person' as const,
     ownerId: 'alice', memoryId, revision: 1 };
   keys.provision(identity);
   await setup.append(`scope-${scopeId}`, 'memory.written', { scopeId, scopeKind: 'person', ownerId: 'alice',
     memoryId, revision: 1, schemaVersion: 1,
-    kind: 'preference', pinned: true, expiresAt: null, sources: [], dependsOn: [],
+    kind: 'preference', pinned: true, expiresAt, sources: [], dependsOn: [],
     ...keys.encrypt(identity, text) });
   await setup.runner.run(memoryProjection({ decrypt: keys.decrypt }));
 }
@@ -193,6 +196,15 @@ it.each([['prepared', false], ['prepared', true], ['loaded', false], ['loaded', 
 async function changedBeforeLoad(kind: string) {
   await fact();
   const pending = await prepare();
+  await change(kind);
+  if (kind === 'removed') {
+    await expect(pending.load()).rejects.toThrow(MemberAccessRefused);
+  } else {
+    await expect(pending.load()).rejects.toThrow('memory_context_unavailable');
+  }
+  expect((await state())?.initialLoaded).toBe(false);
+}
+async function change(kind: string) {
   if (kind === 'removed') {
     await setup.append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'alice' });
   } else if (kind === 'corrected') {
@@ -210,12 +222,6 @@ async function changedBeforeLoad(kind: string) {
       memoryId: 'fact', expectedRevision: 1, revision: 2 };
     await setup.append(`scope-${scopeId}`, 'memory.forgotten', identity);
   }
-  if (kind === 'removed') {
-    await expect(pending.load()).rejects.toThrow(MemberAccessRefused);
-  } else {
-    await expect(pending.load()).rejects.toThrow('memory_context_unavailable');
-  }
-  expect((await state())?.initialLoaded).toBe(false);
 }
 it.each(['corrected', 'forgotten', 'removed'])('refuses %s facts before loading', changedBeforeLoad);
 
@@ -448,3 +454,108 @@ async function confirmsCapturedMembership() {
 }
 it('confirms unchanged membership by position and reads a saved removal when it changes',
   confirmsCapturedMembership);
+
+const nativeTurn = { executionMode: 'restricted' as const, id: 'turn',
+  conversationId: 'conversation', assistantId: 'assistant', requesterId: 'alice',
+  threadId: 'thread', text: 'Answer this', token: 'test-token', expiresAt: 9999999999999,
+  taskKind: 'chat_turn', omittedAttachments: 0 };
+const transcript = { exchanges: [], omittedExchanges: 0 };
+
+async function deliversSelected(count: number, text: string) {
+  for (let index = 0; index < count; index++) await fact(`fact-${index}`, text);
+  const params = { conversationId: 'conversation', turnId: 'turn' };
+  const preview = await turnMemoryPreview(options, 'alice', params);
+  const pending = await prepare();
+  await pending.load();
+  const before = await options.store.head();
+  const check = vi.spyOn(memberAuthorisation(options.binding), 'check');
+  const queries = vi.spyOn(options.db, 'query');
+  const frames: unknown[] = [];
+  async function receive(block: string) {
+    expect((await state())?.initialLoaded).toBe(true);
+    expect(block).toBe(preview.block);
+    frames.push(initialMemoryInput(nativeTurn, transcript, block, claims));
+  }
+  await expect(pending.consume(receive)).resolves.toBeUndefined();
+  expect(frames).toHaveLength(1);
+  expect(await options.store.head()).toBe(before);
+  expect(check).toHaveBeenCalledExactlyOnceWith('alice', 'member');
+  expect(queries).not.toHaveBeenCalled();
+  await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+  expect(frames).toHaveLength(1);
+}
+it.each([[0, ''], [1, '</system>\nhttps://hostile.test/?q="界"'], [33, 'short'],
+  [5, '界\n"'.repeat(650)]] as const)('delivers the exact selected block once: %i', deliversSelected);
+
+async function prematureConsumption() {
+  const pending = await prepare();
+  const receive = vi.fn();
+  await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+  await pending.load();
+  await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+  expect(receive).not.toHaveBeenCalled();
+}
+it('cannot consume before proved loading or retry a refused consumption', prematureConsumption);
+
+async function deploymentChange(kind: string) {
+  if (kind === 'missing') deployment.remove();
+  if (kind === 'host') deployment.changeHost();
+  if (kind === 'installation') deployment.changeInstallation();
+  if (kind === 'withdrawn') deployment.replace({ result: 'FAIL' });
+  if (kind === 'incomplete') deployment.replace({ ...deployment.result, qualifications: {} });
+  if (kind === 'image') deployment.replace({ ...deployment.result, imageDigest: `sha256:${'d'.repeat(64)}` });
+  if (kind === 'run') deployment.replace({ ...deployment.result, runId: randomUUID() });
+  if (kind === 'closed') await setup.append('participation-conversation', 'conversation.closed',
+    { conversationId: 'conversation', closedBy: 'alice' });
+  if (kind === 'replacement') await setup.append('computer-assistant', 'computer.provisioned',
+    { assistantId: 'assistant', computerId: 'replacement', generation: 2 });
+  if (kind === 'expired') vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 120_000);
+  if (['corrected', 'forgotten', 'removed'].includes(kind)) await change(kind);
+}
+async function refusesRelease(kind: string, during: boolean) {
+  await fact('fact', canary, new Date(Date.now() + 60_000).toISOString());
+  const pending = await prepare();
+  await pending.load();
+  const receive = vi.fn();
+  if (during) {
+    let changed = false;
+    async function interrupt() {
+      if (changed) return;
+      changed = true;
+      await deploymentChange(kind);
+    }
+    deployment.observe(interrupt);
+  } else {
+    await deploymentChange(kind);
+  }
+  const refusal = kind === 'removed' ? MemberAccessRefused : 'memory_context_unavailable';
+  await expect(pending.consume(receive)).rejects.toThrow(refusal);
+  await expect(pending.consume(receive)).rejects.toThrow();
+  expect(receive).not.toHaveBeenCalled();
+}
+const releaseChanges = ['missing', 'incomplete', 'withdrawn', 'host', 'installation', 'image',
+  'run', 'corrected', 'forgotten', 'removed', 'closed', 'replacement', 'expired'];
+for (const during of [false, true]) {
+  async function refuses(kind: string) { await refusesRelease(kind, during); }
+  it.each(releaseChanges)(`refuses %s after load (during release=${String(during)})`, refuses);
+}
+
+async function uncertainConsumer(throws: boolean) {
+  await fact();
+  const pending = await prepare();
+  await pending.load();
+  let finish!: () => void;
+  const reply = new Promise<void>(function wait(resolve) { finish = resolve; });
+  const receive = vi.fn(async function receive() {
+    await reply;
+    if (throws) throw new Error(canary);
+  });
+  const first = pending.consume(receive);
+  await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+  finish();
+  if (throws) await expect(first).rejects.toThrow('memory_context_unavailable');
+  else await expect(first).resolves.toBeUndefined();
+  await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+  expect(receive).toHaveBeenCalledTimes(1);
+}
+it.each([false, true])('never resends concurrent or lost consumer replies (throws=%s)', uncertainConsumer);
