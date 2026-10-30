@@ -6081,6 +6081,37 @@ it.each([['removed', false], ['removed', true], ['demoted', false], ['demoted', 
   'preserves company OAuth %s refusal with failed history and invalid input %s',
   refusesCompanyConsentAccess);
 
+async function companyConsentCatalogueRenewal() {
+  const test = await companyConsentFixture();
+  const stage = test.store.custody.prepareAttempt.bind(test.store.custody);
+  const policy = toolPolicyFromRows(test.serverRows);
+  async function renewedStage(...args: Parameters<typeof stage>) {
+    const prepared = await stage(...args);
+    const checkedAt = Date.now();
+    const renewed = envelope('test', `mcp-${test.input.serverId}`, 'mcp.catalogue_checked', {
+      serverId: test.input.serverId, outcome: 'unchanged',
+      schemaDigest: policy.catalogue!.schemaDigest,
+      checkedAt: new Date(checkedAt).toISOString(),
+      expiresAt: new Date(checkedAt + 300_000).toISOString(),
+    });
+    await events.seed([renewed]);
+    return prepared;
+  }
+  const access = vi.spyOn(memberAuthority, 'activeMember');
+  vi.spyOn(test.store.custody, 'prepareAttempt').mockImplementationOnce(renewedStage);
+  try {
+    const prepared = await test.prepare();
+    expect(prepared.status).toBe('prepared');
+    expect(access).toHaveBeenCalledTimes(1);
+    expect(test.store.creates).toBe(1);
+    expect(await test.rows()).toEqual([]);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it('prepares company OAuth when an unchanged catalogue is renewed during staging',
+  companyConsentCatalogueRenewal);
+
 async function companyConsentStageRace(kind: string) {
   const test = await companyConsentFixture();
   const stage = test.store.custody.prepareAttempt.bind(test.store.custody);
