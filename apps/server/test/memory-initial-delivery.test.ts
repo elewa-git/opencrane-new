@@ -1,3 +1,4 @@
+import { releaseTurnCredentials } from '../src/chat/turn-credentials.ts';
 import { randomUUID } from 'node:crypto';
 import { initialMemoryInput } from '../../computer/test/server.ts';
 import { turnMemoryPreview } from '../src/memory/turn-preview.ts';
@@ -763,3 +764,77 @@ async function lateStreamReadChange(kind: string) {
 it.each(['removed', 'corrected', 'forgotten', 'closed', 'replacement',
   'withdrawn', 'expired', 'unrelated'])(
   'checks %s during the final relevant stream read', lateStreamReadChange);
+
+const admitted = { conversationId: 'conversation', turnId: 'turn', threadId: 'thread',
+  requesterId: 'alice', task: 'chat_turn' as const, executionMode: 'restricted' as const };
+const bridgeContext = { silo: 'test', assistantId: 'assistant', computerId: 'computer' };
+async function credentialMessage(text = 'New question') {
+  const data = { conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
+    contentType: 'text', ...setup.keys.encrypt('test', 'conversation', text) };
+  const saved = await setup.append('conversation-conversation', 'message.posted', data);
+  const message = { ...saved, id: 'turn', commandId: 'turn' };
+  await setup.nats.seed([message]);
+}
+async function credentials(acknowledgement: Record<string, unknown>,
+  executionMode: 'restricted' | 'memory_free' = 'restricted') {
+  const bridgeOptions = { ...options, keys: setup.keys };
+  const turn = { ...admitted, executionMode };
+  await releaseTurnCredentials(bridgeOptions, bridgeContext, setup.tokens, admitted,
+    turn, acknowledgement);
+}
+async function initialCredentials(count: number) {
+  if (count) await fact();
+  await credentialMessage();
+  const sign = setup.tokens.turn;
+  async function signing(input: Parameters<typeof sign>[0]) {
+    expect((await state())?.initialLoaded).toBe(true);
+    return sign(input);
+  }
+  const signed = vi.spyOn(setup.tokens, 'turn').mockImplementation(signing);
+  const acknowledgement: Record<string, unknown> = {};
+  await credentials(acknowledgement);
+  expect(acknowledgement).not.toHaveProperty('refused');
+  expect(acknowledgement['token']).toBeTruthy();
+  expect(acknowledgement['initialInput']).toContain('New question');
+  expect(acknowledgement['initialInput']).toContain('Initial personal memory follows');
+  if (count) expect(acknowledgement['initialInput']).toContain(canary);
+  expect(acknowledgement).not.toHaveProperty('context');
+  expect(setup.received()).toBe(0);
+  const cold = await createEventStore(setup.nats.connection);
+  options.store = cold;
+  const repeated: Record<string, unknown> = {};
+  await credentials(repeated);
+  expect(repeated).toEqual({ refused: 'memory_context_unavailable' });
+  expect(signed).toHaveBeenCalledTimes(1);
+  expect(JSON.stringify(await history(cold, 'conversation-conversation', 'test')))
+    .not.toContain(canary);
+}
+it.each([0, 1])('loads %i facts before signing and never resends on cold reconnect',
+  initialCredentials);
+async function changedWhileSigning(kind: string) {
+  await fact();
+  await credentialMessage();
+  const sign = setup.tokens.turn;
+  async function signing(input: Parameters<typeof sign>[0]) {
+    const grant = await sign(input);
+    await deploymentChange(kind);
+    return grant;
+  }
+  vi.spyOn(setup.tokens, 'turn').mockImplementation(signing);
+  const acknowledgement: Record<string, unknown> = {};
+  await credentials(acknowledgement);
+  expect(acknowledgement).toHaveProperty('refused');
+  expect(acknowledgement).not.toHaveProperty('token');
+  expect(acknowledgement).not.toHaveProperty('initialInput');
+  expect(acknowledgement).not.toHaveProperty('context');
+}
+it.each(['corrected', 'forgotten', 'removed', 'replacement', 'withdrawn'])(
+  'releases neither input nor credentials after %s during signing', changedWhileSigning);
+async function oversizedCredentials() {
+  await fact();
+  await credentialMessage('"'.repeat(65_000));
+  const acknowledgement: Record<string, unknown> = {};
+  await credentials(acknowledgement);
+  expect(acknowledgement).toEqual({ refused: 'memory_context_unavailable' });
+}
+it('refuses the complete escaped credential frame above 120 KiB', oversizedCredentials);
