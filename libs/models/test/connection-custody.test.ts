@@ -6081,6 +6081,43 @@ it.each([['removed', false], ['removed', true], ['demoted', false], ['demoted', 
   'preserves company OAuth %s refusal with failed history and invalid input %s',
   refusesCompanyConsentAccess);
 
+async function companyConsentSavedRefusalBeforePositionFailure(kind: string) {
+  const test = await companyConsentFixture();
+  let changed;
+  if (kind === 'removed') {
+    changed = envelope('test', `member-${test.userId}`, 'member.removed', {
+      memberId: test.userId, removedBy: 'owner',
+    });
+  } else {
+    changed = envelope('test', `member-${test.userId}`, 'member.role_changed', {
+      memberId: test.userId, previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+    });
+  }
+  await events.seed([changed]);
+  const access = vi.spyOn(memberAuthority, 'activeMember');
+  const custody = vi.spyOn(test.store.custody, 'prepareAttempt');
+  const reads = vi.spyOn(events.store, 'readStream');
+  vi.spyOn(events.store, 'head').mockRejectedValue(new Error('Position read unavailable'));
+  try {
+    await expect(test.prepare()).rejects.toBeInstanceOf(MemberAccessRefused);
+    expect(access).toHaveBeenCalledTimes(1);
+    let memberReads = 0;
+    for (const [subject] of reads.mock.calls) {
+      if (subject === `member-${test.userId}`) {
+        memberReads += 1;
+      }
+    }
+    expect(memberReads).toBe(1);
+    expect(custody).not.toHaveBeenCalled();
+    expect(test.store.creates).toBe(0);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it.each(['removed', 'demoted'])(
+  'preserves company OAuth %s refusal before a failing position read',
+  companyConsentSavedRefusalBeforePositionFailure);
+
 async function companyConsentCatalogueRenewal() {
   const test = await companyConsentFixture();
   const stage = test.store.custody.prepareAttempt.bind(test.store.custody);
