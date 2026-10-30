@@ -31,6 +31,10 @@ later work. Personal refresh/revoke and exact deletion retain their existing con
 No event/API field or dependency was added; protected security and authority tests are unchanged.
 Fresh-install and live provider qualification: NOT RUN.
 
+`changesDecisionActivity` is also used by initial memory delivery to classify new
+turn events. It keeps ordinary messages, files and other turns separate from
+closure, replacement and memory changes that refuse the current turn.
+
 ## Verified OAuth selection (Part of #50)
 
 `changeConnectionSelection` optionally takes a trusted configuration loader. OAuth

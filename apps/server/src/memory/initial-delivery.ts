@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
+import type { StoredEvent } from '@opencrane/event-store';
 import { memoryContextRecordedEventSchema, type MemoryContextRecord } from '@opencrane/events';
-import { approvalActivity, confirmDecisionAccess, decisionAuthorityFence, foldMemoryContext,
+import { approvalActivity, changesDecisionActivity, confirmDecisionAccess,
+  decisionAuthorityFence, foldMemoryContext,
   history, LoadedMemoryRefused, memoryReferences, memoryRights, parseMemoryRequest, prepareLoadedMemory,
   type MemoryContext } from '@opencrane/models';
 import { readChatFacts } from '../chat/chat-summary.ts';
@@ -228,18 +230,26 @@ async function confirmInitialRelease(options: MemoryOptions, selection: Selectio
   const memory = await prepareLoadedMemory(options.store, options.binding, binding,
     activity.conversation, deadline, permissions);
   const parsed = requestFor(binding, scope.scopeId);
+  const watched = new Set([`ownership-${binding.silo}`, `member-${binding.requester}`]);
+  function include(...subjects: string[]) {
+    for (const subject of subjects) watched.add(subject);
+  }
   const rights = await memoryRights(options.store, options.binding, binding, parsed, deadline,
-    undefined, undefined, permissions);
+    include, undefined, permissions);
   const rows = await history(options.store, `scope-${scope.scopeId}`, options.silo, deadline);
-  const references = memoryReferences(rows, options.silo, scope.scopeId, 'event-only');
   const subjects = [`member-${binding.requester}`, `assistant-${binding.assistant}`, 'mcp-memory',
     grantStream('mcp_server', 'memory'), grantStream('memory_read', scope.scopeId)];
   const authority = await decisionAuthorityFence(options.store, performance.now(), subjects,
     binding.requester, binding.assistant, undefined, deadline);
+  include(...subjects);
+  function includeAccess(...subjects: string[]) {
+    include(...subjects);
+    authority.include(...subjects);
+  }
   async function confirmAccess() {
     await confirmDecisionAccess(activity, authority, false, true);
   }
-  const access = { include: authority.include, head: authority.head, deadline: authority.deadline };
+  const access = { include: includeAccess, head: authority.head, deadline: authority.deadline };
   const fresh = Object.assign(confirmAccess, access);
   let before = await options.store.head(undefined, fresh.deadline);
   while (true) {
@@ -248,14 +258,17 @@ async function confirmInitialRelease(options: MemoryOptions, selection: Selectio
     await rights.confirm(fresh.deadline);
     await memory.confirm(fresh);
     const after = await options.store.head(undefined, fresh.deadline);
-    if (after !== before) {
-      // Recheck changes saved during the last await; unrelated activity can still pass.
+    const changed = after !== before && await releaseChanges(options, selection, watched,
+      rows, before, after, fresh.deadline);
+    if (changed) {
+      // Repeat only for changes to this access or turn, within the original deadline.
       before = after;
       continue;
     }
     confirmQualification();
     if (performance.now() >= fresh.deadline) throw new LoadedMemoryRefused();
     // Check expiry synchronously so the final await cannot carry an expired fact into input.
+    const references = memoryReferences(rows, options.silo, scope.scopeId, 'event-only');
     for (const reference of loaded.data.additions) {
       if (references.current(reference, Date.now()) !== 'current') throw new LoadedMemoryRefused();
     }
@@ -267,4 +280,42 @@ async function confirmInitialRelease(options: MemoryOptions, selection: Selectio
     }
     return;
   }
+}
+
+async function releaseChanges(options: MemoryOptions, selection: Selection,
+  accessSubjects: Set<string>, scopeRows: StoredEvent[], from: number, to: number,
+  deadline: number) {
+  const { binding, scope } = selection;
+  const conversation = `conversation-${binding.conversation}`;
+  const computer = `computer-${binding.assistant}`;
+  const memory = `scope-${scope.scopeId}`;
+  const subjects = [...accessSubjects, conversation, computer, memory];
+  async function readChanges(subject: string) {
+    const rows: StoredEvent[] = [];
+    const includeCloses = subject === conversation;
+    for await (const row of options.store.readStream(subject, from + 1, deadline, includeCloses)) {
+      if (row.sequence > to) break;
+      rows.push(row);
+    }
+    return { subject, rows };
+  }
+  // Read only relevant stream tails through the captured position. Other chats
+  // can keep writing without making this validation wait for a quiet store.
+  const reads = subjects.map(readChanges);
+  const changes = await Promise.all(reads);
+  let changed = false;
+  for (const change of changes) {
+    if (change.subject === memory) {
+      scopeRows.push(...change.rows);
+      continue;
+    }
+    for (const row of change.rows) {
+      if (change.subject === conversation || change.subject === computer) {
+        changed ||= changesDecisionActivity(row.event, binding.turn, false, true);
+      } else {
+        changed = true;
+      }
+    }
+  }
+  return changed;
 }
