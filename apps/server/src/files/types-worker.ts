@@ -67,7 +67,7 @@ async function office(
       types ||= entry.fileName === '[Content_Types].xml';
       if (/embeddings\//iu.test(entry.fileName)) {
         const workbook = await readOfficePart(zip, entry);
-        await office(workbook, 'xlsx', budget, depth + 1);
+        await inspectFile('workbook.xlsx', workbook, budget, depth + 1);
       } else {
         await inspectOfficeXml(zip, entry, required!);
       }
@@ -130,7 +130,12 @@ function readOfficePart(zip: ZipFile, entry: Entry): Promise<Buffer> {
   }
 }
 
-async function inspectFile(name: string, bytes: Buffer): Promise<string> {
+async function inspectFile(
+  name: string,
+  bytes: Buffer,
+  budget: OfficeBudget = { bytes: 0, parts: 0 },
+  depth = 0,
+): Promise<string> {
   const extension = extname(name).slice(1).toLowerCase();
   if (!bytes.length || !/^[\w][\w .()-]{0,119}$/u.test(name)) throw new Error('Unsupported file type');
   const detected = await fileTypeFromBuffer(bytes);
@@ -142,7 +147,7 @@ async function inspectFile(name: string, bytes: Buffer): Promise<string> {
   const mime = allowed.get(extension);
   if (['doc', 'xls', 'ppt'].includes(extension)) return legacyOffice(bytes, extension, mime!);
   if (!mime || !detected || (detected.mime !== mime && !(detected.ext === 'zip' && ['docx', 'xlsx', 'pptx'].includes(extension)))) throw new Error('Unsupported file type');
-  if (['docx', 'xlsx', 'pptx'].includes(extension)) await office(bytes, extension);
+  if (['docx', 'xlsx', 'pptx'].includes(extension)) await office(bytes, extension, budget, depth);
   return mime;
 }
 
