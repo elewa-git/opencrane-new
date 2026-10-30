@@ -32,6 +32,10 @@ const invalid: [string, unknown][] = [
   ['runId', 'not-a-uuid'], ['challengeId', '../../private'], ['name', 'unknown'],
   ['name', '../../private.mjs'], ['executable', '/private/program'], ['observations', {}],
   ['complete', true], ['result', 'PASS'],
+  ['sourceSha', `${request.sourceSha}\n`], ['imageDigest', `${request.imageDigest}\n`],
+  ['environmentId', `${request.environmentId}\n`], ['siloId', `${request.siloId}\n`],
+  ['installationId', `${request.installationId}\n`], ['runId', `${request.runId}\n`],
+  ['challengeId', `${request.challengeId}\n`],
 ];
 function invalidField(field: string, value: unknown): void {
   expect(runJourney(JSON.stringify({ ...request, [field]: value }))).toEqual({
@@ -71,8 +75,11 @@ function entryRefuses(input: string, args: string[] = []): void {
   expect(result.stdout).toBe('{"result":"FAIL","reason":"input_invalid"}\n');
   expect(result.stderr).toBe('');
 }
+function refusesEntryInput(input: string): void {
+  entryRefuses(input);
+}
 it.each(['{private', 'x'.repeat(4097), 'é'.repeat(2049)])(
-  'bounds and sanitises the real entry input %#', entryRefuses);
+  'bounds and sanitises the real entry input %#', refusesEntryInput);
 function refusesArguments(): void {
   entryRefuses(JSON.stringify(request), ['/private/program']);
 }

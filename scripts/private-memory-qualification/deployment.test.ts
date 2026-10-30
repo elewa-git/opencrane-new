@@ -347,9 +347,8 @@ async function withdrawsPassForPartialRunner(): Promise<void> {
   expect((await collectDeployment()).result).toBe('PASS');
   expect(JSON.parse(saved)).toHaveProperty('result', 'PASS');
   function partial(response: Record<string, unknown>): void {
-    const input = JSON.stringify(response);
     // Strip the fixture's invented success before invoking the actual entry.
-    const request = JSON.parse(input) as Record<string, unknown>;
+    const request = { ...response };
     delete request['result'];
     delete request['complete'];
     delete request['observedAt'];

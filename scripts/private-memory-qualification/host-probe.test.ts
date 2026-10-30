@@ -3,6 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { probeHost } from './host-probe.ts';
 
 vi.mock('node:fs', { spy: true });
+const readDirectoryNames: (path: string) => string[] = readdirSync;
 const zeroLimits = 'Max core file size        0                    0                    bytes\n';
 let files: Map<string, string>;
 function read(path: unknown): string {
@@ -24,7 +25,7 @@ function prepare(): void {
   ]);
   vi.mocked(readFileSync).mockImplementation(read);
   // Represent server, bridge and proxy processes without reading their arguments or data.
-  vi.mocked(readdirSync).mockReturnValue(['1', '2', '3', 'self'] as never);
+  vi.mocked(readDirectoryNames).mockReturnValue(['1', '2', '3', 'self']);
 }
 beforeEach(prepare);
 
@@ -67,7 +68,7 @@ it.each(['/proc/swaps', '/proc/sys/kernel/core_pattern', '/proc/sys/kernel/core_
   'refuses an unreadable observation at %s', refusesUnreadable);
 
 function refusesProcessList(entries: string[]): void {
-  vi.mocked(readdirSync).mockReturnValue(entries as never);
+  vi.mocked(readDirectoryNames).mockReturnValue(entries);
   expect(probeHost()).toBe(false);
 }
 it.each([[[]], [['self']], [['../private']], [['1', '../../private']]])(

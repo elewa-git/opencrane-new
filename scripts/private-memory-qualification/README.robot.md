@@ -83,12 +83,43 @@ another wait before each append. It repeats the checks after saving.
 This reader requires local Docker access on the deployment host; no HTTP route exposes it.
 Delivery and production admission remain disabled.
 
-**Live qualification: NOT RUN.** The image-owned journey runner is deliberately
-left to P4-15 PR 5d, with its claimed dev stack and enable-and-journey work. It must
-bootstrap the empty silo and implement the complete journeys listed below, including
-the private-memory cleanup required by those journeys. The collector owns process cancellation. A missing runner refuses today. Simulated Docker responses prove collection and refusals. Disposable Node containers
-prove process cancellation on timeout, output overflow and collector exit. These
-tests do not qualify an actual application image or host. Kubernetes collection is outside this first part.
+## Image-owned host probe
+
+P4-15 PR 5h adds the fixed `journey.mjs` entry. The existing package Dockerfile copies
+these files; no code mount, caller executable or interpreter override is needed.
+The entry accepts no arguments and at most 4,096 stdin bytes. Its strict request has
+only the measured binding, one of the eleven existing names and a UUID challenge.
+Unknown names, extra fields, malformed formats and paths refuse before observations.
+Failures contain only `result: FAIL` and `input_invalid`, `host_refused` or
+`journey_incomplete` as the reason. No identity, raw observation or child output is echoed.
+The entry starts no child processes and remains in the supervisor's process group.
+
+The host probe reads `/proc/swaps`, the effective `core_pattern`, `core_uses_pid` and
+`suid_dumpable` kernel settings, `/sys/kernel/kexec_crash_loaded`, its own core limits,
+and the core limits of every process visible in `/proc`. It requires no swap entries,
+an empty dump pattern, zero PID suffix and privileged dump settings, no loaded crash
+kernel, and zero soft AND hard core limits. Duplicate limits, disappearing processes,
+missing observations and unknown values refuse. It changes no setting. Pipe-based
+collectors can ignore core limits, and an empty pattern alone can still produce a
+PID-named dump; both settings matter ([Linux core documentation](https://man7.org/linux/man-pages/man5/core.5.html)).
+The old P4-14 F1/F2 host exceptions never apply to memory.
+
+A safe fixture passes only this host probe. It does not establish coverage of other
+process namespaces or guest kernels. Server, bridge, supervisor and proxy buffers
+all need disabled swap/dumps; later live checks must measure their actual processes.
+Every valid journey still returns FAIL, even after safe observations. The collector
+therefore withdraws its earlier result and cannot save PASS with this partial runner.
+
+**Outstanding / NOT RUN:** all nine live journeys (`privateTurns`, `nativeRecall`,
+`requesterIsolation`, `sessionIsolation`, `invalidation`, `unrelatedActivity`,
+`stopReconnect`, `replacementReload`, `persistence`); both complete qualifications
+(`P4-14`, `P4-15`); pinned native launch; volatile replies; and immutable deployment
+qualification. Their absence holds the later journey on `work/p4-15-pr5i`. Copied
+receipts, human UI checks and protocol PASS cannot replace them. Disposable container
+fixtures prove refusal and cancellation only. No stack, bootstrap or model call runs
+here. Kubernetes collection remains outside this part.
+
+Own checks: [host-runner receipt](../../docs/process/p4-15-pr5h/receipt.md).
 
 ## File parser scope and invocation
 

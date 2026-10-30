@@ -8,6 +8,7 @@
       "entry": [
         "scripts/private-memory-qualification/vitest.config.mjs",
         "scripts/private-memory-qualification/run.mjs",
+        "scripts/private-memory-qualification/journey.mjs",
         "scripts/private-memory-qualification/*.test.ts",
         "infra/package/upgrade-recovery*.test.ts",
         "infra/package/computer-volume-inventory.ts",
