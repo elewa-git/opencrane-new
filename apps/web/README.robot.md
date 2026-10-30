@@ -1051,12 +1051,16 @@ Published editing, groups and multi-save recovery await their frames.
 Text and link drops do nothing. Document handlers prevent file drops elsewhere from
 opening a browser page. Layouts up to 700 px keep Attach without a drop state.
 Disabled, queued and shared-assistant sessions do not accept drops.
+Direct and group chats have no Attach button, drop label or drop highlight.
 The composer uses the existing accent colours, a dashed outline and the polite
 label “Drop files to add them”. The Attach path remains available to keyboards.
 `UploadBatch` sends files in order through the existing `ChatSession.upload` flow.
 A failed file keeps its request key for Retry upload while later files continue.
 Leaving the session discards files held for retry.
 `file-drop.spec.ts` checks workspace drag events at the upload request boundary.
+`composer.spec.ts` checks that chats without Attach have no drop controls.
+`workspace.spec.ts` supplies the dialog methods missing from the test browser and
+restores them after each test. Access-loss checks open the preview before clearing it.
 `npm run visual:chat-drag-drop` builds the app and captures intercepted API screens.
 Images are in `docs/process/chat-drag-drop/`.
 

@@ -16,7 +16,7 @@ shared rules for checking messages before the website shows them.
 ```mermaid
 flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
-  browser["Person's browser<br/>pages, attachments and file drops"] --> web
+  browser["Person's browser<br/>pages and file drops where Attach is available"] --> web
   web -->|requests and live updates| server["apps/server<br/>the back end"]
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
@@ -42,7 +42,8 @@ For everyone, the website:
   Approval details say when the tool replied, while an uncertain result stays unconfirmed.
 - Uploads and previews files, saves screenshots and opens the assistant's read-only
   [computer](../../GLOSSARY.md#computer) view when permitted.
-  Desktop file drops use the same uploads as Attach. Phones keep the Attach button.
+  Desktop file drops use the same uploads where Attach is available.
+  Colleague chats have no file-drop controls. Phones keep the Attach button.
 - Shows permitted memory facts and supports saving, correcting and forgetting personal facts.
   While saved membership permissions are still being applied, Memory shows a setup
   message and retries its reads for up to 30 seconds. Refused reads show access loss straight away.

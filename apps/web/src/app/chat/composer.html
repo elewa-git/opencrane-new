@@ -1,9 +1,12 @@
 <!-- Copied from OpenCrane 1; commit 10abd0ef6. -->
-<form class="composer" [class.disabled]="!!reason()" [class.file-drag]="fileDrag()"
+<form class="composer" [class.disabled]="!!reason()"
+  [class.file-drag]="fileDrag() && !reason() && !teamSession() && !directMode()"
   (submit)="$event.preventDefault(); submit()">
-  <span class="drop-label" role="status" aria-live="polite">
-    @if (fileDrag()) { Drop files to add them }
-  </span>
+  @if (!reason() && !teamSession() && !directMode()) {
+    <span class="drop-label" role="status" aria-live="polite">
+      @if (fileDrag()) { Drop files to add them }
+    </span>
+  }
   <input #upload type="file" hidden aria-label="Choose a file" (change)="choose($event)">
   @if (reason()) {
     <div id="composer-reason" class="disabled-field"><oc-icon name="closed" /><span>{{ reason() }}</span></div>
