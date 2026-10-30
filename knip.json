@@ -12,6 +12,7 @@
         "scripts/private-memory-qualification/*.test.ts",
         "infra/package/upgrade-recovery*.test.ts",
         "infra/package/computer-volume-inventory.ts",
+        "scripts/capture-chat-markdown.mjs",
         "scripts/check-stage-b-polish.mjs",
         "scripts/check-memory-scopes-applying.mjs",
         "scripts/collect-stage-b-evidence.mjs",

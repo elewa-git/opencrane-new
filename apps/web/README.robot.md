@@ -498,6 +498,7 @@ that reply text changes. Copy failures offer another try without logging the tex
 The component specs cover elements, hostile input, copy results, streaming and long replies.
 `nice -n 10 node scripts/capture-chat-markdown.mjs` captures intercepted API examples
 at 1280 and 390 px after `nice -n 10 npm run build -w apps/web`.
+The [Markdown receipt](../../docs/process/chat-markdown-1/receipt.md) records the checks.
 
 After sign-in, choose **Open workspace** (`/workspace`). Personal Agent sessions
 use the real bridge's `GET /api/chat`, conversation commands and resumable `/ws`
