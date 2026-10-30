@@ -86,8 +86,8 @@ The [server](../../README.md) registers requests for the [website](../../../web/
 Initial personal loading reads the deployment collector's protected results. It refuses
 missing or stale results and checks saved membership before other dependencies.
 Preparation and loading each keep their original access positions and permission decisions.
-Each confirmation checks membership first, then reads the other access positions together.
-This avoids adding a separate wait for every independent stream.
+Each confirmation reads access positions together, then checks membership before considering
+other failures. This avoids adding a separate wait for every independent stream.
 Loading returns status only. A separate internal consumer receives the selected text once,
 after checking current facts, access and deployment results. It includes changes found
 in the final event reads before delivery. Other conversations can keep

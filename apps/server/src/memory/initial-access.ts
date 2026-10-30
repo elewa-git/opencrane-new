@@ -45,24 +45,30 @@ export async function initialMemoryAccess(options: MemoryOptions, requester: str
   function include(...added: string[]) {
     for (const subject of added) subjects.add(subject);
   }
-  async function confirmSubject(subject: string) {
-    if (membership.positions.has(subject)) return;
-    const position = await options.store.head(subject, deadline);
-    if (position > head) throw new LoadedMemoryRefused();
-  }
   async function confirm() {
     if (performance.now() >= deadline) throw new LoadedMemoryRefused();
-    // Preserve removal before another unavailable access stream can hide it.
+    const positions = new Map<string, Promise<number>>();
+    for (const subject of subjects) {
+      positions.set(subject, options.store.head(subject, deadline));
+    }
+    // Keep removal priority even when another position read fails.
+    await Promise.allSettled(positions.values());
     for (const [subject, position] of membership.positions) {
-      const current = await options.store.head(subject, deadline);
+      const current = await positions.get(subject)!;
       if (current !== position) {
         await savedMember(options, requester, deadline);
         throw new LoadedMemoryRefused();
       }
     }
-    // Read independent positions together after membership has kept its refusal priority.
-    const checks = [...subjects].map(confirmSubject);
-    await Promise.all(checks);
+    for (const subject of subjects) {
+      if (membership.positions.has(subject)) continue;
+      let positionRead = positions.get(subject);
+      if (positionRead === undefined) {
+        positionRead = options.store.head(subject, deadline);
+      }
+      const position = await positionRead;
+      if (position > head) throw new LoadedMemoryRefused();
+    }
     if (performance.now() >= deadline) throw new LoadedMemoryRefused();
   }
   const actsFor = cached(auth.actsFor.bind(auth));
