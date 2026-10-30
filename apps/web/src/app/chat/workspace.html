@@ -108,7 +108,14 @@
                 <oc-tool-activity-line [record]="tool"
                   (detailsOpened)="openToolDetails(tool, $event)" />
               }
-              @if (turn.text) { <div class="prose" [class.ink]="turn.author === 'agent'">@for (paragraph of turn.text.split('\n\n'); track $index; let last = $last) { <div class="paragraph">@for (part of textParts(paragraph); track $index) {@switch (part.kind) {@case ('bold') {<strong>{{ part.text }}</strong>}@case ('citation') {<button type="button" class="citation" (click)="preview.set('Citation ' + part.text)"><span class="citation-paper" [ocDogEar]="true">{{ part.text.slice(1, -1) }}</span></button>}@case ('a2ui') {<div class="a2ui" [ocDogEar]="true"><header><span class="agent-badge">Ag</span> Interactive · built from approved components</header><p>This interface is not available yet.</p></div>}@default {<ng-container>{{ part.text }}</ng-container>}}}@if (last && turn.author === 'agent' && turn.state === 'working') {<span class="caret" aria-hidden="true"></span>}</div>}</div> }
+              @if (turn.text && turn.author === 'agent') {
+                <div class="prose ink">
+                  <oc-assistant-markdown [text]="turn.text"
+                    (citationOpened)="preview.set($event)" />
+                  @if (turn.state === 'working') { <span class="caret" aria-hidden="true"></span> }
+                </div>
+              }
+              @if (turn.text && turn.author !== 'agent') { <div class="prose">@for (paragraph of turn.text.split('\n\n'); track $index) { <div class="paragraph">@for (part of textParts(paragraph); track $index) {@switch (part.kind) {@case ('bold') {<strong>{{ part.text }}</strong>}@case ('citation') {<button type="button" class="citation" (click)="preview.set('Citation ' + part.text)"><span class="citation-paper" [ocDogEar]="true">{{ part.text.slice(1, -1) }}</span></button>}@case ('a2ui') {<div class="a2ui" [ocDogEar]="true"><header><span class="agent-badge">Ag</span> Interactive · built from approved components</header><p>This interface is not available yet.</p></div>}@default {<ng-container>{{ part.text }}</ng-container>}}}</div>}</div> }
               @if (turn.author === 'you') { <time class="own-time">{{ time(turn.time) }}</time> }
               @if (turn.author === 'agent' && turn.state === 'working' && turn.text && chat.computer() !== 'recovering') { <div class="writing"><oc-fold-loader /><em>Writing…</em><button type="button" [disabled]="chat.busy()" (click)="chat.stop()">Stop</button></div> }
               @if (turn.author === 'agent' && chat.stopNotConfirmedFor(turn.id)) {
