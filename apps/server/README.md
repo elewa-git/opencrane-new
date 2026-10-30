@@ -13,6 +13,9 @@ out operations without permission or a reviewed free Allow policy.
 Initial personal loading also checks the deployment collector's protected results against
 current installation and host measurements. Saved membership comes first, and each command
 keeps its original permission decisions and access positions through preparation.
+The internal memory consumer can receive the loaded block once. Other conversations
+can keep writing while release is checked. A failed check before delivery keeps the
+original block for a fresh access check; a lost delivery reply never permits a resend.
 Live private tool delivery remains disabled.
 The server checks who is asking and what they may do, saves each change in the
 [event log](../../GLOSSARY.md#event-log-event-store), and passes chat work to each

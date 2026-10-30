@@ -2,13 +2,16 @@
 
 The server keeps the selected personal memories in memory until their references
 have been saved. One internal consumer can then receive the exact selected text,
-after current access, facts and deployment checks succeed. A failed attempt cannot retry.
+after current access, facts and deployment checks succeed. If validation fails before
+delivery, a retry checks everything again and uses the same selected text. Once delivery
+begins, even a lost reply cannot permit a resend. Other conversations can keep writing
+while these checks run.
 
 ```mermaid
 flowchart LR
   server["Server"] -->|prepares and records| memory["Personal memory"]
   memory -->|checks current results| collector["Deployment collector"]
-  memory -->|supplies once| input["Computer input renderer"]
+  memory -->|checks then supplies once| input["Computer input renderer"]
   server -->|reads saved references| chat["Chat status"]
 ```
 

@@ -10,9 +10,11 @@ exact `turnMemoryPreview` block. Each evidence command still makes one condition
 returns no text or callback result. It calls the internal consumer only after a proved load.
 The consumer receives the original block, never a new selection or a public response.
 
-Consumption removes the retained block before its first await. Premature, concurrent,
-failed and repeated attempts cannot send it. Unknown appends clear it too. A thrown or lost
-consumer reply keeps the references recorded and cannot resend. Cold replay restores
+Consumption reserves the attempt before its first await and removes the retained block
+immediately before calling the consumer. Failed validation keeps it for a retry with
+fresh checks. Premature attempts and unknown appends clear it. Concurrent and repeated
+delivery cannot send it again. A thrown or lost consumer reply keeps the references
+recorded and cannot resend. Cold replay restores
 references and status with execution unavailable; it cannot construct this live closure.
 
 Release captures saved membership first and retains one permission decision per operation.
@@ -23,8 +25,11 @@ refusal even when another dependency fails; other errors expose only a fixed ref
 
 Conversation and scope history load before the two-second access check. Only small access
 streams enter that check. Separate activity checks read new turn and closure events.
-The final event-store position detects changes saved while checks awaited replies and
-repeats validation within the same deadline. Unrelated activity may pass. A synchronous
+The final event-store position bounds new rows in the relevant access, scope and activity
+streams. The existing turn classifier ignores other turns and ordinary chat activity.
+Only relevant access or turn changes repeat validation within the same deadline; scope
+changes update the reference check directly. Other conversations never need to stop
+writing. Each tail read uses the captured position as its boundary. A synchronous
 reference check catches expiry during the final await, including supporting facts.
 The deployment's synchronous file confirmation catches withdrawn results. The consumer
 runs immediately after these checks, without another await before receiving the block.
@@ -42,6 +47,8 @@ Escaping, metadata and the new message count. Overflow refuses; no text is trunc
 No event, public API, mode, catalogue, approval or dependency changes are included.
 
 ## Own checks
+
+### Original implementation
 
 2026-10-30. Source: base `963d5130a` plus this branch’s changes. No image was built.
 

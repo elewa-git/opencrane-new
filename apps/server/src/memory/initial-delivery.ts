@@ -113,6 +113,7 @@ function initialCommands(options: MemoryOptions, selection: Selection, preparedI
   const { binding, loaded } = selection;
   let consumed = false;
   let loadedProved = false;
+  let releasing = false;
   async function load() {
     const loadDeadline = performance.now() + 10_000;
     try {
@@ -132,15 +133,26 @@ function initialCommands(options: MemoryOptions, selection: Selection, preparedI
   }
   async function consume(consumer: (block: string) => void | Promise<void>) {
     const releaseDeadline = performance.now() + 10_000;
-    const block = retainedBlock;
-    // Remove the only reusable copy before waiting, including on a failed attempt.
-    retainedBlock = undefined;
+    if (releasing) {
+      return refuseInitialMemory(options, binding.requester, releaseDeadline, new LoadedMemoryRefused());
+    }
+    releasing = true;
+    function release() {
+      const block = retainedBlock;
+      // Consume immediately before handing text over. Lost consumer replies cannot resend.
+      retainedBlock = undefined;
+      if (block === undefined) throw new LoadedMemoryRefused();
+      return consumer(block);
+    }
     try {
-      if (!loadedProved || block === undefined) throw new LoadedMemoryRefused();
+      if (!loadedProved) retainedBlock = undefined;
+      if (!loadedProved || retainedBlock === undefined) throw new LoadedMemoryRefused();
       const permissions = await initialMemoryAccess(options, binding.requester, releaseDeadline);
-      await confirmInitialRelease(options, selection, permissions, releaseDeadline, block, consumer);
+      await confirmInitialRelease(options, selection, permissions, releaseDeadline, release);
     } catch (error) {
       return refuseInitialMemory(options, binding.requester, releaseDeadline, error);
+    } finally {
+      releasing = false;
     }
   }
   return { load, consume };
@@ -220,7 +232,7 @@ async function appendInitialRecord(options: MemoryOptions, selection: Selection,
 
 async function confirmInitialRelease(options: MemoryOptions, selection: Selection,
   permissions: Awaited<ReturnType<typeof initialMemoryAccess>>, deadline: number,
-  block: string, consumer: (block: string) => void | Promise<void>) {
+  release: () => void | Promise<void>) {
   const { binding, scope, loaded, qualification } = selection;
   const activity = await approvalActivity(options.store, options.silo, binding.assistant,
     binding.conversation, binding.turn, deadline);
@@ -273,7 +285,7 @@ async function confirmInitialRelease(options: MemoryOptions, selection: Selectio
       if (references.current(reference, Date.now()) !== 'current') throw new LoadedMemoryRefused();
     }
     try {
-      await consumer(block);
+      await release();
     } catch {
       // Keep private text out of errors, including an error that imitates an access refusal.
       throw new LoadedMemoryRefused();
