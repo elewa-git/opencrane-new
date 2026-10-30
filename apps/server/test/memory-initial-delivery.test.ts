@@ -171,11 +171,15 @@ const slowAccessSubjects = ['member-alice', grantStream('mcp_server', 'memory'),
   grantStream('memory_read', scopeId)];
 it.each(slowAccessSubjects)(
   'loads initial memory within the access deadline when %s history is slow', boundedAccessHistory);
-async function boundedAccessPositions() {
+async function boundedAccessPositions(includeMembership: boolean) {
   await fact();
   const read = options.store.head.bind(options.store);
   const delayedSubjects = new Set(['assistant-assistant', 'mcp-memory',
     grantStream('mcp_server', 'memory'), grantStream('memory_read', scopeId)]);
+  if (includeMembership) {
+    delayedSubjects.add('ownership-test');
+    delayedSubjects.add('member-alice');
+  }
   let now = performance.now();
   function clock() {
     return now;
@@ -203,7 +207,8 @@ async function boundedAccessPositions() {
   expect(await state()).toMatchObject({ initialLoaded: true,
     references: [{ scopeId, memoryId: 'fact', revision: 1 }] });
 }
-it('delivers initial memory within the access deadline when stream positions are slow',
+it.each([false, true])(
+  'delivers initial memory within the access deadline with slow positions, membership=%s',
   boundedAccessPositions);
 async function limits(count: number, text: string) {
   for (let index = 0; index < count; index++) await fact(`fact-${index}`, text);
