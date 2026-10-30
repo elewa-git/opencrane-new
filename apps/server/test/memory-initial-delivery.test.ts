@@ -139,22 +139,22 @@ async function recordsBeforeRelease() {
   expect(memoryAdmission.state).toBe('disabled');
 }
 it('records references once, returns no text and cold replay grants nothing', recordsBeforeRelease);
-async function boundedAccessHistory() {
+async function boundedAccessHistory(subject: string) {
   await fact();
   const read = options.store.readStream.bind(options.store);
   let now = performance.now();
   function clock() {
     return now;
   }
-  async function* slowMemberHistory(...args: Parameters<typeof read>) {
+  async function* slowAccessHistory(...args: Parameters<typeof read>) {
     yield* read(...args);
-    if (args[0] === 'member-alice' && args[1] === 1) {
-      // Charge each complete membership read without relying on host scheduling.
+    if (args[0] === subject && args[1] === 1) {
+      // Charge each complete access-history read without relying on host scheduling.
       now += 600;
     }
   }
   vi.spyOn(performance, 'now').mockImplementation(clock);
-  vi.spyOn(options.store, 'readStream').mockImplementation(slowMemberHistory);
+  vi.spyOn(options.store, 'readStream').mockImplementation(slowAccessHistory);
   const pending = await prepare();
   await expect(pending.load()).resolves.toEqual({ status: 'loaded', dispatch: 'disabled' });
   const delivered: string[] = [];
@@ -167,8 +167,10 @@ async function boundedAccessHistory() {
   expect(await state()).toMatchObject({ initialLoaded: true,
     references: [{ scopeId, memoryId: 'fact', revision: 1 }] });
 }
-it('loads initial memory within the access deadline when membership history is slow',
-  boundedAccessHistory);
+const slowAccessSubjects = ['member-alice', grantStream('mcp_server', 'memory'),
+  grantStream('memory_read', scopeId)];
+it.each(slowAccessSubjects)(
+  'loads initial memory within the access deadline when %s history is slow', boundedAccessHistory);
 async function limits(count: number, text: string) {
   for (let index = 0; index < count; index++) await fact(`fact-${index}`, text);
   const pending = await prepare();
