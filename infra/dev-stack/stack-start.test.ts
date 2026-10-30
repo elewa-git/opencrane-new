@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { isIP } from 'node:net';
+import { stripTypeScriptTypes } from 'node:module';
+import { runInNewContext } from 'node:vm';
 import { test } from 'node:test';
 
 type StartOptions = {
@@ -174,6 +177,9 @@ const listenerCases: Array<{ address: string; accepted: boolean; process?: strin
   { address: '[fd7a:115c:a1e0::1234:443', accepted: false },
   { address: '100.121.102.47%:443', accepted: false },
   { address: '100.121.102.47%eth0%tailscale0:443', accepted: false },
+  { address: '100.121.102.47%tailscale0%eth0:443', accepted: false },
+  { address: '[fd7a:115c:a1e0::1234%tailscale0]%eth0:443', accepted: false },
+  { address: '[100.121.102.47]:443', accepted: false },
   { address: '[fd7a:115c:a1e0::1234%eth0]%tailscale0:443', accepted: false },
   { address: '[broken]%tailscale0:48000', accepted: false },
   { address: '[broken]%eth0:9999', accepted: true },
@@ -181,6 +187,9 @@ const listenerCases: Array<{ address: string; accepted: boolean; process?: strin
   { address: '[::]:43000', accepted: true },
   { address: '*:43000', accepted: true },
   { address: '[broken]%tailscale0:43000', accepted: false },
+  { address: '999.1.1.1:43000', accepted: false },
+  { address: '[broken]:43000', accepted: false },
+  { address: '192.0.2.10%tailscale0:43000', accepted: false },
   { address: '100.121.102.47%eth0:43000', accepted: false },
   { address: 'not-an-address', accepted: false, process: 'users:(("node",pid=900000,fd=1))' },
   { address: '0.0.0.0:9999', accepted: false, process: 'users:(("node",pid=900000,fd=1))' },
@@ -202,3 +211,35 @@ for (const listenerCase of listenerCases) {
   const outcome = listenerCase.accepted ? 'accepts' : 'refuses';
   test(`startup ${outcome} listener ${listenerCase.address}`, checksListenerAddress);
 }
+
+async function secondaryModelListeners() {
+  const source = await readFile(new URL('./stack.ts', import.meta.url), 'utf8');
+  const start = source.indexOf('  const ports = new Set(Object.entries(settings)');
+  const end = source.indexOf('  if (!secondary) await modelFirewall(true);', start);
+  assert(start >= 0 && end > start, 'Find the complete startup listener check');
+  const listenerSource = source.slice(start, end);
+  const listenerCheck = stripTypeScriptTypes(listenerSource);
+  const addresses = ['127.0.0.1', '[::1]', '0.0.0.0', '[::]', '*'];
+  for (const address of addresses) {
+    const context = {
+      settings: { MODEL_GATEWAY_PORT: '25107' },
+      tail: { Self: { TailscaleIPs: [] } },
+      after: `LISTEN 0 4096 ${address}:25107 *:*`,
+      pids: [],
+      secondary: true,
+      isIP,
+    };
+    function checkListener() {
+      // Run the actual check with secondary settings, without launching services.
+      runInNewContext(listenerCheck, context);
+    }
+    if (address === '127.0.0.1' || address === '[::1]') {
+      assert.doesNotThrow(checkListener, address);
+    } else {
+      assert.throws(checkListener, /not on loopback or Tailscale/u, address);
+    }
+  }
+}
+
+test('secondary model gateway accepts loopback and refuses every wildcard form',
+  secondaryModelListeners);
