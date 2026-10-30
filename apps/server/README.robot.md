@@ -6807,3 +6807,16 @@ required. Saved membership precedes dependencies; command-local permissions and 
 access positions survive preparation. MemberAccessRefused remains decisive.
 See [the initial-load contract](../../docs/process/p4-15-pr5d/README.robot.md).
 Delivery remains disabled. Fresh-install native qualification: NOT RUN.
+
+## Initial personal memory release
+
+`prepareInitialMemory().consume` checks only new access, scope and turn events through
+each relevant stream’s final read, including events saved after the global position
+was captured. A relevant access or turn change refuses delivery. Scope changes
+update the selected-reference check. It reuses `changesDecisionActivity` to ignore
+ordinary messages, files and other turns. Full histories still load before the
+two-second check. Qualification and reference expiry are checked synchronously after
+the last awaited read. The retained block is removed immediately before calling the
+consumer. A failed validation can retry with all checks repeated, but concurrent
+consumers and failed or lost consumer replies cannot resend.
+See [the delivery contract and checks](../../docs/process/p4-15-pr5f/README.robot.md).

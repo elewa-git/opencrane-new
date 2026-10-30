@@ -21,7 +21,7 @@ flowchart LR
   ops -->|starts and pauses| computer
   server -->|messages, private routine preparation, turns, files and targeted Stops| computer
   computer -->|preparation replies, reply removal receipts, native termination, progress and results| server
-  server -.->|prepares up to four private memory tools| computer
+  server -.->|prepares private memory tools and one-use input| computer
   computer -.->|records private thread before tool approval| server
   computer -->|checks command ownership| executor["socket-denied executor"]
   computer -->|runs| desktop["Codex, browser and desktop"]
@@ -73,6 +73,9 @@ private reply buffers are cleared before waiting for interruption to finish.
   Each plan can prepare files only once, and cleanup removes only its own files.
   Cleanup also removes newly created folders if opening them fails.
   Network execution stays disabled until the call's identity and isolation are proved.
+- Renders checked personal memories as labelled JSON beside the rebuilt private transcript.
+  The complete input must fit its limit without shortening the message. Native delivery
+  still needs to be connected before this input can start a turn.
 - Checks the image's licences before publishing it.
 
 An internal routine turn keeps its saved input id separate from its execution id.

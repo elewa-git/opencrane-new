@@ -113,7 +113,7 @@ async function readTurnActivity(store: EventStore, silo: string, assistantId: st
   return { conversation, computer, confirm };
 }
 
-function changesDecisionActivity(event: EventEnvelope, turnId: string, needsApproval: boolean,
+export function changesDecisionActivity(event: EventEnvelope, turnId: string, needsApproval: boolean,
   refuseMemoryLoads = false) {
   if (event.subject.startsWith('computer-')) {
     const turnActivity = ['computer.turn_started', 'computer.turn_closed'].includes(event.type);

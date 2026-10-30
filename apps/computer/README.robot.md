@@ -1749,3 +1749,10 @@ The 48 KiB tool and 120 KiB turn limits remain. No public API or event field is 
 `RISKY_FIELD_NAME` was checked and the protected tests are unchanged.
 Qualification evidence in these fixtures is synthetic. Fresh-install qualification,
 native calls and production admission remain NOT RUN or disabled.
+
+## Initial personal memory input
+
+The [delivery contract](../../docs/process/p4-15-pr5f/README.robot.md) owns
+`initialMemoryInput`, its identity checks and byte limits. It renders only a live internal
+block from `prepareInitialMemory().consume`; it neither journals input nor starts Codex.
+The existing private and memory-free start paths are unchanged.

@@ -2,6 +2,10 @@
 
 For people, read [README.md](README.md) first.
 
+`changesDecisionActivity` is also used by initial memory delivery to classify new
+turn events. It keeps ordinary messages, files and other turns separate from
+closure, replacement and memory changes that refuse the current turn.
+
 ## Private company OAuth preparation (Part of #50)
 
 `prepareCompanyOAuthAttempt` is internal, with no route or package export. Trusted

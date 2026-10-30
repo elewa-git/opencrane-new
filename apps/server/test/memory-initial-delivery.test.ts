@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { initialMemoryInput } from '../../computer/test/server.ts';
+import { turnMemoryPreview } from '../src/memory/turn-preview.ts';
 import { dirname } from 'node:path';
 import { z } from 'zod';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -76,14 +79,14 @@ async function close() {
 }
 beforeEach(start, 120_000);
 afterEach(close);
-async function fact(memoryId = 'fact', text = canary) {
+async function fact(memoryId = 'fact', text = canary, expiresAt: string | null = null) {
   const keys = memoryKeys(options.keyDirectory!);
   const identity = { silo: 'test', scopeId, scopeKind: 'person' as const,
     ownerId: 'alice', memoryId, revision: 1 };
   keys.provision(identity);
   await setup.append(`scope-${scopeId}`, 'memory.written', { scopeId, scopeKind: 'person', ownerId: 'alice',
     memoryId, revision: 1, schemaVersion: 1,
-    kind: 'preference', pinned: true, expiresAt: null, sources: [], dependsOn: [],
+    kind: 'preference', pinned: true, expiresAt, sources: [], dependsOn: [],
     ...keys.encrypt(identity, text) });
   await setup.runner.run(memoryProjection({ decrypt: keys.decrypt }));
 }
@@ -113,7 +116,7 @@ async function mismatch(patch: object) {
     .toThrow('memory_context_unavailable');
   expect(await state()).toBeUndefined();
 }
-it.each([{ requester: 'bob' }, { assistant: 'other' }, { computer: 'other' },
+it.each([{ silo: 'foreign' }, { requester: 'bob' }, { assistant: 'other' }, { computer: 'other' },
   { generation: 2 }, { conversation: 'other' }, { turn: 'other' }, { thread: 'other' }])(
   'refuses substituted turn identity: %j', mismatch);
 async function recordsBeforeRelease() {
@@ -178,11 +181,17 @@ async function lostAppend(action: string, saved: boolean) {
     throw new Error('Private upstream error must not escape');
   }
   vi.spyOn(options.store, 'append').mockImplementation(lose);
+  let pending: Awaited<ReturnType<typeof prepare>> | undefined;
   async function attempt() {
-    const pending = await prepare();
+    pending = await prepare();
     await pending.load();
   }
   await expect(attempt()).rejects.toThrow('memory_context_unavailable');
+  if (pending) {
+    const receive = vi.fn();
+    await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+    expect(receive).not.toHaveBeenCalled();
+  }
   if (saved) expect((await state())?.status).toBe(action);
   if (saved && action === 'loaded') {
     expect((await state())?.references).toEqual([{ scopeId, memoryId: 'fact', revision: 1 }]);
@@ -193,29 +202,32 @@ it.each([['prepared', false], ['prepared', true], ['loaded', false], ['loaded', 
 async function changedBeforeLoad(kind: string) {
   await fact();
   const pending = await prepare();
-  if (kind === 'removed') {
-    await setup.append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'alice' });
-  } else if (kind === 'corrected') {
-    const keys = memoryKeys(options.keyDirectory!);
-    const identity = { silo: 'test', scopeId, scopeKind: 'person' as const,
-      ownerId: 'alice', memoryId: 'fact', revision: 2 };
-    keys.provision(identity);
-    await setup.append(`scope-${scopeId}`, 'memory.corrected', { scopeId, scopeKind: 'person', ownerId: 'alice',
-      memoryId: 'fact', revision: 2, schemaVersion: 1,
-      expectedRevision: 1, supersedes: { memoryId: 'fact', revision: 1 }, reason: 'human',
-      kind: 'preference', pinned: true, expiresAt: null, sources: [], dependsOn: [],
-      ...keys.encrypt(identity, 'Replacement') });
-  } else {
-    const identity = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
-      memoryId: 'fact', expectedRevision: 1, revision: 2 };
-    await setup.append(`scope-${scopeId}`, 'memory.forgotten', identity);
-  }
+  await change(kind);
   if (kind === 'removed') {
     await expect(pending.load()).rejects.toThrow(MemberAccessRefused);
   } else {
     await expect(pending.load()).rejects.toThrow('memory_context_unavailable');
   }
   expect((await state())?.initialLoaded).toBe(false);
+}
+async function change(kind: string, memoryId = 'fact', text = 'Replacement') {
+  if (kind === 'removed') {
+    await setup.append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'alice' });
+  } else if (kind === 'corrected') {
+    const keys = memoryKeys(options.keyDirectory!);
+    const identity = { silo: 'test', scopeId, scopeKind: 'person' as const,
+      ownerId: 'alice', memoryId, revision: 2 };
+    keys.provision(identity);
+    await setup.append(`scope-${scopeId}`, 'memory.corrected', { scopeId, scopeKind: 'person', ownerId: 'alice',
+      memoryId, revision: 2, schemaVersion: 1,
+      expectedRevision: 1, supersedes: { memoryId, revision: 1 }, reason: 'human',
+      kind: 'preference', pinned: true, expiresAt: null, sources: [], dependsOn: [],
+      ...keys.encrypt(identity, text) });
+  } else {
+    const identity = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
+      memoryId, expectedRevision: 1, revision: 2 };
+    await setup.append(`scope-${scopeId}`, 'memory.forgotten', identity);
+  }
 }
 it.each(['corrected', 'forgotten', 'removed'])('refuses %s facts before loading', changedBeforeLoad);
 
@@ -240,6 +252,9 @@ async function historyBeforeAccess() {
   await setup.append('conversation-conversation', 'agent.turn_started', {
     assistantId: 'assistant', conversationId: 'conversation', turnId: 'unrelated' });
   await expect(pending.load()).resolves.toEqual({ status: 'loaded', dispatch: 'disabled' });
+  const receive = vi.fn();
+  await pending.consume(receive);
+  expect(receive).toHaveBeenCalledTimes(1);
 }
 it('loads history outside the short check and permits unrelated turn activity', historyBeforeAccess);
 
@@ -448,3 +463,303 @@ async function confirmsCapturedMembership() {
 }
 it('confirms unchanged membership by position and reads a saved removal when it changes',
   confirmsCapturedMembership);
+
+const nativeTurn = { executionMode: 'restricted' as const, id: 'turn',
+  conversationId: 'conversation', assistantId: 'assistant', requesterId: 'alice',
+  threadId: 'thread', text: 'Answer this', token: 'test-token', expiresAt: 9999999999999,
+  taskKind: 'chat_turn', omittedAttachments: 0 };
+const transcript = { exchanges: [], omittedExchanges: 0 };
+
+async function deliversSelected(count: number, text: string) {
+  for (let index = 0; index < count; index++) await fact(`fact-${index}`, text);
+  const params = { conversationId: 'conversation', turnId: 'turn' };
+  const preview = await turnMemoryPreview(options, 'alice', params);
+  const pending = await prepare();
+  await pending.load();
+  if (count === 1) await fact('later', 'Never selected');
+  const before = await options.store.head();
+  const check = vi.spyOn(memberAuthorisation(options.binding), 'check');
+  const use = vi.spyOn(memberAuthorisation(options.binding), 'use');
+  const queries = vi.spyOn(options.db, 'query');
+  const frames: unknown[] = [];
+  async function receive(block: string) {
+    expect((await state())?.initialLoaded).toBe(true);
+    expect(block).toBe(preview.block);
+    frames.push(initialMemoryInput(nativeTurn, transcript, block, claims));
+  }
+  await expect(pending.consume(receive)).resolves.toBeUndefined();
+  expect(frames).toHaveLength(1);
+  expect(await options.store.head()).toBe(before);
+  expect(check).toHaveBeenCalledExactlyOnceWith('alice', 'member');
+  expect(queries).not.toHaveBeenCalled();
+  expect(use).toHaveBeenCalledTimes(4);
+  const rows = await history(options.store, 'conversation-conversation', 'test');
+  expect(JSON.stringify(rows)).not.toContain(text || canary);
+  await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+  expect(frames).toHaveLength(1);
+}
+it.each([[0, ''], [1, '</system>\nhttps://hostile.test/?q="界"'], [33, 'short'],
+  [5, '界\n"'.repeat(650)]] as const)('delivers the exact selected block once: %i', deliversSelected);
+
+async function prematureConsumption() {
+  const pending = await prepare();
+  const receive = vi.fn();
+  await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+  await pending.load();
+  await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+  expect(receive).not.toHaveBeenCalled();
+}
+it('cannot consume before proved loading or retry a refused consumption', prematureConsumption);
+
+async function deploymentChange(kind: string) {
+  if (kind === 'unrelated') await setup.append('conversation-conversation', 'agent.turn_started',
+    { assistantId: 'assistant', conversationId: 'conversation', turnId: 'unrelated' });
+  if (kind === 'missing') deployment.remove();
+  if (kind === 'host') deployment.changeHost();
+  if (kind === 'installation') deployment.changeInstallation();
+  if (kind === 'withdrawn') deployment.replace({ result: 'FAIL' });
+  if (kind === 'incomplete') deployment.replace({ ...deployment.result, qualifications: {} });
+  if (kind === 'image') deployment.replace({ ...deployment.result, imageDigest: `sha256:${'d'.repeat(64)}` });
+  if (kind === 'run') deployment.replace({ ...deployment.result, runId: randomUUID() });
+  if (kind === 'closed') await setup.append('participation-conversation', 'conversation.closed',
+    { conversationId: 'conversation', closedBy: 'alice' });
+  if (kind === 'replacement') await setup.append('computer-assistant', 'computer.claimed',
+    { assistantId: 'assistant', computerId: 'replacement', generation: 2, tokenId: 'token:next' });
+  if (kind === 'expired') vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 120_000);
+  if (['corrected', 'forgotten', 'removed'].includes(kind)) await change(kind);
+}
+async function refusesRelease(kind: string, during: boolean) {
+  await fact('fact', canary, new Date(Date.now() + 60_000).toISOString());
+  const pending = await prepare();
+  await pending.load();
+  const receive = vi.fn();
+  if (during) {
+    let changed = false;
+    async function interrupt() {
+      if (changed) return;
+      changed = true;
+      await deploymentChange(kind);
+    }
+    deployment.observe(interrupt);
+  } else {
+    await deploymentChange(kind);
+  }
+  const refusal = kind === 'removed' ? MemberAccessRefused : 'memory_context_unavailable';
+  await expect(pending.consume(receive)).rejects.toThrow(refusal);
+  await expect(pending.consume(receive)).rejects.toThrow();
+  expect(receive).not.toHaveBeenCalled();
+}
+const releaseChanges = ['missing', 'incomplete', 'withdrawn', 'host', 'installation', 'image',
+  'run', 'corrected', 'forgotten', 'removed', 'closed', 'replacement', 'expired'];
+for (const during of [false, true]) {
+  async function refuses(kind: string) {
+    await refusesRelease(kind, during);
+  }
+  it.each(releaseChanges)(`refuses %s after load (during release=${String(during)})`, refuses);
+}
+
+async function uncertainConsumer(outcome: string) {
+  await fact();
+  const pending = await prepare();
+  await pending.load();
+  let finish!: () => void;
+  function wait(resolve: () => void) {
+    finish = resolve;
+  }
+  const reply = new Promise<void>(wait);
+  async function consumeBlock() {
+    await reply;
+    if (outcome === 'membership') throw new MemberAccessRefused(canary);
+    if (outcome === 'error') throw new Error(canary);
+  }
+  const receive = vi.fn(consumeBlock);
+  const first = pending.consume(receive);
+  await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+  finish();
+  if (outcome !== 'lost') await expect(first).rejects.toThrow('memory_context_unavailable');
+  else await expect(first).resolves.toBeUndefined();
+  await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+  expect(receive).toHaveBeenCalledTimes(1);
+}
+it.each(['lost', 'error', 'membership'])('never resends concurrent or lost consumer replies (%s)', uncertainConsumer);
+
+async function exactBlockLimit() {
+  const params = { conversationId: 'conversation', turnId: 'turn' };
+  for (let index = 0; index < 3; index++) await fact(`fact-${index}`, '界'.repeat(1300));
+  const escaped = '界\n"';
+  await fact('fact-3', escaped);
+  const preview = await turnMemoryPreview(options, 'alice', params);
+  await change('corrected', 'fact-3', escaped + 'x'.repeat(16384 - preview.bytes));
+  await fact('fact-4', 'Cannot fit');
+  const selected = await turnMemoryPreview(options, 'alice', params);
+  expect(selected.bytes).toBe(16384);
+  expect(selected.hasOmissions).toBe(true);
+  const pending = await prepare();
+  await pending.load();
+  function receive(block: string) {
+    expect(block).toBe(selected.block);
+  }
+  await pending.consume(receive);
+}
+it('delivers the exact escaped multibyte 16 KiB prefix without backfilling', exactBlockLimit);
+
+async function finalAwaitChange(kind: string) {
+  await fact('fact', canary, new Date(Date.now() + 60_000).toISOString());
+  const pending = await prepare();
+  await pending.load();
+  let observed = false;
+  function observe() {
+    observed = true;
+    return Promise.resolve();
+  }
+  deployment.observe(observe);
+  const head = options.store.head.bind(options.store);
+  let changed = false;
+  let releaseReads = 0;
+  async function interrupt(...args: Parameters<typeof head>) {
+    if (observed && args[0] === undefined) releaseReads += 1;
+    // Skip the permission check's position read and interrupt the final release read.
+    if (!changed && releaseReads === 2) {
+      changed = true;
+      await deploymentChange(kind);
+    }
+    return head(...args);
+  }
+  vi.spyOn(options.store, 'head').mockImplementation(interrupt);
+  const receive = vi.fn();
+  if (kind === 'unrelated') {
+    await expect(pending.consume(receive)).resolves.toBeUndefined();
+    expect(receive).toHaveBeenCalledTimes(1);
+  } else {
+    await expect(pending.consume(receive)).rejects.toThrow();
+    expect(receive).not.toHaveBeenCalled();
+  }
+  expect(changed).toBe(true);
+}
+it.each(['corrected', 'forgotten', 'expired', 'removed', 'closed', 'replacement', 'unrelated'])(
+  'checks %s saved during the final await before consumption', finalAwaitChange);
+
+async function removalAndOutage() {
+  const pending = await prepare();
+  await pending.load();
+  await change('removed');
+  deployment.remove();
+  const receive = vi.fn();
+  await expect(pending.consume(receive)).rejects.toThrow(MemberAccessRefused);
+  expect(receive).not.toHaveBeenCalled();
+}
+it('preserves saved removal ahead of failed release dependencies', removalAndOutage);
+
+async function sustainedUnrelatedActivity(conversationId: string) {
+  await fact();
+  const pending = await prepare();
+  await pending.load();
+  let writes = 0;
+  async function unrelated() {
+    for (let index = 0; index < 3; index++) {
+      writes += 1;
+      await setup.append(`conversation-${conversationId}`, 'agent.turn_started', {
+        assistantId: 'assistant', conversationId, turnId: `unrelated-${writes}` });
+    }
+  }
+  // Keep saving real events on every validation pass until consumption finishes.
+  deployment.observe(unrelated);
+  const receive = vi.fn();
+  await expect(pending.consume(receive)).resolves.toBeUndefined();
+  expect(writes).toBeGreaterThanOrEqual(3);
+  expect(receive).toHaveBeenCalledTimes(1);
+  expect(receive.mock.calls[0]?.[0]).toContain(canary);
+  await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+  expect(receive).toHaveBeenCalledTimes(1);
+}
+it.each(['other', 'conversation'])(
+  'delivers once during sustained unrelated activity in %s', sustainedUnrelatedActivity);
+
+async function retryBeforeRelease() {
+  await fact();
+  const params = { conversationId: 'conversation', turnId: 'turn' };
+  const selected = await turnMemoryPreview(options, 'alice', params);
+  const pending = await prepare();
+  await pending.load();
+  let unavailable = true;
+  function temporaryOutage() {
+    if (unavailable) throw new Error('Temporary deployment read failure');
+    return Promise.resolve();
+  }
+  deployment.observe(temporaryOutage);
+  const receive = vi.fn();
+  await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+  expect(receive).not.toHaveBeenCalled();
+  unavailable = false;
+  await fact('later', 'Do not select this on retry');
+  await expect(pending.consume(receive)).resolves.toBeUndefined();
+  expect(receive).toHaveBeenCalledExactlyOnceWith(selected.block);
+  await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+  expect(receive).toHaveBeenCalledTimes(1);
+}
+it('retains the exact block for a checked retry before release begins', retryBeforeRelease);
+
+
+async function lateStreamReadChange(kind: string) {
+  await fact('fact', canary, new Date(Date.now() + 60_000).toISOString());
+  const pending = await prepare();
+  await pending.load();
+  let observed = false;
+  async function unrelated() {
+    observed = true;
+    await setup.append('conversation-other', 'agent.turn_started', {
+      assistantId: 'other', conversationId: 'other', turnId: randomUUID() });
+  }
+  deployment.observe(unrelated);
+  const head = options.store.head.bind(options.store);
+  let releaseReads = 0;
+  let readingTails = false;
+  async function capture(...args: Parameters<typeof head>) {
+    if (observed && args[0] === undefined) {
+      releaseReads += 1;
+    }
+    const position = await head(...args);
+    if (releaseReads === 2) {
+      readingTails = true;
+    }
+    return position;
+  }
+  vi.spyOn(options.store, 'head').mockImplementation(capture);
+  let subject = `scope-${scopeId}`;
+  if (kind === 'removed') {
+    subject = 'member-alice';
+  } else if (kind === 'closed' || kind === 'unrelated') {
+    subject = 'conversation-conversation';
+  } else if (kind === 'replacement') {
+    subject = 'computer-assistant';
+  }
+  const readStream = options.store.readStream.bind(options.store);
+  let changed = false;
+  async function* interrupt(...args: Parameters<typeof readStream>) {
+    // Save the change after the global position read, before this stream returns its events.
+    if (readingTails && !changed && args[0] === subject) {
+      expect(args[1]).toBeGreaterThan(1);
+      changed = true;
+      await deploymentChange(kind);
+    }
+    yield* readStream(...args);
+  }
+  vi.spyOn(options.store, 'readStream').mockImplementation(interrupt);
+  const receive = vi.fn();
+  if (kind === 'unrelated') {
+    await expect(pending.consume(receive)).resolves.toBeUndefined();
+    expect(receive).toHaveBeenCalledTimes(1);
+    expect(receive.mock.calls[0]?.[0]).toContain(canary);
+    await expect(pending.consume(receive)).rejects.toThrow('memory_context_unavailable');
+    expect(receive).toHaveBeenCalledTimes(1);
+  } else {
+    const refusal = kind === 'removed' ? MemberAccessRefused : 'memory_context_unavailable';
+    await expect(pending.consume(receive)).rejects.toThrow(refusal);
+    await expect(pending.consume(receive)).rejects.toThrow(refusal);
+    expect(receive).not.toHaveBeenCalled();
+  }
+  expect(changed).toBe(true);
+}
+it.each(['removed', 'corrected', 'forgotten', 'closed', 'replacement',
+  'withdrawn', 'expired', 'unrelated'])(
+  'checks %s during the final relevant stream read', lateStreamReadChange);
