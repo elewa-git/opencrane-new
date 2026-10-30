@@ -22,7 +22,7 @@ flowchart LR
   web["apps/web<br/>sign-in, chat, calls, saved spending status and admin pages"] -->|requests, saved call status and live updates| server["apps/server<br/>the back end"]
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
-  web -->|shows saved Stop, takeover cancellation and tool reply status| capture["Reply and screenshot status<br/>workspace and viewer"]
+  web -->|shows saved Stop, takeover cancellation and tool reply status| capture["Reply formatting and screenshot status<br/>workspace and viewer"]
   web -->|manages settings and waits for memory setup and saved changes| admin["Admin pages<br/>provider, tool, people and saved memory"]
 ```
 
@@ -36,6 +36,8 @@ For everyone, the website:
 
 - Shows sign-in, first-owner setup and the welcome survey.
 - Supports assistant sessions and direct or group chats with colleagues.
+  Assistant replies show headings, lists, quotes, code and safe links.
+  Code blocks have a copy button; diagrams appear as code.
 - Lists recent and archived conversations and opens saved chat links.
 - Shows tool actions for review and lets the requester approve or deny them.
   A saved takeover cancellation names its cause and end time.

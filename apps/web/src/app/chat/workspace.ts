@@ -7,6 +7,7 @@ import { GrainLoader } from '../ui/grain-loader';
 import { FlutterLoader } from '../ui/flutter-loader';
 import { SharedState } from '../shared-state/shared-state';
 import { ApprovalCards } from './approvals';
+import { AssistantMarkdown } from './assistant-markdown';
 import { BudgetStopNotice } from './budget-stop-notice';
 import { ConversationFileCard } from './conversation-file-card';
 import { CaptureStatus } from './capture-status';
@@ -50,7 +51,7 @@ import {
   imports: [
     HingeDrawer, NavigationMenu, PaperSurface, DogEar, GrainLoader, FlutterLoader,
     SharedState, ApprovalCards, BudgetStopNotice, ConversationFileCard, CaptureStatus,
-    ToolActivityLine, RecoveryNotice, MemoryFreeNotice, MemoryPanel,
+    ToolActivityLine, RecoveryNotice, MemoryFreeNotice, MemoryPanel, AssistantMarkdown,
     FoldLoader, ChatComposer, FilePreview, LiveView,
     NgTemplateOutlet, ChatIcon, BrandMark,
   ],

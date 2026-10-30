@@ -2277,3 +2277,27 @@ async function cancelsReconnectAfterRefusedRead(viewportWidth: number): Promise<
 it.each([390, 1280])(
   'cancels the pending reconnect when a read reports revocation during the wait at %ipx',
   cancelsReconnectAfterRefusedRead);
+
+async function rendersAssistantMarkdown() {
+  const capture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: '# My question', authorId: 'me' } },
+  ]);
+  const delta = { id: 'delta', position: 2, type: 'agent.message_delta',
+    time: '2026-10-04T10:00:01Z',
+    data: { turnId: 'message', messageId: 'reply', text: '## Answer\n\nSource [1]' } };
+  sendConversationRow(capture.socket, delta);
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  expect(capture.root.querySelector('.own .prose')?.textContent).toBe('# My question');
+  expect(capture.root.querySelector('.own h1')).toBeNull();
+  expect(capture.root.querySelector('oc-assistant-markdown h2')?.textContent).toBe('Answer');
+  capture.root.querySelector<HTMLButtonElement>('oc-assistant-markdown .citation')?.click();
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  expect(capture.root.querySelector('oc-file-preview')?.textContent).toContain('Citation [1]');
+  capture.fixture.destroy();
+}
+
+it('renders Markdown only in assistant replies, including live updates and citations',
+  rendersAssistantMarkdown);

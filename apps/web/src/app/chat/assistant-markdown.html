@@ -1,0 +1,73 @@
+@for (block of blocks(); track $index) {
+  @switch (block.kind) {
+    @case ('code') {
+      <section class="code-block" aria-label="Code block">
+        <div class="code-heading"><span>{{ block.language || 'Code' }}</span>
+          <button type="button" (click)="copyCode(block)">Copy code</button>
+        </div>
+        <pre><code>{{ block.text }}</code></pre>
+        @if (copyStatus()?.block === block) {
+          <span role="status">{{ copyStatus()?.text }}</span>
+        }
+      </section>
+    }
+    @case ('a2ui') {
+      <div class="a2ui" [ocDogEar]="true">
+        <header>Interactive · built from approved components</header>
+        <p>This interface is not available yet.</p>
+      </div>
+    }
+    @case ('heading') {
+      @switch (block.level) {
+        @case (1) { <h1><ng-container
+          *ngTemplateOutlet="inline; context: { $implicit: block.lines[0] }" /></h1> }
+        @case (2) { <h2><ng-container
+          *ngTemplateOutlet="inline; context: { $implicit: block.lines[0] }" /></h2> }
+        @case (3) { <h3><ng-container
+          *ngTemplateOutlet="inline; context: { $implicit: block.lines[0] }" /></h3> }
+        @case (4) { <h4><ng-container
+          *ngTemplateOutlet="inline; context: { $implicit: block.lines[0] }" /></h4> }
+        @case (5) { <h5><ng-container
+          *ngTemplateOutlet="inline; context: { $implicit: block.lines[0] }" /></h5> }
+        @case (6) { <h6><ng-container
+          *ngTemplateOutlet="inline; context: { $implicit: block.lines[0] }" /></h6> }
+      }
+    }
+    @case ('ul') {
+      <ul>@for (line of block.lines; track $index) {
+        <li><ng-container *ngTemplateOutlet="inline; context: { $implicit: line }" /></li>
+      }</ul>
+    }
+    @case ('ol') {
+      <ol [start]="block.start">@for (line of block.lines; track $index) {
+        <li><ng-container *ngTemplateOutlet="inline; context: { $implicit: line }" /></li>
+      }</ol>
+    }
+    @case ('quote') {
+      <blockquote><ng-container
+        *ngTemplateOutlet="inline; context: { $implicit: block.lines[0] }" /></blockquote>
+    }
+    @case ('paragraph') {
+      <p><ng-container *ngTemplateOutlet="inline; context: { $implicit: block.lines[0] }" /></p>
+    }
+  }
+}
+<ng-template #inline let-parts>
+  @for (part of parts; track $index) {
+    @switch (part.kind) {
+      @case ('bold') { <strong>{{ part.text }}</strong> }
+      @case ('italic') { <em>{{ part.text }}</em> }
+      @case ('code') { <code>{{ part.text }}</code> }
+      @case ('link') {
+        <a [href]="part.href" target="_blank" rel="noopener noreferrer">{{ part.text }}</a>
+      }
+      @case ('citation') {
+        <button type="button" class="citation" [attr.aria-label]="'Citation ' + part.text"
+          (click)="citationOpened.emit('Citation [' + part.text + ']')">
+          <span class="citation-paper" [ocDogEar]="true">{{ part.text }}</span>
+        </button>
+      }
+      @case ('text') {<ng-container>{{ part.text }}</ng-container>}
+    }
+  }
+</ng-template>

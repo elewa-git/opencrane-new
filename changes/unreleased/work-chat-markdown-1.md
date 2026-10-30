@@ -1,0 +1,1 @@
+- Assistant replies now show Markdown headings, lists, quotes, inline formatting and safe links, with copy buttons on code blocks. HTML stays text and diagrams appear as code.

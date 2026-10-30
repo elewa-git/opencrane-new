@@ -10,9 +10,12 @@ function mount(text: string) {
   return { fixture, root };
 }
 
-afterEach(function restoreMocks() { vi.restoreAllMocks(); });
+afterEach(function restoreMocks() {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
-it('renders headings, paragraphs, ordered and unordered lists and block quotes', () => {
+function rendersBlocks() {
   const { root } = mount('# Title\n\nParagraph\n\n3. Third\n4. Fourth\n\n- One\n- Two\n\n> Quote');
   expect(root.querySelector('h1')?.textContent).toBe('Title');
   expect(root.querySelector('p')?.textContent).toBe('Paragraph');
@@ -24,9 +27,9 @@ it('renders headings, paragraphs, ordered and unordered lists and block quotes',
     const heading = mount(`${'#'.repeat(level)} Heading`).root;
     expect(heading.querySelector(`h${level}`)?.textContent).toBe('Heading');
   }
-});
+}
 
-it('renders inline code, bold, italic and permitted links', () => {
+function rendersInline() {
   const { root } = mount('`<code>` **bold** *italic* _also italic_ '
     + '[site](https://example.test/help) [mail](mailto:help@example.test)');
   expect(root.querySelector('code')?.textContent).toBe('<code>');
@@ -40,18 +43,18 @@ it('renders inline code, bold, italic and permitted links', () => {
     expect(link.target).toBe('_blank');
     expect(link.rel).toBe('noopener noreferrer');
   }
-});
+}
 
-it('keeps HTML and unsafe links as text', () => {
+function keepsHostileText() {
   const hostile = '<img src=x onerror=alert(1)> <script>alert(1)</script> '
     + '[bad](javascript:alert) [data](data:text/html,hello) [web](http://example.test) '
     + '[relative](/settings) [file](file:///example) [encoded](java&#x73;cript:alert)';
   const { root } = mount(hostile);
   expect(root.querySelector('img, script, a')).toBeNull();
   expect(root.textContent).toBe(hostile);
-});
+}
 
-it('keeps nested fences, HTML and Mermaid inside code, with exact copying', async () => {
+async function copiesCode() {
   const writeText = vi.fn().mockResolvedValue(undefined);
   vi.stubGlobal('navigator', { clipboard: { writeText } });
   const code = '```html\n<img src=x>\n```';
@@ -64,9 +67,9 @@ it('keeps nested fences, HTML and Mermaid inside code, with exact copying', asyn
   expect(writeText).toHaveBeenCalledWith(code);
   expect(root.textContent).toContain('Copied');
   vi.unstubAllGlobals();
-});
+}
 
-it('offers another try when copying is refused', async () => {
+async function handlesCopyRefusal() {
   const writeText = vi.fn().mockRejectedValue(new Error('Refused'));
   vi.stubGlobal('navigator', { clipboard: { writeText } });
   const { root, fixture } = mount('```\nhello\n```');
@@ -75,25 +78,41 @@ it('offers another try when copying is refused', async () => {
   expect(root.textContent).toContain('Could not copy. Try again.');
   expect(root.querySelector('button')?.disabled).toBe(false);
   vi.unstubAllGlobals();
-});
+}
 
-it('renders unfinished streamed code and updates when the reply grows', () => {
+function updatesStreamedReply() {
   const { root, fixture } = mount('```js\nconst value = 1;');
   expect(root.querySelector('code')?.textContent).toBe('const value = 1;');
   fixture.componentRef.setInput('text', '```js\nconst value = 1;\n```\n\n## Finished');
   fixture.detectChanges();
   expect(root.querySelector('h2')?.textContent).toBe('Finished');
-});
+}
 
-it('keeps very long replies and unmatched markers without truncation', () => {
-  const longText = 'Long reply '.repeat(20000) + '['.repeat(20000) + '*'.repeat(20000);
+function keepsLongReplies() {
+  const longText = 'Long reply\n'.repeat(20000) + '['.repeat(20000) + '*'.repeat(20000);
   const { root } = mount(longText);
   expect(root.textContent).toBe(longText);
   expect(root.querySelectorAll('p')).toHaveLength(1);
-});
+}
 
-it('keeps citations and the existing interactive placeholder outside code', () => {
+function keepsExistingElements() {
   const { root } = mount('Source [1]\n\n```a2ui\n{}\n```');
   expect(root.querySelector('.citation')?.textContent?.trim()).toBe('1');
   expect(root.textContent).toContain('This interface is not available yet.');
-});
+}
+
+it('renders headings, paragraphs, ordered and unordered lists and block quotes', rendersBlocks);
+
+it('renders inline code, bold, italic and permitted links', rendersInline);
+
+it('keeps HTML and unsafe links as text', keepsHostileText);
+
+it('keeps nested fences, HTML and Mermaid inside code, with exact copying', copiesCode);
+
+it('offers another try when copying is refused', handlesCopyRefusal);
+
+it('renders unfinished streamed code and updates when the reply grows', updatesStreamedReply);
+
+it('keeps very long replies and unmatched markers without truncation', keepsLongReplies);
+
+it('keeps citations and the existing interactive placeholder outside code', keepsExistingElements);
