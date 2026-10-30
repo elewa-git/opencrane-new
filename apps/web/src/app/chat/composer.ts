@@ -14,6 +14,7 @@ export class ChatComposer {
   readonly queued = input(false);
   readonly teamSession = input(false);
   readonly directMode = input(false);
+  readonly fileDrag = input(false);
   readonly memoryFree = input(false);
   readonly draftChange = output<string>();
   readonly submitted = output<string>();

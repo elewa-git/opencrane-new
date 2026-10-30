@@ -21,7 +21,7 @@ This folder contains the workspace where people talk to their assistant, exchang
 | `direct-chat*.ts`, `direct-chat.html`, `recipient-picker.*` | Handle colleague chats, recipients, participant changes, archives and drafts. |
 | `conversations.*`, `conversations-data.ts`, `read-marker.ts` | Load conversation lists, find saved links and save the read place. |
 | `approvals.*`, `approval-*.ts`, `tool-activity-line.*` | Show tool reviews, decisions, saved times and safe activity details. |
-| `upload.ts`, `file-*.ts`, `conversation-file-card.*`, `screenshot-capture.ts`, `capture-status.*` | Upload, preview and download files, and track screenshot saves. |
+| `upload.ts`, `upload-batch.ts`, `file-*.ts`, `conversation-file-card.*`, `screenshot-capture.ts`, `capture-status.*` | Upload attached and dropped files, retry failures, preview and download files, and track screenshot saves. |
 | `shared-assistant-picker.*`, `recovery-notice.*`, `memory-free-notice.*`, `budget-stop-notice.*` | Explain shared sessions, recovery, privacy choices and spending stops. |
 
 ## Replies and Stop
@@ -92,6 +92,11 @@ once. Another change offers Retry. Group chat headers use the full saved title.
 The assistant workspace does not yet offer archiving from its header.
 
 ## Files and screenshots
+
+On desktop screens, dropping files onto the conversation or message box starts the
+same upload as Attach. The message box says “Drop files to add them” during a file
+drag, with a polite screen reader announcement. Files upload in order. A failed file
+keeps Retry upload while later files continue. Phones keep Attach.
 
 Uploads stay pending while the server prepares the saved file list. The page checks
 again briefly before showing Ready. Leaving the page cancels those checks.

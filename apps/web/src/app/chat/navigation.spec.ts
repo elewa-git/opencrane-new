@@ -109,7 +109,7 @@ async function checkGuardedNavigation(condition: 'queued' | 'upload'): Promise<v
   }
   function uploadStarted(): void {
     expect(uploadRequests).toHaveLength(1);
-    expect(chat.uploading()).toBe(true);
+    expect(chat.uploadBatch.uploading()).toBe(true);
   }
   if (condition === 'queued') {
     await chat.send('Keep this queued message');
@@ -146,10 +146,10 @@ async function checkGuardedNavigation(condition: 'queued' | 'upload'): Promise<v
   await fixture.whenStable();
   expect(chat.selected()).toBe('chat');
   if (condition === 'queued') expect(chat.queued()).toBe(true);
-  else expect(chat.uploading()).toBe(true);
+  else expect(chat.uploadBatch.uploading()).toBe(true);
   expect(chat.error()).toContain('before changing sessions');
   if (pendingUpload) {
-    expect(chat.uploadName()).toBe('notes.txt');
+    expect(chat.uploadBatch.name()).toBe('notes.txt');
     const uploadRequest = uploadRequests[0];
     uploadRequest?.dispatchEvent(new Event('abort'));
     await pendingUpload;

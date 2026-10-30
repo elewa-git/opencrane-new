@@ -64,3 +64,16 @@ kbd { font: 11px var(--oc-font-mono); background: #eef1f2; border: 1px solid #de
 }
 .attach-menu .mobile-mode oc-icon { color: #0db5cc; }
 #attach-toggle.selected { background: linear-gradient(#eef1f2, #eef1f2) center/26px 26px no-repeat white; }
+.composer.file-drag {
+  outline: var(--oc-focus-width) dashed var(--oc-focus-ring);
+  outline-offset: var(--oc-focus-offset);
+  background: var(--oc-accent-tint);
+}
+.drop-label:empty { position: absolute; margin: 0; }
+.drop-label {
+  display: block;
+  color: var(--oc-accent-dark);
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}

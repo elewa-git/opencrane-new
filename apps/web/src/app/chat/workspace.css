@@ -233,3 +233,4 @@ oc-file-preview { position: absolute; }
   border-radius: 9px;
   background: #eef1f2;
 }
+.chat-drop-area { display: contents; }

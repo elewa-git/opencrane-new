@@ -1047,6 +1047,19 @@ Published editing, groups and multi-save recovery await their frames.
 
 ## Upload readiness
 
+`chat/file-drop.ts` accepts desktop file drops over the transcript and composer.
+Text and link drops do nothing. Document handlers prevent file drops elsewhere from
+opening a browser page. Layouts up to 700 px keep Attach without a drop state.
+Disabled, queued and shared-assistant sessions do not accept drops.
+The composer uses the existing accent colours, a dashed outline and the polite
+label “Drop files to add them”. The Attach path remains available to keyboards.
+`UploadBatch` sends files in order through the existing `ChatSession.upload` flow.
+A failed file keeps its request key for Retry upload while later files continue.
+Leaving the session discards files held for retry.
+`file-drop.spec.ts` checks workspace drag events at the upload request boundary.
+`npm run visual:chat-drag-drop` builds the app and captures intercepted API screens.
+Images are in `docs/process/chat-drag-drop/`.
+
 `chat/upload.ts` keeps the upload promise pending after HTTP 201 until the file-list
 GET succeeds. It reuses `fetchConversationRead`: HTTP 425 or 409 retries every
 100 ms for at most 50 attempts, within a ten-second request limit. Other failures
