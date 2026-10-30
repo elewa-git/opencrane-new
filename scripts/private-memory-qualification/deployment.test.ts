@@ -107,7 +107,7 @@ async function refusesInventedBundle(): Promise<void> {
 }
 it('refuses an invented evidence bundle before executing anything', refusesInventedBundle);
 
-async function substitutes(field: string): Promise<void> {
+async function substitutes(field: string, status = 'PASS'): Promise<void> {
   const foreign: Record<string, string> = {
     sourceSha: 'd'.repeat(40), imageDigest: `sha256:${'d'.repeat(64)}`,
     environmentId: 'd'.repeat(64), siloId: `sha256:${'d'.repeat(64)}`,
@@ -115,6 +115,8 @@ async function substitutes(field: string): Promise<void> {
   };
   function change(response: Record<string, unknown>): void {
     response[field] = foreign[field];
+    response['result'] = status;
+    response['complete'] = status === 'PASS';
   }
   alter = change;
   expect((await collectDeployment()).result).toBe('FAIL');
@@ -368,3 +370,23 @@ async function withdrawsPassForPartialRunner(): Promise<void> {
   expect(responses).toHaveLength(12);
 }
 it('withdraws earlier saved PASS when the real partial runner refuses', withdrawsPassForPartialRunner);
+
+async function retainsMissingJourneys(): Promise<void> {
+  function incomplete(response: Record<string, unknown>): void {
+    response['result'] = 'NOT RUN';
+    response['complete'] = false;
+  }
+  alter = incomplete;
+  const result = await collectDeployment();
+  expect(result).toMatchObject({ result: 'PARTIAL',
+    checks: { privateTurns: 'NOT RUN', invalidation: 'NOT RUN' },
+    qualifications: { 'P4-14': 'NOT RUN', 'P4-15': 'NOT RUN' } });
+  expect(responses).toHaveLength(11);
+}
+it('keeps missing journeys NOT RUN without qualifying the deployment', retainsMissingJourneys);
+
+async function foreignPartial(field: string): Promise<void> {
+  await substitutes(field, 'PARTIAL');
+}
+it.each(['imageDigest', 'environmentId', 'siloId'])(
+  'refuses incomplete evidence from another %s', foreignPartial);

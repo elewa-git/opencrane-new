@@ -5,7 +5,8 @@
 This developer tool collects private memory test results from a running deployment.
 It reads the deployment identity itself and starts each check inside that image.
 It also checks older evidence files, which cannot qualify a deployment.
-Admission remains off. The runner checks host settings but cannot complete a memory journey.
+Admission remains off. The runner checks host settings and saved memory invalidation.
+It reports unfinished journeys without qualifying them.
 
 ## Where it fits
 
@@ -17,9 +18,10 @@ flowchart LR
   scripts["scripts<br/>developer tools"] -.-> collector["private-memory-qualification<br/>collects observed results"]
   scripts -.-> sibling["check-local-qualification<br/>checks local results"]
   server["apps/server<br/>disabled initial loading"] -->|reads and rechecks results| collector
+  collector -.->|uses memory checks| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
   collector -->|measures and starts checks| docker["Docker<br/>running image and host"]
-  docker -->|runs supervised host checks| deployment["deployment<br/>event store and journey runner"]
+  docker -->|runs supervised memory checks| deployment["deployment<br/>event store and journey runner"]
 ```
 
 ## What it is responsible for
@@ -45,8 +47,12 @@ the previous journey has stopped. Only complete, matching results can pass.
 
 The fixed journey runner is copied into the deployment image by the existing image build.
 It reads kernel settings and process core limits itself. Even safe host settings cannot
-complete a journey: native calls, process isolation and storage checks are still pending.
-Tests use simulated observations and disposable containers to check refusal and cleanup.
+complete a journey. The runner shares its assertions with server tests to check correction, forgetting and
+unrelated fact changes against the measured event store. It saves encrypted fixture facts
+using the deployment's memory key store. It records these checks as PARTIAL and missing
+journeys as NOT RUN. Native calls, process isolation and storage checks are still pending.
+Tests build the package image and run both memory checks against a disposable event store.
+Other tests use simulated observations and disposable containers to check refusal and cleanup.
 They do not qualify a deployment or enable memory.
 
 ## How to run or test it

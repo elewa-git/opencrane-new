@@ -23,7 +23,7 @@ const bindingSchema = z.strictObject({
 });
 const receiptSchema = bindingSchema.extend({
   name: z.string(), challengeId: z.uuid(), observedAt: z.number().int(),
-  result: z.literal('PASS'), complete: z.literal(true),
+  result: z.enum(['PASS', 'PARTIAL', 'NOT RUN']), complete: z.boolean(),
 });
 const freshSchema = z.strictObject({
   created: z.iso.datetime(), lastSequence: z.number().int().nonnegative(),
@@ -45,8 +45,9 @@ try {
 }
 `;
 type Binding = z.infer<typeof bindingSchema>;
+type Status = 'PASS' | 'PARTIAL' | 'NOT RUN';
 type Result = { result: 'FAIL'; reason: 'collection_failed' } | Binding & {
-  result: 'PASS'; checks: Record<string, 'PASS'>; qualifications: Record<string, 'PASS'>;
+  result: 'PASS' | 'PARTIAL'; checks: Record<string, Status>; qualifications: Record<string, Status>;
   receiptDigests: string[];
 };
 
@@ -196,7 +197,7 @@ async function assertInstallation(
   }
 }
 
-async function runCheck(containerId: string, binding: Binding, name: string): Promise<string> {
+async function runCheck(containerId: string, binding: Binding, name: string) {
   const challengeId = randomUUID();
   const request = { ...binding, name, challengeId };
   const input = JSON.stringify(request);
@@ -205,10 +206,13 @@ async function runCheck(containerId: string, binding: Binding, name: string): Pr
     '/app/scripts/private-memory-qualification/journey.mjs'];
   const receipt = receiptSchema.parse(await runInContainer(containerId, args, input));
   assertSame(request, receipt);
+  if (receipt.complete !== (receipt.result === 'PASS')) {
+    throw new Error('inconsistent_receipt');
+  }
   if (receipt.observedAt < startedAt || receipt.observedAt > Date.now()) {
     throw new Error('stale_receipt');
   }
-  return hash(JSON.stringify(receipt));
+  return { result: receipt.result, digest: hash(JSON.stringify(receipt)) };
 }
 
 function deploymentTarget() {
@@ -250,21 +254,25 @@ export async function collectDeployment(...unexpectedArguments: unknown[]): Prom
       environmentId: before.environmentId, siloId: before.siloId,
       installationId, runId: randomUUID(), freshInstall: true,
     });
-    const results: Record<string, 'PASS'> = {};
-    const complete: Record<string, 'PASS'> = {};
+    const results: Record<string, Status> = {};
+    const complete: Record<string, Status> = {};
     const receiptDigests: string[] = [];
+    let status: 'PASS' | 'PARTIAL' = 'PASS';
     for (const name of [...checks, ...qualifications]) {
       await assertInstallation(containerId, before, streamCreated);
-      const receiptDigest = await runCheck(containerId, binding, name);
-      receiptDigests.push(receiptDigest);
+      const receipt = await runCheck(containerId, binding, name);
+      receiptDigests.push(receipt.digest);
+      if (receipt.result !== 'PASS') {
+        status = 'PARTIAL';
+      }
       await assertInstallation(containerId, before, streamCreated);
       if (checks.includes(name)) {
-        results[name] = 'PASS';
+        results[name] = receipt.result;
       } else {
-        complete[name] = 'PASS';
+        complete[name] = receipt.result;
       }
     }
-    const result: Result = { ...binding, result: 'PASS', checks: results,
+    const result: Result = { ...binding, result: status, checks: results,
       qualifications: complete, receiptDigests };
     saveResult(result);
     return result;

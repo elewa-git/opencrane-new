@@ -27,11 +27,10 @@ infra/package/*
 !infra/package/bootstrap.ts
 !infra/package/worker.mjs
 !infra/package/kubeconfig.mjs
-apps/ops/test
-apps/server/test
-apps/web/test
-**/*.spec.ts
-**/*.test.ts
+**/test
+**/tests
+**/*.spec.*
+**/*.test.*
 **/*.png
 **/*.jpg
 **/*.webp

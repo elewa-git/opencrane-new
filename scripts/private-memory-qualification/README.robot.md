@@ -42,8 +42,9 @@ Each of the nine checks and both complete qualifications executes the fixed
 The runner receives one JSON object on stdin: measured binding, `name`, fresh
 `runId` and fresh per-check `challengeId`. It must perform that named journey,
 then return only the same fields plus `observedAt` (epoch milliseconds),
-`result: PASS` and `complete: true`. Partial, missing, extra, stale or mismatched
-results refuse. Every process has a two-minute timeout and a combined stdout/stderr
+`result` and `complete`. PASS requires complete=true; PARTIAL and NOT RUN require
+complete=false. Extra, stale or mismatched results refuse. Partial and missing journeys
+are recorded but cannot qualify. Every process has a two-minute timeout and a combined stdout/stderr
 limit of 64 KiB. The collector injects `supervisor.mjs` into each Docker exec. This
 supervisor starts the fixed command in a new Linux process group and keeps stdin
 open as a connection to the collector. EOF, including collector SIGTERM or SIGKILL,
@@ -62,13 +63,14 @@ cannot match the new challenge. It does not accept detached receipts or signatur
 
 Only validated metadata is hashed into `receiptDigests`; no memory text is hashed.
 All child output and errors stay in process memory. Failures expose only
-`FAIL / collection_failed`. Success reports measured identity, the nine checks,
+`FAIL / collection_failed`. Completed collection reports measured identity, the nine checks,
 both qualifications and receipt digests. This output is not an admission token.
 The collector atomically writes its own result to
 `/etc/opencrane/private-memory-qualification-result.json`, using a new file with mode 0600.
-A new collection first replaces the prior result with FAIL. Only its own complete run
-can replace that with PASS. The owner runs the collector as root and protects the parent
-directories. No event is appended and no admission setting changes. Saved JSON cannot
+A new collection first replaces the prior result with FAIL. Its own incomplete run can replace that with PARTIAL, preserving each check status.
+Only its own complete run can replace that with PASS. The owner runs the collector as root and protects the parent
+directories. The collector changes no admission setting. Its runner appends the fixture
+events described below. Saved JSON cannot
 be fed back into this collector. The older file parser still cannot return PASS.
 
 `readDeploymentQualification(silo)` reads that fixed file with no symlink following.
@@ -91,7 +93,7 @@ The entry accepts no arguments and at most 4,096 stdin bytes. Its strict request
 only the measured binding, one of the eleven existing names and a UUID challenge.
 Unknown names, extra fields, malformed formats and paths refuse before observations.
 Failures contain only `result: FAIL` and `input_invalid`, `host_refused` or
-`journey_incomplete` as the reason. No identity, raw observation or child output is echoed.
+`journey_failed` as the reason. No identity, raw observation or child output is echoed.
 The entry starts no child processes and remains in the supervisor's process group.
 
 The host probe reads `/proc/swaps`, the effective `core_pattern`, `core_uses_pid` and
@@ -107,8 +109,8 @@ The old P4-14 F1/F2 host exceptions never apply to memory.
 A safe fixture passes only this host probe. It does not establish coverage of other
 process namespaces or guest kernels. Server, bridge, supervisor and proxy buffers
 all need disabled swap/dumps; later live checks must measure their actual processes.
-Every valid journey still returns FAIL, even after safe observations. The collector
-therefore withdraws its earlier result and cannot save PASS with this partial runner.
+Safe observations allow the checks below to run. The collector still withdraws its
+earlier result and cannot save PASS with this partial runner.
 
 **Outstanding / NOT RUN:** all nine live journeys (`privateTurns`, `nativeRecall`,
 `requesterIsolation`, `sessionIsolation`, `invalidation`, `unrelatedActivity`,
@@ -120,6 +122,42 @@ fixtures prove refusal and cancellation only. No stack, bootstrap or model call 
 here. Kubernetes collection remains outside this part.
 
 Own checks: [host-runner receipt](../../docs/process/p4-15-pr5h/receipt.md).
+
+## Image-owned memory checks
+
+P4-15 PR 5j, Part of #97, owns the shared assertions in `memory-journey.ts`.
+The server invalidation suite imports this same file. The package image includes the
+runner code and excludes repository test folders and test files.
+The runner connects to the measured deployment through its existing NATS settings and
+checks SILO_ID against the collector's hash before writing. Each case uses new random
+conversation, requester and command ids. MEMORY_KEY_DIRECTORY must name the deployment's
+existing memory key store. Facts use its ordinary revision encryption; no plaintext,
+keys, private paths or assertion errors are returned. Fixture events remain in that
+fresh installation, so a retry needs a new installation as the collector already requires.
+
+For `invalidation`, the shared assertions check Correct and Forget, retained references,
+unavailable execution status and exact retry recovery. For `unrelatedActivity`, they check that
+correcting or forgetting another fact leaves the loaded context unchanged. These are
+server checks with recorded context fixtures, not native memory delivery. Successful
+runs return PARTIAL, complete=false. The remaining seven journeys and both qualifications
+return NOT RUN, complete=false. Failure returns only FAIL / journey_failed.
+The collector binds every returned status to the image, host, silo, installation and
+fresh challenge, then saves its protected result. These are challenge-bound receipts,
+not cryptographic signatures. The qualification reader still accepts only complete PASS.
+
+Requester/session isolation, messages/uploads during native work, dispatch/output rejection,
+process termination, persistence scans and real native recall remain NOT RUN. No native
+process starts, and no admission setting changes. The existing supervisor still owns
+timeout and process-group cleanup. Tests run shared assertions on disposable NATS and
+check denied appends, incomplete results and refusal by the qualification reader.
+
+`memory-image.test.ts` builds the actual `infra/package/Dockerfile` with the root
+`.dockerignore`. It checks that repository tests are absent, then calls both memory
+checks inside read-only containers against disposable NATS. Only temporary credentials
+are mounted; all executable modules come from the image. Both Correct and Forget must
+be saved, and invalidation must occur only for the affected context. Admission must
+remain disabled. This test calls the memory checks directly, so it does not claim safe
+host settings or live qualification. The separate entry-point test checks host refusal.
 
 ## File parser scope and invocation
 

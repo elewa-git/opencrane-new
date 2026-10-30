@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { checks, qualifications } from './collect.ts';
+import { qualifications } from './collect.ts';
 import { probeHost } from './host-probe.ts';
 import { runJourney } from './journey.ts';
 
@@ -18,13 +18,14 @@ function prepare(): void {
 }
 beforeEach(prepare);
 
-function incomplete(name: string): void {
-  expect(runJourney(JSON.stringify({ ...request, name }))).toEqual({
-    result: 'FAIL', reason: 'journey_incomplete',
-  });
+async function incomplete(name: string): Promise<void> {
+  const result = await runJourney(JSON.stringify({ ...request, name }));
+  expect(result).toMatchObject({ ...request, name, result: 'NOT RUN', complete: false });
+  expect(result).toHaveProperty('observedAt', expect.any(Number));
   expect(probeHost).toHaveBeenCalledOnce();
 }
-it.each([...checks, ...qualifications])('never completes %s on host checks alone', incomplete);
+it.each(['privateTurns', 'nativeRecall', 'requesterIsolation', 'sessionIsolation',
+  'stopReconnect', 'replacementReload', 'persistence', ...qualifications])('never completes %s on host checks alone', incomplete);
 
 const invalid: [string, unknown][] = [
   ['sourceSha', 'a'.repeat(39)], ['imageDigest', 'latest'], ['environmentId', '../private'],
@@ -37,32 +38,34 @@ const invalid: [string, unknown][] = [
   ['installationId', `${request.installationId}\n`], ['runId', `${request.runId}\n`],
   ['challengeId', `${request.challengeId}\n`],
 ];
-function invalidField(field: string, value: unknown): void {
-  expect(runJourney(JSON.stringify({ ...request, [field]: value }))).toEqual({
+async function invalidField(field: string, value: unknown): Promise<void> {
+  expect(await runJourney(JSON.stringify({ ...request, [field]: value }))).toEqual({
     result: 'FAIL', reason: 'input_invalid',
   });
   expect(probeHost).not.toHaveBeenCalled();
 }
 it.each(invalid)('refuses malformed or extra %s', invalidField);
 
-function missingField(field: string): void {
+async function missingField(field: string): Promise<void> {
   const missing: Record<string, unknown> = { ...request };
   delete missing[field];
-  expect(runJourney(JSON.stringify(missing)).reason).toBe('input_invalid');
+  expect(await runJourney(JSON.stringify(missing))).toEqual({
+    result: 'FAIL', reason: 'input_invalid',
+  });
   expect(probeHost).not.toHaveBeenCalled();
 }
 it.each(Object.keys(request))('requires %s', missingField);
 
-function malformed(input: string): void {
-  expect(runJourney(input)).toEqual({ result: 'FAIL', reason: 'input_invalid' });
+async function malformed(input: string): Promise<void> {
+  expect(await runJourney(input)).toEqual({ result: 'FAIL', reason: 'input_invalid' });
   expect(probeHost).not.toHaveBeenCalled();
 }
 it.each(['', '{', 'null', '[]', '{}\n{}', ' '.repeat(4097), 'é'.repeat(2049)])(
   'refuses malformed or oversized input %#', malformed);
 
-function unsafeHost(): void {
+async function unsafeHost(): Promise<void> {
   vi.mocked(probeHost).mockReturnValue(false);
-  expect(runJourney(JSON.stringify(request))).toEqual({ result: 'FAIL', reason: 'host_refused' });
+  expect(await runJourney(JSON.stringify(request))).toEqual({ result: 'FAIL', reason: 'host_refused' });
 }
 it('refuses a host whose observations are unsafe or unavailable', unsafeHost);
 

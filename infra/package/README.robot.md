@@ -12,6 +12,13 @@ reviewed contents of every pinned image. It refuses unknown application licences
 non-OSI application licences and operating-system packages without a matching
 Debian main or PostgreSQL apt archive review.
 
+The root `.dockerignore` excludes repository test folders and test files from the
+package build. The runtime cleanup also removes the nested `fast-uri/test` and
+`json-schema-traverse/spec` folders installed with server dependencies.
+`scripts/private-memory-qualification/memory-image.test.ts` builds this Dockerfile,
+checks the packaged source folders for tests, and runs both memory checks against
+disposable NATS. It does not qualify live memory delivery or enable admission.
+
 `chart/.helmignore` excludes `templates/README.md` so Helm does not try to render
 the guide as a Kubernetes resource. `chart-render.test.mjs` renders the real chart
 with made-up digest-pinned images and credential reference names. It checks that

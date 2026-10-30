@@ -12,20 +12,34 @@ const requestSchema = z.strictObject({
     'P4-14', 'P4-15']),
 });
 
-type Refusal = { result: 'FAIL'; reason: 'input_invalid' | 'host_refused' | 'journey_incomplete' };
+type Refusal = { result: 'FAIL'; reason: 'input_invalid' | 'host_refused' | 'journey_failed' };
 
-export function runJourney(input: string): Refusal {
+type Request = z.infer<typeof requestSchema>;
+type Receipt = Request & { observedAt: number; result: 'NOT RUN' | 'PARTIAL'; complete: false };
+
+export async function runJourney(input: string): Promise<Refusal | Receipt> {
+  let request: Request;
   try {
     if (Buffer.byteLength(input) > 4096) {
       return { result: 'FAIL', reason: 'input_invalid' };
     }
-    requestSchema.parse(JSON.parse(input));
+    request = requestSchema.parse(JSON.parse(input));
   } catch {
     return { result: 'FAIL', reason: 'input_invalid' };
   }
   if (!probeHost()) {
     return { result: 'FAIL', reason: 'host_refused' };
   }
-  // Keep all journeys refused until native, process and persistence assertions exist.
-  return { result: 'FAIL', reason: 'journey_incomplete' };
+  let result: Receipt['result'] = 'NOT RUN';
+  if (request.name === 'invalidation' || request.name === 'unrelatedActivity') {
+    try {
+      const { checkMemory } = await import('./memory-checks.ts');
+      await checkMemory(request.name, request.siloId);
+      result = 'PARTIAL';
+    } catch {
+      return { result: 'FAIL', reason: 'journey_failed' };
+    }
+  }
+  // Server assertions alone cannot qualify native processes or private output delivery.
+  return { ...request, observedAt: Date.now(), result, complete: false };
 }
