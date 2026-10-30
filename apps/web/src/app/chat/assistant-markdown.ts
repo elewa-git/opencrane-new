@@ -16,18 +16,22 @@ export class AssistantMarkdown {
   readonly text = input.required<string>();
   readonly citationOpened = output<string>();
   protected readonly blocks = computed(this.parseReply.bind(this));
-  protected readonly copyStatus = signal<{ block: MarkdownBlock; text: string } | null>(null);
+  protected readonly copyStatus = signal<{
+    blockIndex: number;
+    code: string;
+    text: string;
+  } | null>(null);
 
   private parseReply(): MarkdownBlock[] {
     return parseMarkdown(this.text());
   }
 
-  protected async copyCode(block: MarkdownBlock): Promise<void> {
+  protected async copyCode(block: MarkdownBlock, blockIndex: number): Promise<void> {
     try {
       await navigator.clipboard.writeText(block.text);
-      this.copyStatus.set({ block, text: 'Copied' });
+      this.copyStatus.set({ blockIndex, code: block.text, text: 'Copied' });
     } catch {
-      this.copyStatus.set({ block, text: 'Could not copy. Try again.' });
+      this.copyStatus.set({ blockIndex, code: block.text, text: 'Could not copy. Try again.' });
     }
   }
 }

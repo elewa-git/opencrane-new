@@ -3,10 +3,10 @@
     @case ('code') {
       <section class="code-block" aria-label="Code block">
         <div class="code-heading"><span>{{ block.language || 'Code' }}</span>
-          <button type="button" (click)="copyCode(block)">Copy code</button>
+          <button type="button" (click)="copyCode(block, $index)">Copy code</button>
         </div>
         <pre><code>{{ block.text }}</code></pre>
-        @if (copyStatus()?.block === block) {
+        @if (copyStatus()?.blockIndex === $index && copyStatus()?.code === block.text) {
           <span role="status">{{ copyStatus()?.text }}</span>
         }
       </section>
