@@ -336,6 +336,17 @@ it.each(['', 'xmlns:r="https://example.org/other"'])(
   'refuses an unbound or wrong relationship namespace: %s', refusesUnknownRelationshipNamespace,
 );
 
+async function refusesEmptyNamespacePrefix(element: string) {
+  const parts = documentParts('xl');
+  const xml = relationships(relationship('worksheet', 'worksheets/sheet1.xml'));
+  const tags = new RegExp(`(<\\/?)(${element})(?=[\\s>])`, 'gu');
+  parts['xl/_rels/workbook.xml.rels'] = xml.replace(tags, '$1:$2');
+  await expect(inspectFile('sample.xlsx', archive(parts))).rejects.toThrow('Unsafe Office document');
+}
+it.each(['Relationships', 'Relationship'])(
+  'refuses an empty namespace prefix on %s', refusesEmptyNamespacePrefix,
+);
+
 async function refusesEmbeddedPartCount() {
   const workbook = documentParts('xl');
   addParts(workbook, 2001);
