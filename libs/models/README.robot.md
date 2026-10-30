@@ -9,7 +9,8 @@ context supplies the silo and admin custodian; strict input names a new profile,
 installation, registration and opt-in revisions. The session supplies its digest and
 current membership revision. History and configuration load before one admin permission
 decision, including when preparation fails. Saved removal and demotion retain
-`MemberAccessRefused`. An existing profile cannot be replaced through preparation.
+`MemberAccessRefused`, including when a later position read would fail. An existing
+profile cannot be replaced through preparation.
 
 `prepareOAuthAttempt` accepts company context only through its explicit company variant.
 Personal input remains strict. A typed company operation key binds silo and change reference;
@@ -19,10 +20,11 @@ reviewed scopes and admission revisions. It reuses immutable PKCE S256, state an
 with pinned UID/version and a ten-minute expiry. A lost preparation reply recovers the
 same copy; a lost create reply without pinned identity stays unknown.
 
-After staging, the helper compares the admitted membership positions, profile, server,
-opt-in and current configuration. Concurrent events repeat those small checks within
-the original two-second final deadline. The final awaited read cannot extend attempt
-expiry. Recovery one millisecond before expiry is allowed; recovery at expiry refuses.
+After staging, the helper compares the admitted membership positions, profile,
+opt-in and current configuration. It reloads the server policy and catalogue evidence.
+An unchanged catalogue renewal is allowed; policy changes or unavailable evidence refuse
+preparation. Concurrent events repeat these checks within the original two-second final
+deadline. The final awaited read cannot extend attempt expiry. Recovery one millisecond before expiry is allowed; recovery at expiry refuses.
 Only safe internal metadata returns. No provider call, event append, selection or
 release occurs. Company start/URL, callback, exchange, activation and transfer remain
 later work. Personal refresh/revoke and exact deletion retain their existing contracts.
@@ -2060,8 +2062,10 @@ reads each other successor once to calculate the complete owner set. It keeps
 historical successors out of the positions used for write access checks. Their
 later ordinary role changes cannot remove ownership.
 `activeMember` can reuse a membership read completed before the write check. It
-compares both saved stream positions before checking current permissions and
-applied receipts. A position change or an expired two-second window refuses the write.
+refuses a saved removal or insufficient role before reading stream positions, so a
+position read outage cannot replace that refusal. It then compares both saved stream
+positions before checking current permissions and applied receipts. A position change
+or an expired two-second window refuses the write.
 When a caller has already started its write check, membership reads use that same
 deadline. They never start a new ten-second history window.
 

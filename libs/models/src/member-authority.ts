@@ -19,6 +19,8 @@ export async function activeMember(
   const historyDeadline = options.fresh?.deadline ?? performance.now() + 10_000;
   const membership = options.membership ?? await currentMembership(
     store, binding.silo, memberId, options.fresh, historyDeadline);
+  // Preserve a saved refusal before position reads can fail.
+  requireSavedRole(membership.role, options.requiredRole === 'admin');
   const subjects = [...membership.positions.keys()];
   const fresh = options.fresh ?? await authorityFence(store, performance.now(), subjects);
   for (const [subject, position] of membership.positions) {
@@ -37,8 +39,18 @@ export async function readActiveMember(store: EventStore, binding: Binding, memb
 ) {
   const membership = await currentMembership(store, binding.silo, memberId,
     undefined, performance.now() + 10_000);
+  requireSavedRole(membership.role, requiredRole === 'admin');
   await requireMember(binding, memberId, requiredRole === 'admin', membership, applied);
   return membership.role;
+}
+
+function requireSavedRole(role: string, admin: boolean) {
+  if (!role) {
+    throw new MemberAccessRefused('Active silo membership required');
+  }
+  if (admin && !['owner', 'admin'].includes(role)) {
+    throw new MemberAccessRefused('Owner or Admin required');
+  }
 }
 
 async function requireMember(
@@ -46,12 +58,6 @@ async function requireMember(
   membership: Awaited<ReturnType<typeof currentMembership>>,
   applied?: (eventId: string) => Promise<boolean>,
 ) {
-  if (!membership.role) {
-    throw new MemberAccessRefused('Active silo membership required');
-  }
-  if (admin && !['owner', 'admin'].includes(membership.role)) {
-    throw new MemberAccessRefused('Owner or Admin required');
-  }
   const auth = memberAuthorisation(binding);
   const checkApplied = applied ?? auth.applied.bind(auth);
   const relation = admin ? 'admin' : 'member';
