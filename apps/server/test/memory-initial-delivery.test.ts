@@ -185,7 +185,7 @@ async function boundedAccessPositions() {
     const position = await read(...args);
     if (args[0] !== undefined && delayedSubjects.has(args[0])) {
       // Charge elapsed time once for reads that overlap, and separately for sequential reads.
-      now = Math.max(now, started + 100);
+      now = Math.max(now, started + 50);
     }
     return position;
   }
