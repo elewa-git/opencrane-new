@@ -171,6 +171,40 @@ const slowAccessSubjects = ['member-alice', grantStream('mcp_server', 'memory'),
   grantStream('memory_read', scopeId)];
 it.each(slowAccessSubjects)(
   'loads initial memory within the access deadline when %s history is slow', boundedAccessHistory);
+async function boundedAccessPositions() {
+  await fact();
+  const read = options.store.head.bind(options.store);
+  const delayedSubjects = new Set(['assistant-assistant', 'mcp-memory',
+    grantStream('mcp_server', 'memory'), grantStream('memory_read', scopeId)]);
+  let now = performance.now();
+  function clock() {
+    return now;
+  }
+  async function slowAccessPosition(...args: Parameters<typeof read>) {
+    const started = now;
+    const position = await read(...args);
+    if (args[0] !== undefined && delayedSubjects.has(args[0])) {
+      // Charge elapsed time once for reads that overlap, and separately for sequential reads.
+      now = Math.max(now, started + 100);
+    }
+    return position;
+  }
+  vi.spyOn(performance, 'now').mockImplementation(clock);
+  vi.spyOn(options.store, 'head').mockImplementation(slowAccessPosition);
+  const pending = await prepare();
+  await expect(pending.load()).resolves.toEqual({ status: 'loaded', dispatch: 'disabled' });
+  const delivered: string[] = [];
+  function consume(block: string) {
+    delivered.push(block);
+  }
+  await pending.consume(consume);
+  expect(delivered).toHaveLength(1);
+  expect(delivered[0]).toContain(canary);
+  expect(await state()).toMatchObject({ initialLoaded: true,
+    references: [{ scopeId, memoryId: 'fact', revision: 1 }] });
+}
+it('delivers initial memory within the access deadline when stream positions are slow',
+  boundedAccessPositions);
 async function limits(count: number, text: string) {
   for (let index = 0; index < count; index++) await fact(`fact-${index}`, text);
   const pending = await prepare();
