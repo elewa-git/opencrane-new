@@ -78,10 +78,13 @@ function describeLine(line: string): MarkdownBlock {
 }
 
 function closesFence(line: string, fence: string): boolean {
-  const closing = line.trim();
+  const match = /^ {0,3}(`+|~+)[ \t]*$/.exec(line);
+  const closing = match?.[1];
+  if (!closing) {
+    return false;
+  }
   const sameMarker = closing[0] === fence[0];
-  const onlyMarkers = /^`+$|^~+$/.test(closing);
-  return sameMarker && onlyMarkers && closing.length >= fence.length;
+  return sameMarker && closing.length >= fence.length;
 }
 
 function appendBlock(
