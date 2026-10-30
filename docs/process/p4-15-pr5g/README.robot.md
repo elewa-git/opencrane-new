@@ -43,16 +43,24 @@ No new event, dependency or licence is introduced.
 2026-10-30. Local source only; no image or live silo was built. Tests use disposable
 NATS, PostgreSQL databases, OpenFGA and gateway fixtures. Deployment filesystem and Docker
 observations are simulated by the real collector's fixture; they do not qualify this host.
-All checks use `nice -n 10`; tests use one worker and explicit `PG_TEST_URL`.
+All checks use `nice -n 10`; tests use an explicit `PG_TEST_URL`.
 
-- PASS: failing-first test commit `4232f516b`. Ten server regressions and the runner
+- PASS: failing-first test commit `e835e776f`. Ten server regressions and the runner
   regression failed before implementation. Two refusal cases already passed.
+- PASS: failing-first renewal test commit `5e20d8426`. The new renewal case failed
+  before the fix because initial delivery asked for a database and event feed.
 - PASS: all five changed test files, 255/255 twice. The earlier four-file run passed 205/205.
+- PASS: the four tests for dispatch, delivery, initial delivery and credentials,
+  290/290 twice after the renewal fix. The unchanged assertions run again.
 - PASS: unchanged security, admission, report and renderer checks, 496/496.
   The wider run also exposed three older replay fixtures that lacked qualification;
   those fixtures were corrected and all 48 replay tests passed in both final runs.
-- PASS: lint, typecheck, event catalogue, Knip and changelog. A final targeted lint
-  and server typecheck also passed after moving the acknowledgement sender.
+- FAIL: the complete server memory test set passed 1036/1041, then 1039/1041.
+  The two runs failed in different gateway, delivery and initial-delivery cases.
+  Each failed case passed when rerun unchanged on its own or with the other failed case.
+- PASS: lint, typecheck, event catalogue, Knip and changelog on the current base.
+  A targeted lint and server typecheck also passed after moving the
+  acknowledgement sender.
 - PASS: focused release and replay checks after moving that helper, 26/26.
 - NOT RUN: full root suite, fresh-install native qualification, persistence scans,
   paid model calls and CI. No owner or secondary development stack was started.
