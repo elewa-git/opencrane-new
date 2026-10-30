@@ -177,7 +177,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|requests, Office uploads, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks saved membership before personal memory tools and history errors; prepares allowances; checks routine admission; applies Stop, Pause and Retire; verifies termination and admin authority; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
   server -->|reads and saves opt-in, metadata, receipts, memory changes, account choices, pauses, retirements, paused ownership changes, routine sessions, inputs, cancellations and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
@@ -237,7 +237,8 @@ assistant back on does not undo that pause or prevent cleanup of the stopped run
 - Signs people in and keeps their browser session.
 - Checks current membership and permissions before returning private information or saving a change.
 - Handles chats, assistant work, live replies, stop requests and tool approvals.
-- Checks uploads and saves clean files and authorised screenshots.
+- Checks uploads and saves clean files and authorised screenshots. Office files can include
+  checked chart workbooks, printer settings and web or email links.
 - Serves assistant desktops to people who may view them.
 - Handles members, groups, ownership, model providers, tool servers and spending settings.
 - Returns permitted change history, saved results and memory facts.
