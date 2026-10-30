@@ -311,12 +311,16 @@ it.each(removedTurnCases)(
   'refuses personal turn admission after removal and invitation, repeated start=%s',
   refusesRemovedTurnRequester);
 
-vi.mock('node:fs', async function filesystem(importOriginal) {
-  return { ...await importOriginal<typeof import('node:fs')>() };
-});
-vi.mock('node:child_process', async function processes(importOriginal) {
-  return { ...await importOriginal<typeof import('node:child_process')>() };
-});
+async function filesystem(importOriginal: <Module>() => Promise<Module>) {
+  const original = await importOriginal<typeof import('node:fs')>();
+  return { ...original };
+}
+async function processes(importOriginal: <Module>() => Promise<Module>) {
+  const original = await importOriginal<typeof import('node:child_process')>();
+  return { ...original };
+}
+vi.mock('node:fs', filesystem);
+vi.mock('node:child_process', processes);
 async function qualifiedStart(change: string) {
   await setup();
   const deployment = await initialQualificationFixture();
@@ -334,7 +338,8 @@ async function qualifiedStart(change: string) {
     executionMode: 'restricted', threadId: 'thread',
   });
   const next = { ...event('next-private', 'conversation-chat', 'message.posted'),
-    data: { conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text' } };
+    data: { ...event('next-private', 'conversation-chat', 'message.posted').data,
+      conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text' } };
   await nats.seed([next]);
   await expect(turnCommand(nats.store, context, { ...request, turnId: 'next-private' }))
     .rejects.toThrow('Private thread reused');

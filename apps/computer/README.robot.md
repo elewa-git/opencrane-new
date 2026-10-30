@@ -1755,4 +1755,9 @@ native calls and production admission remain NOT RUN or disabled.
 The [delivery contract](../../docs/process/p4-15-pr5f/README.robot.md) owns
 `initialMemoryInput`, its identity checks and byte limits. It renders only a live internal
 block from `prepareInitialMemory().consume`; it neither journals input nor starts Codex.
-The existing private and memory-free start paths are unchanged.
+The [qualified start contract](../../docs/process/p4-15-pr5g/README.robot.md) connects
+credential release to the private runner. The server assembles its labelled input without
+importing computer source, which the server image excludes. The private acknowledgement's `initialInput` contains
+the complete rendered text. The runner accepts it only on a restricted personal turn,
+without a second transcript field, and passes it once to `turn/start`. It never journals
+this text. Memory-free and shared turns refuse it. Native tool launch remains unbuilt.

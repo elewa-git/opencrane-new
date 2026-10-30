@@ -25,7 +25,8 @@ type ChatRows = Awaited<ReturnType<typeof chatHistory>>;
 type Upload = z.infer<typeof fileUploadedDataSchema>;
 type Tokens = Parameters<typeof resumeComputer>[1];
 export type WatchOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'> &
-  Partial<Pick<ChatOptions, 'binding'>> & {
+  Partial<Pick<ChatOptions, 'binding' | 'feed'>> & {
+    keyDirectory?: string;
     objects?: Client;
     catalogue?: Pick<ReturnType<typeof connectMcpCatalogue>, 'rows'>;
   };
@@ -304,7 +305,7 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   refreshStops: (beforeTurn: boolean) => Promise<void>) {
   const requested = z.object({ executionMode: z.literal('memory_free').optional() })
     .parse(message.event.data);
-  const mode = requiredExecutionMode(kind, requested.executionMode);
+  const mode = await requiredExecutionMode(kind, requested.executionMode, options.silo);
   const previousDelivery = link.sentTurns.get(conversation.conversationId);
   const accepted = started.has(message.event.id);
   // Retry busy computers until they accept the turn, without flooding the connection.
@@ -313,6 +314,7 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   const turn = turnMessage(options, conversation, rows, uploads, message, mode) as
     ReturnType<typeof turnMessage> & { tools?: Awaited<ReturnType<typeof buildTurnTools>> };
   async function buildTools() {
+    if (requested.executionMode === 'memory_free') return [];
     return toolsForTurn(options, conversation, turn, kind, mode, link.approvalWaiting === true);
   }
   const tools = await toolsForMessageOrEmpty(link.sentTurns, conversation.conversationId,

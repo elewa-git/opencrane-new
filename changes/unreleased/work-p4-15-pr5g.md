@@ -1,0 +1,1 @@
+- Personal assistants can receive initial memory once on a fresh private turn after deployment qualification, with checks during signing and no resend after a lost acknowledgement. Explicit memory-free work receives no history, memory block or offered tools. Native memory tools and private reply delivery remain unavailable.

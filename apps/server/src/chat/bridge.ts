@@ -1,6 +1,6 @@
 import { routineBridge, routineStartRefusal } from '../routine-bridge.ts';
 import { memoryBridge } from '../memory/bridge.ts';
-import { releaseTurnCredentials } from './turn-credentials.ts';
+import { releaseTurnCredentials, sendAcknowledgement } from './turn-credentials.ts';
 import { prepareRoutineThread } from './routine-thread.ts';
 import { executorStop } from '../computers/stop-executor.ts';
 import { childRequestHeld } from './child-hold.ts';
@@ -31,7 +31,7 @@ import { resumeBridgeReports } from './bridge-resume.ts';
 import type { ChatOptions } from './routes.ts';
 
 type BridgeOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
-  Partial<Pick<ChatOptions, 'binding'>> &
+  Partial<Pick<ChatOptions, 'binding' | 'db' | 'feed'>> & { keyDirectory?: string } &
   Pick<Parameters<typeof bridgeControl>[0], 'stopExecution'>;
 type RoutineStart = NonNullable<Parameters<typeof turnCommand>[1]['routineStart']>;
 type ReportOptions = BridgeOptions & { routineStart: RoutineStart;
@@ -97,8 +97,13 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
   const result = await recordBridgeReports(options.store, options.keys, context, batch.values);
   const acknowledgement: {
     type: string; sequence: number; token?: string; expiresAt?: number;
-    model?: string; refused?: string; context?: unknown;
+    model?: string; refused?: string; context?: unknown; initialInput?: string;
   } = { type: 'ack', sequence: report.sequence };
+  let initialReleased = false;
+  function releaseInitial(reply: object) {
+    initialReleased = true;
+    sendAcknowledgement(socket, batch.sequences, reply);
+  }
   if (report.type.startsWith('agent.turn_')) {
     const status = turnStatus(report.type);
     let binding;
@@ -122,17 +127,14 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
         await options.routines.accept(binding);
         await options.memory.accept(report, binding);
       }
-      await releaseTurnCredentials(options, context, tokens, report, binding, acknowledgement);
+      const delivery = { ...report, replay: result === 'duplicate' };
+      await releaseTurnCredentials(options, context, tokens, delivery, binding, acknowledgement,
+        releaseInitial);
     } else if (status !== 'started') {
       options.routines.ended(report.turnId);
     }
   }
-  if (socket.readyState === socket.OPEN) {
-    for (const sequence of batch.sequences) {
-      const reply = { ...acknowledgement, sequence };
-      socket.send(JSON.stringify(reply));
-    }
-  }
+  if (!initialReleased) sendAcknowledgement(socket, batch.sequences, acknowledgement);
 }
 
 async function deliverFile(options: BridgeOptions, input: BridgeInput, socket: WebSocket,

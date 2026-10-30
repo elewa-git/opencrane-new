@@ -596,3 +596,22 @@ async function usesInitialInputOnce() {
 }
 it('uses the complete initial input once in the ephemeral thread without journalling it',
   usesInitialInputOnce);
+
+async function refusesInitialInput(kind: string) {
+  const test = await fixture({ initialInput: 'Private canary' });
+  try {
+    const mode = kind === 'shared' ? 'restricted' : 'memory_free';
+    const sharing = kind === 'shared' ? 'shared_only' : undefined;
+    test.send('alice', mode, sharing);
+    function ended() {
+      return test.terminals('alice').length === 1;
+    }
+    await until(ended);
+    expect(test.terminals('alice')[0]!.type).toBe('agent.turn_failed');
+    expect(JSON.stringify(test.persistentRpc.mock.calls)).not.toContain('Private canary');
+    expect(readFileSync(test.journal, 'utf8')).not.toContain('Private canary');
+  } finally {
+    await test.close();
+  }
+}
+it.each(['memory_free', 'shared'])('refuses initial personal input on %s work', refusesInitialInput);
