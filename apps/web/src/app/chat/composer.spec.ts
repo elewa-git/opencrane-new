@@ -1,6 +1,25 @@
 import { TestBed } from '@angular/core/testing';
 import { ChatComposer } from './composer';
 
+async function hidesDropStateWithoutAttach(mode: 'directMode' | 'teamSession' | 'reason') {
+  const fixture = TestBed.createComponent(ChatComposer);
+  const inputValue = mode === 'reason' ? 'Chat unavailable' : true;
+  fixture.componentRef.setInput(mode, inputValue);
+  fixture.componentRef.setInput('fileDrag', true);
+  await fixture.whenStable();
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No root');
+  expect(root.querySelector('[aria-label="Attach"]')).toBeNull();
+  expect(root.querySelector('.drop-label')).toBeNull();
+  expect(root.querySelector('.file-drag')).toBeNull();
+  expect(root.textContent).not.toContain('Drop files to add them');
+}
+
+it.each(['directMode', 'teamSession', 'reason'] as const)(
+  'keeps drop controls out of the composer when Attach is unavailable: %s',
+  hidesDropStateWithoutAttach,
+);
+
 it('sends on Enter, keeps Shift+Enter and IME composition, and swaps Send for Stop', async () => {
   const fixture = TestBed.createComponent(ChatComposer);
   fixture.componentRef.setInput('draft', 'Hello');
