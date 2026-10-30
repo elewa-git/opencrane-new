@@ -48,7 +48,7 @@ async function observesStore(name: string, role = 'command'): Promise<void> {
     await rm(directory, { recursive: true, force: true });
   }
 }
-it.each(['invalidation', 'unrelatedActivity'])(
+it.each(['invalidation', 'unrelatedActivity', 'requesterIsolation', 'sessionIsolation'])(
   'executes %s on the configured event store without claiming live qualification', observesStore, 30_000);
 
 async function failedJourney(): Promise<void> {
@@ -60,7 +60,8 @@ async function failedJourney(): Promise<void> {
 }
 it('refuses a journey that cannot execute without exposing connection settings', failedJourney);
 
-async function deniedAppend(): Promise<void> {
-  await observesStore('invalidation', 'projection');
+async function deniedAppend(name: string): Promise<void> {
+  await observesStore(name, 'projection');
 }
-it('refuses when the measured store rejects the journey append', deniedAppend, 30_000);
+it.each(['invalidation', 'requesterIsolation', 'sessionIsolation'])(
+  'refuses when the measured store rejects %s', deniedAppend, 30_000);

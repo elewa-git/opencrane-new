@@ -24,7 +24,7 @@ async function incomplete(name: string): Promise<void> {
   expect(result).toHaveProperty('observedAt', expect.any(Number));
   expect(probeHost).toHaveBeenCalledOnce();
 }
-it.each(['privateTurns', 'nativeRecall', 'requesterIsolation', 'sessionIsolation',
+it.each(['privateTurns', 'nativeRecall',
   'stopReconnect', 'replacementReload', 'persistence', ...qualifications])('never completes %s on host checks alone', incomplete);
 
 const invalid: [string, unknown][] = [

@@ -36,7 +36,7 @@ async function excludesTests(): Promise<void> {
 
 it('keeps repository tests and their private fixtures out of the package image', excludesTests);
 
-async function executesMemoryCheck(name: 'invalidation' | 'unrelatedActivity'): Promise<void> {
+async function executesMemoryCheck(name: 'invalidation' | 'unrelatedActivity' | 'requesterIsolation' | 'sessionIsolation'): Promise<void> {
   const fixture = await natsFixture();
   const containerName = `private-memory-image-test-${randomUUID()}`;
   try {
@@ -83,7 +83,7 @@ async function executesMemoryCheck(name: 'invalidation' | 'unrelatedActivity'): 
       }
     }
     expect(changes).toEqual(['memory.corrected', 'memory.forgotten']);
-    const expectedInvalidations = name === 'invalidation' ? 2 : 0;
+    const expectedInvalidations = name === 'unrelatedActivity' ? 0 : 2;
     expect(invalidations).toBe(expectedInvalidations);
   } finally {
     try {
@@ -94,5 +94,5 @@ async function executesMemoryCheck(name: 'invalidation' | 'unrelatedActivity'): 
   }
 }
 
-it.each(['invalidation', 'unrelatedActivity'] as const)(
+it.each(['invalidation', 'unrelatedActivity', 'requesterIsolation', 'sessionIsolation'] as const)(
   'executes %s from the package image against disposable NATS', executesMemoryCheck, 45_000);
