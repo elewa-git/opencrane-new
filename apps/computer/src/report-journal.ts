@@ -1,7 +1,9 @@
+import { parseArtifacts, type Artifact } from './artifacts.ts';
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { record } from './http.ts';
 
 export interface BridgeReport {
+  artifacts?: Artifact[];
   sequence: number;
   previousSequence?: number;
   conversationId: string;
@@ -125,6 +127,9 @@ function parseStoredReport(line: string): BridgeReport {
   }
   if (text !== undefined) {
     report.text = text;
+  }
+  if (value['artifacts'] !== undefined) {
+    report.artifacts = parseArtifacts(value['artifacts']);
   }
   readToolDetails(value, report);
   readStorageDetails(value, report);

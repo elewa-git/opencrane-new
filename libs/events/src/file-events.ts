@@ -3,15 +3,38 @@ import { event } from './definition.ts';
 const id = z.string().regex(/^[\w-]{1,200}$/u);
 const screenshot = z.object({ computerId: id, generation: z.int().positive(), capturedAt: z.iso.datetime(),
   width: z.int().positive().max(4096), height: z.int().positive().max(4096) }).strict();
-const identity = { conversationId: id, fileId: id, uploadedBy: id, name: z.string().regex(/^[\w][\w .()-]{0,119}$/u),
+const identity = { turnId: id.optional(), conversationId: id, fileId: id, uploadedBy: id, name: z.string().regex(/^[\w][\w .()-]{0,119}$/u),
   size: z.int().positive().max(20 * 1024 * 1024), sha256: z.string().regex(/^[a-f0-9]{64}$/u), screenshot: screenshot.optional() };
 export const fileUploadedDataSchema = z.object({ ...identity, mime: z.string().min(1), objectKey: z.string().regex(/^[\w/-]{1,800}$/u) }).strict();
 export const fileRejectedDataSchema = z.object({ ...identity, reason: z.literal('infected') }).strict();
 export const fileDeliveredDataSchema = z.object({ conversationId: id, fileId: id, computerId: id, sha256: identity.sha256,
   outcome: z.enum(['saved', 'kept_existing']).optional() }).strict();
 const example = { conversationId: 'conv_1', fileId: 'file_1', uploadedBy: 'mem_1', name: 'notes.txt', size: 5, sha256: 'a'.repeat(64) };
+const publicationStarted = z.object({ conversationId: id, turnId: id,
+  digest: z.string().regex(/^[a-f0-9]{64}$/u) }).strict();
 export const fileEvents = [
+  event('agent.file_publication_started', 'conversation',
+    'The server bound a turn to its reported file set before publishing any bytes.',
+    publicationStarted, { conversationId: 'conv_1', turnId: 'turn_1',
+      digest: 'a'.repeat(64) }),
   event('file.uploaded', 'conversation', 'A clean upload was scanned and stored.', fileUploadedDataSchema, { ...example, mime: 'text/plain', objectKey: 'silo/conv_1/file_1' }),
   event('file.rejected', 'conversation', 'The scanner refused an infected upload.', fileRejectedDataSchema, { ...example, reason: 'infected' }),
   event('file.delivered', 'conversation', 'The computer acknowledged a verified workspace file.', fileDeliveredDataSchema, { conversationId: 'conv_1', fileId: 'file_1', computerId: 'computer_1', sha256: example.sha256 }),
 ] as const;
+
+export const artifactRefusalSchema = z.enum([
+  'unsupported_type', 'content_mismatch', 'macros', 'embedded_object', 'external_link',
+  'encrypted', 'too_large', 'too_many_parts', 'invalid_file', 'unsafe_name', 'infected',
+]);
+const artifactId = z.string().regex(/^[a-f0-9]{64}$/u);
+export const artifactListSchema = z.array(z.union([
+  z.object({ id: artifactId, name: z.string().regex(/^[\w][\w .()-]{0,119}$/u),
+    size: z.int().positive().max(20 * 1024 * 1024), sha256: artifactId }).strict(),
+  z.object({ id: artifactId, reason: artifactRefusalSchema }).strict(),
+])).max(17).refine(hasBoundedArtifactCount);
+
+function hasBoundedArtifactCount(files: object[]) {
+  if (files.length <= 16) return true;
+  const last = files[16];
+  return last !== undefined && 'reason' in last;
+}

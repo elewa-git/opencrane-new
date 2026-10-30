@@ -1,3 +1,6 @@
+import { FileRefusal } from '../files/refusals.ts';
+import { artifactListSchema } from '@opencrane/events';
+import { publishArtifacts, type ArtifactPublication } from '../files/artifacts.ts';
 import {
   conversationCreatedDataSchema, agentToolCallStartedDataSchema, agentToolCallFinishedDataSchema,
   agentNativeConsentRefusedDataSchema, agentNativeRequestRefusedDataSchema,
@@ -15,7 +18,8 @@ import { chatWrite } from './write-priority.ts';
 export class ReportRejected extends Error {}
 class MemoryReportRejected extends ReportRejected {}
 
-const existingReportSchema = z.object({ sequence: z.int().positive(), previousSequence: z.int().nonnegative().optional(), conversationId: z.string().regex(/^[\w-]{1,200}$/u),
+const existingReportSchema = z.object({
+  artifacts: artifactListSchema.optional(), sequence: z.int().positive(), previousSequence: z.int().nonnegative().optional(), conversationId: z.string().regex(/^[\w-]{1,200}$/u),
   turnId: z.string(), assistantId: z.string(), requesterId: z.string().optional(), threadId: z.string().optional(), messageId: z.string().optional(), text: z.string().max(128_000).optional(),
   rootId: z.string().optional(), senderAttemptId: z.string().optional(),
   commandDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(), exitCode: z.int().optional(),
@@ -48,7 +52,7 @@ const reportSchema = z.union([
   existingReportSchema, toolStartedReportSchema, toolFinishedReportSchema,
 ]);
 type Report = z.infer<typeof reportSchema>;
-type ReportContext = { silo: string; computerId: string; assistantId: string };
+type ReportContext = ArtifactPublication & { silo: string; computerId: string; assistantId: string };
 function reportDigest(report: Report) {
   const hash = createHash('sha256');
   hash.update(JSON.stringify(report));
@@ -147,7 +151,7 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
   const report = reportSchema.parse(value);
   if (report.assistantId !== context.assistantId) throw new ReportRejected('Assistant mismatch');
   const first = batch?.[0] ?? report;
-  const facts = await readChatFacts(store, context.silo, report.conversationId,
+  let facts = await readChatFacts(store, context.silo, report.conversationId,
     report.turnId, context.computerId, first.sequence, deadline);
   const created = agentSessionData(facts.created);
   const authorId = reportAuthor(report, context.assistantId, created, facts.message);
@@ -165,6 +169,9 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
     expectedPrevious = report.sequence - 1;
   }
   if (expectedPrevious !== previousSequence) throw new ReportRejected('Report sequence gap');
+  const publication = await publishReportArtifacts(store, report, context, facts, authorId, deadline);
+  facts = publication.facts;
+  deadline = publication.deadline;
   const event = reportEvent(report, context, keys, batch, digest);
   const command: AppendCommand = { expectedSequence: facts.sequence, historyChecked: true, event };
   const append = store.append.bind(store, command);
@@ -185,12 +192,35 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
   return 'recorded' as const;
 }
 
+async function publishReportArtifacts(store: EventStore, report: Report, context: ReportContext,
+  facts: ChatFacts, authorId: unknown, deadline: number) {
+  if (!('artifacts' in report) || !report.artifacts?.length) return { facts, deadline };
+  if (report.type !== 'agent.turn_completed' || facts.memoryContext !== undefined
+    || facts.turnEnded) {
+    throw new ReportRejected('Artifact report refused');
+  }
+  const memberId = z.string().parse(authorId);
+  try {
+    await publishArtifacts(context, memberId, report.conversationId, report.turnId, report.artifacts);
+  } catch (error) {
+    if (error instanceof FileRefusal && error.kind === 'id_reused') {
+      throw new ReportRejected('Artifact publication set changed');
+    }
+    throw error;
+  }
+  deadline = performance.now() + 10_000;
+  facts = await readChatFacts(store, context.silo, report.conversationId,
+    report.turnId, context.computerId, report.sequence, deadline);
+  return { facts, deadline };
+}
+
 function requireMemoryFreeContent(report: Report, facts: ChatFacts) {
   if (facts.memoryContext === undefined) return;
   // Keep even prepared or ended memory out of conversation-key copies and saved text hashes.
   const hasText = 'text' in report && report.text !== undefined;
   const hasCommandDigest = 'commandDigest' in report && report.commandDigest !== undefined;
-  if (hasText || hasCommandDigest) {
+  const hasArtifacts = 'artifacts' in report && Boolean(report.artifacts?.length);
+  if (hasText || hasCommandDigest || hasArtifacts) {
     throw new MemoryReportRejected('Memory-bearing report content refused');
   }
 }

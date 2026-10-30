@@ -106,7 +106,8 @@ export async function fileCommand(
   silo: string,
   memberId: string,
   eventId: string,
-  type: 'file.uploaded' | 'file.rejected' | 'file.delivered',
+  type: 'file.uploaded' | 'file.rejected' | 'file.delivered' | 'agent.file_changed'
+    | 'agent.file_publication_started',
   value: unknown,
   fresh?: () => Promise<void>,
 ) {

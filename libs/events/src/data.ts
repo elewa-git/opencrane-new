@@ -1,3 +1,4 @@
+import { artifactRefusalSchema } from './file-events.ts';
 import { toolCredentialReleaseSchema } from './credential-release.ts';
 import { budgetCallRetrySchema } from './budget-root.ts';
 import { hostedCredentialContractSchema } from './startup-credentials.ts';
@@ -380,6 +381,7 @@ export const agentFileChangedDataSchema = z
     turnId: id,
     path: id,
     changeType: z.enum(['created', 'modified', 'deleted']),
+    reason: artifactRefusalSchema.optional(),
   })
   .strict();
 

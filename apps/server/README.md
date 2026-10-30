@@ -177,14 +177,14 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, Office uploads, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|requests, Office uploads, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks saved membership before personal memory tools and history errors; prepares allowances; checks routine admission; applies Stop, Pause and Retire; verifies termination and admin authority; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
   server -->|reads and saves opt-in, metadata, receipts, memory changes, account choices, pauses, retirements, paused ownership changes, routine sessions, inputs, cancellations and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
   server -->|waits briefly for Forget locks| postgres
-  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, routine Stops after deactivation or failed evidence reads, memory Stops after confirmed loss, reply removal receipts after completion and checked reports| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, routine Stops after deactivation or failed evidence reads, memory Stops after confirmed loss, reply removal receipts after completion, checked reports and publication files| computer["apps/computer<br/>assistant computers"]
   computer -.->|records private thread for memory discovery| server
   server -.->|prepares up to four private memory tools| computer
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
@@ -306,6 +306,12 @@ can be used now is checked separately. Missing evidence never means it is safe t
 | [models](src/models/README.md) | Manages access to AI models for people, groups and assistants. |
 | [onboarding](src/onboarding/README.md) | Saves and resumes a member's private welcome survey. |
 | [providers](src/providers/README.md) | Connects model providers and manages keys, checks and provider choices. |
+
+The server checks files the assistant creates through the same type checks, virus
+scanner and storage as uploads. Accepted files appear as assistant file cards.
+The first file report fixes the turn's file list. Retries keep that list and its original
+size allowance, so a repeated completion cannot add more cards.
+People need current conversation access to preview or download them.
 
 ## Processes it handles
 

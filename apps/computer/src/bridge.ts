@@ -1,3 +1,4 @@
+import { artifactSnapshot, artifactList, readArtifact } from './artifacts.ts';
 import { nativeRequests } from './native-requests.ts';
 import { receiveFile } from './files.ts';
 // Codex process supervision and the authenticated server event channel.
@@ -144,6 +145,9 @@ const server = createServer((req, res) => {
 let computerCredential = '';
 const channel = bridgeChannel(server, {
   file: receiveFile,
+  artifactSnapshot,
+  artifactList,
+  readArtifact,
   journal: '/home/agent/codex/bridge-reports.jsonl',
   credential() {
     const path = '/run/executor/credentials/computer.json';

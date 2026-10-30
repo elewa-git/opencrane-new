@@ -30,6 +30,9 @@ records keeps the account and attempt without contacting its provider.
 A later claim records one live worker and the exact saved credential reference.
 Replaying a claim cannot give a restarted worker permission to send.
 
+Assistant file publication records fix a turn's file list before uploads begin.
+Retries must keep that list and its original allowance.
+
 ## Where it fits
 
 This is one of the packages that build everything from the
@@ -43,7 +46,7 @@ Allow, Ask or Block choice for a tool.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions"]
-  server["apps/server<br/>back end"] -.->|checks native termination, routine turn identities, allowance fingerprints, owner and approval Stop intent, owner-removal pauses and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
+  server["apps/server<br/>back end"] -.->|checks assistant file lists and records, native termination, routine turn identities, allowance fingerprints, owner and approval Stop intent, owner-removal pauses and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
@@ -70,6 +73,9 @@ records the next generation of the saved profile. Saving grants no access.
 - Rebuild routine definitions and preview future dates for scheduled work, including
   clock changes, without starting that work.
   Share the same pause record checks with the server's internal owner operation.
+
+File records can identify the assistant turn that created them. A file change can
+also record a fixed refusal reason, without storing file contents or private paths.
 
 ## Processes it handles
 

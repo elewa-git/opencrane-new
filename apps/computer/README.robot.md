@@ -1756,3 +1756,22 @@ The [delivery contract](../../docs/process/p4-15-pr5f/README.robot.md) owns
 `initialMemoryInput`, its identity checks and byte limits. It renders only a live internal
 block from `prepareInitialMemory().consume`; it neither journals input nor starts Codex.
 The existing private and memory-free start paths are unchanged.
+
+## Assistant publication files
+
+Completed memory-free turns compare files before and after execution. The bounded reader
+walks at most 128 entries and eight directory levels under `/workspace/artifacts`.
+Before a turn, it snapshots file metadata without reading bytes. After the turn, it skips
+unchanged entries before allowing up to 16 changed files and 20 MiB of changed bytes.
+The snapshot includes device, inode, mode, link count, size, modification time and change
+time. Restoring a file's modification time cannot hide a change. Snapshots stay in RAM;
+only bounded publication descriptors enter the report journal. It refuses links, special files and unsafe names. Reports carry
+basenames and digests, never private paths or bytes. Authenticated bridge requests pull
+32 KiB chunks. Changed or missing bytes cannot pass the server's digest check.
+The journal preserves reports for replay. Restricted and interrupted turns publish no files.
+The assistant is instructed to convert SVG to PNG; SVG remains refused.
+
+The bridge sends the before-turn snapshot as one JSON line to the file reader.
+The reader accepts at most 65,536 characters and stops at the newline. It does not
+wait for stdin to close: the workspace executor keeps that input open after a write.
+This also lets ordinary turns finish when there are no publication files.

@@ -357,6 +357,11 @@ function infectedUpload(fileId: string) {
   return { status: 'infected' as const, error: 'File rejected: malware detected', fileId };
 }
 
+export function uploadIdentity(silo: string, conversationId: string, memberId: string, key: string) {
+  const identity = JSON.stringify([silo, conversationId, memberId, key]);
+  return sha256Digest(identity);
+}
+
 export async function uploadFile(
   options: FileOptions,
   memberId: string,
@@ -366,6 +371,7 @@ export async function uploadFile(
   bytes: Buffer,
   screenshot?: UploadedFile['screenshot'],
   fresh?: () => Promise<void>,
+  turnId?: string,
 ) {
   if (!bytes.length) {
     throw new FileRefusal('invalid_request');
@@ -375,12 +381,12 @@ export async function uploadFile(
   }
   const mime = await inspectUpload(name, bytes);
   const sha256 = sha256Digest(bytes);
-  const identity = JSON.stringify([options.silo, conversationId, memberId, key]);
-  const fileId = sha256Digest(identity);
+  const fileId = uploadIdentity(options.silo, conversationId, memberId, key);
   const data = {
     conversationId,
     fileId,
     uploadedBy: memberId,
+    turnId,
     name,
     size: bytes.length,
     sha256,

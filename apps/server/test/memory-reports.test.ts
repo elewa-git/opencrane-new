@@ -162,6 +162,9 @@ async function rejectsBatchesAndHiddenText() {
   await expect(save(report('agent.turn_completed'))).rejects.toThrow(refusal);
   const command = { ...status('agent.command_ran', 1), commandDigest: 'b'.repeat(64), exitCode: 0 };
   await expect(save(command)).rejects.toThrow(refusal);
+  const artifacts = [{ id: 'a'.repeat(64), name: 'report.txt', size: 5, sha256: 'b'.repeat(64) }];
+  const completed = { ...status('agent.turn_completed', 1), artifacts };
+  await expect(save(completed)).rejects.toThrow(refusal);
   expect(encrypt).not.toHaveBeenCalled();
   await assertNoReportSaved();
 }

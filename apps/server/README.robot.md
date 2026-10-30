@@ -6875,3 +6875,23 @@ requester in two sessions and for two requesters on one assistant and computer.
 The other context must retain its saved state, including after a fresh event read.
 The runner records PARTIAL; native isolation and full qualification remain NOT RUN.
 The server's runtime behaviour and authority checks are unchanged.
+
+## Assistant file publication
+
+Part of #850. Completed turn reports can include bounded artifact metadata. The server
+checks the report's requested conversation and author before pulling bytes. Publication
+uses the upload type checks, scanner, storage and current access rules. Stable request ids
+keep retries from creating extra cards. File records carry an optional `turnId`; these files
+are not delivered back to the computer. `agent.file_changed` names the downloadable upload
+or carries a fixed refusal reason. No workspace path or file bytes enter the event log.
+Inline image thumbnails and reply links remain for the next part. SVG stays refused because
+this part reuses the current upload formats without adding active image handling.
+
+The server saves `agent.file_publication_started` before pulling any publication bytes.
+Its digest binds the ordered artifact list to the conversation and turn. Exact retries
+must match it, including after an interrupted upload or refusal. Upload and card ids use
+the conversation, turn and artifact id, independent of name or content digest. Every listed
+file counts towards the same 20 MiB allowance on each retry, including saved cards.
+A new report with files for an ended turn is refused; the original report sequence remains
+replayable. Completion is recorded only after all cards and refusals are saved, so bridge
+reconnects cannot skip unfinished publication. The binding event has no reaction.
