@@ -48,6 +48,31 @@ async function boundsArtifactReads() {
 }
 it('bounds artifact files and refuses symlinks without reporting private paths', boundsArtifactReads);
 
+async function listsWithOpenInput(hasFile: boolean) {
+  const root = await mkdtemp(`${tmpdir()}/artifacts-input-`);
+  try {
+    if (hasFile) {
+      await mkdir(`${root}/artifacts`);
+      await writeFile(`${root}/artifacts/report.txt`, 'A report');
+    }
+    const args = ['apps/computer/src/artifacts.py', root];
+    const pending = execute('python3', args, { timeout: 2000 });
+    // Keep stdin open, as the workspace executor does after accepting a write.
+    pending.child.stdin!.write('{}\n');
+    const result = await pending;
+    const entries = artifactListSchema.parse(JSON.parse(result.stdout) as unknown);
+    if (hasFile) {
+      expect(entries).toEqual([expect.objectContaining({ name: 'report.txt', size: 8 })]);
+    } else {
+      expect(entries).toEqual([]);
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+it.each([false, true])('lists publication files with executor input open (file: %s)',
+  listsWithOpenInput);
+
 type Artifact = ReturnType<typeof artifactListSchema.parse>[number];
 function isTooLarge(file: Artifact) { return 'reason' in file && file.reason === 'too_large'; }
 function isUnsafe(file: Artifact) { return 'reason' in file && file.reason === 'unsafe_name'; }
