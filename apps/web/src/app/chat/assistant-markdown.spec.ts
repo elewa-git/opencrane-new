@@ -54,6 +54,12 @@ function keepsHostileText() {
   expect(root.textContent).toBe(hostile);
 }
 
+function rendersMultilineBold() {
+  const { root } = mount('**first\nsecond**');
+  expect(root.querySelector('strong')?.textContent).toBe('first\nsecond');
+  expect(root.textContent).toBe('first\nsecond');
+}
+
 async function copiesCode() {
   const writeText = vi.fn().mockResolvedValue(undefined);
   vi.stubGlobal('navigator', { clipboard: { writeText } });
@@ -105,6 +111,8 @@ function keepsExistingElements() {
 it('renders headings, paragraphs, ordered and unordered lists and block quotes', rendersBlocks);
 
 it('renders inline code, bold, italic and permitted links', rendersInline);
+
+it('keeps bold formatting across a line break', rendersMultilineBold);
 
 it('keeps HTML and unsafe links as text', keepsHostileText);
 
