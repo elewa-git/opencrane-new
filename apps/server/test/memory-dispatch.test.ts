@@ -1373,6 +1373,7 @@ async function allowsMemoryRenewal(loaded: boolean) {
       const reply = await bridge.exchange(sequence);
       expect(reply).toHaveProperty('token');
       expect(reply).not.toHaveProperty('refused');
+      expect(reply).not.toHaveProperty('initialInput');
       if (loaded) expect(starts).toEqual([1, position + 1]);
     }
     if (!loaded) expect(scopeReads).toBe(0);
@@ -1383,6 +1384,27 @@ async function allowsMemoryRenewal(loaded: boolean) {
   }
 }
 it.each([true, false])('allows turn renewal with loaded memory %s', allowsMemoryRenewal);
+
+async function renewsWithoutInitialDeliveryInputs() {
+  const bridge = await renewalBridge();
+  try {
+    const before = await savedContext();
+    for (const sequence of [1, 1, 2]) {
+      const reply = await bridge.exchange(sequence);
+      expect(reply).toHaveProperty('token');
+      expect(reply).not.toHaveProperty('refused');
+      expect(reply).not.toHaveProperty('initialInput');
+    }
+    const after = await savedContext();
+    expect(after.memoryContext).toEqual(before.memoryContext);
+    expect(after.turnEnded).toBe(false);
+  } finally {
+    await bridge.close();
+  }
+}
+it('renews an already started turn without initial delivery inputs or new memory evidence',
+  renewsWithoutInitialDeliveryInputs);
+
 
 async function checksRenewalExpiry(offset: number) {
   const expires = Date.now() + 60_000;
