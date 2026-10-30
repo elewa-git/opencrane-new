@@ -24,7 +24,7 @@ function safeLink(value: string): boolean {
 
 function parseInline(text: string): InlinePart[] {
   // Keep each alternative bounded by its own delimiter, including unmatched input.
-  const pattern = /`([^`\n]+)`|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*|_([^_\n]+)_|\[([^[\]\n]+)\]\(([^()\s]+)\)|\[(\d+)\]/g;
+  const pattern = /`([^`\n]+)`|\*\*([^*]+)\*\*|\*([^*\n]+)\*|_([^_\n]+)_|\[([^[\]\n]+)\]\(([^()\s]+)\)|\[(\d+)\]/g;
   const parts: InlinePart[] = [];
   let position = 0;
   for (const match of text.matchAll(pattern)) {
