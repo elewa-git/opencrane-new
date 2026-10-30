@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
 import { memoryContextRecordedEventSchema, type MemoryContextRecord } from '@opencrane/events';
 import { approvalActivity, confirmDecisionAccess, decisionAuthorityFence, foldMemoryContext,
-  LoadedMemoryRefused, memoryRights, parseMemoryRequest, prepareLoadedMemory,
+  history, LoadedMemoryRefused, memoryReferences, memoryRights, parseMemoryRequest, prepareLoadedMemory,
   type MemoryContext } from '@opencrane/models';
 import { readChatFacts } from '../chat/chat-summary.ts';
 import { creationEvent } from '../chat/private-session.ts';
@@ -44,7 +44,7 @@ function recordEvent(silo: string, data: MemoryContextRecord) {
   return memoryContextRecordedEventSchema.parse(input);
 }
 
-// Record evidence only. This workflow cannot return text or authorise bridge release.
+// Keep the selected text only in this live preparation; replay cannot recreate its consumer.
 export async function prepareInitialMemory(options: MemoryOptions, identity: Identity,
   ...unexpectedArguments: unknown[]) {
   const deadline = performance.now() + 10_000;
@@ -94,23 +94,9 @@ export async function prepareInitialMemory(options: MemoryOptions, identity: Ide
     const binding = structuredClone(identity);
     const selection = { scope, snapshot, loaded, qualification, binding };
     await appendInitialRecord(options, selection, prepared, access, deadline);
-    let consumed = false;
-    async function load() {
-      const loadDeadline = performance.now() + 10_000;
-      try {
-        if (consumed) {
-          throw new LoadedMemoryRefused();
-        }
-        // Consume before awaiting anything. Unknown saves and lost replies cannot resend.
-        consumed = true;
-        const loadAccess = await initialMemoryAccess(options, binding.requester, loadDeadline);
-        await appendInitialRecord(options, selection, loaded, loadAccess, loadDeadline, prepared.id);
-        return { status: 'loaded' as const, dispatch: 'disabled' as const };
-      } catch (error) {
-        return refuseInitialMemory(options, binding.requester, loadDeadline, error);
-      }
-    }
-    return { load };
+    const commands = initialCommands(options, selection, prepared.id, preview.block);
+    preview.block = '';
+    return commands;
   } catch (error) {
     return refuseInitialMemory(options, identity.requester, deadline, error);
   }
@@ -119,6 +105,44 @@ export async function prepareInitialMemory(options: MemoryOptions, identity: Ide
 type Selection = { scope: ReturnType<typeof scopeFor>;
   snapshot: Awaited<ReturnType<typeof memorySnapshot>>; loaded: RecordEvent;
   qualification: string; binding: Identity };
+
+function initialCommands(options: MemoryOptions, selection: Selection, preparedId: string,
+  retainedBlock: string | undefined) {
+  const { binding, loaded } = selection;
+  let consumed = false;
+  let loadedProved = false;
+  async function load() {
+    const loadDeadline = performance.now() + 10_000;
+    try {
+      if (consumed) {
+        throw new LoadedMemoryRefused();
+      }
+      // Consume before awaiting anything. Unknown saves and lost replies cannot resend.
+      consumed = true;
+      const loadAccess = await initialMemoryAccess(options, binding.requester, loadDeadline);
+      await appendInitialRecord(options, selection, loaded, loadAccess, loadDeadline, preparedId);
+      loadedProved = true;
+      return { status: 'loaded' as const, dispatch: 'disabled' as const };
+    } catch (error) {
+      retainedBlock = undefined;
+      return refuseInitialMemory(options, binding.requester, loadDeadline, error);
+    }
+  }
+  async function consume(consumer: (block: string) => void | Promise<void>) {
+    const releaseDeadline = performance.now() + 10_000;
+    const block = retainedBlock;
+    // Remove the only reusable copy before waiting, including on a failed attempt.
+    retainedBlock = undefined;
+    try {
+      if (!loadedProved || block === undefined) throw new LoadedMemoryRefused();
+      const permissions = await initialMemoryAccess(options, binding.requester, releaseDeadline);
+      await confirmInitialRelease(options, selection, permissions, releaseDeadline, block, consumer);
+    } catch (error) {
+      return refuseInitialMemory(options, binding.requester, releaseDeadline, error);
+    }
+  }
+  return { load, consume };
+}
 
 async function appendInitialRecord(options: MemoryOptions, selection: Selection,
   event: RecordEvent, permissions: Awaited<ReturnType<typeof initialMemoryAccess>>,
@@ -190,4 +214,57 @@ async function appendInitialRecord(options: MemoryOptions, selection: Selection,
     throw new LoadedMemoryRefused();
   }
   await confirm();
+}
+
+async function confirmInitialRelease(options: MemoryOptions, selection: Selection,
+  permissions: Awaited<ReturnType<typeof initialMemoryAccess>>, deadline: number,
+  block: string, consumer: (block: string) => void | Promise<void>) {
+  const { binding, scope, loaded, qualification } = selection;
+  const activity = await approvalActivity(options.store, options.silo, binding.assistant,
+    binding.conversation, binding.turn, deadline);
+  const chat = await readChatFacts(options.store, options.silo, binding.conversation, binding.turn);
+  if (chat.conversationClosed || chat.turnEnded || !chat.memoryContext?.initialLoaded ||
+      !chat.memoryContext.events.has(loaded.id)) throw new LoadedMemoryRefused();
+  const memory = await prepareLoadedMemory(options.store, options.binding, binding,
+    activity.conversation, deadline, permissions);
+  const parsed = requestFor(binding, scope.scopeId);
+  const rights = await memoryRights(options.store, options.binding, binding, parsed, deadline,
+    undefined, undefined, permissions);
+  const rows = await history(options.store, `scope-${scope.scopeId}`, options.silo, deadline);
+  const references = memoryReferences(rows, options.silo, scope.scopeId, 'event-only');
+  const subjects = [`member-${binding.requester}`, `assistant-${binding.assistant}`, 'mcp-memory',
+    grantStream('mcp_server', 'memory'), grantStream('memory_read', scope.scopeId)];
+  const authority = await decisionAuthorityFence(options.store, performance.now(), subjects,
+    binding.requester, binding.assistant, undefined, deadline);
+  async function confirmAccess() {
+    await confirmDecisionAccess(activity, authority, false, true);
+  }
+  const access = { include: authority.include, head: authority.head, deadline: authority.deadline };
+  const fresh = Object.assign(confirmAccess, access);
+  let before = await options.store.head(undefined, fresh.deadline);
+  while (true) {
+    const confirmQualification = await requireQualification(options.silo, qualification);
+    await permissions.confirm();
+    await rights.confirm(fresh.deadline);
+    await memory.confirm(fresh);
+    const after = await options.store.head(undefined, fresh.deadline);
+    if (after !== before) {
+      // Recheck changes saved during the last await; unrelated activity can still pass.
+      before = after;
+      continue;
+    }
+    confirmQualification();
+    if (performance.now() >= fresh.deadline) throw new LoadedMemoryRefused();
+    // Check expiry synchronously so the final await cannot carry an expired fact into input.
+    for (const reference of loaded.data.additions) {
+      if (references.current(reference, Date.now()) !== 'current') throw new LoadedMemoryRefused();
+    }
+    try {
+      await consumer(block);
+    } catch {
+      // Keep private text out of errors, including an error that imitates an access refusal.
+      throw new LoadedMemoryRefused();
+    }
+    return;
+  }
 }

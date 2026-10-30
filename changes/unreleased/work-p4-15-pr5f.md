@@ -1,0 +1,1 @@
+- Keep a loaded personal memory block for one checked internal delivery, with labelled JSON input and full frame limits. Native start and credential wiring remain disabled.

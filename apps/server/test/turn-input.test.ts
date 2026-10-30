@@ -72,16 +72,31 @@ function completeFrameBound() {
   expect(Buffer.byteLength(JSON.stringify(exact))).toBe(120 * 1024);
   expect(exact.text.endsWith(turn.text)).toBe(true);
   const over = { ...turn, text: turn.text + '界' };
-  expect(function render() { initialMemoryInput(over, oldExchanges, memoryBlock, memoryIdentity); })
-    .toThrow('memory_context_unavailable');
+  function render() {
+    initialMemoryInput(over, oldExchanges, memoryBlock, memoryIdentity);
+  }
+  expect(render).toThrow('memory_context_unavailable');
 }
 it('bounds the complete escaped frame at exactly 120 KiB without truncation', completeFrameBound);
 
 function refusedInput(patch: object) {
   const turn = { ...memoryTurn, ...patch };
-  expect(function render() { initialMemoryInput(turn, oldExchanges, memoryBlock, memoryIdentity); })
-    .toThrow('memory_context_unavailable');
+  function render() {
+    initialMemoryInput(turn, oldExchanges, memoryBlock, memoryIdentity);
+  }
+  expect(render).toThrow('memory_context_unavailable');
 }
 it.each([{ executionMode: 'memory_free' }, { sharingClass: 'shared_only' }, { requesterId: 'bob' },
+  { attachments: [{}] }, { omittedAttachments: 1 },
   { threadId: 'other' }, { id: 'other' }, { assistantId: 'other' }, { conversationId: 'other' }])(
   'refuses memory in an unsuitable or foreign input: %j', refusedInput);
+
+function foreignBlock(field: string) {
+  const foreign = { ...memoryIdentity, [field]: 'foreign' };
+  const block = JSON.stringify({ identity: foreign, records: [] });
+  function render() {
+    initialMemoryInput(memoryTurn, oldExchanges, block, memoryIdentity);
+  }
+  expect(render).toThrow('memory_context_unavailable');
+}
+it.each(Object.keys(memoryIdentity))('refuses a foreign block identity: %s', foreignBlock);

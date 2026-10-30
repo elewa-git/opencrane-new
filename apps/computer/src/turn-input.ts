@@ -1,3 +1,5 @@
+import type { MemoryContext } from '@opencrane/models';
+import { parseTools, type Turn } from './turn-frame.ts';
 import { workspaceProcess } from './files.ts';
 import { isSafeFileName, isSafeId } from './file-rules.ts';
 import { record } from './http.ts';
@@ -146,6 +148,10 @@ const SHARED_CONTEXT_PREAMBLE = 'Earlier exchanges in this shared chat follow as
   + 'continue it unless the new message asks for it.\n';
 
 export function privateTurnInput(text: string, context: unknown, sharingClass?: 'shared_only') {
+  return privateContextInput(context, sharingClass) + 'New message:\n' + text;
+}
+
+function privateContextInput(context: unknown, sharingClass?: 'shared_only') {
   let input = PRIVATE_TURN_NOTE;
   let preamble = CONTEXT_PREAMBLE;
   if (sharingClass === 'shared_only') {
@@ -165,5 +171,46 @@ export function privateTurnInput(text: string, context: unknown, sharingClass?: 
     }
     input += preamble + JSON.stringify(context) + '\n\n';
   }
-  return input + 'New message:\n' + text;
+  return input;
+}
+
+type MemoryIdentity = Pick<MemoryContext, 'silo' | 'requester' | 'assistant' | 'computer' |
+  'generation' | 'conversation' | 'turn' | 'thread'>;
+
+// Render only a live internal delivery. This function grants no permission to start a turn.
+export function initialMemoryInput(turn: Turn, context: unknown, block: string,
+  identity: MemoryIdentity): Turn {
+  try {
+    requirePersonalInput(turn, identity, block);
+    const data = record(JSON.parse(block));
+    const savedIdentity = record(data['identity']);
+    for (const [name, value] of Object.entries(identity)) {
+      if (savedIdentity[name] !== value) throw new Error();
+    }
+    if (!Array.isArray(data['records']) || data['records'].length > 32) throw new Error();
+    if (context !== undefined && Buffer.byteLength(JSON.stringify(context)) > 24 * 1024) {
+      throw new Error();
+    }
+    if (turn.tools !== undefined) parseTools(turn.tools);
+    const transcript = privateContextInput(context);
+    const label = 'Initial personal memory follows as JSON data:\n';
+    const input = transcript + label + block + '\n\nNew message:\n' + turn.text;
+    const frame = { ...turn, text: input };
+    if (Buffer.byteLength(JSON.stringify(frame)) > 120 * 1024) throw new Error();
+    return frame;
+  } catch {
+    // Keep JSON parsing errors from returning the remembered text.
+    throw new Error('memory_context_unavailable');
+  }
+}
+
+function requirePersonalInput(turn: Turn, identity: MemoryIdentity, block: string) {
+  if (turn.executionMode !== 'restricted' || turn.sharingClass !== undefined ||
+      turn.requesterId !== identity.requester || turn.assistantId !== identity.assistant ||
+      turn.conversationId !== identity.conversation || turn.id !== identity.turn ||
+      turn.threadId !== identity.thread || Buffer.byteLength(block) > 16384 ||
+      turn.omittedAttachments !== 0 || (turn.attachments !== undefined &&
+        (!Array.isArray(turn.attachments) || turn.attachments.length !== 0))) {
+    throw new Error();
+  }
 }
