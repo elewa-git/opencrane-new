@@ -1061,7 +1061,13 @@ suffixes cannot use that exception.
 
 The startup unit tests supply synthetic listener lines and Tailscale addresses.
 They check startup success or refusal without starting services or changing the
-host network:
+host network. Refusal cases include invalid IPv4 and IPv6 on the owner model port,
+an IPv4 address inside IPv6 brackets, a non-Tailscale address with `%tailscale0`,
+and two suffixes with `tailscale0` first. These cases catch removal of the IP,
+address-family, Tailscale membership and repeated-suffix checks independently.
+A separate test runs the actual listener check with secondary settings. It accepts
+both loopback forms and refuses IPv4, IPv6 and star wildcards on the model port,
+so removing the owner-only condition also fails a test:
 
 ```sh
 nice -n 10 node --experimental-strip-types --test infra/dev-stack/stack-start.test.ts
