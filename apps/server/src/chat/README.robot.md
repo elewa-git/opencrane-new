@@ -8,12 +8,15 @@ The private bridge acknowledgement carries the rendered input with its short-liv
 Memory-free and shared work cannot receive this field. Generated memory output is still
 refused by the report writer; native memory tool launch remains unbuilt.
 
-Credential renewal recognises an earlier saved `agent.turn_started` for the same turn.
-It does not prepare or resend initial memory, and needs neither the memory read database
-nor the member feed. The existing loaded-reference and membership checks still run
-before and after signing. Repeating the first numbered start report stays on the
-one-use initial-delivery path and refuses replay. Older starts without report numbers
-remain renewable through the same access checks.
+Credential renewal recognises a saved `agent.turn_started` for the same turn. For a
+numbered start, it also requires saved initial-load evidence. The runner resends the
+same report number when renewing; an equal or later number can renew only after that
+load. A larger number cannot bypass missing initial-delivery dependencies or qualification
+withdrawn before preparation. Without loaded evidence, replay still refuses initial delivery.
+Renewal does not prepare or resend initial memory, and needs neither the memory read
+database nor the member feed. The existing loaded-reference and membership checks still
+run before and after signing. Older starts without report numbers predate initial delivery
+and remain renewable through the same access checks.
 
 The withdrawal fixture now supplies a disposable PostgreSQL memory projection, encrypted
 facts, recall settings, permissions and simulated deployment qualification. Its first

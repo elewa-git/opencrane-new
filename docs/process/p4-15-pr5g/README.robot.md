@@ -28,9 +28,12 @@ not an event or public API field. The runner uses it once without rendering it a
 journalling it. Explicit memory-free and shared turns refuse this input. No model selects
 memory. Gateway admission still counts the whole model request with integer-cent limits.
 
-Repeats of the first start report refuse initial delivery even before preparation evidence exists.
-A later numbered report for an already started turn renews its pass without initial-delivery
-inputs or new memory evidence. Loaded-reference and access checks still surround signing.
+Numbered start reports require saved initial-load evidence before renewing a pass.
+The runner resends its existing number; equal and later numbers can renew after that load,
+without initial-delivery inputs or new memory evidence. A saved start alone cannot bypass
+a refusal caused by missing dependencies or qualification withdrawn before preparation.
+Without loaded evidence, replay refuses initial delivery. Older unnumbered starts retain
+their existing renewal path. Loaded-reference and access checks still surround signing.
 Reconnection and cold replay cannot reconstruct the live consumer. Existing preparation
 or loading evidence refuses a second preparation, including uncertain delivery. No token
 or plaintext is stored in evidence. `reports.ts` still refuses generated memory output.
