@@ -95,6 +95,7 @@ Completed replies report new or changed files in the publication folder. The ser
 pulls those files for checking and shows accepted files in the conversation.
 Files left by earlier turns do not use the next turn's file count or size allowance.
 The computer compares file metadata before reading changed files.
+Turns also finish when the publication folder is absent or has no changed files.
 
 ## Processes it handles
 

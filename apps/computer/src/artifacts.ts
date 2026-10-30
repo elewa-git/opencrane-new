@@ -19,7 +19,7 @@ export async function artifactSnapshot() {
 
 export async function artifactList(before: Record<string, string>) {
   const args = ['/opt/python/bin/python', '/app/src/artifacts.py', '/workspace'];
-  const input = Buffer.from(JSON.stringify(before));
+  const input = Buffer.from(`${JSON.stringify(before)}\n`);
   const result = await workspaceProcess(args, input);
   if (result.exitCode !== 0) throw new Error('Artifact list unavailable');
   return parseArtifacts(JSON.parse(result.output.toString()) as unknown);

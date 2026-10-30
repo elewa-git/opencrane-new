@@ -21,7 +21,8 @@ stopped = False
 snapshot = {}
 before = {}
 if not requested and not snapshot_only:
-    supplied = sys.stdin.read(65537)
+    # Stop at the message boundary; the workspace executor keeps stdin open.
+    supplied = sys.stdin.readline(65537)
     assert len(supplied) <= 65536
     before = json.loads(supplied) if supplied else {}
     assert isinstance(before, dict) and len(before) <= 128

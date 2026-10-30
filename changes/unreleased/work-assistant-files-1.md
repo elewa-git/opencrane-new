@@ -1,2 +1,3 @@
 - Completed assistant replies publish new or changed files as file cards with preview and download. Files pass the upload checks and virus scanner; refusals explain why. SVG remains refused; inline images and reply links will follow separately.
 - Publication retries keep the original file list and size allowance. Files retained from earlier turns no longer hide new output or use the next turn’s allowance.
+- Ordinary replies and replies using uploaded documents finish without waiting for the file reader’s input to close, including when there are no files to publish.
