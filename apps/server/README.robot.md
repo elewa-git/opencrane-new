@@ -6811,7 +6811,9 @@ Delivery remains disabled. Fresh-install native qualification: NOT RUN.
 ## Initial personal memory release
 
 `prepareInitialMemory().consume` checks only new access, scope and turn events through
-the final captured store position. It reuses `changesDecisionActivity` to ignore
+each relevant stream’s final read, including events saved after the global position
+was captured. A relevant access or turn change refuses delivery. Scope changes
+update the selected-reference check. It reuses `changesDecisionActivity` to ignore
 ordinary messages, files and other turns. Full histories still load before the
 two-second check. Qualification and reference expiry are checked synchronously after
 the last awaited read. The retained block is removed immediately before calling the

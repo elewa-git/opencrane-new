@@ -87,6 +87,7 @@ Initial personal loading reads the deployment collector's protected results. It 
 missing or stale results and checks saved membership before other dependencies.
 Preparation and loading each keep their original access positions and permission decisions.
 Loading returns status only. A separate internal consumer receives the selected text once,
-after checking current facts, access and deployment results. Other conversations can keep
+after checking current facts, access and deployment results. It includes changes found
+in the final event reads before delivery. Other conversations can keep
 writing during these checks. A failed check keeps the same block for a fresh check; a lost
 consumer reply never permits another delivery. Native start wiring remains unbuilt.

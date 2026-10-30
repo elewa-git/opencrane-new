@@ -25,11 +25,12 @@ refusal even when another dependency fails; other errors expose only a fixed ref
 
 Conversation and scope history load before the two-second access check. Only small access
 streams enter that check. Separate activity checks read new turn and closure events.
-The final event-store position bounds new rows in the relevant access, scope and activity
-streams. The existing turn classifier ignores other turns and ordinary chat activity.
-Only relevant access or turn changes repeat validation within the same deadline; scope
-changes update the reference check directly. Other conversations never need to stop
-writing. Each tail read uses the captured position as its boundary. A synchronous
+The final global position read detects new activity. Each relevant access, scope and
+activity stream then supplies all events through its own read, including events saved
+after that global position. The existing turn classifier ignores other turns and ordinary
+chat activity. Relevant access or turn changes refuse delivery; scope changes update the
+selected-reference check directly. Other conversations never need to stop writing.
+Each stream read has its own end position and keeps the original deadline. A synchronous
 reference check catches expiry during the final await, including supporting facts.
 The deployment's synchronous file confirmation catches withdrawn results. The consumer
 runs immediately after these checks, without another await before receiving the block.

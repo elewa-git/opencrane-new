@@ -1,2 +1,3 @@
 - Keep a loaded personal memory block for one checked internal delivery, with labelled JSON input and full frame limits. Native start and credential wiring remain disabled.
 - Allow that delivery while unrelated conversations keep writing, and retain the selected block for a fresh check if validation fails before delivery begins.
+- Refuse personal memory delivery when the final stream reads find removed access, changed or forgotten facts, a closed conversation or a replaced computer.

@@ -272,39 +272,38 @@ async function confirmInitialRelease(options: MemoryOptions, selection: Selectio
   }
   const access = { include: includeAccess, head: authority.head, deadline: authority.deadline };
   const fresh = Object.assign(confirmAccess, access);
-  let before = await options.store.head(undefined, fresh.deadline);
-  while (true) {
-    const confirmQualification = await requireQualification(options.silo, qualification);
-    await permissions.confirm();
-    await rights.confirm(fresh.deadline);
-    await memory.confirm(fresh);
-    const after = await options.store.head(undefined, fresh.deadline);
-    const changed = after !== before && await releaseChanges(options, selection, watched,
-      rows, before, after, fresh.deadline);
-    if (changed) {
-      // Repeat only for changes to this access or turn, within the original deadline.
-      before = after;
-      continue;
-    }
-    confirmQualification();
-    if (performance.now() >= fresh.deadline) throw new LoadedMemoryRefused();
-    // Check expiry synchronously so the final await cannot carry an expired fact into input.
-    const references = memoryReferences(rows, options.silo, scope.scopeId, 'event-only');
-    for (const reference of loaded.data.additions) {
-      if (references.current(reference, Date.now()) !== 'current') throw new LoadedMemoryRefused();
-    }
-    try {
-      await release();
-    } catch {
-      // Keep private text out of errors, including an error that imitates an access refusal.
+  const before = await options.store.head(undefined, fresh.deadline);
+  const confirmQualification = await requireQualification(options.silo, qualification);
+  await permissions.confirm();
+  await rights.confirm(fresh.deadline);
+  await memory.confirm(fresh);
+  const after = await options.store.head(undefined, fresh.deadline);
+  const changed = after !== before && await releaseChanges(options, selection, watched,
+    rows, before, fresh.deadline);
+  if (changed) {
+    throw new LoadedMemoryRefused();
+  }
+  confirmQualification();
+  if (performance.now() >= fresh.deadline) {
+    throw new LoadedMemoryRefused();
+  }
+  // Check expiry synchronously so the final await cannot carry an expired fact into input.
+  const references = memoryReferences(rows, options.silo, scope.scopeId, 'event-only');
+  for (const reference of loaded.data.additions) {
+    if (references.current(reference, Date.now()) !== 'current') {
       throw new LoadedMemoryRefused();
     }
-    return;
+  }
+  try {
+    await release();
+  } catch {
+    // Keep private text out of errors, including an error that imitates an access refusal.
+    throw new LoadedMemoryRefused();
   }
 }
 
 async function releaseChanges(options: MemoryOptions, selection: Selection,
-  accessSubjects: Set<string>, scopeRows: StoredEvent[], from: number, to: number,
+  accessSubjects: Set<string>, scopeRows: StoredEvent[], from: number,
   deadline: number) {
   const { binding, scope } = selection;
   const conversation = `conversation-${binding.conversation}`;
@@ -315,15 +314,13 @@ async function releaseChanges(options: MemoryOptions, selection: Selection,
     const rows: StoredEvent[] = [];
     const includeCloses = subject === conversation;
     for await (const row of options.store.readStream(subject, from + 1, deadline, includeCloses)) {
-      if (row.sequence > to) {
-        break;
-      }
       rows.push(row);
     }
     return { subject, rows };
   }
-  // Read only relevant stream tails through the captured position. Other chats
-  // can keep writing without making this validation wait for a quiet store.
+  // Read every event returned by each relevant stream, including changes saved
+  // after the global position read. Each stream bounds its own read, so other
+  // chats can keep writing without making this validation wait for a quiet store.
   const reads = subjects.map(readChanges);
   const changes = await Promise.all(reads);
   let changed = false;

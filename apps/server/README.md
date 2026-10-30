@@ -14,7 +14,8 @@ Initial personal loading also checks the deployment collector's protected result
 current installation and host measurements. Saved membership comes first, and each command
 keeps its original permission decisions and access positions through preparation.
 The internal memory consumer can receive the loaded block once. Other conversations
-can keep writing while release is checked. A failed check before delivery keeps the
+can keep writing while release is checked. Changes to access, selected facts or the
+current turn found in the final event reads refuse delivery. A failed check keeps the
 original block for a fresh access check; a lost delivery reply never permits a resend.
 Live private tool delivery remains disabled.
 The server checks who is asking and what they may do, saves each change in the

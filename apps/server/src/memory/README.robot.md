@@ -12,8 +12,10 @@ qualifications. Each command captures saved membership first and keeps one comma
 permission decision with its original access positions. MemberAccessRefused takes precedence
 over dependency failures. The ten-second preparation and two-second append limits remain.
 
-Release compares only new rows in the relevant access, scope and turn streams through
-the captured store position. Unrelated chat activity does not repeat validation.
+Release reads all new rows returned by the relevant access, scope and turn streams,
+including changes saved after the global position read. Relevant access or turn changes
+refuse delivery; changed scope rows update the selected-reference check. Each stream
+bounds its own read. Unrelated chat activity does not repeat validation.
 Synchronous qualification and reference-expiry checks follow the last awaited read.
 Failed validation retains the original block for a fully checked retry. The consumer
 reserves each attempt before waiting and removes the block only when delivery begins.
