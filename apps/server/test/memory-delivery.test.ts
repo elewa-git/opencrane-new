@@ -204,6 +204,41 @@ async function cleanup() {
 }
 beforeEach(setup);
 afterEach(cleanup);
+
+async function renewsNumberedNativeStart() {
+  const before = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  const rows = await history(nats.store, 'conversation-chat', 'test');
+  function isStart(row: typeof rows[number]) {
+    return row.event.type === 'agent.turn_started';
+  }
+  const start = rows.find(isStart)!;
+  expect(start.event.report?.sequence).toBeGreaterThan(0);
+  const reports: unknown[] = [];
+  function receive(raw: Buffer) {
+    reports.push(JSON.parse(raw.toString()) as unknown);
+  }
+  link.socket.on('message', receive);
+  const send = vi.spyOn(link.socket, 'send');
+  await expect(computer.channel.renew('thread-1')).resolves.toBeUndefined();
+  await link.settled();
+  expect(reports).toContainEqual(expect.objectContaining({ type: 'agent.turn_started',
+    sequence: start.event.report!.sequence, turnId: 'turn', threadId: 'thread-1' }));
+  expect(send).toHaveBeenCalledTimes(1);
+  const reply = JSON.parse(String(send.mock.calls[0]![0])) as unknown;
+  expect(reply).toMatchObject({ type: 'ack', token: expect.any(String) });
+  expect(reply).not.toHaveProperty('initialInput');
+  expect(reply).not.toHaveProperty('refused');
+  expect(computer.grants.has('thread-1')).toBe(true);
+  function isNativeStart(call: string) {
+    return call === 'turn/start:thread-1';
+  }
+  expect(computer.calls.filter(isNativeStart)).toHaveLength(1);
+  const after = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+  expect(after.memoryContext).toEqual(before.memoryContext);
+}
+it('renews the real numbered native start without resending initial memory',
+  renewsNumberedNativeStart);
+
 async function changed(kind: 'corrected' | 'forgotten' = 'forgotten', memoryId = 'fact') {
   const data = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
     memoryId, revision: 2, expectedRevision: 1 };
