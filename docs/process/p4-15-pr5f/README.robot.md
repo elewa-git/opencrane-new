@@ -67,6 +67,43 @@ qualify this host. Tests use `nice -n 10` and at most two workers. Service tests
 - Wider `memory.test.ts`: FAIL, 242/245 passed. Saved and concurrent correction recovery
   returned unavailable; binding replay exceeded 30 seconds. Causes remain unresolved.
   Long-history and unrelated-activity cases passed. These failures are not waived.
-  Overall source readiness remains PARTIAL until the wider failures are resolved.
+  Source readiness at that point was PARTIAL.
 - Fresh-install native delivery, persistence scans, paid calls and CI: NOT RUN.
   Admission remains disabled. This change is input delivery code, not native enablement.
+
+### Release availability and retry checks
+
+2026-10-30. Rebased onto `37387baeb`. Run one started at `87c84156b`; run two uses
+`b79e3d088`, which adds documentation and clearer guard bodies without changing behaviour.
+No image was built. Each service test uses fresh disposable fixtures, not a fresh silo.
+The deployment collector's filesystem and Docker observations remain simulated.
+
+- PASS: failing-first tests. `fd264c0e6` records both sustained-activity failures before
+  the fix. `d7b436d9f` records the failed retry before changing retention. Each failed
+  with `memory_context_unavailable`, then passed after its corresponding fix.
+- PASS: the focused sustained-activity and existing final-await cases, 9/9. The
+  premature, concurrent, lost-reply and retry cases also passed, 5/5.
+- PASS: run one, 363/363 across `memory-initial-delivery.test.ts`, `memory.test.ts`
+  and `apps/computer/test/worker-input.test.ts`. The renderer's `turn-input.test.ts`
+  passed separately, 22/22.
+- PASS: run two, 356/356 across initial delivery, memory and the renderer. Initial
+  delivery (89), memory (245) and renderer (22) therefore each passed twice.
+  The earlier memory recovery and replay failures were not reproduced in either
+  complete memory run; their earlier causes remain unknown.
+- PASS: lint, typecheck, check:events, Knip and lint:changelog. A separate ESLint
+  check passed after expanding the delivery module's guard bodies.
+- NOT RUN: full root suite, fresh-install native delivery, persistence scans, paid
+  calls and CI. Admission remains disabled.
+
+Commands use `nice -n 10`. Both service runs use the supplied `PG_TEST_URL` and
+`npx vitest run` with explicit test file paths and `--maxWorkers=1`.
+The regression keeps saving three real unrelated turn-start events during every
+deployment read until consumption finishes. Both another conversation and another
+turn in the same conversation must allow exactly one delivery. The retry test
+requires the original selection after a temporary read failure, even if new facts arrive.
+
+Local logs: `/tmp/p4-15-pr5f-fix-red.log`, `/tmp/p4-15-pr5f-retry-red.log`,
+`/tmp/p4-15-pr5f-fix-green.log`, `/tmp/p4-15-pr5f-retry-green.log`,
+`/tmp/p4-15-pr5f-fix-tests-1.log`, `/tmp/p4-15-pr5f-fix-tests-2.log`,
+`/tmp/p4-15-pr5f-fix-renderer-1.log`, `/tmp/p4-15-pr5f-fix-lint.log`,
+`/tmp/p4-15-pr5f-fix-typecheck.log` and `/tmp/p4-15-pr5f-fix-events.log`.
