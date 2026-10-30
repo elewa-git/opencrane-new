@@ -255,6 +255,19 @@ async function refusesInvalidEmbeddedWorkbook() {
 }
 it('refuses another document disguised as an embedded workbook', refusesInvalidEmbeddedWorkbook);
 
+async function refusesDisguisedWorkbookWithDecoy() {
+  const hybrid = documentParts('word');
+  hybrid['xl/workbook.xml'] = `<workbook xmlns="${spreadsheetNamespace}"/>`;
+  const bytes = archive(hybrid);
+  await expect(inspectFile('hybrid.xlsx', bytes)).rejects.toThrow('Unsupported file type');
+
+  const parts = documentParts('ppt');
+  addChart(parts, 'ppt', bytes);
+  await expect(inspectFile('sample.pptx', archive(parts))).rejects.toThrow('Unsafe Office document');
+}
+it('refuses a Word package with a decoy workbook both directly and embedded',
+  refusesDisguisedWorkbookWithDecoy);
+
 async function refusesEmbeddedPartCount() {
   const workbook = documentParts('xl');
   addParts(workbook, 2001);
