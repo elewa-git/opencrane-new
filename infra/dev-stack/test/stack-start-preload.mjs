@@ -53,10 +53,16 @@ async function execute(command, args) {
   if (command === 'tailscale') {
     if (args[0] === 'serve' && switchedOn) failureAt('after-switch-on');
     if (args[0] === 'status') {
-      stdout = JSON.stringify({ Self: { DNSName: 'owner.example.test.', TailscaleIPs: [] } });
+      const tailscaleIPs = ['100.121.102.47', 'fd7a:115c:a1e0::1234'];
+      stdout = JSON.stringify({ Self: {
+        DNSName: 'owner.example.test.', TailscaleIPs: tailscaleIPs,
+      } });
     } else {
       stdout = '{}';
     }
+  }
+  if (command === 'ss') {
+    stdout = process.env['START_LISTENER'] ?? '';
   }
   if (command === 'kubectl') {
     if (args.includes('view')) stdout = '{"clusters":[{"cluster":{}}]}';
@@ -162,7 +168,8 @@ export async function writeEnv(name, values) {
 export async function prepareDirectory() { await mkdir(directory, { recursive: true }); }
 export async function generate(origin) {
   if (await exists(directory + '/settings.env')) return;
-  await writeEnv('settings', { ORIGIN: origin, SILO_ID: 'fixture', OPENFGA_API_URL: 'https://fga.invalid' });
+  await writeEnv('settings', { ORIGIN: origin, SILO_ID: 'fixture',
+    OPENFGA_API_URL: 'https://fga.invalid', SERVER_PORT: '48000', MODEL_GATEWAY_PORT: '43000' });
   for (const name of ['admin', 'projection', 'server', 'command', 'dispatcher', 'minio']) {
     await writeEnv(name, { DATABASE_URL: 'postgres://fixture.invalid/' + name });
   }
