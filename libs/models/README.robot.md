@@ -4850,7 +4850,8 @@ first. Existing callers retain their original live permission checks. Full conve
 history still loads before the two-second access check.
 
 `memoryRights` and `loadedMemoryRights` reuse `authorityHistoryReader` across the
-MCP and memory `currentAuthority` calls in one snapshot. The reader retains only rows
+MCP and memory `currentAuthority` calls, scope selection and recorded-grant checks
+in one snapshot. The reader retains only rows
 at the original position and keeps the original deadline. Every authority call still
 checks receipts, live permissions, turn activity and changed access positions. No reader
 is shared between checks, commands or turns. This avoids repeated membership, assistant
