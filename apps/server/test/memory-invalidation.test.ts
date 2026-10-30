@@ -20,11 +20,13 @@ let change: Journey['change'];
 let invalidate: Journey['invalidate'];
 let checkInvalidation: Journey['exactInvalidation'];
 let checkUnrelated: Journey['unrelatedChange'];
+let checkIsolation: Journey['isolatedContext'];
 async function start() {
   setup = await natsFixture();
   const journey = memoryJourney(setup.store, 'test');
   ({ scopeId, memoryWrittenExample, reference, input, prepared, append, load, change,
-    invalidate, exactInvalidation: checkInvalidation, unrelatedChange: checkUnrelated } = journey);
+    invalidate, exactInvalidation: checkInvalidation, unrelatedChange: checkUnrelated,
+    isolatedContext: checkIsolation } = journey);
   await journey.start();
 }
 async function close() {
@@ -195,6 +197,15 @@ async function oldReadAccess() {
   }
 }
 it('withdraws use without consulting the former reader or any grant', oldReadAccess);
+
+async function isolatedSession(kind: 'corrected' | 'forgotten', requester: string) {
+  await checkIsolation(kind, requester);
+}
+const isolatedSessions = [
+  ['corrected', 'alice'], ['forgotten', 'alice'], ['corrected', 'bob'], ['forgotten', 'bob'],
+] as const;
+it.each(isolatedSessions)(
+  'a %s fact leaves an unrelated session owned by %s unchanged', isolatedSession);
 
 async function anotherSession() {
   await append('conversation-other', 'conversation.created', { conversationId: 'other',

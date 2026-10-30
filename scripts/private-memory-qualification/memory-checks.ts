@@ -4,7 +4,10 @@ import { memoryKeys } from '@opencrane/projections';
 import type { MemoryIdentity } from '@opencrane/events';
 import { memoryJourney } from './memory-journey.ts';
 
-export async function checkMemory(name: 'invalidation' | 'unrelatedActivity', siloId: string) {
+export async function checkMemory(
+  name: 'invalidation' | 'unrelatedActivity' | 'requesterIsolation' | 'sessionIsolation',
+  siloId: string,
+) {
   const silo = process.env['SILO_ID'];
   const directory = process.env['MEMORY_KEY_DIRECTORY'];
   if (!silo || !directory) throw new Error('journey_unavailable');
@@ -24,8 +27,12 @@ export async function checkMemory(name: 'invalidation' | 'unrelatedActivity', si
       await journey.start();
       if (name === 'invalidation') {
         await journey.exactInvalidation(kind);
-      } else {
+      } else if (name === 'unrelatedActivity') {
         await journey.unrelatedChange(kind);
+      } else {
+        let otherRequester = identity;
+        if (name === 'requesterIsolation') otherRequester = randomUUID();
+        await journey.isolatedContext(kind, otherRequester);
       }
     }
   } finally {

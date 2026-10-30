@@ -107,13 +107,14 @@ async function refusesInventedBundle(): Promise<void> {
 }
 it('refuses an invented evidence bundle before executing anything', refusesInventedBundle);
 
-async function substitutes(field: string, status = 'PASS'): Promise<void> {
+async function substitutes(field: string, status = 'PASS', name?: string): Promise<void> {
   const foreign: Record<string, string> = {
     sourceSha: 'd'.repeat(40), imageDigest: `sha256:${'d'.repeat(64)}`,
     environmentId: 'd'.repeat(64), siloId: `sha256:${'d'.repeat(64)}`,
     installationId: `sha256:${'d'.repeat(64)}`, runId: '11111111-1111-4111-8111-111111111111',
   };
   function change(response: Record<string, unknown>): void {
+    if (name && response['name'] !== name) return;
     response[field] = foreign[field];
     response['result'] = status;
     response['complete'] = status === 'PASS';
@@ -390,3 +391,14 @@ async function foreignPartial(field: string): Promise<void> {
 }
 it.each(['imageDigest', 'environmentId', 'siloId'])(
   'refuses incomplete evidence from another %s', foreignPartial);
+
+async function foreignIsolation(name: string, field: string): Promise<void> {
+  await substitutes(field, 'PARTIAL', name);
+}
+const isolationSubstitutions = [
+  ['requesterIsolation', 'imageDigest'], ['requesterIsolation', 'environmentId'],
+  ['requesterIsolation', 'siloId'], ['sessionIsolation', 'imageDigest'],
+  ['sessionIsolation', 'environmentId'], ['sessionIsolation', 'siloId'],
+];
+it.each(isolationSubstitutions)(
+  'refuses %s results from another %s', foreignIsolation);

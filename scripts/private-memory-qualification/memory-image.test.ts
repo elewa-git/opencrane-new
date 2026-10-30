@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { memoryContextRecordedEventSchema } from '@opencrane/events';
+import { conversationCreatedDataSchema, memoryContextRecordedEventSchema } from '@opencrane/events';
 
 const execute = promisify(execFile);
 const imageTag = `private-memory-image-test:${randomUUID()}`;
@@ -36,7 +36,9 @@ async function excludesTests(): Promise<void> {
 
 it('keeps repository tests and their private fixtures out of the package image', excludesTests);
 
-async function executesMemoryCheck(name: 'invalidation' | 'unrelatedActivity' | 'requesterIsolation' | 'sessionIsolation'): Promise<void> {
+async function executesMemoryCheck(
+  name: 'invalidation' | 'unrelatedActivity' | 'requesterIsolation' | 'sessionIsolation',
+): Promise<void> {
   const fixture = await natsFixture();
   const containerName = `private-memory-image-test-${randomUUID()}`;
   try {
@@ -70,10 +72,15 @@ async function executesMemoryCheck(name: 'invalidation' | 'unrelatedActivity' | 
     const position = await fixture.store.head();
     const changes: string[] = [];
     let invalidations = 0;
+    const requesters: string[] = [];
     for (let sequence = 1; sequence <= position; sequence += 1) {
       const row = await fixture.store.readEvent(sequence);
       if (['memory.corrected', 'memory.forgotten'].includes(row.event.type)) {
         changes.push(row.event.type);
+      }
+      if (row.event.type === 'conversation.created') {
+        const data = conversationCreatedDataSchema.parse(row.event.data);
+        requesters.push(data.createdBy);
       }
       if (row.event.type === 'agent.memory_context_recorded') {
         const event = memoryContextRecordedEventSchema.parse(row.event);
@@ -85,6 +92,12 @@ async function executesMemoryCheck(name: 'invalidation' | 'unrelatedActivity' | 
     expect(changes).toEqual(['memory.corrected', 'memory.forgotten']);
     const expectedInvalidations = name === 'unrelatedActivity' ? 0 : 2;
     expect(invalidations).toBe(expectedInvalidations);
+    if (name === 'requesterIsolation' || name === 'sessionIsolation') {
+      expect(requesters).toHaveLength(4);
+      const sameRequester = name === 'sessionIsolation';
+      expect(requesters[0] === requesters[1]).toBe(sameRequester);
+      expect(requesters[2] === requesters[3]).toBe(sameRequester);
+    }
   } finally {
     try {
       await docker(['rm', '-f', '-v', containerName]);

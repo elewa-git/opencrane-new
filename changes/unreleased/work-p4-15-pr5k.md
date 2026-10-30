@@ -1,0 +1,1 @@
+The packaged memory qualification runner now checks that correction and forgetting leave an unrelated recorded context unchanged, for two requesters and for one requester in two sessions. These checks remain PARTIAL; native isolation and unfinished journeys cannot qualify a deployment or enable memory.

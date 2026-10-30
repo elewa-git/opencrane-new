@@ -601,8 +601,8 @@ Uploads go to the configured private scanner over HTTPS before storage. The serv
 checks the exact file and a fresh result again after checking access. Missing trust
 settings, expired results and scanner outages leave uploads unavailable.
 
-The server tests and memory evidence runner share correction and forgetting assertions
-from the runner's shipped code. These checks do not qualify native memory or enable it.
+The server tests and memory evidence runner share correction, forgetting and recorded-context
+isolation assertions from the runner's shipped code. These checks do not qualify native memory or enable it.
 
 ## How to run or test it
 

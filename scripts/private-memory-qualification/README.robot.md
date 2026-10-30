@@ -139,25 +139,54 @@ For `invalidation`, the shared assertions check Correct and Forget, retained ref
 unavailable execution status and exact retry recovery. For `unrelatedActivity`, they check that
 correcting or forgetting another fact leaves the loaded context unchanged. These are
 server checks with recorded context fixtures, not native memory delivery. Successful
-runs return PARTIAL, complete=false. The remaining seven journeys and both qualifications
-return NOT RUN, complete=false. Failure returns only FAIL / journey_failed.
+runs return PARTIAL, complete=false. The isolation checks below also return PARTIAL.
+The remaining five journeys and both qualifications return NOT RUN, complete=false. Failure returns only FAIL / journey_failed.
 The collector binds every returned status to the image, host, silo, installation and
 fresh challenge, then saves its protected result. These are challenge-bound receipts,
 not cryptographic signatures. The qualification reader still accepts only complete PASS.
 
-Requester/session isolation, messages/uploads during native work, dispatch/output rejection,
+Native requester/session isolation, messages/uploads during native work, dispatch/output rejection,
 process termination, persistence scans and real native recall remain NOT RUN. No native
 process starts, and no admission setting changes. The existing supervisor still owns
 timeout and process-group cleanup. Tests run shared assertions on disposable NATS and
 check denied appends, incomplete results and refusal by the qualification reader.
 
 `memory-image.test.ts` builds the actual `infra/package/Dockerfile` with the root
-`.dockerignore`. It checks that repository tests are absent, then calls both memory
+`.dockerignore`. It checks that repository tests are absent, then calls all four memory
 checks inside read-only containers against disposable NATS. Only temporary credentials
 are mounted; all executable modules come from the image. Both Correct and Forget must
 be saved, and invalidation must occur only for the affected context. Admission must
 remain disabled. This test calls the memory checks directly, so it does not claim safe
 host settings or live qualification. The separate entry-point test checks host refusal.
+
+## Recorded requester and session isolation
+
+P4-15 PR 5k, Part of #97, adds the first part of the remaining server checks.
+`requesterIsolation` and `sessionIsolation` use `memoryJourney.isolatedContext`,
+which the server invalidation tests also call. Each runs Correct and Forget with
+two recorded contexts on the same assistant and computer. One context loads the
+affected fact; the other loads an unrelated fact, either for another requester or
+for the same requester in another session. The check requires exact invalidation
+of the first context and unchanged saved state and event position for the second.
+It rebuilds the second state from events, without a cached summary. Substituting
+its thread or input generation in the first context's request must refuse.
+Applying the first requester's cause to the second requester's context must refuse;
+for the same requester, it must report unchanged because the loaded fact differs.
+
+These two checks return PARTIAL, complete=false. They check recorded contexts,
+not native threads, simultaneous canary delivery or requester-visible replies.
+The collector keeps its existing challenge-bound, image/host/silo/install-bound
+receipts and protected result file; no signature format or admission switch is added.
+Denied writes, wrong deployment silos and assertion failures refuse. Image tests
+require two contexts per mutation and check whether their requesters should match.
+Only fixture credentials are mounted; the helper and assertions come from the image.
+The existing supervisor still stops child processes on timeout or collector loss.
+
+Persistence, Stop/reconnect and replacement/reload checks are deferred to the next
+part and remain NOT RUN. Private turns, native recall, both qualifications, pinned
+native launch, volatile replies and immutable deployment qualification also remain
+NOT RUN. The full nine live journeys remain incomplete. No new event or API fields,
+dependencies, authority checks or admission changes are introduced.
 
 ## File parser scope and invocation
 
