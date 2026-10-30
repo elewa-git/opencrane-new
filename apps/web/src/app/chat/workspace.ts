@@ -34,6 +34,7 @@ import {
   type ChatAttachment, type ToolActivityRecord, type Turn,
 } from './chat-state';
 import { ChatComposer } from './composer';
+import { FileDrop } from './file-drop';
 import { WebSocketService } from '../core/websocket.service';
 import { FoldLoader } from '../ui/fold-loader/fold-loader';
 import { FilePreview } from './file-preview';
@@ -52,7 +53,7 @@ import {
     HingeDrawer, NavigationMenu, PaperSurface, DogEar, GrainLoader, FlutterLoader,
     SharedState, ApprovalCards, BudgetStopNotice, ConversationFileCard, CaptureStatus,
     ToolActivityLine, RecoveryNotice, MemoryFreeNotice, MemoryPanel, AssistantMarkdown,
-    FoldLoader, ChatComposer, FilePreview, LiveView,
+    FoldLoader, ChatComposer, FileDrop, FilePreview, LiveView,
     NgTemplateOutlet, ChatIcon, BrandMark,
   ],
   providers: [ChatSession, WebSocketService, ScreenshotCapture],

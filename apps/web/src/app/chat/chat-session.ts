@@ -1,4 +1,5 @@
 import { sendUpload } from './upload';
+import { UploadBatch } from './upload-batch';
 import { toolTransitionAnnouncement } from './chat-announcement';
 import { Injectable, computed, effect, inject, signal, type OnDestroy } from '@angular/core';
 import { z } from 'zod';
@@ -58,15 +59,9 @@ export class ChatSession implements OnDestroy {
   readonly lastConfirmedTurnAt = computed(() => lastConfirmedTurnAt(this.turns()));
   readonly active = computed(() => this.turns().filter(isActiveTurn).at(-1));
   readonly attachments = computed(() => this.rows().flatMap(row => { const file = uploadedFile(row); return file ? [file] : []; }));
-  readonly uploadName = signal('');
-  readonly uploadProgress = signal(0);
-  readonly uploadError = signal('');
-  readonly uploading = signal(false);
-  private readonly pendingDelivery = signal('');
-  readonly uploadPending = computed(() => [...this.attachments().filter(file => !file.screenshot).map(file => file.fileId), this.pendingDelivery()].filter(Boolean)
+  readonly uploadBatch = new UploadBatch(this.upload.bind(this), this.currentRevision.bind(this));
+  readonly uploadPending = computed(() => [...this.attachments().filter(file => !file.screenshot).map(file => file.fileId), this.uploadBatch.pendingDelivery()].filter(Boolean)
     .some(id => !this.rows().some(row => row.type === 'file.delivered' && row.data['fileId'] === id)));
-  private uploadFile: { file: File; key: string; conversation: string } | undefined;
-  private transfer: ReturnType<typeof sendUpload> | undefined;
   private creationId = '';
   /** Change this when the feed changes; old event positions and transcript then become invalid. */
   private generation = 0;
@@ -153,7 +148,7 @@ export class ChatSession implements OnDestroy {
     await this.select(id);
   }
   async select(id: string): Promise<void> {
-    if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
+    if (this.busy() || this.pending || this.uploadBatch.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
     this.requestedUnavailable.set(false);
     this.requestedLookupFailed.set(false);
     const revision = ++this.revision;
@@ -188,7 +183,7 @@ export class ChatSession implements OnDestroy {
     this.executionMode.set('restricted');
   }
   newSession(): void {
-    if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
+    if (this.busy() || this.pending || this.uploadBatch.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
     ++this.revision; this.sawReconnecting = false; this.reconnectCount = 0;
     this.stopState.reset();
     this.reconnectedAt.set('');
@@ -221,7 +216,7 @@ export class ChatSession implements OnDestroy {
     finally { if (revision === this.revision) this.busy.set(false); }
   }
   private canSend(text: string): boolean {
-    return Boolean(text.trim() && !this.busy() && !this.active() && !this.uploading()
+    return Boolean(text.trim() && !this.busy() && !this.active() && !this.uploadBatch.uploading()
       && !this.uploadPending() && !this.denied() && this.computer() !== 'recovering'
       && this.selectedAssistantId());
   }
@@ -259,7 +254,7 @@ export class ChatSession implements OnDestroy {
     await this.stopState.stop();
   }
   ngOnDestroy(): void {
-    this.transfer?.abort();
+    this.clearUpload();
     this.stopState.reset();
     ++this.revision;
     this.subscription.unsubscribe();
@@ -353,32 +348,41 @@ export class ChatSession implements OnDestroy {
   }
   async upload(file?: File): Promise<void> {
     if (!this.canUpload()) return;
-    if (file) this.uploadFile = { file, key: crypto.randomUUID(), conversation: this.selected() || this.creationId || (this.creationId = crypto.randomUUID()) };
-    const pending = this.uploadFile; if (!pending) return;
+    const conversation = this.selected() || this.creationId || (this.creationId = crypto.randomUUID());
+    const pending = this.uploadBatch.start(file, conversation);
+    if (!pending) return;
     const revision = this.revision;
-    this.uploadName.set(pending.file.name); this.uploadProgress.set(0); this.uploadError.set(''); this.uploading.set(true);
     try {
-      if (pending.file.size > 20 * 1024 * 1024) throw new Error('File too large. Maximum size is 20 MiB.');
+      if (pending.file.size > 20 * 1024 * 1024) {
+        throw new Error('File too large. Maximum size is 20 MiB.');
+      }
       await this.ensureConversation(pending.conversation);
       if (revision !== this.revision) return;
       this.socket.connect();
-      this.transfer = sendUpload(pending.conversation, pending.file, pending.key, percent => this.uploadProgress.set(percent));
-      this.pendingDelivery.set(await this.transfer.completed);
+      const reportProgress = this.uploadBatch.reportProgress.bind(this.uploadBatch);
+      this.uploadBatch.transfer = sendUpload(
+        pending.conversation, pending.file, pending.key, reportProgress,
+      );
+      const fileId = await this.uploadBatch.transfer.completed;
       if (revision !== this.revision) return;
-      this.uploadProgress.set(100); this.uploadFile = undefined;
+      this.uploadBatch.confirmed(fileId);
     } catch (error) {
       if (revision === this.revision) {
-        this.uploadError.set(error instanceof Error ? error.message : 'Upload unavailable. Retry.');
+        const message = error instanceof Error ? error.message : 'Upload unavailable. Retry.';
+        this.uploadBatch.failed(pending, message);
       }
     }
-    finally { if (revision === this.revision) this.uploading.set(false); }
+    finally {
+      if (revision === this.revision) this.uploadBatch.uploading.set(false);
+    }
   }
   private canUpload(): boolean {
-    return !this.pending && !this.uploading() && !this.busy()
+    return !this.pending && !this.uploadBatch.uploading() && !this.busy()
       && !this.denied() && Boolean(this.assistantId());
   }
   private clearUpload(): void {
-    this.uploadFile = undefined; this.pendingDelivery.set(''); this.creationId = ''; this.uploadName.set(''); this.uploadError.set('');
+    this.uploadBatch.clear();
+    this.creationId = '';
   }
   private async catchUp(id: string, revision: number): Promise<void> {
     let more = true;
@@ -475,11 +479,7 @@ export class ChatSession implements OnDestroy {
   private clearDenied(): void {
     ++this.revision;
     this.denied.set(true);
-    this.transfer?.abort();
-    this.transfer = undefined;
     this.clearUpload();
-    this.uploadProgress.set(0);
-    this.uploading.set(false);
     this.rows.set([]);
     this.conversations.set([]);
     this.listHasMore.set(false);

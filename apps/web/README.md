@@ -16,15 +16,12 @@ shared rules for checking messages before the website shows them.
 ```mermaid
 flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
-  browser["Person's browser<br/>pages and actions"] --> web
-  web -->|requests, saved publication and tool-check facts, and resumable live updates| server["apps/server<br/>the back end"]
-  server -->|file refusal codes| web
-  server -.->|recovery tests use the transcript helper| web
-  web["apps/web<br/>sign-in, chat, calls, saved spending status and admin pages"] -->|requests, saved call status and live updates| server["apps/server<br/>the back end"]
+  browser["Person's browser<br/>pages and file drops where Attach is available"] --> web
+  web -->|requests and live updates| server["apps/server<br/>the back end"]
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
-  web -->|shows saved Stop, takeover cancellation and tool reply status| capture["Reply formatting and screenshot status<br/>workspace and viewer"]
-  web -->|manages settings and waits for memory setup and saved changes| admin["Admin pages<br/>provider, tool, people and saved memory"]
+  web -->|saved reply status| capture["Reply formatting<br/>workspace and viewer"]
+  web -->|settings| admin["Admin pages<br/>provider, tool, people and memory"]
 ```
 
 Sign-in goes through the server to [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service).
@@ -45,6 +42,8 @@ For everyone, the website:
   Approval details say when the tool replied, while an uncertain result stays unconfirmed.
 - Uploads and previews files, saves screenshots and opens the assistant's read-only
   [computer](../../GLOSSARY.md#computer) view when permitted.
+  Desktop file drops use the same uploads where Attach is available.
+  Colleague chats have no file-drop controls. Phones keep the Attach button.
 - Shows permitted memory facts and supports saving, correcting and forgetting personal facts.
   While saved membership permissions are still being applied, Memory shows a setup
   message and retries its reads for up to 30 seconds. Refused reads show access loss straight away.

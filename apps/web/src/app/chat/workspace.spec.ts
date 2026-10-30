@@ -310,11 +310,34 @@ function runDownloadScenario(scenario: DownloadScenario): Promise<void> {
 }
 
 const originalViewportWidth = globalThis.innerWidth;
+const originalShowModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
+const originalClose = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close');
+
+function installDialogMethods(): void {
+  const methods = {
+    showModal: { configurable: true, writable: true, value: openPanelDialog },
+    close: { configurable: true, writable: true, value: closePanelDialog },
+  };
+  Object.defineProperties(HTMLDialogElement.prototype, methods);
+}
+
+function restoreDialogMethod(name: string, original: PropertyDescriptor | undefined): void {
+  if (original) {
+    Object.defineProperty(HTMLDialogElement.prototype, name, original);
+  } else {
+    Reflect.deleteProperty(HTMLDialogElement.prototype, name);
+  }
+}
+
+beforeEach(installDialogMethods);
 
 afterEach(() => {
   vi.useRealTimers();
+  TestBed.resetTestingModule();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  restoreDialogMethod('showModal', originalShowModal);
+  restoreDialogMethod('close', originalClose);
   history.replaceState({}, '', '/');
   Object.defineProperty(globalThis, 'innerWidth', {
     configurable: true, value: originalViewportWidth,
@@ -454,6 +477,7 @@ it('clears the preview, screenshot rows and counts when access is denied', async
   await context.fixture.componentInstance['capture'].start('chat', []);
   context.fixture.componentInstance['preview'].set('uploads/chat/screen/screen.png');
   context.fixture.detectChanges();
+  expect(context.root.querySelector('oc-file-preview dialog')?.hasAttribute('open')).toBe(true);
   context.denyFeedRead();
   await context.fixture.componentInstance['chat'].refresh();
   await vi.waitFor(() => expect(context.fixture.componentInstance['chat'].denied()).toBe(true));

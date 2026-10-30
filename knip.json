@@ -14,6 +14,7 @@
         "infra/package/computer-volume-inventory.ts",
         "scripts/capture-chat-markdown.mjs",
         "scripts/capture-uploads-reasons.mjs",
+        "scripts/capture-chat-drag-drop.mjs",
         "scripts/check-stage-b-polish.mjs",
         "scripts/check-memory-scopes-applying.mjs",
         "scripts/collect-stage-b-evidence.mjs",

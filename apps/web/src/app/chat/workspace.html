@@ -41,6 +41,10 @@
     <span class="sr-only" role="status" aria-live="polite">
       {{ conversationStatus() }}
     </span>
+    <div class="chat-drop-area" #fileDrop="ocFileDrop"
+      [ocFileDrop]="!reason() && !teamSession() && !chat.busy() && !chat.queued()
+        && !chat.uploadBatch.uploading() && !chat.uploadPending() && !chat.requestedUnavailable()
+        && !chat.requestedLookupFailed()" (filesDropped)="chat.uploadBatch.send($event)">
     <section class="transcript" #transcript tabindex="0" aria-label="Conversation messages" [attr.aria-busy]="chat.loading()">
       <div class="transcript-inner">
         @if (teamSession() && chat.executionMode() === 'restricted'
@@ -190,11 +194,24 @@
     <div class="composer-dock">
       <div class="progress" role="status" aria-live="polite">@if (chat.waiting()) { <div class="connection-strip" [class.waking]="chat.waiting() === 'starting'"><oc-icon [name]="chat.waiting() === 'starting' ? 'agent' : 'working'" /><span>@if (chat.waiting() === 'queued') { We couldn't tell whether your message was recorded. Retry checks its status before sending again. Reference: {{ chat.queuedReference() }}. Reload discards this draft. } @else if (chat.waiting() === 'starting') { Starting your computer… Your message is saved and will run when it is ready. } @else { Reconnecting — your conversation is saved. Unsent text stays on this page. }</span><small>{{ chat.waitSeconds() }}s</small>@if (chat.waiting() === 'queued') { <button type="button" [disabled]="chat.busy() || chat.computer() === 'recovering'"
         [title]="chat.computer() === 'recovering' ? 'Sending is paused until your computer is ready' : ''" (click)="send(draft())">Retry</button> } @else if (chat.waiting() === 'reconnecting') { <button type="button" (click)="chat.reconnect()">Retry</button> }</div> }</div>
-      @if (chat.uploadName()) {
+      @for (failure of chat.uploadBatch.failures(); track failure.key) {
         <div class="upload-status" role="status" aria-live="polite">
-          <span>{{ chat.uploadName() }} · @if (chat.uploadError()) { {{ chat.uploadError() }} } @else if (chat.uploading()) { {{ chat.uploadProgress() }}% · {{ chat.uploadProgress() === 100 ? 'Scanning…' : 'Uploading…' }} } @else { Uploaded · {{ chat.uploadPending() ? 'Preparing in your workspace…' : 'Ready' }} }</span>
-          @if (chat.uploading()) { <progress max="100" [value]="chat.uploadProgress()" aria-label="Upload progress"></progress> }
-          @if (chat.uploadError()) { <button type="button" (click)="chat.upload()">Retry upload</button> }
+          <span>{{ failure.file.name }} · {{ failure.error }}</span>
+          <button type="button" [disabled]="chat.uploadBatch.uploading() || chat.busy() || chat.queued()"
+            (click)="chat.uploadBatch.retry(failure)">Retry upload</button>
+        </div>
+      }
+      @if (chat.uploadBatch.name() && !chat.uploadBatch.error()) {
+        <div class="upload-status" role="status" aria-live="polite">
+          <span>{{ chat.uploadBatch.name() }} ·
+            @if (chat.uploadBatch.uploading()) {
+              {{ chat.uploadBatch.progress() }}% ·
+              {{ chat.uploadBatch.progress() === 100 ? 'Scanning…' : 'Uploading…' }}
+            } @else {
+              Uploaded · {{ chat.uploadPending() ? 'Preparing in your workspace…' : 'Ready' }}
+            }
+          </span>
+          @if (chat.uploadBatch.uploading()) { <progress max="100" [value]="chat.uploadBatch.progress()" aria-label="Upload progress"></progress> }
         </div>
       }
         @if (teamSession() && chat.executionMode() === 'memory_free') {
@@ -204,9 +221,10 @@
         }
       @if (!chat.denied()) {
       <oc-chat-composer [draft]="draft()" [placeholder]="composerPlaceholder()"
+        [fileDrag]="fileDrop.active()"
         [working]="!!chat.active()"
         [stopping]="chat.active()?.state === 'stopping'"
-        [busy]="(chat.busy() && !chat.stopNotConfirmedFor()) || chat.uploading() || chat.uploadPending()"
+        [busy]="(chat.busy() && !chat.stopNotConfirmedFor()) || chat.uploadBatch.uploading() || chat.uploadPending()"
         (attached)="chat.upload($event)" [reason]="reason()" [queued]="chat.queued()"
         [teamSession]="teamSession()" [memoryFree]="chat.executionMode() === 'memory_free'"
         (memoryFreeSelected)="selectMemoryFree()" (privateSelected)="selectPrivate()"
@@ -226,6 +244,7 @@
       }
     </div>
     }
+    </div>
   </main>
   @if (desktop() && panel()) {
     <aside class="session-panel desktop-panel" aria-label="Session panel">
