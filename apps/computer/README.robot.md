@@ -1760,8 +1760,12 @@ The existing private and memory-free start paths are unchanged.
 ## Assistant publication files
 
 Completed memory-free turns compare files before and after execution. The bounded reader
-walks at most 128 entries, eight directory levels and 16 files under `/workspace/artifacts`,
-with a 20 MiB total budget. It refuses links, special files and unsafe names. Reports carry
+walks at most 128 entries and eight directory levels under `/workspace/artifacts`.
+Before a turn, it snapshots file metadata without reading bytes. After the turn, it skips
+unchanged entries before allowing up to 16 changed files and 20 MiB of changed bytes.
+The snapshot includes device, inode, mode, link count, size, modification time and change
+time. Restoring a file's modification time cannot hide a change. Snapshots stay in RAM;
+only bounded publication descriptors enter the report journal. It refuses links, special files and unsafe names. Reports carry
 basenames and digests, never private paths or bytes. Authenticated bridge requests pull
 32 KiB chunks. Changed or missing bytes cannot pass the server's digest check.
 The journal preserves reports for replay. Restricted and interrupted turns publish no files.

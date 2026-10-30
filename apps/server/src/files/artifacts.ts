@@ -17,11 +17,12 @@ export async function publishArtifacts(context: ArtifactPublication, memberId: s
   conversationId: string, turnId: string, artifacts: Artifacts) {
   const { files, readArtifact } = context;
   if (!files || !readArtifact) throw new Error('Artifact publication unavailable');
+  await bindPublication(files, memberId, conversationId, turnId, artifacts);
   const rows = await ownConversation(files.store, files.silo, conversationId, memberId, false, true);
   let remaining = 20 * 1024 * 1024;
   for (const artifact of artifacts) {
     const hash = createHash('sha256');
-    hash.update(JSON.stringify([conversationId, turnId, artifact]));
+    hash.update(JSON.stringify([conversationId, turnId, artifact.id]));
     const key = `artifact-${hash.digest('hex')}`;
     function alreadyPublished(row: typeof rows[number]) { return row.event.id === key; }
     // Count saved files too, so replay keeps the original turn allowance.
@@ -45,6 +46,20 @@ export async function publishArtifacts(context: ArtifactPublication, memberId: s
       'agent.file_changed', data);
     if (result.status !== 'appended') throw new Error('Artifact record unavailable');
   }
+}
+
+async function bindPublication(files: FileOptions, memberId: string,
+  conversationId: string, turnId: string, artifacts: Artifacts) {
+  const identity = createHash('sha256');
+  identity.update(JSON.stringify([conversationId, turnId]));
+  const key = `artifact-set-${identity.digest('hex')}`;
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(artifacts));
+  const data = { conversationId, turnId, digest: hash.digest('hex') };
+  // Save the set before any upload, so an interrupted report cannot replace its allowance.
+  const result = await fileCommand(files.store, files.silo, memberId, key,
+    'agent.file_publication_started', data);
+  if (result.status !== 'appended') throw new Error('Artifact set unavailable');
 }
 
 async function publishArtifact(files: FileOptions, readArtifact: NonNullable<ArtifactPublication['readArtifact']>,

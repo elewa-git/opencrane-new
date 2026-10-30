@@ -6886,3 +6886,12 @@ are not delivered back to the computer. `agent.file_changed` names the downloada
 or carries a fixed refusal reason. No workspace path or file bytes enter the event log.
 Inline image thumbnails and reply links remain for the next part. SVG stays refused because
 this part reuses the current upload formats without adding active image handling.
+
+The server saves `agent.file_publication_started` before pulling any publication bytes.
+Its digest binds the ordered artifact list to the conversation and turn. Exact retries
+must match it, including after an interrupted upload or refusal. Upload and card ids use
+the conversation, turn and artifact id, independent of name or content digest. Every listed
+file counts towards the same 20 MiB allowance on each retry, including saved cards.
+A new report with files for an ended turn is refused; the original report sequence remains
+replayable. Completion is recorded only after all cards and refusals are saved, so bridge
+reconnects cannot skip unfinished publication. The binding event has no reaction.

@@ -20,7 +20,7 @@ flowchart LR
   apps --> server["apps/server<br/>back end"]
   ops -->|starts and pauses| computer
   server -->|messages, private routine preparation, turns, files and targeted Stops| computer
-  computer -->|preparation replies, reply removal receipts, native termination, progress, results and publication files| server
+  computer -->|preparation replies, reply removal receipts, native termination, progress, results and changed publication files| server
   server -.->|prepares private memory tools and one-use input| computer
   computer -.->|records private thread before tool approval| server
   computer -->|checks command ownership| executor["socket-denied executor"]
@@ -93,6 +93,8 @@ Automatic routine execution remains disabled.
 
 Completed replies report new or changed files in the publication folder. The server
 pulls those files for checking and shows accepted files in the conversation.
+Files left by earlier turns do not use the next turn's file count or size allowance.
+The computer compares file metadata before reading changed files.
 
 ## Processes it handles
 

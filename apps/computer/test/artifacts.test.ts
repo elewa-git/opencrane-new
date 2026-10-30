@@ -10,7 +10,9 @@ async function boundsArtifactReads() {
   const root = await mkdtemp(`${tmpdir()}/artifacts-`);
   async function scan() {
     const args = ['apps/computer/src/artifacts.py', `${root}/workspace`];
-    const result = await execute('python3', args);
+    const pending = execute('python3', args);
+    pending.child.stdin!.end();
+    const result = await pending;
     return artifactListSchema.parse(JSON.parse(result.stdout) as unknown);
   }
   try {

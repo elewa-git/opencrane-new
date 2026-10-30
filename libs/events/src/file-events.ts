@@ -10,7 +10,13 @@ export const fileRejectedDataSchema = z.object({ ...identity, reason: z.literal(
 export const fileDeliveredDataSchema = z.object({ conversationId: id, fileId: id, computerId: id, sha256: identity.sha256,
   outcome: z.enum(['saved', 'kept_existing']).optional() }).strict();
 const example = { conversationId: 'conv_1', fileId: 'file_1', uploadedBy: 'mem_1', name: 'notes.txt', size: 5, sha256: 'a'.repeat(64) };
+const publicationStarted = z.object({ conversationId: id, turnId: id,
+  digest: z.string().regex(/^[a-f0-9]{64}$/u) }).strict();
 export const fileEvents = [
+  event('agent.file_publication_started', 'conversation',
+    'The server bound a turn to its reported file set before publishing any bytes.',
+    publicationStarted, { conversationId: 'conv_1', turnId: 'turn_1',
+      digest: 'a'.repeat(64) }),
   event('file.uploaded', 'conversation', 'A clean upload was scanned and stored.', fileUploadedDataSchema, { ...example, mime: 'text/plain', objectKey: 'silo/conv_1/file_1' }),
   event('file.rejected', 'conversation', 'The scanner refused an infected upload.', fileRejectedDataSchema, { ...example, reason: 'infected' }),
   event('file.delivered', 'conversation', 'The computer acknowledged a verified workspace file.', fileDeliveredDataSchema, { conversationId: 'conv_1', fileId: 'file_1', computerId: 'computer_1', sha256: example.sha256 }),

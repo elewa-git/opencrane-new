@@ -99,9 +99,15 @@ async function refusesChangedPublication(interrupted: boolean) {
       [fixture.artifact, additional]];
     for (const artifacts of changedSets) {
       const changed = { ...fixture.report, sequence: 2, previousSequence: 1, artifacts };
-      await expect(fixture.record(changed)).rejects.toThrow();
+      let changedReason = 'Artifact report refused';
+      let reusedReason = 'Report sequence reused';
+      if (interrupted) {
+        changedReason = 'Report sequence gap';
+        reusedReason = 'Artifact publication set changed';
+      }
+      await expect(fixture.record(changed)).rejects.toThrow(changedReason);
       const reusedSequence = { ...fixture.report, artifacts };
-      await expect(fixture.record(reusedSequence)).rejects.toThrow();
+      await expect(fixture.record(reusedSequence)).rejects.toThrow(reusedReason);
     }
     await fixture.record(fixture.report);
     expect(await fixture.record(fixture.report)).toBe('duplicate');

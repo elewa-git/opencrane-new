@@ -9,22 +9,41 @@ import sys
 LIMIT = 20 * 1024 * 1024
 DIRECTORY = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 FILE = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
-requested = sys.argv[2] if len(sys.argv) > 2 else None
+snapshot_only = len(sys.argv) > 2 and sys.argv[2] == '--snapshot'
+requested = sys.argv[2] if len(sys.argv) > 2 and not snapshot_only else None
 offset = int(sys.argv[3]) if requested else 0
 assert not requested or re.fullmatch(r'[a-f0-9]{64}', requested)
 assert 0 <= offset < LIMIT
 entries = []
 visited = 0
 remaining = LIMIT
+stopped = False
+snapshot = {}
+before = {}
+if not requested and not snapshot_only:
+    supplied = sys.stdin.read(65537)
+    assert len(supplied) <= 65536
+    before = json.loads(supplied) if supplied else {}
+    assert isinstance(before, dict) and len(before) <= 128
+
+
+def fingerprint(details):
+    # Include change time so replacing bytes and restoring modification time still counts.
+    fields = [details.st_dev, details.st_ino, details.st_mode, details.st_nlink,
+              details.st_size, details.st_mtime_ns, details.st_ctime_ns]
+    return hashlib.sha256(json.dumps(fields).encode()).hexdigest()
 
 
 def walk(directory, prefix='', depth=0):
-    global visited, remaining
+    global visited, remaining, stopped
     with os.scandir(directory) as children:
         for child in children:
+            if stopped:
+                return
             visited += 1
-            if visited > 128 or len(entries) >= 16 or depth > 8:
+            if visited > 128 or depth > 8:
                 entries.append({'id': '0' * 64, 'reason': 'too_many_parts'})
+                stopped = True
                 return
             relative = prefix + child.name
             identity = hashlib.sha256(relative.encode()).hexdigest()
@@ -39,6 +58,16 @@ def walk(directory, prefix='', depth=0):
                     continue
                 if requested and requested != identity:
                     continue
+                signature = fingerprint(child.stat(follow_symlinks=False))
+                if snapshot_only:
+                    snapshot[identity] = signature
+                    continue
+                if not requested and before.get(identity) == signature:
+                    continue
+                if not requested and len(entries) >= 16:
+                    entries.append({'id': '0' * 64, 'reason': 'too_many_parts'})
+                    stopped = True
+                    return
                 if not re.fullmatch(r'[\w][\w .()-]{0,119}', child.name, re.ASCII):
                     raise ValueError('unsafe_name')
                 source = os.open(child.name, FILE, dir_fd=directory)
@@ -84,5 +113,7 @@ try:
             os.close(artifacts)
 finally:
     os.close(workspace)
-if not requested:
+if snapshot_only:
+    print(json.dumps(snapshot))
+elif not requested:
     print(json.dumps(entries[:17]))

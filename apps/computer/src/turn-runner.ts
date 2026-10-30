@@ -21,7 +21,8 @@ const PRIVATE_ITEM_TYPES = new Set(['userMessage', 'agentMessage', 'reasoning', 
 type Grant = { token: string; expiresAt: number; model?: string | undefined; context?: unknown };
 
 export interface TurnDriver extends ThreadLoadDriver {
-  artifactList?(): Promise<NonNullable<BridgeReport['artifacts']>>;
+  artifactSnapshot?(): Promise<Record<string, string>>;
+  artifactList?(before: Record<string, string>): Promise<NonNullable<BridgeReport['artifacts']>>;
   readArtifact?(id: string, offset: number): Promise<Buffer>;
   privateSession?(): Promise<PrivateSession>;
   file?(file: WorkspaceFile, bytes: Buffer): Promise<void | 'kept_existing'>;
@@ -91,7 +92,7 @@ function readAcknowledgedGrant(value: Record<string, unknown>,
 
 class TurnRunner {
   readonly gate = new BridgeGate();
-  private readonly artifactStarts = new Map<string, string>();
+  private readonly artifactStarts = new Map<string, Record<string, string>>();
   private readonly finishing = new Set<string>();
   private preparingCount = 0;
   private readonly stoppedTurns = new Set<string>();
@@ -542,8 +543,9 @@ class TurnRunner {
       this.failTurn(input);
       return;
     }
-    if (input.executionMode === 'memory_free' && this.driver.artifactList) {
-      this.artifactStarts.set(input.id, JSON.stringify(await this.driver.artifactList()));
+    if (input.executionMode === 'memory_free' && this.driver.artifactSnapshot) {
+      const snapshot = await this.driver.artifactSnapshot();
+      this.artifactStarts.set(input.id, snapshot);
     }
     await this.runThread(input, threadValue);
   }
@@ -908,12 +910,9 @@ class TurnRunner {
   private async finishArtifacts(input: Turn) {
     try {
       const before = this.artifactStarts.get(input.id);
-      const artifacts: NonNullable<BridgeReport['artifacts']> = [];
+      let artifacts: NonNullable<BridgeReport['artifacts']> = [];
       if (before !== undefined && this.driver.artifactList) {
-        const current = await this.driver.artifactList();
-        for (const file of current) {
-          if ('reason' in file || !before.includes(JSON.stringify(file))) artifacts.push(file);
-        }
+        artifacts = await this.driver.artifactList(before);
       }
       if (!this.isActiveTurn(input.id) || this.state.cancelled.has(input.id)) return;
       this.appendReport(input, 'agent.turn_completed', { artifacts });

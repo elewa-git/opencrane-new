@@ -1,3 +1,4 @@
+import { FileRefusal } from '../files/refusals.ts';
 import { artifactListSchema } from '@opencrane/events';
 import { publishArtifacts, type ArtifactPublication } from '../files/artifacts.ts';
 import {
@@ -194,11 +195,19 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
 async function publishReportArtifacts(store: EventStore, report: Report, context: ReportContext,
   facts: ChatFacts, authorId: unknown, deadline: number) {
   if (!('artifacts' in report) || !report.artifacts?.length) return { facts, deadline };
-  if (report.type !== 'agent.turn_completed' || facts.memoryContext !== undefined) {
+  if (report.type !== 'agent.turn_completed' || facts.memoryContext !== undefined
+    || facts.turnEnded) {
     throw new ReportRejected('Artifact report refused');
   }
   const memberId = z.string().parse(authorId);
-  await publishArtifacts(context, memberId, report.conversationId, report.turnId, report.artifacts);
+  try {
+    await publishArtifacts(context, memberId, report.conversationId, report.turnId, report.artifacts);
+  } catch (error) {
+    if (error instanceof FileRefusal && error.kind === 'id_reused') {
+      throw new ReportRejected('Artifact publication set changed');
+    }
+    throw error;
+  }
   deadline = performance.now() + 10_000;
   facts = await readChatFacts(store, context.silo, report.conversationId,
     report.turnId, context.computerId, report.sequence, deadline);

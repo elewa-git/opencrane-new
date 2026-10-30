@@ -238,6 +238,7 @@ it('replays reports written before a channel restart without executing the turn 
   let starts = 0;
   const artifact = { id: 'a'.repeat(64), name: 'report.txt', size: 5, sha256: 'b'.repeat(64) };
   const driver = {
+    artifactSnapshot() { return Promise.resolve({}); },
     artifactList() { return Promise.resolve(starts ? [artifact] : []); },
     rpc(method: string, _params: Record<string, unknown>) {
       if (method === 'thread/start') {

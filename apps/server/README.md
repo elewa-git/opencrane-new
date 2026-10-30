@@ -177,7 +177,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests, Office uploads, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates and tool choices| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|requests, Office uploads, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks saved membership before personal memory tools and history errors; prepares allowances; checks routine admission; applies Stop, Pause and Retire; verifies termination and admin authority; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
   server -->|reads and saves opt-in, metadata, receipts, memory changes, account choices, pauses, retirements, paused ownership changes, routine sessions, inputs, cancellations and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
@@ -309,6 +309,8 @@ can be used now is checked separately. Missing evidence never means it is safe t
 
 The server checks files the assistant creates through the same type checks, virus
 scanner and storage as uploads. Accepted files appear as assistant file cards.
+The first file report fixes the turn's file list. Retries keep that list and its original
+size allowance, so a repeated completion cannot add more cards.
 People need current conversation access to preview or download them.
 
 ## Processes it handles
