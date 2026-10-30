@@ -6,6 +6,7 @@ import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { chmod, copyFile, mkdir, open, readFile, realpath, rm, stat } from 'node:fs/promises';
+import { isIP } from 'node:net';
 import { setPriority } from 'node:os';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -713,12 +714,30 @@ async function up(fresh: boolean) {
   const allowed = new Set(['127.0.0.1', '::1', ...tail.Self.TailscaleIPs]);
   for (const line of after.trim().split('\n')) {
     const address = line.trim().split(/\s+/u)[3]!;
-    const match = /^(?:\[(.*)\]|([^:]*)):(\d+)$/u.exec(address);
+    // Read the port separately so a malformed address cannot bypass the check.
+    const port = /:(\d+)$/u.exec(address)?.[1] ?? '';
     const ownedProcess = pids.some((pid) => line.includes(`pid=${pid},`));
-    if (ownedProcess && !match) throw new Error(`Cannot verify stack listener address: ${address}`);
+    if (!ownedProcess && !ports.has(port)) {
+      continue;
+    }
+    // Accept the interface suffix inside or after IPv6 brackets, but never both.
+    const match = /^(?:\[([^\]%]+)(?:%([^\]%]+))?\]|([^:[\]%]+))(?:%([^%:[\]]+))?:(\d+)$/u.exec(address);
+    if (!match || (match[2] !== undefined && match[4] !== undefined)) {
+      throw new Error(`Cannot verify stack listener address: ${address}`);
+    }
+    const host = match[1] ?? match[3] ?? '';
+    const zone = match[2] ?? match[4];
+    const expectedFamily = match[1] === undefined ? 4 : 6;
+    const wildcard = host === '*' && match[1] === undefined;
+    if (!wildcard && isIP(host) !== expectedFamily) {
+      throw new Error(`Cannot verify stack listener address: ${address}`);
+    }
+    if (zone !== undefined && (zone !== 'tailscale0' || !tail.Self.TailscaleIPs.includes(host))) {
+      throw new Error(`Stack listener is not on loopback or Tailscale: ${address}`);
+    }
     // The verified IPv4/IPv6 firewall restricts this wildcard listener to loopback, tailnet and k3d.
-    if (!secondary && match?.[3] === settings['MODEL_GATEWAY_PORT']) continue;
-    if ((ownedProcess || ports.has(match?.[3] ?? '')) && !allowed.has(match?.[1] ?? match?.[2] ?? '')) {
+    if (!secondary && port === settings['MODEL_GATEWAY_PORT']) continue;
+    if (!allowed.has(host)) {
       throw new Error(`Stack listener is not on loopback or Tailscale: ${address}`);
     }
   }

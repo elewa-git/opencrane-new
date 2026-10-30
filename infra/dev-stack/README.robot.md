@@ -1041,6 +1041,32 @@ or `[::]` listener is allowed. Existing host SSH is outside this stack.
 See [sign-in evidence](../../docs/process/signin-evidence.md) and [the original evidence receipt](../../docs/process/dev-stack-evidence.md) for results
 and conditions not qualified by these local journeys.
 
+### Startup listener check
+
+`stack.ts` checks the local addresses in `ss -H -ltnp` output for every configured
+stack port and every recorded stack process. The owner's check also includes HTTPS
+port 443, which Tailscale Serve opens in its own process.
+
+Loopback and the addresses in `tailscale status --json` under `Self.TailscaleIPs`
+are allowed. An address may include `%tailscale0` only when the address itself is
+one of those Tailscale IPs. IPv6 brackets may enclose the suffix or come before it:
+`[fd7a:115c:a1e0::1234%tailscale0]:443` and
+`[fd7a:115c:a1e0::1234]%tailscale0:443` are both supported.
+Other interface suffixes, suffixes on loopback, repeated suffixes and malformed
+addresses on checked ports stop startup. Reading the port separately prevents a
+malformed IPv6 address from being skipped. Unrelated host ports are left alone.
+The existing owner model gateway exception still allows its wildcard listener
+behind the firewall described below; malformed addresses and disallowed interface
+suffixes cannot use that exception.
+
+The startup unit tests supply synthetic listener lines and Tailscale addresses.
+They check startup success or refusal without starting services or changing the
+host network:
+
+```sh
+nice -n 10 node --experimental-strip-types --test infra/dev-stack/stack-start.test.ts
+```
+
 ## Phase 2 model gateway
 
 `up.sh` starts the model decision and pinned agentgateway binary, budget projection,

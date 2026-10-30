@@ -17,7 +17,7 @@ assistant computers run.
 flowchart LR
   infra["infra<br/>infrastructure"] --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
-  stack -->|starts services; creates the configured test owner| services["Local services<br/>jobs, content and access"]
+  stack -->|starts services; checks listener addresses| services["Local services<br/>jobs, content and access"]
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
   stack -->|starts apps; keeps keys private; checks journeys, times Memory body reads and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
@@ -41,6 +41,7 @@ its body. A body that does not finish fails after ten seconds, leaving that stat
 available for diagnosis.
 
 - Starts and stops local services and apps with private local credentials.
+- Checks that stack listeners use loopback or this machine's Tailscale addresses.
 - Waits for the website to answer before starting browser checks.
 - Prepares Kubernetes so background workers can start one
   [computer](../../GLOSSARY.md#computer) per assistant, including shared group assistants.
