@@ -1,0 +1,1 @@
+- Accept ordinary Office files with checked chart workbooks, printer settings and web or email links. Keep refusing macros, other embedded files and links that load outside content.

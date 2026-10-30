@@ -46,7 +46,11 @@ Unexpected errors stay distinct and expose only the stable 500 response above.
 Accepted: PDF; DOC/DOCX, XLS/XLSX and PPT/PPTX; UTF-8 TXT/MD/CSV/JSON; PNG, JPEG,
 GIF, WebP, BMP and TIFF. Signatures, binary Office streams and Office ZIP entries
 are inspected; HTTP MIME claims are ignored. Executables, scripts, SVG/HTML,
-archives, macro-bearing/encrypted/embedded Office content are refused. All
+archives and macro-bearing or encrypted Office content are refused. Office files may
+contain checked embedded XLSX chart workbooks, printer settings and HTTP, HTTPS or
+mailto hyperlinks. Other embedded files and external relationships remain refused.
+Embedded workbooks may not embed further workbooks. All parts share the 2,000-part
+and 80 MiB unpacked limits. All
 inspection (including CFB, ZIP and XML) runs in a separate worker with a
 five-second startup deadline, a separate 1.5-second inspection deadline, a 64 MiB old-generation heap limit, a 16 MiB
 young-generation limit and a 4 MiB stack limit. A timeout, worker error or limit

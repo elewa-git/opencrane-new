@@ -12,6 +12,10 @@ This folder handles files people attach to conversations. It checks the file's c
 - Lists and serves files only within the person's current conversation access.
 - Sends clean files to the assistant's computer and waits for its confirmation before that chat's next turn.
 
+Office files can include chart workbooks, printer settings and web or email links.
+Embedded workbooks receive the same checks and share the upload limits. Macros,
+other embedded files and links that load outside content remain refused.
+
 A file waits in server memory while [ClamAV](../../../../GLOSSARY.md#clamav-virus-scanner) scans it. Only a clean file reaches the files bucket; an infected file receives a rejection. File access follows the latest join, so a later participant cannot fetch older attachments. A later invitation alone does not undo a saved removal. Replies tell browsers and caches not to store private results.
 
 File lists use the saved read tables before checking newer events. They return a waiting response while the file table catches up with a saved upload. The website checks again before showing the upload as Ready. Other chat activity does not hold up the list, and old messages do not need to be replayed.

@@ -16,25 +16,118 @@ const allowed = new Map([
 ]);
 const textTypes = new Set(['txt', 'md', 'csv', 'json']);
 
-async function office(bytes: Buffer, extension: string) {
-  const required = new Map([['docx', 'word/document.xml'], ['xlsx', 'xl/workbook.xml'], ['pptx', 'ppt/presentation.xml']]).get(extension);
+type OfficeBudget = { bytes: number; parts: number };
+
+async function office(
+  bytes: Buffer,
+  extension: string,
+  budget: OfficeBudget = { bytes: 0, parts: 0 },
+  depth = 0,
+) {
+  const mainParts = new Map([
+    ['docx', 'word/document.xml'], ['xlsx', 'xl/workbook.xml'], ['pptx', 'ppt/presentation.xml'],
+  ]);
+  const required = mainParts.get(extension);
   if (!required) throw new Error('Unsupported file type');
-  await new Promise<void>((resolve, reject) => fromBuffer(bytes, { lazyEntries: true }, (error, zip) => {
-    if (error || !zip) { reject(new Error('Invalid Office document')); return; }
-    let total = 0, count = 0, content = false, types = false;
-    zip.on('error', reject);
-    zip.on('entry', (entry: Entry) => {
-      total += entry.uncompressedSize; count++;
-      if (total > 80 * 1024 * 1024 || count > 2000 || (entry.generalPurposeBitFlag & 1) ||
-          /^\/|(?:^|\/)\.\.(?:\/|$)|\\|\.(?:exe|dll|com|js|vbs|zip|rar|7z)$|vbaProject|macrosheets\/|dialogSheets\/|embeddings\/|\.bin$/iu.test(entry.fileName)) {
-        zip.close(); reject(new Error('Unsafe Office document')); return;
+  const zip = await new Promise<ZipFile>(openArchive);
+  await new Promise<void>(inspectArchive);
+
+  function openArchive(resolve: (zip: ZipFile) => void, reject: (error: Error) => void) {
+    function opened(error: Error | null, archive?: ZipFile) {
+      if (error || !archive) {
+        reject(new Error('Invalid Office document'));
+        return;
       }
-      content ||= entry.fileName === required; types ||= entry.fileName === '[Content_Types].xml';
-      void inspectOfficeXml(zip, entry, required).then(() => zip.readEntry()).catch(() => { zip.close(); reject(new Error('Unsafe Office document')); });
-    });
-    zip.on('end', () => content && types ? resolve() : reject(new Error('Invalid Office document')));
+      resolve(archive);
+    }
+    const options = { lazyEntries: true };
+    fromBuffer(bytes, options, opened);
+  }
+
+  function inspectArchive(resolve: () => void, reject: (error: Error) => void) {
+    let content = false;
+    let types = false;
+    function refuse() {
+      zip.close();
+      reject(new Error('Unsafe Office document'));
+    }
+    function finished() {
+      if (content && types) {
+        resolve();
+      } else {
+        reject(new Error('Invalid Office document'));
+      }
+    }
+    function next() {
+      zip.readEntry();
+    }
+    async function inspect(entry: Entry) {
+      checkOfficeEntry(entry, budget, depth);
+      content ||= entry.fileName === required;
+      types ||= entry.fileName === '[Content_Types].xml';
+      if (/embeddings\//iu.test(entry.fileName)) {
+        const workbook = await readOfficePart(zip, entry);
+        await office(workbook, 'xlsx', budget, depth + 1);
+      } else {
+        await inspectOfficeXml(zip, entry, required!);
+      }
+    }
+    function received(entry: Entry) {
+      const inspection = inspect(entry);
+      const advancing = inspection.then(next);
+      void advancing.catch(refuse);
+    }
+    zip.on('error', refuse);
+    zip.on('entry', received);
+    zip.on('end', finished);
     zip.readEntry();
-  }));
+  }
+}
+
+function checkOfficeEntry(entry: Entry, budget: OfficeBudget, depth: number) {
+  // Count the embedded ZIP and its unpacked parts against the same upload limits.
+  budget.bytes += entry.uncompressedSize;
+  budget.parts++;
+  const unsafePath = /^\/|(?:^|\/)\.\.(?:\/|$)|\\/u;
+  const executable = /\.(?:exe|dll|com|js|vbs|zip|rar|7z)$/iu;
+  const activeContent = /vbaProject|macrosheets\/|dialogSheets\/|activeX|oleObject/iu;
+  const unsafeName = unsafePath.test(entry.fileName) || executable.test(entry.fileName) ||
+    activeContent.test(entry.fileName);
+  if (budget.bytes > 80 * 1024 * 1024 || budget.parts > 2000 ||
+      (entry.generalPurposeBitFlag & 1) || unsafeName) {
+    throw new Error('Unsafe Office document');
+  }
+  if (/embeddings\//iu.test(entry.fileName) &&
+      (depth !== 0 || !/^(?:ppt|word|xl)\/embeddings\/[^/]+\.xlsx$/iu.test(entry.fileName))) {
+    throw new Error('Unsafe Office document');
+  }
+  if (/\.bin$/iu.test(entry.fileName) &&
+      !/(?:^|\/)printerSettings\/printerSettings[^/]*\.bin$/iu.test(entry.fileName)) {
+    throw new Error('Unsafe Office document');
+  }
+}
+
+function readOfficePart(zip: ZipFile, entry: Entry): Promise<Buffer> {
+  return new Promise(read);
+  function read(resolve: (bytes: Buffer) => void, reject: (error: Error) => void) {
+    const parts: Buffer[] = [];
+    function collect(part: Buffer) {
+      parts.push(part);
+    }
+    function finished() {
+      resolve(Buffer.concat(parts));
+    }
+    function opened(error: Error | null, stream?: NodeJS.ReadableStream) {
+      if (error || !stream) {
+        reject(new Error('Invalid Office document'));
+        return;
+      }
+      stream.on('error', reject);
+      stream.on('data', collect);
+      stream.on('end', finished);
+    }
+    zip.openReadStream(entry, opened);
+  }
 }
 
 async function inspectFile(name: string, bytes: Buffer): Promise<string> {
@@ -69,22 +162,75 @@ function legacyOffice(bytes: Buffer, extension: string, mime: string) {
 }
 
 async function inspectOfficeXml(zip: ZipFile, entry: Entry, main: string) {
-  if (entry.fileName !== '[Content_Types].xml' && entry.fileName !== main && !entry.fileName.endsWith('.rels')) return;
-  if (entry.uncompressedSize > 8 * 1024 * 1024) throw new Error('Unsafe Office document');
-  const text = await new Promise<string>((resolve, reject) => zip.openReadStream(entry, (error, stream) => {
-    if (error || !stream) { reject(new Error('Invalid Office document')); return; }
-    const parts: Buffer[] = [];
-    stream.on('error', reject); stream.on('data', (part: Buffer) => parts.push(part));
-    stream.on('end', () => resolve(Buffer.concat(parts).toString('utf8')));
-  }));
-  if (/<!DOCTYPE|<!ENTITY|macroEnabled|macrosheet|vbaProject|activeX|oleObject|TargetMode\s*=\s*["']External["']/iu.test(text)) throw new Error('Unsafe Office document');
-  if (!text.trimStart().startsWith('<') || XMLValidator.validate(text) !== true) throw new Error('Invalid Office document');
+  const isRelationships = entry.fileName.endsWith('.rels');
+  const isMetadata = entry.fileName === '[Content_Types].xml' || isRelationships;
+  if (!isMetadata && entry.fileName !== main) return;
+  if (entry.uncompressedSize > 8 * 1024 * 1024) {
+    throw new Error('Unsafe Office document');
+  }
+  const bytes = await readOfficePart(zip, entry);
+  const text = bytes.toString('utf8');
+  const forbidden = /macroEnabled|macrosheet|vbaProject|activeX|oleObject/iu;
+  if (/<!DOCTYPE|<!ENTITY/iu.test(text) || forbidden.test(text)) {
+    throw new Error('Unsafe Office document');
+  }
+  if (!text.trimStart().startsWith('<') || XMLValidator.validate(text) !== true) {
+    throw new Error('Invalid Office document');
+  }
+  if (!isRelationships && /TargetMode\s*=\s*["']External["']/iu.test(text)) {
+    throw new Error('Unsafe Office document');
+  }
+  if (!isMetadata) return;
   // Parse the small metadata parts so escaped attributes cannot conceal active content.
-  if (entry.fileName !== main) {
-    const metadata: unknown = new XMLParser({ ignoreAttributes: false, parseAttributeValue: false, htmlEntities: true }).parse(text);
-    if (/macroEnabled|macrosheet|vbaProject|activeX|oleObject|External/iu.test(JSON.stringify(metadata))) throw new Error('Unsafe Office document');
+  const options = { ignoreAttributes: false, parseAttributeValue: false, htmlEntities: true };
+  const parser = new XMLParser(options);
+  const metadata: unknown = parser.parse(text);
+  const decoded = JSON.stringify(metadata);
+  if (forbidden.test(decoded)) {
+    throw new Error('Unsafe Office document');
+  }
+  if (isRelationships) {
+    inspectRelationships(metadata);
+  } else if (/External/iu.test(decoded)) {
+    throw new Error('Unsafe Office document');
   }
 }
+
+const relationshipSchema = z.strictObject({
+  '@_Id': z.string(),
+  '@_Type': z.string(),
+  '@_Target': z.string(),
+  '@_TargetMode': z.enum(['Internal', 'External']).optional(),
+});
+const relationshipsSchema = z.strictObject({
+  '?xml': z.unknown().optional(),
+  Relationships: z.union([
+    z.literal(''),
+    z.strictObject({
+      '@_xmlns': z.string().optional(),
+      Relationship: z.union([relationshipSchema, z.array(relationshipSchema)]).optional(),
+    }),
+  ]),
+});
+
+function inspectRelationships(metadata: unknown) {
+  const result = relationshipsSchema.safeParse(metadata);
+  if (!result.success) throw new Error('Unsafe Office document');
+  const root = result.data.Relationships;
+  if (root === '' || !root.Relationship) return;
+  const entries = Array.isArray(root.Relationship) ? root.Relationship : [root.Relationship];
+  for (const entry of entries) {
+    if (entry['@_TargetMode'] !== 'External') continue;
+    const type = entry['@_Type'];
+    const transitional = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/';
+    const strict = 'http://purl.oclc.org/ooxml/officeDocument/relationships/';
+    if ((type !== `${transitional}hyperlink` && type !== `${strict}hyperlink`) ||
+        !/^(?:https?:\/\/|mailto:)/iu.test(entry['@_Target'])) {
+      throw new Error('Unsafe Office document');
+    }
+  }
+}
+
 function inspectWorkbook(bytes: Buffer) {
   for (let offset = 0; offset + 4 <= bytes.length;) {
     const record = bytes.readUInt16LE(offset), length = bytes.readUInt16LE(offset+2);
