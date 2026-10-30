@@ -5601,7 +5601,7 @@ Neither failure appends an event or returns a saved receipt.
 lost replies past deduplication expiry and NATS restart, refusal cases, queued changes,
 publish retries, slow history and both permission and content replay. Run it with
 `nice -n 10` and `PG_TEST_URL` set to the disposable test database.
-There is no route, admin intervention, reassignment or scheduler. The separate internal
+Retirement has no route or admin intervention. The separate internal
 `applyRoutineStop` operation accepts this retirement as budget Stop evidence.
 Fresh-install execution qualification: NOT RUN.
 
@@ -6629,7 +6629,7 @@ historical admin authority. Demotion after the pause cannot undo that prohibitio
 The focused command, root evidence, routine-session and routine-sender tests cover
 refusals, races, restart, uncertain holds, late settlement, delayed cleanup and private
 thread interruption. Replay sends nothing. Execution, routes, admin retirement,
-reassignment, resume and company calls remain disabled or unbuilt; live qualification is NOT RUN.
+occupied-run reassignment, resume and company calls remain disabled or unbuilt; live qualification is NOT RUN.
 
 ## Governed personal Forget (P4-15 PR 4h)
 
@@ -6775,6 +6775,28 @@ Fastify is pinned to 5.12.6 (MIT). The shared lockfile also updates fast-uri
 to 3.1.9 and 4.2.3 (BSD-3-Clause). Registry metadata and installed licence
 files were checked. The [audit notes](../../docs/process/npm-audit.md#29-october-2026-update)
 record the affected paths and the decoder override.
+
+## Paused routine reassignment
+
+`reassignRoutine(store, binding, memberId, input)` is internal and has no route.
+Input: routineId, changeId (`<routineId>:<unique-id>`), ownerId, expectedPosition,
+expectedDefinitionRevision, expectedScheduleRevision and expectedControlRevision.
+Current admin metadata access and applied receipts are checked before any receipt
+or conflict is returned. The recipient needs current membership/admission, an active
+team assistant with the same payer, group memberships and applied IAM receipts.
+History loads before the original two-second write check over small access streams.
+One conditional `routine.reassigned` changes owner/admission and advances definition
+and control revisions only. It remains paused. Occupied runs refuse even after Stop.
+All other settings and encrypted instructions stay unchanged. Existing IAM and
+projection handlers apply the saved event; original completed runs stay private.
+Identical retries recover the receipt after current authority checks, including after
+the new owner retires the routine. Paused status and absence of an occupied run are
+required for a new reassignment, after checking for a saved matching receipt.
+The admin check precedes routine-access preparation, so a saved demotion still returns
+`ReassignmentRefused` when ownership history fails. Permission is not retried on failure.
+Changed retries conflict. There is no broker, wake, credential release, budget action
+or execution switch.
+Checks and limits: [build record](../../docs/process/p4-24-pr12h/README.robot.md).
 
 ## Initial personal load gate repair
 
