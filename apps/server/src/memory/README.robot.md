@@ -11,6 +11,10 @@ The collector contract defines the fixed files, current measurements and require
 qualifications. Each command captures saved membership first and keeps one command-local
 permission decision with its original access positions. MemberAccessRefused takes precedence
 over dependency failures. The ten-second preparation and two-second append limits remain.
+Confirmation reads watched positions in parallel. It evaluates membership positions before
+other results, retaining removal priority, every position comparison and the original
+deadline. A subject added during confirmation is also checked. A successful confirmation
+waits for every read; any changed or unavailable position still refuses it.
 
 Release reads all new rows returned by the relevant access, scope and turn streams,
 including changes saved after the global position read. Relevant access or turn changes

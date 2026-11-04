@@ -25,7 +25,7 @@ function deferred<Value>() {
 }
 type TestSession = PrivateSession & { threadId: string; rpc: ReturnType<typeof vi.fn<(method: string, params: Record<string, unknown>) => Promise<unknown>>>;
   close: ReturnType<typeof vi.fn>; end(this: void): void };
-async function fixture(options: { path?: string; ephemeral?: boolean; context?: unknown;
+async function fixture(options: { path?: string; ephemeral?: boolean; context?: unknown; initialInput?: string;
   acknowledge?: boolean; noPrivate?: boolean; delayedStart?: boolean; delayedGrant?: boolean; threadId?: string } = {}) {
   const directory = options.path ?? mkdtempSync(`${tmpdir()}/private-turn-`);
   const journal = `${directory}/reports`;
@@ -85,7 +85,7 @@ async function fixture(options: { path?: string; ephemeral?: boolean; context?: 
       if (options.acknowledge !== false) {
         const acknowledgement = { type: 'ack', sequence: report.sequence,
           token: 'turn-token', expiresAt: Date.now() + 120_000,
-          ...(report.type === 'agent.turn_started' ? { context: options.context } : {}) };
+          ...(report.type === 'agent.turn_started' ? { context: options.context, initialInput: options.initialInput } : {}) };
         socket.send(JSON.stringify(acknowledgement));
       }
     }
@@ -571,3 +571,47 @@ async function usesSharedWording() {
   }
 }
 it('uses shared wording for shared frames and preserves private input byte for byte', usesSharedWording);
+
+async function usesInitialInputOnce() {
+  const initialInput = PRIVATE_TURN_NOTE + 'Initial personal memory canary\nNew message:\nhello';
+  const test = await fixture({ initialInput });
+  try {
+    test.send();
+    await test.running();
+    function isStart(call: [string, Record<string, unknown>]) {
+      return call[0] === 'turn/start';
+    }
+    const starts = test.sessions[0]!.rpc.mock.calls.filter(isStart);
+    expect(starts).toHaveLength(1);
+    expect(starts[0]![1]['input']).toEqual([
+      { type: 'text', text: initialInput, text_elements: [] },
+    ]);
+    expect(readFileSync(test.journal, 'utf8')).not.toContain('Initial personal memory canary');
+    await test.reconnect(0);
+    expect(test.sessions).toHaveLength(1);
+    expect(test.sessions[0]!.rpc.mock.calls.filter(isStart)).toHaveLength(1);
+  } finally {
+    await test.close();
+  }
+}
+it('uses the complete initial input once in the ephemeral thread without journalling it',
+  usesInitialInputOnce);
+
+async function refusesInitialInput(kind: string) {
+  const test = await fixture({ initialInput: 'Private canary' });
+  try {
+    const mode = kind === 'shared' ? 'restricted' : 'memory_free';
+    const sharing = kind === 'shared' ? 'shared_only' : undefined;
+    test.send('alice', mode, sharing);
+    function ended() {
+      return test.terminals('alice').length === 1;
+    }
+    await until(ended);
+    expect(test.terminals('alice')[0]!.type).toBe('agent.turn_failed');
+    expect(JSON.stringify(test.persistentRpc.mock.calls)).not.toContain('Private canary');
+    expect(readFileSync(test.journal, 'utf8')).not.toContain('Private canary');
+  } finally {
+    await test.close();
+  }
+}
+it.each(['memory_free', 'shared'])('refuses initial personal input on %s work', refusesInitialInput);

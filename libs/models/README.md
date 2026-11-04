@@ -793,3 +793,7 @@ those checks from rereading old work on every request.
 Initial personal loading can reuse one command's permission decisions while checking
 that its original access positions have not changed. The server reads saved membership
 first. Other calls keep their existing permission checks.
+
+Memory access checks reuse saved history while checking MCP and memory permissions
+at the same event position. They still check current permissions and later events.
+This leaves more of the two-second limit for checks that need fresh reads.

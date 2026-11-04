@@ -4,7 +4,7 @@ import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { grantStream, type Binding } from '@opencrane/authz';
 import { memoryScopeId } from '@opencrane/projections';
 import { assistantCreatedDataSchema, type MemoryIdentity } from '@opencrane/events';
-import { type AuthorityPermissions, type authorityFence, decisionAuthorityFence,
+import { type AuthorityPermissions, type authorityFence, authorityHistoryReader, decisionAuthorityFence,
   currentAuthority, AuthorityRefused } from './authority.ts';
 import { confirmDecisionAccess, decisionActivity } from './decision-activity.ts';
 import { mcpPolicy, parseMcpCall, parseMemoryRequest, toolDecision } from './mcp.ts';
@@ -102,6 +102,8 @@ export async function memoryRights(store: EventStore, binding: Binding,
     const snapshot = { include, head: authority.head,
       deadline: authority.deadline };
     const fresh = Object.assign(confirmAuthority, snapshot);
+    // Reuse saved history at this position; still check live permissions and later events.
+    const readHistory = authorityHistoryReader(store, fresh);
     fresh.include('mcp-memory');
     const policy = await memoryToolPolicy(store, binding.silo, parsed, checkDeadline);
     if (policy.outcome === 'ask') {
@@ -117,12 +119,12 @@ export async function memoryRights(store: EventStore, binding: Binding,
       canRemember = policy.policy.tools.some(allowsRemember);
     }
     const selected = await selectedMemoryScope(store, binding, claims, parsed.input?.scopeId,
-      fresh, applied);
+      fresh, readHistory, applied);
     const scope = selected.scope;
-    await requireRecordedGrants(store, binding.silo, claims, 'mcp_server', 'memory', fresh);
+    await requireRecordedGrants(readHistory, binding.silo, claims, 'mcp_server', 'memory', fresh);
     let contextDigest = await currentAuthority(store, binding, claims.requester,
       claims.assistant, claims.conversation, 'mcp_server', 'memory', fresh,
-      activity.conversation, undefined, applied, undefined, permissions);
+      activity.conversation, undefined, applied, readHistory, permissions);
     // Keep discovery free of fact access. Each recall checks its selected scope separately.
     if (parsed.input) {
       let resourceTypes = ['memory_read'];
@@ -135,11 +137,11 @@ export async function memoryRights(store: EventStore, binding: Binding,
         if (parsed.input.operation === 'remember') resourceTypes = ['memory_write'];
       }
       for (const resourceType of resourceTypes) {
-        await requireRecordedGrants(store, binding.silo, claims, resourceType, scope.scopeId,
+        await requireRecordedGrants(readHistory, binding.silo, claims, resourceType, scope.scopeId,
           fresh, selected.requesterGroup);
         contextDigest = await currentAuthority(store, binding, claims.requester,
           claims.assistant, claims.conversation, resourceType, scope.scopeId, fresh,
-          activity.conversation, undefined, applied, undefined, permissions);
+          activity.conversation, undefined, applied, readHistory, permissions);
       }
     }
     await fresh();
@@ -150,11 +152,13 @@ export async function memoryRights(store: EventStore, binding: Binding,
 async function selectedMemoryScope(store: EventStore, binding: Binding, claims: ThreadIdentity,
   selectedScopeId: string | undefined,
   fresh: Awaited<ReturnType<typeof authorityFence>>,
+  readHistory: ReturnType<typeof authorityHistoryReader>,
   applied?: (eventId: string) => Promise<boolean>) {
   const subject = `assistant-${claims.assistant}`;
   fresh.include(subject);
   let assistant: z.infer<typeof assistantCreatedDataSchema> | undefined;
-  for await (const row of store.readStream(subject, 1, fresh.deadline)) {
+  const rows = await readHistory(subject);
+  for (const row of rows) {
     if (row.sequence > fresh.head) {
       break;
     }
@@ -192,7 +196,7 @@ async function selectedMemoryScope(store: EventStore, binding: Binding, claims: 
   throw new Error('Memory scope refused');
 }
 
-async function requireRecordedGrants(store: EventStore, silo: string,
+async function requireRecordedGrants(readHistory: ReturnType<typeof authorityHistoryReader>, silo: string,
   claims: ThreadIdentity, resourceType: string, resourceId: string,
   fresh: Awaited<ReturnType<typeof authorityFence>>, requesterGroup?: string) {
   const subject = grantStream(resourceType, resourceId);
@@ -201,7 +205,8 @@ async function requireRecordedGrants(store: EventStore, silo: string,
   let assistantAllowed = false;
   let groupAllowed = false;
   // Require saved grants too. Leftover permissions cannot select memory on their own.
-  for await (const row of store.readStream(subject, 1, fresh.deadline)) {
+  const rows = await readHistory(subject);
+  for (const row of rows) {
     if (row.sequence > fresh.head) {
       break;
     }
@@ -341,14 +346,17 @@ export async function loadedMemoryRights(store: EventStore, binding: Binding,
   claims: ThreadIdentity, scopeId: string, fresh: Awaited<ReturnType<typeof authorityFence>>,
   conversation: StoredEvent[], applied: (eventId: string) => Promise<boolean>,
   permissions?: AuthorityPermissions) {
+  // Share immutable history across the two resources within this access check only.
+  const readHistory = authorityHistoryReader(store, fresh);
   await currentAuthority(store, binding, claims.requester, claims.assistant,
     claims.conversation, 'mcp_server', 'memory', fresh, conversation, undefined,
-    applied, undefined, permissions);
-  const selected = await selectedMemoryScope(store, binding, claims, scopeId, fresh, applied);
-  await requireRecordedGrants(store, binding.silo, claims, 'mcp_server', 'memory', fresh);
+    applied, readHistory, permissions);
+  const selected = await selectedMemoryScope(store, binding, claims, scopeId, fresh,
+    readHistory, applied);
+  await requireRecordedGrants(readHistory, binding.silo, claims, 'mcp_server', 'memory', fresh);
   await currentAuthority(store, binding, claims.requester, claims.assistant,
     claims.conversation, 'memory_read', scopeId, fresh, conversation, undefined,
-    applied, undefined, permissions);
-  await requireRecordedGrants(store, binding.silo, claims, 'memory_read', scopeId,
+    applied, readHistory, permissions);
+  await requireRecordedGrants(readHistory, binding.silo, claims, 'memory_read', scopeId,
     fresh, selected.requesterGroup);
 }
