@@ -69,6 +69,10 @@
   overflow-wrap: anywhere;
 }
 
+.tool-details[hidden] {
+  display: none;
+}
+
 .tool-kind {
   margin: 0 0 12px;
   color: var(--oc-ink-muted);

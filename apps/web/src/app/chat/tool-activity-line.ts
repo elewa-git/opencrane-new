@@ -51,7 +51,9 @@ export class ToolActivityLine {
   }
 
   protected openDetails(event: MouseEvent): void {
-    if (!(event.currentTarget instanceof HTMLElement)) return;
+    if (!(event.currentTarget instanceof HTMLElement)) {
+      return;
+    }
     if (this.record().nativeRequestId) {
       this.detailsOpened.emit(event.currentTarget);
       return;

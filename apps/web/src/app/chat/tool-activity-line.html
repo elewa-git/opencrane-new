@@ -7,14 +7,17 @@
   <span class="tool-label">{{ lineLabel() }}</span>
   <oc-icon class="chevron" [class.expanded]="expanded()" name="chevron" />
 </button>
-@if (expanded() && !record().nativeRequestId) {
+@if (!record().nativeRequestId) {
   <section class="tool-details" [id]="'tool-details-' + record().id"
-    [attr.aria-labelledby]="'tool-' + record().id">
+    [attr.aria-labelledby]="'tool-' + record().id" [hidden]="!expanded()">
     <p class="tool-kind">{{ toolKind(record()) }}</p>
     <dl class="tool-detail-ledger">
-      <dt>{{ toolResultLabel(record()) }}</dt><dd>{{ toolResult(record()) }}</dd>
-      <dt>Recorded</dt><dd>{{ toolTime(record().time) }}</dd>
-      <dt>Reference</dt><dd class="tool-reference">{{ record().id }}</dd>
+      <dt>{{ toolResultLabel(record()) }}</dt>
+      <dd>{{ toolResult(record()) }}</dd>
+      <dt>Recorded</dt>
+      <dd>{{ toolTime(record().time) }}</dd>
+      <dt>Reference</dt>
+      <dd class="tool-reference">{{ record().id }}</dd>
     </dl>
     <p>Where it ran, the account used and attempt history: Not available yet.</p>
     <aside class="sanitised-note">

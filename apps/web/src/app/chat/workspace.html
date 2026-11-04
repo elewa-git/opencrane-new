@@ -272,29 +272,27 @@
       <oc-hinge-drawer [open]="true" [title]="details.record.label"
         [description]="toolKind(details.record)" backLabel="Back to conversation"
         [returnFocusTo]="details.opener" (closed)="closeToolDetails()">
-        @if (details.record.nativeRequestId) {
-          @if (nativeDetailState() === 'loading') {
-            <p class="native-detail-status" role="status">Checking saved details…</p>
-          }
-          @if (nativeDetailState() === 'failed') {
-            <p class="native-detail-status" role="status">
-              Saved details could not be refreshed. The recorded summary is still shown.
-            </p>
-          }
-          <p class="native-consent-result" role="status">
-            Unsupported native consent. No gateway permission was granted.
-          </p>
-          <dl class="tool-detail-ledger">
-            <dt>Request kind</dt><dd>Native consent request</dd>
-            <dt>Request reference</dt>
-            <dd class="tool-reference">{{ details.record.nativeRequestId }}</dd>
-            <dt>Turn reference</dt><dd class="tool-reference">{{ details.record.turnId }}</dd>
-            @if (details.record.serverName) {
-              <dt>Server</dt><dd>{{ details.record.serverName }}</dd>
-            }
-            <dt>Recorded</dt><dd>{{ toolTime(details.record) }}</dd>
-          </dl>
+        @if (nativeDetailState() === 'loading') {
+          <p class="native-detail-status" role="status">Checking saved details…</p>
         }
+        @if (nativeDetailState() === 'failed') {
+          <p class="native-detail-status" role="status">
+            Saved details could not be refreshed. The recorded summary is still shown.
+          </p>
+        }
+        <p class="native-consent-result" role="status">
+          Unsupported native consent. No gateway permission was granted.
+        </p>
+        <dl class="tool-detail-ledger">
+          <dt>Request kind</dt><dd>Native consent request</dd>
+          <dt>Request reference</dt>
+          <dd class="tool-reference">{{ details.record.nativeRequestId }}</dd>
+          <dt>Turn reference</dt><dd class="tool-reference">{{ details.record.turnId }}</dd>
+          @if (details.record.serverName) {
+            <dt>Server</dt><dd>{{ details.record.serverName }}</dd>
+          }
+          <dt>Recorded</dt><dd>{{ toolTime(details.record) }}</dd>
+        </dl>
       </oc-hinge-drawer>
     }
   }

@@ -227,9 +227,11 @@ export class Workspace implements OnInit {
     return hasHighlightedTool(tools, this.highlightedToolId());
   }
   protected openToolDetails(record: ToolActivityRecord, opener: HTMLElement): void {
+    if (!record.nativeRequestId) {
+      return;
+    }
     const generation = ++this.nativeDetailGeneration;
     this.toolDetails.set({ record, opener });
-    if (!record.nativeRequestId) return;
     this.nativeDetailState.set('loading');
     void this.refreshNativeDetails(record.id, generation);
   }
