@@ -58,6 +58,8 @@ private reply buffers are cleared before waiting for interruption to finish.
   Empty lists, duplicates and other tools refuse preparation.
   It starts the native thread first, so the server can record its real ID and approve
   the tools for that thread. It then loads the approved list on the same thread.
+  The session permits empty reload and unload checks without closing that process.
+  It refuses a second start before sending it to the native process.
   It checks the same caller, thread, requester, assistant and grant after waiting.
   Copied tool lists have no approval. The private configuration selects the protocol
   that the proxy accepts. Cancellation removes the list. Discovery reads no facts and gives no permission to call tools.
