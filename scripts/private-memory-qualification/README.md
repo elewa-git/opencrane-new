@@ -5,7 +5,7 @@
 This developer tool collects private memory test results from a running deployment.
 It reads the deployment identity itself and starts each check inside that image.
 It also checks older evidence files, which cannot qualify a deployment.
-Admission remains off. The runner checks host settings, saved memory invalidation
+Admission remains off. The runner checks host settings, saved memory invalidation,
 separation between sessions and saved Stop delivery after reconnect. It also checks
 two native processes and their cleanup when Codex is present.
 It reports unfinished journeys without qualifying them.
