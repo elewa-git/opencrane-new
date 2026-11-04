@@ -232,16 +232,19 @@ async function noSubscriberReplay() {
 }
 it('does not deliver an earlier report to a new subscriber', noSubscriberReplay);
 
-async function releaseRace(kind: string) {
+async function releaseRace(kind: string, readNumber = 1, repeat = false) {
   const client = await subscribe();
   const buffers = vi.spyOn(Buffer, 'from');
   const scope = `scope-${scopeId}`;
   const scopePosition = await setup.nats.store.head(scope);
   const read = setup.nats.store.readStream.bind(setup.nats.store);
   let changed = false;
+  let incrementalReads = 0;
   async function* changeAfterRead(...args: Parameters<typeof read>) {
     yield* read(...args);
-    if (changed || args[0] !== scope || (args[1] ?? 0) <= scopePosition) return;
+    if (args[0] !== scope || (args[1] ?? 0) <= scopePosition) return;
+    incrementalReads++;
+    if (incrementalReads < readNumber || (changed && !repeat)) return;
     changed = true;
     if (kind === 'expiry') {
       vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 120_000);
@@ -271,6 +274,7 @@ async function releaseRace(kind: string) {
   vi.spyOn(setup.nats.store, 'readStream').mockImplementation(changeAfterRead);
   await send();
   expect(changed).toBe(true);
+  expect(incrementalReads).toBeGreaterThanOrEqual(readNumber);
   let cleared = false;
   for (const [index, call] of buffers.mock.calls.entries()) {
     if (call[0] !== canary) continue;
@@ -282,8 +286,21 @@ async function releaseRace(kind: string) {
   expect(cleared).toBe(true);
   expect(privateFrames(client.frames)).toHaveLength(kind === 'unrelated' ? 1 : 0);
 }
+async function firstReadRace(kind: string) {
+  await releaseRace(kind);
+}
 it.each(['correct', 'forget', 'expiry', 'removal', 'socket', 'slow', 'unrelated'])(
-  'rechecks and clears bytes when %s happens during the final reference read', releaseRace);
+  'rechecks and clears bytes when %s happens during the first incremental scope read', firstReadRace);
+async function secondReadRace(kind: string) {
+  await releaseRace(kind, 2);
+}
+it.each(['removal', 'correct', 'forget'])(
+  'delivers no frame when %s is saved during the second incremental scope read', secondReadRace);
+async function continuousUnrelatedMessages() {
+  await releaseRace('unrelated', 1, true);
+}
+it('delivers one frame with an unrelated message on every incremental scope read',
+  continuousUnrelatedMessages);
 async function refusesUntrustedReport(extra: object) {
   const client = await subscribe();
   const closed = once(peer, 'close');
