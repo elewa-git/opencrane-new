@@ -979,7 +979,9 @@ store's final publication guard. Current owner access and leadership gate receip
 For a missing local time, `next` is null because the slot schema requires a real
 instant. The command derives the first candidate after `effectiveAt` and the saved
 cursor. It records the skip at the calendar's `checkAt`, retains the last real cursor
-and saves the following slot. It never invents an instant for the missing time.
+and saves the following slot by advancing from the skipped local date. A valid slot
+at the same UTC instant as the gap boundary remains next. It never invents an instant
+for the missing time.
 For overlap, it checks the saved next slot, advances the cursor, and preserves the
 occupied run, activation and Stop state. Both kinds refuse early or over-sixty-second
 late writes and a clock moving backwards during append. Repeated hours use the first
@@ -987,6 +989,8 @@ offset. Lost replies and retries recover by the original expected position and f
 saved event, beyond broker deduplication retention. Changed inputs refuse.
 
 `test/routine-skip.test.ts` uses disposable NATS, PostgreSQL and OpenFGA with controlled
-time. It covers gaps, occupied runs, races, recovery, access loss and cancellation
+time. Daily gap tests cover Apia's missing 30 December 2011 and Brussels's missing
+02:30 on 28 March 2027. They check the saved next slot, replay and retry without work.
+It also covers occupied runs, races, recovery, access loss and cancellation
 inside and after append's access check. Ticks, scans, downtime ranges, dispatch and
 fresh-install live qualification remain later work. Company credentials are unchanged.

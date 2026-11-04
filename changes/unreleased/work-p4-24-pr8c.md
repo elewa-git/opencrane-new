@@ -1,1 +1,1 @@
-An internal routine command can record a checked daylight-saving gap or overlap skip without starting work or replacing an occupied run. Scheduling and execution remain unavailable.
+An internal routine command can record a checked daylight-saving gap or overlap skip without starting work or replacing an occupied run. It keeps the next valid local slot even when a whole-day clock jump puts it at the same instant as the skipped slot's check. Scheduling and execution remain unavailable.

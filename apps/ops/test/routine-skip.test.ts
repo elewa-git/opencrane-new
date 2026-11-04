@@ -22,9 +22,15 @@ let owned: boolean;
 let stop: AbortController;
 const input = { routineId: 'orders', expectedPosition: 2, localDate: '2027-03-28',
   definitionRevision: 1, scheduleRevision: 1, controlRevision: 1 };
-function clock() { return now; }
-function checkCurrent() { return Promise.resolve(owned); }
-function worker() { return { silo: 'test', binding, now: clock, checkCurrent, signal: stop.signal }; }
+function clock() {
+  return now;
+}
+function checkCurrent() {
+  return Promise.resolve(owned);
+}
+function worker() {
+  return { silo: 'test', binding, now: clock, checkCurrent, signal: stop.signal };
+}
 function creation() {
   const example = foldRoutine(undefined, routine('routine.created')).definition!;
   const schedule = { frequency: 'weekly' as const, weekday: 7,
@@ -45,10 +51,16 @@ async function setup() {
   await nats.seed(events);
   const auth = memberAuthorisation(binding, nats.store);
   const database = { query: forbiddenEffect };
-  for (const saved of events) await auth.handler.handle(saved, database);
+  for (const saved of events) {
+    await auth.handler.handle(saved, database);
+  }
 }
-function ignoreError() {}
-function forbiddenEffect(): never { throw new Error('Forbidden effect'); }
+function ignoreError() {
+  // Expect the database connection to report an error when the test ends its session.
+}
+function forbiddenEffect(): never {
+  throw new Error('Forbidden effect');
+}
 async function cleanup() {
   vi.restoreAllMocks();
   await fga?.close();
@@ -56,7 +68,9 @@ async function cleanup() {
 }
 beforeEach(setup);
 afterEach(cleanup);
-function skip(request = input) { return skipRoutineOccurrence(nats.store, worker(), request); }
+function skip(request = input) {
+  return skipRoutineOccurrence(nats.store, worker(), request);
+}
 async function state() {
   let saved: RoutineState | undefined;
   for await (const row of nats.store.readStream('routine-orders')) {
@@ -145,7 +159,8 @@ async function occupied(kind = 'starting') {
     const { definition: _definition, source: _source, slot: _slot,
       firedAt: _firedAt, startBy: _startBy, ...binding } = activation;
     const admitted = { ...updated, id: 'activation', commandId: 'activation',
-      type: 'routine.run_activation_admitted', principal: { kind: 'system' as const, id: 'opencrane-server' },
+      type: 'routine.run_activation_admitted',
+      principal: { kind: 'system' as const, id: 'opencrane-server' },
       data: binding };
     await nats.seed([admitted]);
     if (kind === 'stopping') {
@@ -185,7 +200,9 @@ async function overlap(kind: string) {
 it.each(['starting', 'running', 'Ask', 'stopping'])('preserves an occupied %s run', overlap);
 async function timing(offset: number, overlapSlot: boolean) {
   let request = input;
-  if (overlapSlot) request = await occupied();
+  if (overlapSlot) {
+    request = await occupied();
+  }
   now += offset;
   const before = await nats.store.head();
   await expect(skip(request)).rejects.toThrow(/^Routine skip refused$/u);
@@ -198,15 +215,23 @@ async function invalid(kind: string) {
   const data = { ...created.data };
   let changed: EventEnvelope = { ...created, id: 'changed', commandId: 'changed',
     type: 'routine.updated', data };
-  if (kind === 'paused') changed.data = { ...data, status: 'paused' };
-  else if (kind === 'retired') changed = { ...routine('routine.retired'), id: 'changed' };
-  else if (kind === 'legacy') changed.data = { routineId: 'orders', schedule: '* * * * *',
-    updatedBy: 'alice' };
-  else if (kind === 'cursor') changed.data = { ...data, cursor: { localDate: input.localDate,
-    localTime: '02:30', zone: 'Europe/Brussels', at: '2027-03-28T01:00:00Z', offsetMinutes: 120 } };
-  else if (kind === 'real') changed.data = { ...data,
-    definition: { ...data.definition, schedule: { ...data.definition.schedule, localTime: '03:00' } } };
-  else changed.data = { ...data, [kind]: 2 };
+  if (kind === 'paused') {
+    changed.data = { ...data, status: 'paused' };
+  } else if (kind === 'retired') {
+    changed = { ...routine('routine.retired'), id: 'changed' };
+  } else if (kind === 'legacy') {
+    changed.data = { routineId: 'orders', schedule: '* * * * *', updatedBy: 'alice' };
+  } else if (kind === 'cursor') {
+    const cursor = { localDate: input.localDate, localTime: '02:30', zone: 'Europe/Brussels',
+      at: '2027-03-28T01:00:00Z', offsetMinutes: 120 };
+    changed.data = { ...data, cursor };
+  } else if (kind === 'real') {
+    const schedule = { ...data.definition.schedule, localTime: '03:00' };
+    const definition = { ...data.definition, schedule };
+    changed.data = { ...data, definition };
+  } else {
+    changed.data = { ...data, [kind]: 2 };
+  }
   await nats.seed([changed]);
   const request = { ...input, expectedPosition: await nats.store.head('routine-orders') };
   await expect(skip(request)).rejects.toThrow();
@@ -255,9 +280,11 @@ async function recovery() {
 it('recovers the same receipt after lost reply, restart and dedupe expiry', recovery);
 async function access(kind: string, phase: string) {
   async function revoke() {
-    if (kind === 'worker') owned = false;
-    else if (kind === 'signal') stop.abort();
-    else if (kind === 'member') {
+    if (kind === 'worker') {
+      owned = false;
+    } else if (kind === 'signal') {
+      stop.abort();
+    } else if (kind === 'member') {
       await nats.seed([event('removed', 'member-alice', 'member.removed')]);
     } else {
       const client = new TupleClient(binding);
@@ -266,7 +293,9 @@ async function access(kind: string, phase: string) {
       await client.write([], [receipt]);
     }
   }
-  if (phase === 'retry') await skip();
+  if (phase === 'retry') {
+    await skip();
+  }
   const before = await nats.store.head();
   if (phase === 'after') {
     const append = nats.store.append.bind(nats.store);
@@ -283,7 +312,9 @@ async function access(kind: string, phase: string) {
   await expect(skip()).rejects.toThrow(/^Routine skip refused$/u);
   const saved = await state();
   expect(saved.definition?.next !== null).toBe(phase !== 'before');
-  if (phase === 'after') expect(await nats.store.head('routine-orders')).toBe(before + 1);
+  if (phase === 'after') {
+    expect(await nats.store.head('routine-orders')).toBe(before + 1);
+  }
 }
 it.each(['before', 'retry', 'after'])('refuses owner removal %s', access.bind(null, 'member'));
 it.each(['before', 'retry', 'after'])('refuses lost leadership %s', access.bind(null, 'worker'));
@@ -317,21 +348,29 @@ async function cancelled(afterAccess: boolean) {
           WHERE locktype = 'advisory' AND granted AND
           classid = (hashtextextended('opencrane:projection:routine-leader:skip-command-test', 0) >> 32)::int
           AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`);
-        function aborted() { expect(lease.signal.aborted).toBe(true); }
+        function aborted() {
+          expect(lease.signal.aborted).toBe(true);
+        }
         await vi.waitFor(aborted);
-      } finally { await admin.close(); }
+      } finally {
+        await admin.close();
+      }
     }
     async function observedAppend(change: AppendCommand) {
       appending = true;
       async function checkAccess() {
         await change.checkAccess!();
-        if (afterAccess) await loseSession();
+        if (afterAccess) {
+          await loseSession();
+        }
       }
       const checked = { ...change, checkAccess };
       return append(checked);
     }
     async function readHead(...args: Parameters<typeof head>) {
-      if (!afterAccess && appending && args[0] === 'member-alice') await loseSession();
+      if (!afterAccess && appending && args[0] === 'member-alice') {
+        await loseSession();
+      }
       return head(...args);
     }
     const appendSpy = vi.spyOn(nats.store, 'append');

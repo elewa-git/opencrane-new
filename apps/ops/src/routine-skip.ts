@@ -145,7 +145,8 @@ function skipData(state: RoutineState | undefined, input: Input) {
     throw new SkipRefused();
   }
   const reason = skipReason(state, occurrence, firstInput);
-  const nextInput = { ...firstInput, now: occurrence.checkAt, afterLocalDate: input.localDate };
+  // Advance by local date: a whole-day gap can end exactly when the next valid slot starts.
+  const nextInput = { ...firstInput, afterLocalDate: input.localDate };
   const following = previewRoutineOccurrences(nextInput)[0]!;
   const data = { version: 1 as const, routineId: input.routineId,
     definitionRevision: input.definitionRevision, scheduleRevision: input.scheduleRevision,
