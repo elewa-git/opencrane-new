@@ -25,10 +25,13 @@ let link: Awaited<ReturnType<typeof connectBridge>>;
 let peer: WebSocket;
 let address: string;
 const clients: WebSocket[] = [];
-const config = testAuthConfig({ expectedOrgId: 'org-test' });
+const authOptions = { expectedOrgId: 'org-test' };
+const config = testAuthConfig(authOptions);
 const scopeId = memoryScopeId('test', 'person', 'alice');
 const canary = 'Private completed reply — £';
-function memberId(_silo: string, _issuer: string, sub: string) { return Promise.resolve(sub); }
+function memberId(_silo: string, _issuer: string, sub: string) {
+  return Promise.resolve(sub);
+}
 async function initialise() {
   setup = await fixture(2000, 20000, false, 'gpt-6-luna', true);
   await setup.runner.initialise(conversations);
@@ -36,24 +39,28 @@ async function initialise() {
   feed = await connectMemberFeed(setup.databaseUrl!);
   const options = { silo: 'test', store: setup.nats.store, db: setup.db, keys: setup.keys,
     binding: setup.binding, feed: { memberId } };
-  app = buildServer(config, { chat: options });
-  wss = attachWebSocketServer(app.server, app.log, config,
-    { feed, binding: setup.binding, chat: options });
-  address = await app.listen({ host: '127.0.0.1', port: 0 });
-  bridge = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+  const serverOptions = { chat: options };
+  app = buildServer(config, serverOptions);
+  const websocketOptions = { feed, binding: setup.binding, chat: options };
+  wss = attachWebSocketServer(app.server, app.log, config, websocketOptions);
+  const listenOptions = { host: '127.0.0.1', port: 0 };
+  address = await app.listen(listenOptions);
+  bridge = new WebSocketServer(listenOptions);
   await once(bridge, 'listening');
   const location = bridge.address();
   if (!location || typeof location === 'string') throw new Error('Missing bridge address');
   const connected = once(bridge, 'connection');
-  link = await connectBridge(options, { url: `ws://127.0.0.1:${location.port}`,
-    assistantId: 'assistant', computerId: 'computer', bearer: 'fixture' });
+  const bridgeOptions = { url: `ws://127.0.0.1:${location.port}`,
+    assistantId: 'assistant', computerId: 'computer', bearer: 'fixture' };
+  link = await connectBridge(options, bridgeOptions);
   const connection: unknown[] = await connected;
   if (!(connection[0] instanceof WebSocket)) throw new Error('Missing bridge peer');
   peer = connection[0];
   for (const [resourceType, resourceId] of [['mcp_server', 'memory'], ['memory_read', scopeId]]) {
     for (const [granteeKind, granteeId] of [['member', 'alice'], ['assistant', 'assistant']]) {
-      const saved = await setup.append(grantStream(resourceType!, resourceId!), 'grant.given',
-        { resourceType, resourceId, granteeKind, granteeId, grantedBy: 'alice' });
+      const grant = { resourceType, resourceId, granteeKind, granteeId, grantedBy: 'alice' };
+      const subject = grantStream(resourceType!, resourceId!);
+      const saved = await setup.append(subject, 'grant.given', grant);
       await setup.auth.handler.handle(saved, setup.db);
     }
   }
@@ -61,34 +68,37 @@ async function initialise() {
   const identity = { silo: 'test', scopeId, scopeKind: 'person' as const,
     ownerId: 'alice', memoryId: 'fact', revision: 1 };
   keys.provision(identity);
-  await setup.append(`scope-${scopeId}`, 'memory.written', { scopeId, scopeKind: 'person', ownerId: 'alice', memoryId: 'fact', revision: 1,
-    schemaVersion: 1,
-    kind: 'fact', pinned: true, expiresAt: new Date(Date.now() + 90_000).toISOString(), sources: [], dependsOn: [],
-    ...keys.encrypt(identity, 'A remembered fact') });
+  const fact = { scopeId, scopeKind: 'person', ownerId: 'alice', memoryId: 'fact', revision: 1,
+    schemaVersion: 1, kind: 'fact', pinned: true,
+    expiresAt: new Date(Date.now() + 90_000).toISOString(), sources: [], dependsOn: [],
+    ...keys.encrypt(identity, 'A remembered fact') };
+  await setup.append(`scope-${scopeId}`, 'memory.written', fact);
   await session('first');
   await session('second');
-  const joined = await setup.append('member-bob', 'member.joined', { memberId: 'bob',
-    email: 'bob@example.test', displayName: 'Bob', role: 'member' });
+  const bob = { memberId: 'bob', email: 'bob@example.test', displayName: 'Bob', role: 'member' };
+  const joined = await setup.append('member-bob', 'member.joined', bob);
   await setup.auth.handler.handle(joined, setup.db);
-  await setup.append('team-sales', 'team.member_added',
-    { teamId: 'sales', memberId: 'bob', addedBy: 'alice' });
+  const membership = { teamId: 'sales', memberId: 'bob', addedBy: 'alice' };
+  await setup.append('team-sales', 'team.member_added', membership);
   await session('bob', 'bob');
   await setup.runner.run(conversations);
   await setup.runner.run(computers);
 }
 async function session(conversationId: string, requesterId = 'alice') {
   setup.keys.provision('test', conversationId);
-  await setup.append(`conversation-${conversationId}`, 'conversation.created', {
-    conversationId, createdBy: requesterId, assistantId: 'assistant', mode: 'agent_session',
-    payingGroupId: 'sales' });
-  const message = envelope('test', `conversation-${conversationId}`, 'message.posted', {
-    conversationId, authorId: requesterId, authorKind: 'human', contentType: 'text',
-    ...setup.keys.encrypt('test', conversationId, 'Human request') });
-  await setup.nats.seed([{ ...message, id: conversationId, commandId: conversationId }]);
-  await setup.append('computer-assistant', 'computer.turn_started', {
-    conversationId, turnId: conversationId, requesterId, assistantId: 'assistant',
+  const conversation = { conversationId, createdBy: requesterId, assistantId: 'assistant',
+    mode: 'agent_session', payingGroupId: 'sales' };
+  const subject = `conversation-${conversationId}`;
+  await setup.append(subject, 'conversation.created', conversation);
+  const messageData = { conversationId, authorId: requesterId, authorKind: 'human',
+    contentType: 'text', ...setup.keys.encrypt('test', conversationId, 'Human request') };
+  const message = envelope('test', subject, 'message.posted', messageData);
+  const messages = [{ ...message, id: conversationId, commandId: conversationId }];
+  await setup.nats.seed(messages);
+  const start = { conversationId, turnId: conversationId, requesterId, assistantId: 'assistant',
     computerId: 'computer', threadId: conversationId, task: 'chat_turn',
-    executionMode: 'restricted', payingGroupId: 'sales' });
+    executionMode: 'restricted', payingGroupId: 'sales' };
+  await setup.append('computer-assistant', 'computer.turn_started', start);
   const data = { conversationId, turnId: conversationId, requesterId, assistantId: 'assistant',
     computerId: 'computer', threadId: conversationId, generation: 1, inputGeneration: 'input',
     projectionGeneration: '1', action: 'prepared', delivery: null, callDigest: null,
@@ -97,16 +107,17 @@ async function session(conversationId: string, requesterId = 'alice') {
   await contextRecord(conversationId, data);
   const reference = { scopeId, memoryId: 'fact', revision: 1 };
   const scopePosition = { scopeId, position: await setup.nats.store.head(`scope-${scopeId}`) };
-  await contextRecord(conversationId, {
-    ...data, action: 'loaded', delivery: 'initial',
-    additions: requesterId === 'alice' ? [reference] : [],
-    scopePositions: [scopePosition] });
+  const loaded = { ...data, action: 'loaded', delivery: 'initial',
+    additions: requesterId === 'alice' ? [reference] : [], scopePositions: [scopePosition] };
+  await contextRecord(conversationId, loaded);
 }
 async function contextRecord(conversationId: string, data: object) {
   const id = randomUUID();
-  await setup.nats.seed([{ id, commandId: id, type: 'agent.memory_context_recorded',
+  const records = [{ id, commandId: id, type: 'agent.memory_context_recorded',
     silo: 'test', subject: `conversation-${conversationId}`, source: 'opencrane-server',
-    time: new Date().toISOString(), correlation: {}, principal: { kind: 'system', id: 'server' }, data }]);
+    time: new Date().toISOString(), correlation: {},
+    principal: { kind: 'system' as const, id: 'server' }, data }];
+  await setup.nats.seed(records);
 }
 async function cleanup() {
   vi.restoreAllMocks();
@@ -127,14 +138,22 @@ async function subscribe(conversationId = 'first', sub = 'alice') {
     exp: Math.floor(Date.now() / 1000) + 3600 };
   const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}`,
     origin: new URL(config.redirectUri).origin };
-  const socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, { headers });
+  const websocketOptions = { headers };
+  const socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, websocketOptions);
   clients.push(socket);
   const frames: unknown[] = [];
-  function receive(raw: Buffer) { frames.push(JSON.parse(raw.toString()) as unknown); }
+  function receive(raw: Buffer) {
+    const frame: unknown = JSON.parse(raw.toString());
+    frames.push(frame);
+  }
   socket.on('message', receive);
   await once(socket, 'open');
-  socket.send(JSON.stringify({ type: 'subscribe', topic: 'conversation', conversationId, since: 0 }));
-  function ready() { expect(JSON.stringify(frames)).toContain('"ready"'); }
+  const subscription = { type: 'subscribe', topic: 'conversation', conversationId, since: 0 };
+  const encoded = JSON.stringify(subscription);
+  socket.send(encoded);
+  function ready() {
+    expect(JSON.stringify(frames)).toContain('"ready"');
+  }
   await vi.waitFor(ready);
   return { socket, frames };
 }
@@ -149,7 +168,8 @@ async function send(value = report()) {
   const values: unknown[] = await Promise.race([response, closed]);
   const raw = values[0];
   if (!Buffer.isBuffer(raw)) throw new Error('Bridge closed without acknowledgement');
-  expect(JSON.parse(raw.toString())).toEqual({ type: 'ack', sequence: value.sequence });
+  const acknowledgement = { type: 'ack', sequence: value.sequence };
+  expect(JSON.parse(raw.toString())).toEqual(acknowledgement);
   await link.settled();
 }
 function privateFrames(frames: unknown[]) {
@@ -165,21 +185,28 @@ async function isolatesAndConsumes() {
   const bob = await subscribe('bob', 'bob');
   const encrypt = vi.spyOn(setup.keys, 'encrypt');
   await send();
-  function delivered() { expect(privateFrames(first.frames)).toHaveLength(1); }
+  function delivered() {
+    expect(privateFrames(first.frames)).toHaveLength(1);
+  }
   await vi.waitFor(delivered);
   const frame = privateFrames(first.frames)[0];
-  expect(privateReplySchema.parse(frame)).toMatchObject({ type: 'private_reply',
+  const expectedFrame = { type: 'private_reply',
     conversationId: 'first', turnId: 'first', threadId: 'first', inputGeneration: 'input',
-    data: { text: canary, turnId: 'first' } });
+    data: { text: canary, turnId: 'first' } };
+  expect(privateReplySchema.parse(frame)).toMatchObject(expectedFrame);
   expect(frame).not.toHaveProperty('position');
   expect(privateFrames(second.frames)).toEqual([]);
   expect(privateFrames(bob.frames)).toEqual([]);
   await send();
-  await send({ ...report(), sequence: 2, previousSequence: 1 });
+  const duplicate = { ...report(), sequence: 2, previousSequence: 1 };
+  await send(duplicate);
   expect(privateFrames(first.frames)).toHaveLength(1);
   expect(encrypt).not.toHaveBeenCalled();
-  await send({ ...report(), conversationId: 'bob', turnId: 'bob', threadId: 'bob', sequence: 3 });
-  await send({ ...report(), conversationId: 'second', turnId: 'second', threadId: 'second', sequence: 4 });
+  const bobReport = { ...report(), conversationId: 'bob', turnId: 'bob', threadId: 'bob', sequence: 3 };
+  await send(bobReport);
+  const secondReport = { ...report(), conversationId: 'second', turnId: 'second',
+    threadId: 'second', sequence: 4 };
+  await send(secondReport);
   expect(privateFrames(bob.frames)).toHaveLength(1);
   expect(privateFrames(second.frames)).toHaveLength(1);
   expect(privateFrames(first.frames)).toHaveLength(1);
@@ -196,7 +223,8 @@ it('delivers once to the saved requester and exact session without saving or rep
   isolatesAndConsumes);
 async function refusesBinding(change: object) {
   const client = await subscribe();
-  await send({ ...report(), ...change });
+  const changed = { ...report(), ...change };
+  await send(changed);
   expect(privateFrames(client.frames)).toEqual([]);
 }
 it.each([{ threadId: 'second' }, { inputGeneration: 'late' }, { generation: 2 }])(
@@ -206,9 +234,10 @@ function strictNotification() {
     conversationId: 'first', turnId: 'first', threadId: 'first', generation: 1,
     inputGeneration: 'input', data: { text: canary, turnId: 'first' } };
   expect(privateReplySchema.safeParse(frame).success).toBe(true);
-  expect(privateReplySchema.safeParse({ ...frame, position: 1 }).success).toBe(false);
-  expect(privateReplySchema.safeParse({ ...frame, data: { ...frame.data, secret: 'no' } }).success)
-    .toBe(false);
+  const withPosition = { ...frame, position: 1 };
+  expect(privateReplySchema.safeParse(withPosition).success).toBe(false);
+  const withSecret = { ...frame, data: { ...frame.data, secret: 'no' } };
+  expect(privateReplySchema.safeParse(withSecret).success).toBe(false);
 }
 it('checks a strict cursor-free notification using existing chat payload fields', strictNotification);
 
@@ -247,36 +276,43 @@ async function releaseRace(kind: string, readNumber = 1, repeat = false) {
     if (incrementalReads < readNumber || (changed && !repeat)) return;
     changed = true;
     if (kind === 'expiry') {
-      vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 120_000);
+      const clock = vi.spyOn(Date, 'now');
+      clock.mockReturnValue(Date.now() + 120_000);
     } else if (kind === 'removal') {
-      await setup.append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'owner' });
+      const removal = { memberId: 'alice', removedBy: 'owner' };
+      await setup.append('member-alice', 'member.removed', removal);
     } else if (kind === 'forget') {
-      await setup.append(scope, 'memory.forgotten', { schemaVersion: 1, scopeId,
-        scopeKind: 'person', ownerId: 'alice', memoryId: 'fact', revision: 2, expectedRevision: 1 });
+      const forget = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
+        memoryId: 'fact', revision: 2, expectedRevision: 1 };
+      await setup.append(scope, 'memory.forgotten', forget);
     } else if (kind === 'correct') {
       const rows = await history(setup.nats.store, scope, 'test');
       const data = memoryWrittenDataSchema.parse(rows[0]!.event.data);
-      await setup.append(scope, 'memory.corrected', { ...data, revision: 2, expectedRevision: 1,
-        supersedes: { memoryId: 'fact', revision: 1 }, reason: 'human' });
+      const correction = { ...data, revision: 2, expectedRevision: 1,
+        supersedes: { memoryId: 'fact', revision: 1 }, reason: 'human' };
+      await setup.append(scope, 'memory.corrected', correction);
     } else if (kind === 'socket') {
       const closed = once(client.socket, 'close');
       client.socket.terminate();
       await closed;
     } else if (kind === 'slow') {
       const subscriber = [...wss.clients][0]!;
-      vi.spyOn(subscriber, 'bufferedAmount', 'get').mockReturnValue(64 * 1024);
+      const bufferedAmount = vi.spyOn(subscriber, 'bufferedAmount', 'get');
+      bufferedAmount.mockReturnValue(64 * 1024);
     } else {
-      await setup.append('conversation-first', 'message.posted', { conversationId: 'first',
-        authorId: 'alice', authorKind: 'human', contentType: 'text',
-        ...setup.keys.encrypt('test', 'first', 'An unrelated question') });
+      const message = { conversationId: 'first', authorId: 'alice', authorKind: 'human',
+        contentType: 'text', ...setup.keys.encrypt('test', 'first', 'An unrelated question') };
+      await setup.append('conversation-first', 'message.posted', message);
     }
   }
-  vi.spyOn(setup.nats.store, 'readStream').mockImplementation(changeAfterRead);
+  const streamRead = vi.spyOn(setup.nats.store, 'readStream');
+  streamRead.mockImplementation(changeAfterRead);
   await send();
   expect(changed).toBe(true);
   expect(incrementalReads).toBeGreaterThanOrEqual(readNumber);
   let cleared = false;
-  for (const [index, call] of buffers.mock.calls.entries()) {
+  const bufferCalls = buffers.mock.calls.entries();
+  for (const [index, call] of bufferCalls) {
     if (call[0] !== canary) continue;
     const buffer: unknown = buffers.mock.results[index]?.value;
     if (!Buffer.isBuffer(buffer)) throw new Error('Missing retained buffer');
@@ -304,7 +340,9 @@ it('delivers one frame with an unrelated message on every incremental scope read
 async function refusesUntrustedReport(extra: object) {
   const client = await subscribe();
   const closed = once(peer, 'close');
-  peer.send(JSON.stringify({ ...report(), ...extra }));
+  const untrusted = { ...report(), ...extra };
+  const encoded = JSON.stringify(untrusted);
+  peer.send(encoded);
   expect((await closed)[0]).toBe(1008);
   expect(privateFrames(client.frames)).toEqual([]);
 }
@@ -318,7 +356,8 @@ async function losesAppendReply() {
     await append(command);
     throw new Error('Fixture loses append acknowledgement');
   }
-  vi.spyOn(setup.nats.store, 'append').mockImplementationOnce(lose);
+  const appendSpy = vi.spyOn(setup.nats.store, 'append');
+  appendSpy.mockImplementationOnce(lose);
   const closed = once(peer, 'close');
   peer.send(JSON.stringify(report()));
   expect((await closed)[0]).toBe(1011);

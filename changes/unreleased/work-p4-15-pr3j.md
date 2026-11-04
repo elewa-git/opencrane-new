@@ -1,1 +1,2 @@
 - Deliver completed private replies once through bounded server memory to the saved requester's connected chat reader, without saving reply text. Browser support and memory admission remain unavailable.
+- Refuse private replies when access or remembered facts change during the final delivery scan. Unrelated messages no longer prevent a valid reply from arriving.

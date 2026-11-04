@@ -31,14 +31,18 @@ function messageBytes(raw: RawData) {
 export function subscribePrivateOutput(subscriber: Subscriber) {
   if (subscribers.size >= 4096) return;
   subscribers.add(subscriber);
-  function remove() { subscribers.delete(subscriber); }
+  function remove() {
+    subscribers.delete(subscriber);
+  }
   subscriber.socket.once('close', remove);
 }
 
 // Keep no reply after its single release attempt. A fresh connection cannot recover this map.
 export function privateOutput(options: Options, computer: { computerId: string; assistantId: string },
   socket: WebSocket) {
-  function unavailablePosition() { return Infinity; }
+  function unavailablePosition() {
+    return Infinity;
+  }
   // Keep a slow position read from delaying Stop or other bridge controls.
   const readingPosition = options.store.head(undefined, performance.now() + 10_000);
   const openedPosition = readingPosition.catch(unavailablePosition);
@@ -136,7 +140,8 @@ async function savedBinding(options: Options, computer: { computerId: string; as
       chat.created?.['createdBy'] !== saved.requesterId || chat.created['contextKind']) {
     throw new Error('Reply refused');
   }
-  const first = chat.memoryContext.events.values().next().value;
+  const events = chat.memoryContext.events.values();
+  const first = events.next().value;
   const decoded: unknown = JSON.parse(first ?? 'null');
   const binding = memoryContextRecordedEventSchema.parse(decoded).data;
   const expected = { ...reply, ...computer, requesterId: saved.requesterId };
@@ -204,22 +209,15 @@ async function confirmRelease(options: Options, binding: Binding, recipient: Sub
     for (const subject of subjects) watched.add(subject);
     authority.include(...subjects);
   }
-  async function confirm() { await confirmDecisionAccess(activity, authority, false, true); }
-  const fresh = Object.assign(confirm, { include, head: authority.head, deadline: authority.deadline });
+  async function confirm() {
+    await confirmDecisionAccess(activity, authority, false, true);
+  }
+  const snapshot = { include, head: authority.head, deadline: authority.deadline };
+  const fresh = Object.assign(confirm, snapshot);
   const before = await options.store.head(undefined, fresh.deadline);
   if (!await recipient.confirm()) throw new Error('Reader refused');
   await memory.confirm(fresh);
-  let checkedPosition = before;
-  while (true) {
-    const currentPosition = await options.store.head(undefined, fresh.deadline);
-    await releaseChanges(options, binding, watched, scopes, checkedPosition, fresh.deadline);
-    const after = await options.store.head(undefined, fresh.deadline);
-    if (after === currentPosition) {
-      await releaseChanges(options, binding, watched, scopes, currentPosition, fresh.deadline);
-      break;
-    }
-    checkedPosition = currentPosition;
-  }
+  await confirmReleaseChanges(options, binding, watched, scopes, before, fresh.deadline);
   if (performance.now() >= fresh.deadline) throw new Error('Reply expired');
   for (const reference of references) {
     const rows = scopes.get(reference.scopeId)!;
@@ -229,13 +227,44 @@ async function confirmRelease(options: Options, binding: Binding, recipient: Sub
   return release();
 }
 
-async function releaseChanges(options: Options, binding: Binding, watched: Set<string>,
+async function confirmReleaseChanges(options: Options, binding: Binding, watched: Set<string>,
   scopes: Map<string, StoredEvent[]>, before: number, deadline: number) {
-  // Read changes after the last access await, without replaying conversation history.
   const subjects = [...watched, `conversation-${binding.conversationId}`,
     `computer-${binding.assistantId}`];
   for (const scope of scopes.keys()) subjects.push(`scope-${scope}`);
+  const positions = new Map<string, number>();
+  for (const subject of subjects) positions.set(subject, before);
+  // Validate changes during permission checks before the final release scan.
+  await releaseChanges(options, binding, watched, scopes, positions, subjects, deadline);
+  let changedSubjects = subjects;
+  async function readPosition(subject: string) {
+    const includeCloses = subject === `conversation-${binding.conversationId}`;
+    const position = await options.store.head(subject, deadline, includeCloses);
+    return { subject, position };
+  }
+  while (true) {
+    await releaseChanges(options, binding, watched, scopes, positions,
+      changedSubjects, deadline);
+    // Recheck every stream after the final scan. Read only changed streams next,
+    // so unrelated messages cannot force another scope read or extend the deadline.
+    const positionReads = subjects.map(readPosition);
+    const currentPositions = await Promise.all(positionReads);
+    changedSubjects = [];
+    for (const current of currentPositions) {
+      if (current.position > positions.get(current.subject)!) {
+        changedSubjects.push(current.subject);
+      }
+    }
+    if (changedSubjects.length === 0) break;
+  }
+}
+
+async function releaseChanges(options: Options, binding: Binding, watched: Set<string>,
+  scopes: Map<string, StoredEvent[]>, positions: Map<string, number>, subjects: string[],
+  deadline: number) {
+  // Read changes after the last access await, without replaying conversation history.
   for (const subject of subjects) {
+    const before = positions.get(subject)!;
     for await (const row of options.store.readStream(subject, before + 1, deadline,
       subject === `conversation-${binding.conversationId}`)) {
       const scope = scopes.get(subject.slice('scope-'.length));
@@ -246,6 +275,7 @@ async function releaseChanges(options: Options, binding: Binding, watched: Set<s
           changesDecisionActivity(row.event, binding.turnId, false, true)) {
         throw new Error('Reply changed');
       }
+      positions.set(subject, row.sequence);
     }
   }
 }

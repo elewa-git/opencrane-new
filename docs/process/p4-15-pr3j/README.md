@@ -27,6 +27,8 @@ flowchart LR
 The bridge sends a completed reply. The server saves only an unavailable-output
 record, checks the current reader and loaded facts, and attempts delivery once.
 A lost connection or failed check discards the bytes. Reconnecting cannot recover them.
+The server checks for access and memory changes after its last scan, before sending.
+Unrelated messages can continue while a valid reply is checked.
 
 Browser display, browser clearance and streamed replies are not built here.
 Memory admission remains disabled.
