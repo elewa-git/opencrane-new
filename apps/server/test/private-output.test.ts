@@ -261,7 +261,8 @@ async function noSubscriberReplay() {
 }
 it('does not deliver an earlier report to a new subscriber', noSubscriberReplay);
 
-async function releaseRace(kind: string, readNumber = 1, repeat = false) {
+async function releaseRace(kind: string, readNumber = 1, repeat = false,
+  boundary: 'scope' | 'position' | 'conversation' = 'scope') {
   const client = await subscribe();
   const buffers = vi.spyOn(Buffer, 'from');
   const scope = `scope-${scopeId}`;
@@ -271,11 +272,21 @@ async function releaseRace(kind: string, readNumber = 1, repeat = false) {
   let incrementalReads = 0;
   async function* changeAfterRead(...args: Parameters<typeof read>) {
     yield* read(...args);
-    if (args[0] !== scope || (args[1] ?? 0) <= scopePosition) return;
+    const subject = boundary === 'conversation' ? 'conversation-first' : scope;
+    if (args[0] !== subject || (args[1] ?? 0) <= scopePosition) return;
+    if (boundary === 'conversation' && args[3] !== true) return;
     incrementalReads++;
-    if (incrementalReads < readNumber || (changed && !repeat)) return;
+    if (boundary === 'position' || incrementalReads < readNumber) return;
+    await saveChange();
+  }
+  async function saveChange() {
+    if (changed && !repeat) return;
     changed = true;
-    if (kind === 'expiry') {
+    if (kind === 'deadline') {
+      const expired = performance.now() + 2001;
+      const clock = vi.spyOn(performance, 'now');
+      clock.mockReturnValue(expired);
+    } else if (kind === 'expiry') {
       const clock = vi.spyOn(Date, 'now');
       clock.mockReturnValue(Date.now() + 120_000);
     } else if (kind === 'removal') {
@@ -307,6 +318,23 @@ async function releaseRace(kind: string, readNumber = 1, repeat = false) {
   }
   const streamRead = vi.spyOn(setup.nats.store, 'readStream');
   streamRead.mockImplementation(changeAfterRead);
+  if (boundary === 'position') {
+    const head = setup.nats.store.head.bind(setup.nats.store);
+    async function delayedPosition(...args: Parameters<typeof head>) {
+      const position = await head(...args);
+      if (args[0] === scope && incrementalReads >= readNumber && !changed) {
+        // Hold the old response until the other parallel position reads have finished.
+        function finishDelay(resolve: () => void) {
+          setTimeout(resolve, 20);
+        }
+        await new Promise<void>(finishDelay);
+        await saveChange();
+      }
+      return position;
+    }
+    const positionRead = vi.spyOn(setup.nats.store, 'head');
+    positionRead.mockImplementation(delayedPosition);
+  }
   await send();
   expect(changed).toBe(true);
   expect(incrementalReads).toBeGreaterThanOrEqual(readNumber);
@@ -337,6 +365,20 @@ async function continuousUnrelatedMessages() {
 }
 it('delivers one frame with an unrelated message on every incremental scope read',
   continuousUnrelatedMessages);
+async function positionReadRace(kind: string) {
+  await releaseRace(kind, 2, false, 'position');
+}
+it.each(['removal', 'correct', 'forget'])(
+  'delivers no frame when %s is saved while the scope position response is held', positionReadRace);
+async function continuousConversationMessages() {
+  await releaseRace('unrelated', 1, true, 'conversation');
+}
+it('delivers one frame with an unrelated message on every incremental conversation read',
+  continuousConversationMessages);
+async function originalDeadline() {
+  await releaseRace('deadline', 2, false, 'position');
+}
+it('refuses delivery when the original deadline expires during position reads', originalDeadline);
 async function refusesUntrustedReport(extra: object) {
   const client = await subscribe();
   const closed = once(peer, 'close');
