@@ -31,6 +31,15 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
     return { result: 'FAIL', reason: 'host_refused' };
   }
   let result: Receipt['result'] = 'NOT RUN';
+  if (request.name === 'privateTurns') {
+    try {
+      const { checkNative } = await import('./native-checks.ts');
+      await checkNative(request.challengeId);
+      result = 'PARTIAL';
+    } catch {
+      return { result: 'FAIL', reason: 'journey_failed' };
+    }
+  }
   if (request.name === 'invalidation' || request.name === 'unrelatedActivity' ||
       request.name === 'requesterIsolation' || request.name === 'sessionIsolation') {
     try {
@@ -41,6 +50,6 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
       return { result: 'FAIL', reason: 'journey_failed' };
     }
   }
-  // Server assertions alone cannot qualify native processes or private output delivery.
+  // These assertions cannot qualify isolation, persistence or private output delivery.
   return { ...request, observedAt: Date.now(), result, complete: false };
 }
