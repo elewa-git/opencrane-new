@@ -23,16 +23,24 @@ function assertCommandRecord(record: (typeof commandRecords)[number]): void {
   expect(button?.querySelector('[data-state="failed"]') !== null).toBe(record.failed);
   expect(root.textContent).not.toMatch(/retry|try again/i);
 
-  let emittedOpener: HTMLElement | undefined;
-  fixture.componentInstance.detailsOpened.subscribe(opener => {
-    emittedOpener = opener;
-  });
+  expect(button?.getAttribute('aria-expanded')).toBe('false');
+  expect(root.querySelector('.tool-details')).toBeNull();
   button?.click();
-
-  expect(emittedOpener).toBe(button);
+  fixture.detectChanges();
+  const details = root.querySelector('.tool-details');
+  expect(button?.getAttribute('aria-expanded')).toBe('true');
+  expect(details?.textContent).toContain(record.detail);
+  expect(details?.textContent).toContain('Recorded');
+  expect(details?.textContent).toContain('Reference');
+  expect(details?.textContent).toContain('Sanitised');
+  expect(root.querySelector('oc-hinge-drawer')).toBeNull();
+  button?.click();
+  fixture.detectChanges();
+  expect(button?.getAttribute('aria-expanded')).toBe('false');
+  expect(root.querySelector('.tool-details')).toBeNull();
 }
 
-it.each(commandRecords)('shows $label as a button and reports its opener', assertCommandRecord);
+it.each(commandRecords)('expands and collapses $label inline', assertCommandRecord);
 
 const toolStateCases = [
   { status: 'running', failed: false, suffix: 'Running', icon: 'running' },
