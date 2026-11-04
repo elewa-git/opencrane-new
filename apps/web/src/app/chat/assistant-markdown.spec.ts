@@ -157,6 +157,31 @@ function keepsExistingElements() {
   expect(root.textContent).toContain('This interface is not available yet.');
 }
 
+async function rendersMermaidAsAnImage() {
+  const { root } = mount('```mermaid\ngraph LR\nA[Start] --> B[Done]\n```');
+  await vi.waitFor(function imageAppears() {
+    const image = root.querySelector<HTMLImageElement>('img[alt="Diagram"]');
+    expect(image?.getAttribute('src')).toMatch(/^data:image\/svg\+xml/);
+  });
+  expect(root.querySelector('iframe, svg, script, a')).toBeNull();
+}
+
+async function showsSourceWhenMermaidFails() {
+  const source = 'this is not a diagram';
+  const { root } = mount('```mermaid\n' + source + '\n```');
+  await vi.waitFor(function sourceAppears() {
+    expect(root.querySelector('pre code')?.textContent).toBe(source);
+  });
+  expect(root.querySelector('img')).toBeNull();
+}
+
+function keepsNestedMermaidFenceAsCode() {
+  const source = '```mermaid\ngraph LR\nA --> B\n```';
+  const { root } = mount('````text\n' + source + '\n````');
+  expect(root.querySelector('pre code')?.textContent).toBe(source);
+  expect(root.querySelector('img, oc-mermaid-diagram')).toBeNull();
+}
+
 it('renders headings, paragraphs, ordered and unordered lists and block quotes', rendersBlocks);
 
 it('renders inline code, bold, italic and permitted links', rendersInline);
@@ -183,3 +208,9 @@ it('keeps copy feedback on the copied block while unchanged code precedes stream
 it('keeps very long replies and unmatched markers without truncation', keepsLongReplies);
 
 it('keeps citations and the existing interactive placeholder outside code', keepsExistingElements);
+
+it('renders a Mermaid block as an inert image', rendersMermaidAsAnImage);
+
+it('shows the Mermaid source as code when rendering fails', showsSourceWhenMermaidFails);
+
+it('keeps a nested Mermaid fence inside its outer code block', keepsNestedMermaidFenceAsCode);
