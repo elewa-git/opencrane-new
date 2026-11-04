@@ -2,20 +2,35 @@ ARG COMPUTER_BASE=127.0.0.1:5001/opencrane/s035@sha256:6fe29bfc4455f19601bbca9e3
 ARG COMPUTER_APT_BASE=computer-apt-fallback
 FROM mirror.gcr.io/library/node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS npm-tools
 FROM npm-tools AS launcher-build
+# Stop slow package downloads even when a connection stays active.
+RUN printf '%s\n' \
+    'Acquire::http::Timeout "30";' \
+    'Acquire::https::Timeout "30";' \
+    'Acquire::Retries "5";' \
+    'APT::Update::Error-Mode "any";' \
+    > /etc/apt/apt.conf.d/80-opencrane-network
 RUN sed -i 's|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/20261001T000000Z|; s|http://deb.debian.org/debian$|http://snapshot.debian.org/archive/debian/20261001T000000Z|' /etc/apt/sources.list.d/debian.sources && \
-    apt-get -o Acquire::Check-Valid-Until=false update -qq && apt-get install -y --no-install-recommends gcc libc6-dev
+    timeout -v -k 10s 8m apt-get -o Acquire::Check-Valid-Until=false update -qq && \
+    timeout -v -k 10s 8m apt-get install -y --no-install-recommends gcc libc6-dev
 COPY tool-user.c /tmp/tool-user.c
 RUN gcc -O2 -Wall -Wextra -Werror -o /tool-user /tmp/tool-user.c
 # The pinned base image supplies Codex and the native launcher that applies seccomp.
 FROM ${COMPUTER_BASE} AS computer-apt-fallback
 USER root
+# Stop slow package downloads even when a connection stays active.
+RUN printf '%s\n' \
+    'Acquire::http::Timeout "30";' \
+    'Acquire::https::Timeout "30";' \
+    'Acquire::Retries "5";' \
+    'APT::Update::Error-Mode "any";' \
+    > /etc/apt/apt.conf.d/80-opencrane-network
 RUN sed -i 's|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/20261001T000000Z|; s|http://deb.debian.org/debian$|http://snapshot.debian.org/archive/debian/20261001T000000Z|' /etc/apt/sources.list.d/debian.sources
 COPY apt.lock /tmp/apt.lock
 COPY collect-licences.py /tmp/collect-licences.py
-RUN apt-get -o Acquire::Check-Valid-Until=false update -qq && \
-    xargs apt-get install -y --no-install-recommends < /tmp/apt.lock && \
+RUN timeout -v -k 10s 8m apt-get -o Acquire::Check-Valid-Until=false update -qq && \
+    xargs timeout -v -k 10s 8m apt-get install -y --no-install-recommends < /tmp/apt.lock && \
     sed 's/20261001T000000Z/20261002T000000Z/g' /etc/apt/sources.list.d/debian.sources > /etc/apt/sources.list.d/inherited.sources && \
-    apt-get -o Acquire::Check-Valid-Until=false update -qq && \
+    timeout -v -k 10s 8m apt-get -o Acquire::Check-Valid-Until=false update -qq && \
     mkdir -p /usr/share/opencrane && \
     python3 /tmp/collect-licences.py apt > /usr/share/opencrane/apt-packages.json && \
     rm -rf /var/lib/apt/lists/* /tmp/apt.lock /tmp/collect-licences.py /etc/apt/sources.list.d/inherited.sources /lifecycle /desktop && \

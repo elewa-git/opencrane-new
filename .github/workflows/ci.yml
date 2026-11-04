@@ -317,7 +317,8 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build the upload test computer
+      - name: Build the upload test computer (30-minute limit)
+        timeout-minutes: 30
         run: |
           image=$(node scripts/ci/base-image.mjs)
           if [ -n "$image" ]; then
