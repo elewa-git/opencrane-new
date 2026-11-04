@@ -861,6 +861,17 @@ it('expands tool details from the line and focuses the line from Activity', asyn
   expect(document.activeElement).toBe(toolLine);
 });
 
+it('keeps a direct ordinary tool call out of the native details drawer', async () => {
+  const capture = await createCaptureWorkspace(toolRows());
+  const toolLine = capture.root.querySelector<HTMLButtonElement>('.tool-line');
+  if (!toolLine) throw new Error('Missing tool line');
+  const commandRecord = capture.fixture.componentInstance['activity']()[0];
+  if (!commandRecord) throw new Error('Missing command record');
+  capture.fixture.componentInstance['openToolDetails'](commandRecord, toolLine);
+  capture.fixture.detectChanges();
+  expect(capture.fixture.componentInstance['toolDetails']()).toBeUndefined();
+});
+
 it('shows the recorded native refusal and keeps its safe details after a failed read', async () => {
   Object.assign(HTMLDialogElement.prototype, {
     showModal: openPanelDialog,
