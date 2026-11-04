@@ -56,6 +56,6 @@ export class ToolActivityLine {
       this.detailsOpened.emit(event.currentTarget);
       return;
     }
-    this.expanded.update(current => !current);
+    this.expanded.set(!this.expanded());
   }
 }
