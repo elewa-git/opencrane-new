@@ -2,10 +2,11 @@ import type { Binding } from '@opencrane/authz';
 import { invalidateMemoryAccess } from './invalidation.ts';
 import { computerSummary, type ComputerSummary } from '@opencrane/auth';
 import { readStreamSummary, type EventStore } from '@opencrane/event-store';
-import { memoryContextRecordedEventSchema, type MemoryContextRecord } from '@opencrane/events';
+import { agentTurnStopRequestedDataSchema, memoryContextRecordedEventSchema,
+  type MemoryContextRecord } from '@opencrane/events';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
-import { readChatFacts } from '../chat/chat-summary.ts';
+import { readChatFacts, readChatStopRows, type ChatFacts } from '../chat/chat-summary.ts';
 import type { turnCommand } from '../chat/turns.ts';
 import { memoryChanges } from './changes.ts';
 import { stopInvalidatedMemory } from './stop.ts';
@@ -26,6 +27,28 @@ function matchesPreparation(saved: MemoryContextRecord, active: TrackedTurn, com
     saved.requesterId === active.turn.requesterId && saved.assistantId === computer.assistantId &&
     saved.computerId === computer.computerId && saved.generation === active.generation &&
     saved.threadId === active.turn.threadId;
+}
+
+async function hasSavedStop(options: Options, binding: MemoryContextRecord) {
+  const rows = await readChatStopRows(options.store, options.silo, binding.conversationId);
+  for (const row of rows) {
+    if (row.event.type !== 'agent.turn_stop_requested') continue;
+    const stop = agentTurnStopRequestedDataSchema.parse(row.event.data);
+    if (stop.conversationId === binding.conversationId && stop.turnId === binding.turnId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function savedPreparation(chat: ChatFacts) {
+  if (!chat.memoryContext) return undefined;
+  const events = chat.memoryContext.events.values();
+  const encoded = events.next().value;
+  if (!encoded) return undefined;
+  const decoded: unknown = JSON.parse(encoded);
+  const binding = memoryContextRecordedEventSchema.parse(decoded).data;
+  return { binding, context: chat.memoryContext };
 }
 
 export function memoryBridge(options: Options, computer: Computer, socket: WebSocket,
@@ -88,30 +111,32 @@ export function memoryBridge(options: Options, computer: Computer, socket: WebSo
     if (socket.readyState !== WebSocket.OPEN) return;
     try {
       let chat = await readChatFacts(options.store, options.silo, conversationId, active.turn.turnId);
-      if (!chat.memoryContext) return;
-      const preparation = chat.memoryContext.events.values().next().value;
+      const preparation = savedPreparation(chat);
       if (!preparation) return;
-      const decodedPreparation: unknown = JSON.parse(preparation);
-      const saved = memoryContextRecordedEventSchema.parse(decodedPreparation).data;
+      const saved = preparation.binding;
       const request = { conversationId: saved.conversationId, turnId: saved.turnId,
         threadId: saved.threadId, inputGeneration: saved.inputGeneration };
       await invalidateMemoryAccess(options, request);
-      await active.detect(chat.memoryContext);
+      await active.detect(preparation.context);
       chat = await readChatFacts(options.store, options.silo, conversationId, active.turn.turnId);
-      if (!chat.memoryContext) return;
-      const first = chat.memoryContext.events.values().next().value;
-      if (!first) return;
-      const initial: unknown = JSON.parse(first);
-      const preparationBinding = memoryContextRecordedEventSchema.parse(initial).data;
+      const checkedPreparation = savedPreparation(chat);
+      if (!checkedPreparation) return;
+      const preparationBinding = checkedPreparation.binding;
       if (!matchesPreparation(preparationBinding, active, computer)) return;
+      const stopped = await hasSavedStop(options, preparationBinding);
       if (await generation() !== active.generation) {
         clearOutput(preparationBinding);
         removeTurn(conversationId, active);
         return;
       }
+      if (stopped && !active.cleared) {
+        // Keep saved Stop decisive even when a late completion arrives before this poll.
+        clearOutput(preparationBinding);
+        active.cleared = true;
+      }
       if (chat.conversationClosed) clearOutput(preparationBinding);
       let hasInvalidation = false;
-      for (const encoded of chat.memoryContext.events.values()) {
+      for (const encoded of checkedPreparation.context.events.values()) {
         const decoded: unknown = JSON.parse(encoded);
         const event = memoryContextRecordedEventSchema.parse(decoded);
         if (event.data.action !== 'invalidated') continue;

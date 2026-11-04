@@ -633,8 +633,13 @@ async function oldReceiptKeepsLaterReply(change: object) {
   await flushBrowser(first.socket);
   expect(clearanceFrames(first.frames)).toEqual([expectedClearance()]);
 }
-it.each([{ threadId: 'old' }, { generation: 2 }, { inputGeneration: 'old' },
-  { turnId: 'old' }, { conversationId: 'second' }])(
+const staleThread = { threadId: 'old' };
+const staleGeneration = { generation: 2 };
+const staleInput = { inputGeneration: 'old' };
+const staleTurn = { turnId: 'old' };
+const otherConversation = { conversationId: 'second' };
+const staleReceipts = [staleThread, staleGeneration, staleInput, staleTurn, otherConversation];
+it.each(staleReceipts)(
   'cannot redirect or consume clearance with a stale receipt %j', oldReceiptKeepsLaterReply);
 
 async function oldInvalidationKeepsNextReply() {

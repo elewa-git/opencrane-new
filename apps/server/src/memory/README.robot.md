@@ -30,3 +30,7 @@ before accepting a computer clearance receipt. Saved preparation supplies the re
 computer generation, turn, thread and input generation; a receipt supplies no authority.
 Completed turns remain tracked until checked clearance. Closure and replacement clear
 the old binding without sending a Stop to a replacement process.
+Saved Stop requests also clear an already delivered reply through its checked preparation.
+The check uses `readChatStopRows`, outside any access deadline, and matches the conversation
+and turn. A late completion cannot hide the Stop. Repeated polls notify the original
+browser once and keep tracking until the computer confirms clearance.

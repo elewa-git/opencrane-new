@@ -55,6 +55,8 @@ corrections, forgets and expiry. Expiry checks the revisions saved at each load 
 supporting fact. An unrelated expired fact does not stop the turn. Polling checks the
 saved requester’s membership and the requester’s and assistant’s required grants.
 Confirmed loss clears the exact private reply, including after completion.
+A saved Stop also tells the original browser to clear its delivered reply, even if
+the computer finishes before the next check. Repeated checks send no duplicate notice.
 A saved member removal, confirmed denial or saved assistant deactivation clears the reply
 even when another permission check is unavailable. Unavailable checks alone leave the check pending.
 An addition saved at expiry cannot block clearing output from an earlier loaded fact.
@@ -79,7 +81,7 @@ Recall saves the time used to check its facts and checks again before returning 
 flowchart LR
   server["Server"] -->|handles memory requests| memory["Memory"]
   chat["Chat"] -->|supplies saved turn facts| memory
-  memory -->|clears withdrawn private replies| chat
+  memory -->|clears withdrawn or stopped private replies| chat
   memory -->|checks access and references| models["Models library"]
   memory -->|supplies initial input once| computer["Computer input renderer"]
 ```
