@@ -124,13 +124,28 @@ try {
   console.log('PASS draft recipient selection');
   const activity = await open('tools', 1280);
   const toolLine = activity.page.locator('.tool-line').first();
+  const toolDetails = activity.page.locator('.tool-details').first();
+  const controlledId = await toolLine.getAttribute('aria-controls');
+  assert(controlledId, 'Command line names its inline details');
+  assert.equal(await toolDetails.getAttribute('id'), controlledId);
+  assert.equal(await toolLine.getAttribute('aria-expanded'), 'false');
+  assert.equal(await toolDetails.isVisible(), false);
   await toolLine.click();
-  const toolDrawer = activity.page.getByRole('dialog', { name: 'Command failed' });
-  await toolDrawer.waitFor();
-  assert(!(await toolDrawer.innerText()).includes('a'.repeat(64)), 'Failure drawer never exposes a raw digest');
-  await activity.page.keyboard.press('Escape');
+  assert.equal(await toolLine.getAttribute('aria-expanded'), 'true');
+  await toolDetails.getByText('Failed · Exit code 1').waitFor();
+  assert((await toolDetails.innerText()).includes('Sanitised'));
+  assert(!(await toolDetails.innerText()).includes('a'.repeat(64)),
+    'Inline details never expose a raw digest');
+  assert.equal(await activity.page.locator('oc-hinge-drawer[open]').count(), 0);
+  await toolLine.focus();
+  await activity.page.keyboard.press('Enter');
+  assert.equal(await toolLine.getAttribute('aria-expanded'), 'false');
+  assert.equal(await toolDetails.isVisible(), false);
+  await activity.page.keyboard.press('Space');
+  assert.equal(await toolLine.getAttribute('aria-expanded'), 'true');
+  assert.equal(await toolDetails.isVisible(), true);
   assert(await toolLine.evaluate(node => node.ownerDocument.activeElement === node),
-    'Closing tool details returns focus to the first tool line');
+    'Toggling inline details keeps focus on the first tool line');
   await activity.page.getByRole('tab', { name: /Activity/ }).click();
   await activity.page.locator('.desktop-panel .activity-row').first().waitFor();
   assert.equal(await activity.page.locator('.desktop-panel .activity-row').count(), 2);
@@ -230,8 +245,10 @@ try {
       if (scenario === 'queued') { await page.getByRole('textbox', { name: 'Message your agent' }).fill('Compare this brief against what we promised.'); await page.getByRole('button', { name: 'Send message' }).click(); await page.getByRole('button', { name: 'Retry queued message' }).waitFor(); }
       if (scenario === 'panel' && width === 390) await page.getByRole('button', { name: 'Session panel', exact: true }).click();
       if (scenario === 'tools' && frame !== '8i-activity') {
-        await page.locator('.tool-line').first().click();
-        await page.getByRole('dialog', { name: /Command/ }).waitFor();
+        const commandLine = page.locator('.tool-line').first();
+        await commandLine.click();
+        const inlineDetails = page.locator('.tool-details').first();
+        await inlineDetails.getByText('Failed · Exit code 1').waitFor();
       }
       if (scenario === 'assets') { await page.locator('.file-card').getByRole('button', { name: /^Open (?!session files)/ }).click(); await page.getByText('Preview unavailable.', { exact: false }).waitFor(); }
       if (scenario === 'a2ui') {

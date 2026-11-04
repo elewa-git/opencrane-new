@@ -847,6 +847,7 @@ it('expands tool details from the line and focuses the line from Activity', asyn
   capture.fixture.detectChanges();
   const details = capture.root.querySelector('.tool-details');
   expect(toolLine.getAttribute('aria-expanded')).toBe('true');
+  expect(details?.id).toBe(toolLine.getAttribute('aria-controls'));
   expect(details?.textContent).toContain('Failed · Exit code 1');
   expect(details?.textContent).toContain('4 Oct 2026, 10:01 UTC');
   expect(details?.textContent).toContain('Reference');
@@ -856,7 +857,7 @@ it('expands tool details from the line and focuses the line from Activity', asyn
   toolLine.click();
   capture.fixture.detectChanges();
   expect(toolLine.getAttribute('aria-expanded')).toBe('false');
-  expect(capture.root.querySelector('.tool-details')).toBeNull();
+  expect(capture.root.querySelector<HTMLElement>('.tool-details')?.hidden).toBe(true);
   expect(document.activeElement).toBe(toolLine);
 });
 
@@ -886,6 +887,9 @@ it('shows the recorded native refusal and keeps its safe details after a failed 
   if (!line) throw new Error('Missing native refusal line');
   expect(line.textContent).toContain('native-92');
   expect(line.textContent).toContain('<Files server>');
+  expect(line.getAttribute('aria-expanded')).toBeNull();
+  expect(line.getAttribute('aria-controls')).toBeNull();
+  expect(context.root.querySelector('.tool-details')).toBeNull();
   expect(line.querySelector('files')).toBeNull();
   line.click();
   await context.fixture.whenStable();
