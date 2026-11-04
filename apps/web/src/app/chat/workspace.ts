@@ -29,7 +29,6 @@ import { ChatSession } from './chat-session';
 import { ScreenshotCapture, captureView } from './screenshot-capture';
 import {
   budgetStoppedTurnIds, findToolRecord, hasHighlightedTool, rejectedScreenshotIds,
-  toolActivityResult, toolActivityResultLabel,
   toolKind as getToolKind, turnContent, turnOutcome, turnStatusIcon,
   type ChatAttachment, type ToolActivityRecord, type Turn,
 } from './chat-state';
@@ -80,8 +79,6 @@ export class Workspace implements OnInit {
   protected readonly panelTab = signal<'files' | 'activity' | 'memory'>('files');
   protected readonly approvalWaiting = signal(false);
   protected readonly activity = computed(() => this.chat.turns().flatMap(turn => turn.tools));
-  protected readonly toolResult = toolActivityResult;
-  protected readonly toolResultLabel = toolActivityResultLabel;
   protected readonly toolKind = getToolKind;
   protected readonly desktop = signal(globalThis.innerWidth >= 1100);
   protected readonly panel = signal(this.desktop());

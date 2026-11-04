@@ -54,6 +54,57 @@
   transition: transform 220ms var(--oc-ease-standard);
 }
 
+.chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.tool-details {
+  max-width: 100%;
+  margin: 0 0 12px 20px;
+  padding: 12px;
+  border-left: 2px solid var(--oc-focus-ring);
+  background: var(--oc-paper, #fff);
+  color: var(--oc-ink);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.tool-kind {
+  margin: 0 0 12px;
+  color: var(--oc-ink-muted);
+}
+
+.tool-detail-ledger {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 8px 12px;
+  margin: 0;
+}
+
+.tool-detail-ledger dt {
+  color: #4f575a;
+}
+
+.tool-detail-ledger dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.tool-reference {
+  font-family: var(--oc-font-mono);
+}
+
+.sanitised-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 20px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f2fbfc;
+  color: #006a78;
+}
+
 @media (max-width: 700px) {
   .tool-line {
     margin: 0;

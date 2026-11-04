@@ -1,7 +1,25 @@
 <button type="button" class="tool-line" [id]="'tool-' + record().id"
+  [attr.aria-expanded]="record().nativeRequestId ? null : expanded()"
+  [attr.aria-controls]="record().nativeRequestId ? null : 'tool-details-' + record().id"
   (click)="openDetails($event)">
   <oc-icon class="state-mark" [attr.data-state]="stateName()"
     [name]="stateIcon()" />
   <span class="tool-label">{{ lineLabel() }}</span>
-  <oc-icon class="chevron" name="chevron" />
+  <oc-icon class="chevron" [class.expanded]="expanded()" name="chevron" />
 </button>
+@if (expanded() && !record().nativeRequestId) {
+  <section class="tool-details" [id]="'tool-details-' + record().id"
+    [attr.aria-labelledby]="'tool-' + record().id">
+    <p class="tool-kind">{{ toolKind(record()) }}</p>
+    <dl class="tool-detail-ledger">
+      <dt>{{ toolResultLabel(record()) }}</dt><dd>{{ toolResult(record()) }}</dd>
+      <dt>Recorded</dt><dd>{{ toolTime(record().time) }}</dd>
+      <dt>Reference</dt><dd class="tool-reference">{{ record().id }}</dd>
+    </dl>
+    <p>Where it ran, the account used and attempt history: Not available yet.</p>
+    <aside class="sanitised-note">
+      <strong>Sanitised</strong>
+      <span>Raw arguments, tokens and full tool output are not shown here.</span>
+    </aside>
+  </section>
+}

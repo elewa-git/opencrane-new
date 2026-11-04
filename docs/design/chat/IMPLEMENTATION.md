@@ -43,6 +43,13 @@ preview and attachment controls do not claim a successful file operation.
 
 ## Visual evidence
 
+Command and governed tool lines now expand their sanitised details under the line.
+This differs from the right-hand drawer in the later WRK-04 design frame. The
+same saved result, time, reference and safety note remain visible. Approval
+reviews and native consent refusals still use their drawers. The
+[inline detail captures](../../process/chat-tool-inline/README.md) show the
+collapsed and expanded states at desktop and phone widths.
+
 [Comparison page](comparison/index.html) shows all in-scope frames beside the
 built UI at 1280px and 390px. Run `npm run visual:chat` to regenerate it with
 Playwright Chromium. Protocol fixtures live only in the capture script, never

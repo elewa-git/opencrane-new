@@ -294,17 +294,6 @@
             }
             <dt>Recorded</dt><dd>{{ toolTime(details.record) }}</dd>
           </dl>
-        } @else {
-          <dl class="tool-detail-ledger">
-            <dt>{{ toolResultLabel(details.record) }}</dt><dd>{{ toolResult(details.record) }}</dd>
-            <dt>Recorded</dt><dd>{{ toolTime(details.record) }}</dd>
-            <dt>Reference</dt><dd class="tool-reference">{{ details.record.id }}</dd>
-          </dl>
-          <p>Where it ran, the account used and attempt history: Not available yet.</p>
-          <aside class="sanitised-note">
-            <strong>Sanitised</strong>
-            <span>Raw arguments, tokens and full tool output are not shown here.</span>
-          </aside>
         }
       </oc-hinge-drawer>
     }

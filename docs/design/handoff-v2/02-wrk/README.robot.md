@@ -95,6 +95,10 @@ Approvals, computer control, screenshots and egress in the workspace. Covers P3-
 - `WRK-02` Loading tool result — `png/WRK-02-1280.png` · `-390.png`
 - `WRK-03` Successful read — `png/WRK-03-1280.png` · `-390.png`
 - `WRK-04` Tool details — sanitised — `png/WRK-04-1280.png` · `-390.png`
+
+The built chat now shows command and governed tool details inline when a person
+opens their activity line. WRK-04 still records the earlier drawer design.
+Approval reviews and native consent refusals retain their drawers.
 - `WRK-05` Completed after an evidenced safe retry — `png/WRK-05-1280.png` · `-390.png`
 - `WRK-06` Unsupported native consent — `png/WRK-06-1280.png` · `-390.png`
 - `WRK-07` Activity jumps to its message — `png/WRK-07-1280.png` · `-390.png`
