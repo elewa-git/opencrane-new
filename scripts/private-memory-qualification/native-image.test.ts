@@ -1,8 +1,9 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -19,6 +20,25 @@ const request = {
 const faults: [string, string, string][] = [
   ['missing binary', 'readFileSync(binary)', "readFileSync('/missing-native')"],
   ['replaced binary', 'readFileSync(binary)', "Buffer.from('replacement')"],
+  ['changed running binary', 'binaryDigest(`${base}/exe`)', "'changed'"],
+  ['shared home', 'randomUUID()', "'11111111-1111-4111-8111-111111111111'"],
+  ['used home', 'mkdirSync(home, directoryOptions);',
+    "mkdirSync(home, directoryOptions); writeFileSync(home + '/retained', 'keep'); " +
+    'mkdirSync(home, directoryOptions);'],
+  ['shared process identity', 'processIdentity(nativePid)', "'same-process-identity'"],
+  ['shared thread', "thread['id']", "(fixtureThread ??= thread['id'])"],
+  ['reused process', 'return nativePid;', 'return fixturePid ??= nativePid;'],
+  ['swapped home', 'readlinkSync(`${base}/cwd`)',
+    '(fixtureHome ??= readlinkSync(`${base}/cwd`))'],
+  ['swapped thread', 'checkThread(readResponse)', '(fixtureThread ??= checkThread(readResponse))'],
+  ['first child failure', 'const configParams =',
+    "if (++sample === 1) { child.kill('SIGKILL'); } const configParams ="],
+  ['RPC rejection', "connection.rpc('config/read', configParams)",
+    "connection.rpc('fixture/reject', configParams)"],
+  ['startup timeout', "await connection.rpc('initialize', initialise);",
+    "child.stdout.pause(); await connection.rpc('initialize', initialise);"],
+  ['surviving process', '!sameProcess(pid, start)', 'false'],
+  ['failed home cleanup', 'rmSync(home, removalOptions);', 'void removalOptions;'],
   ['persistent thread', "thread['ephemeral']", 'false'],
   ['saved path', "thread['path']", "'/saved'"],
   ['execution environment', "thread['environments']", '[{}]'],
@@ -47,15 +67,8 @@ function docker(args: string[], timeout = 30_000): string {
   const output = execFileSync('/usr/bin/docker', args, options);
   return output.trim();
 }
-function prepare(): void {
-  docker(['build', '-q', '-f', 'infra/package/Dockerfile', '-t', packageTag, '.'], 600_000);
-  const directory = mkdtempSync(join(tmpdir(), 'private-native-image-'));
-  try {
-    for (const name of ['private-codex.ts', 'codex-config.ts', 'codex-connection.ts', 'http.ts']) {
-      cpSync(`apps/computer/src/${name}`, join(directory, name));
-    }
-    // Inject observations only in this fixture image. The shipped entry has no fault switch.
-    const preload = `import { registerHooks } from 'node:module';
+// Inject observations only in this fixture image. The shipped entry has no fault switch.
+const preload = `import { registerHooks } from 'node:module';
 const faults = ${JSON.stringify(faults)};
 function load(url, context, next) {
   const loaded = next(url, context);
@@ -66,17 +79,85 @@ function load(url, context, next) {
     return row[0] === process.env.CASE;
   }
   const fault = faults.find(selected);
-  if (url.endsWith('/native-checks.ts') && fault) {
-    const source = String(loaded.source);
-    if (!source.includes(fault[1])) {
-      process.exit(2);
+  if (url.endsWith('/codex-connection.ts') && process.env.CASE === 'startup timeout') {
+    const originalSource = String(loaded.source);
+    const source = originalSource.replace('30_000', '200');
+    return { ...loaded, source };
+  }
+  if (url.endsWith('/native-checks.ts')) {
+    let source = String(loaded.source);
+    if (fault) {
+      if (!source.includes(fault[1])) {
+        process.exit(2);
+      }
+      source = source.replaceAll(fault[1], fault[2]);
     }
-    return { ...loaded, source: 'let sample = 0;\\n' + source.replaceAll(fault[1], fault[2]) };
+    const audit = String.raw\`
+import { existsSync as fixtureExists } from 'node:fs';
+let sample = 0, fixtureThread, fixturePid, fixtureHome;
+const observed = [];
+let independentRead = false;
+function observe(home, child, threadId) {
+  for (const previous of process.env.CASE === 'safe' ? observed : []) {
+    process.kill(previous.pid, 0);
+    if (previous.home === home || previous.pid === child.pid || previous.threadId === threadId) {
+      throw new Error('fixture_failed');
+    }
+  }
+  const childrenPath = '/proc/' + child.pid + '/task/' + child.pid + '/children';
+  const childrenText = readFileSync(childrenPath, 'utf8');
+  const trimmedChildren = childrenText.trim();
+  const nativePid = Number(trimmedChildren);
+  const observation = { home, pid: child.pid, nativePid, threadId };
+  observed.push(observation);
+  writeFileSync('/run/native-count', String(observed.length));
+  if (process.env.CASE === 'collector EOF' && observed.length === 2) {
+    process.kill(process.pid, 'SIGSTOP');
+  }
+}
+function auditRead(home, child, threadId) {
+  if (process.env.CASE === 'safe' && observed.length === 2 && home === observed[1].home &&
+      !fixtureExists(observed[0].home)) {
+    if (fixtureExists('/proc/' + observed[0].pid) || fixtureExists('/proc/' + observed[0].nativePid)) {
+      throw new Error('fixture_failed');
+    }
+    process.kill(child.pid, 0);
+    process.kill(observed[1].nativePid, 0);
+    if (threadId !== observed[1].threadId) {
+      throw new Error('fixture_failed');
+    }
+    independentRead = true;
+  }
+  return threadId;
+}
+\`;
+    source = source.replaceAll('checkThread(readResponse)',
+      'auditRead(home, child, checkThread(readResponse))');
+    source = source.replace('const threadId = checkThread(startResponse);',
+      'const threadId = checkThread(startResponse); observe(home, child, threadId);');
+    source = source.replace('export async function checkNative(', 'async function checkedNative(');
+    source += String.raw\`
+export async function checkNative(challengeId) {
+  await checkedNative(challengeId);
+  if (process.env.CASE === 'safe' && (observed.length !== 2 || !independentRead)) {
+    throw new Error('fixture_failed');
+  }
+}
+\`;
+    return { ...loaded, source: audit + source };
   }
   return loaded;
 }
 const hooks = { load };
 registerHooks(hooks);`;
+
+function prepare(): void {
+  docker(['build', '-q', '-f', 'infra/package/Dockerfile', '-t', packageTag, '.'], 600_000);
+  const directory = mkdtempSync(join(tmpdir(), 'private-native-image-'));
+  try {
+    for (const name of ['private-codex.ts', 'codex-config.ts', 'codex-connection.ts', 'http.ts']) {
+      cpSync(`apps/computer/src/${name}`, join(directory, name));
+    }
     writeFileSync(join(directory, 'preload.mjs'), preload);
     const computerImage = process.env['COMPUTER_TEST_IMAGE'] ?? 'ocn-upload-computer:test';
     const dockerfile = `FROM ${computerImage} AS native
@@ -103,35 +184,77 @@ function cleanup(): void {
 beforeAll(prepare, 970_000);
 afterAll(cleanup, 30_000);
 
-function run(caseName: string, image = tag): Record<string, unknown> {
+function startContainer(caseName: string, image: string): string {
   const containerName = `private-native-${randomUUID()}`;
-  const args = ['run', '-i', '--name', containerName, '--network=none', '--read-only', '--init', '--user=0',
+  const args = ['run', '-d', '--name', containerName, '--network=none', '--read-only', '--init', '--user=0',
     '--cap-add=SYS_PTRACE', '--cpus=0.5', '--pids-limit=256', '--ulimit=core=0:0',
     '--ulimit=nproc=256:256', '--tmpfs', '/home/private:mode=711', '--tmpfs', '/run',
-    '-e', `CASE=${caseName}`, image, 'nice', '-n', '10', 'node', '--experimental-strip-types'];
+    '-e', `CASE=${caseName}`, image, 'sleep', '120'];
+  docker(args);
+  return containerName;
+}
+function nativeCommand(image: string): string[] {
+  const command = ['nice', '-n', '10', 'node',
+    '--experimental-strip-types'];
   if (image !== packageTag) {
-    args.push('--import', '/fixture/preload.mjs');
+    command.push('--import', '/fixture/preload.mjs');
   }
-  args.push('/app/scripts/private-memory-qualification/journey.mjs');
+  command.push('/app/scripts/private-memory-qualification/journey.mjs');
+  return command;
+}
+function run(caseName: string, image = tag): Record<string, unknown> {
+  const containerName = startContainer(caseName, image);
+  const command = ['exec', '-i', containerName, ...nativeCommand(image)];
   try {
     const options = {
       input: JSON.stringify(request), encoding: 'utf8' as const, timeout: 45_000,
     };
-    const result = spawnSync('/usr/bin/docker', args, options);
+    const result = spawnSync('/usr/bin/docker', command, options);
     expect(result.error).toBeUndefined();
     expect(result.stderr).toBe('');
     const receipt = receiptSchema.parse(JSON.parse(result.stdout));
     expect(result.status).toBe(receipt['result'] === 'FAIL' ? 1 : 0);
+    assertStopped(containerName, ['failed home cleanup', 'used home', 'surviving process'].includes(caseName));
+    if (caseName === 'used home') {
+      const probe = "const fs = require('node:fs'); " +
+        "const homes = fs.readdirSync('/home/private'); " +
+        "if (homes.length !== 1 || fs.readFileSync('/home/private/' + homes[0] + " +
+        "'/retained', 'utf8') !== 'keep') process.exit(1);";
+      expect(docker(['exec', containerName, 'node', '-e', probe])).toBe('');
+    }
     return receipt;
   } finally {
     docker(['rm', '-f', '-v', containerName]);
   }
 }
+function assertStopped(containerName: string, allowHome = false): void {
+  const probe = String.raw`
+const fs = require('node:fs');
+for (const entry of fs.readdirSync('/proc')) {
+  if (!/^\d+$/.test(entry)) {
+    continue;
+  }
+  let command;
+  try {
+    command = fs.readFileSync('/proc/' + entry + '/cmdline', 'utf8');
+  } catch {
+    continue;
+  }
+  if (command.includes('app-server') && !command.includes('const fs')) {
+    process.exit(1);
+  }
+}
+if (!${allowHome} && fs.readdirSync('/home/private').length !== 0) {
+  process.exit(1);
+}
+`;
+  expect(docker(['exec', containerName, 'node', '-e', probe])).toBe('');
+}
 function safeNative(): void {
   const expected = { ...request, result: 'PARTIAL', complete: false };
   expect(run('safe')).toMatchObject(expected);
 }
-it('observes pinned native start from image modules and keeps qualification incomplete',
+it('observes two simultaneous pinned native processes and keeps qualification incomplete',
   safeNative, 60_000);
 function refusesFault(name: string): void {
   const expected = { result: 'FAIL', reason: 'journey_failed' };
@@ -150,3 +273,48 @@ function missingNative(): void {
   expect(run('safe', missingTag)).toEqual(expected);
 }
 it('refuses the package without native files even with safe host observations', missingNative);
+
+async function collectorEof(): Promise<void> {
+  const containerName = startContainer('collector EOF', tag);
+  try {
+    const source = readFileSync(new URL('./supervisor.mjs', import.meta.url), 'utf8');
+    const args = ['exec', '-i', containerName, 'node', '--input-type=module', '--eval',
+      source, JSON.stringify(nativeCommand(tag))];
+    const options = { stdio: 'pipe' as const };
+    const child = spawn('/usr/bin/docker', args, options);
+    function closed(resolve: (code: number | null) => void): void {
+      child.once('close', resolve);
+    }
+    const stopped = new Promise(closed);
+    const output: Buffer[] = [];
+    function collect(chunk: Buffer): void {
+      output.push(chunk);
+    }
+    child.stdout.on('data', collect);
+    child.stderr.on('data', collect);
+    child.stdin.write(`${JSON.stringify(JSON.stringify(request))}\n`);
+    try {
+      let ready = false;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const probe = "const fs = require('node:fs'); " +
+          "if (fs.existsSync('/run/native-count')) " +
+          "process.stdout.write(fs.readFileSync('/run/native-count'));";
+        ready = docker(['exec', containerName, 'node', '-e', probe]) === '2';
+        if (ready) {
+          break;
+        }
+        await delay(50);
+      }
+      expect(ready).toBe(true);
+    } finally {
+      child.stdin.end();
+    }
+    expect(await stopped).toBe(1);
+    expect(Buffer.concat(output).length).toBe(0);
+    assertStopped(containerName, true);
+    docker(['exec', containerName, 'test', '!', '-e', '/run/opencrane-memory-qualification.lock']);
+  } finally {
+    docker(['rm', '-f', '-v', containerName]);
+  }
+}
+it('collector EOF stops both native processes in the supervisor group', collectorEof, 30_000);

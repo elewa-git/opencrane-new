@@ -1,0 +1,1 @@
+- Private memory checks now observe two simultaneous native processes and verify that each process and home is removed independently. Repeated cleanup leaves reused process IDs alone. Results remain partial; memory admission and live qualification stay incomplete.

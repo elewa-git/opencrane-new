@@ -190,14 +190,16 @@ dependencies, authority checks or admission changes are introduced.
 ## Native process assertions
 
 P4-15 PR 5l, Part of #97, adds `native-checks.ts` to `privateTurns`. Host refusal
-still happens first. A fresh challenge names a newly created home and identifies
-initialisation of one new Codex process. The helper reuses the production launcher,
+still happens first. The runner generates two fresh child identities and homes,
+independently of the receipt challenge, and starts both Codex processes before making
+metadata requests. The helper reuses the production launcher,
 configuration and JSON-RPC connection. It never resumes a thread or sends model input.
 It checks the Linux x64 Codex 0.159.2 executable hash before launch and through the
 running process. It checks the actual executable, parent-child relationship, working
 directory, home settings, UID, no-new-privileges setting, core limits and finite positive
 process limits. The home must use tmpfs. Both soft and hard core limits must be zero.
-It checks process identity and these observations again before returning.
+It checks process identity and these observations again before returning. Each process
+must stay in the runner’s Linux process group.
 
 The native config must disable shell, files, browser access, code-host execution,
 external tools, skills instructions, plugins and agent spawning. A new thread must
@@ -225,6 +227,36 @@ requester-only volatile replies; native isolation, invalidation and unrelated-ac
 journeys; and immutable fresh-install qualification. Admission stays disabled, the
 collector cannot save PASS and 5i remains held. Own checks are in the
 [receipt](../../docs/process/p4-15-pr5l/receipt.md).
+
+## Simultaneous native processes and cleanup
+
+P4-15 PR 5m, Part of #97, extends the image-owned assertions above. Both wrappers and
+native executables must be alive together, with different homes, child identities,
+PIDs, process/start identities and empty ephemeral threads. Their environment values
+must match their own generated homes and child identities. The first process and
+home must disappear before a metadata read from the second returns its original
+thread and process identities. The second process and home must then disappear.
+Distinct metadata does not establish filesystem isolation between these processes.
+
+Cleanup records each wrapper and native process by PID and Linux start time. It
+checks that identity before each signal and while waiting for removal, leaving a
+reused PID alone. Each child has one cleanup attempt; later calls reuse its result,
+including a failure. Cleanup freezes each wrapper before reading its children, so
+a startup still in progress cannot create a child after that read. It kills and checks both processes,
+even when startup, RPC or assertions fail. It refuses a surviving process or failed
+home removal. A pre-existing home is refused before it belongs to cleanup. A failed
+process cleanup retains the homes and refuses. The existing supervisor kills the
+whole group on collector EOF; abrupt cancellation may leave homes in tmpfs and
+returns no successful receipt. No model input is sent.
+
+The derivative-image tests observe overlap and independent cleanup, check process
+liveness after failures, and exercise actual supervisor EOF with two native children.
+Only the test loader substitutes bad observations or faults. The ordinary package
+still lacks the native runtime and production computer helpers and must refuse.
+Those shipped files and safe host settings remain prerequisites for a deployment run.
+All check and qualification statuses above stay unchanged. Delivery, persistence,
+gVisor and fresh-install qualification remain unproved. Own checks are recorded in
+[the receipt](../../docs/process/p4-15-pr5m/receipt.md).
 
 ## File parser scope and invocation
 

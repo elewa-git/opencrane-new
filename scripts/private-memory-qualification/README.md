@@ -6,7 +6,8 @@ This developer tool collects private memory test results from a running deployme
 It reads the deployment identity itself and starts each check inside that image.
 It also checks older evidence files, which cannot qualify a deployment.
 Admission remains off. The runner checks host settings, saved memory invalidation
-and separation between sessions. It also checks native process starts when Codex is present.
+and separation between sessions. It also checks two native processes and their cleanup
+when Codex is present.
 It reports unfinished journeys without qualifying them.
 
 ## Where it fits
@@ -22,7 +23,7 @@ flowchart LR
   collector -.->|uses memory checks| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
   collector -->|measures and starts checks| docker["Docker<br/>running image and host"]
-  docker -->|checks memory and native starts| deployment["deployment<br/>event store and journey runner"]
+  docker -->|checks memory and two native processes| deployment["deployment<br/>event store and journey runner"]
 ```
 
 ## What it is responsible for
@@ -53,9 +54,11 @@ correction and forgetting against the measured event store. It checks that unrel
 facts and other sessions keep their recorded state. It saves encrypted fixture facts
 using the deployment's memory key store. It records these checks as PARTIAL and missing
 journeys as NOT RUN. For private turns, it requires the pinned Codex executable,
-a fresh empty thread, disabled tools, a home in RAM and safe process limits. It
-checks the running process again before returning PARTIAL. Native calls, full
-process isolation and storage checks are still pending. The package image does not
+two fresh empty threads, disabled tools, separate homes in RAM and safe process limits.
+It closes the first process and checks that its home is gone while the second still
+answers with its original identity. It then closes and checks the second before returning
+PARTIAL. Cleanup checks process start times before signalling and keeps its first
+result, so another cleanup call leaves reused process IDs alone. Memory tool calls, full process isolation and storage checks are still pending. The package image does not
 contain Codex or its launch helpers, so its native check refuses. Tests add those
 files to a separate disposable image; they do not change the deployment image.
 Tests build the package image and run all four memory checks against a disposable event store.
