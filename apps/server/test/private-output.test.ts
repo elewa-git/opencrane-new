@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { testAuthConfig } from '@opencrane/auth/testing';
 import { fixture } from '@opencrane/models/testing';
-import { memoryWrittenDataSchema } from '@opencrane/events';
+import { memoryContextRecordedEventSchema, memoryWrittenDataSchema } from '@opencrane/events';
 import { history, envelope } from '@opencrane/models';
 import { grantStream } from '@opencrane/authz';
 import { connectMemberFeed, conversations, computers, memoryKeys, memoryScopeId, readConversation }
@@ -96,9 +96,13 @@ async function session(conversationId: string, requesterId = 'alice') {
   const messages = [{ ...message, id: conversationId, commandId: conversationId }];
   await setup.nats.seed(messages);
   const start = { conversationId, turnId: conversationId, requesterId, assistantId: 'assistant',
-    computerId: 'computer', threadId: conversationId, task: 'chat_turn',
-    executionMode: 'restricted', payingGroupId: 'sales' };
+    computerId: 'computer', threadId: conversationId,
+    executionMode: 'restricted' as const, payingGroupId: 'sales', task: 'chat_turn' as const };
   await setup.append('computer-assistant', 'computer.turn_started', start);
+  const observed = { type: 'agent.turn_started', sequence: 1, conversationId,
+    turnId: conversationId, threadId: conversationId };
+  link.memory.observe(observed);
+  await link.memory.accept(observed, start);
   const data = { conversationId, turnId: conversationId, requesterId, assistantId: 'assistant',
     computerId: 'computer', threadId: conversationId, generation: 1, inputGeneration: 'input',
     projectionGeneration: '1', action: 'prepared', delivery: null, callDigest: null,
@@ -410,3 +414,227 @@ async function losesAppendReply() {
   expect(JSON.stringify(rows)).not.toContain(canary);
 }
 it('clears an uncertain append without releasing or remembering reply bytes', losesAppendReply);
+
+function clearanceFrames(frames: unknown[]) {
+  function clearance(frame: unknown) {
+    return typeof frame === 'object' && frame !== null && 'type' in frame &&
+      frame.type === 'private_output_cleared';
+  }
+  return frames.filter(clearance);
+}
+function expectedClearance() {
+  return { version: 1, topic: 'conversation', type: 'private_output_cleared',
+    conversationId: 'first', turnId: 'first', threadId: 'first', generation: 1,
+    inputGeneration: 'input' };
+}
+async function completedReply() {
+  const client = await subscribe();
+  await send();
+  function delivered() {
+    expect(privateFrames(client.frames)).toHaveLength(1);
+  }
+  await vi.waitFor(delivered);
+  const completed = { conversationId: 'first', turnId: 'first' };
+  await setup.append('conversation-first', 'agent.turn_completed', completed);
+  return client;
+}
+async function changeFact(kind: string, memoryId = 'fact') {
+  const subject = `scope-${scopeId}`;
+  if (kind === 'expiry') {
+    const expired = Date.now() + 120_000;
+    const clock = vi.spyOn(Date, 'now');
+    clock.mockReturnValue(expired);
+  } else if (kind === 'revoke') {
+    const resourceType = 'memory_read';
+    const subject = grantStream(resourceType, scopeId);
+    const data = { resourceType, resourceId: scopeId, granteeKind: 'member',
+      granteeId: 'alice', revokedBy: 'alice' };
+    const saved = await setup.append(subject, 'grant.revoked', data);
+    await setup.auth.handler.handle(saved, setup.db);
+  } else if (kind === 'correct') {
+    const rows = await history(setup.nats.store, subject, 'test');
+    const original = memoryWrittenDataSchema.parse(rows[0]!.event.data);
+    const data = { ...original, memoryId, revision: 2, expectedRevision: 1,
+      supersedes: { memoryId, revision: 1 }, reason: 'human' };
+    await setup.append(subject, 'memory.corrected', data);
+  } else {
+    const data = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
+      memoryId, revision: 2, expectedRevision: 1 };
+    await setup.append(subject, 'memory.forgotten', data);
+  }
+}
+async function flushBrowser(client: WebSocket) {
+  const pong = once(client, 'pong');
+  client.ping();
+  await pong;
+}
+async function clearsOriginalBrowser(kind: string) {
+  const first = await completedReply();
+  const sameChat = await subscribe();
+  const second = await subscribe('second');
+  const bob = await subscribe('bob', 'bob');
+  await changeFact(kind);
+  await link.memory.poll('first');
+  await flushBrowser(first.socket);
+  expect(clearanceFrames(first.frames)).toEqual([expectedClearance()]);
+  expect(clearanceFrames(sameChat.frames)).toEqual([]);
+  expect(clearanceFrames(second.frames)).toEqual([]);
+  expect(clearanceFrames(bob.frames)).toEqual([]);
+  await link.memory.poll('first');
+  await flushBrowser(first.socket);
+  expect(clearanceFrames(first.frames)).toHaveLength(1);
+  expect(first.socket.readyState).toBe(WebSocket.OPEN);
+}
+it.each(['correct', 'forget', 'expiry', 'revoke'])(
+  'clears only the original live browser after completed memory %s', clearsOriginalBrowser);
+
+async function prematureReceiptCannotForgetBrowser() {
+  const first = await completedReply();
+  const receipt = { type: 'private_output_cleared', conversationId: 'first',
+    turnId: 'first', threadId: 'first' };
+  link.memory.receive(receipt);
+  await changeFact('forget');
+  await link.memory.poll('first');
+  await flushBrowser(first.socket);
+  expect(clearanceFrames(first.frames)).toEqual([expectedClearance()]);
+  link.memory.receive(receipt);
+  await link.memory.poll('first');
+  await flushBrowser(first.socket);
+  expect(clearanceFrames(first.frames)).toHaveLength(1);
+}
+it('cannot use an unsolicited computer receipt to drop browser clearance',
+  prematureReceiptCannotForgetBrowser);
+
+async function clearsBridgeReplies() {
+  const first = await completedReply();
+  const second = await subscribe('second');
+  const secondReport = { ...report(), conversationId: 'second', turnId: 'second',
+    threadId: 'second', sequence: 2 };
+  await send(secondReport);
+  const closed = once(link.socket, 'close');
+  link.socket.terminate();
+  await closed;
+  await flushBrowser(first.socket);
+  await flushBrowser(second.socket);
+  expect(clearanceFrames(first.frames)).toEqual([expectedClearance()]);
+  const expected = { ...expectedClearance(), conversationId: 'second',
+    turnId: 'second', threadId: 'second' };
+  expect(clearanceFrames(second.frames)).toEqual([expected]);
+}
+it('clears every delivered reply bound to a lost bridge', clearsBridgeReplies);
+
+async function closesOrReplaces(kind: string) {
+  const first = await completedReply();
+  if (kind === 'closed') {
+    const data = { conversationId: 'first', closedBy: 'alice' };
+    await setup.append('conversation-first', 'conversation.closed', data);
+  } else {
+    const data = { assistantId: 'assistant', computerId: 'computer', generation: 2,
+      podUid: 'replacement' };
+    await setup.append('computer-assistant', 'computer.ready', data);
+  }
+  await link.memory.poll('first');
+  await flushBrowser(first.socket);
+  expect(clearanceFrames(first.frames)).toEqual([expectedClearance()]);
+}
+it.each(['closed', 'replacement'])('clears delivered output when %s', closesOrReplaces);
+
+async function disconnectedBrowserCannotRedirect() {
+  const first = await completedReply();
+  const closed = once(first.socket, 'close');
+  first.socket.terminate();
+  await closed;
+  const replacement = await subscribe();
+  await changeFact('forget');
+  await link.memory.poll('first');
+  await flushBrowser(replacement.socket);
+  expect(clearanceFrames(replacement.frames)).toEqual([]);
+}
+it('drops disconnected browser tracking without notifying a new subscription',
+  disconnectedBrowserCannotRedirect);
+
+async function unrelatedActivityKeepsReply() {
+  const first = await completedReply();
+  await changeFact('forget', 'unrelated');
+  const message = { conversationId: 'first', authorId: 'alice', authorKind: 'human',
+    contentType: 'text', ...setup.keys.encrypt('test', 'first', 'Another question') };
+  await setup.append('conversation-first', 'message.posted', message);
+  const upload = { conversationId: 'first', fileId: 'upload', uploadedBy: 'alice',
+    name: 'fixture.txt', mime: 'text/plain', size: 1, sha256: 'a'.repeat(64),
+    objectKey: 'fixture' };
+  await setup.append('conversation-first', 'file.uploaded', upload);
+  const neighbour = { conversationId: 'first', turnId: 'neighbour' };
+  await setup.append('conversation-first', 'agent.turn_completed', neighbour);
+  await link.memory.poll('first');
+  await flushBrowser(first.socket);
+  expect(clearanceFrames(first.frames)).toEqual([]);
+  expect(first.socket.readyState).toBe(WebSocket.OPEN);
+  await changeFact('forget');
+  await link.memory.poll('first');
+  await flushBrowser(first.socket);
+  expect(clearanceFrames(first.frames)).toEqual([expectedClearance()]);
+}
+it('keeps the reply and viewer open through unrelated facts, messages, uploads and turns',
+  unrelatedActivityKeepsReply);
+
+async function oldReceiptKeepsLaterReply(change: object) {
+  const first = await completedReply();
+  const stale = { type: 'private_output_cleared', conversationId: 'first',
+    turnId: 'first', threadId: 'first', ...change };
+  link.memory.receive(stale);
+  await changeFact('forget');
+  await link.memory.poll('first');
+  await flushBrowser(first.socket);
+  expect(clearanceFrames(first.frames)).toEqual([expectedClearance()]);
+}
+it.each([{ threadId: 'old' }, { generation: 2 }, { inputGeneration: 'old' },
+  { turnId: 'old' }, { conversationId: 'second' }])(
+  'cannot redirect or consume clearance with a stale receipt %j', oldReceiptKeepsLaterReply);
+
+async function oldInvalidationKeepsNextReply() {
+  const first = await completedReply();
+  const rows = await history(setup.nats.store, 'conversation-first', 'test');
+  const preparation = rows.find(isPreparation);
+  if (!preparation) throw new Error('Missing fixture preparation');
+  const original = memoryContextRecordedEventSchema.parse(preparation.event).data;
+  const next = { ...original, turnId: 'next', threadId: 'next-thread', inputGeneration: 'next-input' };
+  const message = { conversationId: 'first', authorId: 'alice', authorKind: 'human',
+    contentType: 'text', ...setup.keys.encrypt('test', 'first', 'Next question') };
+  const request = envelope('test', 'conversation-first', 'message.posted', message);
+  const requests = [{ ...request, id: 'next', commandId: 'next' }];
+  await setup.nats.seed(requests);
+  const started = { conversationId: 'first', turnId: 'next', threadId: 'next-thread',
+    requesterId: 'alice', assistantId: 'assistant', computerId: 'computer',
+    task: 'chat_turn' as const, executionMode: 'restricted' as const, payingGroupId: 'sales' };
+  await setup.append('computer-assistant', 'computer.turn_started', started);
+  const observed = { ...started, type: 'agent.turn_started', sequence: 2 };
+  link.memory.observe(observed);
+  await link.memory.accept(observed, started);
+  await contextRecord('first', next);
+  const loaded = { ...next, action: 'loaded', delivery: 'initial' };
+  await contextRecord('first', loaded);
+  const reply = { ...report(), sequence: 2, previousSequence: 1, turnId: 'next', threadId: 'next-thread',
+    inputGeneration: 'next-input' };
+  await send(reply);
+  await flushBrowser(first.socket);
+  expect(privateFrames(first.frames)).toHaveLength(2);
+  await changeFact('forget');
+  await link.memory.poll('first');
+  await flushBrowser(first.socket);
+  expect(clearanceFrames(first.frames)).toEqual([expectedClearance()]);
+  const receipt = { type: 'private_output_cleared', conversationId: 'first',
+    turnId: 'first', threadId: 'first' };
+  link.memory.receive(receipt);
+  const closed = once(link.socket, 'close');
+  link.socket.terminate();
+  await closed;
+  await flushBrowser(first.socket);
+  const expected = { ...expectedClearance(), turnId: 'next', threadId: 'next-thread',
+    inputGeneration: 'next-input' };
+  expect(clearanceFrames(first.frames)).toEqual([expectedClearance(), expected]);
+}
+function isPreparation(row: Awaited<ReturnType<typeof history>>[number]) {
+  return row.event.type === 'agent.memory_context_recorded';
+}
+it('keeps old turn, thread and input identities separate from the next delivered reply',
+  oldInvalidationKeepsNextReply);
