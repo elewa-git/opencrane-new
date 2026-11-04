@@ -672,7 +672,8 @@ message. History replay and streamed text do not announce tool changes. If a tur
 ends before a tool finish report arrives, the tool says that no finish was confirmed;
 it does not claim that the call failed, completed or kept running. Command and tool
 lines expand inline and follow the latest saved tool row. Native consent refusals
-keep their drawer and refresh their saved details when opened. A stored review that fails its schema
+keep their drawer and refresh their saved details when opened. A stored review
+that fails its schema
 makes the GET return 400. The browser shows the read-failed state and pauses
 decisions.
 Chromium captures use intercepted fixtures and do not prove a live governed turn.
