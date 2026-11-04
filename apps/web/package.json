@@ -21,6 +21,7 @@
     "@fontsource/dm-sans": "5.3.0",
     "@novnc/novnc": "1.5.0",
     "@opencrane/protocol": "0.1.0",
+    "mermaid": "12.2.0",
     "punycode": "2.3.1",
     "rxjs": "7.8.2",
     "tslib": "2.8.1",

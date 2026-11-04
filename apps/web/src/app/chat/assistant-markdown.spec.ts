@@ -1,5 +1,16 @@
-import { TestBed } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { AssistantMarkdown } from './assistant-markdown';
+import { MERMAID_RENDERER } from './mermaid-diagram';
+
+function render(code: string) {
+  if (code === 'this is not a diagram') {
+    return Promise.reject(new Error('Invalid diagram'));
+  }
+  const result = { svg: '<svg xmlns="http://www.w3.org/2000/svg"></svg>' };
+  return Promise.resolve(result);
+}
+
+const renderMermaid = vi.fn(render);
 
 function mount(text: string) {
   const fixture = TestBed.createComponent(AssistantMarkdown);
@@ -157,6 +168,39 @@ function keepsExistingElements() {
   expect(root.textContent).toContain('This interface is not available yet.');
 }
 
+async function rendersMermaidAsAnImage() {
+  const { root } = mount('```mermaid\ngraph LR\nA[Start] --> B[Done]\n```');
+  function imageAppears() {
+    const image = root.querySelector<HTMLImageElement>('img[alt="Diagram"]');
+    expect(image?.getAttribute('src')).toMatch(/^data:image\/svg\+xml/);
+  }
+  await vi.waitFor(imageAppears);
+  expect(root.querySelector('iframe, svg, script, a')).toBeNull();
+}
+
+async function showsSourceWhenMermaidFails() {
+  const source = 'this is not a diagram';
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal('navigator', { clipboard: { writeText } });
+  const { root, fixture } = mount('```mermaid\n' + source + '\n```');
+  function sourceAppears() {
+    expect(root.querySelector('pre code')?.textContent).toBe(source);
+  }
+  await vi.waitFor(sourceAppears);
+  expect(root.querySelector('img')).toBeNull();
+  root.querySelector('button')?.click();
+  await fixture.whenStable();
+  expect(writeText).toHaveBeenCalledWith(source);
+  expect(root.querySelector('[role="status"]')?.textContent).toBe('Copied');
+}
+
+function keepsNestedMermaidFenceAsCode() {
+  const source = '```mermaid\ngraph LR\nA --> B\n```';
+  const { root } = mount('````text\n' + source + '\n````');
+  expect(root.querySelector('pre code')?.textContent).toBe(source);
+  expect(root.querySelector('img, oc-mermaid-diagram')).toBeNull();
+}
+
 it('renders headings, paragraphs, ordered and unordered lists and block quotes', rendersBlocks);
 
 it('renders inline code, bold, italic and permitted links', rendersInline);
@@ -183,3 +227,135 @@ it('keeps copy feedback on the copied block while unchanged code precedes stream
 it('keeps very long replies and unmatched markers without truncation', keepsLongReplies);
 
 it('keeps citations and the existing interactive placeholder outside code', keepsExistingElements);
+
+it('renders a Mermaid block as an inert image', rendersMermaidAsAnImage);
+
+it('shows the Mermaid source as code when rendering fails', showsSourceWhenMermaidFails);
+
+it('keeps a nested Mermaid fence inside its outer code block', keepsNestedMermaidFenceAsCode);
+
+async function settleDiagram(fixture: ComponentFixture<AssistantMarkdown>) {
+  function nextTask(resolve: (value: void) => void) {
+    setTimeout(resolve, 0);
+  }
+  await new Promise<void>(nextTask);
+  fixture.detectChanges();
+  await fixture.whenStable();
+}
+
+function resetRenderer() {
+  renderMermaid.mockReset();
+  renderMermaid.mockImplementation(render);
+  const provider = { provide: MERMAID_RENDERER, useValue: renderMermaid };
+  const testingModule = { providers: [provider] };
+  TestBed.configureTestingModule(testingModule);
+}
+
+beforeEach(resetRenderer);
+
+async function waitsForClosedMermaidFence() {
+  renderMermaid.mockClear();
+  const { root, fixture } = mount('```mermaid\ngraph LR\nA --> B');
+  const deltas = ['\nB --> C[', 'Done]', '\n``', '`'];
+  let text = '```mermaid\ngraph LR\nA --> B';
+  for (const delta of deltas) {
+    await settleDiagram(fixture);
+    expect(renderMermaid).not.toHaveBeenCalled();
+    expect(root.querySelector('img')).toBeNull();
+    expect(root.querySelector('pre code')).not.toBeNull();
+    text += delta;
+    fixture.componentRef.setInput('text', text);
+    fixture.detectChanges();
+  }
+  function diagramAppears() {
+    expect(root.querySelector('img')).not.toBeNull();
+  }
+  await vi.waitFor(diagramAppears);
+  expect(renderMermaid).toHaveBeenCalledTimes(1);
+}
+
+async function refusesOversizedMermaid() {
+  renderMermaid.mockClear();
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  const clipboard = { clipboard: { writeText } };
+  vi.stubGlobal('navigator', clipboard);
+  const source = 'graph LR\nA["' + 'x'.repeat(51000) + '"]';
+  const { root, fixture } = mount('```mermaid\n' + source + '\n```');
+  await settleDiagram(fixture);
+  expect(renderMermaid).not.toHaveBeenCalled();
+  expect(root.querySelector('img')).toBeNull();
+  expect(root.querySelector('pre code')?.textContent).toBe(source);
+  root.querySelector('button')?.click();
+  await settleDiagram(fixture);
+  expect(writeText).toHaveBeenCalledWith(source);
+}
+
+async function refusesWarningImage() {
+  const warningSvg = '<svg><text><tspan>Maximum text size in</tspan>'
+    + '<tspan>diagram exceeded</tspan></text></svg>';
+  const warning = { svg: warningSvg };
+  renderMermaid.mockResolvedValueOnce(warning);
+  const source = 'graph LR\nA --> B';
+  const { root, fixture } = mount('```mermaid\n' + source + '\n```');
+  await settleDiagram(fixture);
+  expect(root.querySelector('img')).toBeNull();
+  expect(root.querySelector('pre code')?.textContent).toBe(source);
+  expect(root.querySelector('button')?.textContent).toBe('Copy code');
+}
+
+async function keepsNewestDiagram(lateFailure: boolean) {
+  let resolveRender!: (result: { svg: string; diagramType: string }) => void;
+  let rejectRender!: (reason: Error) => void;
+  function holdRender(
+    resolve: typeof resolveRender, reject: typeof rejectRender,
+  ) {
+    resolveRender = resolve;
+    rejectRender = reject;
+  }
+  const pending = new Promise<{ svg: string; diagramType: string }>(holdRender);
+  renderMermaid.mockReturnValueOnce(pending);
+  const { root, fixture } = mount('```mermaid\ngraph LR\nOld --> Reply\n```');
+  await settleDiagram(fixture);
+  fixture.componentRef.setInput('text', '```mermaid\ngraph LR\nNew --> Reply\n```');
+  fixture.detectChanges();
+  function newDiagramAppears() {
+    expect(root.querySelector('img')).not.toBeNull();
+  }
+  await vi.waitFor(newDiagramAppears);
+  const currentSource = root.querySelector('img')?.getAttribute('src');
+  if (lateFailure) {
+    rejectRender(new Error('Old render failed'));
+  } else {
+    const oldResult = { svg: '<svg>Old reply</svg>', diagramType: 'flowchart' };
+    resolveRender(oldResult);
+  }
+  await settleDiagram(fixture);
+  expect(root.querySelector('img')?.getAttribute('src')).toBe(currentSource);
+}
+
+async function ignoresLateSuccess() {
+  await keepsNewestDiagram(false);
+}
+
+async function ignoresLateFailure() {
+  await keepsNewestDiagram(true);
+}
+
+async function handlesMermaidCopyRefusal() {
+  const writeText = vi.fn().mockRejectedValue(new Error('Refused'));
+  const clipboard = { clipboard: { writeText } };
+  vi.stubGlobal('navigator', clipboard);
+  const { root, fixture } = mount('```mermaid\nthis is not a diagram\n```');
+  await settleDiagram(fixture);
+  root.querySelector('button')?.click();
+  await settleDiagram(fixture);
+  expect(root.querySelector('[role=status]')?.textContent).toBe('Could not copy. Try again.');
+  expect(root.querySelector('button')?.disabled).toBe(false);
+}
+
+it('waits for the closing fence through successive Mermaid deltas', waitsForClosedMermaidFence);
+it('keeps oversized Mermaid source copyable without rendering', refusesOversizedMermaid);
+it('keeps source when Mermaid resolves with a warning image', refusesWarningImage);
+it('ignores an older successful render after a newer diagram', ignoresLateSuccess);
+it('ignores an older failed render after a newer diagram', ignoresLateFailure);
+it('offers another try when Mermaid source copying is refused', handlesMermaidCopyRefusal);

@@ -15,6 +15,10 @@ export default tseslint.config(
   },
   { linterOptions: { reportUnusedDisableDirectives: 'error' } },
   js.configs.recommended,
+  {
+    files: ['apps/web/public/mermaid-renderer.js'],
+    languageOptions: { globals: globals.browser },
+  },
   ...tseslint.configs.recommendedTypeChecked,
   {
     languageOptions: {

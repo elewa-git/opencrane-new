@@ -21,7 +21,7 @@ flowchart LR
   server -->|assistant file cards and file refusal codes| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
-  web -->|saved replies and tool activity| capture["Chat workspace<br/>reply and tool details"]
+  web -->|saved replies and tool activity| capture["Chat workspace<br/>reply details and isolated diagrams"]
   web -->|settings| admin["Admin pages<br/>provider, tool, people and memory"]
 ```
 
@@ -36,7 +36,9 @@ For everyone, the website:
 - Shows sign-in, first-owner setup and the welcome survey.
 - Supports assistant sessions and direct or group chats with colleagues.
   Assistant replies show headings, lists, quotes, code and safe links.
-  Code blocks have a copy button; diagrams appear as code.
+  Code blocks have a copy button. Mermaid diagrams appear as images, with their
+  source shown as code until the block closes or when a diagram cannot be drawn.
+  Drawing happens in a separate browser document that cannot contact the network.
 - Expands saved command and tool details under their activity lines in chat.
 - Lists recent and archived conversations and opens saved chat links.
 - Shows tool actions for review and lets the requester approve or deny them.

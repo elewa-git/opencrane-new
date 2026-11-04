@@ -1,15 +1,19 @@
 @for (block of blocks(); track $index) {
   @switch (block.kind) {
     @case ('code') {
-      <section class="code-block" aria-label="Code block">
-        <div class="code-heading"><span>{{ block.language || 'Code' }}</span>
-          <button type="button" (click)="copyCode(block, $index)">Copy code</button>
-        </div>
-        <pre><code>{{ block.text }}</code></pre>
-        @if (copyStatus()?.blockIndex === $index && copyStatus()?.code === block.text) {
-          <span role="status">{{ copyStatus()?.text }}</span>
-        }
-      </section>
+      @if (block.language.toLowerCase() === 'mermaid') {
+        <oc-mermaid-diagram [code]="block.text" [closed]="block.closed" />
+      } @else {
+        <section class="code-block" aria-label="Code block">
+          <div class="code-heading"><span>{{ block.language || 'Code' }}</span>
+            <button type="button" (click)="copyCode(block, $index)">Copy code</button>
+          </div>
+          <pre><code>{{ block.text }}</code></pre>
+          @if (copyStatus()?.blockIndex === $index && copyStatus()?.code === block.text) {
+            <span role="status">{{ copyStatus()?.text }}</span>
+          }
+        </section>
+      }
     }
     @case ('a2ui') {
       <div class="a2ui" [ocDogEar]="true">

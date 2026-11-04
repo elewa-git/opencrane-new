@@ -331,3 +331,14 @@ select {
 
 /* Keep the page behind an open dialog from scrolling while the dialog is active. */
 html:has(dialog[open]), body:has(dialog[open]) { overflow: hidden; }
+
+/* Keep diagram layout measurable without showing the renderer or adding page overflow. */
+.oc-mermaid-renderer {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 1000px;
+  height: 800px;
+  visibility: hidden;
+  pointer-events: none;
+}

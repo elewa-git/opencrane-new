@@ -29,7 +29,9 @@ This folder contains the workspace where people talk to their assistant, exchang
 
 Assistant replies show Markdown headings, lists, quotes, inline formatting and code.
 Code blocks have a copy button. Links open in a new tab and allow only HTTPS and email.
-HTML stays text. Diagrams appear as code. Citations still open the existing preview.
+HTML stays text. Mermaid diagrams appear as images once their code block closes.
+Drawing happens in a separate browser document with network access blocked.
+An unfinished, oversized or unsupported diagram keeps its source and copy button. Citations still open the existing preview.
 
 After Stop, the workspace says “Stopping…” while it waits for an ending report.
 After ten seconds without an ending report, it says “Stop not confirmed”.
