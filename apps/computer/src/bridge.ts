@@ -1,12 +1,13 @@
+import { openPrivateSession } from './private-session.ts';
+import { launchLine } from './private-launch.ts';
 import { artifactSnapshot, artifactList, readArtifact } from './artifacts.ts';
 import { nativeRequests } from './native-requests.ts';
 import { receiveFile } from './files.ts';
 // Codex process supervision and the authenticated server event channel.
 import { spawn } from 'node:child_process';
-import { createServer as netServer, connect, type Socket } from 'node:net';
+import { createServer as netServer, connect, Socket } from 'node:net';
 import { createServer } from 'node:http';
 import { writeFileSync, chmodSync, readFileSync } from 'node:fs';
-import { once } from 'node:events';
 import { codexConnection } from './codex-connection.ts';
 import { memoryFreeConfig, memoryFreeEnvironments } from './codex-config.ts';
 import { bridgeChannel } from './channel.ts';
@@ -30,8 +31,15 @@ function waiting(thread: string, approvalId: string) {
 }
 function renew(thread: string) { return channel.renew(thread); }
 const approvalDriver = { waiting, renew };
+const launchPipe = new Socket({ fd: 3 });
+const launchKey = await launchLine(launchPipe);
+launchPipe.destroy();
+if (!/^[a-f0-9]{64}$/u.test(launchKey)) throw new Error('Private launch unavailable');
+function control(path: string, input: unknown) {
+  return proxyControl(path, input, '/run/codex/control.sock', launchKey);
+}
 const runtimeProxy = await proxy(gateway.origin, undefined,
-  process.env['PROXY_CALLER_TOKEN'], approvalDriver);
+  process.env['PROXY_CALLER_TOKEN'], approvalDriver, launchKey);
 const { caller } = runtimeProxy;
 writeFileSync('/home/codex/.codex/environments.toml', memoryFreeEnvironments());
 writeFileSync('/home/codex/.codex/config.toml', memoryFreeConfig(process.env['MODEL'] ?? 'stub-model'));
@@ -74,47 +82,11 @@ async function initialise() {
 }
 void initialise().catch(invalidMemoryFreeOutput);
 
-async function privateSession() {
-  const socket = connect('/run/executor/private.sock');
-  function close() { socket.destroy(); }
-  function closedPromise(resolve: () => void) { socket.once('close', resolve); }
-  const closed = new Promise<void>(closedPromise);
-  let threadId: string | undefined;
-  function dispatchPrivateMessage(message: Record<string, unknown>) {
-    if (answerPrivateRequest(message)) return;
-    const params = message['params'];
-    if (!params || typeof params !== 'object' || !('threadId' in params)
-      || params.threadId !== threadId) return;
-    channel.notification(message);
-  }
-  function privateMessage(message: Record<string, unknown>) {
-    try { dispatchPrivateMessage(message); }
-    catch { close(); }
-  }
-  const connection = codexConnection(socket, socket, { message: privateMessage, failed: close });
-  function reportPrivateRequest(message: Record<string, unknown>) {
-    if (message['method'] === 'mcpServer/elicitation/request' &&
-        record(message['params'])['threadId'] === threadId) channel.notification(message);
-  }
-  const answerPrivateRequest = nativeRequests(connection.respond, reportPrivateRequest, true);
-  socket.on('error', close);
-  try {
-    await once(socket, 'connect');
-    await connection.rpc('initialize', initialiseParams);
-    connection.notify('initialized', {});
-  } catch {
-    close();
-    throw new Error('Private Codex unavailable');
-  }
-  async function rpc(method: string, params: Record<string, unknown>) {
-    const result = await connection.rpc(method, params);
-    if (method === 'thread/start') {
-      const thread = record(record(result)['thread']);
-      if (typeof thread['id'] === 'string') threadId = thread['id'];
-    }
-    return result;
-  }
-  return { rpc, close, closed };
+function privateSession() {
+  const saved = record(JSON.parse(readFileSync('/run/executor/credentials/computer.json', 'utf8')));
+  const options = { runtimeProxy, generation: Number(saved['generation']), launchKey,
+    initialiseParams, notification: reportNativeRequest };
+  return openPrivateSession(options);
 }
 // Keep the persistent Codex connection local to the computer and its image checks.
 netServer(socket => {
@@ -181,18 +153,21 @@ const channel = bridgeChannel(server, {
   privateSession,
   catalogue(loadKey, conversation, tools, thread, turnId, generations) {
     const input = { loadKey, conversation, tools, thread, turnId, ...generations };
-    return proxyControl('/catalogue', input);
+    return control('/catalogue', input);
   },
   discovered(loadKey) {
-    return proxyControl('/catalogue/ready', { loadKey });
+    return control('/catalogue/ready', { loadKey });
   },
   dropCatalogue(loadKey) {
-    return proxyControl('/catalogue/drop', { loadKey });
+    return control('/catalogue/drop', { loadKey });
   },
   grant(thread, conversation, token, expiresAt, turnId) {
     const path = token ? '/grant' : '/drop';
     const input = { thread, turnId, conversation, computer: computerCredential,
       token, expires: expiresAt };
-    return proxyControl(path, input);
+    if (!token) return control(path, input);
+    const saved = record(JSON.parse(readFileSync('/run/executor/credentials/computer.json', 'utf8')));
+    const grant = { ...input, generation: saved['generation'], inputGeneration: 1 };
+    return control(path, grant);
   },
 }, runtimeProxy.approvals);

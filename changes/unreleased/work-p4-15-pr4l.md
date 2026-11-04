@@ -1,0 +1,2 @@
+- Each private assistant launch gets its own checked caller. Other threads and the shared computer caller cannot use it; Stop, failure, disconnect and expiry remove access. Private memory admission remains disabled.
+- Stopping a private launch or losing its connection before startup now releases its space for new work and lets the computer confirm it is quiet.

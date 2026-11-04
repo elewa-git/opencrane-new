@@ -459,6 +459,8 @@ async function closesRequests(method: string) {
     replacement.bind('thread-A');
     await test.catalogue(other);
     await test.grant(other);
+    session.close();
+    await test.grant(other);
     expect((await test.send(session.caller, 'thread-A', method)).status).toBe(401);
     await expect(test.grant(binding)).rejects.toThrow('refused');
     expect(test.received).toHaveLength(1);

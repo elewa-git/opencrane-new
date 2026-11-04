@@ -1,6 +1,7 @@
 import { request, type IncomingMessage } from 'node:http';
 
-export function proxyControl(path: string, input: unknown, socketPath = '/run/codex/control.sock') {
+export function proxyControl(path: string, input: unknown,
+  socketPath = '/run/codex/control.sock', controlKey = '') {
   function send(resolve: () => void, reject: (error: Error) => void) {
     function receive(response: IncomingMessage) {
       response.resume();
@@ -11,7 +12,9 @@ export function proxyControl(path: string, input: unknown, socketPath = '/run/co
       response.on('end', end);
       response.on('error', reject);
     }
-    const outgoing = request({ socketPath, path, method: 'POST' }, receive);
+    const headers = { authorization: `Bearer ${controlKey}` };
+    const options = { socketPath, path, method: 'POST', headers };
+    const outgoing = request(options, receive);
     function timeout() { outgoing.destroy(new Error('Proxy control request timed out')); }
     outgoing.on('error', reject);
     const timeoutMs = path === '/catalogue/ready' ? 11_000 : 5000;

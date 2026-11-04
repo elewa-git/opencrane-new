@@ -294,15 +294,10 @@ path.chmod(0o555)
       token: 'test-turn', expiresAt: Date.now() + 120_000 };
     socket.send(JSON.stringify(turn));
     await waitForFile(computer, '/workspace/detached.pid');
-    const privateClient = `
-import { spawn } from 'node:child_process';
-const code = "require('net').connect('/run/executor/private.sock')";
-const child = spawn('node', ['-e', code], {
-  uid: 1000, gid: 1000, detached: true, stdio: 'ignore',
-});
-child.unref();
-`;
-    await computer.exec('node', '--input-type=module', '-e', privateClient);
+    const privateTurn = { type: 'turn', id: 'private-stop', conversationId: 'private-stop',
+      assistantId: 'assistant', executionMode: 'restricted', text: 'Say hello again.',
+      token: 'pending', expiresAt: Date.now() + 120_000 };
+    socket.send(JSON.stringify(privateTurn));
     const restrictedStarted = `
 import { readdirSync, readFileSync } from 'node:fs';
 import { setTimeout } from 'node:timers/promises';

@@ -26,7 +26,7 @@ flowchart LR
   computer -->|checks command ownership| executor["socket-denied executor"]
   computer -->|runs| desktop["Codex, browser and desktop"]
   computer -->|checks callers and passes for AI and MCP calls| gateway["agentgateway<br/>AI gateway"]
-  computer -.->|checks private callers and catalogue loads| models["libs/models<br/>AI access checks"]
+  computer -->|checks private callers and catalogue loads| models["libs/models<br/>AI access checks"]
 ```
 
 ## What it is responsible for
@@ -47,8 +47,10 @@ private reply buffers are cleared before waiting for interruption to finish.
 - Runs a [private turn](../../GLOSSARY.md#private-turn) on a shared computer in a fresh,
   short-lived Codex process with no tools. Initial personal memory requires deployment checks.
   The server supplies its complete input once; the runner keeps it out of the journal.
-  The proxy can now check a separate caller for each turn. Private process launches
-  still need to be connected to these checks before they provide isolation.
+  Each private launch gets its own caller, kept in memory. The bridge binds it to
+  the native thread before waiting for the server to admit the turn. Stop, expiry
+  and connection loss remove it, even while the connection is still opening.
+  Cancelled launches release their space for new work. Other processes cannot authorise a launch.
   Each tool call checks the caller against the pass it will send, including after
   approval. Ordinary and private turns cannot share a bound thread.
   An internal loader can discover permitted recall, remember, Correct and Forget definitions

@@ -193,14 +193,17 @@ async function refusesInspector(testCase: typeof inspectorCases[number]) {
   const computer = await uploadComputer(true, testCase.nodeOptions);
   const live = await connect(computer.url, computer.credential.value);
   try {
+    if (testCase.uid === 1003) {
+      live.send(JSON.stringify({ type: 'resume', since: 0 }));
+      const turn = { type: 'turn', id: 'inspector', conversationId: 'inspector',
+        assistantId: 'assistant', executionMode: 'restricted', text: 'fixture',
+        token: 'pending', expiresAt: Date.now() + 60_000 };
+      live.send(JSON.stringify(turn));
+    }
     // Signal from the same user as the service, without CAP_KILL or root access.
     const probe = String.raw`
 import json, os, pathlib, signal, socket, time
 expected = b'${testCase.path}'
-private = None
-if ${testCase.uid} == 1003:
-    private = socket.socket(socket.AF_UNIX)
-    private.connect('/run/executor/private.sock')
 processes = []
 deadline = time.monotonic() + 5
 while not processes and time.monotonic() < deadline:
