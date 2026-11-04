@@ -102,6 +102,12 @@ const budgetStopNotificationSchema = chatUpdateSchema.extend({
   computerRecovered: z.never().optional(),
   computerLostAt: z.never().optional(),
 });
+export const privateReplySchema = z.strictObject({
+  version: z.literal(1), topic: z.literal('conversation'), type: z.literal('private_reply'),
+  conversationId: chatIdSchema, turnId: chatIdSchema, threadId: chatIdSchema,
+  generation: z.int().positive(), inputGeneration: chatIdSchema,
+  data: chatRowSchema.shape.data.pick({ text: true, turnId: true }).required().strict(),
+});
 export const chatMessageSchema = z.union([chatUpdateSchema, budgetStopNotificationSchema]);
 
 export const chatFeedSchema = z.object({

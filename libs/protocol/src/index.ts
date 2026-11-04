@@ -31,6 +31,7 @@ export {
   chatStateCommandSchema,
   chatSubscribeSchema,
   chatMessageSchema,
+  privateReplySchema,
   chatRowSchema,
   chatFeedSchema,
   chatListSchema,

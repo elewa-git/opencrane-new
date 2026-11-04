@@ -1,3 +1,4 @@
+import { privateOutput } from './private-output.ts';
 import { pullArtifact, type ArtifactPublication } from '../files/artifacts.ts';
 import { routineBridge, routineStartRefusal } from '../routine-bridge.ts';
 import { memoryBridge } from '../memory/bridge.ts';
@@ -36,7 +37,8 @@ type BridgeOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'store' | 
   Pick<Parameters<typeof bridgeControl>[0], 'stopExecution'>;
 type RoutineStart = NonNullable<Parameters<typeof turnCommand>[1]['routineStart']>;
 type ReportOptions = BridgeOptions & { routineStart: RoutineStart;
-  memory: ReturnType<typeof memoryBridge>; routines: ReturnType<typeof routineBridge> };
+  output: ReturnType<typeof privateOutput>; memory: ReturnType<typeof memoryBridge>;
+  routines: ReturnType<typeof routineBridge> };
 type BridgeInput = { url: string; computerId: string; assistantId: string; bearer: string };
 type ReportBatch = { values: unknown[]; sequences: number[]; textLength: number;
   bytes: number; started: boolean };
@@ -58,12 +60,6 @@ type ChatRows = Awaited<ReturnType<typeof chatHistory>>;
 type Upload = z.infer<typeof fileUploadedDataSchema>;
 
 type Tokens = Awaited<ReturnType<typeof tokenIssuer>>;
-
-function messageBytes(raw: RawData) {
-  if (Buffer.isBuffer(raw)) return raw;
-  if (Array.isArray(raw)) return Buffer.concat(raw);
-  return Buffer.from(raw);
-}
 
 function combineQueuedReport(batch: ReportBatch | undefined, value: unknown,
   report: z.infer<typeof reportDetails>, bytes: number) {
@@ -95,6 +91,7 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
     if (await childRequestHeld(options, facts.created)) throw new ReportRejected('Child request queued');
   }
   const result = await recordBridgeReports(options.store, options.keys, context, batch.values);
+  await options.output.release(report.sequence, result === 'recorded');
   const acknowledgement: {
     type: string; sequence: number; token?: string; expiresAt?: number;
     model?: string; refused?: string; context?: unknown; initialInput?: string;
@@ -199,8 +196,7 @@ function reportReceiver(options: ReportOptions, input: BridgeInput,
   }
   function receiveReport(raw: RawData) {
     try {
-      const bytes = messageBytes(raw);
-      const value: unknown = JSON.parse(bytes.toString());
+      const { value, bytes } = options.output.capture(raw);
       if (receiveReceipt(value)) return;
       const report = reportDetails.parse(value);
       options.memory.observe(report);
@@ -292,7 +288,8 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   socket.once('close', forgetRoutineStarts);
   const memory = memoryBridge(options, input, socket);
   const routines = routineBridge(options, input, socket);
-  const reportOptions = { ...options, routineStart, memory, routines };
+  const output = privateOutput(options, input, socket);
+  const reportOptions = { ...options, routineStart, memory, routines, output };
   const reports = reportReceiver(reportOptions, input, tokens, socket, refuse, approvals, control);
   socket.on('message', reports.receiveReport);
   try {

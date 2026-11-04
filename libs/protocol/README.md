@@ -34,7 +34,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.->|chat, approval and other replies| protocol["libs/protocol<br/>shared reply shapes"]
-  server["apps/server<br/>back end"] -.->|saved spending, current effect pages and accounting replies| protocol
+  server["apps/server<br/>back end"] -.->|chat and accounting replies| protocol
   projections["libs/projections<br/>read tables"] -.->|saved resolution history| protocol
   models["libs/models<br/>AI rules and spending"] -.-> protocol
   protocol -.-> zod["Zod<br/>data checks"]
@@ -50,6 +50,7 @@ flowchart LR
 
 The server returns a reply and the browser checks it against the same shape.
 Chat tool results use a separate display shape that excludes private adapter details.
+Completed private reply notifications carry existing chat text fields without a saved cursor.
 An effect detail can include an original resolution receipt, with integer euro cents.
 Older replies without that field still work. Parsing a receipt grants no access.
 

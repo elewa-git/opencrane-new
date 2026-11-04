@@ -1369,7 +1369,12 @@ message used by the live-view checks. This design filters unrelated events rathe
 than retrying a reservation or a single-use approval.
 
 `authorityFence` returns a freshness check with `include(...subjects)`, `head` and
-an absolute `deadline`. `ownershipWriteAccess` also supplies `subjects()`, which returns
+an absolute `deadline`. Its optional fifth argument supplies earlier positions by stream
+name. The shared check copies these positions and refuses changes beyond them, keeping
+the original start time and caller deadline. Private reply delivery supplies checked
+access and scope positions this way; it never watches the conversation stream.
+Existing callers still use the starting global position.
+`ownershipWriteAccess` also supplies `subjects()`, which returns
 a copy of the watched stream names, including groups and grants added during access
 checks. Routine allocation uses those names to detect changes during receipt confirmation
 without depending on other conversations. Access rules and deadlines are unchanged.
