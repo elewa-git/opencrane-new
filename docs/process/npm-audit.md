@@ -91,3 +91,19 @@ would break server startup. The server does not call MinIO's bucket notification
 listener. This keeps the existing documented moderate finding visible; no audit
 ignore or threshold change is added. A compatible upstream MinIO release is
 still needed to remove it safely.
+
+## 4 November 2026 update
+
+The root production audit found one new high finding in `follow-redirects` 1.16.1.
+It reaches the server through `@opencrane/authz` → `@openfga/sdk` → Axios.
+The shared lockfile now selects the patched 1.16.2 within Axios's existing range.
+No direct dependency or override changes. The package is MIT licensed according to
+registry metadata and its installed licence file. The separate computer runtime
+audit found zero issues.
+
+This update fixes
+[GHSA-mrwp-f3q8-3g9p](https://github.com/advisories/GHSA-mrwp-f3q8-3g9p).
+The existing three moderate `stream-json` advisories remain under MinIO 8.0.7.
+MinIO still requires `stream-json` 1.x, while the patched 3.x parser changes the
+import that MinIO uses. The production audit therefore passes at its existing high
+threshold, with the moderate findings still reported.
