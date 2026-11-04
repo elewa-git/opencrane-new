@@ -21,7 +21,7 @@ flowchart LR
   server -.->|tests use helper| ops
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
-  ops -->|saves results and checks cancellation before routine claims| nats
+  ops -->|saves results, routine claims and checked skips| nats
   ops -->|holds routine ownership and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
@@ -45,7 +45,7 @@ and suspension. Those checks read metadata and change no resources.
 - Prepares reviewed tool settings for the gateway and, when configured, removes
   forgotten memory keys and old private connection copies.
 - Provides [replay](../../GLOSSARY.md#replay), failed-job tools and upgrades for recovery.
-- Provides an internal command that claims one scheduled routine occurrence without starting it.
+- Provides internal commands that claim or skip one scheduled routine occurrence without starting it.
 - Holds one routine scheduler owner per silo while its callback prepares claims.
 
 ## Processes it handles
@@ -86,6 +86,9 @@ Routine claims check that the saved owner is still a member with permission to m
 the routine. Retries also check current access and worker ownership before returning
 the saved run identifiers. Repeated completion records keep their first outcome.
 Execution remains disabled.
+A separate internal command records a missing local time or a slot blocked by an
+occupied run. It advances the schedule without replacing that run, even during Ask
+or Stop. Retries return the same saved receipt after checking access and leadership.
 
 A reviewed template defines how hosted tools may run. Separate Kubernetes rules check
 the image and settings and limit who may create or scale a tool. Starting hosted tools
