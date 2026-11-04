@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
-  chownSync, mkdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statfsSync,
+  chownSync, existsSync, mkdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statfsSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Readable, Writable } from 'node:stream';
+import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 
 // Pin the Linux x64 executable from the integrity-checked Codex 0.159.2 npm release.
@@ -33,6 +34,10 @@ function processIdentity(nativePid: number): string {
   const fieldsText = stat.slice(stat.lastIndexOf(')') + 2);
   const fields = fieldsText.split(' ');
   assert.match(fields[19] ?? '', /^[0-9]+$/u);
+  const runnerStat = readFileSync('/proc/self/stat', 'utf8');
+  const runnerText = runnerStat.slice(runnerStat.lastIndexOf(')') + 2);
+  const runnerFields = runnerText.split(' ');
+  assert.equal(fields[2], runnerFields[2]);
   const limits = readFileSync(`${base}/limits`, 'utf8');
   assert.match(limits, /^Max core file size\s+0\s+0\s+bytes[ \t]*$/mu);
   const processes = /^Max processes\s+(\d+)\s+(\d+)\s+processes[ \t]*$/mu.exec(limits);
@@ -46,7 +51,9 @@ function processIdentity(nativePid: number): string {
   return `${nativePid}:${fields[19]}:${fields[1]}:${fields[2]}`;
 }
 
-function nativeChild(wrapperPid: number, binary: string, home: string): number {
+function nativeChild(
+  wrapperPid: number, binary: string, home: string, childId: string,
+): number {
   const children = readFileSync(`/proc/${wrapperPid}/task/${wrapperPid}/children`, 'utf8');
   const trimmed = children.trim();
   assert.match(trimmed, /^[1-9][0-9]*$/u);
@@ -58,7 +65,7 @@ function nativeChild(wrapperPid: number, binary: string, home: string): number {
   const environment = readFileSync(`${base}/environ`, 'utf8');
   const entries = environment.split('\0');
   for (const entry of [`HOME=${home}`, `CODEX_HOME=${home}/codex`,
-    `CODEX_SQLITE_HOME=${home}/codex`, `TMPDIR=${home}/tmp`]) {
+    `CODEX_SQLITE_HOME=${home}/codex`, `TMPDIR=${home}/tmp`, `PROXY_CALLER_TOKEN=${childId}`]) {
     assert(entries.includes(entry));
   }
   return nativePid;
@@ -121,14 +128,15 @@ function prepareHome(
 function superviseChild(
   child: ChildProcessByStdio<Writable, Readable, null>,
   codexConnection: typeof import('../../apps/computer/src/codex-connection.ts').codexConnection,
+  home: string,
+  childId: string,
 ) {
   let size = 0;
   const state = { failed: false, nativePid: undefined as number | undefined };
   function fail(): void {
     state.failed = true;
-    child.stdin.destroy();
     child.stdout.destroy();
-    child.kill('SIGKILL');
+    // Leave termination to cleanup so it can first record any native child.
   }
   function boundOutput(chunk: Buffer): void {
     size += chunk.length;
@@ -149,27 +157,26 @@ function superviseChild(
   }
   const handlers = { message, failed: fail };
   const connection = codexConnection(child.stdin, child.stdout, handlers);
-  return { child, state, stopped, connection };
+  return { child, state, stopped, connection, home, childId };
 }
 
 type SupervisedChild = ReturnType<typeof superviseChild>;
 
 async function checkNativeRpc(
   supervised: SupervisedChild,
-  challengeId: string,
   binary: string,
-  home: string,
-): Promise<void> {
-  const { child, state, connection } = supervised;
+) {
+  const { child, state, connection, home, childId } = supervised;
+  assert.equal(state.failed, false);
   const initialise = {
-    clientInfo: { name: 'qualification', version: challengeId },
+    clientInfo: { name: 'qualification', version: childId },
     capabilities: { experimentalApi: true },
   };
   await connection.rpc('initialize', initialise);
   const initialized = {};
   connection.notify('initialized', initialized);
   assert(child.pid);
-  const nativePid = nativeChild(child.pid, binary, home);
+  const nativePid = nativeChild(child.pid, binary, home, childId);
   state.nativePid = nativePid;
   const wrapperIdentity = processIdentity(child.pid);
   const identity = processIdentity(nativePid);
@@ -182,27 +189,149 @@ async function checkNativeRpc(
   };
   const startResponse = await connection.rpc('thread/start', startParams);
   const threadId = checkThread(startResponse);
+  const observation = { nativePid, identity, wrapperIdentity, threadId };
+  await checkStillRunning(supervised, binary, observation);
+  return observation;
+}
+
+type NativeObservation = Awaited<ReturnType<typeof checkNativeRpc>>;
+
+async function checkStillRunning(
+  supervised: SupervisedChild, binary: string, observation: NativeObservation,
+): Promise<void> {
+  const { child, state, connection, home, childId } = supervised;
+  const { nativePid, identity, wrapperIdentity, threadId } = observation;
   // Read live metadata; fetching saved turns would require a rollout on disk.
   const readParams = { threadId, includeTurns: false };
   const readResponse = await connection.rpc('thread/read', readParams);
   assert.equal(checkThread(readResponse), threadId);
-  assert.equal(nativeChild(child.pid, binary, home), nativePid);
+  assert(child.pid);
+  assert.equal(nativeChild(child.pid, binary, home, childId), nativePid);
   assert.equal(processIdentity(nativePid), identity);
   assert.equal(processIdentity(child.pid), wrapperIdentity);
   assert.equal(statfsSync(home).type, 0x01021994);
   assert.equal(state.failed, false);
 }
 
+function signalProcess(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(pid, signal);
+  } catch (error) {
+    if (!(error instanceof Error) || !('code' in error) || error.code !== 'ESRCH') {
+      throw error;
+    }
+  }
+}
+
+function processState(pid: number): string | undefined {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    return stat[stat.lastIndexOf(')') + 2];
+  } catch (error) {
+    if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') {
+      throw error;
+    }
+    return undefined;
+  }
+}
+
+async function freezeWrapper(pid: number): Promise<number[]> {
+  signalProcess(pid, 'SIGSTOP');
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const state = processState(pid);
+    if (state === undefined || state === 'Z') {
+      return [];
+    }
+    if (state === 'T') {
+      const text = readFileSync(`/proc/${pid}/task/${pid}/children`, 'utf8');
+      const trimmed = text.trim();
+      if (trimmed === '') {
+        return [];
+      }
+      assert.match(trimmed, /^[1-9][0-9]*$/u);
+      return [Number(trimmed)];
+    }
+    await delay(10);
+  }
+  throw new Error('native_cleanup_failed');
+}
+
+async function checkGone(pid: number): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    if (!existsSync(`/proc/${pid}`)) {
+      return;
+    }
+    await delay(10);
+  }
+  throw new Error('native_cleanup_failed');
+}
+
 async function stopChild(supervised: SupervisedChild): Promise<void> {
   const { child, state, stopped } = supervised;
-  child.stdin.destroy();
+  const pids = new Set<number>();
+  if (state.nativePid !== undefined) {
+    pids.add(state.nativePid);
+  }
   try {
-    if (state.nativePid !== undefined) {
-      process.kill(state.nativePid, 'SIGKILL');
+    if (child.pid !== undefined) {
+      // Stop the wrapper before reading its children, so startup cannot race cleanup.
+      const children = await freezeWrapper(child.pid);
+      for (const pid of children) {
+        pids.add(pid);
+      }
+    }
+    for (const pid of pids) {
+      signalProcess(pid, 'SIGKILL');
     }
   } finally {
+    child.stdin.destroy();
     child.kill('SIGKILL');
     await stopped;
+  }
+  if (child.pid !== undefined) {
+    pids.add(child.pid);
+  }
+  for (const pid of pids) {
+    await checkGone(pid);
+  }
+}
+
+function removeHome(home: string): void {
+  const removalOptions = { recursive: true, force: true };
+  rmSync(home, removalOptions);
+  assert.equal(existsSync(home), false);
+}
+
+async function checkPair(
+  first: SupervisedChild, second: SupervisedChild, binary: string,
+): Promise<void> {
+  const firstObservation = await checkNativeRpc(first, binary);
+  const secondObservation = await checkNativeRpc(second, binary);
+  assert.notEqual(first.home, second.home);
+  assert.notEqual(first.childId, second.childId);
+  assert.notEqual(first.child.pid, second.child.pid);
+  assert.notEqual(firstObservation.nativePid, secondObservation.nativePid);
+  assert.notEqual(firstObservation.identity, secondObservation.identity);
+  assert.notEqual(firstObservation.wrapperIdentity, secondObservation.wrapperIdentity);
+  assert.notEqual(firstObservation.threadId, secondObservation.threadId);
+  await checkStillRunning(first, binary, firstObservation);
+  await stopChild(first);
+  removeHome(first.home);
+  await checkStillRunning(second, binary, secondObservation);
+  await stopChild(second);
+  removeHome(second.home);
+}
+
+async function cleanup(children: SupervisedChild[], homes: string[]): Promise<void> {
+  const stops = children.map(stopChild);
+  const results = await Promise.allSettled(stops);
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      throw new Error('native_cleanup_failed');
+    }
+  }
+  for (const home of homes) {
+    removeHome(home);
   }
 }
 
@@ -213,24 +342,28 @@ export async function checkNative(challengeId: string): Promise<void> {
   const { privateCodexLaunch } = await import('../../apps/computer/src/private-codex.ts');
   const configuration = await import('../../apps/computer/src/codex-config.ts');
   const { codexConnection } = await import('../../apps/computer/src/codex-connection.ts');
-  const home = `/home/private/turn-${challengeId}`;
   assert.equal(statfsSync('/home/private').type, 0x01021994);
-  const directoryOptions = { mode: 0o700 };
-  // Refuse an existing home before cleanup can remove it.
-  mkdirSync(home, directoryOptions);
+  const children: SupervisedChild[] = [];
+  const homes: string[] = [];
   try {
-    prepareHome(home, configuration);
-    const launch = privateCodexLaunch(home, challengeId);
-    // Inherit the supervisor's process group so its timeout and collector-loss cleanup still apply.
-    const child = spawn(launch.command, launch.args, launch.options);
-    const supervised = superviseChild(child, codexConnection);
-    try {
-      await checkNativeRpc(supervised, challengeId, binary, home);
-    } finally {
-      await stopChild(supervised);
+    for (let index = 0; index < 2; index++) {
+      const childId = randomUUID();
+      const home = `/home/private/turn-${childId}`;
+      const directoryOptions = { mode: 0o700 };
+      // Refuse an existing home before cleanup can remove it.
+      mkdirSync(home, directoryOptions);
+      homes.push(home);
+      prepareHome(home, configuration);
+      const launch = privateCodexLaunch(home, childId);
+      // Keep native children in the supervisor's process group for collector-loss cleanup.
+      const child = spawn(launch.command, launch.args, launch.options);
+      const supervised = superviseChild(child, codexConnection, home, childId);
+      children.push(supervised);
     }
+    const [first, second] = children;
+    assert(first && second);
+    await checkPair(first, second, binary);
   } finally {
-    const removalOptions = { recursive: true, force: true };
-    rmSync(home, removalOptions);
+    await cleanup(children, homes);
   }
 }

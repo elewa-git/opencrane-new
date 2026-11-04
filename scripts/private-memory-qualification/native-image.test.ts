@@ -85,7 +85,9 @@ function load(url, context, next) {
   if (url.endsWith('/native-checks.ts')) {
     let source = String(loaded.source);
     if (fault) {
-      if (!source.includes(fault[1])) process.exit(2);
+      if (!source.includes(fault[1])) {
+        process.exit(2);
+      }
       source = source.replaceAll(fault[1], fault[2]);
     }
     const audit = String.raw\`
@@ -116,7 +118,9 @@ function auditRead(home, child, threadId) {
     }
     process.kill(child.pid, 0);
     process.kill(observed[1].nativePid, 0);
-    if (threadId !== observed[1].threadId) throw new Error('fixture_failed');
+    if (threadId !== observed[1].threadId) {
+      throw new Error('fixture_failed');
+    }
     independentRead = true;
   }
   return threadId;
@@ -269,7 +273,9 @@ async function collectorEof(): Promise<void> {
     }
     const stopped = new Promise(closed);
     const output: Buffer[] = [];
-    function collect(chunk: Buffer): void { output.push(chunk); }
+    function collect(chunk: Buffer): void {
+      output.push(chunk);
+    }
     child.stdout.on('data', collect);
     child.stderr.on('data', collect);
     child.stdin.write(`${JSON.stringify(JSON.stringify(request))}\n`);
@@ -280,7 +286,9 @@ async function collectorEof(): Promise<void> {
           "if (fs.existsSync('/run/native-count')) " +
           "process.stdout.write(fs.readFileSync('/run/native-count'));";
         ready = docker(['exec', containerName, 'node', '-e', probe]) === '2';
-        if (ready) break;
+        if (ready) {
+          break;
+        }
         await delay(50);
       }
       expect(ready).toBe(true);
