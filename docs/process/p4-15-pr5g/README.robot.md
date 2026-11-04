@@ -105,3 +105,80 @@ an explicit `PG_TEST_URL` and `nice -n 10`. This was not a fresh installation.
 Logs: `/tmp/p4-15-pr5g-fix2-targeted-1.log`,
 `/tmp/p4-15-pr5g-fix2-targeted-2.log`, `/tmp/p4-15-pr5g-fix2-focused-final.log`
 and `/tmp/p4-15-pr5g-fix2-*.log`.
+
+## Initial access history repair attempts
+
+30 October 2026. Rebased onto `origin/main` at `ccd0d5eb2` and verified that the
+rebase finished. Test commit `955a48f42` precedes production fix `d3457e68a`.
+Grant-history test commit `6018a5606` precedes the final fix `5bc7073d9`.
+
+The native-start timeout was reproduced before the fix: 73/74 delivery tests passed.
+A temporary trace showed `Authority snapshot expired` during the access confirmation
+following the initial loaded-event append. The server refused credentials, so the
+native turn never started. A paired run also failed during initial loading: delivery
+passed 74/74 and initial delivery passed 110/111. Both failures occurred before the
+cases reached their intended assertions. These were not lost acknowledgements or
+missing fixture inputs. Temporary production diagnostics were removed.
+
+MCP access and memory access reread the same saved membership, ownership and assistant
+history within one authority snapshot. The memory checks now use the existing
+`authorityHistoryReader` for those immutable rows. Each check keeps its original
+position and deadline. Receipt checks, live permissions, later access changes, turn
+activity, qualification and memory-reference checks still run. No reader survives
+into another check, command or turn. No conversation history is added to the short
+access check. Admission remains disabled.
+
+The regressions charge 600 ms for each complete membership, MCP-grant or memory-grant
+history read through a controlled monotonic clock. They use real initial preparation,
+loading and consumption. They check the delivered fact and saved reference. The
+membership case failed before the first fix. The two grant cases failed before the
+follow-up fix, with test commit `6018a5606` saved first. All three then passed.
+No test timeout or existing assertion was changed.
+
+The first cache change still left duplicate reads in scope selection and recorded-grant
+checks. Its wider run passed 526/527, including delivery at 74/74. The installation-change
+case refused during loading before reaching its assertion. The same snapshot reader now
+also supplies those scope and grant checks; their predicates and final access checks remain.
+
+The history-only fix at `5bc7073d9` was still incomplete. Its first two wider runs
+passed 529/529 and 528/529 respectively. In the second run, `refuses forgotten facts
+before loading` failed during preparation, before the intended change. Delivery passed
+74/74 in both runs and in a third run. The fourth delivery run passed 73/74: the
+completed-output expiry case failed at the original native-start wait. A diagnostic
+rerun passed 74/74; this did not clear that failure.
+
+A separate diagnostic run passed all 114 initial-delivery cases. An isolated checkout
+of the fetched main, with its own installed dependencies, passed 100 repetitions of the
+forgotten-fact case. That comparison did not reproduce the remaining preparation failure,
+so it does not establish a separate cause. The temporary checkout was removed.
+
+Initial access confirmation also read independent stream positions in sequence. These
+waits repeat inside the short append check. Test commit `5ebe3d405` reproduced expiry
+with slow position reads. Its first fixture charged 100 ms for every position read;
+that also exhausted the budget for required sequential checks. Test commit `86349e387`
+changed the charge to 50 ms without changing any assertion. It still failed with the
+old code. Confirmation now checks membership first, then reads every other watched
+position in parallel. It keeps removal priority, every position comparison and the same
+deadline. Temporary diagnostic logging was removed.
+
+Production commit `3fa7862f7` follows the failing position-read test commits. All four
+slow-read cases passed together afterward. No original delivery assertion or ten-second
+wait was changed. The next complete run used this production revision.
+
+The complete batch on `3fa7862f7` passed 529/530. All 115 initial-delivery cases passed,
+but the delayed-history delivery case again stopped at the native-start wait. The
+repeated-run gate was stopped. Two normal-fixture runs with temporary refusal logging
+then passed 74/74 each. Those passes did not clear the failed batch.
+
+Two earlier diagnostic helpers were discarded: a prototype spy conflicted with an
+instance spy, and a setup import loaded qualification code before its filesystem mock.
+Neither run is accepted as test evidence. Their orphaned NATS services and databases
+were identified from their fixture records and removed. No owner stack was changed.
+
+Membership positions still added sequential waits to each confirmation. Test commit
+`d8439c611` adds slow membership-position reads to the existing delivery regression;
+it failed before the fix. Production commit `cc42294da` reads all watched positions
+together and then evaluates membership results first. It retains every comparison,
+removal priority and the original deadline, including checks for subjects added during
+confirmation. The focused slow-read and saved-removal run passed 10/10. Temporary
+logging was removed. The stopped run did not finish acceptance checks on this revision.
