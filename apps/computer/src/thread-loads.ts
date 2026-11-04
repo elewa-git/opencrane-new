@@ -343,7 +343,7 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
     const owner = entry.owner;
     const callerTurn = owner.authority.identify(`Bearer ${owner.caller}`);
     const identity = { turnId: owner.turnId, conversation: owner.conversation,
-      generation: owner.generation, inputGeneration: owner.inputGeneration };
+      generation: owner.generation, inputGeneration: owner.inputGeneration, thread: entry.thread };
     if (callerTurn !== owner.turnId || !owner.authority.check(identity)) {
       throw new Error('Private binding refused');
     }
@@ -373,6 +373,8 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
       const thread = record(response['thread']);
       if (isThreadId(thread['id'])) entry.thread = thread['id'];
       if (!entry.thread || !isEphemeralThread(thread)) throw new Error('Private thread refused');
+      // Confirm the returned id even when the session has already bound its caller.
+      entry.registration.bind(entry.thread);
       checkPrivateStart(entry, input);
       entry.response = response;
       return response;

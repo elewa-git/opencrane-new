@@ -97,8 +97,12 @@ export async function preflightFixture() {
       }
       if (method === 'mcpServerStatus/list' && endpoint) {
         if (holdDiscovery) await resume.promise;
+        if (socket.destroyed) return;
         await send(endpoint, caller, 'server/discover');
         result = await send(endpoint, caller);
+        const offered = record(record(result)['result']);
+        const expected: unknown = JSON.parse(privateToolOffer('recall')[0]!.definitions[0]!);
+        expect(offered['tools']).toEqual([expected]);
       }
       if (method === 'thread/loaded/list') result = { data: [] };
       socket.write(JSON.stringify({ id: request['id'], result }) + '\n');

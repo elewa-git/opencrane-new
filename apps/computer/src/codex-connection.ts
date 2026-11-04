@@ -51,6 +51,8 @@ export function codexConnection(input: Writable, output: Readable, handlers: Han
   lines.on('line', receive);
   lines.on('close', rejectPending);
   output.on('error', invalidOutput);
+  // Settle pending requests when Stop destroys a socket without an end event.
+  output.on('close', rejectPending);
   input.on('error', invalidOutput);
   function write(value: unknown) {
     if (failed || input.destroyed || input.writableEnded) throw new Error('Codex connection closed');

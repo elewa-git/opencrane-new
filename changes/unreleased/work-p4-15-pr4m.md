@@ -1,0 +1,1 @@
+- Private sessions can stay open for checked tool discovery on their returned native thread. Reload and unload checks keep strict parameters; a repeated start is refused before reaching the native process. Production recall dispatch remains unfinished.

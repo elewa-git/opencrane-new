@@ -1624,7 +1624,8 @@ extra modes refuse preparation. It does not replace the server's definition or q
 random address and calls private `thread/start` once. It requires `ephemeral: true`,
 `path: null`, an empty `environments` array and a non-empty native thread ID.
 No catalogue exists at this point, so early discovery is refused. The trusted caller
-then records that real ID, binds the registration to it and runs server assembly.
+then records that real ID and runs server assembly. The loader binds the returned ID
+before its next caller check, including when the production session has already bound it.
 `loadPrivate` accepts only that pending start, original registration and session.
 It compares the returned native ID with the recorded grant before registering tools.
 
@@ -1806,3 +1807,13 @@ admission ordering, cross-thread and shared-caller refusal, capacity, control ac
 UIDs 1000/1002 and scripted startup failures. Existing proxy tests cover old bindings.
 Catalogue assembly/discovery and admission enablement remain separate; no host is qualified.
 Own checks, including the routine/ordinary diagnostic: [receipt](../../docs/process/p4-15-pr4l/receipt.md).
+
+## Private session discovery — P4-15 PR 4m
+
+The production session allows empty `config/mcpServer/reload` and `thread/loaded/list`
+requests after startup. Extra fields are refused, and other requests still require the
+bound thread ID. A second `thread/start` is refused before native RPC.
+The joined session/loader fixture uses real caller, assembler and proxy helpers with
+a scripted local native peer. It checks separate catalogues, cancellation and lost replies.
+Production bridge hand-off and recall dispatch remain unfinished.
+See the [scope and checks](../../docs/process/p4-15-pr4m/README.robot.md).

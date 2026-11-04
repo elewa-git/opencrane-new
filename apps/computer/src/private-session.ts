@@ -15,6 +15,16 @@ type SessionOptions = {
   notification(this: void, message: Record<string, unknown>): void;
 };
 
+function matchesPrivateThread(method: string, params: Record<string, unknown>, thread?: string) {
+  if (!thread) return true;
+  if (method === 'thread/start') return false;
+  // Keep these process-wide requests empty. This process owns just one private thread.
+  if (method === 'config/mcpServer/reload' || method === 'thread/loaded/list') {
+    return Object.keys(params).length === 0;
+  }
+  return params['threadId'] === thread;
+}
+
 function privateSocket(signal: AbortSignal, expires: number, revoke: () => void) {
   const socket = connect('/run/executor/private.sock');
   const connecting = new AbortController();
@@ -85,7 +95,7 @@ export async function openPrivateSession(options: SessionOptions) {
   }
   async function rpc(method: string, params: Record<string, unknown>) {
     try {
-      if (socket.destroyed || (threadId && params['threadId'] !== threadId)) {
+      if (socket.destroyed || !matchesPrivateThread(method, params, threadId)) {
         throw new Error('Private thread refused');
       }
       const result = await connection.rpc(method, params);
