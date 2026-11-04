@@ -88,6 +88,10 @@ Every state is shown as a glyph plus words, never colour alone:
 
 ## Frame index
 
+The built chat now shows command and governed tool details inline when a person
+opens their activity line. WRK-04 still records the earlier drawer design.
+Approval reviews and native consent refusals retain their drawers.
+
 ### 02 · Workspace effects (WRK) — 66 states
 Approvals, computer control, screenshots and egress in the workspace. Covers P3-5 · P3-12 · P3-14 · P3-17 · P3-18 · P3-20 · P3-21.
 

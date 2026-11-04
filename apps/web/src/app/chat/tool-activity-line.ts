@@ -1,6 +1,9 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 import { ChatIcon } from './icon';
-import type { ToolActivityRecord } from './chat-state';
+import {
+  toolActivityResult, toolActivityResultLabel, toolKind, type ToolActivityRecord,
+} from './chat-state';
+import { utcDateTime } from './file-presentation';
 
 @Component({
   selector: 'oc-tool-activity-line',
@@ -12,6 +15,11 @@ import type { ToolActivityRecord } from './chat-state';
 export class ToolActivityLine {
   readonly record = input.required<ToolActivityRecord>();
   readonly detailsOpened = output<HTMLElement>();
+  protected readonly expanded = signal(false);
+  protected readonly toolResult = toolActivityResult;
+  protected readonly toolResultLabel = toolActivityResultLabel;
+  protected readonly toolKind = toolKind;
+  protected readonly toolTime = utcDateTime;
 
   protected stateName(): string {
     const record = this.record();
@@ -43,8 +51,13 @@ export class ToolActivityLine {
   }
 
   protected openDetails(event: MouseEvent): void {
-    if (event.currentTarget instanceof HTMLElement) {
-      this.detailsOpened.emit(event.currentTarget);
+    if (!(event.currentTarget instanceof HTMLElement)) {
+      return;
     }
+    if (this.record().nativeRequestId) {
+      this.detailsOpened.emit(event.currentTarget);
+      return;
+    }
+    this.expanded.set(!this.expanded());
   }
 }

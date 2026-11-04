@@ -10,6 +10,7 @@ This folder contains the workspace where people talk to their assistant, exchang
 - Keeps drafts with their conversations, resumes live updates from the last saved position and records the read place in colleague chats once new messages are visible. Lost access clears messages, drafts, names and files, including late replies.
 - Reviews recipients and participants. More than three recipients require a full review before sending. A group chat's creator manages other participants and stays in the chat; others can leave. Company group membership and chat participants are separate lists.
 - Shows tool reviews to participants while only the requester can approve or deny. Missing review fields are named. Saved decision, use and end times remain visible; closing a session clears its approval cards. Native consent refusals show their saved reference and grant no permission.
+- Expands command and tool activity under each line. The details show only the saved result, time and reference. Approval reviews and native consent refusals keep their drawers.
 - Opens private sessions with a group's shared assistant at `/workspace/shared`. The person confirms the paying group, whose budget pays for the work. Group membership gives no desktop access. Team work is private by default; the [memory-free](../../../../../GLOSSARY.md#memory-free-turn) choice applies to one turn, uses shared disk and receives no earlier private context.
 
 ## Main files

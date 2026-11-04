@@ -21,7 +21,7 @@ flowchart LR
   server -->|assistant file cards and file refusal codes| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
-  web -->|saved reply status| capture["Reply formatting<br/>workspace and viewer"]
+  web -->|saved replies and tool activity| capture["Chat workspace<br/>reply and tool details"]
   web -->|settings| admin["Admin pages<br/>provider, tool, people and memory"]
 ```
 
@@ -37,6 +37,7 @@ For everyone, the website:
 - Supports assistant sessions and direct or group chats with colleagues.
   Assistant replies show headings, lists, quotes, code and safe links.
   Code blocks have a copy button; diagrams appear as code.
+- Expands saved command and tool details under their activity lines in chat.
 - Lists recent and archived conversations and opens saved chat links.
 - Shows tool actions for review and lets the requester approve or deny them.
   A saved takeover cancellation names its cause and end time.

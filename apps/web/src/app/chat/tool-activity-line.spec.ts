@@ -23,16 +23,64 @@ function assertCommandRecord(record: (typeof commandRecords)[number]): void {
   expect(button?.querySelector('[data-state="failed"]') !== null).toBe(record.failed);
   expect(root.textContent).not.toMatch(/retry|try again/i);
 
-  let emittedOpener: HTMLElement | undefined;
-  fixture.componentInstance.detailsOpened.subscribe(opener => {
-    emittedOpener = opener;
-  });
+  expect(button?.getAttribute('aria-expanded')).toBe('false');
+  const controlledId = button?.getAttribute('aria-controls');
+  expect(controlledId).toBe('tool-details-tool-1');
+  const collapsedDetails = root.querySelector<HTMLElement>(`#${controlledId}`);
+  expect(collapsedDetails?.hidden).toBe(true);
   button?.click();
-
-  expect(emittedOpener).toBe(button);
+  fixture.detectChanges();
+  const details = root.querySelector<HTMLElement>('.tool-details');
+  expect(button?.getAttribute('aria-expanded')).toBe('true');
+  expect(details?.hidden).toBe(false);
+  expect(details?.textContent).toContain(record.detail);
+  expect(details?.textContent).toContain('Recorded');
+  expect(details?.textContent).toContain('Reference');
+  expect(details?.textContent).toContain('Sanitised');
+  expect(root.querySelector('oc-hinge-drawer')).toBeNull();
+  button?.click();
+  fixture.detectChanges();
+  expect(button?.getAttribute('aria-expanded')).toBe('false');
+  expect(root.querySelector<HTMLElement>(`#${controlledId}`)?.hidden).toBe(true);
 }
 
-it.each(commandRecords)('shows $label as a button and reports its opener', assertCommandRecord);
+it.each(commandRecords)('expands and collapses $label inline', assertCommandRecord);
+
+it('keeps native consent in its own drawer without inline controls', () => {
+  const fixture = TestBed.createComponent(ToolActivityLine);
+  fixture.componentRef.setInput('record', {
+    id: 'native-1', label: 'Unsupported native consent', detail: '',
+    failed: true, time: '2026-10-04T10:00:00Z', nativeRequestId: 'request-1',
+  });
+  fixture.detectChanges();
+
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No tool activity line');
+  const button = root.querySelector<HTMLButtonElement>('.tool-line');
+  expect(button?.getAttribute('aria-expanded')).toBeNull();
+  expect(button?.getAttribute('aria-controls')).toBeNull();
+  expect(root.querySelector('.tool-details')).toBeNull();
+  fixture.destroy();
+});
+
+it('ignores an event without a button target', () => {
+  const fixture = TestBed.createComponent(ToolActivityLine);
+  fixture.componentRef.setInput('record', {
+    id: 'tool-1', label: 'Command completed', detail: 'Exit code 0',
+    failed: false, time: '2026-10-04T10:00:00Z',
+  });
+  fixture.detectChanges();
+
+  const event = new MouseEvent('click');
+  fixture.componentInstance['openDetails'](event);
+  fixture.detectChanges();
+
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No tool activity line');
+  const button = root.querySelector('.tool-line');
+  expect(button?.getAttribute('aria-expanded')).toBe('false');
+  fixture.destroy();
+});
 
 const toolStateCases = [
   { status: 'running', failed: false, suffix: 'Running', icon: 'running' },

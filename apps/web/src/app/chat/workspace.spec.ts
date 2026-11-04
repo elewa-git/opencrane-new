@@ -824,7 +824,7 @@ function sendConversationRow(
   socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify(message) }));
 }
 
-it('opens tool details from the line and focuses the line from Activity', async () => {
+it('expands tool details from the line and focuses the line from Activity', async () => {
   HTMLElement.prototype.scrollIntoView = vi.fn();
   Object.assign(HTMLDialogElement.prototype, {
     showModal: openPanelDialog,
@@ -845,21 +845,31 @@ it('opens tool details from the line and focuses the line from Activity', async 
   toolLine.click();
   await capture.fixture.whenStable();
   capture.fixture.detectChanges();
-  const dialogs = Array.from(capture.root.querySelectorAll<HTMLDialogElement>(
-    'oc-hinge-drawer dialog',
-  ));
-  const dialog = dialogs.find(candidate => candidate.querySelector('h2')?.textContent
-    === 'Command failed');
-  expect(dialog?.querySelector('h2')?.textContent).toBe('Command failed');
-  expect(document.activeElement).toBe(dialog?.querySelector('h2'));
-  expect(dialog?.textContent).toContain('Failed · Exit code 1');
-  expect(dialog?.textContent).toContain('4 Oct 2026, 10:01 UTC');
-  expect(dialog?.textContent).toContain('Reference');
-  expect(dialog?.textContent).toContain('Not available yet');
-
-  dialog?.dispatchEvent(new Event('cancel', { cancelable: true }));
-  await capture.fixture.whenStable();
+  const details = capture.root.querySelector('.tool-details');
+  expect(toolLine.getAttribute('aria-expanded')).toBe('true');
+  expect(details?.id).toBe(toolLine.getAttribute('aria-controls'));
+  expect(details?.textContent).toContain('Failed · Exit code 1');
+  expect(details?.textContent).toContain('4 Oct 2026, 10:01 UTC');
+  expect(details?.textContent).toContain('Reference');
+  expect(details?.textContent).toContain('Not available yet');
+  expect(details?.textContent).toContain('Sanitised');
+  expect(capture.root.querySelector('oc-hinge-drawer[open]')).toBeNull();
+  toolLine.click();
+  capture.fixture.detectChanges();
+  expect(toolLine.getAttribute('aria-expanded')).toBe('false');
+  expect(capture.root.querySelector<HTMLElement>('.tool-details')?.hidden).toBe(true);
   expect(document.activeElement).toBe(toolLine);
+});
+
+it('keeps a direct ordinary tool call out of the native details drawer', async () => {
+  const capture = await createCaptureWorkspace(toolRows());
+  const toolLine = capture.root.querySelector<HTMLButtonElement>('.tool-line');
+  if (!toolLine) throw new Error('Missing tool line');
+  const commandRecord = capture.fixture.componentInstance['activity']()[0];
+  if (!commandRecord) throw new Error('Missing command record');
+  capture.fixture.componentInstance['openToolDetails'](commandRecord, toolLine);
+  capture.fixture.detectChanges();
+  expect(capture.fixture.componentInstance['toolDetails']()).toBeUndefined();
 });
 
 it('shows the recorded native refusal and keeps its safe details after a failed read', async () => {
@@ -888,6 +898,9 @@ it('shows the recorded native refusal and keeps its safe details after a failed 
   if (!line) throw new Error('Missing native refusal line');
   expect(line.textContent).toContain('native-92');
   expect(line.textContent).toContain('<Files server>');
+  expect(line.getAttribute('aria-expanded')).toBeNull();
+  expect(line.getAttribute('aria-controls')).toBeNull();
+  expect(context.root.querySelector('.tool-details')).toBeNull();
   expect(line.querySelector('files')).toBeNull();
   line.click();
   await context.fixture.whenStable();
@@ -922,7 +935,7 @@ it('shows the recorded native refusal and keeps its safe details after a failed 
   context.fixture.destroy();
 });
 
-it('updates an open tool drawer when its finish event arrives', async () => {
+it('updates open inline tool details when its finish event arrives', async () => {
   Object.assign(HTMLDialogElement.prototype, {
     showModal: openPanelDialog,
     close: closePanelDialog,
@@ -944,6 +957,7 @@ it('updates an open tool drawer when its finish event arrives', async () => {
 
   expect(capture.root.querySelector('.tool-line')?.textContent).toContain('read_order · Completed');
   expect(capture.root.textContent).not.toContain('Running · The call has not finished.');
+  expect(capture.root.querySelector('.tool-details')?.textContent).toContain('Call completed');
   capture.fixture.destroy();
 });
 

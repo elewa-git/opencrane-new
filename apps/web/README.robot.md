@@ -670,8 +670,10 @@ and attempt history are not available. The transcript does not show raw argument
 tokens or full tool output. Live tool start and finish rows update one polite status
 message. History replay and streamed text do not announce tool changes. If a turn
 ends before a tool finish report arrives, the tool says that no finish was confirmed;
-it does not claim that the call failed, completed or kept running. An open details
-drawer follows the latest saved tool row. A stored review that fails its schema
+it does not claim that the call failed, completed or kept running. Command and tool
+lines expand inline and follow the latest saved tool row. Native consent refusals
+keep their drawer and refresh their saved details when opened. A stored review
+that fails its schema
 makes the GET return 400. The browser shows the read-failed state and pauses
 decisions.
 Chromium captures use intercepted fixtures and do not prove a live governed turn.
