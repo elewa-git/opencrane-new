@@ -28,7 +28,8 @@ function clock() {
 function checkCurrent() {
   return Promise.resolve(owned);
 }
-const worker = { silo: 'test', checkCurrent, now: clock };
+const signal = new AbortController().signal;
+const worker = { silo: 'test', checkCurrent, now: clock, signal };
 function creation() {
   const example = foldRoutine(undefined, routine('routine.created')).definition!;
   const schedule = { frequency: 'weekly' as const, weekday: 7,

@@ -257,7 +257,8 @@ async function refusesOrdinaryChatBeforeClaim() {
   const beforeHistory = await chatHistory(nats.store, 'test', futureConversationId);
   expect(beforeHistory).toHaveLength(2);
   expect(beforeHistory[1]!.event.type).toBe('message.posted');
-  const worker = { silo: 'test', binding, checkCurrent, now: clock };
+  const signal = new AbortController().signal;
+  const worker = { silo: 'test', binding, checkCurrent, now: clock, signal };
   const request = { routineId, expectedPosition, localDate: saved.next!.localDate,
     definitionRevision: 1, scheduleRevision: 1, controlRevision: 1 };
   const claim = await claimScheduledRoutine(nats.store, worker, request);

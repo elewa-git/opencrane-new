@@ -20,6 +20,7 @@ interface Worker {
   binding: Binding;
   // Supply this from the trusted worker, never from a request or saved due record.
   checkCurrent: (deadline: number) => Promise<boolean>;
+  signal: AbortSignal;
   now?: () => number;
 }
 class DueRefused extends Error {
@@ -47,20 +48,27 @@ function requireInput(input: Input) {
     throw new DueRefused();
   }
 }
-async function loadHistory(store: EventStore, silo: string, input: Input) {
+function requireActive(worker: Worker) {
+  if (worker.signal.aborted) {
+    throw new DueRefused();
+  }
+}
+async function loadHistory(store: EventStore, worker: Worker, input: Input) {
   const rows: StoredEvent[] = [];
   let state: RoutineState | undefined;
   const completedRuns = new Map<string, Run>();
   const deadline = performance.now() + 10_000;
   for await (const row of store.readStream(`routine-${input.routineId}`, 1, deadline)) {
+    requireActive(worker);
     const identity = routineRecordIdentitySchema.parse(row.event.data);
-    if (row.event.silo !== silo || identity.version !== 1 ||
+    if (row.event.silo !== worker.silo || identity.version !== 1 ||
         (rows.length === 0 && row.event.type !== 'routine.created')) {
       throw new DueRefused();
     }
     state = foldRoutineHistory(state, row.event, completedRuns);
     rows.push(row);
   }
+  requireActive(worker);
   if (performance.now() >= deadline) {
     throw new DueRefused();
   }
@@ -71,13 +79,15 @@ async function loadClaimAccess(store: EventStore, worker: Worker, input: Input) 
     if (worker.binding.silo !== worker.silo) {
       throw new DueRefused();
     }
-    const history = await loadHistory(store, worker.silo, input);
+    const history = await loadHistory(store, worker, input);
+    requireActive(worker);
     const ownerId = history.state?.definition?.definition.ownerId;
     if (!ownerId) {
       throw new DueRefused();
     }
     const auth = memberAuthorisation(worker.binding, store);
     const access = await auth.loadRoutineAccess(ownerId, input.routineId);
+    requireActive(worker);
     if (access.rows.at(-1)?.sequence !== history.rows.at(-1)?.sequence) {
       throw new DueRefused();
     }
@@ -88,20 +98,25 @@ async function loadClaimAccess(store: EventStore, worker: Worker, input: Input) 
   }
 }
 async function requireWorker(worker: Worker, deadline: number) {
+  requireActive(worker);
   if (!(await worker.checkCurrent(deadline)) || performance.now() >= deadline) {
     throw new DueRefused();
   }
+  requireActive(worker);
 }
-async function requireOwner(access: Awaited<ReturnType<typeof loadClaimAccess>>['access']) {
+async function requireOwner(access: Awaited<ReturnType<typeof loadClaimAccess>>['access'],
+  worker: Worker) {
   if (!(await access.check('manage')).allowed) {
     throw new DueRefused();
   }
+  requireActive(worker);
 }
 async function claimWriteAccess(store: EventStore,
-  access: Awaited<ReturnType<typeof loadClaimAccess>>['access']) {
+  access: Awaited<ReturnType<typeof loadClaimAccess>>['access'], worker: Worker) {
   try {
     const fresh = await ownershipWriteAccess(store, access.positions);
-    await requireOwner(access);
+    requireActive(worker);
+    await requireOwner(access, worker);
     return fresh;
   } catch {
     throw new DueRefused();
@@ -203,10 +218,12 @@ function appendedPosition(result: Awaited<ReturnType<EventStore['append']>>) {
 export async function claimRoutineDue(store: EventStore, worker: Worker, input: Input) {
   try {
     requireInput(input);
+    requireActive(worker);
     const saved = await loadClaimAccess(store, worker, input);
+    requireActive(worker);
     const previous = previousReceipt(saved.rows, input);
     if (previous) {
-      await requireOwner(saved.access);
+      await requireOwner(saved.access, worker);
       await requireWorker(worker, performance.now() + 2000);
       return previous;
     }
@@ -227,7 +244,7 @@ export async function claimRoutineDue(store: EventStore, worker: Worker, input: 
     }
     foldRoutine(saved.state, event);
     // Finish routine history before watching only the small membership access streams.
-    const fresh = await claimWriteAccess(store, saved.access);
+    const fresh = await claimWriteAccess(store, saved.access, worker);
     const deadline = fresh.deadline;
     async function checkAccess() {
       await requireWorker(worker, deadline);
@@ -236,17 +253,22 @@ export async function claimRoutineDue(store: EventStore, worker: Worker, input: 
       } catch {
         throw new DueRefused();
       }
+      requireActive(worker);
       requireSlot(worker.silo, run, now());
     }
     await checkAccess();
+    requireActive(worker);
     const change = { event, expectedSequence: input.expectedPosition,
-      historyChecked: true as const, deadline, checkAccess };
+      historyChecked: true as const, deadline, checkAccess, signal: worker.signal };
+    // Keep cancellation effective through the store's final awaited access check.
     const result = await store.append(change);
+    requireActive(worker);
     const position = appendedPosition(result);
     const row = await store.readEvent(position, performance.now() + 10_000);
+    requireActive(worker);
     const confirmed = savedReceipt(row, saved.state, input);
     // Recheck access even when the store recovered an already saved event.
-    await requireOwner(saved.access);
+    await requireOwner(saved.access, worker);
     await checkAccess();
     return confirmed;
   } catch (error) {
