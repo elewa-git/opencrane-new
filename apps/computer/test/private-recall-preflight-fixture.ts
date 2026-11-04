@@ -46,7 +46,10 @@ export async function preflightFixture() {
     await mcp.handle(request, response, permits);
   }
   function handleMcp(request: IncomingMessage, response: ServerResponse) {
-    function failed() { response.destroy(); }
+    function failed() {
+      response.writeHead(400, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: 'Discovery refused' }));
+    }
     void receiveMcp(request, response).catch(failed);
   }
   const listener = createServer(handleMcp);
@@ -58,7 +61,8 @@ export async function preflightFixture() {
   async function send(endpoint: string, caller: string, method = 'tools/list') {
     const headers = { authorization: `Bearer ${caller}`, 'mcp-method': method,
       'mcp-protocol-version': '2026-07-28' };
-    const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method });
+    const metadata = { 'io.modelcontextprotocol/protocolVersion': '2026-07-28' };
+    const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: { _meta: metadata } });
     const options = { method: 'POST', headers, body };
     const response = await fetch(origin + new URL(endpoint).pathname, options);
     return record(await response.json());
