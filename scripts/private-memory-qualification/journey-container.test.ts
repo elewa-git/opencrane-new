@@ -39,7 +39,7 @@ async function refusesRealHost(): Promise<void> {
     environmentId: 'c'.repeat(64), siloId: `sha256:${'d'.repeat(64)}`,
     installationId: `sha256:${'e'.repeat(64)}`, freshInstall: true,
     runId: '11111111-1111-4111-8111-111111111111',
-    challengeId: '22222222-2222-4222-8222-222222222222', name: 'privateTurns',
+    challengeId: '22222222-2222-4222-8222-222222222222', name: 'nativeRecall',
   };
   const args = ['/usr/local/bin/node', '--experimental-strip-types',
     '/app/scripts/private-memory-qualification/journey.mjs'];

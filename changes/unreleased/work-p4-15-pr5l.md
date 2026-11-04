@@ -1,0 +1,1 @@
+Private-memory checks now require the pinned native process, an empty ephemeral thread, disabled tools, a RAM home and safe process limits. Successful assertions remain partial; missing native files refuse and memory admission stays disabled.

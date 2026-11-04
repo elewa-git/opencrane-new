@@ -94,7 +94,7 @@ only the measured binding, one of the eleven existing names and a UUID challenge
 Unknown names, extra fields, malformed formats and paths refuse before observations.
 Failures contain only `result: FAIL` and `input_invalid`, `host_refused` or
 `journey_failed` as the reason. No identity, raw observation or child output is echoed.
-The entry starts no child processes and remains in the supervisor's process group.
+The native check described below starts children in the supervisor's process group.
 
 The host probe reads `/proc/swaps`, the effective `core_pattern`, `core_uses_pid` and
 `suid_dumpable` kernel settings, `/sys/kernel/kexec_crash_loaded`, its own core limits,
@@ -112,10 +112,10 @@ all need disabled swap/dumps; later live checks must measure their actual proces
 Safe observations allow the checks below to run. The collector still withdraws its
 earlier result and cannot save PASS with this partial runner.
 
-**Outstanding / NOT RUN:** all nine live journeys (`privateTurns`, `nativeRecall`,
+**Complete live journeys / NOT RUN:** all nine live journeys (`privateTurns`, `nativeRecall`,
 `requesterIsolation`, `sessionIsolation`, `invalidation`, `unrelatedActivity`,
 `stopReconnect`, `replacementReload`, `persistence`); both complete qualifications
-(`P4-14`, `P4-15`); pinned native launch; volatile replies; and immutable deployment
+(`P4-14`, `P4-15`); native deployment launch; volatile replies; and immutable deployment
 qualification. Their absence holds the later journey on `work/p4-15-pr5i`. Copied
 receipts, human UI checks and protocol PASS cannot replace them. Disposable container
 fixtures prove refusal and cancellation only. No stack, bootstrap or model call runs
@@ -140,14 +140,14 @@ unavailable execution status and exact retry recovery. For `unrelatedActivity`, 
 correcting or forgetting another fact leaves the loaded context unchanged. These are
 server checks with recorded context fixtures, not native memory delivery. Successful
 runs return PARTIAL, complete=false. The isolation checks below also return PARTIAL.
-The remaining five journeys and both qualifications return NOT RUN, complete=false. Failure returns only FAIL / journey_failed.
+The native check is described below. Four other journeys and both qualifications return
+NOT RUN, complete=false. Failure returns only FAIL / journey_failed.
 The collector binds every returned status to the image, host, silo, installation and
 fresh challenge, then saves its protected result. These are challenge-bound receipts,
 not cryptographic signatures. The qualification reader still accepts only complete PASS.
 
 Native requester/session isolation, messages/uploads during native work, dispatch/output rejection,
-process termination, persistence scans and real native recall remain NOT RUN. No native
-process starts, and no admission setting changes. The existing supervisor still owns
+process termination, persistence scans and real native recall remain NOT RUN. No native process starts during these four server checks, and no admission setting changes. The existing supervisor still owns
 timeout and process-group cleanup. Tests run shared assertions on disposable NATS and
 check denied appends, incomplete results and refusal by the qualification reader.
 
@@ -183,10 +183,48 @@ Only fixture credentials are mounted; the helper and assertions come from the im
 The existing supervisor still stops child processes on timeout or collector loss.
 
 Persistence, Stop/reconnect and replacement/reload checks are deferred to the next
-part and remain NOT RUN. Private turns, native recall, both qualifications, pinned
-native launch, volatile replies and immutable deployment qualification also remain
-NOT RUN. The full nine live journeys remain incomplete. No new event or API fields,
+part and remain NOT RUN. Native recall, both qualifications, volatile replies and immutable deployment
+qualification also remain NOT RUN. The private-turn assertions below remain PARTIAL. The full nine live journeys remain incomplete. No new event or API fields,
 dependencies, authority checks or admission changes are introduced.
+
+## Native process assertions
+
+P4-15 PR 5l, Part of #97, adds `native-checks.ts` to `privateTurns`. Host refusal
+still happens first. A fresh challenge names a newly created home and identifies
+initialisation of one new Codex process. The helper reuses the production launcher,
+configuration and JSON-RPC connection. It never resumes a thread or sends model input.
+It checks the Linux x64 Codex 0.159.2 executable hash before launch and through the
+running process. It checks the actual executable, parent-child relationship, working
+directory, home settings, UID, no-new-privileges setting, core limits and finite positive
+process limits. The home must use tmpfs. Both soft and hard core limits must be zero.
+It checks process identity and these observations again before returning.
+
+The native config must disable shell, files, browser access, code-host execution,
+external tools, skills instructions, plugins and agent spawning. A new thread must
+have no saved path, execution environments or turns. Reading it again must return
+the same empty ephemeral thread. Child output is bounded in RAM and never returned.
+Failures return only FAIL / journey_failed. Successful assertions return PARTIAL /
+complete=false. They cannot prove gVisor isolation or attempted persistence.
+
+The unmodified package image excludes Codex and computer source. It refuses this
+check, even on a safe host. No production image or computer file changes here.
+`native-image.test.ts` builds that package and a disposable derivative containing
+only the pinned npm runtime and four production computer helpers. No repository
+test or spike module is imported by the runner. A test-only loader built into the
+fixture image substitutes host observations and individual bad native observations.
+It runs the shipped entry without executable mounts. The unmodified entry still
+refuses the real host. These fixtures are not deployment qualification.
+
+Current incomplete checks: `privateTurns` is PARTIAL only when these assertions run;
+`requesterIsolation`, `sessionIsolation`, `invalidation` and `unrelatedActivity` are
+PARTIAL server checks. `nativeRecall`, `stopReconnect`, `replacementReload` and
+`persistence` are NOT RUN. Both complete qualifications, P4-14 and P4-15, are NOT RUN.
+Still unproved: gVisor and other process namespaces; live and fault-time storage
+scans; actual server, bridge and proxy RAM protection; native caller/catalogue launch;
+requester-only volatile replies; native isolation, invalidation and unrelated-activity
+journeys; and immutable fresh-install qualification. Admission stays disabled, the
+collector cannot save PASS and 5i remains held. Own checks are in the
+[receipt](../../docs/process/p4-15-pr5l/receipt.md).
 
 ## File parser scope and invocation
 
