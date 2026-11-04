@@ -182,3 +182,74 @@ together and then evaluates membership results first. It retains every compariso
 removal priority and the original deadline, including checks for subjects added during
 confirmation. The focused slow-read and saved-removal run passed 10/10. Temporary
 logging was removed. The stopped run did not finish acceptance checks on this revision.
+
+## Resumed repair checks
+
+4 November 2026. Source under test: `3e2dc82cdc5783d2908ad624b9ef261c1d768202`.
+Fetched `origin` and rebased onto `origin/main` at
+`658da7a756c764a9a856409496d23012c24bd7fc`. The rebase completed, main is an
+ancestor, and neither rebase state directory remained. Conflicts combined the new
+assistant-file delivery options with the initial-memory options. Both behaviours
+remain in the bridge. The computer README keeps both contracts.
+
+The saved diagnostic log records `Authority snapshot expired` in the access
+confirmation after the loaded event was appended. Credentials were refused, which
+left the fixture waiting for native start. Its grants, facts, memory projection and
+qualification were already supplied before that start. The repair avoids repeated
+reads of immutable history within one check and reads independent access positions
+together. It changes no deadline or native-start assertion.
+
+The three stopped commits remain intact apart from their rebased identifiers:
+`d8439c611` is now `f44321677`, `cc42294da` is now `8fa4b929a`, and `3f2d28b59`
+is now `57d918435`. The failing slow-membership-position test still precedes its
+production fix. The original failure log is
+`/tmp/p4-15-pr5g-fix3-membership-positions-red.log`. The saved expiry trace is
+`/tmp/p4-15-pr5g-fix3-repeat-diagnostic.log`.
+
+Code inspection found no removed access, money or memory check. Membership results
+are checked before other read failures. Every watched position is compared, including
+subjects added during confirmation. History reuse ends with each access check and
+keeps its original position and deadline. Conversation history is loaded before the
+short authority check; its later activity is checked separately. The authority check
+still watches only the small access streams. Membership, grants, tool permissions,
+receipts, qualification, current memory references, turn state and spending checks
+remain. Admission is unchanged and disabled.
+
+PASS: full lint, typecheck, `check:events` (158 types), Knip and `lint:changelog`.
+Commands ran under `nice -n 10`. Logs are
+`/tmp/p4-15-pr5g-fix3-r-{lint,typecheck,events,knip,changelog}.log`; exit statuses
+are in `/tmp/p4-15-pr5g-fix3-r-checks.json`.
+
+Tests use the shared host, disposable NATS/OpenFGA fixtures and a new disposable
+PostgreSQL 17.6 container. `PG_TEST_URL` points to that container on loopback port
+57076. Deployment qualification is simulated. This is not a fresh installation.
+The first two batches cover all eight changed test files, five related authority and
+memory test files, and three assistant-file tests affected by the rebase. Later runs
+repeat the complete delivery file. Vitest uses at most two workers in total, under
+`nice -n 10`. Per-run logs and JSON reports use
+`/tmp/p4-15-pr5g-fix3-r-run-{1..10}.{log,json}`.
+
+PASS: both complete batches, 539/539 in 16 files each. Initial delivery passed
+116/116 in each batch, including all five slow-read regressions. All eight changed
+test files therefore passed twice. Each complete delivery run passed:
+
+| Delivery run | Result |
+| --- | --- |
+| 1 | PASS, 74/74 |
+| 2 | PASS, 74/74 |
+| 3 | PASS, 74/74 |
+| 4 | PASS, 74/74 |
+| 5 | PASS, 74/74 |
+| 6 | PASS, 74/74 |
+| 7 | PASS, 74/74 |
+| 8 | PASS, 74/74 |
+| 9 | PASS, 74/74 |
+| 10 | PASS, 74/74 |
+
+The ten-run summary is `/tmp/p4-15-pr5g-fix3-r-runs.json`. These are new runs on
+the rebased source, with no production edits between them. The failed attempts above
+remain recorded separately. The disposable database was removed with its volume.
+
+NOT RUN: full root suite, fresh-install qualification, persistence scans and paid
+model calls. No development stack was started or changed. Admission remains disabled.
+CI is not awaited. These checks do not establish live capability qualification.
