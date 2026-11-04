@@ -75,7 +75,8 @@ function load(url, context, next) {
   }
   return loaded;
 }
-registerHooks({ load });`;
+const hooks = { load };
+registerHooks(hooks);`;
     writeFileSync(join(directory, 'preload.mjs'), preload);
     const computerImage = process.env['COMPUTER_TEST_IMAGE'] ?? 'ocn-upload-computer:test';
     const dockerfile = `FROM ${computerImage} AS native
@@ -92,7 +93,8 @@ RUN ln -s /opt/native/node_modules/@openai/codex/bin/codex.js /usr/local/bin/cod
       '-t', missingTag, directory], 180_000);
     docker(['build', '--network=none', '-q', '-t', tag, directory], 180_000);
   } finally {
-    rmSync(directory, { recursive: true, force: true });
+    const removalOptions = { recursive: true, force: true };
+    rmSync(directory, removalOptions);
   }
 }
 function cleanup(): void {
@@ -112,9 +114,10 @@ function run(caseName: string, image = tag): Record<string, unknown> {
   }
   args.push('/app/scripts/private-memory-qualification/journey.mjs');
   try {
-    const result = spawnSync('/usr/bin/docker', args, {
-      input: JSON.stringify(request), encoding: 'utf8', timeout: 45_000,
-    });
+    const options = {
+      input: JSON.stringify(request), encoding: 'utf8' as const, timeout: 45_000,
+    };
+    const result = spawnSync('/usr/bin/docker', args, options);
     expect(result.error).toBeUndefined();
     expect(result.stderr).toBe('');
     const receipt = receiptSchema.parse(JSON.parse(result.stdout));
@@ -125,21 +128,25 @@ function run(caseName: string, image = tag): Record<string, unknown> {
   }
 }
 function safeNative(): void {
-  expect(run('safe')).toMatchObject({ ...request, result: 'PARTIAL', complete: false });
+  const expected = { ...request, result: 'PARTIAL', complete: false };
+  expect(run('safe')).toMatchObject(expected);
 }
 it('observes pinned native start from image modules and keeps qualification incomplete',
   safeNative, 60_000);
 function refusesFault(name: string): void {
-  expect(run(name)).toEqual({ result: 'FAIL', reason: 'journey_failed' });
+  const expected = { result: 'FAIL', reason: 'journey_failed' };
+  expect(run(name)).toEqual(expected);
 }
 it.each(faults)('refuses %s without returning native output', refusesFault, 60_000);
 function refusesHost(): void {
-  expect(run('host')).toEqual({ result: 'FAIL', reason: 'host_refused' });
-  expect(run('host', packageTag)).toEqual({ result: 'FAIL', reason: 'host_refused' });
+  const expected = { result: 'FAIL', reason: 'host_refused' };
+  expect(run('host')).toEqual(expected);
+  expect(run('host', packageTag)).toEqual(expected);
 }
 it('keeps the real host refusal ahead of native execution in both images', refusesHost, 60_000);
 
 function missingNative(): void {
-  expect(run('safe', missingTag)).toEqual({ result: 'FAIL', reason: 'journey_failed' });
+  const expected = { result: 'FAIL', reason: 'journey_failed' };
+  expect(run('safe', missingTag)).toEqual(expected);
 }
 it('refuses the package without native files even with safe host observations', missingNative);
