@@ -24,7 +24,7 @@ async function incomplete(name: string): Promise<void> {
   expect(result).toHaveProperty('observedAt', expect.any(Number));
   expect(probeHost).toHaveBeenCalledOnce();
 }
-it.each(['privateTurns', 'nativeRecall',
+it.each(['nativeRecall',
   'stopReconnect', 'replacementReload', 'persistence', ...qualifications])('never completes %s on host checks alone', incomplete);
 
 const invalid: [string, unknown][] = [
@@ -87,3 +87,10 @@ function refusesArguments(): void {
   entryRefuses(JSON.stringify(request), ['/private/program']);
 }
 it('refuses command arguments without running a selected executable', refusesArguments);
+
+async function missingNative(): Promise<void> {
+  expect(await runJourney(JSON.stringify(request))).toEqual({
+    result: 'FAIL', reason: 'journey_failed',
+  });
+}
+it('refuses a host-only result when the native binary is absent', missingNative);
