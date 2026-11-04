@@ -1,6 +1,18 @@
 import { TestBed } from '@angular/core/testing';
 import { AssistantMarkdown } from './assistant-markdown';
 
+function mockMermaid() {
+  function render(_id: string, code: string) {
+    if (code === 'this is not a diagram') {
+      return Promise.reject(new Error('Invalid diagram'));
+    }
+    return Promise.resolve({ svg: '<svg xmlns="http://www.w3.org/2000/svg"></svg>' });
+  }
+  return { default: { initialize: vi.fn(), render: vi.fn(render) } };
+}
+
+vi.mock('mermaid', mockMermaid);
+
 function mount(text: string) {
   const fixture = TestBed.createComponent(AssistantMarkdown);
   fixture.componentRef.setInput('text', text);
@@ -163,16 +175,31 @@ async function rendersMermaidAsAnImage() {
     const image = root.querySelector<HTMLImageElement>('img[alt="Diagram"]');
     expect(image?.getAttribute('src')).toMatch(/^data:image\/svg\+xml/);
   });
+  const { default: mermaid } = await import('mermaid');
+  const initialisation = vi.mocked(mermaid.initialize).mock.calls[0]?.[0];
+  expect(initialisation?.securityLevel).toBe('strict');
+  expect(initialisation?.htmlLabels).toBe(false);
+  expect(initialisation?.startOnLoad).toBe(false);
+  expect(initialisation?.logLevel).toBe('fatal');
+  expect(initialisation?.secure).toContain('securityLevel');
+  expect(initialisation?.secure).toContain('htmlLabels');
+  expect(initialisation?.secure).toContain('logLevel');
   expect(root.querySelector('iframe, svg, script, a')).toBeNull();
 }
 
 async function showsSourceWhenMermaidFails() {
   const source = 'this is not a diagram';
-  const { root } = mount('```mermaid\n' + source + '\n```');
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal('navigator', { clipboard: { writeText } });
+  const { root, fixture } = mount('```mermaid\n' + source + '\n```');
   await vi.waitFor(function sourceAppears() {
     expect(root.querySelector('pre code')?.textContent).toBe(source);
   });
   expect(root.querySelector('img')).toBeNull();
+  root.querySelector('button')?.click();
+  await fixture.whenStable();
+  expect(writeText).toHaveBeenCalledWith(source);
+  expect(root.querySelector('[role="status"]')?.textContent).toBe('Copied');
 }
 
 function keepsNestedMermaidFenceAsCode() {

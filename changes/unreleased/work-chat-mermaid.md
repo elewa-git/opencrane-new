@@ -1,0 +1,1 @@
+- Assistant replies now show Mermaid diagrams as images. If a diagram cannot be drawn, its source stays visible as code.

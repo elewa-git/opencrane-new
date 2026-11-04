@@ -36,7 +36,8 @@ For everyone, the website:
 - Shows sign-in, first-owner setup and the welcome survey.
 - Supports assistant sessions and direct or group chats with colleagues.
   Assistant replies show headings, lists, quotes, code and safe links.
-  Code blocks have a copy button; diagrams appear as code.
+  Code blocks have a copy button. Mermaid diagrams appear as images, with their
+  source shown as code when a diagram cannot be drawn.
 - Expands saved command and tool details under their activity lines in chat.
 - Lists recent and archived conversations and opens saved chat links.
 - Shows tool actions for review and lets the requester approve or deny them.

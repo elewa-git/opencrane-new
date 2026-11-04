@@ -501,8 +501,12 @@ The earlier live journey is recorded in [sign-in evidence](../../docs/process/si
 paragraphs, backtick and tilde code fences, inline code, bold, italic and links.
 Only `https:` and `mailto:` links become anchors, with a new tab and
 `rel="noopener noreferrer"`. Other destinations and HTML remain text.
-Mermaid stays code; a2ui keeps its existing unavailable placeholder. Citations keep
-opening the preview. User messages, saved events and streamed messages are unchanged.
+Mermaid code blocks load the MIT-licensed Mermaid package only when needed. The package
+draws with strict security settings, with HTML labels disabled. The reply shows the
+result as an image; a failed drawing keeps the source as code with a copy button. The
+component does not log reply text or change saved events. `a2ui` keeps its existing
+unavailable placeholder. Citations keep opening the preview. User messages, saved events
+and streamed messages are unchanged.
 Bold text can continue across a line break. Closing code markers allow at most three
 leading spaces. More deeply indented markers remain code, including when copied.
 The interactive placeholder keeps the `Ag` badge. Copy feedback stays with the same
@@ -513,6 +517,9 @@ The component specs cover elements, hostile input, copy results, streaming and l
 `nice -n 10 node scripts/capture-chat-markdown.mjs` captures intercepted API examples
 at 1280 and 390 px after `nice -n 10 npm run build -w apps/web`.
 The [Markdown receipt](../../docs/process/chat-markdown-1/receipt.md) records the checks.
+`npm run visual:chat-mermaid` builds the website and captures diagram images and failed
+diagrams at both widths with intercepted API replies. Its images are under
+`docs/process/chat-mermaid/`.
 
 After sign-in, choose **Open workspace** (`/workspace`). Personal Agent sessions
 use the real bridge's `GET /api/chat`, conversation commands and resumable `/ws`

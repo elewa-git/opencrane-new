@@ -41,6 +41,7 @@
     "visual:uploads-reasons": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-uploads-reasons.mjs",
     "visual:chat-markdown": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-chat-markdown.mjs",
     "visual:chat-tool-inline": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-chat-tool-inline.mjs",
+    "visual:chat-mermaid": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-chat-mermaid.mjs",
     "visual:chat-drag-drop": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-chat-drag-drop.mjs",
     "visual:chat": "NO_COLOR=1 node scripts/check-chat-browser.mjs --capture",
     "test:chat:production": "NO_COLOR=1 node scripts/check-chat-production.mjs",

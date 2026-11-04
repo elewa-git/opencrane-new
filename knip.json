@@ -14,6 +14,7 @@
         "infra/package/computer-volume-inventory.ts",
         "scripts/capture-chat-markdown.mjs",
         "scripts/capture-chat-tool-inline.mjs",
+        "scripts/capture-chat-mermaid.mjs",
         "scripts/capture-uploads-reasons.mjs",
         "scripts/capture-chat-drag-drop.mjs",
         "scripts/check-stage-b-polish.mjs",

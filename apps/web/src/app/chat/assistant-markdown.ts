@@ -3,11 +3,12 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { DogEar } from '../ui/paper';
+import { MermaidDiagram } from './mermaid-diagram';
 import { parseMarkdown, type MarkdownBlock } from './markdown-parser';
 
 @Component({
   selector: 'oc-assistant-markdown',
-  imports: [NgTemplateOutlet, DogEar],
+  imports: [NgTemplateOutlet, DogEar, MermaidDiagram],
   templateUrl: './assistant-markdown.html',
   styleUrls: ['./transcript.css', './assistant-markdown.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
