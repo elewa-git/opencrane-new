@@ -33,7 +33,8 @@ async function serveAssets(route) {
   await serveWebBuild(route, build);
 }
 function containsMermaid(source) {
-  return source.includes('Maximum text size in diagram exceeded');
+  return source.includes('Maximum text size in diagram exceeded')
+    && source.includes('mermaidAPI');
 }
 function observeInitialisation() {
   let library;
@@ -59,6 +60,23 @@ function readSettings() {
     initialisations: globalThis.mermaidInitialisations,
   };
 }
+async function drawBlockedImage(source) {
+  try {
+    await globalThis.mermaid.render('network-probe', source);
+    return 'rendered';
+  } catch {
+    return 'blocked';
+  }
+}
+
+function canReadParent() {
+  try {
+    return Boolean(globalThis.parent.document.body);
+  } catch {
+    return false;
+  }
+}
+
 async function probeNetwork() {
   const violations = [];
   function recordViolation(event) {
@@ -72,6 +90,9 @@ async function probeNetwork() {
   const script = globalThis.document.createElement('script');
   script.src = 'https://attacker.invalid/script.js';
   globalThis.document.body.append(script);
+  const localScript = globalThis.document.createElement('script');
+  localScript.src = '/probe-script.js';
+  globalThis.document.body.append(localScript);
   const style = globalThis.document.createElement('link');
   style.rel = 'stylesheet';
   style.href = 'https://attacker.invalid/style.css';
@@ -112,6 +133,14 @@ try {
   fixture.add('agent.message_delta', sentinel);
   await reply.getByRole('img', { name: 'Diagram' }).last().waitFor();
   await page.waitForLoadState('networkidle');
+  const renderedImage = reply.getByRole('img', { name: 'Diagram' }).last();
+  const imageSource = await renderedImage.getAttribute('src');
+  const svg = Buffer.from(imageSource.split(',')[1], 'base64').toString('utf8');
+  const viewBox = /viewBox="([^"]+)"/.exec(svg);
+  assert(viewBox, 'The rendered image needs a measured view box');
+  const dimensions = viewBox[1].split(' ');
+  assert(Number(dimensions[2]) >= 100 && Number(dimensions[3]) >= 40,
+    'Measure both nodes and their labels: ' + viewBox[1]);
   assert.deepEqual(requests, [], 'Rendering a reply must not send any attacker request');
   assert.equal(scripts.some(containsMermaid), true, 'A closed diagram must load the real renderer');
   const iframe = page.locator('iframe[title="Diagram renderer"]');
@@ -135,6 +164,8 @@ try {
   for (const key of secureKeys) {
     assert(config.secure.includes(key), 'Protect configuration key: ' + key);
   }
+  assert.equal(await renderer.evaluate(canReadParent), false);
+  assert.equal(await renderer.evaluate(drawBlockedImage, source), 'blocked');
   const violations = await renderer.evaluate(probeNetwork);
   for (const directive of ['img-src', 'script-src-elem', 'style-src-elem', 'connect-src']) {
     assert(violations.includes(directive), 'CSP must block ' + directive);
@@ -161,11 +192,13 @@ try {
   const blocks = reply.locator('oc-mermaid-diagram');
   for (let index = 0; index < sources.length; index++) {
     const block = blocks.nth(index + 2);
-    assert.equal(await block.locator('pre code').textContent(), sources[index].trimEnd());
+    assert.equal(await block.locator('pre code').textContent(), sources[index]);
     assert.equal(await block.getByRole('button', { name: 'Copy code' }).count(), 1);
     assert.equal(await block.locator('img').count(), 0);
   }
-  assert.deepEqual(await renderer.evaluate(readSettings), { config, initialisations: 1 });
+  const expectedSettings = { config, initialisations: 1 };
+  assert.deepEqual(await renderer.evaluate(readSettings), expectedSettings);
+  assert.equal(await iframe.count(), 1);
   assert.equal(await renderer.locator('.error-icon, .error-text').count(), 0);
   assert.deepEqual(requests, []);
   console.log('PASS Mermaid Chromium: isolation, lazy loading, settings and limits');
