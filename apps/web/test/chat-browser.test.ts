@@ -17,3 +17,16 @@ it('qualifies shared folding motion and the cancellable 2.5-second handoff in Ch
   const result = await promisify(execFile)(process.execPath, ['scripts/check-fold-loader.mjs'], { env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' }, timeout: 180_000 });
   expect(result.stdout).toContain('PASS fold loader Chromium');
 }, 190_000);
+
+async function checksMermaidIsolation() {
+  const options = {
+    env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
+    timeout: 180_000,
+  };
+  const execute = promisify(execFile);
+  const result = await execute(process.execPath, ['scripts/check-chat-mermaid.mjs'], options);
+  expect(result.stdout).toContain('PASS Mermaid Chromium');
+}
+
+it('blocks network access while the real Mermaid renderer draws replies',
+  checksMermaidIsolation, 190_000);
