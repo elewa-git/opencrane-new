@@ -132,7 +132,13 @@ function superviseChild(
   childId: string,
 ) {
   let size = 0;
-  const state = { failed: false, nativePid: undefined as number | undefined };
+  const state = {
+    failed: false,
+    nativePid: undefined as number | undefined,
+    nativeStart: undefined as string | undefined,
+    wrapperStart: undefined as string | undefined,
+    cleanup: undefined as Promise<void> | undefined,
+  };
   function fail(): void {
     state.failed = true;
     child.stdout.destroy();
@@ -178,6 +184,7 @@ async function checkNativeRpc(
   assert(child.pid);
   const nativePid = nativeChild(child.pid, binary, home, childId);
   state.nativePid = nativePid;
+  state.nativeStart = processStart(nativePid);
   const wrapperIdentity = processIdentity(child.pid);
   const identity = processIdentity(nativePid);
   const configParams = { includeLayers: false };
@@ -213,6 +220,37 @@ async function checkStillRunning(
   assert.equal(state.failed, false);
 }
 
+function processStart(pid: number): string | undefined {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const fieldsText = stat.slice(stat.lastIndexOf(')') + 2);
+    const fields = fieldsText.split(' ');
+    const start = fields[19];
+    assert.match(start ?? '', /^[0-9]+$/u);
+    // Keep the birth identity stable even if an exiting wrapper leaves an orphan.
+    return `${pid}:${start}`;
+  } catch (error) {
+    if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') {
+      throw error;
+    }
+    return undefined;
+  }
+}
+
+function sameProcess(pid: number, start: string | undefined): boolean {
+  return start !== undefined && processStart(pid) === start;
+}
+
+function signalOwnedProcess(
+  pid: number, start: string | undefined, signal: NodeJS.Signals,
+): boolean {
+  if (sameProcess(pid, start)) {
+    signalProcess(pid, signal);
+    return true;
+  }
+  return false;
+}
+
 function signalProcess(pid: number, signal: NodeJS.Signals): void {
   try {
     process.kill(pid, signal);
@@ -235,9 +273,14 @@ function processState(pid: number): string | undefined {
   }
 }
 
-async function freezeWrapper(pid: number): Promise<number[]> {
-  signalProcess(pid, 'SIGSTOP');
+async function freezeWrapper(pid: number, start: string): Promise<number[]> {
+  if (!signalOwnedProcess(pid, start, 'SIGSTOP')) {
+    return [];
+  }
   for (let attempt = 0; attempt < 200; attempt++) {
+    if (!sameProcess(pid, start)) {
+      return [];
+    }
     const state = processState(pid);
     if (state === undefined || state === 'Z') {
       return [];
@@ -256,9 +299,9 @@ async function freezeWrapper(pid: number): Promise<number[]> {
   throw new Error('native_cleanup_failed');
 }
 
-async function checkGone(pid: number): Promise<void> {
+async function checkGone(pid: number, start: string): Promise<void> {
   for (let attempt = 0; attempt < 200; attempt++) {
-    if (!existsSync(`/proc/${pid}`)) {
+    if (!sameProcess(pid, start)) {
       return;
     }
     await delay(10);
@@ -266,34 +309,52 @@ async function checkGone(pid: number): Promise<void> {
   throw new Error('native_cleanup_failed');
 }
 
-async function stopChild(supervised: SupervisedChild): Promise<void> {
+function rememberProcess(processes: Map<number, string>, pid: number): void {
+  if (processes.has(pid)) {
+    return;
+  }
+  const start = processStart(pid);
+  if (start !== undefined) {
+    processes.set(pid, start);
+  }
+}
+
+async function stopOwnedChild(supervised: SupervisedChild): Promise<void> {
   const { child, state, stopped } = supervised;
-  const pids = new Set<number>();
-  if (state.nativePid !== undefined) {
-    pids.add(state.nativePid);
+  const processes = new Map<number, string>();
+  if (state.nativePid !== undefined && state.nativeStart !== undefined) {
+    processes.set(state.nativePid, state.nativeStart);
   }
   try {
-    if (child.pid !== undefined) {
+    if (child.pid !== undefined && state.wrapperStart !== undefined) {
       // Stop the wrapper before reading its children, so startup cannot race cleanup.
-      const children = await freezeWrapper(child.pid);
+      const children = await freezeWrapper(child.pid, state.wrapperStart);
       for (const pid of children) {
-        pids.add(pid);
+        rememberProcess(processes, pid);
       }
     }
-    for (const pid of pids) {
-      signalProcess(pid, 'SIGKILL');
+    for (const [pid, start] of processes) {
+      signalOwnedProcess(pid, start, 'SIGKILL');
     }
   } finally {
     child.stdin.destroy();
-    child.kill('SIGKILL');
+    if (child.pid !== undefined) {
+      signalOwnedProcess(child.pid, state.wrapperStart, 'SIGKILL');
+    }
     await stopped;
   }
-  if (child.pid !== undefined) {
-    pids.add(child.pid);
+  if (child.pid !== undefined && state.wrapperStart !== undefined) {
+    processes.set(child.pid, state.wrapperStart);
   }
-  for (const pid of pids) {
-    await checkGone(pid);
+  for (const [pid, start] of processes) {
+    await checkGone(pid, start);
   }
+}
+
+function stopChild(supervised: SupervisedChild): Promise<void> {
+  // Reuse failures too: another cleanup must never signal released process IDs.
+  supervised.state.cleanup ??= stopOwnedChild(supervised);
+  return supervised.state.cleanup;
 }
 
 function removeHome(home: string): void {
@@ -359,6 +420,9 @@ export async function checkNative(challengeId: string): Promise<void> {
       const child = spawn(launch.command, launch.args, launch.options);
       const supervised = superviseChild(child, codexConnection, home, childId);
       children.push(supervised);
+      if (child.pid !== undefined) {
+        supervised.state.wrapperStart = processStart(child.pid);
+      }
     }
     const [first, second] = children;
     assert(first && second);

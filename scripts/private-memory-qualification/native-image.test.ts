@@ -37,7 +37,7 @@ const faults: [string, string, string][] = [
     "connection.rpc('fixture/reject', configParams)"],
   ['startup timeout', "await connection.rpc('initialize', initialise);",
     "child.stdout.pause(); await connection.rpc('initialize', initialise);"],
-  ['surviving process', 'existsSync(`/proc/${pid}`)', 'true'],
+  ['surviving process', '!sameProcess(pid, start)', 'false'],
   ['failed home cleanup', 'rmSync(home, removalOptions);', 'void removalOptions;'],
   ['persistent thread', "thread['ephemeral']", 'false'],
   ['saved path', "thread['path']", "'/saved'"],
@@ -80,7 +80,9 @@ function load(url, context, next) {
   }
   const fault = faults.find(selected);
   if (url.endsWith('/codex-connection.ts') && process.env.CASE === 'startup timeout') {
-    return { ...loaded, source: String(loaded.source).replace('30_000', '200') };
+    const originalSource = String(loaded.source);
+    const source = originalSource.replace('30_000', '200');
+    return { ...loaded, source };
   }
   if (url.endsWith('/native-checks.ts')) {
     let source = String(loaded.source);
@@ -102,9 +104,12 @@ function observe(home, child, threadId) {
       throw new Error('fixture_failed');
     }
   }
-  const nativePid = Number(readFileSync('/proc/' + child.pid + '/task/' + child.pid +
-    '/children', 'utf8').trim());
-  observed.push({ home, pid: child.pid, nativePid, threadId });
+  const childrenPath = '/proc/' + child.pid + '/task/' + child.pid + '/children';
+  const childrenText = readFileSync(childrenPath, 'utf8');
+  const trimmedChildren = childrenText.trim();
+  const nativePid = Number(trimmedChildren);
+  const observation = { home, pid: child.pid, nativePid, threadId };
+  observed.push(observation);
   writeFileSync('/run/native-count', String(observed.length));
   if (process.env.CASE === 'collector EOF' && observed.length === 2) {
     process.kill(process.pid, 'SIGSTOP');
@@ -226,13 +231,22 @@ function assertStopped(containerName: string, allowHome = false): void {
   const probe = String.raw`
 const fs = require('node:fs');
 for (const entry of fs.readdirSync('/proc')) {
-  if (!/^\d+$/.test(entry)) continue;
+  if (!/^\d+$/.test(entry)) {
+    continue;
+  }
   let command;
-  try { command = fs.readFileSync('/proc/' + entry + '/cmdline', 'utf8'); }
-  catch { continue; }
-  if (command.includes('app-server') && !command.includes('const fs')) process.exit(1);
+  try {
+    command = fs.readFileSync('/proc/' + entry + '/cmdline', 'utf8');
+  } catch {
+    continue;
+  }
+  if (command.includes('app-server') && !command.includes('const fs')) {
+    process.exit(1);
+  }
 }
-if (!${allowHome} && fs.readdirSync('/home/private').length !== 0) process.exit(1);
+if (!${allowHome} && fs.readdirSync('/home/private').length !== 0) {
+  process.exit(1);
+}
 `;
   expect(docker(['exec', containerName, 'node', '-e', probe])).toBe('');
 }

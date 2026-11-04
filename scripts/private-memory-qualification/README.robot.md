@@ -238,8 +238,11 @@ home must disappear before a metadata read from the second returns its original
 thread and process identities. The second process and home must then disappear.
 Distinct metadata does not establish filesystem isolation between these processes.
 
-Cleanup freezes each wrapper before reading its children, so a startup still in
-progress cannot create a child after that read. It kills and checks both processes,
+Cleanup records each wrapper and native process by PID and Linux start time. It
+checks that identity before each signal and while waiting for removal, leaving a
+reused PID alone. Each child has one cleanup attempt; later calls reuse its result,
+including a failure. Cleanup freezes each wrapper before reading its children, so
+a startup still in progress cannot create a child after that read. It kills and checks both processes,
 even when startup, RPC or assertions fail. It refuses a surviving process or failed
 home removal. A pre-existing home is refused before it belongs to cleanup. A failed
 process cleanup retains the homes and refuses. The existing supervisor kills the

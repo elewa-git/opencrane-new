@@ -57,7 +57,8 @@ journeys as NOT RUN. For private turns, it requires the pinned Codex executable,
 two fresh empty threads, disabled tools, separate homes in RAM and safe process limits.
 It closes the first process and checks that its home is gone while the second still
 answers with its original identity. It then closes and checks the second before returning
-PARTIAL. Memory tool calls, full process isolation and storage checks are still pending. The package image does not
+PARTIAL. Cleanup checks process start times before signalling and keeps its first
+result, so another cleanup call leaves reused process IDs alone. Memory tool calls, full process isolation and storage checks are still pending. The package image does not
 contain Codex or its launch helpers, so its native check refuses. Tests add those
 files to a separate disposable image; they do not change the deployment image.
 Tests build the package image and run all four memory checks against a disposable event store.

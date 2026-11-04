@@ -23,7 +23,8 @@ function cleanupFixture() {
     signals.push(`${pid}:${signal}`);
     const current = processes.get(pid);
     if (current === undefined) {
-      const missing = Object.assign(new Error('missing'), { code: 'ESRCH' });
+      const errorCode = { code: 'ESRCH' };
+      const missing = Object.assign(new Error('missing'), errorCode);
       throw missing;
     }
     if (signal === 'SIGSTOP') {
@@ -36,17 +37,20 @@ function cleanupFixture() {
     return true;
   }
   function read(path: string): string {
-    const pid = Number(path.split('/')[2]);
+    const parts = path.split('/');
+    const pid = Number(parts[2]);
     const current = processes.get(pid);
     if (current === undefined) {
-      const missing = Object.assign(new Error('missing'), { code: 'ENOENT' });
+      const errorCode = { code: 'ENOENT' };
+      const missing = Object.assign(new Error('missing'), errorCode);
       throw missing;
     }
     if (path.endsWith('/children')) {
       return current.children.join(' ');
     }
     assert(path.endsWith('/stat'));
-    const fields = Array<string>(20).fill('0');
+    const fields = Array<string>(20);
+    fields.fill('0');
     fields[0] = current.status;
     fields[1] = '99';
     fields[2] = '88';
@@ -54,7 +58,8 @@ function cleanupFixture() {
     return `${pid} (fixture) ${fields.join(' ')}`;
   }
   function exists(path: string): boolean {
-    const pid = Number(path.split('/')[2]);
+    const parts = path.split('/');
+    const pid = Number(parts[2]);
     return processes.has(pid);
   }
   function killWrapper(signal: string): boolean {
@@ -77,14 +82,18 @@ function cleanupFixture() {
   const withoutImports = source.replace(/^import[\s\S]*?from '[^']+';\n/gmu, '');
   const withoutExports = withoutImports.replace('export async function', 'async function');
   const javascript = stripTypeScriptTypes(withoutExports);
+  let stopChild: ((value: typeof supervised) => Promise<void>) | undefined;
+  function captureStop(candidate: (value: typeof supervised) => Promise<void>): void {
+    stopChild = candidate;
+  }
   const context = {
     assert, z, Error, readFileSync: read, existsSync: exists, process: { kill }, delay,
+    captureStop,
   };
-  const functions = runInNewContext(`${javascript}\n({ stopChild });`, context) as {
-    stopChild: (value: typeof supervised) => Promise<void>;
-  };
+  runInNewContext(`${javascript}\ncaptureStop(stopChild);`, context);
   function stop(): Promise<void> {
-    return functions.stopChild(supervised);
+    assert(stopChild);
+    return stopChild(supervised);
   }
   function reuse(pid: number): FixtureProcess {
     const replacement = { start: '999', status: 'S', children: [] };
