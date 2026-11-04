@@ -1,5 +1,5 @@
-import { privateLaunchContext } from './private-launch-context.ts';
-import { launchLine, requestPrivateLaunch } from './private-launch.ts';
+import { openPrivateSession } from './private-session.ts';
+import { launchLine } from './private-launch.ts';
 import { artifactSnapshot, artifactList, readArtifact } from './artifacts.ts';
 import { nativeRequests } from './native-requests.ts';
 import { receiveFile } from './files.ts';
@@ -8,7 +8,6 @@ import { spawn } from 'node:child_process';
 import { createServer as netServer, connect, Socket } from 'node:net';
 import { createServer } from 'node:http';
 import { writeFileSync, chmodSync, readFileSync } from 'node:fs';
-import { once } from 'node:events';
 import { codexConnection } from './codex-connection.ts';
 import { memoryFreeConfig, memoryFreeEnvironments } from './codex-config.ts';
 import { bridgeChannel } from './channel.ts';
@@ -83,82 +82,11 @@ async function initialise() {
 }
 void initialise().catch(invalidMemoryFreeOutput);
 
-async function privateSession() {
-  const pendingLaunch = privateLaunchContext.getStore();
-  if (!pendingLaunch || pendingLaunch.abort.signal.aborted) throw new Error('Private launch unavailable');
-  const launch = pendingLaunch;
+function privateSession() {
   const saved = record(JSON.parse(readFileSync('/run/executor/credentials/computer.json', 'utf8')));
-  const binding = { turnId: launch.turnId, conversation: launch.conversation,
-    generation: Number(saved['generation']), inputGeneration: 1, expires: launch.expires };
-  const registration = runtimeProxy.privateCaller(binding);
-  const socket = connect('/run/executor/private.sock');
-  const expiry = setTimeout(close, binding.expires - Date.now());
-  function close() {
-    registration.close();
-    clearTimeout(expiry);
-    launch.abort.signal.removeEventListener('abort', close);
-    socket.destroy();
-  }
-  launch.abort.signal.addEventListener('abort', close, { once: true });
-  socket.once('close', close);
-  function closedPromise(resolve: () => void) { socket.once('close', resolve); }
-  const closed = new Promise<void>(closedPromise);
-  let threadId: string | undefined;
-  function dispatchPrivateMessage(message: Record<string, unknown>) {
-    if (answerPrivateRequest(message)) return;
-    const params = message['params'];
-    if (!params || typeof params !== 'object' || !('threadId' in params)
-      || params.threadId !== threadId) return;
-    channel.notification(message);
-  }
-  function privateMessage(message: Record<string, unknown>) {
-    try { dispatchPrivateMessage(message); }
-    catch { close(); }
-  }
-  let connection: ReturnType<typeof codexConnection>;
-  let answerPrivateRequest: ReturnType<typeof nativeRequests>;
-  function reportPrivateRequest(message: Record<string, unknown>) {
-    if (message['method'] === 'mcpServer/elicitation/request' &&
-        record(message['params'])['threadId'] === threadId) channel.notification(message);
-  }
-
-  socket.on('error', close);
-  try {
-    await once(socket, 'connect');
-    await requestPrivateLaunch(socket, launchKey, registration.caller);
-    connection = codexConnection(socket, socket, { message: privateMessage, failed: close });
-    answerPrivateRequest = nativeRequests(connection.respond, reportPrivateRequest, true);
-    socket.resume();
-    await connection.rpc('initialize', initialiseParams);
-    connection.notify('initialized', {});
-  } catch {
-    close();
-    throw new Error('Private Codex unavailable');
-  }
-  async function rpc(method: string, params: Record<string, unknown>) {
-    try {
-      if (socket.destroyed || (threadId && params['threadId'] !== threadId)) {
-        throw new Error('Private thread refused');
-      }
-      const result = await connection.rpc(method, params);
-      if (method === 'thread/start') {
-        const thread = record(record(result)['thread']);
-        if (threadId || typeof thread['id'] !== 'string' || thread['ephemeral'] !== true
-          || thread['path'] !== null || !Array.isArray(thread['environments'])
-          || thread['environments'].length || socket.destroyed) {
-          throw new Error('Private thread refused');
-        }
-        registration.bind(thread['id']);
-        threadId = thread['id'];
-        launch.thread = threadId;
-      }
-      return result;
-    } catch {
-      close();
-      throw new Error('Private thread refused');
-    }
-  }
-  return { rpc, close, closed };
+  const options = { runtimeProxy, generation: Number(saved['generation']), launchKey,
+    initialiseParams, notification: reportNativeRequest };
+  return openPrivateSession(options);
 }
 // Keep the persistent Codex connection local to the computer and its image checks.
 netServer(socket => {
