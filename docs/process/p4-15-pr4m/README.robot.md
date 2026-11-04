@@ -126,3 +126,15 @@ Local worktree based on `64586a95c`; disposable fixtures, not a fresh silo.
 
 Checks used `nice -n 10`, one test worker and no file parallelism. The PostgreSQL fixture
 used an assigned loopback port and was removed with its volume after the tests.
+
+### Existing tool-free turns
+
+The first CI head, `3e3a6da47`, failed the unchanged private tool-report test.
+Recall selection incorrectly treated ordinary tool metadata as a memory catalogue.
+Only memory catalogues now select recall loading. Other private turns keep their
+existing tool-free start; ordinary definitions are never installed. The existing
+native interrupt and tool-refusal assertions remain unchanged.
+
+- PASS: the failure reproduced locally, then all 61 tool-report, recall runner and
+  discovery tests passed twice after the fix; 884 distinct tests have now run locally.
+- PASS: final focused ESLint and computer typecheck.

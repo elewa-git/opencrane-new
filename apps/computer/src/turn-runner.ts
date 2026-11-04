@@ -45,6 +45,13 @@ interface TurnRunnerState {
   refusedTools: Set<string>;
 }
 
+function carriesMemoryTools(input: Turn) {
+  for (const server of input.tools ?? []) {
+    if (server.serverId === 'memory') return true;
+  }
+  return false;
+}
+
 function containsTurn(turns: Iterable<Turn>, turnId: string) {
   for (const turn of turns) {
     if (turn.id === turnId) {
@@ -508,7 +515,7 @@ class TurnRunner {
     if (!this.driver.privateSession) throw new Error('Private sessions unavailable');
     const session = await this.driver.privateSession();
     this.keepPrivateSession(input, session);
-    if (input.tools?.length) {
+    if (carriesMemoryTools(input)) {
       const identity = this.driver.credential().gateIdentity;
       if (!identity || !session.recallOwner) throw new Error('Private recall unavailable');
       const recall = privateRecall(input, session.recallOwner, session, identity, this.loads);
@@ -615,7 +622,7 @@ class TurnRunner {
   }
 
   private async prepareGrantedInput(input: Turn, grant: Grant) {
-    if (input.tools?.length && input.executionMode === 'restricted'
+    if (carriesMemoryTools(input) && input.executionMode === 'restricted'
       && !this.recalls.get(input.id)?.ready) throw new Error('Private recall unavailable');
     // Keep the server's admitted model for every call and renewal in this turn.
     const model = grant.model ?? modelForTask(input.taskKind);
