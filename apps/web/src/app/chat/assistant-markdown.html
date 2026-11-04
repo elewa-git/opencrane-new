@@ -2,7 +2,7 @@
   @switch (block.kind) {
     @case ('code') {
       @if (block.language.toLowerCase() === 'mermaid') {
-        <oc-mermaid-diagram [code]="block.text" />
+        <oc-mermaid-diagram [code]="block.text" [closed]="block.closed" />
       } @else {
         <section class="code-block" aria-label="Code block">
           <div class="code-heading"><span>{{ block.language || 'Code' }}</span>

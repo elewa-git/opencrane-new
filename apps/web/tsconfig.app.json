@@ -4,10 +4,13 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./out-tsc/app",
-    "types": []
+    "types": [],
+    "allowJs": true,
+    "checkJs": true
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "public/mermaid-renderer.js"
   ],
   "exclude": [
     "src/**/*.spec.ts"

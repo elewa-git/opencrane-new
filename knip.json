@@ -22,7 +22,8 @@
         "scripts/collect-stage-b-evidence.mjs",
         "scripts/ci/run-tests.mjs",
         "scripts/ci/refresh-timings.mjs",
-        "scripts/ci/*.test.mjs"
+        "scripts/ci/*.test.mjs",
+        "scripts/check-chat-mermaid.mjs"
       ],
       "project": [
         "scripts/private-memory-qualification/*.ts",
@@ -65,7 +66,8 @@
         "src/**/*.spec.ts",
         "test/**/*.test.ts",
         "test/live-view-main.ts",
-        "test/overlays-main.ts"
+        "test/overlays-main.ts",
+        "public/mermaid-renderer.js"
       ],
       "project": [
         "src/**/*.ts",

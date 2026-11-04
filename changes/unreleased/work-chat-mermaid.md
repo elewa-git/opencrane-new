@@ -1,1 +1,1 @@
-- Assistant replies now show Mermaid diagrams as images. If a diagram cannot be drawn, its source stays visible as code.
+- Assistant replies show Mermaid diagrams as images after their code block closes. Drawing cannot contact the network. Invalid, oversized or unsupported diagrams keep their source and copy button.

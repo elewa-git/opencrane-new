@@ -12,3 +12,10 @@ not use a development stack or qualify a fresh installation.
 that the diagram library loads when the diagram arrives, that the image has no active
 link or HTML label, and that invalid source stays visible. It also checks page width
 and that invalid reply text does not enter browser console messages.
+
+The Chromium regression in `scripts/check-chat-mermaid.mjs` also checks that drawing
+cannot make network requests. It tries the reported image shape through the reply
+and directly through the library, then tries image, script, stylesheet and fetch
+requests inside the sandbox. It checks diagram measurements, lazy loading, protected
+settings, one-time initialisation, text and edge limits, and copyable source fallbacks.
+`apps/web/test/chat-browser.test.ts` runs this check in browser CI.

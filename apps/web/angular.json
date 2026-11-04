@@ -29,6 +29,13 @@
             ],
             "styles": [
               "src/styles.css"
+            ],
+            "scripts": [
+              {
+                "input": "mermaid/dist/mermaid.min.js",
+                "bundleName": "mermaid-library",
+                "inject": false
+              }
             ]
           },
           "configurations": {

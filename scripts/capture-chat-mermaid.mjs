@@ -31,20 +31,24 @@ function transcriptHasNoOverflow(element) {
 async function openReply(page, text) {
   await page.route('**/*', serveAssets);
   const fixture = await chatFixture(page, 'empty-selected');
-  const question = fixture.add('message.posted',
-    { text: 'Please show the diagram.', authorId: 'me' });
-  fixture.add('agent.turn_started', { turnId: question.id });
-  fixture.add('agent.message_delta', { turnId: question.id, messageId: 'reply', text });
+  const questionPayload = { text: 'Please show the diagram.', authorId: 'me' };
+  const question = fixture.add('message.posted', questionPayload);
+  const turn = { turnId: question.id };
+  const delta = { ...turn, messageId: 'reply', text };
+  fixture.add('agent.turn_started', turn);
+  fixture.add('agent.message_delta', delta);
   await page.goto('https://mermaid.opencrane.test/workspace?conversation=chat');
   const reply = page.locator('oc-assistant-markdown');
-  await reply.getByRole('heading', { name: 'A simple route' }).waitFor();
+  const headingOptions = { name: 'A simple route' };
+  const heading = reply.getByRole('heading', headingOptions);
+  await heading.waitFor();
   await page.evaluate(waitForFonts);
   return { fixture, question, reply };
 }
 
 async function captureRendered(browser, width) {
-  const page = await browser.newPage({ viewport: { width, height: 1100 },
-    reducedMotion: 'reduce' });
+  const pageOptions = { viewport: { width, height: 1100 }, reducedMotion: 'reduce' };
+  const page = await browser.newPage(pageOptions);
   try {
     const { fixture, question, reply } = await openReply(page,
       '# A simple route\n\nThe steps appear below.');
@@ -56,9 +60,10 @@ async function captureRendered(browser, width) {
       + '%%{init: {"securityLevel": "loose", "htmlLabels": true, "logLevel": "debug"}}%%\n'
       + 'graph LR\n  Start --> Check --> Done\n'
       + '  click Start "javascript:alert(1)"\n```';
-    fixture.add('agent.message_delta',
-      { turnId: question.id, messageId: 'reply', text: diagram });
-    const image = reply.getByRole('img', { name: 'Diagram' });
+    const delta = { turnId: question.id, messageId: 'reply', text: diagram };
+    fixture.add('agent.message_delta', delta);
+    const imageOptions = { name: 'Diagram' };
+    const image = reply.getByRole('img', imageOptions);
     await image.waitFor();
     const source = await image.getAttribute('src');
     assert.match(source, /^data:image\/svg\+xml;base64,/);
@@ -69,15 +74,16 @@ async function captureRendered(browser, width) {
     assert(await page.evaluate(pageHasNoOverflow));
     assert(await page.locator('.transcript').evaluate(transcriptHasNoOverflow));
     await reply.scrollIntoViewIfNeeded();
-    await page.screenshot({ path: resolve(output, `diagram-${width}.png`), fullPage: true });
+    const screenshotOptions = { path: resolve(output, `diagram-${width}.png`), fullPage: true };
+    await page.screenshot(screenshotOptions);
   } finally {
     await page.close();
   }
 }
 
 async function captureFailure(browser, width) {
-  const page = await browser.newPage({ viewport: { width, height: 1100 },
-    reducedMotion: 'reduce' });
+  const pageOptions = { viewport: { width, height: 1100 }, reducedMotion: 'reduce' };
+  const page = await browser.newPage(pageOptions);
   try {
     const code = 'this is not a diagram';
     const consoleMessages = [];
@@ -90,20 +96,26 @@ async function captureFailure(browser, width) {
     page.on('console', captureConsole);
     const text = '# A simple route\n\n```mermaid\n' + code + '\n```';
     const { reply } = await openReply(page, text);
-    await reply.locator('pre code').filter({ hasText: code }).waitFor();
+    const sourceOptions = { hasText: code };
+    const source = reply.locator('pre code');
+    const matchingSource = source.filter(sourceOptions);
+    await matchingSource.waitFor();
     await page.waitForLoadState('networkidle');
     assert.equal(await reply.locator('pre code').textContent(), code);
     assert.equal(await reply.locator('img, iframe, svg, script').count(), 0);
     assert(consoleMessages.every(hidesReply));
     assert(await page.evaluate(pageHasNoOverflow));
-    await page.screenshot({ path: resolve(output, `source-${width}.png`), fullPage: true });
+    const screenshotOptions = { path: resolve(output, `source-${width}.png`), fullPage: true };
+    await page.screenshot(screenshotOptions);
   } finally {
     await page.close();
   }
 }
 
-await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ headless: true });
+const directoryOptions = { recursive: true };
+await mkdir(output, directoryOptions);
+const browserOptions = { headless: true };
+const browser = await chromium.launch(browserOptions);
 try {
   for (const width of [1280, 390]) {
     await captureRendered(browser, width);

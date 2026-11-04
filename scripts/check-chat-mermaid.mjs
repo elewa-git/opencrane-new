@@ -19,6 +19,25 @@ const browser = await chromium.launch();
 const page = await browser.newPage();
 const requests = [];
 const scripts = [];
+const startupRequests = new Set([
+  '/mermaid-renderer.html', '/mermaid-library.js', '/mermaid-renderer.js',
+]);
+function recordRendererRequest(request) {
+  const url = new URL(request.url());
+  const resourceType = request.resourceType();
+  if ((resourceType === 'document' || resourceType === 'script')
+    && startupRequests.delete(url.pathname)) {
+    return;
+  }
+  if (request.frame().url().endsWith('/mermaid-renderer.html')) {
+    requests.push(request.url());
+  }
+}
+async function inspectNetworkRequest(route) {
+  // Count requests that reach network interception. Chromium also emits request events for CSP refusals.
+  recordRendererRequest(route.request());
+  await route.fallback();
+}
 async function serveAssets(route) {
   const request = route.request();
   const url = new URL(request.url());
@@ -138,6 +157,7 @@ try {
   await page.addInitScript(observeInitialisation);
   await page.route('**/*', serveAssets);
   const fixture = await chatFixture(page, 'empty-selected');
+  await page.route('**/*', inspectNetworkRequest);
   const questionPayload = { text: 'Draw a route', authorId: 'me' };
   const question = fixture.add('message.posted', questionPayload);
   const turn = { turnId: question.id };

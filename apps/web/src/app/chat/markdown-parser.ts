@@ -11,6 +11,7 @@ export interface MarkdownBlock {
   level: number;
   start: number;
   language: string;
+  closed: boolean;
 }
 
 function safeLink(value: string): boolean {
@@ -73,7 +74,7 @@ function describeLine(line: string): MarkdownBlock {
   }
   return {
     kind, text, lines: [parseInline(text)], level: heading?.[1]?.length ?? 0,
-    start: Number(ordered?.[1] ?? 1), language: '',
+    start: Number(ordered?.[1] ?? 1), language: '', closed: true,
   };
 }
 
@@ -112,6 +113,7 @@ export function parseMarkdown(text: string): MarkdownBlock[] {
   for (const line of lines) {
     if (fenced) {
       if (closesFence(line, fence)) {
+        fenced.closed = true;
         fenced = undefined;
       } else {
         fenced.text += line + '\n';
@@ -123,7 +125,7 @@ export function parseMarkdown(text: string): MarkdownBlock[] {
       fence = opening[1] ?? '';
       const language = (opening[2] ?? '').trim();
       fenced = { kind: language === 'a2ui' ? 'a2ui' : 'code', text: '',
-        language, lines: [], level: 0, start: 1 };
+        language, lines: [], level: 0, start: 1, closed: false };
       blocks.push(fenced);
       previous = undefined;
       continue;

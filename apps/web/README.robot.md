@@ -501,9 +501,26 @@ The earlier live journey is recorded in [sign-in evidence](../../docs/process/si
 paragraphs, backtick and tilde code fences, inline code, bold, italic and links.
 Only `https:` and `mailto:` links become anchors, with a new tab and
 `rel="noopener noreferrer"`. Other destinations and HTML remain text.
-Mermaid code blocks load the MIT-licensed Mermaid package only when needed. The package
-draws with strict security settings, with HTML labels disabled. The reply shows the
-result as an image; a failed drawing keeps the source as code with a copy button. The
+Closed Mermaid code blocks load the MIT-licensed Mermaid package only when needed.
+`mermaid-renderer.ts` creates one sandboxed iframe without same-origin access. The
+iframe sits off-screen so SVG labels still have measurable sizes. It loads the bundled library and its fixed local script, then applies a second
+Content-Security-Policy that blocks all network loads before accepting source. The
+first policy already blocks images, connections, fonts and external stylesheets.
+The second also blocks scripts, including scripts from this website. The complete
+browser bundle avoids later imports while drawing; it is larger than the former
+flowchart-only lazy download and remains absent from ordinary replies.
+`public/mermaid-renderer.js` is checked by TypeScript and ESLint. It initialises
+Mermaid once with strict security, no HTML labels, fatal-only logging, suppressed
+error drawings, 50,000 source characters and 500 edges. The secure list protects
+all those settings and itself against reply directives. Image and icon properties,
+image tags and CSS URL functions are refused before rendering. The browser policy
+also blocks resource syntax that the input check does not recognise.
+The component refuses source over 50,000 characters before loading the renderer and
+rejects the library's maximum-text warning SVG. An unfinished fence stays as source.
+Each response must come from the renderer window and match its request number;
+late results cannot replace a newer diagram. Startup and drawing each have a
+15-second timeout. The reply shows successful SVG as an inert image; refusals,
+timeouts and drawing errors keep the original source with a copy button. The
 component does not log reply text or change saved events. `a2ui` keeps its existing
 unavailable placeholder. Citations keep opening the preview. User messages, saved events
 and streamed messages are unchanged.
@@ -519,7 +536,11 @@ at 1280 and 390 px after `nice -n 10 npm run build -w apps/web`.
 The [Markdown receipt](../../docs/process/chat-markdown-1/receipt.md) records the checks.
 `npm run visual:chat-mermaid` builds the website and captures diagram images and failed
 diagrams at both widths with intercepted API replies. Its images are under
-`docs/process/chat-mermaid/`.
+`docs/process/chat-mermaid/`. `scripts/check-chat-mermaid.mjs` runs real Chromium
+regressions for network isolation, lazy loading, protected settings, one-time
+initialisation and limits. `apps/web/test/chat-browser.test.ts` runs it in browser CI.
+The component tests also cover successive deltas, warning results, stale success
+and failure, and refused clipboard access.
 
 After sign-in, choose **Open workspace** (`/workspace`). Personal Agent sessions
 use the real bridge's `GET /api/chat`, conversation commands and resumable `/ws`

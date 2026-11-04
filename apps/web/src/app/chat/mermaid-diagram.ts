@@ -1,30 +1,33 @@
-import { ChangeDetectionStrategy, Component, effect, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy, Component, effect, inject, InjectionToken, input, signal,
+} from '@angular/core';
 
-let nextDiagramId = 0;
-let mermaidInitialised = false;
+type RenderMermaid = (code: string) => Promise<{ svg: string }>;
+
+async function loadAndRender(code: string): Promise<{ svg: string }> {
+  const { renderMermaid } = await import('./mermaid-renderer');
+  return renderMermaid(code);
+}
+
+function rendererFactory(): RenderMermaid {
+  return loadAndRender;
+}
+
+const rendererOptions = { providedIn: 'root' as const, factory: rendererFactory };
+export const MERMAID_RENDERER = new InjectionToken<RenderMermaid>('Mermaid renderer', rendererOptions);
 
 function byteToCharacter(byte: number): string {
   return String.fromCharCode(byte);
 }
 
-async function renderDiagram(code: string): Promise<string> {
-  // Load Mermaid only after a reply contains a diagram.
-  const { default: mermaid } = await import('mermaid');
-  if (!mermaidInitialised) {
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: 'strict',
-      htmlLabels: false,
-      logLevel: 'fatal',
-      suppressErrorRendering: true,
-      // Keep reply directives from changing security settings or logging reply text.
-      secure: ['secure', 'securityLevel', 'startOnLoad', 'logLevel', 'maxTextSize',
-        'suppressErrorRendering', 'maxEdges', 'htmlLabels'],
-    });
-    mermaidInitialised = true;
+async function renderDiagram(code: string, render: RenderMermaid): Promise<string> {
+  const result = await render(code);
+  // Join the warning's text spans without inserting untrusted SVG into the parent document.
+  const text = result.svg.replace(/<\/?tspan\b[^>]*>/g, '');
+  const joinedText = text.replace(/\s/g, '');
+  if (joinedText.includes('Maximumtextsizeindiagramexceeded')) {
+    throw new Error('Diagram exceeds the text limit');
   }
-  nextDiagramId += 1;
-  const result = await mermaid.render(`reply-diagram-${nextDiagramId}`, code);
   const bytes = new TextEncoder().encode(result.svg);
   const characters = Array.from(bytes, byteToCharacter);
   const binary = characters.join('');
@@ -66,8 +69,10 @@ async function renderDiagram(code: string): Promise<string> {
 })
 export class MermaidDiagram {
   readonly code = input.required<string>();
+  readonly closed = input.required<boolean>();
   protected readonly imageUrl = signal<string | null>(null);
   protected readonly copyStatus = signal('');
+  private readonly render = inject(MERMAID_RENDERER);
   private renderVersion = 0;
 
   constructor() {
@@ -76,16 +81,20 @@ export class MermaidDiagram {
 
   private renderCurrentCode(): void {
     const code = this.code();
+    const closed = this.closed();
     this.imageUrl.set(null);
     this.copyStatus.set('');
     this.renderVersion += 1;
     const version = this.renderVersion;
+    if (!closed || code.length > 50_000) {
+      return;
+    }
     void this.showDiagram(code, version);
   }
 
   private async showDiagram(code: string, version: number): Promise<void> {
     try {
-      const imageUrl = await renderDiagram(code);
+      const imageUrl = await renderDiagram(code, this.render);
       if (version === this.renderVersion) {
         this.imageUrl.set(imageUrl);
       }
