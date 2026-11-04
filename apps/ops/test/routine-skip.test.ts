@@ -259,7 +259,8 @@ async function backwards() {
 it('refuses a clock moving backwards during append', backwards);
 async function cancelled(afterAccess: boolean) {
   let checked = false;
-  const options = { databaseUrl: process.env['PG_TEST_URL']!, silo: 'test', signal: stop.signal };
+  const options = { databaseUrl: process.env['PG_TEST_URL']!,
+    silo: 'skip-command-test', signal: stop.signal };
   async function work(lease: Parameters<Parameters<typeof withRoutineLeadership>[1]>[0]) {
     const append = nats.store.append.bind(nats.store);
     const head = nats.store.head.bind(nats.store);
@@ -269,7 +270,7 @@ async function cancelled(afterAccess: boolean) {
       try {
         await admin.db.query(`SELECT pg_terminate_backend(pid) FROM pg_locks
           WHERE locktype = 'advisory' AND granted AND
-          classid = (hashtextextended('opencrane:projection:routine-leader:test', 0) >> 32)::int
+          classid = (hashtextextended('opencrane:projection:routine-leader:skip-command-test', 0) >> 32)::int
           AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`);
         function aborted() { expect(lease.signal.aborted).toBe(true); }
         await vi.waitFor(aborted);
