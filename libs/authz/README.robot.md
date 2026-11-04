@@ -287,3 +287,11 @@ unavailable to a permitted reader and refused to a non-reader.
 check to the internal routine claim command. The caller keeps one map of completed
 runs for each history read. Repeated terminal records still pass `foldRoutine`
 against the original run before being ignored. No access check is bypassed.
+
+## OpenFGA client dependency patch
+
+The shared lockfile updates `follow-redirects` from 1.16.1 to 1.16.2 through
+`@openfga/sdk` and Axios. This fixes GHSA-mrwp-f3q8-3g9p without changing the
+OpenFGA client or adding an override. `follow-redirects` is MIT licensed; registry
+metadata and the installed licence file were checked. The
+[audit notes](../../docs/process/npm-audit.md) record the affected path and checks.
