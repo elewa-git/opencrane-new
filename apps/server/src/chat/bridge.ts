@@ -286,9 +286,9 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     routineStarts.clear();
   }
   socket.once('close', forgetRoutineStarts);
-  const memory = memoryBridge(options, input, socket);
-  const routines = routineBridge(options, input, socket);
   const output = privateOutput(options, input, socket);
+  const memory = memoryBridge(options, input, socket, output.clearBinding);
+  const routines = routineBridge(options, input, socket);
   const reportOptions = { ...options, routineStart, memory, routines, output };
   const reports = reportReceiver(reportOptions, input, tokens, socket, refuse, approvals, control);
   socket.on('message', reports.receiveReport);

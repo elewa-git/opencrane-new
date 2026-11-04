@@ -23,3 +23,10 @@ bounds its own read. Unrelated chat activity does not repeat validation.
 Synchronous qualification and reference-expiry checks follow the last awaited read.
 Failed validation retains the original block for a fully checked retry. The consumer
 reserves each attempt before waiting and removes the block only when delivery begins.
+
+The bridge passes checked saved withdrawal to the
+[private reply clearance path](../chat/README.robot.md#live-private-reply-clearance)
+before accepting a computer clearance receipt. Saved preparation supplies the requester,
+computer generation, turn, thread and input generation; a receipt supplies no authority.
+Completed turns remain tracked until checked clearance. Closure and replacement clear
+the old binding without sending a Stop to a replacement process.

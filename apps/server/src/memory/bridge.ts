@@ -2,7 +2,7 @@ import type { Binding } from '@opencrane/authz';
 import { invalidateMemoryAccess } from './invalidation.ts';
 import { computerSummary, type ComputerSummary } from '@opencrane/auth';
 import { readStreamSummary, type EventStore } from '@opencrane/event-store';
-import { memoryContextRecordedEventSchema } from '@opencrane/events';
+import { memoryContextRecordedEventSchema, type MemoryContextRecord } from '@opencrane/events';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { readChatFacts } from '../chat/chat-summary.ts';
@@ -15,13 +15,21 @@ type Report = { type: string; conversationId: string; turnId: string; sequence: 
   threadId?: string | undefined };
 type Options = { silo: string; store: EventStore; binding?: Binding };
 type Computer = { assistantId: string; computerId: string };
-type TrackedTurn = { turn: Admitted; generation: number;
+type TrackedTurn = { turn: Admitted; generation: number; cleared: boolean;
   detect: ReturnType<typeof memoryChanges> };
-const clearedData = z.object({ type: z.literal('private_output_cleared'),
+const clearedData = z.strictObject({ type: z.literal('private_output_cleared'),
   conversationId: z.string(), turnId: z.string(), threadId: z.string() });
 const generationData = z.object({ computerId: z.string(), generation: z.int().positive() });
 
-export function memoryBridge(options: Options, computer: Computer, socket: WebSocket) {
+function matchesPreparation(saved: MemoryContextRecord, active: TrackedTurn, computer: Computer) {
+  return saved.conversationId === active.turn.conversationId && saved.turnId === active.turn.turnId &&
+    saved.requesterId === active.turn.requesterId && saved.assistantId === computer.assistantId &&
+    saved.computerId === computer.computerId && saved.generation === active.generation &&
+    saved.threadId === active.turn.threadId;
+}
+
+export function memoryBridge(options: Options, computer: Computer, socket: WebSocket,
+  clearOutput: (binding: MemoryContextRecord) => void) {
   const observed = new Map<string, Pick<Report, 'sequence' | 'turnId' | 'threadId'>>();
   const turns = new Map<string, Map<string, TrackedTurn>>();
   const checking = new Map<string, Promise<void>>();
@@ -37,15 +45,21 @@ export function memoryBridge(options: Options, computer: Computer, socket: WebSo
       observed.set(report.conversationId, pending);
     }
   }
+  function removeTurn(conversationId: string, active: TrackedTurn) {
+    const conversation = turns.get(conversationId);
+    if (conversation?.get(active.turn.turnId) !== active) return;
+    conversation.delete(active.turn.turnId);
+    if (conversation?.size === 0) turns.delete(conversationId);
+  }
   function receive(value: unknown) {
     const receipt = clearedData.safeParse(value);
     if (!receipt.success) return false;
     const { conversationId, turnId, threadId } = receipt.data;
     const conversation = turns.get(conversationId);
     const tracked = conversation?.get(turnId);
-    if (conversation && tracked?.turn.threadId === threadId) {
-      conversation.delete(turnId);
-      if (conversation.size === 0) turns.delete(conversationId);
+    // Require checked withdrawal before a receipt can release this connection's tracking.
+    if (tracked?.cleared && tracked.turn.threadId === threadId) {
+      removeTurn(conversationId, tracked);
     }
     return true;
   }
@@ -64,7 +78,8 @@ export function memoryBridge(options: Options, computer: Computer, socket: WebSo
     const savedGeneration = await generation();
     if (savedGeneration === undefined || observed.get(report.conversationId)?.sequence !== report.sequence ||
         socket.readyState !== WebSocket.OPEN) return;
-    const active = { turn, generation: savedGeneration, detect: memoryChanges(options) };
+    const active = { turn, generation: savedGeneration, cleared: false,
+      detect: memoryChanges(options) };
     const conversation = turns.get(report.conversationId) ?? new Map<string, TrackedTurn>();
     conversation.set(turn.turnId, active);
     turns.set(report.conversationId, conversation);
@@ -88,15 +103,19 @@ export function memoryBridge(options: Options, computer: Computer, socket: WebSo
       if (!first) return;
       const initial: unknown = JSON.parse(first);
       const preparationBinding = memoryContextRecordedEventSchema.parse(initial).data;
-      if (preparationBinding.requesterId !== active.turn.requesterId ||
-          preparationBinding.assistantId !== computer.assistantId ||
-          preparationBinding.computerId !== computer.computerId ||
-          preparationBinding.generation !== active.generation ||
-          preparationBinding.threadId !== active.turn.threadId) return;
+      if (!matchesPreparation(preparationBinding, active, computer)) return;
+      if (await generation() !== active.generation) {
+        clearOutput(preparationBinding);
+        removeTurn(conversationId, active);
+        return;
+      }
+      if (chat.conversationClosed) clearOutput(preparationBinding);
+      let hasInvalidation = false;
       for (const encoded of chat.memoryContext.events.values()) {
         const decoded: unknown = JSON.parse(encoded);
         const event = memoryContextRecordedEventSchema.parse(decoded);
         if (event.data.action !== 'invalidated') continue;
+        hasInvalidation = true;
         // Use saved preparation to keep the input generation independent of the invalidation.
         const binding = preparationBinding;
         let currentGeneration: number | undefined;
@@ -113,8 +132,14 @@ export function memoryBridge(options: Options, computer: Computer, socket: WebSo
           return { silo: options.silo, binding, socket, pendingClearance: true };
         }
         const reaction = { silo: options.silo, store: options.store, current, refresh };
-        await stopInvalidatedMemory(reaction, event);
+        const result = await stopInvalidatedMemory(reaction, event);
+        if (result === 'sent') {
+          clearOutput(binding);
+          active.cleared = true;
+        }
       }
+      // Keep a saved withdrawal until the computer also confirms that its buffers are clear.
+      if (chat.conversationClosed && !hasInvalidation) removeTurn(conversationId, active);
     } catch {
       // Retry on the next poll. Neither a failed read nor a sent frame proves termination.
     }

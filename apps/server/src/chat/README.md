@@ -7,6 +7,11 @@ A start report alone is not enough. Renewal does not prepare or resend the initi
 
 This folder handles conversations between people and with assistants. It saves messages, sends assistant work to the right computer and returns replies and live updates while checking who may read each chat.
 
+After sending a completed private reply, the server keeps only its identity. It can ask
+the original browser to clear it when loaded memory changes or its computer connection
+closes. Another tab or session receives no copy. Browser display and removal are not
+connected yet.
+
 ## What it is responsible for
 
 - Creates direct, group and assistant conversations, and manages participants.
@@ -111,6 +116,6 @@ flowchart LR
   chat -->|selects and checks input| memory
   chat -->|one-use private input| computer[Assistant computer]
   computer -->|completed private reply| chat
-  chat -->|one-use notification| reader[Authenticated reader]
+  chat -->|private reply and clearance| reader[Authenticated reader]
   chat -->|checks fixed access positions and spending| models[Models]
 ```

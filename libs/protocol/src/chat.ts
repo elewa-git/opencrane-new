@@ -108,6 +108,10 @@ export const privateReplySchema = z.strictObject({
   generation: z.int().positive(), inputGeneration: chatIdSchema,
   data: chatRowSchema.shape.data.pick({ text: true, turnId: true }).required().strict(),
 });
+const privateReplyIdentitySchema = privateReplySchema.omit({ data: true });
+export const privateOutputClearedSchema = privateReplyIdentitySchema.extend({
+  type: z.literal('private_output_cleared'),
+});
 export const chatMessageSchema = z.union([chatUpdateSchema, budgetStopNotificationSchema]);
 
 export const chatFeedSchema = z.object({
