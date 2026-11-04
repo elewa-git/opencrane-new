@@ -223,7 +223,8 @@ async function dueFixture() {
     return Date.parse(next.at);
   }
   function claim(lease: Leadership) {
-    const worker = { silo: 'test', binding, now, checkCurrent: lease.checkCurrent };
+    const worker = { silo: 'test', binding, now, checkCurrent: lease.checkCurrent,
+      signal: lease.signal };
     const input = { routineId: 'orders', expectedPosition: 2, localDate: next.localDate,
       definitionRevision: 1, scheduleRevision: 1, controlRevision: 1 };
     return claimRoutineDue(nats.store, worker, input);
@@ -266,6 +267,62 @@ async function cancelsDue() {
   expect(await nats.store.head()).toBe(3);
 }
 it('withholds append and receipt after session loss during due preparation', cancelsDue);
+
+async function cancelsDuringAppendAccess(afterAccess: boolean) {
+  const { nats, claim } = await dueFixture();
+  const first = await owner();
+  const waiting = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  function releaseWait() {
+    resume.resolve();
+  }
+  onTestFinished(releaseWait);
+  const append = nats.store.append.bind(nats.store);
+  const readHead = nats.store.head.bind(nats.store);
+  let appending = false;
+  async function observedAppend(...args: Parameters<typeof append>) {
+    appending = true;
+    const change = args[0];
+    async function checkAccess() {
+      await change.checkAccess!();
+      if (afterAccess) {
+        waiting.resolve();
+        await resume.promise;
+      }
+    }
+    const observedChange = { ...change, checkAccess };
+    return append(observedChange);
+  }
+  async function pauseMemberRead(...args: Parameters<typeof readHead>) {
+    if (!afterAccess && appending && args[0] === 'member-alice') {
+      waiting.resolve();
+      await resume.promise;
+    }
+    return readHead(...args);
+  }
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  appendSpy.mockImplementationOnce(observedAppend);
+  const headSpy = vi.spyOn(nats.store, 'head');
+  headSpy.mockImplementation(pauseMemberRead);
+  const pending = expect(claim(first.lease)).rejects.toThrow(/^Routine due refused$/u);
+  await waiting.promise;
+  await terminate();
+  function cancelled() {
+    expect(first.lease.signal.aborted).toBe(true);
+  }
+  await vi.waitFor(cancelled);
+  const replacement = await owner();
+  expect(await replacement.lease.checkCurrent(performance.now() + 2000)).toBe(true);
+  resume.resolve();
+  await pending;
+  expect(await nats.store.head()).toBe(2);
+  const receipt = await claim(replacement.lease);
+  expect(receipt.executionAvailable).toBe(false);
+  expect(receipt.position).toBe(3);
+  expect(await nats.store.head()).toBe(3);
+}
+it.each([false, true])(
+  'saves no due after takeover during append (access check finished: %s)', cancelsDuringAppendAccess);
 
 async function recoversDue() {
   const { nats, claim } = await dueFixture();
