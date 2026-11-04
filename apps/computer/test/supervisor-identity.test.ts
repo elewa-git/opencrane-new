@@ -1,4 +1,7 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import { once } from 'node:events';
+import { WebSocket } from 'ws';
+import { record } from '../src/http.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { uploadComputer } from '../../server/test/support/upload-computer.ts';
@@ -203,3 +206,66 @@ process.stdout.write('ordinary-denied worker-disabled');
   }
 }
 it('refuses worker launch while ordinary execution remains socket-denied', checksWorkerRefusal, 60_000);
+
+async function isolatesProductionLaunches() {
+  const computer = await uploadComputer();
+  const socket = new WebSocket(computer.url.replace('http:', 'ws:') + '/bridge',
+    { headers: { 'x-bridge-token': computer.credential.value } });
+  const reports: Record<string, unknown>[] = [];
+  function receive(bytes: Buffer) { reports.push(record(JSON.parse(bytes.toString()))); }
+  socket.on('message', receive);
+  function starts() { return reports.filter(isStart); }
+  function isStart(report: Record<string, unknown>) { return report['type'] === 'agent.turn_started'; }
+  function send(id: string) {
+    socket.send(JSON.stringify({ type: 'turn', id, conversationId: id,
+      assistantId: 'assistant', requesterId: 'alice', executionMode: 'restricted',
+      text: 'Say hello again.', token: 'pending', expiresAt: Date.now() + 110_000 }));
+  }
+  try {
+    await once(socket, 'open');
+    socket.send(JSON.stringify({ type: 'resume', since: 0 }));
+    send('first');
+    send('second');
+    function twoStarted() { expect(starts()).toHaveLength(2); }
+    await vi.waitFor(twoStarted, { timeout: 15_000 });
+    send('third');
+    const pong = once(socket, 'pong');
+    socket.ping();
+    await pong;
+    expect(starts()).toHaveLength(2);
+    // Inspect only fixture processes; return decisions, never the callers themselves.
+    const inspect = `
+import { readdirSync, readFileSync } from 'node:fs';
+const callers = new Set();
+for (const pid of readdirSync('/proc')) {
+  if (!/^[0-9]+$/.test(pid)) continue;
+  try {
+    const env = readFileSync('/proc/' + pid + '/environ', 'utf8').split('\\0');
+    if (!env.some(value => value.startsWith('HOME=/home/private/turn-'))) continue;
+    callers.add(env.find(value => value.startsWith('PROXY_CALLER_TOKEN=')));
+  } catch {}
+}
+process.stdout.write(JSON.stringify({ distinct: callers.size }));
+`;
+    const observed = await computer.exec('setpriv', '--reuid=1003', '--regid=1003',
+      '--clear-groups', 'node', '--input-type=module', '-e', inspect);
+    expect(JSON.parse(observed)).toEqual({ distinct: 2 });
+    let requests = '';
+    try { requests = await computer.requests(); } catch { /* No model request before admission. */ }
+    expect(requests).toBe('');
+    for (const report of starts()) {
+      socket.send(JSON.stringify({ type: 'ack', sequence: report['sequence'],
+        token: 'admitted', expiresAt: Date.now() + 100_000 }));
+    }
+    async function bothForwarded() {
+      const lines = (await computer.requests()).trim().split('\n');
+      expect(lines).toHaveLength(2);
+    }
+    await vi.waitFor(bothForwarded, { timeout: 15_000 });
+  } finally {
+    socket.terminate();
+    await computer.close();
+  }
+}
+it('gives concurrent production private launches distinct callers before saved admission',
+  isolatesProductionLaunches, 60_000);
