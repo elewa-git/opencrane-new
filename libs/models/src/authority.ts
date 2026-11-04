@@ -256,11 +256,12 @@ async function readAt(store: EventStore, subject: string, head: number, deadline
   return rows;
 }
 
-/** Add exact subjects as they are discovered; all are fenced against the same starting head. */
+/** Keep watched streams tied to their starting positions and the original deadline. */
 export async function authorityFence(store: Pick<EventStore, 'readStream' | 'head'>, started: number,
-  subjects: string[] = [], callerDeadline = Infinity) {
+  subjects: string[] = [], callerDeadline = Infinity,
+  earlierPositions?: ReadonlyMap<string, number>) {
   const authority = await createAuthorityFence(
-    store, started, subjects, callerDeadline, checkOutputReports);
+    store, started, subjects, callerDeadline, checkOutputReports, earlierPositions);
   return authority.fresh;
 }
 

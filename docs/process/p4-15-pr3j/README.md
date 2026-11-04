@@ -13,7 +13,7 @@ flowchart LR
   server["Server"] --> chat["Chat"]
   computer["Assistant computer"] -->|completed reply| chat
   chat -->|private notification| reader["Authenticated reader"]
-  chat -->|checks references| memory["Memory"]
+  chat -->|checks fixed positions and references| memory["Memory"]
 ```
 
 ## What it is responsible for
@@ -27,7 +27,8 @@ flowchart LR
 The bridge sends a completed reply. The server saves only an unavailable-output
 record, checks the current reader and loaded facts, and attempts delivery once.
 A lost connection or failed check discards the bytes. Reconnecting cannot recover them.
-The server checks for access and memory changes after its last scan, before sending.
+The server records the access and memory positions it checked. Before sending, its
+shared access check refuses any change beyond those positions.
 Unrelated messages can continue while a valid reply is checked.
 
 Browser display, browser clearance and streamed replies are not built here.

@@ -51,7 +51,10 @@ reasoning text, saves an unavailable status and confirms it to the computer. Rep
 a report returns the same confirmation; reconnecting restores only that status.
 Command hashes and text hidden on status reports remain refused. Rebuilt private
 context excludes every assistant reply from that turn, including replies saved before
-recall. Human messages remain saved. Completed private replies can reach an already connected reader once, through bounded server memory. Browser support is still planned.
+recall. Human messages remain saved. Completed private replies can reach an already
+connected reader once, through bounded server memory. The server records the last
+access and memory events it checked. Before sending, it refuses later changes.
+Ordinary messages do not delay delivery. Browser support is still planned.
 
 **Live updates.** Open chat pages keep checking access when installation or group membership changes. Removing someone from a group closes their private session with its assistant within two seconds. If another permission update takes too long, the page reconnects after five seconds and resumes from saved messages. The server checks each open chat's feed position every 100 ms and loads content only when it changes. Computer status comes from a small read-table record updated by background workers. A sleeping or waking computer shows Starting; recovery lasts until a new ready record appears.
 
@@ -109,5 +112,5 @@ flowchart LR
   chat -->|one-use private input| computer[Assistant computer]
   computer -->|completed private reply| chat
   chat -->|one-use notification| reader[Authenticated reader]
-  chat -->|checks access and spending| models[Models]
+  chat -->|checks fixed access positions and spending| models[Models]
 ```

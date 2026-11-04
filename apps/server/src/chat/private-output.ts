@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { RawData, WebSocket } from 'ws';
 import type { StoredEvent } from '@opencrane/event-store';
 import { memoryContextRecordedEventSchema } from '@opencrane/events';
-import { approvalActivity, decisionAuthorityFence, changesDecisionActivity, confirmDecisionAccess,
+import { approvalActivity, authorityFence, decisionAuthorityFence, changesDecisionActivity,
   history, memoryReferences, prepareLoadedMemory } from '@opencrane/models';
 import { privateReplySchema } from '@opencrane/protocol';
 import type { ChatOptions } from './access.ts';
@@ -203,21 +203,28 @@ async function confirmRelease(options: Options, binding: Binding, recipient: Sub
   const references = chat.memoryContext?.references ?? [];
   const scopes = await scopeHistories(options, references, deadline);
   const watched = new Set([`member-${binding.requesterId}`, `assistant-${binding.assistantId}`]);
-  const authority = await decisionAuthorityFence(options.store, performance.now(), [...watched],
+  const started = performance.now();
+  const authority = await decisionAuthorityFence(options.store, started, [...watched],
     binding.requesterId, binding.assistantId);
   function include(...subjects: string[]) {
     for (const subject of subjects) watched.add(subject);
     authority.include(...subjects);
   }
   async function confirm() {
-    await confirmDecisionAccess(activity, authority, false, true);
+    // Check new turn events once. Harmless messages must not restart this check.
+    await activity.confirm(authority.deadline, false, true);
+    await authority();
   }
   const snapshot = { include, head: authority.head, deadline: authority.deadline };
   const fresh = Object.assign(confirm, snapshot);
   const before = await options.store.head(undefined, fresh.deadline);
   if (!await recipient.confirm()) throw new Error('Reader refused');
   await memory.confirm(fresh);
-  await confirmReleaseChanges(options, binding, watched, scopes, before, fresh.deadline);
+  const positions = await readyPositions(options, binding, watched, scopes, before, fresh.deadline);
+  const subjects = [...positions.keys()];
+  const delivery = await authorityFence(options.store, started, subjects, fresh.deadline, positions);
+  await activity.confirm(fresh.deadline, false, true);
+  await delivery();
   if (performance.now() >= fresh.deadline) throw new Error('Reply expired');
   for (const reference of references) {
     const rows = scopes.get(reference.scopeId)!;
@@ -227,36 +234,40 @@ async function confirmRelease(options: Options, binding: Binding, recipient: Sub
   return release();
 }
 
-async function confirmReleaseChanges(options: Options, binding: Binding, watched: Set<string>,
+async function readyPositions(options: Options, binding: Binding, watched: Set<string>,
   scopes: Map<string, StoredEvent[]>, before: number, deadline: number) {
+  const relevant = [...watched];
+  for (const scope of scopes.keys()) {
+    relevant.push(`scope-${scope}`);
+  }
   const subjects = [...watched, `conversation-${binding.conversationId}`,
     `computer-${binding.assistantId}`];
-  for (const scope of scopes.keys()) subjects.push(`scope-${scope}`);
-  const positions = new Map<string, number>();
-  for (const subject of subjects) positions.set(subject, before);
-  // Validate changes during permission checks before the final release scan.
-  await releaseChanges(options, binding, watched, scopes, positions, subjects, deadline);
-  let changedSubjects = subjects;
+  for (const scope of scopes.keys()) {
+    subjects.push(`scope-${scope}`);
+  }
+  const checkedPositions = new Map<string, number>();
+  for (const subject of subjects) {
+    checkedPositions.set(subject, before);
+  }
+  // Check changes during permissions, then changes saved while those rows were read.
+  await releaseChanges(options, binding, watched, scopes, checkedPositions, subjects, deadline);
+  await releaseChanges(options, binding, watched, scopes, checkedPositions, subjects, deadline);
   async function readPosition(subject: string) {
-    const includeCloses = subject === `conversation-${binding.conversationId}`;
-    const position = await options.store.head(subject, deadline, includeCloses);
+    const position = await options.store.head(subject, deadline);
     return { subject, position };
   }
-  while (true) {
-    await releaseChanges(options, binding, watched, scopes, positions,
-      changedSubjects, deadline);
-    // Recheck every stream after the final scan. Read only changed streams next,
-    // so unrelated messages cannot force another scope read or extend the deadline.
-    const positionReads = subjects.map(readPosition);
-    const currentPositions = await Promise.all(positionReads);
-    changedSubjects = [];
-    for (const current of currentPositions) {
-      if (current.position > positions.get(current.subject)!) {
-        changedSubjects.push(current.subject);
-      }
+  const positionReads = relevant.map(readPosition);
+  const currentPositions = await Promise.all(positionReads);
+  const positions = new Map<string, number>();
+  for (const current of currentPositions) {
+    if (current.position > checkedPositions.get(current.subject)!) {
+      throw new Error('Reply changed');
     }
-    if (changedSubjects.length === 0) break;
+    positions.set(current.subject, current.position);
   }
+  // Keep these positions fixed for the shared authority check. Conversation activity
+  // is checked separately because ordinary messages do not withdraw a private reply.
+  return positions;
 }
 
 async function releaseChanges(options: Options, binding: Binding, watched: Set<string>,

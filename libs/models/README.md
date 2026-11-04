@@ -88,6 +88,10 @@ a tool permit, and again before sending. They refuse even when spending cleanup 
 An established refusal still reaches the caller if saving its audit record fails.
 Missing or mismatched run evidence refuses the call. Automatic routines remain unavailable.
 
+The shared access check can use positions already checked by the caller. Private reply
+delivery uses this to refuse later access or memory changes before sending text.
+Ordinary conversation messages do not affect this check.
+
 ## Where it fits
 
 This shared library is used by the server, background workers and personal computers.
@@ -119,7 +123,7 @@ built-in functions.
 ```mermaid
 flowchart LR
   models -.->|replay tests use the database helper| store
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks release audit bindings, public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal bearer and verified OAuth choices with current access and owner revocation from HTTP, admin company opt-in, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks release audit bindings, public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, fixed positions before private replies, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal bearer and verified OAuth choices with current access and owner revocation from HTTP, admin company opt-in, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
   models -->|tests private sign-in, refresh and revocation requests, revokes refresh and access tokens; checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains reply withdrawal after expiry or access loss; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models and checks private callers; native child calls refused| models
   models -.->|checks receipts, checks each initial memory permission once, and preserves confirmed refusals during permission outages or invalid company saves| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]

@@ -27,3 +27,7 @@ turn's memory does not change the second turn's access.
 
 The [private reply contract](../../../../docs/process/p4-15-pr3j/README.robot.md)
 defines one-use server RAM delivery beside the unchanged text-free report writer.
+
+Private reply delivery records the checked access and scope positions, then passes them
+to `authorityFence` with the original start time and deadline. Conversation messages
+cannot restart that check; Stop and closure still refuse delivery.

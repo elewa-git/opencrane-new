@@ -25,16 +25,23 @@ The unchanged report writer saves `agent.output_lost` with no reply text or text
 Unknown append outcomes cannot release output. Duplicate reports, cold servers and new
 connections cannot replay it. Ordinary human messages and completion records remain valid.
 Whole histories load before the two-second access check; only new activity is read inside it.
-The final scan tracks a separate checked position for each access, conversation,
-computer and scope stream. After each scan, it checks all those stream positions again.
-Only streams that advanced are read again. Unrelated human messages cannot force
-repeated scope reads. All reads keep the original two-second deadline. The final
-reference, expiry and socket checks run synchronously before sending.
+After checking new turn and memory events, delivery records fixed positions for the
+requester's member, assistant, discovered access and loaded scope streams. A position
+beyond the checked history refuses delivery. The shared `authorityFence` compares those
+recorded positions before sending; it does not replace them with a later global position.
+Conversation and computer activity are checked separately for Stop, closure and other
+terminal changes. Each access validation reads new activity once; harmless rows do not
+repeat it. Ordinary messages cannot restart the delivery check. There is no
+retry loop in the private reply code. Every read keeps the original two-second deadline.
+The final reference, expiry and socket checks run synchronously before sending.
 The existing loaded-reference checker remains unchanged.
 
 Regression tests save member removal, Correct and Forget during the second incremental
-scope read and require zero frames. A separate test saves an unrelated message during
-every incremental scope read and requires one frame. All cases check buffer clearance.
+scope read and while the subsequent scope-position response is held. Each requires zero
+frames. Separate tests save an unrelated message during every incremental scope read
+and every incremental conversation read; both require one frame. The deadline test
+expires the original check while the scope-position response is held and requires zero
+frames. All cases check buffer clearance.
 
 Tests use real NATS, IAM and authenticated subscribers. Browser consumption, browser
 clearance, streaming, cross-replica delivery and fresh-install qualification remain later work.
