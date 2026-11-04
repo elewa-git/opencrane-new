@@ -147,6 +147,8 @@ function handleNativeProtocol(
     }
     void receive(value).catch(failed);
   }
+  function failed() { socket.destroy(); }
+  lines.on('error', failed);
   lines.on('line', line);
   socket.resume();
 }
@@ -166,6 +168,7 @@ async function startNativeSocket(
     function failed() {
       socket.destroy();
     }
+    socket.on('error', failed);
     void native(socket).catch(failed);
   }
   const server = net.createServer(connected);
@@ -193,8 +196,8 @@ function createSessions(proxy: ProxyFixture, launchKey: string) {
   function notification() {
     /* No model turn runs in this fixture. */
   }
-  async function open(id = 'first') {
-    const identity = { turnId: id, conversation: 'chat', generation: 1,
+  async function open(id = 'first', conversation = 'chat') {
+    const identity = { turnId: id, conversation, generation: 1,
       inputGeneration: 1, expires: Date.now() + 60_000 };
     const launch = { ...identity, abort: new AbortController() };
     const options = { runtimeProxy: { privateCaller: register, privateAuthority: callers }, generation: 1,

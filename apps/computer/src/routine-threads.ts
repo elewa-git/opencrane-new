@@ -1,8 +1,10 @@
+import type { RecallOwner } from './private-recall.ts';
 import { modelForTask } from '@opencrane/models/routing';
 import { record } from './http.ts';
 import { requiredString, type Turn } from './turn-frame.ts';
 
 export interface PrivateSession {
+  recallOwner?: RecallOwner | undefined;
   rpc(this: void, method: string, params: Record<string, unknown>): Promise<unknown>;
   close(this: void): void;
   closed: Promise<void>;

@@ -17,6 +17,7 @@ interface TurnRunnerPort {
   stopBridge(value: Record<string, unknown>,
     accept: (value: Record<string, unknown>) => void): Promise<Record<string, unknown>>;
   start(turn: ReturnType<typeof parseTurn>): Promise<void>;
+  loadRecall?(value: Record<string, unknown>): Promise<Record<string, unknown>>;
   prepareRoutine(value: Record<string, unknown>): Promise<Record<string, unknown>>;
   interrupt(value: Record<string, unknown>, cleared?: () => void): Promise<void>;
   readArtifact?(value: Record<string, unknown>): Promise<Record<string, unknown>>;
@@ -120,6 +121,36 @@ async function prepareRoutine(input: Record<string, unknown>, runner: TurnRunner
   }
 }
 
+async function loadRecall(input: Record<string, unknown>, runner: TurnRunnerPort,
+  next: WebSocket, resumed: boolean) {
+  const turnId = input['turnId'];
+  if (typeof turnId !== 'string' || !/^[\w-]{1,200}$/u.test(turnId)) {
+    next.close(1008, 'Invalid recall request');
+    return;
+  }
+  try {
+    if (!resumed || !runner.loadRecall) throw new Error('Private recall unavailable');
+    const reply = await runner.loadRecall(input);
+    sendFileReceipt(next, reply);
+  } catch {
+    const refusal = { type: 'recall_refused', turnId };
+    sendFileReceipt(next, refusal);
+  }
+}
+
+function preparePrivate(input: Record<string, unknown>, runner: TurnRunnerPort,
+  next: WebSocket, resumed: boolean) {
+  if (input['type'] === 'recall_load') {
+    void loadRecall(input, runner, next, resumed);
+    return true;
+  }
+  if (input['type'] === 'routine_prepare') {
+    void prepareRoutine(input, runner, next, resumed);
+    return true;
+  }
+  return false;
+}
+
 function settleApproval(input: Record<string, unknown>,
   approvals: ReturnType<typeof approvalHolds> | undefined) {
   const approvalId = input['approvalId'];
@@ -177,10 +208,7 @@ function dispatch(
     void runner.start(parseTurn(input));
     return;
   }
-  if (type === 'routine_prepare') {
-    void prepareRoutine(input, runner, next, state.resumed);
-    return;
-  }
+  if (preparePrivate(input, runner, next, state.resumed)) return;
   if (type === 'stop' && state.resumed) {
     void interruptTurn(input, runner, next);
     return;
@@ -335,6 +363,7 @@ export function bridgeSocket(
     ...(runner.readArtifact ? { readArtifact: runner.readArtifact.bind(runner) } : {}),
     stopBridge: runner.stopBridge.bind(runner),
     start: runner.start.bind(runner),
+    ...(runner.loadRecall ? { loadRecall: runner.loadRecall.bind(runner) } : {}),
     prepareRoutine: runner.prepareRoutine.bind(runner),
     interrupt: runner.interrupt.bind(runner),
     connectionLost: runner.connectionLost.bind(runner),

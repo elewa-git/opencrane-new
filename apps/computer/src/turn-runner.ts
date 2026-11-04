@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- Keep approval renewal and release beside the turn state they share. */
+import { privateRecall } from './private-recall.ts';
 import { BridgeGate } from './bridge-gate.ts';
 import type { GateIdentity } from './bridge-gate-authority.ts';
 import type { approvalHolds } from './approval-holds.ts';
@@ -92,6 +93,7 @@ function readAcknowledgedGrant(value: Record<string, unknown>,
 
 class TurnRunner {
   readonly gate = new BridgeGate();
+  private readonly recalls = new Map<string, ReturnType<typeof privateRecall>>();
   private readonly artifactStarts = new Map<string, Record<string, string>>();
   private readonly finishing = new Set<string>();
   private preparingCount = 0;
@@ -506,7 +508,27 @@ class TurnRunner {
     if (!this.driver.privateSession) throw new Error('Private sessions unavailable');
     const session = await this.driver.privateSession();
     this.keepPrivateSession(input, session);
+    if (input.tools?.length) {
+      const identity = this.driver.credential().gateIdentity;
+      if (!identity || !session.recallOwner) throw new Error('Private recall unavailable');
+      const recall = privateRecall(input, session.recallOwner, session, identity, this.loads);
+      this.recalls.set(input.id, recall);
+      const forget = this.recalls.delete.bind(this.recalls, input.id);
+      void session.closed.then(forget, forget);
+      const started = await recall.start();
+      this.signal(started.receipt);
+      return started.response;
+    }
     return startPrivateThread(session, input.taskKind);
+  }
+
+  async loadRecall(value: Record<string, unknown>) {
+    const turnId = requiredString(value, 'turnId');
+    const recall = this.recalls.get(turnId);
+    if (!recall || this.gate.closed || this.state.cancelled.has(turnId)) {
+      throw new Error('Private recall unavailable');
+    }
+    return recall.load(value);
   }
 
   private keepPrivateSession(input: Turn, session: PrivateSession) {
@@ -571,9 +593,7 @@ class TurnRunner {
     const grant = await this.waitForGrant(sequence, previousStart);
     if (!this.isActiveTurn(input.id) || this.gate.closed
       || this.state.cancelled.has(input.id)) throw new Error('Turn ended');
-    // Keep the server's admitted model for every call and renewal in this turn.
-    const model = grant.model ?? modelForTask(input.taskKind);
-    this.turnModels.set(input.id, model);
+    const { model, inputText } = await this.prepareGrantedInput(input, grant);
     await this.installGrant(threadId, input, grant);
     if (!this.isActiveTurn(input.id)) return;
     if (this.gate.closed || this.state.cancelled.has(input.id)) {
@@ -582,9 +602,6 @@ class TurnRunner {
       return;
     }
 
-    const inputText = await this.inputFor(input, grant.context, grant.initialInput);
-    if (!this.isActiveTurn(input.id)) return;
-    if (this.gate.closed || this.state.cancelled.has(input.id)) throw new Error('Turn ended');
     // Mark execution after validating the input. Memory-free prepared turns can still retry.
     this.journal.recordExecution(input.id);
     this.gate.awaitingTerminal.add(input.id);
@@ -595,6 +612,23 @@ class TurnRunner {
     };
     const turnResponse = record(await this.rpcFor(input)('turn/start', turnParams));
     await this.rememberTurn(input, threadId, turnResponse);
+  }
+
+  private async prepareGrantedInput(input: Turn, grant: Grant) {
+    if (input.tools?.length && input.executionMode === 'restricted'
+      && !this.recalls.get(input.id)?.ready) throw new Error('Private recall unavailable');
+    // Keep the server's admitted model for every call and renewal in this turn.
+    const model = grant.model ?? modelForTask(input.taskKind);
+    const inputText = await this.inputFor(input, grant.context, grant.initialInput);
+    const frame = { ...input, text: inputText, token: grant.token,
+      expiresAt: grant.expiresAt, model };
+    if (Buffer.byteLength(JSON.stringify(frame)) > 120 * 1024) {
+      throw new Error('Turn input too large');
+    }
+    if (!this.isActiveTurn(input.id) || this.gate.closed
+      || this.state.cancelled.has(input.id)) throw new Error('Turn ended');
+    this.turnModels.set(input.id, model);
+    return { model, inputText };
   }
 
   private async inputFor(input: Turn, context: unknown, initialInput: unknown) {
@@ -810,6 +844,11 @@ class TurnRunner {
     else void this.gate.track(releaseLoad(this.loads, this.driver, threadId, '', ''));
   }
 
+  private permitsPrivateItem(input: Turn, item: Record<string, unknown>) {
+    return PRIVATE_ITEM_TYPES.has(String(item['type']))
+      || this.recalls.get(input.id)?.permitsItem(item) === true;
+  }
+
   complete(value: unknown) {
     const event = record(value);
     const params = record(event['params'] ?? {});
@@ -829,7 +868,7 @@ class TurnRunner {
     if (input.executionMode === 'restricted'
       && ['item/started', 'item/completed'].includes(String(event['method']))) {
       const item = record(params['item']);
-      if (!PRIVATE_ITEM_TYPES.has(String(item['type']))) {
+      if (!this.permitsPrivateItem(input, item)) {
         this.refuseTool(input, threadId);
         return;
       }

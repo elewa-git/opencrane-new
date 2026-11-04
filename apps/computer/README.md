@@ -22,7 +22,7 @@ flowchart LR
   server -->|messages, private routine preparation, turns, files and targeted Stops| computer
   computer -->|preparation replies, reply removal receipts, native termination, progress, results and changed publication files| server
   server -->|qualified one-use private input| computer
-  computer -.->|records private thread before tool approval| server
+  computer -->|reports private thread and recall discovery| server
   computer -->|checks command ownership| executor["socket-denied executor"]
   computer -->|runs| desktop["Codex, browser and desktop"]
   computer -->|checks callers and passes for AI and MCP calls| gateway["agentgateway<br/>AI gateway"]
@@ -65,7 +65,10 @@ private reply buffers are cleared before waiting for interruption to finish.
   that the proxy accepts. Cancellation removes the list. Discovery reads no facts and gives no permission to call tools.
   An offline test also makes native Codex call recall and read a test reply through
   the proxy. It checks refusals and cancellation while another private session survives.
-  This proves the call protocol only; live memory access remains disabled.
+  The runner can now load recall through an authenticated bridge request. It matches
+  the returned thread and a single-use load id, then waits for discovery before accepting
+  input or a grant. The server still needs to prepare and send that request.
+  These tests do not qualify deployment; live memory access remains disabled.
   The server and computer use the same private caller checks from the models library.
   The image includes this small shared file, which uses only Node's built-in functions.
 - Checks fixed package and Git requests against the supervisor's record of the tool call.

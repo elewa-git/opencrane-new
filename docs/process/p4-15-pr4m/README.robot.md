@@ -29,13 +29,12 @@ Neither fixture qualifies deployment.
 
 ## Remaining production part
 
-PARTIAL: the authenticated server/computer catalogue hand-off and runner dispatch are
-not built here. They need a strict volatile preparation message after saved admission,
-`preparePersonalMemoryTools`, deployment-owned qualification and a matching discovery
-receipt before initial input or credentials can be released. RAM approvals are not wire
-proof. The server must repeat access, policy and qualification checks after waits.
-A real backend fixture must prove loaded evidence before recalled structured results.
-The existing trusted without-tools wording remains accurate until that path is connected.
+PARTIAL: the computer-side exchange is described below. The server still needs to send
+it after saved admission, using `preparePersonalMemoryTools`, deployment-owned qualification
+and a matching discovery receipt before releasing initial input or credentials.
+RAM approvals are not wire proof. The server must repeat access, policy and qualification
+checks after waits. A real backend fixture must prove loaded evidence before recalled
+structured results.
 Native writes, shared/team scopes and fresh-install qualification remain separate work.
 Global admission, reserved paths and protected authority/security tests are unchanged.
 
@@ -76,3 +75,54 @@ The targeted tests used `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/po
 one worker and no file parallelism. All checks used `nice -n 10`.
 No full root suite, development stack, model call or fresh-install qualification ran.
 Production recall remains PARTIAL and admission stays disabled.
+
+## Computer-side loading
+
+Part 2 starts from #867 (`64586a95c`). Prerequisites are #862 (`4df894661`, private
+launch ownership) and #863 (`5e5882fed`, requester-only volatile reply release).
+The failing-first commit is `4b7bc0a47`. This is a further split within the 600-line limit.
+
+A restricted personal chat carrying one recall definition uses the existing loader.
+The authenticated computer bridge sends `recall_pending` after `startPrivate` returns.
+It carries a random `loadId`, turn, conversation, requester, assistant, computer, silo,
+returned thread, computer/input generations and original expiry. No caller credential,
+registry or RAM approval is serialised. This message is volatile and is not journalled.
+
+The server's future `recall_load` must repeat every field, replace the message type,
+and add only `tools`. The computer rejects extra fields, changed identities, a changed
+catalogue, non-recall tools, Ask and duplicate requests. It compares the local registration
+again during `loadPrivate`, using the existing proxy controls and discovery check.
+Only successful discovery returns `recall_loaded` with the original binding.
+A refused load closes that session. Stop, disconnect and expiry revoke its caller.
+Lost requests or replies are never resent. Two sessions of the same person stay separate.
+
+A grant or initial input arriving before discovery ends the turn without installation.
+The complete turn frame, including tools and credentials, must fit 120 KiB before the
+grant is installed. Tools retain the 48 KiB limit. Restricted native notifications allow
+only recall on this loaded server, alongside the existing non-tool item types.
+The trusted initial-input wording permits only explicitly supplied tools.
+No new event or public API is added. New message field names pass `RISKY_FIELD_NAME`.
+
+PARTIAL: production server assembly and credential release remain unconnected. The next
+part must save admission, use `preparePersonalMemoryTools` with deployment-owned
+qualification, validate these messages on the server, and recheck membership, policy
+and qualification after discovery before releasing input or credentials. It must prove
+real structured recall results and saved loaded evidence through the backend and gateway.
+The existing four-call/64 KiB/32-reference checks and bound-header replacement are unchanged;
+this fixture does not exercise them. Native writes and shared/team scopes remain later work.
+Admission stays disabled. Fixtures do not qualify deployment.
+
+### Own checks for the computer exchange — 4 November 2026
+
+Local worktree based on `64586a95c`; disposable fixtures, not a fresh silo.
+
+- PASS: 859 distinct tests across ten selected files, including the unchanged 460
+  security-rule cases. The final 36 runner/discovery tests passed twice.
+- PASS: full typecheck and a final computer typecheck, event catalogue and changelog checks.
+- PASS: all lint stages, including Knip, dependencies, docs, links, fixtures and licences.
+  ESLint had zero errors and 35 existing size warnings. Two extra blank lines were fixed
+  before repeating the documentation and remaining lint stages.
+- NOT RUN: full root suite, development stack, paid calls and fresh-install qualification.
+
+Checks used `nice -n 10`, one test worker and no file parallelism. The PostgreSQL fixture
+used an assigned loopback port and was removed with its volume after the tests.
