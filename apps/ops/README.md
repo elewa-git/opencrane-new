@@ -22,7 +22,7 @@ flowchart LR
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
   ops -->|saves results and routine claims| nats
-  ops -->|keeps jobs separate from content reads| pg["PostgreSQL<br/>jobs and content databases"]
+  ops -->|holds routine ownership and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
   ops -->|deletes forgotten keys| keys["Memory key store<br/>private storage"]
@@ -46,8 +46,15 @@ and suspension. Those checks read metadata and change no resources.
   forgotten memory keys and old private connection copies.
 - Provides [replay](../../GLOSSARY.md#replay), failed-job tools and upgrades for recovery.
 - Provides an internal command that claims one scheduled routine occurrence without starting it.
+- Holds one routine scheduler owner per silo while its callback prepares claims.
 
 ## Processes it handles
+
+The routine leadership helper holds a PostgreSQL session lock for its callback.
+It cancels preparation when that session stops answering or shutdown is requested.
+The callback must stop and await its work before returning. Only then does the helper
+release the session. Captured ownership checks stay refused after release.
+The routine worker still only updates read tables; automatic scheduling is not connected.
 
 1. **A change is saved.** A worker copies the event into the matching table.
    Reactions run any required background work and save its results as new events.
