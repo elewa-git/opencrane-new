@@ -50,11 +50,12 @@ async function runnerFixture() {
 
 async function waitLoaded(test: Awaited<ReturnType<typeof runnerFixture>>,
   pending: Record<string, unknown>) {
+  const expectedReceipt = { ...pending, type: 'recall_loaded' };
   function loaded() {
     function matches(frame: Record<string, unknown>) {
       return frame['type'] === 'recall_loaded' && frame['turnId'] === pending['turnId'];
     }
-    expect(test.computer.frames.find(matches)).toEqual({ ...pending, type: 'recall_loaded' });
+    expect(test.computer.frames.find(matches)).toEqual(expectedReceipt);
   }
   await vi.waitFor(loaded);
 }
@@ -96,9 +97,10 @@ async function refusesChangedBinding(change: object) {
     const pending = await test.ready();
     const request = { ...pending, type: 'recall_load', tools: test.tools, ...change };
     test.computer.send(request);
+    const expectedReceipt = { type: 'recall_refused', turnId: 'first' };
     function refused() {
       function matches(frame: Record<string, unknown>) { return frame['type'] === 'recall_refused'; }
-      expect(test.computer.frames.find(matches)).toEqual({ type: 'recall_refused', turnId: 'first' });
+      expect(test.computer.frames.find(matches)).toEqual(expectedReceipt);
     }
     await vi.waitFor(refused);
     expect(test.native.received).not.toContain('config/mcpServer/reload');
