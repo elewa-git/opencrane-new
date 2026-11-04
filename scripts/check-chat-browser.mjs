@@ -37,6 +37,15 @@ function agentBadgeStyle(node) {
   return { background: style.backgroundColor, fontFamily: style.fontFamily };
 }
 
+function toolLineHasState({ id, state }) {
+  return globalThis.document.getElementById(id)?.getAttribute('aria-expanded') === state;
+}
+
+async function waitForToolLineState(page, line, state) {
+  const id = await line.getAttribute('id');
+  await page.waitForFunction(toolLineHasState, { id, state });
+}
+
 async function open(scenario, width = 390) {
   const page = await browser.newPage({ viewport: { width, height: width === 390 ? 844 : 900 }, reducedMotion: 'reduce' });
   if (scenario === 'rail-offline') await page.clock.install();
@@ -131,7 +140,7 @@ try {
   assert.equal(await toolLine.getAttribute('aria-expanded'), 'false');
   assert.equal(await toolDetails.isVisible(), false);
   await toolLine.click();
-  assert.equal(await toolLine.getAttribute('aria-expanded'), 'true');
+  await waitForToolLineState(activity.page, toolLine, 'true');
   await toolDetails.getByText('Failed · Exit code 1').waitFor();
   assert((await toolDetails.innerText()).includes('Sanitised'));
   assert(!(await toolDetails.innerText()).includes('a'.repeat(64)),
@@ -139,13 +148,24 @@ try {
   assert.equal(await activity.page.locator('oc-hinge-drawer[open]').count(), 0);
   await toolLine.focus();
   await activity.page.keyboard.press('Enter');
-  assert.equal(await toolLine.getAttribute('aria-expanded'), 'false');
+  await waitForToolLineState(activity.page, toolLine, 'false');
   assert.equal(await toolDetails.isVisible(), false);
   await activity.page.keyboard.press('Space');
-  assert.equal(await toolLine.getAttribute('aria-expanded'), 'true');
+  await waitForToolLineState(activity.page, toolLine, 'true');
   assert.equal(await toolDetails.isVisible(), true);
   assert(await toolLine.evaluate(node => node.ownerDocument.activeElement === node),
     'Toggling inline details keeps focus on the first tool line');
+  const secondToolLine = activity.page.locator('.tool-line').nth(1);
+  const secondToolDetails = activity.page.locator('.tool-details').nth(1);
+  await secondToolLine.click();
+  await waitForToolLineState(activity.page, secondToolLine, 'true');
+  assert.equal(await toolLine.getAttribute('aria-expanded'), 'true');
+  assert.equal(await toolDetails.isVisible(), true);
+  assert.equal(await secondToolDetails.isVisible(), true);
+  await secondToolLine.click();
+  await waitForToolLineState(activity.page, secondToolLine, 'false');
+  assert.equal(await toolLine.getAttribute('aria-expanded'), 'true');
+  await toolLine.focus();
   await activity.page.getByRole('tab', { name: /Activity/ }).click();
   await activity.page.locator('.desktop-panel .activity-row').first().waitFor();
   assert.equal(await activity.page.locator('.desktop-panel .activity-row').count(), 2);

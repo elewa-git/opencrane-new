@@ -63,6 +63,25 @@ it('keeps native consent in its own drawer without inline controls', () => {
   fixture.destroy();
 });
 
+it('ignores an event without a button target', () => {
+  const fixture = TestBed.createComponent(ToolActivityLine);
+  fixture.componentRef.setInput('record', {
+    id: 'tool-1', label: 'Command completed', detail: 'Exit code 0',
+    failed: false, time: '2026-10-04T10:00:00Z',
+  });
+  fixture.detectChanges();
+
+  const event = new MouseEvent('click');
+  fixture.componentInstance['openDetails'](event);
+  fixture.detectChanges();
+
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No tool activity line');
+  const button = root.querySelector('.tool-line');
+  expect(button?.getAttribute('aria-expanded')).toBe('false');
+  fixture.destroy();
+});
+
 const toolStateCases = [
   { status: 'running', failed: false, suffix: 'Running', icon: 'running' },
   { status: 'completed', failed: false, suffix: 'Completed', icon: 'done' },
