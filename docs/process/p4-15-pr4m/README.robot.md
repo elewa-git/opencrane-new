@@ -55,3 +55,24 @@ Global admission, reserved paths and protected authority/security tests are unch
 
 Commands used `nice -n 10`; tests used one worker and a disposable PostgreSQL database.
 The database was removed with its volume after the tests. No deployment is qualified.
+
+### Fixture structure checks — 4 November 2026
+
+The fixture now separates proxy setup, socket startup, protocol handling, session
+creation, approval preparation and cleanup into named functions. The turn request
+and loader driver are named objects. Spy setup and catalogue removal use separate
+statements. This is a behaviour-preserving refactor; all assertions are retained.
+
+- PASS: 693 tests across `private-recall-preflight`, `private-session`,
+  `private-thread-loads`, `thread-loads`, `thread-load-lifecycle` and the unchanged
+  `security-rules` suite. The 11 `private-recall-preflight` cases also passed a
+  second time.
+- PASS: full typecheck, event catalogue and changelog checks.
+- PASS: full lint, including Knip, dependency checks, documentation, links, fixtures
+  and licences. ESLint reported zero errors and 35 existing size warnings.
+  The lint command used `NODE_OPTIONS=--max-old-space-size=6144`.
+
+The targeted tests used `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`,
+one worker and no file parallelism. All checks used `nice -n 10`.
+No full root suite, development stack, model call or fresh-install qualification ran.
+Production recall remains PARTIAL and admission stays disabled.
