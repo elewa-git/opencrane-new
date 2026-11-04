@@ -1,3 +1,5 @@
+import { HandlerRuntime } from '@opencrane/handlers';
+import { SandboxClient } from '../src/kubernetes.ts';
 import { calculateRoutineOccurrence } from '@opencrane/events/routine-schedule';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { routineMissedSchema, foldRoutine, type EventEnvelope, type RoutineState } from '@opencrane/events';
@@ -77,6 +79,22 @@ async function state() {
   return saved!;
 }
 async function range() {
+  const wake = vi.spyOn(SandboxClient.prototype, 'mode');
+  const credentials = vi.spyOn(SandboxClient.prototype, 'credentials');
+  const jobs = vi.spyOn(HandlerRuntime.prototype, 'start');
+  wake.mockImplementation(forbiddenEffect);
+  credentials.mockImplementation(forbiddenEffect);
+  jobs.mockImplementation(forbiddenEffect);
+  const fetch = globalThis.fetch;
+  function permissionFetch(url: Parameters<typeof fetch>[0], options?: RequestInit) {
+    const address = url instanceof Request ? url.url : url.toString();
+    if (!address.startsWith(binding.apiUrl + '/')) {
+      return forbiddenEffect();
+    }
+    return fetch(url, options);
+  }
+  const network = vi.spyOn(globalThis, 'fetch');
+  network.mockImplementation(permissionFetch);
   const before = await state();
   const [receipt, repeated] = await Promise.all([record(), record()]);
   expect(repeated).toEqual(receipt);
@@ -89,27 +107,26 @@ async function range() {
   expect(row.event.data).toMatchObject(expected);
   expect(await state()).toEqual(foldRoutine(before, row.event));
   expect(await nats.store.head()).toBe(3);
+  expect(wake).not.toHaveBeenCalled();
+  expect(credentials).not.toHaveBeenCalled();
+  expect(jobs).not.toHaveBeenCalled();
   expect(JSON.stringify(row.event)).not.toMatch(/ciphertext|instructions|key:1/u);
   const stale = { ...input, expectedPosition: receipt.position };
   await expect(record(stale)).rejects.toThrow();
+  await expect(claimRoutineDue(nats.store, worker(), stale)).rejects.toThrow();
 }
 it('compacts only real old slots across Brussels spring, races and replays without execution', range);
 
 const calendars = [
   ['Europe/Brussels', '02:30', '2026-10-24', '2026-10-26', '2026-10-27', 3],
   ['Australia/Lord_Howe', '02:15', '2026-10-03', '2026-10-05', '2026-10-06', 2],
-  ['Pacific/Apia', '00:00', '2011-12-29', '2011-12-29', '2011-12-31', 1],
-  ['UTC', '09:00', '2027-03-27', '2027-04-10', '2027-04-17', 3],
+  ['Pacific/Apia', '00:00', '2011-12-29', '2011-12-31', '2012-01-01', 2],
+  ['UTC', '09:00', '2027-03-27', '2027-03-29', '2027-03-30', 3],
 ] as const;
 async function calendar(zone: string, localTime: string, first: string, last: string,
   nextDate: string, count: number) {
   const original = creation();
-  let schedule: typeof original.data.definition.schedule | {
-    frequency: 'weekly'; weekday: number; localTime: string; zone: string
-  } = { frequency: 'daily', localTime, zone };
-  if (zone === 'UTC') {
-    schedule = { frequency: 'weekly', weekday: 6, localTime, zone };
-  }
+  const schedule = { frequency: 'daily' as const, localTime, zone };
   const definition = { ...original.data.definition, schedule };
   const calculation = { silo: 'test', routineId: 'orders', scheduleRevision: 1, schedule,
     localDate: first };
@@ -154,20 +171,9 @@ async function bounded() {
 }
 it('bounds each scan to 100 candidates and resumes without counting a slot twice', bounded);
 async function occupied(kind = 'starting') {
-  const created = creation();
-  const schedule = { frequency: 'weekly' as const, weekday: 7,
-    localTime: '02:30', zone: 'Europe/Brussels' };
-  const definition = { ...created.data.definition, schedule };
-  const original = { ...created, data: { ...created.data, definition } };
-  const next = { localDate: '2026-10-18', localTime: '02:30', zone: 'Europe/Brussels',
-    at: '2026-10-18T00:30:00.000Z', offsetMinutes: 120 };
-  const data = { ...original.data, next, effectiveAt: '2026-10-17T12:00:00.000Z' };
-  const updated = { ...original, id: 'earlier', commandId: 'earlier',
-    type: 'routine.updated', time: data.effectiveAt, data };
-  await nats.seed([updated]);
-  now = Date.parse(next.at);
-  const request = { ...input, localDate: next.localDate, expectedPosition: 3 };
-  const claimed = await claimRoutineDue(nats.store, worker(), request);
+  const updated = creation();
+  now = Date.parse(updated.data.next.at);
+  const claimed = await claimRoutineDue(nats.store, worker(), input);
   const run = (await state()).activeRun!;
   if (kind !== 'starting') {
     const activation = { ...run, senderAttemptId: 'attempt',
@@ -192,25 +198,23 @@ async function occupied(kind = 'starting') {
     const binding = { conversationId: run.conversationId, turnId: run.turnId };
     await routineAsk(nats.store, 'Requested', binding);
   }
-  const following = { ...next, localDate: '2026-10-25', at: '2026-10-25T00:30:00.000Z' };
-  const advance = { ...updated, id: 'following', commandId: 'following',
-    data: { ...data, cursor: next, next: following } };
-  await nats.seed([advance]);
-  now = Date.parse(following.at) + 60_001;
-  return { ...input, expectedPosition: await nats.store.head('routine-orders'),
-    localDate: following.localDate };
+  now = Date.parse('2027-03-30T00:31:00.001Z');
+  return { ...input, expectedPosition: await nats.store.head('routine-orders') };
 }
 async function overlap(kind: string) {
   const request = await occupied(kind);
   const before = await state();
   const [receipt, repeated] = await Promise.all([record(request), record(request)]);
   expect(repeated).toEqual(receipt);
+  const row = await nats.store.readEvent(receipt.position);
+  const range = { count: 2, firstLocalDate: '2027-03-29', lastLocalDate: '2027-03-30' };
+  expect(row.event.data).toMatchObject(range);
   const after = await state();
   expect(after.activeRun).toEqual(before.activeRun);
   expect(after.activation).toEqual(before.activation);
   expect(after.stopRequested).toBe(before.stopRequested);
-  expect(after.definition?.cursor?.at).toBe('2026-10-25T00:30:00.000Z');
-  expect(after.definition?.next?.at).toBe('2026-11-01T01:30:00.000Z');
+  expect(after.definition?.cursor?.at).toBe('2027-03-30T00:30:00.000Z');
+  expect(after.definition?.next?.at).toBe('2027-03-31T00:30:00.000Z');
   expect(await record(request)).toEqual(receipt);
 }
 it.each(['starting', 'running', 'Ask', 'stopping'])('preserves an occupied %s run', overlap);
@@ -291,14 +295,20 @@ async function refused(kind: string) {
       type: 'routine.updated', data: { ...original.data, status: 'paused' } };
     if (kind === 'edit') {
       changed.data = { ...original.data, definitionRevision: 2 };
+    } else if (kind === 'weekly') {
+      const schedule = { frequency: 'weekly', weekday: 6, localTime: '02:30',
+        zone: 'Europe/Brussels' };
+      const definition = { ...original.data.definition, schedule };
+      changed.data = { ...original.data, definition };
     } else if (kind === 'retire') {
       changed = routine('routine.retired');
     }
     await nats.seed([changed]);
   }
-  await expect(record()).rejects.toThrow(/^Routine missed refused$/u);
+  const request = { ...input, expectedPosition: await nats.store.head('routine-orders') };
+  await expect(record(request)).rejects.toThrow(/^Routine missed refused$/u);
 }
-it.each(['pause', 'edit', 'retire', 'history'])('refuses %s safely', refused);
+it.each(['pause', 'edit', 'retire', 'history', 'weekly'])('refuses %s safely', refused);
 async function cancellation(afterAccess: boolean) {
   const append = nats.store.append.bind(nats.store);
   const head = nats.store.head.bind(nats.store);
