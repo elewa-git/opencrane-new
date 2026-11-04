@@ -51,11 +51,11 @@ reasoning text, saves an unavailable status and confirms it to the computer. Rep
 a report returns the same confirmation; reconnecting restores only that status.
 Command hashes and text hidden on status reports remain refused. Rebuilt private
 context excludes every assistant reply from that turn, including replies saved before
-recall. Human messages remain saved. Private delivery without saving the reply is still planned.
+recall. Human messages remain saved. Completed private replies can reach an already connected reader once, through bounded server memory. Browser support is still planned.
 
 **Live updates.** Open chat pages keep checking access when installation or group membership changes. Removing someone from a group closes their private session with its assistant within two seconds. If another permission update takes too long, the page reconnects after five seconds and resumes from saved messages. The server checks each open chat's feed position every 100 ms and loads content only when it changes. Computer status comes from a small read-table record updated by background workers. A sleeping or waking computer shows Starting; recovery lasts until a new ready record appears.
 
-**Private and shared work.** Each assistant has one [computer](../../../../GLOSSARY.md#computer); a group shares its assistant's computer. Each member gets a separate private session and a [private turn](../../../../GLOSSARY.md#private-turn) by default. That turn gets earlier completed replies from the same member and starts a fresh [Codex](../../../../GLOSSARY.md#codex), the AI agent, without local tools. Personal memory starts require the deployment’s own passing checks. Native memory tools and private reply delivery remain unavailable. A [memory-free turn](../../../../GLOSSARY.md#memory-free-turn) can use the shared disk and browser but receives no earlier private context. Losing spending access does not remove the right to read or stop existing work.
+**Private and shared work.** Each assistant has one [computer](../../../../GLOSSARY.md#computer); a group shares its assistant's computer. Each member gets a separate private session and a [private turn](../../../../GLOSSARY.md#private-turn) by default. That turn gets earlier completed replies from the same member and starts a fresh [Codex](../../../../GLOSSARY.md#codex), the AI agent, without local tools. Personal memory starts require the deployment’s own passing checks. Native memory tools and browser display of private replies remain unavailable. A [memory-free turn](../../../../GLOSSARY.md#memory-free-turn) can use the shared disk and browser but receives no earlier private context. Losing spending access does not remove the right to read or stop existing work.
 
 Personal memory-free turns can receive a short list of reviewed, free tools available to both the person and assistant. Ask tools also need reviewed approval details. The gateway checks rights again for each call. The computer and gateway keep the reviewed Allow mode, so changing a tool to Ask refuses an old automatic call. The server checks whether a computer supports approval messages first; older computers get Allow tools only. Private turns with a group assistant stay restricted and receive no tools. [Memory](../memory/README.md) explains fact references and the extra checks before renewing a pass. Invalid older memory records do not prevent ordinary messages or stop requests.
 
@@ -107,5 +107,7 @@ flowchart LR
   server --> memory[Memory]
   chat -->|selects and checks input| memory
   chat -->|one-use private input| computer[Assistant computer]
+  computer -->|completed private reply| chat
+  chat -->|one-use notification| reader[Authenticated reader]
   chat -->|checks access and spending| models[Models]
 ```

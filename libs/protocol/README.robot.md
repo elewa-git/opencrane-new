@@ -434,3 +434,9 @@ The saved resolution fields remain separate. Older replies can omit this field.
 and positions. Null settlement differs from zero. Extra fields are refused.
 See the [current effect API](../../apps/server/README.robot.md#bounded-current-effect-pages)
 for access, deadlines, continuation bindings and failure replies.
+
+## Private completed replies
+
+The strict `private_reply` notification has no saved position. It reuses chat data
+fields `text` and `turnId`, with conversationId, turnId, threadId, generation and
+inputGeneration. See the [server contract](../../docs/process/p4-15-pr3j/README.robot.md).

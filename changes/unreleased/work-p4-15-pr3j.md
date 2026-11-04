@@ -1,0 +1,1 @@
+- Deliver completed private replies once through bounded server memory to the saved requester's connected chat reader, without saving reply text. Browser support and memory admission remain unavailable.

@@ -24,3 +24,6 @@ native start prepares and loads memory through the production path. Later withdr
 requests use that saved input generation. Its second session represents older admitted
 work. Replacement turn cases also resume older admitted work, so withdrawal of the first
 turn's memory does not change the second turn's access.
+
+The [private reply contract](../../../../docs/process/p4-15-pr3j/README.robot.md)
+defines one-use server RAM delivery beside the unchanged text-free report writer.

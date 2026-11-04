@@ -1,3 +1,4 @@
+import { subscribePrivateOutput } from './private-output.ts';
 import type { WebSocket } from 'ws';
 import { isOrganisationSession, type AuthConfig, type SessionData } from '@opencrane/auth';
 import { chatMessageSchema, type ChatRow } from '@opencrane/protocol';
@@ -21,6 +22,8 @@ interface Subscription {
   running: boolean;
   ready: boolean;
   accessPassed: boolean;
+  memberId?: string;
+  privateSubscribed?: boolean;
   computerState: Awaited<ReturnType<typeof chatRows>>['computerState'] | '';
   computerRecovered: boolean;
   computerLostAt: string | undefined;
@@ -87,6 +90,7 @@ async function pollAccess(state: Subscription): Promise<Mode | undefined> {
         refuse(state);
         return;
       }
+      state.memberId = memberId;
       state.access = await chatSubscriptionAccess(options, memberId, conversationId, deadline);
     }
     const access = await state.access(deadline);
@@ -94,6 +98,20 @@ async function pollAccess(state: Subscription): Promise<Mode | undefined> {
     state.accessVersion = access.accessPosition;
     const mode = access.mode;
     state.accessPassed = true;
+    if (!state.privateSubscribed && state.memberId) {
+      function current() {
+        return validSession(session, config, options) && socket.readyState === socket.OPEN;
+      }
+      async function confirm() {
+        if (!current() || !state.access) return false;
+        await state.access(performance.now() + 1500);
+        return current();
+      }
+      const subscriber = { store: options.store, silo: options.silo,
+        memberId: state.memberId, conversationId, socket, current, confirm };
+      subscribePrivateOutput(subscriber);
+      state.privateSubscribed = true;
+    }
     delete state.applyingSince;
     return mode;
   } catch (error) {
