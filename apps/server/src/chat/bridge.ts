@@ -245,7 +245,6 @@ function reportReceiver(options: ReportOptions, input: BridgeInput,
 }
 
 export async function connectBridge(options: BridgeOptions, input: BridgeInput, tokens?: Tokens) {
-  const openedPosition = await options.store.head();
   const socketOptions = { headers: { 'x-bridge-token': input.bearer },
     maxPayload: 256 * 1024, handshakeTimeout: 5000 };
   const socket = new WebSocket(input.url, socketOptions);
@@ -289,7 +288,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   socket.once('close', forgetRoutineStarts);
   const memory = memoryBridge(options, input, socket);
   const routines = routineBridge(options, input, socket);
-  const output = privateOutput(options, input, socket, openedPosition);
+  const output = privateOutput(options, input, socket);
   const reportOptions = { ...options, routineStart, memory, routines, output };
   const reports = reportReceiver(reportOptions, input, tokens, socket, refuse, approvals, control);
   socket.on('message', reports.receiveReport);

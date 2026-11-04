@@ -5,8 +5,9 @@ Part of #97. Server part only; native admission remains disabled.
 The bridge accepts strict `private_reply` reports with sequence, previousSequence,
 conversationId, turnId, threadId, generation, inputGeneration and existing `text`.
 Requester and assistant claims are refused. Saved server admission supplies identity.
-Admission must follow the saved position captured before opening this bridge connection.
-Saved preparation must match admission and both generations, with loading proved.
+Admission must follow the position captured when this bridge connection opens.
+A failed position read refuses private delivery without delaying Stop. Saved preparation
+must match admission and both generations, with loading proved.
 Only the first output-loss record for a turn can release bytes. Deltas are not supported.
 
 The strict notification reuses chat data fields `text` and `turnId`, with conversation,

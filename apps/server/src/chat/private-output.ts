@@ -37,7 +37,11 @@ export function subscribePrivateOutput(subscriber: Subscriber) {
 
 // Keep no reply after its single release attempt. A fresh connection cannot recover this map.
 export function privateOutput(options: Options, computer: { computerId: string; assistantId: string },
-  socket: WebSocket, openedPosition: number) {
+  socket: WebSocket) {
+  function unavailablePosition() { return Infinity; }
+  // Keep a slow position read from delaying Stop or other bridge controls.
+  const readingPosition = options.store.head(undefined, performance.now() + 10_000);
+  const openedPosition = readingPosition.catch(unavailablePosition);
   const pending = new Map<number, Pending>();
   function clear() {
     for (const entry of pending.values()) entry.clear();
@@ -89,7 +93,8 @@ export function privateOutput(options: Options, computer: { computerId: string; 
     const entry: Pending = candidate;
     try {
       if (!recorded) return;
-      const binding = await savedBinding(options, computer, entry.reply, openedPosition);
+      const connectionPosition = await openedPosition;
+      const binding = await savedBinding(options, computer, entry.reply, connectionPosition);
       for (const recipient of entry.recipients) {
         if (recipient.memberId !== binding.requesterId || !subscribers.has(recipient)) continue;
         function send() {
