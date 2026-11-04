@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { foldRoutine, routineSkippedSchema, type RoutineState } from '@opencrane/events';
+import { foldRoutine, type EventEnvelope, type RoutineState } from '@opencrane/events';
 import { createStore, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { createEventStore, type AppendCommand } from '@opencrane/event-store';
 import { event } from '@opencrane/event-store/testing';
@@ -9,6 +9,7 @@ import { openfga } from '../../../libs/authz/test/services.ts';
 import { routine, joinedMember } from '../../../libs/authz/test/routine-fixture.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from '../../server/test/support/duplicate-window.ts';
+import { routineAsk } from '../../server/test/support/routine-ask.ts';
 import { claimRoutineDue } from '../src/routine-due.ts';
 import { withRoutineLeadership } from '../src/routine-leadership.ts';
 import { skipRoutineOccurrence } from '../src/routine-skip.ts';
@@ -46,6 +47,7 @@ async function setup() {
   const database = { query: forbiddenEffect };
   for (const saved of events) await auth.handler.handle(saved, database);
 }
+function ignoreError() {}
 function forbiddenEffect(): never { throw new Error('Forbidden effect'); }
 async function cleanup() {
   vi.restoreAllMocks();
@@ -69,11 +71,9 @@ async function dst() {
   const row = await nats.store.readEvent(first.position);
   expect(row.event.type).toBe('routine.occurrence_skipped');
   expect(row.event.time).toBe('2027-03-28T01:00:00.000Z');
-  const data = routineSkippedSchema.parse(row.event.data);
-  expect(data.reason).toBe('dst');
-  expect(data.cursor).toBeNull();
-  expect(data.next?.at).toBe('2027-04-04T00:30:00.000Z');
-  expect(data.next?.localDate).toBe('2027-04-04');
+  const expected = { reason: 'dst', cursor: null,
+    next: { at: '2027-04-04T00:30:00.000Z', localDate: '2027-04-04' } };
+  expect(row.event.data).toMatchObject(expected);
   expect(await nats.store.head()).toBe(3);
   const replayed = await state();
   expect(replayed.activeRun).toBeNull();
@@ -100,7 +100,7 @@ async function occupied(kind = 'starting') {
     const { definition: _definition, source: _source, slot: _slot,
       firedAt: _firedAt, startBy: _startBy, ...binding } = activation;
     const admitted = { ...updated, id: 'activation', commandId: 'activation',
-      type: 'routine.run_activation_admitted', principal: { kind: 'system', id: 'opencrane-server' },
+      type: 'routine.run_activation_admitted', principal: { kind: 'system' as const, id: 'opencrane-server' },
       data: binding };
     await nats.seed([admitted]);
     if (kind === 'stopping') {
@@ -111,6 +111,10 @@ async function occupied(kind = 'starting') {
         type: 'routine.run_stop_requested', data: control };
       await nats.seed([stopping]);
     }
+  }
+  if (kind === 'Ask') {
+    const binding = { conversationId: run.conversationId, turnId: run.turnId };
+    await routineAsk(nats.store, 'Requested', binding);
   }
   const following = { ...next, localDate: '2026-10-25', at: '2026-10-25T00:30:00.000Z' };
   const advance = { ...updated, id: 'following', commandId: 'following',
@@ -123,7 +127,8 @@ async function occupied(kind = 'starting') {
 async function overlap(kind: string) {
   const request = await occupied(kind);
   const before = await state();
-  const receipt = await skip(request);
+  const [receipt, repeated] = await Promise.all([skip(request), skip(request)]);
+  expect(repeated).toEqual(receipt);
   const after = await state();
   expect(after.activeRun).toEqual(before.activeRun);
   expect(after.activation).toEqual(before.activation);
@@ -146,8 +151,8 @@ it.each([[-1, false], [-1, true], [60_001, true], [3_600_000, true]])(
 async function invalid(kind: string) {
   const created = creation();
   const data = { ...created.data };
-  let changed = { ...created, id: 'changed', commandId: 'changed',
-    type: 'routine.updated', data: data as unknown };
+  let changed: EventEnvelope = { ...created, id: 'changed', commandId: 'changed',
+    type: 'routine.updated', data };
   if (kind === 'paused') changed.data = { ...data, status: 'paused' };
   else if (kind === 'retired') changed = { ...routine('routine.retired'), id: 'changed' };
   else if (kind === 'legacy') changed.data = { routineId: 'orders', schedule: '* * * * *',
@@ -172,7 +177,7 @@ async function idle() {
   const data = { ...binding, outcome: 'cancelled', reason: 'root_stopped',
     terminalEvidence: { eventId: 'closed', position: 1 } };
   const finished = { ...creation(), id: 'finished', commandId: 'finished',
-    type: 'routine.run_finished', principal: { kind: 'system', id: 'opencrane-server' }, data };
+    type: 'routine.run_finished', principal: { kind: 'system' as const, id: 'opencrane-server' }, data };
   await nats.seed([finished]);
   request.expectedPosition = await nats.store.head('routine-orders');
   await expect(skip(request)).rejects.toThrow();
@@ -203,32 +208,64 @@ async function recovery() {
   }
 }
 it('recovers the same receipt after lost reply, restart and dedupe expiry', recovery);
-async function access(kind: string, saved: boolean) {
-  if (saved) await skip();
-  if (kind === 'worker') owned = false;
-  else if (kind === 'signal') stop.abort();
-  else if (kind === 'member') await nats.seed([event('removed', 'member-alice', 'member.removed')]);
-  else {
-    const client = new TupleClient(binding);
-    const receipt = { user: objectId('silo', 'test'), relation: 'applied',
-      object: objectId('projection_event', 'test', creation().id) };
-    await client.write([], [receipt]);
+async function access(kind: string, phase: string) {
+  async function revoke() {
+    if (kind === 'worker') owned = false;
+    else if (kind === 'signal') stop.abort();
+    else if (kind === 'member') {
+      await nats.seed([event('removed', 'member-alice', 'member.removed')]);
+    } else {
+      const client = new TupleClient(binding);
+      const receipt = { user: objectId('silo', 'test'), relation: 'applied',
+        object: objectId('projection_event', 'test', creation().id) };
+      await client.write([], [receipt]);
+    }
   }
+  if (phase === 'retry') await skip();
   const before = await nats.store.head();
+  if (phase === 'after') {
+    const append = nats.store.append.bind(nats.store);
+    async function revokeAfterAppend(change: AppendCommand) {
+      const result = await append(change);
+      await revoke();
+      return result;
+    }
+    const spy = vi.spyOn(nats.store, 'append');
+    spy.mockImplementationOnce(revokeAfterAppend);
+  } else {
+    await revoke();
+  }
   await expect(skip()).rejects.toThrow(/^Routine skip refused$/u);
-  expect(await nats.store.head()).toBe(before);
+  const saved = await state();
+  expect(saved.definition?.next !== null).toBe(phase !== 'before');
+  if (phase === 'after') expect(await nats.store.head('routine-orders')).toBe(before + 1);
 }
-it.each([['worker', false], ['worker', true], ['signal', false], ['signal', true],
-  ['member', false], ['member', true], ['receipt', false], ['receipt', true]] as const)(
-  'refuses %s loss with saved receipt %s', access);
+it.each(['before', 'retry', 'after'])('refuses owner removal %s', access.bind(null, 'member'));
+it.each(['before', 'retry', 'after'])('refuses lost leadership %s', access.bind(null, 'worker'));
+it.each(['before', 'retry', 'after'])('refuses cancellation %s', access.bind(null, 'signal'));
+it.each(['before', 'retry', 'after'])('refuses missing receipts %s', access.bind(null, 'receipt'));
+async function backwards() {
+  now += 10_000;
+  const append = nats.store.append.bind(nats.store);
+  async function reverseClock(change: AppendCommand) {
+    now -= 1;
+    return append(change);
+  }
+  const spy = vi.spyOn(nats.store, 'append');
+  spy.mockImplementationOnce(reverseClock);
+  await expect(skip()).rejects.toThrow(/^Routine skip refused$/u);
+  expect(await nats.store.head()).toBe(2);
+}
+it('refuses a clock moving backwards during append', backwards);
 async function cancelled(afterAccess: boolean) {
+  let checked = false;
   const options = { databaseUrl: process.env['PG_TEST_URL']!, silo: 'test', signal: stop.signal };
   async function work(lease: Parameters<Parameters<typeof withRoutineLeadership>[1]>[0]) {
     const append = nats.store.append.bind(nats.store);
     const head = nats.store.head.bind(nats.store);
     let appending = false;
     async function loseSession() {
-      const admin = connectProjectionDb(options.databaseUrl);
+      const admin = connectProjectionDb(options.databaseUrl, ignoreError);
       try {
         await admin.db.query(`SELECT pg_terminate_backend(pid) FROM pg_locks
           WHERE locktype = 'advisory' AND granted AND
@@ -258,7 +295,10 @@ async function cancelled(afterAccess: boolean) {
     const trusted = { ...worker(), ...lease };
     await expect(skipRoutineOccurrence(nats.store, trusted, input)).rejects.toThrow();
     expect(await nats.store.head()).toBe(2);
+    checked = true;
   }
-  await withRoutineLeadership(options, work);
+  await expect(withRoutineLeadership(options, work)).rejects.toThrow(
+    /^Routine leadership unavailable$/u);
+  expect(checked).toBe(true);
 }
 it.each([false, true])('refuses session loss during append, after access %s', cancelled);

@@ -929,7 +929,7 @@ Pending reads keep their existing deadlines; cancellation does not detach them.
 
 `test/routine-due.test.ts` uses disposable NATS and OpenFGA for claims, access
 removal, missing membership, permission loss, races and recovery.
-Ticks, missed/skip writers, catch-up, manual runs, activation,
+Ticks, missed-range writers, catch-up, manual runs, activation,
 deployment and fresh-install execution qualification remain later work.
 
 ### Routine leadership session
@@ -966,3 +966,27 @@ Real due commands cover withheld appends and receipts, lost replies,
 owner refusal and unchanged `startBy`. Wake, model, tool and broker spies stay unused.
 No worker registration, tick queue, scan or dispatch is added. Company execution
 remains blocked; saved unverified company bearers grant no broker access.
+
+### Internal checked occurrence skip
+
+`src/routine-skip.ts` provides `skipRoutineOccurrence(store, worker, input)` for
+P4-24 PR 8c, part of row 8. It takes the same expected position, revisions, local date
+and trusted worker checks as due. One conditional append saves the existing
+`routine.occurrence_skipped`; execution remains unavailable and there is no caller
+outside tests. History precedes the short access check. Cancellation reaches the
+store's final publication guard. Current owner access and leadership gate receipts too.
+
+For a missing local time, `next` is null because the slot schema requires a real
+instant. The command derives the first candidate after `effectiveAt` and the saved
+cursor. It records the skip at the calendar's `checkAt`, retains the last real cursor
+and saves the following slot. It never invents an instant for the missing time.
+For overlap, it checks the saved next slot, advances the cursor, and preserves the
+occupied run, activation and Stop state. Both kinds refuse early or over-sixty-second
+late writes and a clock moving backwards during append. Repeated hours use the first
+offset. Lost replies and retries recover by the original expected position and full
+saved event, beyond broker deduplication retention. Changed inputs refuse.
+
+`test/routine-skip.test.ts` uses disposable NATS, PostgreSQL and OpenFGA with controlled
+time. It covers gaps, occupied runs, races, recovery, access loss and cancellation
+inside and after append's access check. Ticks, scans, downtime ranges, dispatch and
+fresh-install live qualification remain later work. Company credentials are unchanged.
