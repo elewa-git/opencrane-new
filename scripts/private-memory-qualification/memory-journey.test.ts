@@ -48,26 +48,27 @@ async function observesStore(name: string, role = 'command', silo = 'test'): Pro
     await rm(directory, { recursive: true, force: true });
   }
 }
-it.each(['invalidation', 'unrelatedActivity', 'requesterIsolation', 'sessionIsolation'])(
+it.each(['invalidation', 'unrelatedActivity', 'requesterIsolation', 'sessionIsolation', 'stopReconnect'])(
   'executes %s on the configured event store without claiming live qualification', observesStore, 30_000);
 
-async function failedJourney(): Promise<void> {
+async function failedJourney(name: string): Promise<void> {
   vi.mocked(probeHost).mockReturnValue(true);
   vi.stubEnv('SILO_ID', 'test');
   vi.stubEnv('NATS_URL', '');
-  const result = await runJourney(JSON.stringify({ ...request, name: 'invalidation' }));
+  const result = await runJourney(JSON.stringify({ ...request, name }));
   expect(result).toEqual({ result: 'FAIL', reason: 'journey_failed' });
 }
-it('refuses a journey that cannot execute without exposing connection settings', failedJourney);
+it.each(['invalidation', 'stopReconnect'])(
+  'refuses unavailable %s without exposing connection settings', failedJourney);
 
 async function deniedAppend(name: string): Promise<void> {
   await observesStore(name, 'projection');
 }
-it.each(['invalidation', 'requesterIsolation', 'sessionIsolation'])(
+it.each(['invalidation', 'requesterIsolation', 'sessionIsolation', 'stopReconnect'])(
   'refuses when the measured store rejects %s', deniedAppend, 30_000);
 
 async function wrongSilo(name: string): Promise<void> {
   await observesStore(name, 'command', 'foreign');
 }
-it.each(['requesterIsolation', 'sessionIsolation'])(
+it.each(['requesterIsolation', 'sessionIsolation', 'stopReconnect'])(
   'refuses %s before writes when the configured silo differs', wrongSilo, 30_000);

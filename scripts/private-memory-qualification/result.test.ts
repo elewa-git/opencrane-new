@@ -55,11 +55,13 @@ async function otherSilo() {
 }
 it('refuses a caller whose silo differs from the measured deployment', otherSilo);
 
-async function incompleteRun(status: string) {
+async function incompleteRun(status: string, name: string) {
   const deployment = await initialQualificationFixture();
   if (deployment.result.result !== 'PASS') throw new Error('Fixture collection failed');
-  const checks = { ...deployment.result.checks, invalidation: status };
+  const checks = { ...deployment.result.checks, [name]: status };
   deployment.replace({ ...deployment.result, result: 'PARTIAL', checks });
   await expect(readDeploymentQualification('test')).rejects.toThrow();
 }
-it.each(['PARTIAL', 'NOT RUN'])('keeps %s journey results out of admission', incompleteRun);
+const incompleteChecks = [['PARTIAL', 'invalidation'], ['NOT RUN', 'invalidation'],
+  ['PARTIAL', 'stopReconnect']];
+it.each(incompleteChecks)('keeps %s %s results out of admission', incompleteRun);
