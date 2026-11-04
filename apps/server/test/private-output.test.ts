@@ -488,6 +488,52 @@ async function clearsOriginalBrowser(kind: string) {
 it.each(['correct', 'forget', 'expiry', 'revoke'])(
   'clears only the original live browser after completed memory %s', clearsOriginalBrowser);
 
+async function completeStoppedTurn() {
+  const completed = { type: 'agent.turn_completed', conversationId: 'first', turnId: 'first',
+    assistantId: 'assistant', sequence: 2, previousSequence: 1 };
+  const response = once(peer, 'message');
+  peer.send(JSON.stringify(completed));
+  const values: unknown[] = await response;
+  const raw = values[0];
+  if (!Buffer.isBuffer(raw)) throw new Error('Missing completion acknowledgement');
+  const acknowledgement = { type: 'ack', sequence: 2 };
+  expect(JSON.parse(raw.toString())).toEqual(acknowledgement);
+  await link.settled();
+  const rows = await history(setup.nats.store, 'conversation-first', 'test');
+  expect(rows.at(-1)?.event.type).toBe('agent.turn_completed');
+}
+async function clearsDeliveredReplyOnStop(completionBeforePoll: boolean) {
+  const first = await subscribe();
+  await send();
+  await flushBrowser(first.socket);
+  expect(privateFrames(first.frames)).toHaveLength(1);
+  const laterSubscriber = await subscribe();
+  const neighbourStop = { conversationId: 'first', turnId: 'neighbour', requestedBy: 'alice' };
+  await setup.append('conversation-first', 'agent.turn_stop_requested', neighbourStop);
+  await link.memory.poll('first');
+  await flushBrowser(first.socket);
+  expect(clearanceFrames(first.frames)).toEqual([]);
+  const stop = { conversationId: 'first', turnId: 'first', requestedBy: 'alice' };
+  await setup.append('conversation-first', 'agent.turn_stop_requested', stop);
+  if (completionBeforePoll) await completeStoppedTurn();
+  await link.memory.poll('first');
+  await flushBrowser(first.socket);
+  expect(clearanceFrames(first.frames)).toEqual([expectedClearance()]);
+  if (!completionBeforePoll) await completeStoppedTurn();
+  await link.memory.poll('first');
+  await link.memory.poll('first');
+  await flushBrowser(first.socket);
+  await flushBrowser(laterSubscriber.socket);
+  expect(clearanceFrames(first.frames)).toEqual([expectedClearance()]);
+  expect(privateFrames(first.frames)).toHaveLength(1);
+  expect(clearanceFrames(laterSubscriber.frames)).toEqual([]);
+  expect(privateFrames(laterSubscriber.frames)).toEqual([]);
+  expect(first.socket.readyState).toBe(WebSocket.OPEN);
+}
+it.each([false, true])(
+  'clears a delivered reply once after saved Stop with completion before poll: %s',
+  clearsDeliveredReplyOnStop);
+
 async function prematureReceiptCannotForgetBrowser() {
   const first = await completedReply();
   const receipt = { type: 'private_output_cleared', conversationId: 'first',
