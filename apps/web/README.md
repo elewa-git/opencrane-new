@@ -115,7 +115,7 @@ download. Refused files show the reason in plain words.
    without granting access to tools or groups.
 2. **Conversations.** A person sends a message and sees the assistant's reply arrive.
    A chat turn is one message and its reply. Stop requests an end to that reply;
-   a budget stop separately explains that a spending limit ended work.
+   a budget stop separately explains that a spending limit ended work and shows any reset time.
    Colleague chats send human text and never start assistant work.
    A socket rate limit keeps the selected chat, saved messages and draft while the
    connection retries. Recovery reads missing updates without resending work.

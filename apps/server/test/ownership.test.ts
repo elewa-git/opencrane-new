@@ -22,6 +22,11 @@ let runner: ProjectionRunner;
 let count = 0;
 const logger = createLogger('ownership-test', { level: 'silent' });
 
+function futureInvitationExpiry(): string {
+  const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+  return new Date(Date.now() + thirtyDays).toISOString();
+}
+
 async function append(subject: string, type: string, data: unknown, silo = 'acme') {
   const record = {
     ...event(`ownership-fixture-${++count}`, subject, type), silo, data,
@@ -100,12 +105,12 @@ async function projectsPostSeedInvitations() {
   await project();
   await append('member-owner', 'member.invited', {
     memberId: 'owner', email: 'changed@example.test', role: 'member', invitedBy: 'admin',
-    invitationId: 'reinvite-seeded-owner', expiresAt: '2026-11-01T00:00:00Z',
+    invitationId: 'reinvite-seeded-owner', expiresAt: futureInvitationExpiry(),
     invitedIdentity: { issuer: config.issuerUrl, sub: 'another-identity' },
   });
   await append('member-pending-owner', 'member.invited', {
     memberId: 'pending-owner', email: 'pending@example.test', role: 'owner', invitedBy: 'owner',
-    invitationId: 'invite-pending-owner', expiresAt: '2026-11-01T00:00:00Z',
+    invitationId: 'invite-pending-owner', expiresAt: futureInvitationExpiry(),
   });
   await runner.run(members);
   const feed = await connectMemberFeed(String(dbs.queue.options.connectionString));
@@ -146,7 +151,7 @@ async function conflictsOnAuthorityChange() {
       changed = true;
       await append('member-owner', 'member.invited', {
         memberId: 'owner', email: 'owner@example.test', role: 'admin', invitedBy: 'admin',
-        invitationId: 'authority-race', expiresAt: '2026-11-01T00:00:00Z',
+        invitationId: 'authority-race', expiresAt: futureInvitationExpiry(),
       });
     }
     return original(subject, deadline);
@@ -444,7 +449,8 @@ async function assertRefusalPreservesAuthority(memberId: string, commandId: stri
 async function refusesOwnerInvitation() {
   await append('member-invitee', 'member.invited', {
     memberId: 'invitee', email: 'invitee@example.test', role: 'owner', invitedBy: 'owner',
-    invitationId: 'invite-owner', expiresAt: '2026-11-01T00:00:00Z', invitedIdentity: { issuer: config.issuerUrl, sub: 'idp-invitee' },
+    invitationId: 'invite-owner', expiresAt: futureInvitationExpiry(),
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'idp-invitee' },
   });
   const before = await nats.store.head();
   const memberSequence = await nats.store.head('member-invitee');
@@ -512,7 +518,7 @@ async function refusesOwnerReinvitation() {
   const actorId = state.owners[0]!.memberId;
   await append(`member-${actorId}`, 'member.invited', {
     memberId: actorId, email: `${actorId}@example.test`, role: 'member', invitedBy: 'admin',
-    invitationId: 'reinvite-owner', expiresAt: '2026-11-01T00:00:00Z',
+    invitationId: 'reinvite-owner', expiresAt: futureInvitationExpiry(),
     invitedIdentity: { issuer: config.issuerUrl, sub: `idp-${actorId}` },
   });
   const input = { memberId: actorId, invitationId: 'reinvite-owner',

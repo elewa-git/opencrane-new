@@ -47,6 +47,7 @@ async function mount(reply: unknown, status = 200) {
   fixture.componentRef.setInput('reconnectedAt', '');
   fixture.componentRef.setInput('endedAt', '');
   fixture.componentRef.setInput('denied', false);
+  fixture.componentRef.setInput('now', '2026-10-31T12:00:00Z');
   fixture.detectChanges();
   await vi.waitFor(() => expect(fixture.componentInstance['loading']()).toBe(false));
   fixture.detectChanges();
