@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -24,6 +25,18 @@ async function serveAssets(route) {
   if (url.origin !== origin || url.pathname.startsWith('/probe')) {
     requests.push(request.url());
     await route.abort();
+    return;
+  }
+  if (url.pathname === '/workspace') {
+    const nonce = randomBytes(18).toString('base64');
+    const index = await readFile(resolve(build, 'index.html'), 'utf8');
+    const body = index.replace('<app-root', `<app-root ngCspNonce="${nonce}"`);
+    const policy = "default-src 'self'; script-src 'self'; "
+      + `style-src 'self' 'nonce-${nonce}'; img-src 'self' data:; `
+      + "connect-src 'self'; object-src 'none'; base-uri 'self'";
+    const response = { body, contentType: 'text/html',
+      headers: { 'content-security-policy': policy } };
+    await route.fulfill(response);
     return;
   }
   if (url.pathname.endsWith('.js')) {
@@ -69,6 +82,19 @@ async function drawBlockedImage(source) {
   }
 }
 
+async function rendersTextWarning(source) {
+  const originalRender = globalThis.mermaid.render;
+  const result = await originalRender('text-limit-probe', source);
+  function returnWarning() {
+    globalThis.mermaid.render = originalRender;
+    return Promise.resolve(result);
+  }
+  globalThis.mermaid.render = returnWarning;
+  const text = result.svg.replace(/<[^>]*>/g, '');
+  const joinedText = text.replace(/\s/g, '');
+  return joinedText.includes('Maximumtextsizeindiagramexceeded');
+}
+
 function canReadParent() {
   try {
     return Boolean(globalThis.parent.document.body);
@@ -83,9 +109,9 @@ async function probeNetwork() {
     violations.push(event.effectiveDirective);
   }
   globalThis.document.addEventListener('securitypolicyviolation', recordViolation);
-  const image = new Image();
+  const image = new globalThis.Image();
   image.src = 'https://attacker.invalid/image';
-  const localImage = new Image();
+  const localImage = new globalThis.Image();
   localImage.src = '/probe-image';
   const script = globalThis.document.createElement('script');
   script.src = 'https://attacker.invalid/script.js';
@@ -120,7 +146,9 @@ try {
   fixture.add('agent.message_delta', firstDelta);
   await page.goto(origin + '/workspace?conversation=chat');
   const reply = page.locator('oc-assistant-markdown');
-  await reply.getByText('Ordinary reply', { exact: true }).waitFor();
+  const textOptions = { exact: true };
+  const ordinaryReply = reply.getByText('Ordinary reply', textOptions);
+  await ordinaryReply.waitFor();
   await page.waitForLoadState('networkidle');
   assert.equal(scripts.some(containsMermaid), false, 'Ordinary replies must not load Mermaid');
 
@@ -131,9 +159,12 @@ try {
   await page.waitForLoadState('networkidle');
   const sentinel = { ...turn, messageId: 'reply', text: '\n\n```mermaid\ngraph LR\nSafe --> Done\n```' };
   fixture.add('agent.message_delta', sentinel);
-  await reply.getByRole('img', { name: 'Diagram' }).last().waitFor();
+  const diagramOptions = { name: 'Diagram' };
+  const diagrams = reply.getByRole('img', diagramOptions);
+  const firstDiagram = diagrams.last();
+  await firstDiagram.waitFor();
   await page.waitForLoadState('networkidle');
-  const renderedImage = reply.getByRole('img', { name: 'Diagram' }).last();
+  const renderedImage = diagrams.last();
   const imageSource = await renderedImage.getAttribute('src');
   const svg = Buffer.from(imageSource.split(',')[1], 'base64').toString('utf8');
   const viewBox = /viewBox="([^"]+)"/.exec(svg);
@@ -180,7 +211,9 @@ try {
     edges += `A${index} --> A${index + 1}\n`;
   }
   const oversized = 'graph LR\nA["' + 'x'.repeat(51000) + '"]';
-  const sources = [override + edges, oversized, override + 'this is not a diagram'];
+  assert.equal(await renderer.evaluate(rendersTextWarning, override + oversized), true);
+  const warningSource = 'graph LR\nWarning --> Reply';
+  const sources = [warningSource, override + edges, oversized, override + 'this is not a diagram'];
   for (const code of sources) {
     const delta = { ...turn, messageId: 'reply', text: '\n\n```mermaid\n' + code + '\n```' };
     fixture.add('agent.message_delta', delta);
@@ -188,12 +221,16 @@ try {
   const finalDelta = { ...turn, messageId: 'reply',
     text: '\n\n```mermaid\n' + override + 'graph LR\nFinal --> Done\n```' };
   fixture.add('agent.message_delta', finalDelta);
-  await reply.locator('oc-mermaid-diagram').last().getByRole('img').waitFor();
   const blocks = reply.locator('oc-mermaid-diagram');
+  const finalBlock = blocks.nth(sources.length + 2);
+  const finalImage = finalBlock.getByRole('img');
+  await finalImage.waitFor();
   for (let index = 0; index < sources.length; index++) {
     const block = blocks.nth(index + 2);
     assert.equal(await block.locator('pre code').textContent(), sources[index]);
-    assert.equal(await block.getByRole('button', { name: 'Copy code' }).count(), 1);
+    const buttonOptions = { name: 'Copy code' };
+    const copyButton = block.getByRole('button', buttonOptions);
+    assert.equal(await copyButton.count(), 1);
     assert.equal(await block.locator('img').count(), 0);
   }
   const expectedSettings = { config, initialisations: 1 };

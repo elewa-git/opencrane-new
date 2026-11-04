@@ -1,17 +1,16 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { AssistantMarkdown } from './assistant-markdown';
+import { MERMAID_RENDERER } from './mermaid-diagram';
 
-function mockMermaid() {
-  function render(_id: string, code: string) {
-    if (code === 'this is not a diagram') {
-      return Promise.reject(new Error('Invalid diagram'));
-    }
-    return Promise.resolve({ svg: '<svg xmlns="http://www.w3.org/2000/svg"></svg>', diagramType: 'flowchart' });
+function render(code: string) {
+  if (code === 'this is not a diagram') {
+    return Promise.reject(new Error('Invalid diagram'));
   }
-  return { default: { initialize: vi.fn(), render: vi.fn(render) } };
+  const result = { svg: '<svg xmlns="http://www.w3.org/2000/svg"></svg>' };
+  return Promise.resolve(result);
 }
 
-vi.mock('mermaid', mockMermaid);
+const renderMermaid = vi.fn(render);
 
 function mount(text: string) {
   const fixture = TestBed.createComponent(AssistantMarkdown);
@@ -176,15 +175,6 @@ async function rendersMermaidAsAnImage() {
     expect(image?.getAttribute('src')).toMatch(/^data:image\/svg\+xml/);
   }
   await vi.waitFor(imageAppears);
-  const { default: mermaid } = await import('mermaid');
-  const initialisation = vi.mocked(mermaid.initialize).mock.calls[0]?.[0];
-  expect(initialisation?.securityLevel).toBe('strict');
-  expect(initialisation?.htmlLabels).toBe(false);
-  expect(initialisation?.startOnLoad).toBe(false);
-  expect(initialisation?.logLevel).toBe('fatal');
-  expect(initialisation?.secure).toContain('securityLevel');
-  expect(initialisation?.secure).toContain('htmlLabels');
-  expect(initialisation?.secure).toContain('logLevel');
   expect(root.querySelector('iframe, svg, script, a')).toBeNull();
 }
 
@@ -253,24 +243,24 @@ async function settleDiagram(fixture: ComponentFixture<AssistantMarkdown>) {
   await fixture.whenStable();
 }
 
-beforeEach(async function resetRenderer() {
-  const { default: mermaid } = await import('mermaid');
-  const implementation = mockMermaid().default.render.getMockImplementation();
-  vi.mocked(mermaid.render).mockReset();
-  if (implementation) {
-    vi.mocked(mermaid.render).mockImplementation(implementation);
-  }
-});
+function resetRenderer() {
+  renderMermaid.mockReset();
+  renderMermaid.mockImplementation(render);
+  const provider = { provide: MERMAID_RENDERER, useValue: renderMermaid };
+  const testingModule = { providers: [provider] };
+  TestBed.configureTestingModule(testingModule);
+}
+
+beforeEach(resetRenderer);
 
 async function waitsForClosedMermaidFence() {
-  const { default: mermaid } = await import('mermaid');
-  vi.mocked(mermaid.render).mockClear();
+  renderMermaid.mockClear();
   const { root, fixture } = mount('```mermaid\ngraph LR\nA --> B');
   const deltas = ['\nB --> C[', 'Done]', '\n``', '`'];
   let text = '```mermaid\ngraph LR\nA --> B';
   for (const delta of deltas) {
     await settleDiagram(fixture);
-    expect(mermaid.render).not.toHaveBeenCalled();
+    expect(renderMermaid).not.toHaveBeenCalled();
     expect(root.querySelector('img')).toBeNull();
     expect(root.querySelector('pre code')).not.toBeNull();
     text += delta;
@@ -281,19 +271,18 @@ async function waitsForClosedMermaidFence() {
     expect(root.querySelector('img')).not.toBeNull();
   }
   await vi.waitFor(diagramAppears);
-  expect(mermaid.render).toHaveBeenCalledTimes(1);
+  expect(renderMermaid).toHaveBeenCalledTimes(1);
 }
 
 async function refusesOversizedMermaid() {
-  const { default: mermaid } = await import('mermaid');
-  vi.mocked(mermaid.render).mockClear();
+  renderMermaid.mockClear();
   const writeText = vi.fn().mockResolvedValue(undefined);
   const clipboard = { clipboard: { writeText } };
   vi.stubGlobal('navigator', clipboard);
   const source = 'graph LR\nA["' + 'x'.repeat(51000) + '"]';
   const { root, fixture } = mount('```mermaid\n' + source + '\n```');
   await settleDiagram(fixture);
-  expect(mermaid.render).not.toHaveBeenCalled();
+  expect(renderMermaid).not.toHaveBeenCalled();
   expect(root.querySelector('img')).toBeNull();
   expect(root.querySelector('pre code')?.textContent).toBe(source);
   root.querySelector('button')?.click();
@@ -302,9 +291,10 @@ async function refusesOversizedMermaid() {
 }
 
 async function refusesWarningImage() {
-  const { default: mermaid } = await import('mermaid');
-  const warning = { svg: '<svg>Maximum text size in diagram exceeded</svg>', diagramType: 'flowchart' };
-  vi.mocked(mermaid.render).mockResolvedValueOnce(warning);
+  const warningSvg = '<svg><text><tspan>Maximum text size in</tspan>'
+    + '<tspan>diagram exceeded</tspan></text></svg>';
+  const warning = { svg: warningSvg };
+  renderMermaid.mockResolvedValueOnce(warning);
   const source = 'graph LR\nA --> B';
   const { root, fixture } = mount('```mermaid\n' + source + '\n```');
   await settleDiagram(fixture);
@@ -314,7 +304,6 @@ async function refusesWarningImage() {
 }
 
 async function keepsNewestDiagram(lateFailure: boolean) {
-  const { default: mermaid } = await import('mermaid');
   let resolveRender!: (result: { svg: string; diagramType: string }) => void;
   let rejectRender!: (reason: Error) => void;
   function holdRender(
@@ -324,7 +313,7 @@ async function keepsNewestDiagram(lateFailure: boolean) {
     rejectRender = reject;
   }
   const pending = new Promise<{ svg: string; diagramType: string }>(holdRender);
-  vi.mocked(mermaid.render).mockReturnValueOnce(pending);
+  renderMermaid.mockReturnValueOnce(pending);
   const { root, fixture } = mount('```mermaid\ngraph LR\nOld --> Reply\n```');
   await settleDiagram(fixture);
   fixture.componentRef.setInput('text', '```mermaid\ngraph LR\nNew --> Reply\n```');
@@ -337,7 +326,8 @@ async function keepsNewestDiagram(lateFailure: boolean) {
   if (lateFailure) {
     rejectRender(new Error('Old render failed'));
   } else {
-    resolveRender({ svg: '<svg>Old reply</svg>', diagramType: 'flowchart' });
+    const oldResult = { svg: '<svg>Old reply</svg>', diagramType: 'flowchart' };
+    resolveRender(oldResult);
   }
   await settleDiagram(fixture);
   expect(root.querySelector('img')?.getAttribute('src')).toBe(currentSource);
