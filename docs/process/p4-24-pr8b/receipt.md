@@ -1,53 +1,40 @@
 # Routine leadership source checks
 
 Date: 4 November 2026. Part of #106, P4-24 PR 8b.
-Base: `cf809dada`. Test-first commit: `e8db29d92`.
-This change supplies the first worker part of accepted design row 8.
+Base: `4df894661`.
 
-The helper holds a separate PostgreSQL session lock for routine preparation.
-It checks that same session before claims and while preparation waits. Shutdown,
-query failure and connection loss cancel its signal. Old checks stay refused
-when another session takes over. The callback must stop and await its work;
-the helper drains pending checks before releasing the session.
+The routine worker holds a PostgreSQL session lock for one silo while it prepares
+claims. The callback receives a cancellation signal and a check of that same
+session. A lost session cancels the signal. The due command checks it after
+awaited reads and passes it into the conditional append. The event store checks
+the signal after its final access read, immediately before publication.
 
-`routine-due.ts`, both authority test files and the security rules are unchanged.
-No worker registration, queue, scan, skip/missed writer, sender, enable switch,
-event, dependency or money field was added. Company execution remains blocked.
-The new option and callback field names pass the existing risky-name substring rule.
+The new regression test pauses the real member access read during an append,
+terminates the old session, verifies that a replacement holds the lock, and
+then resumes the read. It also pauses after the access callback returns. Both
+cases leave the event count unchanged. The test was committed before the fix.
 
-## Local evidence
+No routine scheduler, tick, scan, sender, route or enable switch was added.
+Automatic scheduling remains off. The claim still records
+`executionAvailable: false` and does not start a computer, model or tool.
 
-`npm ci` completed. NATS and Lychee use the requested local binary symlinks.
-Tests use a throwaway PostgreSQL 17.6 container, disposable NATS and OpenFGA.
-`PG_TEST_URL` names only that test database. Lint, typecheck and tests run under
-`nice -n 10`, with one test worker. No development stack or model call was used.
+## Local checks
 
-The initial test failed because the helper did not exist. After the first passing
-ownership test, terminating the held PostgreSQL session exposed missing callback
-cancellation. That test failed before the background session probe was added.
-Logs are in `/tmp/pr8b-*.log` on the builder host.
+Tests used the provided PostgreSQL test URL and disposable NATS and OpenFGA
+fixtures. Lint, typecheck and tests ran under `nice -n 10`. The full lint scan
+used a 6 GiB Node heap.
 
 | Check | Result |
 | --- | --- |
-| Test-first proof | PASS: missing helper and missing session-loss cancellation failed first |
-| PostgreSQL/NATS/OpenFGA regressions and unchanged security rules | PASS: 518 tests |
-| Final leadership tests | PASS: 13 tests twice |
-| Wake, model, tool and broker calls | PASS: all spies stayed unused |
-| Typecheck | PASS: all workspaces and infrastructure; final ops check also passed |
+| Leadership tests | PASS: 15 tests on each of two runs |
+| Due claim tests | PASS: 46 tests on each of two runs |
+| Changed server claim test | PASS: once on each of two runs |
+| Typecheck | PASS: all workspaces and infrastructure projects |
+| Lint, including knip and changelog | PASS: 34 existing line count warnings, zero errors |
 | Event catalogue | PASS: 158 event types agree |
-| Knip, dependency, documentation, README and offline link checks | PASS |
-| Fixture, licence and changelog checks | PASS |
-| Full lint command | PASS: code and all remaining lint steps |
+| Full root suite | NOT RUN |
+| Fresh-install live journey | NOT RUN |
 
-The final leadership runs are `final3.log` and `final4.log`. The combined regression
-run is `targeted1.log`. No unhandled promise work was reported. The throwaway
-database and its volume were removed after testing.
-The initial full lint scan was stopped near Node's default memory limit. The final
-full run passed with a 6 GiB heap limit and `nice -n 10`; its log is `lint-final.log`.
-
-## Remaining work
-
-Full root suite and fresh-install live qualification: NOT RUN locally.
-Automatic scheduling remains PARTIAL. Ticks, candidate scans, missed/skip records,
-activation and company dispatch remain later work. The existing routines worker
-only updates read tables.
+The full server routine-session file did not complete locally. The changed
+claim test passed twice with the file filtered to that test. No owner stack or
+development stack was changed.
