@@ -211,6 +211,7 @@ async function isolatesProductionLaunches() {
   const computer = await uploadComputer();
   const socket = new WebSocket(computer.url.replace('http:', 'ws:') + '/bridge',
     { headers: { 'x-bridge-token': computer.credential.value } });
+  const opened = once(socket, 'open');
   const reports: Record<string, unknown>[] = [];
   function receive(bytes: Buffer) { reports.push(record(JSON.parse(bytes.toString()))); }
   socket.on('message', receive);
@@ -222,7 +223,7 @@ async function isolatesProductionLaunches() {
       text: 'Say hello again.', token: 'pending', expiresAt: Date.now() + 110_000 }));
   }
   try {
-    await once(socket, 'open');
+    await opened;
     socket.send(JSON.stringify({ type: 'resume', since: 0 }));
     send('first');
     send('second');
@@ -237,12 +238,14 @@ async function isolatesProductionLaunches() {
     const inspect = `
 import { readdirSync, readFileSync } from 'node:fs';
 const callers = new Set();
+function isPrivateHome(value) { return value.startsWith('HOME=/home/private/turn-'); }
+function isCaller(value) { return value.startsWith('PROXY_CALLER_TOKEN='); }
 for (const pid of readdirSync('/proc')) {
   if (!/^[0-9]+$/.test(pid)) continue;
   try {
     const env = readFileSync('/proc/' + pid + '/environ', 'utf8').split('\\0');
-    if (!env.some(value => value.startsWith('HOME=/home/private/turn-'))) continue;
-    callers.add(env.find(value => value.startsWith('PROXY_CALLER_TOKEN=')));
+    if (!env.some(isPrivateHome)) continue;
+    callers.add(env.find(isCaller));
   } catch {}
 }
 process.stdout.write(JSON.stringify({ distinct: callers.size }));
@@ -262,6 +265,127 @@ process.stdout.write(JSON.stringify({ distinct: callers.size }));
       expect(lines).toHaveLength(2);
     }
     await vi.waitFor(bothForwarded, { timeout: 15_000 });
+    const matrix = `
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+const inspect = ${JSON.stringify(inspect.replace('JSON.stringify({ distinct: callers.size })',
+      'JSON.stringify([...callers])'))};
+const bytes = execFileSync('setpriv', ['--reuid=1003', '--regid=1003', '--clear-groups',
+  'node', '--input-type=module', '-e', inspect]);
+function callerValue(value) { return value.slice('PROXY_CALLER_TOKEN='.length); }
+const values = JSON.parse(bytes);
+const callers = values.map(callerValue);
+callers.push(readFileSync('/home/codex/caller', 'utf8'));
+callers.push('f'.repeat(64));
+const threads = JSON.parse(process.argv[1]);
+const rows = [];
+for (const caller of callers) {
+  const statuses = [];
+  for (const thread of threads) {
+    const response = await fetch('http://127.0.0.1:8080/v1/responses', {
+      method: 'POST', headers: { authorization: 'Bearer ' + caller, 'session-id': thread },
+      body: JSON.stringify({ input: [{ role: 'user', content: 'fixture probe' }] }),
+    });
+    statuses.push(response.status);
+    await response.body.cancel();
+  }
+  rows.push(statuses);
+}
+process.stdout.write(JSON.stringify(rows));
+`;
+    function nativeId(report: Record<string, unknown>) { return report['threadId']; }
+    const threads = starts().map(nativeId);
+    const rows: unknown = JSON.parse(await computer.exec('node', '--input-type=module', '-e',
+      matrix, JSON.stringify(threads)));
+    if (!Array.isArray(rows)) throw new Error('Missing fixture statuses');
+    expect(rows.slice(0, 2)).toEqual(expect.arrayContaining([[200, 403], [403, 200]]));
+    expect(rows[2]).toEqual([403, 403]);
+    expect(rows[3]).toEqual([401, 401]);
+    for (const uid of [1000, 1002]) {
+      const attempt = `
+import { connect } from 'node:net';
+import { request } from 'node:http';
+const results = [];
+function sendControl(resolve) {
+  function received(response) {
+    results.push(response.statusCode);
+    response.resume();
+    response.on('end', resolve);
+  }
+  function denied() { results.push('denied'); resolve(); }
+  const options = { socketPath: '/run/codex/control.sock', method: 'POST', path: '/grant' };
+  const outgoing = request(options, received);
+  outgoing.on('error', denied);
+  outgoing.end(JSON.stringify({ thread: 'foreign', turnId: 'injected',
+    computer: 'injected', token: 'injected', expires: Date.now() + 60000 }));
+}
+await new Promise(sendControl);
+function openPrivate(resolve) {
+  const socket = connect('/run/executor/private.sock');
+  function ignoreError() {}
+  socket.on('error', ignoreError);
+  socket.on('close', resolve);
+  function challenged(bytes) {
+    results.push(/^[a-f0-9]{64}\\n$/.test(bytes.toString()) ? 'challenge' : 'unexpected');
+    socket.end(JSON.stringify({ caller: 'injected', env: { NODE_OPTIONS: 'injected' } }) + '\\n');
+  }
+  socket.on('data', challenged);
+}
+await new Promise(openPrivate);
+process.stdout.write(JSON.stringify(results));
+`;
+      const result = await computer.exec('setpriv', `--reuid=${uid}`, `--regid=${uid}`,
+        '--clear-groups', 'node', '--input-type=module', '-e', attempt);
+      expect(JSON.parse(result)).toEqual(uid === 1000 ? [401, 'challenge'] : ['denied']);
+    }
+    socket.send(JSON.stringify({ type: 'stop', turnId: 'first', conversationId: 'first' }));
+    async function onlySecondRemains() {
+      const result = await computer.exec('setpriv', '--reuid=1003', '--regid=1003',
+        '--clear-groups', 'node', '--input-type=module', '-e', inspect);
+      expect(JSON.parse(result)).toEqual({ distinct: 1 });
+    }
+    await vi.waitFor(onlySecondRemains, { timeout: 10_000 });
+    socket.send(JSON.stringify({ type: 'routine_prepare', id: 'routine',
+      conversationId: 'routine', assistantId: 'assistant', requesterId: 'alice',
+      expiresAt: Date.now() + 60_000 }));
+    function preparedRoutine() {
+      function isPrepared(report: Record<string, unknown>) {
+        return report['type'] === 'routine_prepared';
+      }
+      const prepared = reports.find(isPrepared);
+      expect(prepared).toBeDefined();
+      return prepared!;
+    }
+    const prepared = await vi.waitFor(preparedRoutine, { timeout: 10_000 });
+    socket.send(JSON.stringify({ type: 'turn', id: 'routine', conversationId: 'routine',
+      assistantId: 'assistant', requesterId: 'alice', executionMode: 'restricted',
+      text: 'Say hello again.', token: 'pending', expiresAt: Date.now() + 50_000,
+      threadId: prepared['threadId'], messageId: 'routine-input', rootId: 'routine-root',
+      senderAttemptId: 'attempt' }));
+    function routineStarted() { expect(starts()).toHaveLength(3); }
+    await vi.waitFor(routineStarted, { timeout: 10_000 });
+    const routineStart = starts()[2]!;
+    expect(routineStart['threadId']).toBe(prepared['threadId']);
+    socket.send(JSON.stringify({ type: 'ack', sequence: routineStart['sequence'],
+      token: 'admitted', expiresAt: Date.now() + 40_000 }));
+    sendOrdinary();
+    function sendOrdinary() {
+      socket.send(JSON.stringify({ type: 'turn', id: 'ordinary', conversationId: 'ordinary',
+        assistantId: 'assistant', text: 'Say hello again.', token: 'pending',
+        expiresAt: Date.now() + 50_000 }));
+    }
+    function ordinaryStarted() { expect(starts()).toHaveLength(4); }
+    await vi.waitFor(ordinaryStarted, { timeout: 10_000 });
+    socket.send(JSON.stringify({ type: 'ack', sequence: starts()[3]!['sequence'],
+      token: 'admitted', expiresAt: Date.now() + 40_000 }));
+    async function replacementsForwarded() {
+      const requests = await computer.requests();
+      expect(requests.trim().split('\n')).toHaveLength(6);
+    }
+    await vi.waitFor(replacementsForwarded, { timeout: 10_000 });
+
+
+
   } finally {
     socket.terminate();
     await computer.close();
@@ -269,3 +393,87 @@ process.stdout.write(JSON.stringify({ distinct: callers.size }));
 }
 it('gives concurrent production private launches distinct callers before saved admission',
   isolatesProductionLaunches, 60_000);
+
+async function closesFailedNativeStart(fault: string) {
+  const computer = await uploadComputer();
+  const socket = new WebSocket(computer.url.replace('http:', 'ws:') + '/bridge',
+    { headers: { 'x-bridge-token': computer.credential.value } });
+  const opened = once(socket, 'open');
+  const reports: Record<string, unknown>[] = [];
+  function receive(bytes: Buffer) { reports.push(record(JSON.parse(bytes.toString()))); }
+  socket.on('message', receive);
+  try {
+    // Replace only this disposable container's native boundary with a scripted child.
+    const child = `
+import { createInterface } from 'node:readline';
+import { writeFileSync } from 'node:fs';
+const lines = createInterface({ input: process.stdin });
+function receiveNative(line) {
+  const message = JSON.parse(line);
+  let result = {};
+  if (message.method === 'thread/start') {
+    writeFileSync('/tmp/fixture-start', 'ready');
+    const fault = ${JSON.stringify(fault)};
+    if (fault !== 'invalid native id' && fault !== 'foreign native id') return;
+    const id = fault === 'foreign native id' ? 'already-bound' : '';
+    result = { thread: { id, ephemeral: true, path: null, environments: [] } };
+  }
+  if (message.id) process.stdout.write(JSON.stringify({ id: message.id, result }) + '\\n');
+}
+lines.on('line', receiveNative);
+`;
+    const install = `require('node:fs').writeFileSync('/usr/local/bin/codex', process.argv[1]);`;
+    await computer.exec('node', '-e', install, child);
+    await opened;
+    socket.send(JSON.stringify({ type: 'resume', since: 0 }));
+    if (fault === 'foreign native id') {
+      socket.send(JSON.stringify({ type: 'turn', id: 'owner', conversationId: 'owner',
+        assistantId: 'assistant', executionMode: 'restricted', text: 'fixture', token: 'pending',
+        expiresAt: Date.now() + 60_000 }));
+      function ownerStarted() {
+        expect(reports).toContainEqual(expect.objectContaining({
+          type: 'agent.turn_started', turnId: 'owner', threadId: 'already-bound' }));
+      }
+      await vi.waitFor(ownerStarted, { timeout: 10_000 });
+    }
+    const lifetime = fault === 'expiry' ? 3000 : 60_000;
+    socket.send(JSON.stringify({ type: 'turn', id: 'failed', conversationId: 'failed',
+      assistantId: 'assistant', executionMode: 'restricted', text: 'fixture', token: 'pending',
+      expiresAt: Date.now() + lifetime }));
+    async function nativeStarted() {
+      expect(await computer.read('/tmp/fixture-start')).toBe('ready');
+    }
+    await vi.waitFor(nativeStarted, { timeout: 10_000 });
+    if (fault === 'disconnect') {
+      socket.terminate();
+    } else {
+      function failed() {
+        function isFailure(report: Record<string, unknown>) {
+          return report['type'] === 'agent.turn_failed';
+        }
+        expect(reports.some(isFailure)).toBe(true);
+      }
+      await vi.waitFor(failed, { timeout: 10_000 });
+    }
+    if (fault === 'foreign native id') {
+      socket.send(JSON.stringify({ type: 'stop', turnId: 'owner', conversationId: 'owner' }));
+    }
+    async function noPrivateChild() {
+      const result = await computer.exec('node', '-e', `
+const { readdirSync, readFileSync } = require('node:fs');
+let count = 0;
+for (const pid of readdirSync('/proc')) {
+  try { if (/^Uid:\\s+1003\\s/m.test(readFileSync('/proc/' + pid + '/status', 'utf8'))) count++; }
+  catch {}
+}
+process.stdout.write(String(count));`);
+      expect(result).toBe('0');
+    }
+    await vi.waitFor(noPrivateChild, { timeout: 10_000 });
+  } finally {
+    socket.terminate();
+    await computer.close();
+  }
+}
+it.each(['invalid native id', 'foreign native id', 'disconnect', 'expiry'])(
+  'closes a pending production launch after %s', closesFailedNativeStart, 60_000);

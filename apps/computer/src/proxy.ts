@@ -25,7 +25,7 @@ const UNAVAILABLE_APPROVALS = { waiting: unavailableWaiting, renew: unavailableR
 
 export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
   caller = randomBytes(32).toString('hex'),
-  approvalDriver: Parameters<typeof approvalHolds>[0] = UNAVAILABLE_APPROVALS) {
+  approvalDriver: Parameters<typeof approvalHolds>[0] = UNAVAILABLE_APPROVALS, controlKey?: string) {
   let deadline = Date.now() + CALLER_CREDENTIAL_LIFETIME_MS;
   const turns = new Map<string, ProxyGrant>();
   const cancelledTurns = new Set<string>();
@@ -58,6 +58,10 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
   writeFileSync(options.callerPath, caller, { mode: 0o600 });
   const control = createServer((req, res) => {
     void (async () => {
+      if (controlKey && !ordinaryCaller(req.headers.authorization, controlKey, Infinity)) {
+        json(res, { error: 'control' }, 401);
+        return;
+      }
       const input = record(await body(req));
       if (req.method !== 'POST') throw new Error('Bad request');
       if (req.url === '/catalogue') {

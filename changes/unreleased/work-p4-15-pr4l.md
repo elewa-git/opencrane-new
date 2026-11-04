@@ -1,0 +1,1 @@
+- Each private assistant launch gets its own checked caller. Other threads and the shared computer caller cannot use it; Stop, failure, disconnect and expiry remove access. Private memory admission remains disabled.

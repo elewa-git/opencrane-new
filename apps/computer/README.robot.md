@@ -1558,7 +1558,7 @@ Its implementation is unchanged. The Dockerfile copies this dependency-free modu
 alongside `routing.ts`. The separate package entry point avoids loading the models
 library's server dependencies in the computer image.
 The disabled server recall assembler uses the same checks before preparing a tool list.
-This shared code does not connect private launches to the proxy.
+The bridge connects private launches to these checks; see the launch contract below.
 
 `test/supervisor-identity.test.ts` starts the packaged proxy without source mounts
 and checks that an unauthenticated request is refused. Run it and
@@ -1567,9 +1567,8 @@ Set `COMPUTER_TEST_IMAGE` to test a separate local image tag.
 
 The proxy has an in-process `privateCaller` method. It returns a fresh random caller,
 `bind(thread)` and `close()`. No HTTP or control-socket route can register a caller.
-The future trusted bridge launch path must keep this returned value in RAM and pass
-it only to the matching child. The current launcher still uses its shared caller;
-this part does not establish isolation between running private processes.
+The trusted bridge keeps this returned value in RAM and passes it only to the matching
+child. The supervisor no longer gives private children the shared computer caller.
 
 Registration records the conversation, turn, computer generation, input generation
 and an absolute expiry of at most 120 seconds. It permits two active callers and
@@ -1601,8 +1600,8 @@ use or its approval-retry use makes the corresponding cases leak the fixture res
 The file also checks conflicting bindings in both orders and ordinary thread reuse.
 
 No private caller bytes enter the caller file, control replies or errors. The existing
-control socket remains a trusted input; supervisor authentication and process launch
-integration, private thread loading and computer replacement wiring remain pending.
+control socket requires the bridge-only secret in production. Private catalogue
+assembly and loading still have no production caller.
 The new local fields `generation` and `inputGeneration` do not match the exact
 `RISKY_FIELD_NAME` rule. No event or public API schema changes. No dependency is added.
 Own checks and untested conditions: [receipt](../../docs/process/p4-15-pr4a/receipt.md).
@@ -1662,7 +1661,7 @@ same thread, including an initial refused discovery. The test inspects that thre
 native tool list and unloads it without a model turn or grant. These tests run in
 CI's image group.
 These checks do not qualify a host or prove native disk isolation.
-Production stays disabled. Private launch wiring, call forwarding, volatile delivery,
+Production admission stays disabled. Catalogue launch wiring, call forwarding, volatile delivery,
 invalidation and live disk proof remain separate work. Ordinary loading is unchanged.
 
 The approval tests separately cover changed supplied identities, changed current
@@ -1780,3 +1779,24 @@ The bridge sends the before-turn snapshot as one JSON line to the file reader.
 The reader accepts at most 65,536 characters and stops at the newline. It does not
 wait for stdin to close: the workspace executor keeps that input open after a write.
 This also lets ordinary turns finish when there are no publication files.
+
+## Checked private launches — P4-15 PR 4l
+
+The authenticated channel carries pending turn identity through AsyncLocalStorage to
+privateSession. It registers with privateCallers using the saved computer generation,
+turn, conversation, first-launch inputGeneration 1 and original absolute expiry.
+The native ID must bind before the unchanged runner waits for saved server admission.
+No grant or input precedes that acknowledgement. Cancellation covers pending startup.
+
+The supervisor supplies a secret through an inherited pipe which Codex never receives.
+Each socket signs a fresh challenge and caller with HMAC-SHA256. Replies contain no
+caller; no environment or command settings are accepted. Only privateCodexLaunch puts
+the registered caller into its child's environment. Production proxy control also
+requires this bridge-only secret. Caller material stays in RAM. Stop, failure,
+disconnect and expiry remove access and close the socket; existing supervision owns exit.
+
+Production fixtures use pinned Codex and a local provider. They check concurrent callers,
+admission ordering, cross-thread and shared-caller refusal, capacity, control access from
+UIDs 1000/1002 and scripted startup failures. Existing proxy tests cover old bindings.
+Catalogue assembly/discovery and admission enablement remain separate; no host is qualified.
+Own checks, including the routine/ordinary diagnostic: [receipt](../../docs/process/p4-15-pr4l/receipt.md).

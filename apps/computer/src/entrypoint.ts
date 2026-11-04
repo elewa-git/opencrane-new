@@ -1,3 +1,4 @@
+import { acceptPrivateLaunch } from './private-launch.ts';
 import { prepareTemporaryDirectory } from './display-lock.ts';
 // Prepare protected homes and start the computer's separate user processes.
 import {
@@ -136,6 +137,7 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
   rmSync('/home/codex/.codex', { recursive: true, force: true });
   symlinkSync('/home/agent/codex', '/home/codex/.codex');
   const caller = randomBytes(32).toString('hex');
+  const launchKey = randomBytes(32).toString('hex');
   const privateChildren = new Set<ChildProcess>();
   let privateCounter = 0;
 
@@ -148,7 +150,7 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
       // Treat /tmp, /dev/shm and world-writable workspace folders as writable limits.
       // Treat workspace reads and loopback ports 8080, 8081 and 6901 as limits too.
       // Check directory protections under gVisor before claiming live isolation.
-      // Allow UID 1000 processes to reach private.sock, including memory-free Codex.
+      // Require the bridge exchange before giving a child its own caller.
       const launch = privateCodexLaunch(privateHome, caller);
       child = spawn(launch.command, launch.args, launch.options);
       privateChildren.add(child);
@@ -218,7 +220,12 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
   process.umask(0o111);
   function privateConnection(socket: Socket) {
     if (!supervisor.admit(socket)) return;
-    startPrivateCodex(socket, caller);
+    function launch(caller: string) {
+      if (socket.destroyed) return;
+      startPrivateCodex(socket, caller);
+    }
+    function refused() { socket.destroy(); }
+    void acceptPrivateLaunch(socket, launchKey).then(launch, refused);
   }
   createServer(privateConnection).listen('/run/executor/private.sock');
   executor(['host']).listen('/run/executor/host.sock', () => {
@@ -238,9 +245,14 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
         MODEL: process.env['MODEL'] ?? 'stub-model', PROXY_CALLER_TOKEN: caller,
       };
       const bridgeOptions = {
-        uid: 1000, gid: 1000, stdio: 'inherit' as const, env: bridgeEnvironment,
+        uid: 1000, gid: 1000,
+        stdio: ['inherit', 'inherit', 'inherit', 'pipe'] as ['inherit', 'inherit', 'inherit', 'pipe'],
+        env: bridgeEnvironment,
       };
       const bridge = spawn('/usr/local/bin/node', bridgeArgs, bridgeOptions);
+      const launchPipe = bridge.stdio[3];
+      if (!launchPipe || !('end' in launchPipe)) throw new Error('Missing launch pipe');
+      launchPipe.end(`${launchKey}\n`);
       watch(bridge, true);
     });
   });

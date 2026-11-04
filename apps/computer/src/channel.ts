@@ -1,3 +1,4 @@
+import { launchBoundRunner } from './private-launch-context.ts';
 import type { approvalHolds } from './approval-holds.ts';
 import type { Server } from 'node:http';
 import { bridgeSocket, type BridgeSocketState } from './bridge-socket.ts';
@@ -43,7 +44,9 @@ export function bridgeChannel(server: Server, driver: TurnDriver,
     journal.replay(since, waiting, send);
   }
 
-  const bridge = bridgeSocket(server, driver, socketState, runner, reportCount, replayReports, approvals);
+  const boundRunner = launchBoundRunner(runner);
+  const bridge = bridgeSocket(server, driver, socketState, boundRunner, reportCount,
+    replayReports, approvals);
   socketMethods.send = bridge.send;
 
   function notification(value: unknown) {

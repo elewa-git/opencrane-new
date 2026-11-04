@@ -1,9 +1,11 @@
+import { privateLaunchContext } from './private-launch-context.ts';
+import { launchLine, requestPrivateLaunch } from './private-launch.ts';
 import { artifactSnapshot, artifactList, readArtifact } from './artifacts.ts';
 import { nativeRequests } from './native-requests.ts';
 import { receiveFile } from './files.ts';
 // Codex process supervision and the authenticated server event channel.
 import { spawn } from 'node:child_process';
-import { createServer as netServer, connect, type Socket } from 'node:net';
+import { createServer as netServer, connect, Socket } from 'node:net';
 import { createServer } from 'node:http';
 import { writeFileSync, chmodSync, readFileSync } from 'node:fs';
 import { once } from 'node:events';
@@ -30,8 +32,15 @@ function waiting(thread: string, approvalId: string) {
 }
 function renew(thread: string) { return channel.renew(thread); }
 const approvalDriver = { waiting, renew };
+const launchPipe = new Socket({ fd: 3 });
+const launchKey = await launchLine(launchPipe);
+launchPipe.destroy();
+if (!/^[a-f0-9]{64}$/u.test(launchKey)) throw new Error('Private launch unavailable');
+function control(path: string, input: unknown) {
+  return proxyControl(path, input, '/run/codex/control.sock', launchKey);
+}
 const runtimeProxy = await proxy(gateway.origin, undefined,
-  process.env['PROXY_CALLER_TOKEN'], approvalDriver);
+  process.env['PROXY_CALLER_TOKEN'], approvalDriver, launchKey);
 const { caller } = runtimeProxy;
 writeFileSync('/home/codex/.codex/environments.toml', memoryFreeEnvironments());
 writeFileSync('/home/codex/.codex/config.toml', memoryFreeConfig(process.env['MODEL'] ?? 'stub-model'));
@@ -75,8 +84,23 @@ async function initialise() {
 void initialise().catch(invalidMemoryFreeOutput);
 
 async function privateSession() {
+  const pendingLaunch = privateLaunchContext.getStore();
+  if (!pendingLaunch || pendingLaunch.abort.signal.aborted) throw new Error('Private launch unavailable');
+  const launch = pendingLaunch;
+  const saved = record(JSON.parse(readFileSync('/run/executor/credentials/computer.json', 'utf8')));
+  const binding = { turnId: launch.turnId, conversation: launch.conversation,
+    generation: Number(saved['generation']), inputGeneration: 1, expires: launch.expires };
+  const registration = runtimeProxy.privateCaller(binding);
   const socket = connect('/run/executor/private.sock');
-  function close() { socket.destroy(); }
+  const expiry = setTimeout(close, binding.expires - Date.now());
+  function close() {
+    registration.close();
+    clearTimeout(expiry);
+    launch.abort.signal.removeEventListener('abort', close);
+    socket.destroy();
+  }
+  launch.abort.signal.addEventListener('abort', close, { once: true });
+  socket.once('close', close);
   function closedPromise(resolve: () => void) { socket.once('close', resolve); }
   const closed = new Promise<void>(closedPromise);
   let threadId: string | undefined;
@@ -91,15 +115,20 @@ async function privateSession() {
     try { dispatchPrivateMessage(message); }
     catch { close(); }
   }
-  const connection = codexConnection(socket, socket, { message: privateMessage, failed: close });
+  let connection: ReturnType<typeof codexConnection>;
+  let answerPrivateRequest: ReturnType<typeof nativeRequests>;
   function reportPrivateRequest(message: Record<string, unknown>) {
     if (message['method'] === 'mcpServer/elicitation/request' &&
         record(message['params'])['threadId'] === threadId) channel.notification(message);
   }
-  const answerPrivateRequest = nativeRequests(connection.respond, reportPrivateRequest, true);
+
   socket.on('error', close);
   try {
     await once(socket, 'connect');
+    await requestPrivateLaunch(socket, launchKey, registration.caller);
+    connection = codexConnection(socket, socket, { message: privateMessage, failed: close });
+    answerPrivateRequest = nativeRequests(connection.respond, reportPrivateRequest, true);
+    socket.resume();
     await connection.rpc('initialize', initialiseParams);
     connection.notify('initialized', {});
   } catch {
@@ -107,12 +136,27 @@ async function privateSession() {
     throw new Error('Private Codex unavailable');
   }
   async function rpc(method: string, params: Record<string, unknown>) {
-    const result = await connection.rpc(method, params);
-    if (method === 'thread/start') {
-      const thread = record(record(result)['thread']);
-      if (typeof thread['id'] === 'string') threadId = thread['id'];
+    try {
+      if (socket.destroyed || (threadId && params['threadId'] !== threadId)) {
+        throw new Error('Private thread refused');
+      }
+      const result = await connection.rpc(method, params);
+      if (method === 'thread/start') {
+        const thread = record(record(result)['thread']);
+        if (threadId || typeof thread['id'] !== 'string' || thread['ephemeral'] !== true
+          || thread['path'] !== null || !Array.isArray(thread['environments'])
+          || thread['environments'].length || socket.destroyed) {
+          throw new Error('Private thread refused');
+        }
+        registration.bind(thread['id']);
+        threadId = thread['id'];
+        launch.thread = threadId;
+      }
+      return result;
+    } catch {
+      close();
+      throw new Error('Private thread refused');
     }
-    return result;
   }
   return { rpc, close, closed };
 }
@@ -181,18 +225,20 @@ const channel = bridgeChannel(server, {
   privateSession,
   catalogue(loadKey, conversation, tools, thread, turnId, generations) {
     const input = { loadKey, conversation, tools, thread, turnId, ...generations };
-    return proxyControl('/catalogue', input);
+    return control('/catalogue', input);
   },
   discovered(loadKey) {
-    return proxyControl('/catalogue/ready', { loadKey });
+    return control('/catalogue/ready', { loadKey });
   },
   dropCatalogue(loadKey) {
-    return proxyControl('/catalogue/drop', { loadKey });
+    return control('/catalogue/drop', { loadKey });
   },
   grant(thread, conversation, token, expiresAt, turnId) {
     const path = token ? '/grant' : '/drop';
     const input = { thread, turnId, conversation, computer: computerCredential,
       token, expires: expiresAt };
-    return proxyControl(path, input);
+    if (!token) return control(path, input);
+    const saved = record(JSON.parse(readFileSync('/run/executor/credentials/computer.json', 'utf8')));
+    return control(path, { ...input, generation: saved['generation'], inputGeneration: 1 });
   },
 }, runtimeProxy.approvals);
