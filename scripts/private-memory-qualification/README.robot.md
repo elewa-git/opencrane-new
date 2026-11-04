@@ -140,19 +140,19 @@ unavailable execution status and exact retry recovery. For `unrelatedActivity`, 
 correcting or forgetting another fact leaves the loaded context unchanged. These are
 server checks with recorded context fixtures, not native memory delivery. Successful
 runs return PARTIAL, complete=false. The isolation checks below also return PARTIAL.
-The native check is described below. Four other journeys and both qualifications return
+The native check is described below. Three other journeys and both qualifications return
 NOT RUN, complete=false. Failure returns only FAIL / journey_failed.
 The collector binds every returned status to the image, host, silo, installation and
 fresh challenge, then saves its protected result. These are challenge-bound receipts,
 not cryptographic signatures. The qualification reader still accepts only complete PASS.
 
 Native requester/session isolation, messages/uploads during native work, dispatch/output rejection,
-process termination, persistence scans and real native recall remain NOT RUN. No native process starts during these four server checks, and no admission setting changes. The existing supervisor still owns
+process termination, persistence scans and real native recall remain NOT RUN. No native process starts during these five server checks, and no admission setting changes. The existing supervisor still owns
 timeout and process-group cleanup. Tests run shared assertions on disposable NATS and
 check denied appends, incomplete results and refusal by the qualification reader.
 
 `memory-image.test.ts` builds the actual `infra/package/Dockerfile` with the root
-`.dockerignore`. It checks that repository tests are absent, then calls all four memory
+`.dockerignore`. It checks that repository tests are absent, then calls all five memory
 checks inside read-only containers against disposable NATS. Only temporary credentials
 are mounted; all executable modules come from the image. Both Correct and Forget must
 be saved, and invalidation must occur only for the affected context. Admission must
@@ -182,8 +182,8 @@ require two contexts per mutation and check whether their requesters should matc
 Only fixture credentials are mounted; the helper and assertions come from the image.
 The existing supervisor still stops child processes on timeout or collector loss.
 
-Persistence, Stop/reconnect and replacement/reload checks are deferred to the next
-part and remain NOT RUN. Native recall, both qualifications, volatile replies and immutable deployment
+Persistence and replacement/reload checks remain NOT RUN. Recorded Stop/reconnect
+assertions are described below; native Stop/reconnect remains NOT RUN. Native recall, both qualifications, volatile replies and immutable deployment
 qualification also remain NOT RUN. The private-turn assertions below remain PARTIAL. The full nine live journeys remain incomplete. No new event or API fields,
 dependencies, authority checks or admission changes are introduced.
 
@@ -218,8 +218,8 @@ It runs the shipped entry without executable mounts. The unmodified entry still
 refuses the real host. These fixtures are not deployment qualification.
 
 Current incomplete checks: `privateTurns` is PARTIAL only when these assertions run;
-`requesterIsolation`, `sessionIsolation`, `invalidation` and `unrelatedActivity` are
-PARTIAL server checks. `nativeRecall`, `stopReconnect`, `replacementReload` and
+`requesterIsolation`, `sessionIsolation`, `invalidation`, `unrelatedActivity` and
+`stopReconnect` are PARTIAL server checks. `nativeRecall`, `replacementReload` and
 `persistence` are NOT RUN. Both complete qualifications, P4-14 and P4-15, are NOT RUN.
 Still unproved: gVisor and other process namespaces; live and fault-time storage
 scans; actual server, bridge and proxy RAM protection; native caller/catalogue launch;
@@ -257,6 +257,30 @@ Those shipped files and safe host settings remain prerequisites for a deployment
 All check and qualification statuses above stay unchanged. Delivery, persistence,
 gVisor and fresh-install qualification remain unproved. Own checks are recorded in
 [the receipt](../../docs/process/p4-15-pr5m/receipt.md).
+
+## Recorded Stop and reconnect assertions
+
+P4-15 PR 5n, Part of #97, adds `memoryJourney.stopReconnect`. The runner and a
+server test call the same assertions through production `stopInvalidatedMemory`.
+Correct and Forget use encrypted loaded-context fixtures and saved invalidation causes.
+The matching recorded connection must receive only the exact conversation, turn and
+thread Stop. Unsaved or altered events, foreign silos and each changed identity field
+must receive nothing. Missing and closed connections are ignored without opening a process.
+
+After a simulated reconnect, replacement turns and unrelated loaded contexts receive
+nothing. Only the original matching identity can receive withdrawal again. A failed
+send must return `unavailable`; retry must leave the saved event position unchanged.
+Cold reads must retain invalidation, unavailable execution and the original references.
+The replacement turn and unrelated context must retain their state and event positions. Separate tests supply bad
+results, frames and cold reads to prove the assertions refuse them.
+
+`stopReconnect` now returns PARTIAL / complete=false. All other check and qualification
+statuses stay unchanged. Recorded sends do not establish native or browser clearance,
+persistence or live Stop/reconnect. Those journeys and both qualifications remain NOT RUN.
+The collector cannot save PASS, admission stays disabled and queued 5i3 stays held.
+The package-image fixture runs the shipped helper with only disposable credentials mounted.
+No runtime import enters a test folder. Supervisor limits and cleanup remain unchanged.
+Own checks: [build receipt](../../docs/process/p4-15-pr5n/receipt.md).
 
 ## File parser scope and invocation
 
@@ -321,7 +345,7 @@ Codex/gVisor checks must pass. Missing launch leaves these journeys NOT RUN.
 Run the commands in README.md. The root Vitest include list does not discover this
 folder, so the explicit config is required; no CI fixture list is changed.
 The root lint and Knip projects include these files. The local TypeScript command
-checks them directly. The only setting is the protected target file described above. Dependencies: existing MIT Zod and Node built-ins.
+checks them directly. The only setting is the protected target file described above. Dependencies: existing server libraries, MIT Zod and Node built-ins.
 No events or public API fields are added. All JSON field names were checked against
 the unchanged `RISKY_FIELD_NAME` rule. Receipt digests contain no private text hashes.
 Own results and outstanding live work: [receipt](../../docs/process/p4-15-pr5c/receipt.md).

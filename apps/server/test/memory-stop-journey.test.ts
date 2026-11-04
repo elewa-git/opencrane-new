@@ -1,13 +1,23 @@
+import { AssertionError } from 'node:assert';
 import * as childProcess from 'node:child_process';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { memoryJourney } from '../../../scripts/private-memory-qualification/memory-journey.ts';
+import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { stopInvalidatedMemory } from '../src/memory/stop.ts';
 
+vi.mock('node:child_process', { spy: true });
 vi.mock('../src/memory/stop.ts', { spy: true });
+vi.mock('../src/chat/chat-summary.ts', { spy: true });
+const actualStop = await vi.importActual<typeof import('../src/memory/stop.ts')>(
+  '../src/memory/stop.ts');
+const actualChat = await vi.importActual<typeof import('../src/chat/chat-summary.ts')>(
+  '../src/chat/chat-summary.ts');
 let fixture: Awaited<ReturnType<typeof natsFixture>>;
 let journey: ReturnType<typeof memoryJourney>;
 async function prepare() {
+  vi.mocked(stopInvalidatedMemory).mockReset();
+  vi.mocked(readChatFacts).mockReset();
   fixture = await natsFixture();
   journey = memoryJourney(fixture.store, 'test');
   await journey.start();
@@ -20,8 +30,10 @@ beforeEach(prepare);
 afterEach(close);
 
 async function stopsAndReconnects(kind: 'corrected' | 'forgotten') {
-  const spawn = vi.spyOn(childProcess, 'spawn');
-  const execute = vi.spyOn(childProcess, 'execFile');
+  const spawn = vi.mocked(childProcess.spawn);
+  const execute = vi.mocked(childProcess.execFile);
+  spawn.mockClear();
+  execute.mockClear();
   await journey.stopReconnect(kind);
   expect(spawn).not.toHaveBeenCalled();
   expect(execute).not.toHaveBeenCalled();
@@ -45,32 +57,98 @@ const badResults = [
 async function refusesBadResult(_name: string, call: number,
   result: 'sent' | 'ignored') {
   const original = stopInvalidatedMemory;
-  const implementation = vi.mocked(original).getMockImplementation()!;
+  const implementation = actualStop.stopInvalidatedMemory;
   let calls = 0;
   async function changed(...args: Parameters<typeof original>) {
     calls += 1;
-    if (calls === call) return result;
+    if (calls === call) {
+      return result;
+    }
     return implementation(...args);
   }
   vi.mocked(original).mockImplementation(changed);
-  await expect(journey.stopReconnect('forgotten')).rejects.toThrow();
+  await expect(journey.stopReconnect('forgotten')).rejects.toThrow(AssertionError);
   expect(calls).toBe(call);
 }
 it.each(badResults)('refuses a bad observation for %s', refusesBadResult);
 
 async function refusesWrongFrame() {
-  const implementation = vi.mocked(stopInvalidatedMemory).getMockImplementation()!;
+  const implementation = actualStop.stopInvalidatedMemory;
   async function changed(...args: Parameters<typeof stopInvalidatedMemory>) {
     const [options, event] = args;
     function current(binding: Parameters<typeof options.current>[0]) {
       const active = options.current(binding);
-      if (!active) return active;
-      function send() { active!.socket.send('{}'); }
+      if (!active) {
+        return active;
+      }
+      const socket = active.socket;
+      function send() {
+        socket.send('{}');
+      }
       return { ...active, socket: { ...active.socket, send } };
     }
-    return implementation({ ...options, current }, event);
+    const changedOptions = { ...options, current };
+    return implementation(changedOptions, event);
   }
   vi.mocked(stopInvalidatedMemory).mockImplementation(changed);
-  await expect(journey.stopReconnect('corrected')).rejects.toThrow();
+  await expect(journey.stopReconnect('corrected')).rejects.toThrow(AssertionError);
 }
 it('refuses a sent result with the wrong Stop frame', refusesWrongFrame);
+
+async function refusesUnexpectedSend() {
+  const implementation = actualStop.stopInvalidatedMemory;
+  let calls = 0;
+  async function changed(...args: Parameters<typeof stopInvalidatedMemory>) {
+    calls += 1;
+    const result = await implementation(...args);
+    if (calls === 2) {
+      args[0].current(journey.prepared)?.socket.send('{}');
+    }
+    return result;
+  }
+  vi.mocked(stopInvalidatedMemory).mockImplementation(changed);
+  await expect(journey.stopReconnect('forgotten')).rejects.toThrow(AssertionError);
+}
+it('refuses an ignored result that still sends a frame', refusesUnexpectedSend);
+
+async function refusesColdChange(field: string) {
+  const implementation = actualChat.readChatFacts;
+  async function changed(...args: Parameters<typeof readChatFacts>) {
+    const facts = await implementation(...args);
+    if (!('head' in args[0]) && args[2] === 'chat' && facts.memoryContext) {
+      const context = { ...facts.memoryContext };
+      if (field === 'status') {
+        context.status = 'loaded';
+      }
+      if (field === 'execution') {
+        Reflect.set(context, 'executionAvailable', true);
+      }
+      if (field === 'references') {
+        context.references = [];
+      }
+      return { ...facts, memoryContext: context };
+    }
+    return facts;
+  }
+  vi.mocked(readChatFacts).mockImplementation(changed);
+  await expect(journey.stopReconnect('forgotten')).rejects.toThrow(AssertionError);
+}
+it.each(['status', 'execution', 'references'])(
+  'refuses a cold read with changed %s', refusesColdChange);
+
+async function refusesOtherContextChange(which: string) {
+  async function changed(...args: Parameters<typeof readChatFacts>) {
+    const facts = await actualChat.readChatFacts(...args);
+    const otherContext = args[2] !== 'chat';
+    const replacement = args[2] === 'chat' && args[3] !== 'turn';
+    const selected = which === 'other' ? otherContext : replacement;
+    if (!('head' in args[0]) && selected && facts.memoryContext) {
+      return { ...facts, memoryContext: { ...facts.memoryContext, references: [] } };
+    }
+    return facts;
+  }
+  vi.mocked(readChatFacts).mockImplementation(changed);
+  await expect(journey.stopReconnect('corrected')).rejects.toThrow(AssertionError);
+}
+it.each(['other', 'replacement'])(
+  'refuses changed cold state for the %s context', refusesOtherContextChange);

@@ -3,11 +3,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore } from '@opencrane/event-store';
 import { memoryContextRecordedEventSchema, memoryWrittenDataSchema, parseEventByType,
-  type MemoryIdentity } from '@opencrane/events';
+  type MemoryContextRecord, type MemoryIdentity } from '@opencrane/events';
 import { history } from '@opencrane/models';
 import { memoryScopeId } from '@opencrane/projections';
 import { readChatFacts } from '../../apps/server/src/chat/chat-summary.ts';
 import { invalidateMemoryContext } from '../../apps/server/src/memory/invalidation.ts';
+import { stopInvalidatedMemory } from '../../apps/server/src/memory/stop.ts';
 
 export function memoryJourney(store: EventStore, silo: string, conversationId = 'chat',
   requesterId = 'alice', causeId = 'cause', encode?: (identity: MemoryIdentity) => object) {
@@ -160,6 +161,115 @@ export function memoryJourney(store: EventStore, silo: string, conversationId = 
     const after = await readChatFacts(cold, silo, other.conversationId, 'turn');
     assert.deepEqual(after.memoryContext, before.memoryContext);
   }
+  async function stopReconnect(kind: 'corrected' | 'forgotten') {
+    const other = await otherContext(requesterId);
+    const before = await readChatFacts(store, silo, other.conversationId, 'turn');
+    assert.equal(before.memoryContext?.status, 'loaded');
+    const otherPosition = await store.head(other.subject);
+    await exactInvalidation(kind);
+    const rows = await history(store, subject, silo);
+    const saved = memoryContextRecordedEventSchema.parse(rows.at(-1)!.event);
+    const replacement = { turnId: randomUUID(), threadId: randomUUID(),
+      inputGeneration: randomUUID() };
+    const replacementPreparation = { ...prepared, ...replacement };
+    await append(subject, 'agent.memory_context_recorded', replacementPreparation);
+    await load([other.reference], replacement);
+    const replacementBefore = await readChatFacts(store, silo, conversationId, replacement.turnId);
+    assert.equal(replacementBefore.memoryContext?.status, 'loaded');
+    const targetPosition = await store.head(subject);
+    await checkRecordedStops(store, silo, saved, other.preparation, replacementPreparation);
+    // Rebuild all three contexts after failed delivery and retry, without cached summaries.
+    const cold = { readStream: store.readStream.bind(store) };
+    const target = await readChatFacts(cold, silo, conversationId, 'turn');
+    assert.equal(target.memoryContext?.status, 'invalidated');
+    assert.equal(target.memoryContext.executionAvailable, false);
+    assert.deepEqual(target.memoryContext.references, [reference]);
+    const after = await readChatFacts(cold, silo, other.conversationId, 'turn');
+    assert.deepEqual(after.memoryContext, before.memoryContext);
+    const replacementAfter = await readChatFacts(cold, silo, conversationId, replacement.turnId);
+    assert.deepEqual(replacementAfter.memoryContext, replacementBefore.memoryContext);
+    assert.equal(await store.head(other.subject), otherPosition);
+    assert.equal(await store.head(subject), targetPosition);
+  }
   return { scopeId, memoryWrittenExample, reference, input, prepared, append, load,
-    start, change, invalidate, exactInvalidation, unrelatedChange, isolatedContext };
+    start, change, invalidate, exactInvalidation, unrelatedChange, isolatedContext, stopReconnect };
+}
+
+// Record server sends only. These observations cannot prove that a native child cleared memory.
+async function checkRecordedStops(store: EventStore, silo: string,
+  saved: ReturnType<typeof memoryContextRecordedEventSchema.parse>,
+  other: Pick<MemoryContextRecord, 'conversationId' | 'turnId' | 'requesterId' |
+    'assistantId' | 'computerId' | 'generation' | 'threadId' | 'inputGeneration'>,
+  replacement: typeof other) {
+  const frames: unknown[] = [];
+  let failSend = false;
+  function send(data: unknown) {
+    if (failSend) {
+      throw new Error('fixture_send_failed');
+    }
+    frames.push(data);
+  }
+  const socket = { readyState: WebSocket.OPEN, send };
+  const original = { silo, binding: saved.data, socket };
+  type Active = NonNullable<ReturnType<Parameters<typeof stopInvalidatedMemory>[0]['current']>>;
+  let active: Active | undefined = original;
+  function current() {
+    return active;
+  }
+  const options = { silo, store, current };
+  const expectedStop = { type: 'stop', conversationId: saved.data.conversationId,
+    turnId: saved.data.turnId, threadId: saved.data.threadId };
+  const frame = JSON.stringify(expectedStop);
+  async function check(expected: 'sent' | 'ignored' | 'unavailable', event: unknown = saved) {
+    frames.length = 0;
+    assert.equal(await stopInvalidatedMemory(options, event), expected);
+    let expectedFrames: string[] = [];
+    if (expected === 'sent') {
+      expectedFrames = [frame];
+    }
+    assert.deepEqual(frames, expectedFrames);
+  }
+  async function refuseEvidence() {
+    const unsaved = { ...saved, id: randomUUID() };
+    const altered = { ...saved, data: { ...saved.data, inputGeneration: randomUUID() } };
+    const foreign = { ...saved, silo: randomUUID() };
+    for (const event of [unsaved, altered, foreign]) {
+      await check('ignored', event);
+    }
+  }
+  async function refuseConnections() {
+    active = { ...original, silo: randomUUID() };
+    await check('ignored');
+    const changes = [
+      { conversationId: randomUUID() }, { turnId: randomUUID() },
+      { requesterId: randomUUID() }, { assistantId: randomUUID() },
+      { computerId: randomUUID() }, { generation: saved.data.generation + 1 },
+      { threadId: randomUUID() }, { inputGeneration: randomUUID() },
+    ];
+    for (const change of changes) {
+      active = { ...original, binding: { ...saved.data, ...change } };
+      await check('ignored');
+    }
+    active = undefined;
+    await check('ignored');
+    active = { ...original, socket: { readyState: WebSocket.CLOSED, send } };
+    await check('ignored');
+  }
+  async function reconnect() {
+    const reconnected = { readyState: WebSocket.OPEN, send };
+    active = { silo, binding: replacement, socket: reconnected };
+    await check('ignored');
+    active = { silo, binding: other, socket: reconnected };
+    await check('ignored');
+    active = { ...original, socket: reconnected };
+    await check('sent');
+    failSend = true;
+    await check('unavailable');
+    failSend = false;
+    await check('sent');
+  }
+  await check('sent');
+  await refuseEvidence();
+  await refuseConnections();
+  await reconnect();
 }

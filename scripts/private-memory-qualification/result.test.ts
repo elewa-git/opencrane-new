@@ -65,3 +65,12 @@ async function incompleteRun(status: string, name: string) {
 const incompleteChecks = [['PARTIAL', 'invalidation'], ['NOT RUN', 'invalidation'],
   ['PARTIAL', 'stopReconnect']];
 it.each(incompleteChecks)('keeps %s %s results out of admission', incompleteRun);
+
+async function falselyCompleteStop() {
+  const deployment = await initialQualificationFixture();
+  if (deployment.result.result !== 'PASS') throw new Error('Fixture collection failed');
+  const checks = { ...deployment.result.checks, stopReconnect: 'PARTIAL' };
+  deployment.replace({ ...deployment.result, checks });
+  await expect(readDeploymentQualification('test')).rejects.toThrow();
+}
+it('refuses a PASS claim whose Stop check is still PARTIAL', falselyCompleteStop);

@@ -4,9 +4,11 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { probeHost } from './host-probe.ts';
 import { runJourney } from './journey.ts';
+import { stopInvalidatedMemory } from '../../apps/server/src/memory/stop.ts';
 import { memoryAdmission } from '../../apps/server/src/chat/memory-admission.ts';
 
 vi.mock('./host-probe.ts', { spy: true });
+vi.mock('../../apps/server/src/memory/stop.ts', { spy: true });
 afterEach(vi.restoreAllMocks);
 afterEach(vi.unstubAllEnvs);
 
@@ -18,7 +20,7 @@ const request = {
   runId: '11111111-1111-4111-8111-111111111111',
   challengeId: '22222222-2222-4222-8222-222222222222',
 };
-async function observesStore(name: string, role = 'command', silo = 'test'): Promise<void> {
+async function observesStore(name: string, role = 'command', silo = 'test', badStop = false): Promise<void> {
   const fixture = await natsFixture();
   const directory = await mkdtemp('.tools/memory-journey-');
   vi.stubEnv('MEMORY_KEY_DIRECTORY', directory);
@@ -27,7 +29,7 @@ async function observesStore(name: string, role = 'command', silo = 'test'): Pro
   vi.stubEnv('SILO_ID', silo);
   try {
     const result = await runJourney(JSON.stringify({ ...request, name }));
-    if (role === 'command' && silo === 'test') {
+    if (role === 'command' && silo === 'test' && !badStop) {
       expect(result).toMatchObject({ ...request, name, result: 'PARTIAL', complete: false });
       const position = await fixture.store.head();
       const changes: string[] = [];
@@ -40,7 +42,7 @@ async function observesStore(name: string, role = 'command', silo = 'test'): Pro
       expect(changes).toEqual(['memory.corrected', 'memory.forgotten']);
     } else {
       expect(result).toEqual({ result: 'FAIL', reason: 'journey_failed' });
-      expect(await fixture.store.head()).toBe(0);
+      if (!badStop) expect(await fixture.store.head()).toBe(0);
     }
     expect(memoryAdmission.state).toBe('disabled');
   } finally {
@@ -48,8 +50,12 @@ async function observesStore(name: string, role = 'command', silo = 'test'): Pro
     await rm(directory, { recursive: true, force: true });
   }
 }
+async function completedJourney(name: string) {
+  await observesStore(name);
+}
 it.each(['invalidation', 'unrelatedActivity', 'requesterIsolation', 'sessionIsolation', 'stopReconnect'])(
-  'executes %s on the configured event store without claiming live qualification', observesStore, 30_000);
+  'executes %s on the configured event store without claiming live qualification',
+  completedJourney, 30_000);
 
 async function failedJourney(name: string): Promise<void> {
   vi.mocked(probeHost).mockReturnValue(true);
@@ -72,3 +78,9 @@ async function wrongSilo(name: string): Promise<void> {
 }
 it.each(['requesterIsolation', 'sessionIsolation', 'stopReconnect'])(
   'refuses %s before writes when the configured silo differs', wrongSilo, 30_000);
+
+async function privateFailure() {
+  vi.mocked(stopInvalidatedMemory).mockRejectedValue(new Error('private-fixture-error'));
+  await observesStore('stopReconnect', 'command', 'test', true);
+}
+it('returns only the fixed failure when a Stop assertion throws', privateFailure, 30_000);
