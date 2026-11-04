@@ -2799,6 +2799,8 @@ Ownership refusal tests allow exactly one `member.command_refused` audit event.
 They still require unchanged member and ownership stream positions, unchanged
 effective roles and an unchanged membership outcome after projection. The pending
 Owner-role invitation remains invited; the active owner remains an owner.
+The acceptance test keeps invitation expiry ahead of the real clock so it can check
+the `ownership_stream_required` refusal, rather than an expired invitation.
 
 ## Member access and departure reads
 

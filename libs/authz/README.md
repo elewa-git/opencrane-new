@@ -83,6 +83,8 @@ nice -n 10 npm run typecheck -w libs/authz
 The tests start their own services and use an exact Linux amd64 OpenFGA image.
 Docker must be running.
 The [technical notes](README.robot.md#real-service-tests-and-licences) list what they need.
+The [dependency audit notes](../../docs/process/npm-audit.md) record security
+updates for the OpenFGA client used by this library.
 
 This example checks whether a person is an admin. The store and model ids
 come from the existing OpenFGA setup:

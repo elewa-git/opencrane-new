@@ -534,6 +534,8 @@ render. Access refusal clears protected content. The computer state announces wa
 progress.
 
 A budget stop row marks only its own turn. A turn that never started ends as stopped.
+The notice test supplies a fixed time before its first status read, so the reset
+boundary checks stay stable as calendar time passes.
 The notice reads saved stop details once when it appears, when the socket reconnects,
 and when the first turn end report arrives. A queued stop has its own time, so an end
 report still refreshes a failed or earlier read. Check status only GETs the original
