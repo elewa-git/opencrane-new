@@ -1783,10 +1783,16 @@ This also lets ordinary turns finish when there are no publication files.
 ## Checked private launches — P4-15 PR 4l
 
 The authenticated channel carries pending turn identity through AsyncLocalStorage to
-privateSession. It registers with privateCallers using the saved computer generation,
-turn, conversation, first-launch inputGeneration 1 and original absolute expiry.
+`openPrivateSession` in `private-session.ts`. It registers with privateCallers using the
+saved computer generation, turn, conversation, first-launch inputGeneration 1 and
+original absolute expiry.
 The native ID must bind before the unchanged runner waits for saved server admission.
 No grant or input precedes that acknowledgement. Cancellation covers pending startup.
+Closing a socket also cancels its connect wait, including before connection succeeds.
+Cleanup runs once, so the runner releases the conversation and preparation count.
+`test/private-session.test.ts` holds two socket connections before connect, then checks
+Stop, disconnect and socket closure. Each case checks both slots can be reused in the
+same conversations, repeated Stop preserves capacity, and the bridge can report quiet.
 
 The supervisor supplies a secret through an inherited pipe which Codex never receives.
 Each socket signs a fresh challenge and caller with HMAC-SHA256. Replies contain no

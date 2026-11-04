@@ -12,8 +12,34 @@ type SessionOptions = {
   generation: number;
   launchKey: string;
   initialiseParams: Record<string, unknown>;
-  notification(message: Record<string, unknown>): void;
+  notification(this: void, message: Record<string, unknown>): void;
 };
+
+function privateSocket(signal: AbortSignal, expires: number, revoke: () => void) {
+  const socket = connect('/run/executor/private.sock');
+  const connecting = new AbortController();
+  let ended = false;
+  const expiry = setTimeout(close, expires - Date.now());
+  function close() {
+    if (ended) return;
+    ended = true;
+    revoke();
+    clearTimeout(expiry);
+    signal.removeEventListener('abort', close);
+    socket.off('close', close);
+    // Settle startup even when Stop closes the socket without an error.
+    connecting.abort();
+    socket.destroy();
+  }
+  signal.addEventListener('abort', close, { once: true });
+  socket.once('close', close);
+  function closedPromise(resolve: () => void) { socket.once('close', resolve); }
+  const closed = new Promise<void>(closedPromise);
+  const connectOptions = { signal: connecting.signal };
+  const connected = once(socket, 'connect', connectOptions);
+  socket.on('error', close);
+  return { socket, close, closed, connected };
+}
 
 export async function openPrivateSession(options: SessionOptions) {
   const { runtimeProxy, generation, launchKey, initialiseParams, notification } = options;
@@ -23,18 +49,8 @@ export async function openPrivateSession(options: SessionOptions) {
   const binding = { turnId: launch.turnId, conversation: launch.conversation,
     generation, inputGeneration: 1, expires: launch.expires };
   const registration = runtimeProxy.privateCaller(binding);
-  const socket = connect('/run/executor/private.sock');
-  const expiry = setTimeout(close, binding.expires - Date.now());
-  function close() {
-    registration.close();
-    clearTimeout(expiry);
-    launch.abort.signal.removeEventListener('abort', close);
-    socket.destroy();
-  }
-  launch.abort.signal.addEventListener('abort', close, { once: true });
-  socket.once('close', close);
-  function closedPromise(resolve: () => void) { socket.once('close', resolve); }
-  const closed = new Promise<void>(closedPromise);
+  const pending = privateSocket(launch.abort.signal, binding.expires, registration.close);
+  const { socket, close, closed } = pending;
   let threadId: string | undefined;
   function dispatchPrivateMessage(message: Record<string, unknown>) {
     if (answerPrivateRequest(message)) return;
@@ -54,11 +70,11 @@ export async function openPrivateSession(options: SessionOptions) {
         record(message['params'])['threadId'] === threadId) notification(message);
   }
 
-  socket.on('error', close);
   try {
-    await once(socket, 'connect');
+    await pending.connected;
     await requestPrivateLaunch(socket, launchKey, registration.caller);
-    connection = codexConnection(socket, socket, { message: privateMessage, failed: close });
+    const handlers = { message: privateMessage, failed: close };
+    connection = codexConnection(socket, socket, handlers);
     answerPrivateRequest = nativeRequests(connection.respond, reportPrivateRequest, true);
     socket.resume();
     await connection.rpc('initialize', initialiseParams);

@@ -49,7 +49,8 @@ private reply buffers are cleared before waiting for interruption to finish.
   The server supplies its complete input once; the runner keeps it out of the journal.
   Each private launch gets its own caller, kept in memory. The bridge binds it to
   the native thread before waiting for the server to admit the turn. Stop, expiry
-  and connection loss remove it. Other processes cannot authorise a launch.
+  and connection loss remove it, even while the connection is still opening.
+  Cancelled launches release their space for new work. Other processes cannot authorise a launch.
   Each tool call checks the caller against the pass it will send, including after
   approval. Ordinary and private turns cannot share a bound thread.
   An internal loader can discover permitted recall, remember, Correct and Forget definitions

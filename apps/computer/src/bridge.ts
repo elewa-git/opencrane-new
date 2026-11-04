@@ -167,6 +167,7 @@ const channel = bridgeChannel(server, {
       token, expires: expiresAt };
     if (!token) return control(path, input);
     const saved = record(JSON.parse(readFileSync('/run/executor/credentials/computer.json', 'utf8')));
-    return control(path, { ...input, generation: saved['generation'], inputGeneration: 1 });
+    const grant = { ...input, generation: saved['generation'], inputGeneration: 1 };
+    return control(path, grant);
   },
 }, runtimeProxy.approvals);
