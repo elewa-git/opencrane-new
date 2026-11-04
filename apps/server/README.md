@@ -90,6 +90,7 @@ Re-registering the server clears the effective choice. Saving opt-in grants no t
 A retry returns the original save receipt, even after a later change.
 
 Owners and admins can read safe admission, removal, role and ownership change details.
+An invitation cannot make someone an owner outside the recorded ownership change.
 The server checks receipts for the exact saved change before showing its progress, then checks current access.
 It still checks access when loading fails, so errors do not reveal protected records.
 Admission history keeps each join separate, including when a person returns.
