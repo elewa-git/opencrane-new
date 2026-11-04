@@ -21,7 +21,7 @@ flowchart LR
   server -.->|tests use helper| ops
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
-  ops -->|saves results and routine claims| nats
+  ops -->|saves results and checks cancellation before routine claims| nats
   ops -->|holds routine ownership and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
@@ -52,6 +52,8 @@ and suspension. Those checks read metadata and change no resources.
 
 The routine leadership helper holds a PostgreSQL session lock for its callback.
 It cancels preparation when that session stops answering or shutdown is requested.
+Claims carry that cancellation signal through access checks to the final save check.
+If cancellation arrives while a read waits, the old holder cannot save a new claim.
 The callback must stop and await its work before returning. Only then does the helper
 release the session. Captured ownership checks stay refused after release.
 The routine worker still only updates read tables; automatic scheduling is not connected.

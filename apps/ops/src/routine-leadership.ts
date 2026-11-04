@@ -18,7 +18,8 @@ export async function withRoutineLeadership(options: Options,
   function cancel() {
     stop.abort();
   }
-  options.signal.addEventListener('abort', cancel, { once: true });
+  const listenerOptions = { once: true };
+  options.signal.addEventListener('abort', cancel, listenerOptions);
   if (options.signal.aborted) cancel();
   const database = connectProjectionDb(options.databaseUrl, cancel);
   async function held(locked: Db) {
@@ -48,7 +49,8 @@ export async function withRoutineLeadership(options: Options,
       try {
         while (!stop.signal.aborted) {
           await checkCurrent(performance.now() + 1000);
-          await delay(100, undefined, { signal: stop.signal });
+          const delayOptions = { signal: stop.signal };
+          await delay(100, undefined, delayOptions);
         }
       } catch {
         cancel();

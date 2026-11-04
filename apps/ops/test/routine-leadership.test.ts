@@ -49,7 +49,8 @@ async function excludesOnlyItsSilo() {
   async function budget() {
     expect(await first.lease.checkCurrent(performance.now() + 2000)).toBe(true);
   }
-  await database.db.lock!('budget-leader:test', budget, { timeoutMs: 1000 });
+  const budgetOptions = { timeoutMs: 1000 };
+  await database.db.lock!('budget-leader:test', budget, budgetOptions);
   const entered = Promise.withResolvers<void>();
   async function replacement(lease: Leadership) {
     expect(await first.lease.checkCurrent(performance.now() + 2000)).toBe(false);
@@ -118,7 +119,8 @@ async function refusesExpiredCheck() {
   const stop = new AbortController();
   stop.abort();
   const work = vi.fn();
-  await expect(withRoutineLeadership({ databaseUrl, silo: 'other', signal: stop.signal }, work))
+  const options = { databaseUrl, silo: 'other', signal: stop.signal };
+  await expect(withRoutineLeadership(options, work))
     .rejects.toThrow(/^Routine leadership unavailable$/u);
   expect(work).not.toHaveBeenCalled();
 }
@@ -157,7 +159,8 @@ function captureSession() {
     database.db.lock = observe;
     return database;
   }
-  vi.spyOn(projections, 'connectProjectionDb').mockImplementationOnce(observed);
+  const connectSpy = vi.spyOn(projections, 'connectProjectionDb');
+  connectSpy.mockImplementationOnce(observed);
   function restore() {
     vi.restoreAllMocks();
   }
@@ -175,7 +178,8 @@ async function drainsCheck(expire: boolean) {
     expect(options!.deadline).toBeLessThanOrEqual(deadline);
     return query('SELECT pg_sleep(0.15)', [], options);
   }
-  vi.spyOn(session(), 'query').mockImplementationOnce(slow);
+  const querySpy = vi.spyOn(session(), 'query');
+  querySpy.mockImplementationOnce(slow);
   const checking = first.lease.checkCurrent(deadline);
   if (!expire) first.finish.resolve();
   expect(await checking).toBe(false);
@@ -210,10 +214,15 @@ async function dueFixture() {
   const db = { query: forbidden };
   await auth.handler.handle(joined, db);
   await auth.handler.handle(created, db);
-  const effects = [vi.spyOn(SandboxClient.prototype, 'mode').mockImplementation(forbidden),
-    vi.spyOn(models, 'startGateway').mockImplementation(forbidden),
-    vi.spyOn(tools, 'mcpDispatch').mockImplementation(forbidden),
-    vi.spyOn(broker, 'credentialBroker').mockImplementation(forbidden)];
+  const modeSpy = vi.spyOn(SandboxClient.prototype, 'mode');
+  modeSpy.mockImplementation(forbidden);
+  const gatewaySpy = vi.spyOn(models, 'startGateway');
+  gatewaySpy.mockImplementation(forbidden);
+  const dispatchSpy = vi.spyOn(tools, 'mcpDispatch');
+  dispatchSpy.mockImplementation(forbidden);
+  const brokerSpy = vi.spyOn(broker, 'credentialBroker');
+  brokerSpy.mockImplementation(forbidden);
+  const effects = [modeSpy, gatewaySpy, dispatchSpy, brokerSpy];
   function checkEffects() {
     for (const effect of effects) expect(effect).not.toHaveBeenCalled();
     vi.restoreAllMocks();
@@ -247,7 +256,8 @@ async function cancelsDue() {
     await resume.promise;
     yield* read(...args);
   }
-  vi.spyOn(nats.store, 'readStream').mockImplementationOnce(prepare);
+  const readSpy = vi.spyOn(nats.store, 'readStream');
+  readSpy.mockImplementationOnce(prepare);
   const append = vi.spyOn(nats.store, 'append');
   const pending = expect(claim(first.lease)).rejects.toThrow(/^Routine due refused$/u);
   await waiting.promise;
@@ -332,11 +342,13 @@ async function recoversDue() {
     await append(...args);
     throw new Error('private-service-canary');
   }
-  vi.spyOn(nats.store, 'append').mockImplementationOnce(loseReply);
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  appendSpy.mockImplementationOnce(loseReply);
   await expect(claim(first.lease)).rejects.toThrow(/^Routine due unavailable$/u);
   const original = await claim(first.lease);
-  expect(original).toMatchObject({ startBy: '2026-10-25T00:31:00.000Z',
-    position: 3, executionAvailable: false });
+  const expected = { startBy: '2026-10-25T00:31:00.000Z',
+    position: 3, executionAvailable: false };
+  expect(original).toMatchObject(expected);
   await first.close();
   const replacement = await owner();
   await expect(claim(first.lease)).rejects.toThrow(/^Routine due refused$/u);
@@ -351,7 +363,9 @@ it('recovers one due after a lost reply and still checks the owner and old sessi
 async function refusesFailedQuery() {
   const session = captureSession();
   const first = await owner();
-  vi.spyOn(session(), 'query').mockRejectedValueOnce(new Error('private-query-canary'));
+  const querySpy = vi.spyOn(session(), 'query');
+  const queryError = new Error('private-query-canary');
+  querySpy.mockRejectedValueOnce(queryError);
   expect(await first.lease.checkCurrent(performance.now() + 2000)).toBe(false);
   expect(first.lease.signal.aborted).toBe(true);
   expect(await first.lease.checkCurrent(performance.now() + 2000)).toBe(false);
@@ -366,11 +380,13 @@ async function withholdsSavedReceipt() {
     await terminate();
     return read(...args);
   }
-  vi.spyOn(nats.store, 'readEvent').mockImplementationOnce(loseSession);
+  const readSpy = vi.spyOn(nats.store, 'readEvent');
+  readSpy.mockImplementationOnce(loseSession);
   await expect(claim(first.lease)).rejects.toThrow(/^Routine due refused$/u);
   expect(await nats.store.head()).toBe(3);
   const replacement = await owner();
-  expect(await claim(replacement.lease)).toMatchObject({ position: 3, executionAvailable: false });
+  const expected = { position: 3, executionAvailable: false };
+  expect(await claim(replacement.lease)).toMatchObject(expected);
 }
 it('withholds a saved receipt when the session closes after append', withholdsSavedReceipt);
 
@@ -384,7 +400,8 @@ async function boundsCancellation() {
   }
   async function prepare(lease: Leadership) {
     captured = lease;
-    lease.signal.addEventListener('abort', stopped, { once: true });
+    const listenerOptions = { once: true };
+    lease.signal.addEventListener('abort', stopped, listenerOptions);
     ready.resolve();
     await cancelled.promise;
     expect(await lease.checkCurrent(performance.now() + 2000)).toBe(false);
@@ -419,7 +436,8 @@ async function holdsUntilCheckReturns() {
     await resume.promise;
     return result;
   }
-  vi.spyOn(session(), 'query').mockImplementationOnce(pendingResult);
+  const querySpy = vi.spyOn(session(), 'query');
+  querySpy.mockImplementationOnce(pendingResult);
   const checking = first.lease.checkCurrent(performance.now() + 2000);
   await ready.promise;
   first.finish.resolve();

@@ -903,8 +903,9 @@ turn, root and event ids. `startBy` stays sixty seconds after the first `firedAt
 Retries compare the original full record, even after later runs finish or the
 broker forgets duplicate ids. A changed request cannot reclaim a consumed slot.
 
-The trusted worker supplies its silo, permission-service binding and
-`checkCurrent(deadline)` ownership check. The binding must name the same silo.
+The trusted worker supplies its silo, permission-service binding,
+`checkCurrent(deadline)` ownership check and required lease `signal`.
+The binding must name the same silo.
 The command loads current owner membership and routine access through
 `loadRoutineAccess`, including exact applied receipts. Both routine reads finish
 before the two-second write window. `ownershipWriteAccess` watches only the member
@@ -921,6 +922,11 @@ returns saved facts, not permission to act. Both fold and receipt keep
 `executionAvailable: false`.
 The existing schema requires the server system identity on this internal event.
 
+Cancellation is checked after awaited preparation, access and receipt reads.
+The append receives the same lease signal, so its final check immediately before
+publication refuses cancellation received during or after its access callback.
+Pending reads keep their existing deadlines; cancellation does not detach them.
+
 `test/routine-due.test.ts` uses disposable NATS and OpenFGA for claims, access
 removal, missing membership, permission loss, races and recovery.
 Ticks, missed/skip writers, catch-up, manual runs, activation,
@@ -935,7 +941,7 @@ and shutdown signal. It creates its own `connectProjectionDb` connection pool.
 It never takes `budget-leader:<silo>`. Acquisition waits at most one second.
 Contention or failure returns the fixed error `Routine leadership unavailable`.
 
-The callback receives `signal` and `checkCurrent(deadline)`. Pass that check to
+The callback receives `signal` and `checkCurrent(deadline)`. Pass both to
 `claimRoutineDue` with the trusted silo and IAM binding. Each check queries the
 held session, with the earlier of the original deadline and a one-second limit.
 It checks cancellation and expiry again after the query. A background probe runs
@@ -953,7 +959,10 @@ database address or callback error details. No routine history enters this check
 `test/routine-leadership.test.ts` uses real PostgreSQL, NATS and OpenFGA. It covers
 competing sessions, other silos and budgets, terminated sessions during preparation,
 replacement sessions, shutdown, callback failure, deadline expiry and draining a
-pending check. Real due commands cover withheld appends and receipts, lost replies,
+pending check. Takeover tests pause the member-stream read inside append's access
+check and pause after that check returns. Both terminate the old session, verify a
+replacement, then resume and confirm that the event count has not changed.
+Real due commands cover withheld appends and receipts, lost replies,
 owner refusal and unchanged `startBy`. Wake, model, tool and broker spies stay unused.
 No worker registration, tick queue, scan or dispatch is added. Company execution
 remains blocked; saved unverified company bearers grant no broker access.
