@@ -82,6 +82,51 @@ async function dst() {
 }
 it('saves one gap at its boundary, advances without shifting it and replays without work', dst);
 
+const dailyGaps = [
+  {
+    zone: 'Pacific/Apia', localTime: '00:00', localDate: '2011-12-30',
+    effectiveAt: '2011-12-29T12:00:00.000Z', checkAt: '2011-12-30T10:00:00.000Z',
+    next: { localDate: '2011-12-31', localTime: '00:00', zone: 'Pacific/Apia',
+      at: '2011-12-30T10:00:00.000Z', offsetMinutes: 840 },
+  },
+  {
+    zone: 'Europe/Brussels', localTime: '02:30', localDate: '2027-03-28',
+    effectiveAt: '2027-03-27T12:00:00.000Z', checkAt: '2027-03-28T01:00:00.000Z',
+    next: { localDate: '2027-03-29', localTime: '02:30', zone: 'Europe/Brussels',
+      at: '2027-03-29T00:30:00.000Z', offsetMinutes: 120 },
+  },
+];
+async function dailyGapBoundary(gap: typeof dailyGaps[number]) {
+  const original = creation();
+  const schedule = { frequency: 'daily' as const, localTime: gap.localTime, zone: gap.zone };
+  const definition = { ...original.data.definition, schedule };
+  const data = { ...original.data, definition, effectiveAt: gap.effectiveAt };
+  const updated = { ...original, id: 'daily-gap', commandId: 'daily-gap',
+    type: 'routine.updated', time: gap.effectiveAt, data };
+  await nats.seed([updated]);
+  now = Date.parse(gap.checkAt);
+  const request = { ...input, localDate: gap.localDate, expectedPosition: 3 };
+
+  const receipt = await skip(request);
+
+  expect(receipt.executionAvailable).toBe(false);
+  const row = await nats.store.readEvent(receipt.position);
+  expect(row.event.type).toBe('routine.occurrence_skipped');
+  expect(row.event.time).toBe(gap.checkAt);
+  const expected = { reason: 'dst', localDate: gap.localDate, localTime: gap.localTime,
+    zone: gap.zone, cursor: null, next: gap.next };
+  expect(row.event.data).toMatchObject(expected);
+  const replayed = await state();
+  expect(replayed.definition?.next).toEqual(gap.next);
+  expect(replayed.definition?.cursor).toBeNull();
+  expect(replayed.activeRun).toBeNull();
+  expect(replayed.executionAvailable).toBe(false);
+  expect(await skip(request)).toEqual(receipt);
+  expect(await nats.store.head()).toBe(4);
+}
+it.each(dailyGaps)(
+  'keeps the next daily local slot when skipping the $zone gap at its boundary', dailyGapBoundary);
+
 async function occupied(kind = 'starting') {
   const original = creation();
   const next = { localDate: '2026-10-18', localTime: '02:30', zone: 'Europe/Brussels',
