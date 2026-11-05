@@ -76,7 +76,8 @@ async function startBackend(setup: Setup, memory: MemoryOptions) {
     await app.close();
   }
   onTestFinished(closeBackend);
-  const address = await app.listen({ host: '127.0.0.1', port: 0 });
+  const listenOptions = { host: '127.0.0.1', port: 0 };
+  const address = await app.listen(listenOptions);
   const route = { serverId: 'memory', connectionId: 'server', upstream: new URL(address).host,
     generation: 'memory-instance', revisionHeader: 'x-opencrane-mcp-revision' as const };
   setup.options.mcpRoutes.push(route);
@@ -188,7 +189,8 @@ async function prepareChat(setup: Setup, memory: MemoryOptions,
     const rows = await history(setup.nats.store, 'computer-assistant', 'test');
     const assistant = assistantSnapshot(rows, 'personal', 'test');
     function connectedComputer() {
-      return Promise.resolve({ ...link, connectionId: 1 });
+      const connected = { ...link, connectionId: 1 };
+      return Promise.resolve(connected);
     }
     await processConversation(options, setup.tokens, conversation, assistant,
       new Set(), connectedComputer);

@@ -7,14 +7,16 @@ import { recallBackend, factText, scopeId, threadId } from './support/recall-bac
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 
 vi.mock('node:net', { spy: true });
-vi.mock('node:fs', async function filesystem(importOriginal) {
-  const original = await importOriginal<typeof import('node:fs')>();
+async function filesystem() {
+  const original = await vi.importActual<typeof import('node:fs')>('node:fs');
   return { ...original };
-});
-vi.mock('node:child_process', async function processes(importOriginal) {
-  const original = await importOriginal<typeof import('node:child_process')>();
+}
+vi.mock('node:fs', filesystem);
+async function processes() {
+  const original = await vi.importActual<typeof import('node:child_process')>('node:child_process');
   return { ...original };
-});
+}
+vi.mock('node:child_process', processes);
 
 async function recallsStoredFact() {
   const test = await recallBackend();
