@@ -6,6 +6,9 @@ import { memoryWrittenEventSchema } from '@opencrane/events';
 import { history } from '@opencrane/models';
 import { expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { Client } from 'pg';
+import type { Db } from '@opencrane/projections';
+import { commandReference } from '../src/memory/command-history.ts';
 import { recallBackend, scopeId, threadId } from './support/recall-backend.ts';
 
 function createMockOptions() {
@@ -138,6 +141,104 @@ async function refusesRemember(reason: typeof refusals[number]) {
   expect(JSON.stringify(response)).not.toContain(text);
 }
 it.each(refusals)('releases no Remember result after %s', refusesRemember, 120_000);
+
+type Backend = Awaited<ReturnType<typeof recallBackend>>;
+type Withdrawal = 'stop' | 'replacement';
+
+async function saveWithdrawal(test: Backend, change: Withdrawal) {
+  if (change === 'stop') {
+    const data = { conversationId: 'chat', turnId: test.turnId, requestedBy: 'alice' };
+    await test.setup.append('conversation-chat', 'agent.turn_stop_requested', data);
+  } else {
+    const data = { assistantId: 'assistant', computerId: 'computer',
+      generation: 2, podUid: 'replacement' };
+    await test.setup.append('computer-assistant', 'computer.ready', data);
+  }
+  // Keep local withdrawal delayed so saved events must refuse the write.
+  expect(test.native.callers.permits(test.turnId, test.turnId, threadId)).toBe(true);
+}
+
+async function expectNoRemember(test: Backend, commandId: string, response: unknown) {
+  const rows = await history(test.setup.nats.store, `scope-${scopeId}`, 'test');
+  function isRemember(row: typeof rows[number]) {
+    return row.event.commandId === commandId;
+  }
+  const writes = rows.filter(isRemember);
+  expect(writes).toHaveLength(0);
+  const refusal = { result: { isError: true } };
+  expect(response).toMatchObject(refusal);
+  expect(response).not.toHaveProperty('result.structuredContent');
+  expect(JSON.stringify(response)).not.toContain(text);
+}
+
+async function refusesWithdrawalDuringLock(change: Withdrawal) {
+  const test = await recallBackend(true);
+  await test.start();
+  const args = await rememberInput(test);
+  const reference = commandReference('test', scopeId, 'alice', args.commandId, 'agent');
+  const lockName = `memory-command:${reference}`;
+  const databaseLockName = `opencrane:projection:${lockName}`;
+  const clientOptions = { connectionString: test.setup.databaseUrl };
+  const client = new Client(clientOptions);
+  await client.connect();
+  const attempted = Promise.withResolvers<void>();
+  const lock = test.memory.db.lock!.bind(test.memory.db);
+  async function trackedLock<Result>(name: string, work: (db: Db) => Promise<Result>,
+    options?: { timeoutMs: number; signal?: AbortSignal }) {
+    const pending = lock(name, work, options);
+    if (name === lockName) {
+      attempted.resolve();
+    }
+    return pending;
+  }
+  const lockSpy = vi.spyOn(test.memory.db, 'lock');
+  lockSpy.mockImplementation(trackedLock);
+  let pending: Promise<unknown> | undefined;
+  function finishedBeforeLock() {
+    throw new Error('Remember finished before trying the PostgreSQL lock');
+  }
+  try {
+    await client.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [databaseLockName]);
+    pending = test.native.call(threadId, 'remember', args);
+    await Promise.race([attempted.promise, pending.then(finishedBeforeLock)]);
+    await saveWithdrawal(test, change);
+    await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [databaseLockName]);
+    const response = await pending;
+    await expectNoRemember(test, args.commandId, response);
+  } finally {
+    await client.query('SELECT pg_advisory_unlock_all()');
+    await client.end();
+    await pending;
+    lockSpy.mockRestore();
+  }
+}
+it.each(['stop', 'replacement'] as const)(
+  'saves no Remember when %s is saved during the database lock wait',
+  refusesWithdrawalDuringLock, 120_000);
+
+async function refusesWithdrawalAtAppend(change: Withdrawal) {
+  const test = await recallBackend(true);
+  await test.start();
+  const args = await rememberInput(test);
+  const store = test.setup.nats.store;
+  const append = store.append.bind(store);
+  let changed = false;
+  async function withdrawBeforeAppend(command: Parameters<typeof append>[0]) {
+    if (command.event.commandId === args.commandId) {
+      changed = true;
+      await saveWithdrawal(test, change);
+    }
+    return append(command);
+  }
+  const appendSpy = vi.spyOn(store, 'append');
+  appendSpy.mockImplementation(withdrawBeforeAppend);
+  const response = await test.native.call(threadId, 'remember', args);
+  expect(changed).toBe(true);
+  await expectNoRemember(test, args.commandId, response);
+}
+it.each(['stop', 'replacement'] as const)(
+  'saves no Remember when %s is saved before the final append check',
+  refusesWithdrawalAtAppend, 120_000);
 
 async function withdrawsBeforeRelease(reason: 'qualification' | 'reference') {
   const test = await recallBackend(true);
