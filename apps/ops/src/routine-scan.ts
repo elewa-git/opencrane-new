@@ -57,9 +57,13 @@ async function readCandidate(store: EventStore, silo: string, routineId: string,
 }
 
 function observation(state: RoutineState, now: number) {
-  if (state.status !== 'active') return 'inactive';
+  if (state.status !== 'active') {
+    return 'inactive';
+  }
   const saved = state.definition;
-  if (!saved) throw new Error('Routine definition unavailable');
+  if (!saved) {
+    throw new Error('Routine definition unavailable');
+  }
   const identity = { silo: state.silo, routineId: state.routineId,
     scheduleRevision: saved.scheduleRevision, schedule: saved.definition.schedule };
   let occurrence;
@@ -76,17 +80,27 @@ function observation(state: RoutineState, now: number) {
     const input = { ...identity, now: saved.effectiveAt, effectiveAt: saved.effectiveAt,
       afterLocalDate: saved.cursor?.localDate, count: 1 };
     occurrence = previewRoutineOccurrences(input)[0]!;
-    if (occurrence.status !== 'dst_skip') throw new Error('Routine slot unavailable');
+    if (occurrence.status !== 'dst_skip') {
+      throw new Error('Routine slot unavailable');
+    }
   }
   if (Date.parse(occurrence.checkAt) <= Date.parse(saved.effectiveAt) ||
       (saved.cursor && occurrence.localDate <= saved.cursor.localDate)) {
     throw new Error('Routine slot unavailable');
   }
   const lateness = now - Date.parse(occurrence.checkAt);
-  if (lateness < 0) return 'future';
-  if (lateness > 60_000) return 'late';
-  if (occurrence.status === 'dst_skip') return 'gap';
-  if (state.activeRun) return 'occupied';
+  if (lateness < 0) {
+    return 'future';
+  }
+  if (lateness > 60_000) {
+    return 'late';
+  }
+  if (occurrence.status === 'dst_skip') {
+    return 'gap';
+  }
+  if (state.activeRun) {
+    return 'occupied';
+  }
   return 'eligible';
 }
 
@@ -111,7 +125,9 @@ export async function scanRoutineCandidates(db: Query, store: EventStore, worker
       const expires = Math.min(deadline, performance.now() + 1000);
       const current = await worker.checkCurrent(expires);
       check();
-      if (!current || performance.now() >= expires) throw new Error('Routine scan refused');
+      if (!current || performance.now() >= expires) {
+        throw new Error('Routine scan refused');
+      }
     }
     await requireLeadership();
     const minimumPosition = await store.head(undefined, deadline);

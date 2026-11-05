@@ -92,7 +92,9 @@ async function pages() {
   expect(second.examined).toBe(1);
   expect(second.continuation).toBeNull();
   const subjects: string[] = [];
-  for (const call of reads.mock.calls) subjects.push(call[0]);
+  for (const call of reads.mock.calls) {
+    subjects.push(call[0]);
+  }
   expect(new Set(subjects).size).toBe(51);
   expect(subjects).toHaveLength(51);
   expect(subjects).not.toContain('routine-foreign');
@@ -251,14 +253,18 @@ async function noEffects() {
   const tool = vi.spyOn(tools, 'mcpDispatch');
   const credential = vi.spyOn(broker, 'credentialBroker');
   const effects = [append, wake, credentials, jobs, network, model, tool, credential];
-  for (const effect of effects) effect.mockImplementation(forbidden);
+  for (const effect of effects) {
+    effect.mockImplementation(forbidden);
+  }
   const before = await nats.store.head();
   expect((await scan()).counts.eligible).toBe(1);
   const options = { verify: true };
   await rebuildRoutineProjection(storage.db, nats.reader, logger, options);
   expect((await scan()).counts.eligible).toBe(1);
   expect(await nats.store.head()).toBe(before);
-  for (const effect of effects) expect(effect).not.toHaveBeenCalled();
+  for (const effect of effects) {
+    expect(effect).not.toHaveBeenCalled();
+  }
 }
 it('scans and replays without session, input, root, sender, wake, credential or network effects',
   noEffects);
