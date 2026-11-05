@@ -1,10 +1,14 @@
+import { preflightFixture } from '../../computer/test/private-recall-preflight-fixture.ts';
+import { privateToolOffer } from './support/private-catalogue.ts';
+import { recallTool } from '../src/memory/mcp.ts';
+import { losslessJson } from '@opencrane/events/lossless-json';
 import { createHash, randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from 'vitest';
 import { memoryContextRecordedEventSchema, parseEventByType } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { history, readToolPolicy } from '@opencrane/models';
@@ -42,6 +46,7 @@ const binding = { conversationId: 'chat', turnId: 'turn', requesterId: 'alice',
 let prepared = { ...binding, projectionGeneration: 'projection', action: 'prepared',
   delivery: null, callDigest: null, dispatchDigest: null, additions: [], scopePositions: [],
   byteCount: 0, hasOmissions: false, reason: 'none' };
+vi.mock('node:net', { spy: true });
 vi.mock('node:fs', async function filesystem(importOriginal) {
   const original = await importOriginal<typeof import('node:fs')>();
   return { ...original };
@@ -1371,3 +1376,88 @@ async function accessAppendRace(kind: 'lost' | 'recall' | 'expiry') {
 }
 it.each(['lost', 'recall', 'expiry'] as const)(
   'converges after an access withdrawal races with %s', accessAppendRace);
+
+async function prepareRecallTurn() {
+  computer.finish('thread-1');
+  async function ended() {
+    const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+    expect(facts.turnEnded).toBe(true);
+  }
+  await vi.waitFor(ended);
+  const native = await preflightFixture();
+  onTestFinished(native.close);
+  computer.driver.privateSession = native.openCurrent;
+  Object.assign(computer.driver, native.driver);
+  const gateIdentity = { verifier: computer.issuer.jwks.keys[0], issuer: 'fixture',
+    silo: 'test', computer: 'computer', assistant: 'assistant', generation: 1, podUid: 'pod' };
+  function credential() {
+    return { value: 'test', expiresAt: Date.now() + 120_000, gateIdentity };
+  }
+  computer.driver.credential = credential;
+  const definition = JSON.stringify(recallTool);
+  const revision = losslessJson(definition).digest;
+  const metadata = { name: 'recall', reviewed: true, costCents: 0 };
+  const tool = { ...toolEvidence(metadata), definition, revision };
+  const catalogue = catalogueEvidence([tool]);
+  const checkedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
+  const discovered = { serverId: 'memory', connectionId: 'server', accountMode: 'none',
+    checkedAt, expiresAt, serverInfo: { name: 'OpenCrane memory', version: '1' }, ...catalogue };
+  await append('mcp-memory', 'mcp.server_discovered', discovered);
+  const policy = await readToolPolicy(nats.store, 'test', 'memory');
+  const choice = { name: 'recall', revision, reviewDigest: toolReviewDigest(tool), mode: 'allow' };
+  const reviewed = { serverId: 'memory', catalogueDigest: catalogue.schemaDigest,
+    connectionId: 'server', accountMode: 'none', policyRevision: policy.policyRevision,
+    reviewedBy: 'alice', tools: [choice] };
+  await append('mcp-memory', 'mcp.server_reviewed', reviewed);
+  const published = { serverId: 'memory', publishedBy: 'alice' };
+  await append('mcp-memory', 'mcp.server_published', published);
+  const encrypted = keys.encrypt('test', 'chat', 'Recall my fact');
+  const message = { conversationId: 'chat', authorId: 'alice', authorKind: 'human',
+    contentType: 'text', ...encrypted };
+  await append('conversation-chat', 'message.posted', message, 'recall-turn');
+  const started = { conversationId: 'chat', turnId: 'recall-turn', requesterId: 'alice',
+    assistantId: 'assistant', computerId: 'computer', threadId: 'returned-native-1',
+    task: 'chat_turn', executionMode: 'restricted' };
+  await append('computer-assistant', 'computer.turn_started', started);
+  const tools = privateToolOffer('recall');
+  const turn = { type: 'turn', id: 'recall-turn', conversationId: 'chat', requesterId: 'alice',
+    assistantId: 'assistant', executionMode: 'restricted', text: 'Preparing private input', token: 'preparing',
+    expiresAt: Date.now() + 60_000, tools };
+  const recall = { requesterId: 'alice', expiresAt: turn.expiresAt,
+    baseMessageBytes: Buffer.byteLength(JSON.stringify(turn)) };
+  const delivery = { turnId: turn.id, sentAt: performance.now(), tools, recall };
+  link.sentTurns.set('chat', delivery);
+  const sent: Record<string, unknown>[] = [];
+  const originalSend = link.socket.send.bind(link.socket);
+  function send(data: Parameters<typeof originalSend>[0]) {
+    sent.push(JSON.parse(String(data)) as Record<string, unknown>);
+    originalSend(data);
+  }
+  vi.spyOn(link.socket, 'send').mockImplementation(send);
+  return { native, turn, sent };
+}
+
+async function discoversBeforePrivateDispatch() {
+  const test = await prepareRecallTurn();
+  test.native.pauseDiscovery();
+  link.socket.send(JSON.stringify(test.turn));
+  function discovering() {
+    expect(test.native.received).toContain('mcpServerStatus/list');
+  }
+  await vi.waitFor(discovering, { timeout: 10_000 });
+  expect(test.native.received).not.toContain('turn/start');
+  expect(computer.grants.has('returned-native-1')).toBe(false);
+  function isLoad(frame: Record<string, unknown>) { return frame['type'] === 'recall_load'; }
+  expect(test.sent.filter(isLoad)).toHaveLength(1);
+  test.native.resume();
+  function dispatched() { expect(test.native.received).toContain('turn/start'); }
+  await vi.waitFor(dispatched, { timeout: 10_000 });
+  await link.settled();
+  expect(computer.grants.has('returned-native-1')).toBe(true);
+  expect(test.native.mcp.size).toBe(1);
+  const facts = await readChatFacts(nats.store, 'test', 'chat', 'recall-turn');
+  expect(facts.memoryContext?.initialLoaded).toBe(true);
+}
+it('saves admission and loads recall over the bridge before releasing private input or credentials',
+  discoversBeforePrivateDispatch);
