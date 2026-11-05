@@ -90,3 +90,20 @@ repeating the full permission check. The final ordering keeps the captured acces
 inside reference validation, then runs full turn, computer and access confirmation.
 It also uses full confirmation at append. The normal-save control and all four refusal
 cases pass with this ordering. No timeout or assertion was relaxed.
+
+Final code source: `19c0dd1425f462090c82b0fa042aab76a44ed31a`.
+
+- PASS: two final runs, each with 223 tests across the six suites listed above,
+  excluding the separate unchanged event security suite. Every Remember case passed twice.
+- PASS: `npm run lint`, including Knip and `npm run lint:changelog`.
+  The final changed code also passed focused ESLint, with no errors.
+- PASS: `npm run typecheck`, plus a server typecheck after the ordering change.
+- PASS: `npm run check:events`; all 158 registered event types match the catalogue.
+
+Final test logs on the task host are `/tmp/p4-15-pr4n-tests-final-1.log` and
+`/tmp/p4-15-pr4n-tests-final-2.log`. Check logs are `/tmp/p4-15-pr4n-lint.log`,
+`/tmp/p4-15-pr4n-typecheck-final.log`, `/tmp/p4-15-pr4n-server-typecheck.log` and
+`/tmp/p4-15-pr4n-events.log`.
+
+NOT RUN in this repair: full root suite, event security suite, model calls, development
+stacks and fresh-install qualification. Admission stays off.
