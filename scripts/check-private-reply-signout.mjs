@@ -29,12 +29,12 @@ const lateReply = { ...reply, turnId: 'next',
 
 // Inspect the public state in a development build until private reply display exists.
 function privateText() {
-  const element = document.querySelector('oc-workspace');
+  const element = globalThis.document.querySelector('oc-workspace');
   const component = globalThis.ng?.getComponent(element);
   return component?.chat.privateReply()?.data.text ?? null;
 }
 function connected() {
-  const element = document.querySelector('oc-workspace');
+  const element = globalThis.document.querySelector('oc-workspace');
   const component = globalThis.ng?.getComponent(element);
   return component?.chat.connected() ?? false;
 }
@@ -138,7 +138,7 @@ async function scenario(browser, broadcast) {
     await tabA.bringToFront();
     // Headless Chromium does not consistently emit focus when switching pages.
     function returnToTab() {
-      window.dispatchEvent(new Event('focus'));
+      globalThis.dispatchEvent(new Event('focus'));
     }
     await tabA.evaluate(returnToTab);
     await tabA.waitForFunction(`(${privateText})() === null`);
