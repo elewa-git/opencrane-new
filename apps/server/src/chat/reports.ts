@@ -450,7 +450,11 @@ function receiptFor(report: Report) {
 }
 
 export function turnStatus(type: string) {
-  if (type === 'agent.turn_started') return 'started';
-  if (type === 'agent.turn_completed') return 'completed';
+  if (type === 'agent.turn_started') {
+    return 'started';
+  }
+  if (type === 'agent.turn_completed') {
+    return 'completed';
+  }
   return 'failed';
 }

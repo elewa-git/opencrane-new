@@ -393,8 +393,12 @@ async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
   turn: ReturnType<typeof turnMessage>, kind: string, mode: ExecutionMode,
   approvalWaiting: boolean) {
   const recall = kind === 'personal' && mode === 'restricted' && !('sharingClass' in turn);
-  if (!options.binding || typeof turn.requesterId !== 'string') return [];
-  if (!recall && (!mayOfferTurnTools(kind, mode, true) || !options.catalogue)) return [];
+  if (!options.binding || typeof turn.requesterId !== 'string') {
+    return [];
+  }
+  if (!recall && (!mayOfferTurnTools(kind, mode, true) || !options.catalogue)) {
+    return [];
+  }
 
   const catalogueRows = recall ? [] : await options.catalogue!.rows(options.silo);
   const auth = memberAuthorisation(options.binding);
@@ -457,7 +461,9 @@ async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
     readServer,
     canUse: canUseServer,
   };
-  if (recall) return buildRecallOffer(toolInput);
+  if (recall) {
+    return buildRecallOffer(toolInput);
+  }
   return buildTurnTools(toolInput);
 }
 

@@ -183,7 +183,9 @@ function reportReceiver(options: ReportOptions, input: BridgeInput,
   let legacyPending = Promise.resolve();
   const queues = new Map<string, ReportQueue>();
   function receiveReceipt(value: unknown) {
-    if (options.recall.receive(value)) return true;
+    if (options.recall.receive(value)) {
+      return true;
+    }
     if (control.receive(value)) return true;
     const memoryReceipt = options.memory.receive(value);
     const routineReceipt = options.routines.receive(value);
