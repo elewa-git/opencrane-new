@@ -12,7 +12,7 @@ The internal routine frame carries threadId, messageId, rootId and senderAttempt
 id (the turn id). The journal retains these on agent.turn_started, including reload.
 Execution still records the turn id in the existing execution journal before calling
 the driver. The server requires its live sender and exact saved admission before
-returning a start grant. No retry or routine enablement is added to the computer.
+returning a start grant. Delivery is never retried, and routine execution remains disabled.
 The server routine-sender suite exercises the real channel with a recording driver.
 
 `routine_prepare` opens an empty ephemeral private thread before the server records its
@@ -21,14 +21,20 @@ native id, turn, conversation, assistant and requester on delivery. It consumes 
 before checking delivery and never starts a second thread for that routine frame.
 Prepared and running private turns share the two-process limit. Each preparation expires
 within sixty seconds; Stop, disconnect or process closure removes it sooner. The bridge
-remembers at most 4,096 attempted turn ids and refuses further preparations at that limit.
+remembers at most 4,096 pending or consumed turn ids and refuses further preparations at
+that limit. Cancelling unused preparation releases its turn id for a fresh attempt.
+Delivery consumes the id before checking identity, so cancellation cannot enable a repeat
+or mismatched delivery. Delayed startup, expiry and closure callbacks affect only their
+original preparation; they cannot remove its replacement.
 A preparation failure returns `routine_prepare_refused` with only the requested turn id.
 Capacity refusal, expiry and startup failure leave the shared socket and unrelated
 private sessions open. Cleanup closes only the failed preparation's process.
 `test/routine-threads.test.ts` checks two running private conversations at capacity,
 an expired request, timer expiry during native startup and failures opening the process
 or starting its thread. It checks retained grants, open sessions, continued replies
-and no extra turn execution through the real WebSocket channel.
+and no extra turn execution through the real WebSocket channel. Cancellation tests also
+hold process opening, thread startup and process closure, then check that their delayed
+completion preserves replacement preparation and that a delivered id stays consumed.
 A reply from an old connection cannot be sent on a replacement connection.
 The request and reply contain no routine instructions. No production dispatcher is enabled.
 

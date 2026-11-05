@@ -1,1 +1,2 @@
 - Connect checked routine preparation to its native thread and single-use sender through an internal adapter. Automatic execution remains disabled; replay performs no work.
+- Allow cancelled routine preparation to retry the same occurrence before its allowance is saved, without repeating delivery or letting delayed cleanup cancel the replacement.

@@ -22,10 +22,13 @@ passes unchanged to `createRoutineSender`. The existing helpers own authority, b
 publication and post-start credential checks. The adapter adds no event or business rule.
 
 Disabled and replay entries return `unknown` before history, wake or writes.
-A saved activation prevents another wake. Missing native preparation and uncertain saved
-stages return `unknown`; no receipt proves an unsent activation. Recovery cannot replace
-an allocated native thread after its process is lost. Existing allowance, payer and holds
-remain unchanged. This is conservative refusal, not automatic recovery or completion.
+A saved activation prevents another wake. Cancelling unused native preparation releases
+its turn id. Before an allowance is saved, a fresh invocation can prepare a new native
+thread for the same occurrence, recheck access and send once. Saved session and input
+records are reused. Delayed cleanup cannot cancel replacement preparation.
+Missing native preparation and uncertain saved stages return `unknown`; no receipt proves
+an unsent activation. Recovery cannot replace an allocated native thread after its process
+is lost. Existing allowance, payer and holds remain unchanged.
 No new schema fields or dependencies were added. Protected root server/models README pairs,
 files from #837/#838, bridge/credential files and authority/security tests remain unchanged.
 This README pair documents the adapter because the root server files are reserved.
@@ -49,6 +52,39 @@ and used a recursive transport spy. Both were fixed, as were fixture type and li
 Forcing the adapter inactive failed the positive test at its expected sent assertion.
 That temporary test transform changed no repository file and was removed afterwards.
 Logs: `/tmp/p4-24-pr10f-*`; final focused runs are `checked1.log` and `checked2.log`.
+Full root suite and fresh-install live qualification: NOT RUN.
+
+## Preparation retry correction — 5 November 2026
+
+Rebased onto `79afe7aff`; Git reported completion and the base is an ancestor of this
+branch. Test commit `6bb9baba5` preceded production fix `4cd6f3468`.
+The checks below exercised that source; the later documentation commit changes no code.
+
+Expected FAIL: five early-stage recovery cases returned `unknown` instead of `sent`.
+Three cancellation cases also failed because preparation could not reuse its turn id.
+Logs: `/tmp/p4-24-pr10f-fix-red.log` and
+`/tmp/p4-24-pr10f-fix-cancel-red.log`.
+
+The fix releases only pending preparation. Delivery still consumes the id before its
+identity checks. Delayed startup and closure work cannot remove a replacement.
+The existing fault matrix now requires one execution and one set of saved records for
+failures before allocation. Its later-stage refusal assertions remain in place.
+Spies, fixture options and bound callbacks are named separately, and branches are expanded.
+
+Own PASS: the first fix run passed 34 composition and preparation tests.
+Own PASS: full typecheck, the 158-type event catalogue check and all lint stages,
+including Knip and changelog validation. Lint reported 37 warnings; the routine preparation
+function now has 84 lines against the 80-line warning threshold.
+The first combined run was FAIL: 122 passed and one unchanged sender test timed out waiting
+for execution. That case then passed alone with no code, assertion or deadline changes.
+Own PASS: the final combined run passed all 583 tests: 26 composition, eight preparation,
+89 unchanged sender and 460 unchanged security-rule tests. Both changed test files passed
+in each combined run. All test commands used `nice -n 10`, one worker, serial files and
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+Logs use `/tmp/p4-24-pr10f-fix-` followed by `green.log`, `typecheck.log`, `events.log`,
+`lint.log`, `tests1.log`, `tests2.log` or `sender-recheck.log`.
+These tests use disposable NATS/OpenFGA and a scripted native peer, with the supplied
+`PG_TEST_URL`. They do not use a fresh installation or make model calls.
 Full root suite and fresh-install live qualification: NOT RUN.
 
 ## Remaining enablement work

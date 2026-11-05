@@ -12,11 +12,11 @@ The server adapter calls the existing preparation and sender functions.
 
 ```mermaid
 flowchart LR
-  Server --> Composition
-  Composition --> Preparation
-  Composition --> Sender
-  Preparation --> Computer
-  Sender --> Computer
+  Server["apps/server<br/>back end"] -->|calls internally| Composition["Composition<br/>routine delivery"]
+  Composition -->|prepares or retries unused work| Preparation["Preparation<br/>session and allowance"]
+  Composition -->|requests one send| Sender["Sender<br/>checked delivery"]
+  Preparation -->|opens private thread| Computer["apps/computer<br/>assistant computer"]
+  Sender -->|sends admitted turn| Computer
 ```
 
 ## What it is responsible for
@@ -32,8 +32,10 @@ An explicit internal invocation checks the saved routine and current worker owne
 After wake, existing helpers check access again, prepare the private session and input,
 allocate its allowance and admit one sender. The computer receives labelled user instructions.
 
-Recovery reads saved facts. A saved admission grants no new permission to send.
-A lost native preparation cannot be replaced with a guessed thread.
+Recovery reads saved facts. A failure before the allowance is saved can prepare a fresh
+native thread for the same occurrence and send it once. The retry checks access again.
+A saved admission grants no new permission to send. Once an allowance names a native
+thread, recovery cannot replace that thread with a guessed identity.
 
 ## How to run or test it
 
