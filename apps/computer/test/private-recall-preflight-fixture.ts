@@ -12,6 +12,7 @@ import { acceptPrivateLaunch } from '../src/private-launch.ts';
 import { privateLaunchContext } from '../src/private-launch-context.ts';
 import { openPrivateSession } from '../src/private-session.ts';
 import { approvalHolds } from '../src/approval-holds.ts';
+import { randomUUID } from 'node:crypto';
 import { mcpProxy } from '../src/mcp-proxy.ts';
 import { threadLoads } from '../src/thread-loads.ts';
 import { parseTurn, type ToolServer } from '../src/turn-frame.ts';
@@ -67,11 +68,12 @@ async function startMcpListener({ callers, mcp }: ProxyFixture) {
     throw new Error('Missing fixture address');
   }
   const origin = `http://127.0.0.1:${address.port}`;
-  async function send(endpoint: string, caller: string, method = 'tools/list') {
-    const headers = { authorization: `Bearer ${caller}`, 'mcp-method': method,
+  async function send(endpoint: string, caller: string, method = 'tools/list',
+    params: Record<string, unknown> = {}, extraHeaders: Record<string, string> = {}) {
+    const headers = { ...extraHeaders, authorization: `Bearer ${caller}`, 'mcp-method': method,
       'mcp-protocol-version': '2026-07-28' };
     const metadata = { 'io.modelcontextprotocol/protocolVersion': '2026-07-28' };
-    const request = { jsonrpc: '2.0', id: 1, method, params: { _meta: metadata } };
+    const request = { jsonrpc: '2.0', id: 1, method, params: { _meta: metadata, ...params } };
     const body = JSON.stringify(request);
     const options = { method: 'POST', headers, body };
     const response = await fetch(origin + new URL(endpoint).pathname, options);
@@ -83,7 +85,8 @@ async function startMcpListener({ callers, mcp }: ProxyFixture) {
 function createDiscoveryControls() {
   const received: string[] = [];
   const resume = Promise.withResolvers<void>();
-  return { received, resume, holdDiscovery: false, loseReload: false };
+  const calls = new Map<string, (args: object, headers: Record<string, string>) => Promise<Record<string, unknown>>>();
+  return { received, resume, calls, holdDiscovery: false, loseReload: false };
 }
 
 type DiscoveryControls = ReturnType<typeof createDiscoveryControls>;
@@ -116,6 +119,14 @@ function handleNativeProtocol(
         endpoint = String(record(server)['url']);
         expect(await send(endpoint, caller, 'server/discover')).toHaveProperty('error');
       }
+      async function recall(args: object, headers: Record<string, string>) {
+        const metadata = { threadId: thread.id, callId: randomUUID(),
+          'io.modelcontextprotocol/protocolVersion': '2026-07-28' };
+        const params = { name: 'recall', arguments: args, _meta: metadata };
+        const callHeaders = { ...headers, 'mcp-name': 'recall' };
+        return send(endpoint, caller, 'tools/call', params, callHeaders);
+      }
+      discovery.calls.set(thread.id, recall);
       result = { thread };
     }
     if (method === 'config/mcpServer/reload' && discovery.loseReload) {
@@ -327,7 +338,12 @@ export async function preflightFixture() {
     const opened = await sessions.open(launch.turnId, launch.conversation);
     return opened.session;
   }
-  return { open: sessions.open, openCurrent, prepare, received: discovery.received,
+  function recall(thread: string, args: object, headers: Record<string, string> = {}) {
+    const call = discovery.calls.get(thread);
+    if (!call) throw new Error('Native thread has not started');
+    return call(args, headers);
+  }
+  return { recall, open: sessions.open, openCurrent, prepare, received: discovery.received,
     callers: proxy.callers, loads, driver, mcp: proxy.mcp, close, pauseDiscovery,
     resume: discovery.resume.resolve, dropReloadReply };
 }
