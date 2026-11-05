@@ -673,6 +673,17 @@ async function loadedRecallFixture() {
   await journey.append(`scope-${journey.scopeId}`, 'memory.written', fact);
   await journey.append('conversation-conversation', 'agent.memory_context_recorded', journey.prepared);
   await journey.load();
+  for (const [granteeKind, granteeId] of [['member', 'alice'], ['assistant', 'assistant']]) {
+    const grant = { resourceType: 'memory_read', resourceId: journey.scopeId,
+      granteeKind, granteeId, grantedBy: 'alice' };
+    await setup.save(grantStream('memory_read', journey.scopeId), 'grant.given', grant);
+  }
+  const conversations = setup.input.store.readStream('conversation-conversation');
+  for await (const row of conversations) {
+    if (row.event.type === 'conversation.created') {
+      await setup.auth.handler.handle(row.event, noSql);
+    }
+  }
   setup.append.mockClear();
   return { ...setup, journey };
 }
@@ -780,3 +791,49 @@ async function refusesLatePreparationCancellation(stage: 'access' | 'activity') 
 it.each(['access', 'activity'] as const)(
   'refuses recall preparation when its caller closes during final %s confirmation',
   refusesLatePreparationCancellation);
+
+for (const stage of ['before completion', 'during completion'] as const) {
+  async function refusesChangedReference(kind: 'corrected' | 'forgotten') {
+    const setup = await loadedRecallFixture();
+    const load = await preparePersonalRecallLoad(setup.input, setup.pending);
+    const reply = { ...setup.pending, type: 'recall_loaded' };
+    async function changeReference() {
+      await setup.journey.change(kind);
+      setup.append.mockClear();
+      const chat = await readChatFacts(setup.input.store, 'test', 'conversation', 'turn');
+      expect(chat.memoryContext?.status).toBe('loaded');
+    }
+    if (stage === 'before completion') {
+      await changeReference();
+      await expect(load.complete(reply)).rejects.toThrow('memory_context_unavailable');
+      return;
+    }
+    const waiting = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
+    async function delayedPermission(...args: Parameters<typeof setup.realCheck>) {
+      waiting.resolve();
+      await resume.promise;
+      return setup.realCheck(...args);
+    }
+    setup.check.mockImplementationOnce(delayedPermission);
+    const completion = load.complete(reply);
+    const refused = expect(completion).rejects.toThrow('memory_context_unavailable');
+    await waiting.promise;
+    await changeReference();
+    resume.resolve();
+    await refused;
+  }
+  it.each(['corrected', 'forgotten'] as const)(
+    `refuses a loaded reference %s ${stage} while invalidation is pending`, refusesChangedReference);
+}
+
+async function acceptsCurrentLoadedReferences() {
+  const setup = await loadedRecallFixture();
+  const load = await preparePersonalRecallLoad(setup.input, setup.pending);
+  const reply = { ...setup.pending, type: 'recall_loaded' };
+  const tools = await load.complete(reply);
+  expect(tools).toEqual(privateToolOffer('recall'));
+  expect(checkPrivateTurnTools(tools, setup.input)).toBe(true);
+}
+it('accepts recall discovery while loaded references are still current',
+  acceptsCurrentLoadedReferences);
