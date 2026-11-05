@@ -370,3 +370,25 @@ async function checkBeforePrivateDelivery(): Promise<void> {
   expect(chat.privateReply()).toBeNull();
 }
 it('blocks private frames while a returning tab checks its session', checkBeforePrivateDelivery);
+
+async function clearanceDuringSessionCheck(): Promise<void> {
+  send(reply);
+  let finish!: (response: Response) => void;
+  function hold(resolve: (response: Response) => void): void {
+    finish = resolve;
+  }
+  heldAuthentication = new Promise(hold);
+  window.dispatchEvent(new Event('focus'));
+  try {
+    send(clearance);
+    expect(chat.privateReply()).toBeNull();
+    send(reply);
+    expect(chat.privateReply()).toBeNull();
+  } finally {
+    const signedIn = { authenticated: true, user: { name: 'Alex' } };
+    finish(new Response(JSON.stringify(signedIn)));
+  }
+  await heldAuthentication;
+}
+it('honours private clearance while the returning tab checks its session',
+  clearanceDuringSessionCheck);
