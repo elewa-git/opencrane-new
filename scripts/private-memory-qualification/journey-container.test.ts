@@ -54,8 +54,9 @@ async function refusesRealHost(): Promise<void> {
   } else {
     expect(direct.status).toBe(1);
     expect(result).toEqual({ result: 'FAIL', reason: 'host_refused' });
-    await expect(runInContainer(containerId, args, JSON.stringify(request))).rejects.toThrow();
-    await expect(runInContainer(containerId, args, JSON.stringify(request))).rejects.toThrow();
+    const expected = { result: 'FAIL', reason: 'host_refused' };
+    await expect(runInContainer(containerId, args, JSON.stringify(request))).resolves.toEqual(expected);
+    await expect(runInContainer(containerId, args, JSON.stringify(request))).resolves.toEqual(expected);
   }
   docker(['exec', containerId, 'test', '!', '-e', '/run/opencrane-memory-qualification.lock']);
   const processes = docker(['top', containerId, '-eo', 'pid,args']);

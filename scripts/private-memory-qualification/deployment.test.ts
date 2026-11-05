@@ -107,6 +107,27 @@ async function refusesInventedBundle(): Promise<void> {
 }
 it('refuses an invented evidence bundle before executing anything', refusesInventedBundle);
 
+async function savesHostRefusal(): Promise<void> {
+  function refuseHost(receipt: Record<string, unknown>): void {
+    for (const key of Object.keys(receipt)) {
+      delete receipt[key];
+    }
+    receipt['result'] = 'FAIL';
+    receipt['reason'] = 'host_refused';
+  }
+  alter = refuseHost;
+  const expected = {
+    result: 'FAIL', reason: 'host_refused',
+    message: 'Host safety checks failed: swap and core dumps must be disabled.',
+  };
+  expect(await collectDeployment()).toEqual(expected);
+  const options = { flag: 'wx', mode: 0o600 };
+  expect(writeFileSync).toHaveBeenLastCalledWith(expect.any(String),
+    JSON.stringify(expected), options);
+  expect(responses).toHaveLength(1);
+}
+it('returns and saves the host refusal before any later check', savesHostRefusal);
+
 async function substitutes(field: string, status = 'PASS', name?: string): Promise<void> {
   const foreign: Record<string, string> = {
     sourceSha: 'd'.repeat(40), imageDigest: `sha256:${'d'.repeat(64)}`,

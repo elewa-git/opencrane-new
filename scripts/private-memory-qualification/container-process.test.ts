@@ -139,3 +139,35 @@ async function cleansUpSuccessfulJourney(): Promise<void> {
   docker(['exec', containerId, 'test', '-f', '/run/fixture-grandchild']);
 }
 it('returns complete output only after stopping leftover children', cleansUpSuccessfulJourney, 30_000);
+
+async function preservesHostRefusal(): Promise<void> {
+  const refusal = `${journey}
+    setTimeout(() => {
+      process.stdout.write(JSON.stringify({ result: 'FAIL', reason: 'host_refused' }));
+      process.exit(1);
+    }, 1000);
+  `;
+  const args = ['/usr/local/bin/node', '--eval', refusal];
+  const result = await runInContainer(containerId, args);
+  const expected = { result: 'FAIL', reason: 'host_refused' };
+  expect(result).toEqual(expected);
+  assertNoRunningJourney();
+  docker(['exec', containerId, 'test', '-f', '/run/fixture-grandchild']);
+  docker(['exec', containerId, 'test', '!', '-e', '/run/opencrane-memory-qualification.lock']);
+}
+it('returns a host refusal only after stopping leftover children', preservesHostRefusal, 30_000);
+
+async function refusesOtherFailedOutput(output: string): Promise<void> {
+  const source = `process.stdout.write(${JSON.stringify(output)}); process.exit(1);`;
+  const args = ['/usr/local/bin/node', '--eval', source];
+  await expect(runInContainer(containerId, args)).rejects.toThrow('container_process_failed');
+  assertNoRunningJourney();
+}
+const failedOutputs = [
+  '{"result":"PASS"}',
+  '{"result":"FAIL","reason":"journey_failed"}',
+  '{"result":"FAIL","reason":"host_refused","private":"/private/setting"}',
+  '{"result":"FAIL","reason":"host_refused"',
+];
+it.each(failedOutputs)(
+  'rejects other failed process output %s', refusesOtherFailedOutput, 30_000);
