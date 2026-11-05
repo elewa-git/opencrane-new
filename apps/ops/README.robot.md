@@ -929,7 +929,7 @@ Pending reads keep their existing deadlines; cancellation does not detach them.
 
 `test/routine-due.test.ts` uses disposable NATS and OpenFGA for claims, access
 removal, missing membership, permission loss, races and recovery.
-Ticks, missed-range writers, catch-up, manual runs, activation,
+Ticks, catch-up, manual runs, activation,
 deployment and fresh-install execution qualification remain later work.
 
 ### Routine leadership session
@@ -992,5 +992,35 @@ saved event, beyond broker deduplication retention. Changed inputs refuse.
 time. Daily gap tests cover Apia's missing 30 December 2011 and Brussels's missing
 02:30 on 28 March 2027. They check the saved next slot, replay and retry without work.
 It also covers occupied runs, races, recovery, access loss and cancellation
-inside and after append's access check. Ticks, scans, downtime ranges, dispatch and
+inside and after append's access check. Ticks, scans, dispatch and
 fresh-install live qualification remain later work. Company credentials are unchanged.
+
+### Checked routine downtime ranges
+
+`src/routine-missed.ts` provides `recordRoutineMissed(store, worker, input)` for
+P4-24 PR 8d. Input has the same fields as due and skip. Endpoints, count, cursor,
+next and the event id come from exact history and saved revisions, never replacement
+input. One conditional append saves the existing `routine.occurrences_missed`, or
+`routine.occurrence_skipped` when the checked range contains only a missing local time.
+Daily schedules use the shared local calendar rules; weekly schedules refuse.
+Missing times and already claimed occurrences do not count; repeated hours count once. Only slots
+older than sixty seconds count. At most 100 past candidates are inspected per call,
+with the following candidate retained for another invocation. No empty range is saved.
+Gap-only progress records a DST skip at the recovery time, keeps the last real cursor
+and saves the next valid slot without adding to the missed count. The saved event id
+and receipt use the same history and expected-position checks as missed ranges.
+History finishes before the two-second member/ownership access check. The routine
+position is checked on append. Cancellation reaches the final publication check;
+current owner access and leadership are checked before returning any receipt.
+Retries reconstruct the complete original event at its saved time and position,
+even after broker deduplication expires. A range cannot advance over a previously
+recorded range from the same schedule revision. Active runs, activation and Stop
+stay unchanged. Receipts and replay keep execution unavailable.
+
+`test/routine-missed.test.ts` covers calendar transitions, bounded progress, occupied
+runs, races, lost replies, restart, access loss and cancellation during append.
+The Brussels gap-only regression checks recovery on the next valid slot and exactly
+sixty seconds later, one saved skip across concurrent calls and retries, replay, and
+successful claiming of the next valid slot.
+It uses disposable services and controlled time. No caller, tick, scan or sender is
+registered. Weekly recording and fresh-install live qualification remain NOT RUN.

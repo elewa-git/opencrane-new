@@ -21,7 +21,7 @@ flowchart LR
   server -.->|tests use helper| ops
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
-  ops -->|saves results, routine claims and checked skips| nats
+  ops -->|saves results, routine claims, skips and missed ranges| nats
   ops -->|holds routine ownership and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
@@ -45,7 +45,7 @@ and suspension. Those checks read metadata and change no resources.
 - Prepares reviewed tool settings for the gateway and, when configured, removes
   forgotten memory keys and old private connection copies.
 - Provides [replay](../../GLOSSARY.md#replay), failed-job tools and upgrades for recovery.
-- Provides internal commands that claim or skip one scheduled routine occurrence without starting it.
+- Provides internal commands that claim, skip or record missed routine slots without starting work.
 - Holds one routine scheduler owner per silo while its callback prepares claims.
 
 ## Processes it handles
@@ -89,6 +89,12 @@ Execution remains disabled.
 A separate internal command records a missing local time or a slot blocked by an
 occupied run. It advances the schedule without replacing that run, even during Ask
 or Stop. Retries return the same saved receipt after checking access and leadership.
+
+Another internal command records old unclaimed daily slots in a compact downtime range.
+It counts real calendar slots, keeps any occupied run and leaves recent slots eligible.
+If downtime contains only a missing local time, it records that skip once and keeps
+the next valid slot available to claim.
+Long outages continue in bounded steps. A saved receipt never grants execution.
 
 A reviewed template defines how hosted tools may run. Separate Kubernetes rules check
 the image and settings and limit who may create or scale a tool. Starting hosted tools
