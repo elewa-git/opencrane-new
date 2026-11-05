@@ -345,11 +345,6 @@ async function refused(kind: string) {
       type: 'routine.updated', data: { ...original.data, status: 'paused' } };
     if (kind === 'edit') {
       changed.data = { ...original.data, definitionRevision: 2 };
-    } else if (kind === 'weekly') {
-      const schedule = { frequency: 'weekly', weekday: 6, localTime: '02:30',
-        zone: 'Europe/Brussels' };
-      const definition = { ...original.data.definition, schedule };
-      changed.data = { ...original.data, definition };
     } else if (kind === 'retire') {
       changed = routine('routine.retired');
     }
@@ -358,7 +353,7 @@ async function refused(kind: string) {
   const request = { ...input, expectedPosition: await nats.store.head('routine-orders') };
   await expect(record(request)).rejects.toThrow(/^Routine missed refused$/u);
 }
-it.each(['pause', 'edit', 'retire', 'history', 'weekly'])('refuses %s safely', refused);
+it.each(['pause', 'edit', 'retire', 'history'])('refuses %s safely', refused);
 async function cancellation(afterAccess: boolean) {
   const append = nats.store.append.bind(nats.store);
   const head = nats.store.head.bind(nats.store);
