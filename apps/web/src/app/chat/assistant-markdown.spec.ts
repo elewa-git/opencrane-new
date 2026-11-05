@@ -21,6 +21,27 @@ function mount(text: string) {
   return { fixture, root };
 }
 
+it('opens a published workspace link without exposing its path', () => {
+  const { fixture, root } = mount('[Open drawing](/workspace/artifacts/drawing.svg)');
+  fixture.componentRef.setInput('availableFiles', ['artifacts/drawing.svg']);
+  fixture.detectChanges();
+  const opened = vi.fn();
+  fixture.componentInstance.fileOpened.subscribe(opened);
+  const button = root.querySelector('button.workspace-file-link');
+  expect(button?.textContent).toBe('Open drawing');
+  expect(root.textContent).not.toContain('/workspace/artifacts');
+  button?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  button?.click();
+  expect(opened).toHaveBeenCalledWith('artifacts/drawing.svg');
+});
+
+it('shows a plain note for a workspace file the viewer cannot open', () => {
+  const { root } = mount('[Private plan](/workspace/artifacts/private.svg)');
+  expect(root.textContent).toContain('File not available');
+  expect(root.textContent).not.toContain('/workspace/artifacts');
+  expect(root.querySelector('a, button')).toBeNull();
+});
+
 afterEach(function restoreMocks() {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
