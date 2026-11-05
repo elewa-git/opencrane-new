@@ -2382,10 +2382,12 @@ async function displaysAndClearsPrivateReply(): Promise<void> {
   socket.onopen?.(new Event('open'));
   await fixture.whenStable();
   const identity = { version: 1, topic: 'conversation', conversationId: 'chat' };
-  send({ ...identity, type: 'ready', position: 1, generation: 2 });
+  const ready = { ...identity, type: 'ready', position: 1, generation: 2 };
+  send(ready);
   const started = { id: 'start', position: 2, type: 'agent.turn_started',
     time: '2026-11-05T10:00:00Z', data: { turnId: 'turn' } };
-  send({ ...identity, type: 'event', position: 2, generation: 2, row: started });
+  const start = { ...identity, type: 'event', position: 2, generation: 2, row: started };
+  send(start);
   const binding = { ...identity, turnId: 'turn', threadId: 'thread',
     generation: 7, inputGeneration: 'input' };
   const reply = { ...binding, type: 'private_reply',
@@ -2397,10 +2399,12 @@ async function displaysAndClearsPrivateReply(): Promise<void> {
   send(reply);
   expect(root.querySelectorAll('oc-assistant-markdown')).toHaveLength(1);
   const lost = { ...started, id: 'lost', position: 3, type: 'agent.output_lost' };
-  send({ ...identity, type: 'event', position: 3, generation: 2, row: lost });
+  const loss = { ...identity, type: 'event', position: 3, generation: 2, row: lost };
+  send(loss);
   expect(root.textContent).toContain('Synthetic private reply');
   expect(root.textContent).not.toContain("Didn't complete");
-  send({ ...binding, type: 'private_output_cleared' });
+  const clearance = { ...binding, type: 'private_output_cleared' };
+  send(clearance);
   expect(root.querySelector('oc-assistant-markdown')).toBeNull();
   expect(root.innerHTML).not.toContain('Synthetic private reply');
   expect(root.querySelector('[aria-label="Citation 1"]')).toBeNull();
@@ -2410,3 +2414,18 @@ async function displaysAndClearsPrivateReply(): Promise<void> {
 }
 it('shows a private reply once as safe Markdown and removes its text and labels on clearance',
   displaysAndClearsPrivateReply);
+
+async function keepsOrdinaryPartialReply(): Promise<void> {
+  const time = '2026-11-05T10:00:00Z';
+  const question = { id: 'turn', position: 1, type: 'message.posted', time,
+    data: { text: 'Show a plan.', authorId: 'me' } };
+  const delta = { id: 'delta', position: 2, type: 'agent.message_delta', time,
+    data: { text: 'Saved partial answer', turnId: 'turn', messageId: 'reply' } };
+  const lost = { id: 'lost', position: 3, type: 'agent.output_lost', time,
+    data: { turnId: 'turn' } };
+  const { root } = await createCaptureWorkspace([question, delta, lost]);
+  expect(root.textContent).toContain('Saved partial answer');
+  expect(root.textContent).toContain('partial reply kept');
+  expect(root.textContent).not.toContain('Reply unavailable');
+}
+it('keeps the saved partial-reply outcome for ordinary lost output', keepsOrdinaryPartialReply);
