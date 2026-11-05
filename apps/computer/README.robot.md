@@ -1831,3 +1831,12 @@ checks and remaining server work are in the
 [recall loading contract](../../docs/process/p4-15-pr4m/README.robot.md#computer-side-loading).
 The runner now calls `startPrivate` and `loadPrivate`; the server does not yet send
 these requests. This does not enable admission or qualify deployment.
+
+## Backend recall control fixture
+
+The backend recall fixture uses the production proxy HTTP and control socket handlers.
+`proxyGrants` builds the same install and removal requests for the bridge and fixture.
+Installation checks the private caller's generation, input generation and turn identity;
+removal prevents later installation for that turn. Catalogue renewal uses the real expiry
+timer. The fixture observes the real catalogue size without replacing its behaviour.
+The scripted native peer and synthetic deployment observations remain test inputs only.

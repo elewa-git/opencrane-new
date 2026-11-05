@@ -34,3 +34,27 @@ Saved Stop requests also clear an already delivered reply through its checked pr
 The check uses `readChatStopRows`, outside any access deadline, and matches the conversation
 and turn. A late completion cannot hide the Stop. Repeated polls notify the original
 browser once and keep tracking until the computer confirms clearance.
+
+## Recall delivery checks
+
+The joined [backend fixture](../../test/recall-backend-delivery.test.ts) uses the same
+MCP handlers and signed gateway contexts as production. Its response observer reads the
+saved conversation evidence before the first result bytes leave the backend. Holding,
+refusing or losing the append response cannot return fact text; an unknown append can
+still leave loaded references in replay. Repeating that call never returns the old result.
+
+Four content replies retain their measured byte totals under 64 KiB, with whole pages
+under 16 KiB. The next call and a thirty-third distinct loaded reference return no facts.
+The existing memory-context record tests separately exercise the exact cumulative byte
+boundary. Discovery uses the local reviewed catalogue and makes no backend call.
+
+Recall delivery reads the projection before its final `rights.confirm()`. That confirmation
+uses the existing authority check with the original access positions and deadline.
+No database read follows it. Full chat history remains outside the short check;
+confirmation reads only later activity and the small access streams. Stop, removal,
+closure and replacement saved during the final projection query refuse text and proof,
+even when local withdrawal has not run yet.
+
+Renewal is settled at its final access check's read. Correct or Forget saved after that
+read is ordered after renewal and enforced at the next confirmation. Renewal releases
+no memory text. The existing `memory-dispatch.test.ts` boundary assertions remain unchanged.

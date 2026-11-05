@@ -23,3 +23,18 @@ export function proxyControl(path: string, input: unknown,
   }
   return new Promise<void>(send);
 }
+
+export function proxyGrants(control: (path: string, input: unknown) => Promise<void>,
+  credential: () => { computer: string; generation: unknown }) {
+  function grant(thread: string, conversation: string, token: string,
+    expires: number, turnId: string) {
+    const input = { thread, turnId, conversation, token, expires };
+    if (!token) {
+      return control('/drop', input);
+    }
+    const identity = credential();
+    const request = { ...input, ...identity, inputGeneration: 1 };
+    return control('/grant', request);
+  }
+  return grant;
+}

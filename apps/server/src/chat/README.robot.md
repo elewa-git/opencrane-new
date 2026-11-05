@@ -6,7 +6,7 @@ describes personal execution-mode selection, initial input delivery and its chec
 Qualified personal starts use the existing one-use memory consumer after loaded evidence.
 The private bridge acknowledgement carries the rendered input with its short-lived pass.
 Memory-free and shared work cannot receive this field. Generated memory output is still
-refused by the report writer; backend delivery proof remains unfinished.
+refused by the ordinary report writer. The backend fixture below checks recall delivery.
 
 Credential renewal recognises a saved `agent.turn_started` for the same turn. For a
 numbered start, it also requires saved initial-load evidence. The runner resends the
@@ -113,6 +113,21 @@ An established membership refusal remains decisive. No new event or wire field i
 
 The joined fixture uses the production chat sender and supplies saved admission, then runs
 production preparation, the bridge, computer runner, loader, proxy and scripted native
-discovery. It does not call a model or recall facts. PARTIAL: real gateway/backend recall,
-including saved loaded evidence before result bytes, remains for the next split before PR 4n. Admission
-stays disabled. Fixtures do not qualify deployment.
+discovery. That fixture does not call a model or recall facts. The backend fixture below
+now checks delivery through the real gateway. Admission stays disabled. Fixtures do not
+qualify deployment.
+
+## Real backend recall fixture
+
+`test/recall-backend-delivery.test.ts` sends a saved personal turn through the production
+sender, catalogue assembler, authenticated bridge, private loader and local MCP proxy.
+A scripted native peer calls the real gateway and memory backend. NATS, PostgreSQL and
+OpenFGA are disposable services. Saved admission and deployment observations are fixtures;
+no global admission or live qualification is enabled.
+
+The fixture checks a stored own-person fact, loaded evidence before response bytes,
+denied and unknown appends, duplicate calls, replaced client identity headers, whole-page
+and turn limits, and separate same-person sessions. The tests in `memory-delivery.test.ts`,
+`personal-recall-tools.test.ts` and the computer recall suites retain the discovery refusal
+matrix. These are complementary checks; this fixture does not repeat every discovery
+failure through the backend. See the [own-check receipt](../../../../docs/process/p4-15-pr4m3/backend-delivery.md).

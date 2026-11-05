@@ -106,8 +106,9 @@ export async function recordRecall(options: MemoryOptions, context: MemoryContex
     additions.push(reference);
   }
   async function confirm() {
-    await rights.confirm();
     const current = await memorySnapshot(options, rights.scope);
+    // Check the original access positions after every awaited projection read.
+    await rights.confirm();
     const checkedAt = Date.now();
     if (current.position !== snapshot.position || current.generation !== snapshot.generation ||
         context.exp * 1000 <= checkedAt) {

@@ -12,7 +12,7 @@ import { codexConnection } from './codex-connection.ts';
 import { memoryFreeConfig, memoryFreeEnvironments } from './codex-config.ts';
 import { bridgeChannel } from './channel.ts';
 import { proxy } from './proxy.ts';
-import { proxyControl } from './proxy-control.ts';
+import { proxyControl, proxyGrants } from './proxy-control.ts';
 import { json, record } from './http.ts';
 import type { GateIdentity } from './bridge-gate-authority.ts';
 function stopped(error: unknown) {
@@ -115,6 +115,12 @@ const server = createServer((req, res) => {
 }).listen(8081, '0.0.0.0');
 
 let computerCredential = '';
+function grantCredential() {
+  const path = '/run/executor/credentials/computer.json';
+  const saved = record(JSON.parse(readFileSync(path, 'utf8')));
+  return { computer: computerCredential, generation: saved['generation'] };
+}
+const grant = proxyGrants(control, grantCredential);
 const channel = bridgeChannel(server, {
   file: receiveFile,
   artifactSnapshot,
@@ -161,13 +167,5 @@ const channel = bridgeChannel(server, {
   dropCatalogue(loadKey) {
     return control('/catalogue/drop', { loadKey });
   },
-  grant(thread, conversation, token, expiresAt, turnId) {
-    const path = token ? '/grant' : '/drop';
-    const input = { thread, turnId, conversation, computer: computerCredential,
-      token, expires: expiresAt };
-    if (!token) return control(path, input);
-    const saved = record(JSON.parse(readFileSync('/run/executor/credentials/computer.json', 'utf8')));
-    const grant = { ...input, generation: saved['generation'], inputGeneration: 1 };
-    return control(path, grant);
-  },
+  grant,
 }, runtimeProxy.approvals);
