@@ -1,0 +1,1 @@
+- Prepare a recall catalogue from saved private-turn admission and accept one exact discovery receipt after checking current access, tool policy and deployment evidence again. Live bridge dispatch and backend delivery proof remain unfinished; memory admission stays disabled.

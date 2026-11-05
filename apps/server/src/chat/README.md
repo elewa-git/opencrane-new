@@ -5,6 +5,10 @@ Renewing a pass for an already started turn checks access and loaded memory agai
 For a numbered start, the server also requires a saved record that initial memory loaded.
 A start report alone is not enough. Renewal does not prepare or resend the initial memory.
 
+The recall preparation helper checks a saved private turn before offering its tool list.
+It checks the computer's discovery receipt once, then repeats access, policy and deployment
+checks. Connecting this helper to live bridge dispatch is still pending.
+
 This folder handles conversations between people and with assistants. It saves messages, sends assistant work to the right computer and returns replies and live updates while checking who may read each chat.
 
 After sending a completed private reply, the server keeps only its identity. It can ask
@@ -118,4 +122,5 @@ flowchart LR
   computer -->|completed private reply| chat
   chat -->|private reply and clearance| reader[Authenticated reader]
   chat -->|checks fixed access positions and spending| models[Models]
+  chat -->|checks deployment results| collector[Memory qualification collector]
 ```

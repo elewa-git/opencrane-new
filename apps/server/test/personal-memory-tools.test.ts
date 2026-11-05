@@ -8,6 +8,9 @@ import { natsFixture } from '@opencrane/event-store/testing';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { envelope, MemberAccessRefused, privateCallers } from '@opencrane/models';
 import { memoryScopeId } from '@opencrane/projections';
+import { catalogueEvidence, toolEvidence } from '@opencrane/models/testing';
+import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
+import { readToolPolicy } from '@opencrane/models';
 import { privateToolOffer } from './support/private-catalogue.ts';
 import * as preparation from '../src/chat/personal-memory-tools.ts';
 import { initialQualificationFixture } from './support/initial-qualification.ts';
@@ -21,7 +24,7 @@ async function cryptoModule() {
 }
 async function processModule() {
   const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process');
-  return { ...actual, spawn: vi.fn(actual.spawn) };
+  return { ...actual };
 }
 vi.mock('node:fs', async function filesystem(importOriginal) {
   const original = await importOriginal<typeof import('node:fs')>();
@@ -54,6 +57,7 @@ async function fixture(operation: Operation = 'recall', role = 'owner', deployme
   const auth = memberAuthorisation(binding);
   async function save(subject: string, type: string, data: unknown, apply = true) {
     const event = envelope('test', subject, type, data);
+    if (type === 'mcp.server_reviewed') event.principal = { kind: 'human', id: 'alice' };
     await nats.seed([event]);
     if (apply) await auth.handler.handle(event, noSql);
     return event;
@@ -117,14 +121,15 @@ async function fixture(operation: Operation = 'recall', role = 'owner', deployme
   const use = vi.spyOn(auth, 'use');
   const append = vi.spyOn(nats.store, 'append');
   vi.mocked(crypto.createDecipheriv).mockClear();
-  vi.mocked(processes.spawn).mockClear();
+  const spawned = vi.spyOn(processes, 'spawn');
+  spawned.mockClear();
   function noEffects() {
     expect(append).not.toHaveBeenCalled();
     expect(crypto.createDecipheriv).not.toHaveBeenCalled();
-    if (!deploymentReads) expect(processes.spawn).not.toHaveBeenCalled();
+    if (!deploymentReads) expect(spawned).not.toHaveBeenCalled();
   }
   onTestFinished(noEffects);
-  return { input, auth, check, use, realCheck, realUse, save, registration, state };
+  return { input, auth, check, use, realCheck, realUse, save, registration, state, append };
 }
 
 async function preparesOwner(operation: typeof operations[number]) {
@@ -477,16 +482,43 @@ async function refusesCombinedPermission(kind: 'person' | 'assistant') {
 it.each(['person', 'assistant'] as const)(
   'refuses all four tools when the %s permission callback denies access', refusesCombinedPermission);
 
-
 async function recallLoadFixture() {
   const setup = await fixture('recall', 'owner', true);
-  await setup.save('computer-assistant', 'computer.ready', {
+  const readyComputer = {
     assistantId: 'assistant', computerId: 'computer', generation: 1, podUid: 'fixture',
-  }, false);
-  await setup.save('conversation-conversation', 'conversation.created', {
+  };
+  await setup.save('computer-assistant', 'computer.ready', readyComputer, false);
+  const createdConversation = {
     conversationId: 'conversation', mode: 'agent_session', assistantId: 'assistant',
     createdBy: 'alice',
-  }, false);
+  };
+  await setup.save('conversation-conversation', 'conversation.created', createdConversation, false);
+  const definition = JSON.stringify(recallTool);
+  const revision = losslessJson(definition).digest;
+  const declaredTool = { name: 'recall', reviewed: true, costCents: 0 };
+  const evidence = toolEvidence(declaredTool);
+  const tool = { ...evidence, definition, revision };
+  const catalogue = catalogueEvidence([tool]);
+  const registeredServer = { serverId: 'memory',
+    kind: 'hosted', registeredBy: 'alice', locator: `registry.example.test/memory@sha256:${'a'.repeat(64)}` };
+  await setup.save('mcp-memory', 'mcp.server_registered', registeredServer, false);
+  const checkedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
+  const discoveredServer = { serverId: 'memory',
+    connectionId: 'server', accountMode: 'none', checkedAt, expiresAt,
+    serverInfo: { name: 'OpenCrane memory', version: '1' }, ...catalogue };
+  await setup.save('mcp-memory', 'mcp.server_discovered', discoveredServer, false);
+  const policy = await readToolPolicy(setup.input.store, 'test', 'memory');
+  const choice = { name: 'recall', revision, reviewDigest: toolReviewDigest(tool), mode: 'allow' };
+  const reviewedServer = { serverId: 'memory',
+    catalogueDigest: catalogue.schemaDigest, connectionId: 'server', accountMode: 'none',
+    policyRevision: policy.policyRevision, reviewedBy: 'alice', tools: [choice] };
+  await setup.save('mcp-memory', 'mcp.server_reviewed', reviewedServer, false);
+  const publishedServer = {
+    serverId: 'memory', publishedBy: 'alice',
+  };
+  await setup.save('mcp-memory', 'mcp.server_published', publishedServer, false);
+  setup.append.mockClear();
   const deployment = await initialQualificationFixture();
   const pending = { type: 'recall_pending', loadId: '11111111-1111-4111-8111-111111111111',
     silo: 'test', requesterId: 'alice', assistantId: 'assistant', computerId: 'computer',
@@ -506,7 +538,7 @@ async function preparesSavedRecall() {
   const tools = await load.complete(reply);
   expect(tools).toEqual(privateToolOffer('recall'));
   expect(checkPrivateTurnTools(tools, setup.input)).toBe(true);
-  await expect(load.complete(reply)).rejects.toThrow('Loaded memory unavailable');
+  await expect(load.complete(reply)).rejects.toThrow('memory_context_unavailable');
 }
 it('prepares saved recall and accepts one exact discovery receipt without wire approval',
   preparesSavedRecall);
@@ -522,9 +554,9 @@ async function refusesDiscoveryReceipt(change: object) {
   const setup = await recallLoadFixture();
   const load = await preparation.preparePersonalRecallLoad(setup.input, setup.pending);
   const reply = { ...setup.pending, type: 'recall_loaded', ...change };
-  await expect(load.complete(reply)).rejects.toThrow('Loaded memory unavailable');
+  await expect(load.complete(reply)).rejects.toThrow('memory_context_unavailable');
   const correct = { ...setup.pending, type: 'recall_loaded' };
-  await expect(load.complete(correct)).rejects.toThrow('Loaded memory unavailable');
+  await expect(load.complete(correct)).rejects.toThrow('memory_context_unavailable');
 }
 it.each(changedReceipts)('consumes a refused discovery receipt without retry: %j',
   refusesDiscoveryReceipt);
@@ -536,51 +568,61 @@ async function rechecksAfterDiscovery(change: typeof discoveryChanges[number]) {
   const load = await preparation.preparePersonalRecallLoad(setup.input, setup.pending);
   if (change === 'removal') await removal(setup);
   if (change === 'demotion') {
-    await setup.save('member-alice', 'member.role_changed', {
+    const demotedMember = {
       memberId: 'alice', previousRole: 'owner', newRole: 'member', changedBy: 'owner',
-    });
+    };
+    await setup.save('member-alice', 'member.role_changed', demotedMember);
   }
   if (change === 'grant') {
-    await setup.save(grantSubject, 'grant.revoked', {
-      resourceType: 'mcp_server', resourceId: 'memory', granteeKind: 'assistant',
-      granteeId: 'assistant', revokedBy: 'owner',
-    }, false);
+    const revokedGrant = { resourceType: 'mcp_server', resourceId: 'memory',
+      granteeKind: 'assistant', granteeId: 'assistant', revokedBy: 'owner' };
+    await setup.save(grantSubject, 'grant.revoked', revokedGrant, false);
   }
-  if (change === 'policy') setup.state.policyTools[0]!.mode = 'block';
+  if (change === 'policy') {
+    const unpublishedServer = {
+      serverId: 'memory', unpublishedBy: 'alice',
+    };
+    await setup.save('mcp-memory', 'mcp.server_unpublished', unpublishedServer, false);
+  }
   if (change === 'qualification') setup.deployment.remove();
   if (change === 'caller') setup.registration.close();
   if (change === 'replacement') {
-    await setup.save('computer-assistant', 'computer.ready', {
+    const replacedComputer = {
       assistantId: 'assistant', computerId: 'computer', generation: 2, podUid: 'replacement',
-    }, false);
+    };
+    await setup.save('computer-assistant', 'computer.ready', replacedComputer, false);
   }
   if (change === 'closure') {
-    await setup.save('conversation-conversation', 'conversation.closed', {
+    const closedConversation = {
       conversationId: 'conversation', closedBy: 'alice',
-    }, false);
+    };
+    await setup.save('conversation-conversation', 'conversation.closed', closedConversation, false);
   }
   if (change === 'Stop') {
-    await setup.save('conversation-conversation', 'agent.turn_stop_requested', {
+    const stoppedTurn = {
       conversationId: 'conversation', turnId: 'turn', requestedBy: 'alice',
-    }, false);
+    };
+    await setup.save('conversation-conversation', 'agent.turn_stop_requested', stoppedTurn, false);
   }
   if (change === 'activity') {
-    await setup.save('conversation-conversation', 'agent.turn_started', {
+    const neighbourTurn = {
       conversationId: 'conversation', turnId: 'neighbour', assistantId: 'assistant',
-    }, false);
-    await setup.save('conversation-conversation', 'file.uploaded', {
+    };
+    await setup.save('conversation-conversation', 'agent.turn_started', neighbourTurn, false);
+    const uploadedFile = {
       conversationId: 'conversation', fileId: 'file', uploadedBy: 'alice', name: 'safe.txt',
       size: 1, sha256: 'a'.repeat(64), mime: 'text/plain', objectKey: 'fixture',
-    }, false);
+    };
+    await setup.save('conversation-conversation', 'file.uploaded', uploadedFile, false);
   }
   const reply = { ...setup.pending, type: 'recall_loaded' };
   if (change === 'activity') {
     expect(await load.complete(reply)).toEqual(privateToolOffer('recall'));
   } else if (change === 'removal') {
-    setup.input.readServer.mockRejectedValue(new Error('private-dependency-error'));
+    setup.deployment.remove();
     await expect(load.complete(reply)).rejects.toThrow(MemberAccessRefused);
   } else {
-    await expect(load.complete(reply)).rejects.toThrow('Loaded memory unavailable');
+    await expect(load.complete(reply)).rejects.toThrow('memory_context_unavailable');
   }
 }
 it.each(discoveryChanges)('rechecks saved access and identity after discovery: %s',
@@ -590,8 +632,32 @@ async function refusesInitialReceipt(change: object) {
   const setup = await recallLoadFixture();
   const pending = { ...setup.pending, ...change };
   await expect(preparation.preparePersonalRecallLoad(setup.input, pending))
-    .rejects.toThrow('Loaded memory unavailable');
+    .rejects.toThrow('memory_context_unavailable');
+  expect(setup.check).not.toHaveBeenCalled();
+}
+const changedPendingReceipts = changedReceipts.slice(1, -1);
+it.each(changedPendingReceipts)('refuses changed pending identity before discovery: %j',
+  refusesInitialReceipt);
+
+async function ignoresClaimedPreparation() {
+  const setup = await recallLoadFixture();
+  setup.input.turn.firstClose = { sequence: 999, status: 'failed' };
+  setup.input.qualification.result = 'FAIL';
+  setup.state.policyTools[0]!.mode = 'block';
+  const load = await preparation.preparePersonalRecallLoad(setup.input, setup.pending);
+  const reply = { ...setup.pending, type: 'recall_loaded' };
+  expect(await load.complete(reply)).toEqual(privateToolOffer('recall'));
   expect(setup.input.readServer).not.toHaveBeenCalled();
 }
-it.each(changedReceipts.slice(0, -1))('refuses changed pending identity before discovery: %j',
-  refusesInitialReceipt);
+it('reads saved admission, policy and deployment instead of supplied preparation objects',
+  ignoresClaimedPreparation);
+
+async function refusesLateDiscovery() {
+  const setup = await recallLoadFixture();
+  const load = await preparation.preparePersonalRecallLoad(setup.input, setup.pending);
+  const late = performance.now() + 10_001;
+  vi.spyOn(performance, 'now').mockReturnValue(late);
+  const reply = { ...setup.pending, type: 'recall_loaded' };
+  await expect(load.complete(reply)).rejects.toThrow('memory_context_unavailable');
+}
+it('does not extend the preparation deadline while discovery is missing', refusesLateDiscovery);

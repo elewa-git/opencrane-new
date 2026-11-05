@@ -53,3 +53,31 @@ browser loss removes its notification tracking. A new subscription receives no r
 Tests use real memoryBridge detection and authenticated conversation subscriptions.
 Rendering, streaming, admission, WebSocket history exclusion and fresh-install live
 qualification remain outside this server/protocol change.
+
+## Saved recall preparation
+
+P4-15 PR 4m3 first split adds `preparePersonalRecallLoad` in `personal-memory-tools.ts`.
+It receives trusted local caller identity and an untrusted `recall_pending` receipt.
+It reads the saved computer turn, personal assistant owner and current memory policy;
+it does not trust a caller-supplied turn summary, catalogue or qualification.
+The deployment reader supplies measured identity and checks from its protected result.
+
+Only `request` may cross the bridge. It repeats the strict receipt fields with type
+`recall_load` and fixed recall definitions. It contains no registry, caller credential,
+RAM approval or fact. `complete` consumes one exact `recall_loaded` receipt and returns
+an approved local catalogue after repeating saved identity, membership, policy and
+qualification checks. An invalid receipt consumes the attempt too. No receipt means
+no completed preparation; completion after the original ten-second limit refuses.
+The returned catalogue is not permission to release input or credentials.
+
+Membership and grant positions remain fixed across discovery, including past team grants.
+Conversation history loads before the two-second check over small access streams.
+Saved Stop, closure, replacement and control changes refuse; unrelated activity does not.
+Established MemberAccessRefused takes priority over dependency failures.
+
+PARTIAL: no production bridge caller invokes this helper yet. The next split must bind
+it to authenticated delivery, cancel abandoned loads, gate initial input and credentials,
+and prove real backend recall with loaded evidence saved before bytes. The native numeric
+input generation and saved memory input generation remain distinct existing identities;
+this helper validates the former against its trusted local registration. Neither a receipt
+nor this local approval replaces saved memory evidence. Admission remains disabled.
