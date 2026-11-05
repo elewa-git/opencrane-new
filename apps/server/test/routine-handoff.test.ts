@@ -83,18 +83,26 @@ async function setup() {
   for (const group of ['sales', 'billing']) {
     const team = { teamId: group, name: group, createdBy: 'alice' };
     const membership = { teamId: group, memberId: 'alice', addedBy: 'alice' };
-    events.push(record(`created-${group}`, `team-${group}`, 'team.created', team));
-    events.push(record(`added-${group}`, `team-${group}`, 'team.member_added', membership));
+    const teamCreated = record(`created-${group}`, `team-${group}`, 'team.created', team);
+    events.push(teamCreated);
+    const memberAdded = record(`added-${group}`, `team-${group}`, 'team.member_added', membership);
+    events.push(memberAdded);
   }
   const assistant = { assistantId: 'sales-assistant', kind: 'team',
     ownerId: 'billing', payingGroupId: 'sales' };
-  events.push(record('assistant', 'assistant-sales-assistant', 'assistant.created', assistant));
+  const assistantCreated = record(
+    'assistant', 'assistant-sales-assistant', 'assistant.created', assistant
+  );
+  events.push(assistantCreated);
   events.push(active);
   for (const [granteeKind, granteeId] of [['member', 'alice'], ['assistant', 'sales-assistant']]) {
     const grant = { resourceType: 'model', resourceId: 'gpt-6.1-sol', granteeKind, granteeId,
       grantedBy: 'alice' };
-    events.push(record(`grant-${granteeKind}`, grantStream('model', 'gpt-6.1-sol'),
-      'grant.given', grant));
+    const grantSubject = grantStream('model', 'gpt-6.1-sol');
+    const grantGiven = record(
+      `grant-${granteeKind}`, grantSubject, 'grant.given', grant
+    );
+    events.push(grantGiven);
   }
   await apply(events);
   const computer = { assistantId: 'sales-assistant', computerId: 'computer', generation: 1 };
