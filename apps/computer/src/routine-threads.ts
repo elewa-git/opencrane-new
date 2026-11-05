@@ -39,11 +39,19 @@ export function routineThreads(open: (() => Promise<PrivateSession>) | undefined
   }
   function cancel(turnId: string, conversationId?: string) {
     const prepared = pending.get(turnId);
-    if (conversationId && prepared?.identity.conversationId !== conversationId) return;
+    if (conversationId && prepared?.identity.conversationId !== conversationId) {
+      return;
+    }
     pending.delete(turnId);
-    if (!prepared) return;
+    if (!prepared) {
+      return;
+    }
+    // Release only unused preparation; take removes pending before delivery checks.
+    used.delete(turnId);
     clearTimeout(prepared.timer);
-    if (prepared.session) close(prepared.session);
+    if (prepared.session) {
+      close(prepared.session);
+    }
   }
   function stop() {
     for (const turnId of pending.keys()) cancel(turnId);
@@ -60,7 +68,12 @@ export function routineThreads(open: (() => Promise<PrivateSession>) | undefined
       throw new Error('Routine thread unavailable');
     }
     used.add(identity.id);
-    const expire = cancel.bind(undefined, identity.id, identity.conversationId);
+    function expire() {
+      // Keep delayed cleanup from a cancelled attempt away from its replacement.
+      if (pending.get(identity.id) === prepared) {
+        cancel(identity.id, identity.conversationId);
+      }
+    }
     const timer = setTimeout(expire, expiresAt - Date.now());
     const prepared: Prepared = { identity, expiresAt, timer };
     pending.set(identity.id, prepared);
@@ -80,7 +93,7 @@ export function routineThreads(open: (() => Promise<PrivateSession>) | undefined
       return { type: 'routine_prepared', ...identity,
         threadId: requiredString(record(response['thread']), 'id') };
     } catch {
-      cancel(identity.id);
+      expire();
       throw new Error('Routine thread unavailable');
     }
   }

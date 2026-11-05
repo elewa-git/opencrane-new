@@ -19,7 +19,7 @@ flowchart LR
   apps --> ops["apps/ops<br/>background workers"]
   apps --> server["apps/server<br/>back end"]
   ops -->|starts and pauses| computer
-  server -->|messages, private routine preparation, turns, files and targeted Stops| computer
+  server -->|messages, routine preparation and retry, turns, files and Stops| computer
   computer -->|preparation replies, reply removal receipts, native termination, progress, results and changed publication files| server
   server -->|qualified one-use private input| computer
   computer -->|reports private thread and recall discovery| server
@@ -91,6 +91,8 @@ The computer starts an empty private thread and returns its real id before the s
 records the routine's spending allowance. It keeps that process for one matching delivery.
 A refused or failed preparation leaves other conversations running.
 Expiry closes only the unused process. Stop or disconnect also removes unused preparations.
+Cancelled preparation can try again with the same turn id before delivery consumes it.
+Delayed cleanup from the earlier attempt leaves its replacement alone.
 The journal returns the input id, turn id and spending root when asking the server to start.
 A saved routine Stop cancels its private turn. Failed cleanup can retry without closing
 other chats. If interruption has not ended the turn after ten seconds, the computer

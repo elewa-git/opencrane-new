@@ -1,4 +1,6 @@
 import { expect, it, vi } from 'vitest';
+import { routineThreads } from '../src/routine-threads.ts';
+import type { Turn } from '../src/turn-frame.ts';
 import { fixture } from './bridge-gate-fixture.ts';
 
 type Computer = Awaited<ReturnType<typeof fixture>>;
@@ -132,3 +134,89 @@ const failures: Failure[] = ['capacity', 'expired request', 'expiry during start
   'open', 'native start'];
 it.each(failures)('keeps unrelated private turns and the bridge open after %s refusal',
   isolatesPreparationFailure);
+
+function privatePreparation(threadId: string) {
+  const lifetime = Promise.withResolvers<void>();
+  const startup = Promise.withResolvers<void>();
+  const close = vi.fn();
+  const started = Promise.withResolvers<void>();
+  async function rpc() {
+    started.resolve();
+    await startup.promise;
+    return { thread: { id: threadId, ephemeral: true, path: null } };
+  }
+  const session = { rpc, close, closed: lifetime.promise };
+  return { session, lifetime, startup, started };
+}
+
+function trackCleanup(work: Promise<void>) {
+  return work;
+}
+
+async function keepsReplacementAfterCancellation(stage: 'open' | 'start' | 'close') {
+  const original = privatePreparation('original-thread');
+  const replacement = privatePreparation('replacement-thread');
+  const opened = Promise.withResolvers<void>();
+  const releaseOpen = Promise.withResolvers<void>();
+  let opens = 0;
+  async function open() {
+    opens++;
+    if (opens === 1) {
+      opened.resolve();
+      await releaseOpen.promise;
+      return original.session;
+    }
+    return replacement.session;
+  }
+  const threads = routineThreads(open, trackCleanup);
+  const request = preparation();
+  function outcome(error: unknown) {
+    return error;
+  }
+  try {
+    const firstAttempt = threads.prepare(request, 0);
+    const firstOutcome = firstAttempt.catch(outcome);
+    await opened.promise;
+    if (stage !== 'open') {
+      releaseOpen.resolve();
+      await original.started.promise;
+    }
+    if (stage === 'close') {
+      original.startup.resolve();
+      await firstOutcome;
+    }
+    threads.cancel('routine-turn', 'routine-chat');
+    replacement.startup.resolve();
+    const recovered = await threads.prepare(request, 0);
+    expect(recovered.threadId).toBe('replacement-thread');
+    releaseOpen.resolve();
+    original.startup.resolve();
+    if (stage !== 'close') {
+      expect(await firstOutcome).toBeInstanceOf(Error);
+    }
+    original.lifetime.resolve();
+    await original.session.closed;
+    expect(threads.size).toBe(1);
+    expect(original.session.close).toHaveBeenCalledTimes(1);
+    expect(replacement.session.close).not.toHaveBeenCalled();
+    const turn: Turn = { ...request, threadId: 'replacement-thread',
+      executionMode: 'restricted', taskKind: 'chat_turn', text: 'Hello',
+      token: 'preparing', omittedAttachments: 0 };
+    const taken = threads.take(turn);
+    expect(taken.session).toBe(replacement.session);
+    threads.cancel(turn.id, turn.conversationId);
+    await expect(threads.prepare(request, 0)).rejects.toThrow('Routine thread unavailable');
+    expect(opens).toBe(2);
+  } finally {
+    releaseOpen.resolve();
+    original.startup.resolve();
+    original.lifetime.resolve();
+    replacement.startup.resolve();
+    replacement.lifetime.resolve();
+    threads.stop();
+  }
+}
+
+it.each(['open', 'start', 'close'] as const)(
+  'keeps a replacement preparation when cancelled %s work finishes late',
+  keepsReplacementAfterCancellation);
