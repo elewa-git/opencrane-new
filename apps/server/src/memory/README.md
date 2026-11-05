@@ -61,6 +61,9 @@ A saved member removal, confirmed denial or saved assistant deactivation clears 
 even when another permission check is unavailable. Unavailable checks alone leave the check pending.
 An addition saved at expiry cannot block clearing output from an earlier loaded fact.
 Recall saves the time used to check its facts and checks again before returning text.
+It saves the loaded references before returning a result through the gateway. If saving
+fails or its outcome is unknown, the caller receives no fact text. An uncertain result
+is never sent again automatically.
 
 ## Main files
 
@@ -81,6 +84,7 @@ Recall saves the time used to check its facts and checks again before returning 
 flowchart LR
   server["Server"] -->|handles memory requests| memory["Memory"]
   chat["Chat"] -->|supplies saved turn facts| memory
+  gateway["AI gateway"] -->|passes checked recall calls| memory
   memory -->|clears withdrawn or stopped private replies| chat
   memory -->|checks access and references| models["Models library"]
   memory -->|supplies initial input once| computer["Computer input renderer"]
