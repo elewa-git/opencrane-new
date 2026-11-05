@@ -4,7 +4,7 @@ import type { StoredEvent } from '@opencrane/event-store';
 import { memoryContextRecordedEventSchema } from '@opencrane/events';
 import { approvalActivity, authorityFence, decisionAuthorityFence, changesDecisionActivity,
   history, memoryReferences, prepareLoadedMemory } from '@opencrane/models';
-import { privateReplySchema } from '@opencrane/protocol';
+import { privateReplySchema, privateOutputClearedSchema } from '@opencrane/protocol';
 import type { ChatOptions } from './access.ts';
 import { readChatFacts } from './chat-summary.ts';
 
@@ -20,6 +20,81 @@ const replySchema = z.strictObject({ type: z.literal('private_reply'),
   generation: z.int().positive(), inputGeneration: identifier, text: z.string().max(24 * 1024) });
 type Reply = Omit<z.infer<typeof replySchema>, 'text'>;
 type Pending = { reply: Reply; bytes: Buffer; recipients: Subscriber[]; clear(): void };
+type ReplyIdentity = Pick<Reply, 'conversationId' | 'turnId' | 'threadId' |
+  'generation' | 'inputGeneration'>;
+type Clearance = z.infer<typeof privateOutputClearedSchema>;
+type Delivered = { frame: Clearance; recipient: Subscriber; remove(): void };
+
+function sameReply(left: ReplyIdentity, right: ReplyIdentity) {
+  return left.conversationId === right.conversationId && left.turnId === right.turnId &&
+    left.threadId === right.threadId && left.generation === right.generation &&
+    left.inputGeneration === right.inputGeneration;
+}
+
+function notifyClearance(entry: Delivered) {
+  entry.remove();
+  const recipient = entry.recipient;
+  if (!subscribers.has(recipient) || recipient.socket.readyState !== recipient.socket.OPEN) return;
+  try {
+    // Send withdrawal without asking for the access that may just have been removed.
+    recipient.socket.send(JSON.stringify(entry.frame));
+  } catch {
+    recipient.socket.terminate();
+  }
+}
+
+function deliveredReplies(socket: WebSocket) {
+  const delivered = new Set<Delivered>();
+  const removals = new Map<Subscriber, () => void>();
+  function releaseSubscription(recipient: Subscriber) {
+    for (const entry of delivered) {
+      if (entry.recipient === recipient) return;
+    }
+    const remove = removals.get(recipient);
+    if (remove) recipient.socket.off('close', remove);
+    removals.delete(recipient);
+  }
+  function clearAll() {
+    for (const entry of delivered) notifyClearance(entry);
+  }
+  socket.once('close', clearAll);
+  function remember(binding: ReplyIdentity, recipient: Subscriber) {
+    if (delivered.size >= 64) {
+      const entries = delivered.values();
+      const oldest = entries.next().value;
+      if (oldest) notifyClearance(oldest);
+    }
+    // Copy only identity fields. Never keep a delivery buffer or its text in this record.
+    const candidate = { version: 1, topic: 'conversation', type: 'private_output_cleared',
+      conversationId: binding.conversationId, turnId: binding.turnId, threadId: binding.threadId,
+      generation: binding.generation, inputGeneration: binding.inputGeneration };
+    const frame = privateOutputClearedSchema.parse(candidate);
+    function remove() {
+      delivered.delete(entry);
+      releaseSubscription(recipient);
+    }
+    const entry = { frame, recipient, remove };
+    delivered.add(entry);
+    if (!removals.has(recipient)) {
+      function removeRecipient() {
+        for (const entry of delivered) {
+          if (entry.recipient === recipient) entry.remove();
+        }
+      }
+      removals.set(recipient, removeRecipient);
+      recipient.socket.once('close', removeRecipient);
+    }
+  }
+  function clear(binding: ReplyIdentity & { requesterId: string }) {
+    for (const entry of delivered) {
+      if (entry.recipient.memberId === binding.requesterId && sameReply(entry.frame, binding)) {
+        notifyClearance(entry);
+      }
+    }
+  }
+  return { remember, clear };
+}
+
 
 function messageBytes(raw: RawData) {
   if (Buffer.isBuffer(raw)) return raw;
@@ -37,7 +112,7 @@ export function subscribePrivateOutput(subscriber: Subscriber) {
   subscriber.socket.once('close', remove);
 }
 
-// Keep no reply after its single release attempt. A fresh connection cannot recover this map.
+// Keep no reply bytes after the single release attempt. A fresh connection cannot recover them.
 export function privateOutput(options: Options, computer: { computerId: string; assistantId: string },
   socket: WebSocket) {
   function unavailablePosition() {
@@ -47,10 +122,17 @@ export function privateOutput(options: Options, computer: { computerId: string; 
   const readingPosition = options.store.head(undefined, performance.now() + 10_000);
   const openedPosition = readingPosition.catch(unavailablePosition);
   const pending = new Map<number, Pending>();
+  const delivered = deliveredReplies(socket);
   function clear() {
     for (const entry of pending.values()) entry.clear();
   }
   socket.once('close', clear);
+  function clearBinding(binding: ReplyIdentity & { requesterId: string }) {
+    for (const entry of pending.values()) {
+      if (sameReply(entry.reply, binding)) entry.clear();
+    }
+    delivered.clear(binding);
+  }
   function capture(raw: RawData) {
     const rawBytes = messageBytes(raw);
     const value: unknown = JSON.parse(rawBytes.toString());
@@ -114,6 +196,7 @@ export function privateOutput(options: Options, computer: { computerId: string; 
           if (Buffer.byteLength(encoded) > 64 * 1024 || !recipient.current()) return false;
           // Consume before sending. Neither a lost acknowledgement nor another tab can retry.
           entry.clear();
+          delivered.remember(binding, recipient);
           recipient.socket.send(encoded);
           return true;
         }
@@ -125,7 +208,7 @@ export function privateOutput(options: Options, computer: { computerId: string; 
       entry.clear();
     }
   }
-  return { capture, release };
+  return { capture, release, clearBinding };
 }
 
 async function savedBinding(options: Options, computer: { computerId: string; assistantId: string },

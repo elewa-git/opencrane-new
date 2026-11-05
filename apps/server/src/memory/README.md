@@ -13,6 +13,10 @@ This folder lets people review, save, correct and forget information the assista
 - Records initial personal references in two checked steps and supplies the selected text once.
 - Records choices and shows saved status for future nightly upkeep; running that upkeep remains disabled.
 
+When a loaded fact changes, expires or loses access, the saved withdrawal stops the
+computer and asks the original browser to clear its completed reply. The reply identity
+keeps this separate from later work in the same chat.
+
 A memory fact is one saved piece of information. Its scope says whose memory it belongs to: a person, a group or an assistant's notes. [Grants](../../../../GLOSSARY.md#grant) say who may read and write it. Reads return unavailable while the [read table](../../../../GLOSSARY.md#read-table-projection), a database copy built from saved changes, is behind. A later request can succeed after the memory worker catches up. They need the memory worker and its existing private key directory. Destroyed or quarantined facts return status without text.
 
 **Reading sources.** Each source is checked separately. Denied references stay hidden. A chat source requires current access and the latest join before the server looks up that message. A member statement is described without naming its author. Write permission is checked before inspecting a fact. Slow permission checks leave database connections free.
@@ -51,6 +55,8 @@ corrections, forgets and expiry. Expiry checks the revisions saved at each load 
 supporting fact. An unrelated expired fact does not stop the turn. Polling checks the
 saved requester’s membership and the requester’s and assistant’s required grants.
 Confirmed loss clears the exact private reply, including after completion.
+A saved Stop also tells the original browser to clear its delivered reply, even if
+the computer finishes before the next check. Repeated checks send no duplicate notice.
 A saved member removal, confirmed denial or saved assistant deactivation clears the reply
 even when another permission check is unavailable. Unavailable checks alone leave the check pending.
 An addition saved at expiry cannot block clearing output from an earlier loaded fact.
@@ -75,6 +81,7 @@ Recall saves the time used to check its facts and checks again before returning 
 flowchart LR
   server["Server"] -->|handles memory requests| memory["Memory"]
   chat["Chat"] -->|supplies saved turn facts| memory
+  memory -->|clears withdrawn or stopped private replies| chat
   memory -->|checks access and references| models["Models library"]
   memory -->|supplies initial input once| computer["Computer input renderer"]
 ```

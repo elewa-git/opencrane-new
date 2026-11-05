@@ -1,0 +1,1 @@
+- Tell the original live browser to clear a private reply after Stop, withdrawal of its loaded memory or loss of its computer connection. A late completion after Stop cannot keep the reply visible. Clearance carries only the saved reply identity; browser rendering remains separate work.

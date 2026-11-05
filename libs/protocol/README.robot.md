@@ -440,3 +440,9 @@ for access, deadlines, continuation bindings and failure replies.
 The strict `private_reply` notification has no saved position. It reuses chat data
 fields `text` and `turnId`, with conversationId, turnId, threadId, generation and
 inputGeneration. See the [server contract](../../docs/process/p4-15-pr3j/README.robot.md).
+
+`privateOutputClearedSchema` strictly checks `private_output_cleared`: version 1,
+topic conversation, conversationId, turnId, threadId, positive generation and
+inputGeneration. It accepts no payload, position or additional fields. Both private
+notifications stay outside `serverMessageSchema` until browser history exclusion and
+consumption are implemented together in P4-15 PR 3l.
