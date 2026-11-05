@@ -1030,3 +1030,25 @@ It refuses matching damaged custody in both folders. A decryption guard also che
 that later deletion, identity and stability refusals never read an earlier live fact.
 The [package contract](../../infra/package/README.robot.md#memory-restore-preflight)
 owns validation limits and the explicit remaining qualification.
+
+## Routine candidate pages
+
+`routineCandidatePage` reads at most 50 `(routine_id, position, created_position)`
+references for one silo, strictly after the supplied original event position.
+The `routines_silo_created_position` index on `(silo, created_position)` serves
+this query. Updates never change `created_position`, so edits cannot repeat a row
+and new routines follow the cursor regardless of their ids. No status, next-time
+or occupied-run filter hides candidates. The helper selects no private JSON.
+It requires the routine checkpoint to reach the caller's captured event position
+and returns the projection generation so a caller can refuse a pre-rebuild cursor.
+SQL selects references only; the ops scanner reads real history and decides in
+TypeScript. Its [scan contract](../../apps/ops/README.robot.md#bounded-routine-candidate-inspection)
+defines when later additions are picked up and how callers retain progress.
+
+Initialisation adds `created_position` with zero for existing rows. Zero means the
+original event position is unknown; candidate reads refuse that silo until replay.
+Stop routine readers and workers, then run `npm run replay -- routines
+--confirm-routines-stopped` to recover the positions. Do not use `--verify` for
+this upgrade: older rows deliberately differ. Subsequent verification must pass.
+Replay rebuilds the index and invalidates earlier continuations without executing
+routines. Keep readers stopped until replay commits.
