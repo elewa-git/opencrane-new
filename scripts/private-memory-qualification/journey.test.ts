@@ -3,8 +3,12 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { qualifications } from './collect.ts';
 import { probeHost } from './host-probe.ts';
 import { runJourney } from './journey.ts';
+import { probeContainer } from './container-probe.ts';
+import { checkNative } from './native-checks.ts';
 
 vi.mock('./host-probe.ts', { spy: true });
+vi.mock('./container-probe.ts', { spy: true });
+vi.mock('./native-checks.ts', { spy: true });
 const request = {
   sourceSha: 'a'.repeat(40), imageDigest: `sha256:${'b'.repeat(64)}`,
   environmentId: 'c'.repeat(64), siloId: `sha256:${'d'.repeat(64)}`,
@@ -15,6 +19,7 @@ const request = {
 function prepare(): void {
   vi.mocked(probeHost).mockReset();
   vi.mocked(probeHost).mockReturnValue(true);
+  vi.mocked(probeContainer).mockReturnValue(false);
 }
 beforeEach(prepare);
 
@@ -22,7 +27,7 @@ async function incomplete(name: string): Promise<void> {
   const result = await runJourney(JSON.stringify({ ...request, name }));
   expect(result).toMatchObject({ ...request, name, result: 'NOT RUN', complete: false });
   expect(result).toHaveProperty('observedAt', expect.any(Number));
-  expect(probeHost).toHaveBeenCalledOnce();
+  expect(probeHost).toHaveBeenCalledTimes(2);
 }
 it.each(['nativeRecall',
   'persistence', ...qualifications])('never completes %s on host checks alone', incomplete);
@@ -68,6 +73,29 @@ async function unsafeHost(): Promise<void> {
   expect(await runJourney(JSON.stringify(request))).toEqual({ result: 'FAIL', reason: 'host_refused' });
 }
 it('refuses a host whose observations are unsafe or unavailable', unsafeHost);
+
+async function containerPrerequisite(name: string): Promise<void> {
+  vi.mocked(probeHost).mockReturnValue(false);
+  vi.mocked(probeContainer).mockReturnValue(true);
+  const input = JSON.stringify({ ...request, name });
+  expect(await runJourney(input)).toMatchObject({ result: 'NOT RUN', complete: false });
+  expect(probeContainer).toHaveBeenCalledTimes(2);
+}
+it.each(['privateTurns', 'invalidation', 'P4-14', 'P4-15'])(
+  'keeps %s unrun when only the container runner is protected', containerPrerequisite);
+
+async function changedDuringWork(): Promise<void> {
+  function changeHost(): Promise<void> {
+    vi.mocked(probeHost).mockReturnValue(false);
+    vi.mocked(probeContainer).mockReturnValue(true);
+    return Promise.resolve();
+  }
+  vi.mocked(checkNative).mockImplementationOnce(changeHost);
+  expect(await runJourney(JSON.stringify(request))).toEqual({
+    result: 'FAIL', reason: 'host_refused',
+  });
+}
+it('refuses changed protection after awaited work without switching paths', changedDuringWork);
 
 function entryRefuses(input: string, args: string[] = []): void {
   const options = { input, encoding: 'utf8' as const, timeout: 5000 };
