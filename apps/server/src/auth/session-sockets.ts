@@ -35,7 +35,6 @@ export function closeSessionSockets(server: Server, cookie: string): void {
   const digest = cookieDigest(cookie);
   const sockets = sessions?.get(digest);
   if (!sockets) return;
-  sessions?.delete(digest);
   for (const socket of sockets) {
     // Stop delivery synchronously, before the browser receives the close event.
     socket.close(1008, 'signed out');

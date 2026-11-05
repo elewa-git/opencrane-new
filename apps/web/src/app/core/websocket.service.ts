@@ -3,6 +3,7 @@
 // at once after a server restart.
 import { Injectable, type OnDestroy, computed, inject, signal } from '@angular/core';
 import { Subject } from 'rxjs';
+import { BrowserSession } from './browser-session';
 import { serverMessageSchema, type ClientMessage, type ServerMessage } from '@opencrane/protocol';
 import {
   PAGE_LOCATION,
@@ -31,6 +32,8 @@ function socketUrlFor(location: PageLocation): string {
 
 @Injectable({ providedIn: 'root' })
 export class WebSocketService implements OnDestroy {
+  private readonly session = inject(BrowserSession);
+  private readonly sessionSubscription = this.session.signedOut.subscribe(this.endSession.bind(this));
   private readonly createSocket = inject(SOCKET_FACTORY);
   private readonly random = inject(RANDOM_SOURCE);
   private readonly pageLocation = inject(PAGE_LOCATION);
@@ -71,6 +74,7 @@ export class WebSocketService implements OnDestroy {
    * connected (the old socket is closed first), or after {@link disconnect}.
    */
   connect(url: string = socketUrlFor(this.pageLocation)): void {
+    if (!this.session.isActive()) return;
     this.userClosed = false;
     this.clearReconnectTimer();
     this.reconnectAttempt = 0;
@@ -104,7 +108,13 @@ export class WebSocketService implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.sessionSubscription.unsubscribe();
     this.disconnect();
+  }
+
+  private endSession(): void {
+    this.disconnect();
+    this.policyClose.next();
   }
 
   // Remove the handlers before closing. Browsers fire `close` later, and that
@@ -218,6 +228,7 @@ export class WebSocketService implements OnDestroy {
 
   private pushMessage(message: ServerMessage): void {
     if (message.type === 'private_reply' || message.type === 'private_output_cleared') {
+      if (!this.session.acceptsPrivateFrames()) return;
       this.privateFrames.next(message);
       return;
     }
