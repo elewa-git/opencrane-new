@@ -33,9 +33,7 @@ export async function releaseTurnCredentials(options: BridgeOptions,
   deliverInitial: (reply: object) => void) {
   try {
     const input = await turnContextFor(options, report, binding);
-    // Reuse proved initial delivery on renewal; keep checking loaded memory below.
-    const recall = input?.renewal ? undefined
-      : await options.recall?.prepare(binding, report.replay === true);
+    const recall = await prepareRecallForStart(options, binding, report, input);
     await requireOpenConversation(options, report);
     if (!tokens) throw new Error('Turn issuer unavailable');
     const initial = input?.renewal ? undefined
@@ -78,6 +76,16 @@ export async function releaseTurnCredentials(options: BridgeOptions,
     await turnCommand(options.store, context, { ...report, status: 'failed' });
     acknowledgement.refused = error.message;
   }
+}
+
+async function prepareRecallForStart(options: BridgeOptions,
+  binding: NonNullable<Awaited<ReturnType<typeof turnCommand>>>, report: Report,
+  input: { renewal: boolean } | undefined) {
+  // Reuse proved initial delivery on renewal; keep checking loaded memory before signing.
+  if (input?.renewal) {
+    return undefined;
+  }
+  return options.recall?.prepare(binding, report.replay === true);
 }
 
 async function confirmRecall(recall: { confirm(): Promise<void> } | undefined) {

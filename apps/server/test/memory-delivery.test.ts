@@ -1473,7 +1473,8 @@ async function discoversBeforePrivateDispatch() {
   await link.settled();
   const renewalFrames = test.sent.slice(sentBeforeRenewal);
   expect(renewalFrames).toHaveLength(1);
-  expect(renewalFrames[0]).toMatchObject({ type: 'ack', token: expect.any(String) });
+  expect(renewalFrames[0]).toMatchObject({ type: 'ack' });
+  expect(renewalFrames[0]?.['token']).toEqual(expect.any(String));
   expect(renewalFrames[0]).not.toHaveProperty('initialInput');
   expect(renewalFrames[0]).not.toHaveProperty('refused');
   expect(computer.grants.has('returned-native-1')).toBe(true);
@@ -1510,7 +1511,8 @@ async function refusesRecallRenewal(change: typeof recallRenewalWithdrawals[numb
   await link.settled();
   const renewalFrames = test.sent.slice(sentBeforeRenewal);
   expect(renewalFrames).toHaveLength(1);
-  expect(renewalFrames[0]).toMatchObject({ type: 'ack', refused: expect.any(String) });
+  expect(renewalFrames[0]).toMatchObject({ type: 'ack' });
+  expect(renewalFrames[0]?.['refused']).toEqual(expect.any(String));
   expect(renewalFrames[0]).not.toHaveProperty('token');
   expect(renewalFrames[0]).not.toHaveProperty('initialInput');
   expect(test.native.received).toEqual(receivedBeforeRenewal);
