@@ -199,14 +199,36 @@ it('refuses an allowlisted identity from another organisation for membership', a
   expect(await history()).toHaveLength(1);
 });
 
-// Both requests finish reading the same pending invitation before either publishes.
+// Let both requests read the invitation before either checks whether it has changed.
 function racingStore(): JoinStore {
   let reads = 0;
   let release = () => {};
   const barrier = new Promise<void>((resolve) => { release = resolve; });
+  const bothAccessChecks = Promise.withResolvers<void>();
+  const savedJoin = Promise.withResolvers<void>();
+  let memberHeadReads = 0;
+  let firstMemberHeadReturned = false;
+  async function head(...args: Parameters<JoinStore['head']>) {
+    if (args[0] === 'member-alice') {
+      memberHeadReads += 1;
+      if (memberHeadReads === 2) bothAccessChecks.resolve();
+      await bothAccessChecks.promise;
+      if (!firstMemberHeadReturned) {
+        firstMemberHeadReturned = true;
+      } else {
+        await savedJoin.promise;
+      }
+    }
+    return nats.store.head(...args);
+  }
+  async function append(command: Parameters<JoinStore['append']>[0]) {
+    const result = await nats.store.append(command);
+    if (command.event.type === 'member.joined') savedJoin.resolve();
+    return result;
+  }
   return {
-    head: nats.store.head.bind(nats.store),
-    append: (command) => nats.store.append(command),
+    head,
+    append,
     async *readStream(subject, from, deadline) {
       const events: StoredEvent[] = [];
       for await (const stored of nats.store.readStream(subject, from, deadline)) events.push(stored);
