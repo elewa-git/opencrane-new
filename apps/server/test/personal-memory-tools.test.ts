@@ -9,6 +9,8 @@ import { losslessJson } from '@opencrane/events/lossless-json';
 import { envelope, MemberAccessRefused, privateCallers, readToolPolicy }
   from '@opencrane/models';
 import { memoryScopeId } from '@opencrane/projections';
+import { memoryJourney } from '../../../scripts/private-memory-qualification/memory-journey.ts';
+import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { catalogueEvidence, toolEvidence } from '@opencrane/models/testing';
 import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { privateToolOffer } from './support/private-catalogue.ts';
@@ -663,3 +665,79 @@ async function refusesLateDiscovery() {
   await expect(load.complete(reply)).rejects.toThrow('memory_context_unavailable');
 }
 it('does not extend the preparation deadline while discovery is missing', refusesLateDiscovery);
+
+async function loadedRecallFixture() {
+  const setup = await recallLoadFixture();
+  const journey = memoryJourney(setup.input.store, 'test', 'conversation');
+  const fact = { ...journey.memoryWrittenExample, scopeId: journey.scopeId, memoryId: 'fact' };
+  await journey.append(`scope-${journey.scopeId}`, 'memory.written', fact);
+  await journey.append('conversation-conversation', 'agent.memory_context_recorded', journey.prepared);
+  await journey.load();
+  setup.append.mockClear();
+  return { ...setup, journey };
+}
+
+async function invalidateRecall(setup: Awaited<ReturnType<typeof loadedRecallFixture>>,
+  kind: 'corrected' | 'forgotten') {
+  await setup.journey.change(kind);
+  expect(await setup.journey.invalidate()).toMatchObject({ status: 'invalidated' });
+  setup.append.mockClear();
+  const chat = await readChatFacts(setup.input.store, 'test', 'conversation', 'turn');
+  expect(chat.memoryContext).toMatchObject({ status: 'invalidated',
+    references: [setup.journey.reference] });
+  expect(chat.turnEnded).toBe(false);
+  expect(setup.input.callers.check(setup.input.grant)).toBe(true);
+  // Leave the Stop reaction pending so only the saved invalidation can refuse recall.
+  const rows = setup.input.store.readStream('conversation-conversation');
+  for await (const row of rows) {
+    expect(row.event.type).not.toBe('agent.turn_stop_requested');
+  }
+}
+
+for (const stage of ['before preparation', 'before completion', 'during completion'] as const) {
+  async function refusesInvalidatedRecall(kind: 'corrected' | 'forgotten') {
+    const setup = await loadedRecallFixture();
+    if (stage === 'before preparation') {
+      await invalidateRecall(setup, kind);
+      await expect(preparePersonalRecallLoad(setup.input, setup.pending))
+        .rejects.toThrow('memory_context_unavailable');
+      return;
+    }
+    const load = await preparePersonalRecallLoad(setup.input, setup.pending);
+    const reply = { ...setup.pending, type: 'recall_loaded' };
+    if (stage === 'before completion') {
+      await invalidateRecall(setup, kind);
+      await expect(load.complete(reply)).rejects.toThrow('memory_context_unavailable');
+    } else {
+      const waiting = Promise.withResolvers<void>();
+      const resume = Promise.withResolvers<void>();
+      async function delayedPermission(...args: Parameters<typeof setup.realCheck>) {
+        waiting.resolve();
+        await resume.promise;
+        return setup.realCheck(...args);
+      }
+      setup.check.mockImplementationOnce(delayedPermission);
+      const completion = load.complete(reply);
+      const refused = expect(completion).rejects.toThrow('memory_context_unavailable');
+      await waiting.promise;
+      await invalidateRecall(setup, kind);
+      resume.resolve();
+      await refused;
+    }
+    await expect(load.complete(reply)).rejects.toThrow('memory_context_unavailable');
+  }
+  it.each(['corrected', 'forgotten'] as const)(
+    `refuses recall when loaded memory is %s ${stage} with Stop delayed`, refusesInvalidatedRecall);
+}
+
+async function refusesEndedMemoryContext() {
+  const setup = await loadedRecallFixture();
+  const load = await preparePersonalRecallLoad(setup.input, setup.pending);
+  const ended = { ...setup.journey.prepared, action: 'ended', reason: 'ended' };
+  await setup.journey.append('conversation-conversation', 'agent.memory_context_recorded', ended);
+  setup.append.mockClear();
+  const reply = { ...setup.pending, type: 'recall_loaded' };
+  await expect(load.complete(reply)).rejects.toThrow('memory_context_unavailable');
+}
+it('refuses discovery completion after saved memory ended without a turn-end event',
+  refusesEndedMemoryContext);
