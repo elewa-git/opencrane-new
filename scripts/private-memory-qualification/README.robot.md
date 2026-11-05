@@ -62,7 +62,11 @@ The collector measures identity and event-stream creation before and after every
 cannot match the new challenge. It does not accept detached receipts or signatures.
 
 Only validated metadata is hashed into `receiptDigests`; no memory text is hashed.
-All child output and errors stay in process memory. Failures expose only
+All child output and errors stay in process memory. A strict runner response containing
+only `result: FAIL` and `reason: host_refused` stops collection. The collector returns
+and saves that reason with the fixed message: "Host safety checks failed: swap and
+core dumps must be disabled." This reports an unmet prerequisite, without claiming
+which observation failed or exposing its value. Other failures expose only
 `FAIL / collection_failed`. Completed collection reports measured identity, the nine checks,
 both qualifications and receipt digests. This output is not an admission token.
 The collector atomically writes its own result to
@@ -97,6 +101,12 @@ Unknown names, extra fields, malformed formats and paths refuse before observati
 Failures contain only `result: FAIL` and `input_invalid`, `host_refused` or
 `journey_failed` as the reason. No identity, raw observation or child output is echoed.
 The native check described below starts children in the supervisor's process group.
+
+The runner exits with status 1 for a host refusal. After stopping all children and
+removing its lock, the supervisor forwards only that exact two-field refusal with
+transport status 0. This means supervision finished; the returned result is still
+FAIL. Other non-zero exits, extra fields, malformed output and failed cleanup do
+not forward a result. The collector validates the refusal again before saving it.
 
 The host probe reads `/proc/swaps`, the effective `core_pattern`, `core_uses_pid` and
 `suid_dumpable` kernel settings, `/sys/kernel/kexec_crash_loaded`, its own core limits,

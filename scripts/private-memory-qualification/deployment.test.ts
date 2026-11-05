@@ -382,16 +382,19 @@ async function withdrawsPassForPartialRunner(): Promise<void> {
     expect(child.status).toBe(1);
     expect(child.stderr).toBe('');
     const refusal: unknown = JSON.parse(child.stdout);
+    const expectedRefusal = { result: 'FAIL', reason: 'host_refused' };
+    expect(refusal).toEqual(expectedRefusal);
     for (const key of Object.keys(response)) delete response[key];
     Object.assign(response, refusal);
   }
   alter = partial;
-  const failure = { result: 'FAIL', reason: 'collection_failed' };
+  const failure = { result: 'FAIL', reason: 'host_refused',
+    message: 'Host safety checks failed: swap and core dumps must be disabled.' };
   expect(await collectDeployment()).toEqual(failure);
   expect(JSON.parse(saved)).toEqual(failure);
   expect(responses).toHaveLength(12);
 }
-it('withdraws earlier saved PASS when the real partial runner refuses', withdrawsPassForPartialRunner);
+it('withdraws earlier saved PASS when the real runner refuses the host', withdrawsPassForPartialRunner);
 
 async function retainsMissingJourneys(): Promise<void> {
   function incomplete(response: Record<string, unknown>): void {

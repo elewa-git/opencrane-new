@@ -2189,7 +2189,11 @@ AbortSignal, SIGINT, SIGTERM and SIGHUP request cancellation. Cancellation waits
 for the whole collector, including supervisor cleanup, before withdrawing its result
 and rejecting. It does not stop the collector halfway through a check. The calling
 journey must await this function before removing its slot. No command, evidence
-upload or alternative target can be supplied. Errors contain only a fixed refusal.
+upload or alternative target can be supplied. Errors contain only fixed text.
+When the image runner returns `host_refused`, the launcher keeps that reason and
+the collector's fixed message in the saved FAIL result. Its error names the reason
+and reminds the operator that swap and core dumps must be disabled. No raw host
+setting, path or child output is exposed. Other failures keep the generic refusal.
 
 ```sh
 nice -n 10 npx vitest run --config infra/dev-stack/memory-qualification.config.mjs

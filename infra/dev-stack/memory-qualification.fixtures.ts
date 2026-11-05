@@ -42,7 +42,13 @@ function freshContainer() {
 }
 function unchanged(): void {}
 function protectedStat() {
-  return Object.assign(Object.create(Object.getPrototypeOf(originalStat)) as files.Stats, originalStat, { uid: 0, mode: 0o100600, size: 150 });
+  const prototype = Object.getPrototypeOf(originalStat) as object | null;
+  const stat = Object.create(prototype) as files.Stats;
+  Object.assign(stat, originalStat);
+  stat.uid = 0;
+  stat.mode = 0o100600;
+  stat.size = 150;
+  return stat;
 }
 function readProtected(descriptor: unknown): string {
   if (descriptor === 42) {
@@ -95,18 +101,23 @@ function docker(file: unknown, args: unknown): string {
     return JSON.stringify(host);
   }
   if (command[2] === 'inspect') {
-    return JSON.stringify([container]);
+    const containers = [container];
+    return JSON.stringify(containers);
   }
   expect(command.slice(2, 4)).toEqual(['image', 'inspect']);
-  return JSON.stringify([{ Id: container.Image,
-    Config: { Labels: { 'org.opencontainers.image.revision': revision } } }]);
+  const image = { Id: container.Image,
+    Config: { Labels: { 'org.opencontainers.image.revision': revision } } };
+  const images = [image];
+  return JSON.stringify(images);
 }
 function spawnDocker(file: string, args: readonly string[] = []): ReturnType<typeof spawn> {
   expect(file).toBe('/usr/bin/docker');
   const stdin = new PassThrough();
   const stdout = new PassThrough();
   const stderr = new PassThrough();
-  const child = Object.assign(new ChildProcess(), { stdin, stdout, stderr });
+  const streams = { stdin, stdout, stderr };
+  const childProcess = new ChildProcess();
+  const child = Object.assign(childProcess, streams);
   function receive(buffer: Buffer): void {
     function reply(): void {
       const command = JSON.parse(args.at(-1)!) as string[];
@@ -159,7 +170,9 @@ function prepare(): void {
   vi.mocked(files.readFileSync).mockImplementation(readProtected);
   vi.mocked(files.fstatSync).mockImplementation(protectedStat);
   function parentStat() {
-    return Object.assign(protectedStat(), { mode: 0o40755 });
+    const stat = protectedStat();
+    stat.mode = 0o40755;
+    return stat;
   }
   vi.mocked(files.lstatSync).mockImplementation(parentStat);
   vi.mocked(files.closeSync).mockReturnValue(undefined);
@@ -307,7 +320,14 @@ async function explainsUnsafeHost(setting: string): Promise<void> {
   const observations = new Map([
     ['/proc/swaps', 'Filename Type Size Used Priority\n'],
     ['/proc/sys/kernel/core_pattern', '\n'],
+    ['/proc/sys/kernel/core_uses_pid', '0\n'],
+    ['/proc/sys/fs/suid_dumpable', '0\n'],
+    ['/sys/kernel/kexec_crash_loaded', '0\n'],
+    ['/proc/self/limits', 'Max core file size 0 0 bytes\n'],
+    ['/proc/1/limits', 'Max core file size 0 0 bytes\n'],
   ]);
+  const readDirectoryNames: (path: string) => string[] = files.readdirSync;
+  vi.mocked(readDirectoryNames).mockReturnValue(['1', 'self']);
   if (setting === 'swap') {
     observations.set('/proc/swaps',
       'Filename Type Size Used Priority\n/private/swap file 1 0 -2\n');

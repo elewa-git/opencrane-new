@@ -21,7 +21,7 @@ flowchart LR
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
   stack -->|starts apps; keeps keys private; checks journeys, times Memory body reads and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|checks ownership, backup references, nodes and certificates; stops cancelled checks| package["infra/package<br/>Helm install"]
-  stack -->|checks fresh memory collection| collector["scripts/private-memory-qualification<br/>deployment checks"]
+  stack -->|checks collection and reports host refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
 ```
 
@@ -70,6 +70,7 @@ available for diagnosis.
   journeys honestly.
 - Checks the claimed slot and protected deployment target before memory collection.
   Refuses incomplete results before the calling journey can continue.
+  Reports failed host safety checks with a reminder to disable swap and core dumps.
 - Keeps original receipts and separates browser checks from untested native
   memory.
 - Lets a spare slot own a three-node Kubernetes test cluster. Saved ownership

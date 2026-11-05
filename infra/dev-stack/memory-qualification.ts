@@ -94,10 +94,12 @@ async function checkLocalTarget(id: string | undefined, claimed: string) {
   return { target, savedTarget };
 }
 
-function withdrawResult(): void {
+type Failure = Extract<Awaited<ReturnType<typeof collectDeployment>>, { result: 'FAIL' }>;
+
+function withdrawResult(failure: Failure): void {
   const temporary = `${resultPath}.${randomUUID()}`;
-  const failure = { result: 'FAIL', reason: 'collection_failed' };
-  writeFileSync(temporary, JSON.stringify(failure), { flag: 'wx', mode: 0o600 });
+  const options = { flag: 'wx', mode: 0o600 };
+  writeFileSync(temporary, JSON.stringify(failure), options);
   renameSync(temporary, resultPath);
 }
 
@@ -106,6 +108,7 @@ export async function prepareMemoryQualification(signal?: AbortSignal): Promise<
   let cancelled = signal?.aborted ?? false;
   let collectionStarted = false;
   let savedTarget: string | undefined;
+  let failure: Failure = { result: 'FAIL', reason: 'collection_failed' };
   function cancel(): void {
     cancelled = true;
   }
@@ -128,6 +131,9 @@ export async function prepareMemoryQualification(signal?: AbortSignal): Promise<
     collectionStarted = true;
     // Wait for the collector and every supervisor to finish cleanup before cancelling.
     const result = await collectDeployment();
+    if (result.result === 'FAIL') {
+      failure = result;
+    }
     if (cancelled || result.result !== 'PASS') {
       throw new Error('collection_failed');
     }
@@ -144,11 +150,14 @@ export async function prepareMemoryQualification(signal?: AbortSignal): Promise<
     if (collectionStarted && savedTarget !== undefined) {
       try {
         if (readTarget() === savedTarget) {
-          withdrawResult();
+          withdrawResult(failure);
         }
       } catch {
         // Refuse continuation even when the protected result cannot be withdrawn.
       }
+    }
+    if (failure.reason === 'host_refused') {
+      throw new Error(`memory_qualification_refused: host_refused. ${failure.message}`);
     }
     throw new Error('memory_qualification_refused');
   } finally {
