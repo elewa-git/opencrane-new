@@ -6,8 +6,8 @@ import { preflightFixture } from './private-recall-preflight-fixture.ts';
 
 vi.mock('node:net', { spy: true });
 
-async function runnerFixture() {
-  const native = await preflightFixture();
+async function runnerFixture(remember = false) {
+  const native = await preflightFixture(undefined, undefined, remember);
   async function open() {
     const launch = privateLaunchContext.getStore()!;
     const opened = await native.open(launch.turnId, launch.conversation);
@@ -17,6 +17,10 @@ async function runnerFixture() {
   Object.assign(computer.driver, native.driver);
   computer.pauseAcks();
   const tools = privateToolOffer('recall');
+  if (remember) {
+    tools[0]!.definitions.push(...privateToolOffer('remember')[0]!.definitions);
+    tools[0]!.modes['remember'] = 'allow';
+  }
   const turn = { type: 'turn', id: 'first', conversationId: 'chat',
     assistantId: 'assistant', requesterId: 'alice', executionMode: 'restricted',
     text: 'Hello', token: 'preparing', expiresAt: Date.now() + 60_000, tools };
@@ -212,22 +216,24 @@ async function completeFrameLimit() {
 }
 it('counts the tools and credentials in the full frame before installing a grant', completeFrameLimit);
 
-const nativeItems = ['recall', 'remember', 'external', 'commandExecution'] as const;
-async function restrictNativeItems(kind: typeof nativeItems[number]) {
-  const test = await runnerFixture();
+const nativeItems = ['recall', 'remember', 'correct', 'forget', 'external',
+  'commandExecution', 'fileChange', 'webSearch', 'collabAgentToolCall'] as const;
+async function restrictNativeItems(kind: typeof nativeItems[number], remember = false) {
+  const test = await runnerFixture(remember);
   try {
     const pending = await test.ready();
     const request = { ...pending, type: 'recall_load', tools: test.tools };
     test.computer.send(request);
     await waitLoaded(test, pending);
     const item = { id: 'call', type: 'mcpToolCall', server: test.tools[0]!.key, tool: 'recall' };
-    if (kind === 'remember') item.tool = 'remember';
+    item.tool = kind;
     if (kind === 'external') item.server = 'external';
-    if (kind === 'commandExecution') item.type = kind;
+    if (kind === 'commandExecution' || kind === 'fileChange' || kind === 'webSearch'
+      || kind === 'collabAgentToolCall') item.type = kind;
     const event = { method: 'item/started', params: { threadId: pending['threadId'], item } };
     test.computer.channel.notification(event);
     function expectedAccess() {
-      expect(test.native.callers.permits('first', 'first')).toBe(kind === 'recall');
+      expect(test.native.callers.permits('first', 'first')).toBe(kind === 'recall' || (remember && kind === 'remember'));
     }
     await vi.waitFor(expectedAccess);
     expect(test.native.received).not.toContain('turn/start');
@@ -235,4 +241,12 @@ async function restrictNativeItems(kind: typeof nativeItems[number]) {
     await test.close();
   }
 }
-it.each(nativeItems)('admits only loaded recall notifications: %s', restrictNativeItems);
+async function restrictRecallItems(kind: typeof nativeItems[number]) {
+  await restrictNativeItems(kind);
+}
+it.each(nativeItems)('admits only loaded recall notifications: %s', restrictRecallItems);
+
+async function restrictRememberItems(kind: typeof nativeItems[number]) {
+  await restrictNativeItems(kind, true);
+}
+it.each(nativeItems)('admits only loaded personal memory notifications: %s', restrictRememberItems);

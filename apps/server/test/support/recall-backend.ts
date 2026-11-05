@@ -12,7 +12,7 @@ import { fixture as bridgeFixture } from '../../../computer/test/bridge-gate-fix
 import { preflightFixture } from '../../../computer/test/private-recall-preflight-fixture.ts';
 import { connectBridge } from '../../src/chat/bridge.ts';
 import { assistantSnapshot, processConversation } from '../../src/chat/bridge-conversation.ts';
-import { recallTool, rememberTool, registerMemoryMcp } from '../../src/memory/mcp.ts';
+import { recallTool, rememberTool, correctTool, forgetTool, registerMemoryMcp } from '../../src/memory/mcp.ts';
 import Fastify from 'fastify';
 import { initialQualificationFixture } from './initial-qualification.ts';
 import { testAuthConfig } from './test-auth-config.ts';
@@ -204,7 +204,7 @@ async function governRecall(setup: Setup, remember: boolean) {
   const registered = { serverId: 'memory', kind: 'hosted', registeredBy: 'alice',
     locator: `registry.example.test/memory@sha256:${'a'.repeat(64)}` };
   await setup.append('mcp-memory', 'mcp.server_registered', registered);
-  const definitions = remember ? [recallTool, rememberTool] : [recallTool];
+  const definitions = remember ? [recallTool, rememberTool, correctTool, forgetTool] : [recallTool];
   function evidence(definition: typeof definitions[number]) {
     const encoded = JSON.stringify(definition);
     const metadata = { name: definition.name, reviewed: true, costCents: 0 };

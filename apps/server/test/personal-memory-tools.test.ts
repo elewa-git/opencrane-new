@@ -485,6 +485,13 @@ async function refusesCombinedPermission(kind: 'person' | 'assistant') {
 it.each(['person', 'assistant'] as const)(
   'refuses all four tools when the %s permission callback denies access', refusesCombinedPermission);
 
+function rememberOffer() {
+  const tools = privateToolOffer('recall');
+  tools[0]!.definitions.push(...privateToolOffer('remember')[0]!.definitions);
+  tools[0]!.modes['remember'] = 'allow';
+  return tools;
+}
+
 async function recallLoadFixture() {
   const setup = await fixture('recall', 'owner', true);
   const readyComputer = {
@@ -496,12 +503,13 @@ async function recallLoadFixture() {
     createdBy: 'alice',
   };
   await setup.save('conversation-conversation', 'conversation.created', createdConversation, false);
-  const definition = JSON.stringify(recallTool);
-  const revision = losslessJson(definition).digest;
-  const declaredTool = { name: 'recall', reviewed: true, costCents: 0 };
-  const evidence = toolEvidence(declaredTool);
-  const tool = { ...evidence, definition, revision };
-  const catalogue = catalogueEvidence([tool]);
+  function evidence(definition: typeof recallTool | typeof rememberTool) {
+    const encoded = JSON.stringify(definition);
+    const declared = { name: definition.name, reviewed: true, costCents: 0 };
+    return { ...toolEvidence(declared), definition: encoded, revision: losslessJson(encoded).digest };
+  }
+  const tools = [evidence(recallTool), evidence(rememberTool)];
+  const catalogue = catalogueEvidence(tools);
   const registeredServer = { serverId: 'memory',
     kind: 'hosted', registeredBy: 'alice', locator: `registry.example.test/memory@sha256:${'a'.repeat(64)}` };
   await setup.save('mcp-memory', 'mcp.server_registered', registeredServer, false);
@@ -512,10 +520,14 @@ async function recallLoadFixture() {
     serverInfo: { name: 'OpenCrane memory', version: '1' }, ...catalogue };
   await setup.save('mcp-memory', 'mcp.server_discovered', discoveredServer, false);
   const policy = await readToolPolicy(setup.input.store, 'test', 'memory');
-  const choice = { name: 'recall', revision, reviewDigest: toolReviewDigest(tool), mode: 'allow' };
+  function choice(tool: typeof tools[number]) {
+    return { name: tool.name, revision: tool.revision,
+      reviewDigest: toolReviewDigest(tool), mode: 'allow' };
+  }
+  const choices = tools.map(choice);
   const reviewedServer = { serverId: 'memory',
     catalogueDigest: catalogue.schemaDigest, connectionId: 'server', accountMode: 'none',
-    policyRevision: policy.policyRevision, reviewedBy: 'alice', tools: [choice] };
+    policyRevision: policy.policyRevision, reviewedBy: 'alice', tools: choices };
   await setup.save('mcp-memory', 'mcp.server_reviewed', reviewedServer, false);
   const publishedServer = {
     serverId: 'memory', publishedBy: 'alice',
@@ -533,13 +545,13 @@ async function recallLoadFixture() {
 async function preparesSavedRecall() {
   const setup = await recallLoadFixture();
   const load = await preparePersonalRecallLoad(setup.input, setup.pending);
-  const expected = { ...setup.pending, type: 'recall_load', tools: privateToolOffer('recall') };
+  const expected = { ...setup.pending, type: 'recall_load', tools: rememberOffer() };
   expect(load.request).toEqual(expected);
   expect(JSON.stringify(load.request)).not.toContain(setup.input.caller);
   expect(JSON.stringify(load.request)).not.toContain('qualification');
   const reply = { ...setup.pending, type: 'recall_loaded' };
   const tools = await load.complete(reply);
-  expect(tools).toEqual(privateToolOffer('recall'));
+  expect(tools).toEqual(rememberOffer());
   expect(checkPrivateTurnTools(tools, setup.input)).toBe(true);
   await expect(load.complete(reply)).rejects.toThrow('memory_context_unavailable');
 }
@@ -620,7 +632,7 @@ async function rechecksAfterDiscovery(change: typeof discoveryChanges[number]) {
   }
   const reply = { ...setup.pending, type: 'recall_loaded' };
   if (change === 'activity') {
-    expect(await load.complete(reply)).toEqual(privateToolOffer('recall'));
+    expect(await load.complete(reply)).toEqual(rememberOffer());
   } else if (change === 'removal') {
     setup.deployment.remove();
     await expect(load.complete(reply)).rejects.toThrow(MemberAccessRefused);
@@ -649,7 +661,7 @@ async function ignoresClaimedPreparation() {
   setup.state.policyTools[0]!.mode = 'block';
   const load = await preparePersonalRecallLoad(setup.input, setup.pending);
   const reply = { ...setup.pending, type: 'recall_loaded' };
-  expect(await load.complete(reply)).toEqual(privateToolOffer('recall'));
+  expect(await load.complete(reply)).toEqual(rememberOffer());
   expect(setup.input.readServer).not.toHaveBeenCalled();
 }
 it('reads saved admission, policy and deployment instead of supplied preparation objects',
@@ -835,7 +847,7 @@ async function acceptsCurrentLoadedReferences() {
   const load = await preparePersonalRecallLoad(setup.input, setup.pending);
   const reply = { ...setup.pending, type: 'recall_loaded' };
   const tools = await load.complete(reply);
-  expect(tools).toEqual(privateToolOffer('recall'));
+  expect(tools).toEqual(rememberOffer());
   expect(checkPrivateTurnTools(tools, setup.input)).toBe(true);
 }
 it('accepts recall discovery while loaded references are still current',

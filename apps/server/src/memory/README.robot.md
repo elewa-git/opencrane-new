@@ -58,3 +58,6 @@ even when local withdrawal has not run yet.
 Renewal is settled at its final access check's read. Correct or Forget saved after that
 read is ordered after renewal and enforced at the next confirmation. Renewal releases
 no memory text. The existing `memory-dispatch.test.ts` boundary assertions remain unchanged.
+
+The [Remember contract](../../../../docs/process/p4-15-pr4n/README.robot.md) records native
+write qualification checks and original agent-command status without resubmission.

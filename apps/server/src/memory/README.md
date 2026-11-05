@@ -109,3 +109,6 @@ in the final event reads before delivery. Other conversations can keep
 writing during these checks. A failed check keeps the same block for a fresh check; a lost
 consumer reply never permits another delivery. Qualified private starts use this consumer
 before receiving credentials. Admission remains disabled pending live qualification.
+
+The [memory contracts](README.robot.md) describes personal
+write receipts and status reads after a lost reply. Native admission remains disabled.

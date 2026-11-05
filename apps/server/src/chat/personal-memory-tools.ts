@@ -210,7 +210,11 @@ async function readRecallServer(input: RecallLoadInput, deadline: number) {
       ...(tool.costCents === undefined ? {} : { costCents: tool.costCents }) };
   }
   const discoveryTools = available.map(definition);
-  const policyTools = policy.tools.map(choice);
+  function offered(tool: typeof policy.tools[number]) {
+    return tool.name === 'recall' || tool.name === 'remember';
+  }
+  const offeredTools = policy.tools.filter(offered);
+  const policyTools = offeredTools.map(choice);
   return { serverId: 'memory', connectionId: policy.connectionId, published: policy.published,
     accountMode: policy.accountMode, discoveryTools, policyTools,
     ...(policy.catalogue.serverInfo ? { serverInfo: policy.catalogue.serverInfo } : {}) };
@@ -221,7 +225,7 @@ export async function preparePersonalRecallLoad(input: RecallLoadInput, pending:
   const deadline = performance.now() + 10_000;
   const local = { ...input };
   const readServer = readRecallServer.bind(undefined, local, deadline);
-  const original: Input = { ...local, operation: 'recall', turn: undefined, readServer,
+  const original: Input = { ...local, operation: 'all', turn: undefined, readServer,
     scopeId: memoryScopeId(input.silo, 'person', input.requesterId) };
   try {
     const prepared = await prepareRecallRequest(original, pending, deadline);
@@ -326,7 +330,7 @@ function requireRecallCaller(input: Input,
 
 function expectedRecallReceipt(input: Input, loadId: string) {
   const grant = input.grant;
-  if (!grant || input.operation !== 'recall') {
+  if (!grant || input.operation !== 'all') {
     throw new LoadedMemoryRefused();
   }
   return { type: 'recall_pending' as const, loadId, silo: input.silo,

@@ -102,13 +102,13 @@ function mcpSender(origin: string) {
   return send;
 }
 
-type NativeRecall = (name: string, args: object, headers: Record<string, string>, callId: string)
+type NativeMemoryCall = (name: string, args: object, headers: Record<string, string>, callId: string)
   => Promise<Record<string, unknown>>;
 
 function createDiscoveryControls(remember: boolean) {
   const received: string[] = [];
   const resume = Promise.withResolvers<void>();
-  const calls = new Map<string, NativeRecall>();
+  const calls = new Map<string, NativeMemoryCall>();
   return { received, resume, calls, remember, holdDiscovery: false, loseReload: false };
 }
 
@@ -142,7 +142,7 @@ function handleNativeProtocol(
         endpoint = String(record(server)['url']);
         expect(await send(endpoint, caller, 'server/discover')).toHaveProperty('error');
       }
-      async function recall(name: string, args: object,
+      async function callMemory(name: string, args: object,
         headers: Record<string, string>, callId: string) {
         const metadata = { threadId: thread.id, callId,
           'io.modelcontextprotocol/clientCapabilities': {},
@@ -151,7 +151,7 @@ function handleNativeProtocol(
         const callHeaders = { ...headers, 'mcp-name': name };
         return send(endpoint, caller, 'tools/call', params, callHeaders);
       }
-      discovery.calls.set(thread.id, recall);
+      discovery.calls.set(thread.id, callMemory);
       result = { thread };
     }
     if (method === 'config/mcpServer/reload' && discovery.loseReload) {
@@ -377,11 +377,11 @@ export async function preflightFixture(gateway = 'http://127.0.0.1:1',
   }
   function call(thread: string, name: string, args: object, headers: Record<string, string> = {},
     callId: string = randomUUID()) {
-    const call = discovery.calls.get(thread);
-    if (!call) {
+    const nativeCall = discovery.calls.get(thread);
+    if (!nativeCall) {
       throw new Error('Native thread has not started');
     }
-    return call(name, args, headers, callId);
+    return nativeCall(name, args, headers, callId);
   }
   function recall(thread: string, args: object, headers: Record<string, string> = {},
     callId: string = randomUUID()) {

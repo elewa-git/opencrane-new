@@ -11,18 +11,31 @@ function recallTools(input: Turn) {
   const server = tools[0];
   if (input.executionMode !== 'restricted' || input.sharingClass || input.rootId
     || input.taskKind !== 'chat_turn' || !input.requesterId
-    || tools.length !== 1 || server?.serverId !== 'memory' || server.connectionId !== 'server'
-    || server.definitions.length !== 1 || record(JSON.parse(server.definitions[0]!))['name'] !== 'recall'
-    || server.modes['recall'] !== 'allow' || Object.keys(server.modes).length !== 1) {
+    || tools.length !== 1 || server?.serverId !== 'memory' || server.connectionId !== 'server') {
     throw new Error('Private recall refused');
   }
-  return { tools, serverKey: server.key };
+  requireRecallDefinitions(server);
+  return { tools, serverKey: server.key, modes: server.modes };
+}
+
+function requireRecallDefinitions(server: ReturnType<typeof parseTools>[number]) {
+  if (server.definitions.length < 1 || server.definitions.length > 2
+    || record(JSON.parse(server.definitions[0]!))['name'] !== 'recall'
+    || server.modes['recall'] !== 'allow'
+    || Object.keys(server.modes).length !== server.definitions.length) {
+    throw new Error('Private recall refused');
+  }
+  if (server.definitions.length === 2
+    && (record(JSON.parse(server.definitions[1]!))['name'] !== 'remember'
+      || server.modes['remember'] !== 'allow')) {
+    throw new Error('Private recall refused');
+  }
 }
 
 export function privateRecall(input: Turn, owner: RecallOwner,
   session: PrivateThreadBinding['session'], identity: GateIdentity,
   loads: ReturnType<typeof threadLoads>) {
-  const { tools, serverKey } = recallTools(input);
+  const { tools, serverKey, modes } = recallTools(input);
   if (identity.assistant !== input.assistantId || identity.generation !== owner.generation) {
     throw new Error('Private recall refused');
   }
@@ -77,8 +90,9 @@ export function privateRecall(input: Turn, owner: RecallOwner,
     }
   }
   function permitsItem(item: Record<string, unknown>) {
-    return ready && item['type'] === 'mcpToolCall'
-      && item['server'] === serverKey && item['tool'] === 'recall';
+    const name = item['tool'];
+    return ready && typeof name === 'string' && modes[name] === 'allow' && item['type'] === 'mcpToolCall'
+      && item['server'] === serverKey;
   }
   return { start, load, permitsItem, get ready() { return ready; } };
 }

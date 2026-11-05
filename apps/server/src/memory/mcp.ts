@@ -1,6 +1,8 @@
+import { readDeploymentQualification } from
+  '../../../../scripts/private-memory-qualification/deployment.ts';
 import type { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { MemoryToolRefused, type MemoryContext, memoryRights,
+import { MemoryToolRefused, type MemoryContext, memoryRights, history, prepareLoadedMemory,
   parseMemoryRequest, verifyMemoryContext } from '@opencrane/models';
 import type { AuthConfig } from '@opencrane/auth';
 import type { MemoryOptions } from './access.ts';
@@ -128,16 +130,27 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
     const remaining = context.exp * 1000 - Date.now();
     const deadline = performance.now() + remaining;
     const evidence = prepared?.evidence ?? await readRecallContext(options!, context);
+    // Recheck the deployment for writes from a turn with saved native initial loading.
+    const nativeWrite = parsed.input?.operation === 'remember'
+      && evidence.chat.memoryContext?.initialLoaded;
+    const qualification = nativeWrite ? await readDeploymentQualification(options!.silo) : undefined;
+    let memory: Awaited<ReturnType<typeof prepareLoadedMemory>> | undefined;
+    if (nativeWrite) {
+      const conversation = await history(options!.store, `conversation-${context.conversation}`,
+        options!.silo, deadline);
+      memory = await prepareLoadedMemory(options!.store, options!.binding, context,
+        conversation, deadline);
+    }
     const rights = await memoryRights(options!.store, options!.binding, context, parsed,
       deadline, undefined, prepared?.access);
     if (context.dispatch.schemaDigest !== rights.policy.schemaDigest ||
         context.dispatch.policyRevision !== rights.policy.policy.policyRevision) {
       throw new Error('Memory catalogue changed');
     }
-    return { prepared, evidence, rights, deadline };
+    return { prepared, evidence, rights, deadline, qualification, memory };
   }
   async function execute(context: MemoryContext, parsed: ReturnType<typeof parseMemoryRequest>) {
-    const { prepared, evidence, rights, deadline } = await admit(context, parsed);
+    const { prepared, evidence, rights, deadline, qualification, memory } = await admit(context, parsed);
     let result: unknown = discovery;
     if (parsed.request.method === 'tools/list') {
       result = toolList;
@@ -159,13 +172,26 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
       if (input.sources.length > 0) throw new Error('Agent source refused');
       checkRecallProof(config.cookieSecret, context, input.recallProof, input.dependsOn,
         evidence.inputGeneration);
-      const confirm = confirmAgentLineage(options!, context, evidence, input.dependsOn,
-        rights.confirm, deadline);
+      // Check the captured access positions without repeating permission reads.
+      const confirmAccess = memory ? writeAuthority : rights.confirm;
+      const confirmLineage = confirmAgentLineage(options!, context, evidence, input.dependsOn,
+        confirmAccess, deadline);
+      const fresh = Object.assign(confirmLineage, writeAuthority);
+      async function confirm() {
+        qualification?.confirm();
+        if (memory) {
+          await memory.confirm(fresh);
+        } else {
+          await confirmLineage();
+        }
+        qualification?.confirm();
+      }
       const agent = { deadline: writeAuthority.deadline,
         conversation: context.conversation, turn: context.turn,
         requestId: context.requestId, confirm, checkAccess: writeAuthority };
       const { operation: _operation, scopeId: _scopeId, recallProof: _proof, ...command } = input;
       const receipt = await remember(options!, context.requester, rights.scope, command, agent);
+      await confirm();
       result = { content: [], structuredContent: receipt };
     }
     if (parsed.input?.operation === 'recall') {

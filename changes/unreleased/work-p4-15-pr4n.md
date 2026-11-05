@@ -1,0 +1,1 @@
+- Prepared personal memory threads can offer reviewed Remember alongside Recall, return the real saved receipt and read original-command status after a lost append reply. Qualification and access checks still gate delivery; admission, Correct/Forget delivery and live qualification remain held.
