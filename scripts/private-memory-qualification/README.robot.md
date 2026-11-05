@@ -142,19 +142,19 @@ unavailable execution status and exact retry recovery. For `unrelatedActivity`, 
 correcting or forgetting another fact leaves the loaded context unchanged. These are
 server checks with recorded context fixtures, not native memory delivery. Successful
 runs return PARTIAL, complete=false. The isolation checks below also return PARTIAL.
-The native check is described below. Three other journeys and both qualifications return
+The native check is described below. Two other journeys and both qualifications return
 NOT RUN, complete=false. Failure returns only FAIL / journey_failed.
 The collector binds every returned status to the image, host, silo, installation and
 fresh challenge, then saves its protected result. These are challenge-bound receipts,
 not cryptographic signatures. The qualification reader still accepts only complete PASS.
 
 Native requester/session isolation, messages/uploads during native work, dispatch/output rejection,
-process termination, persistence scans and real native recall remain NOT RUN. No native process starts during these five server checks, and no admission setting changes. The existing supervisor still owns
+process termination, persistence scans and real native recall remain NOT RUN. No native process starts during these six server checks, and no admission setting changes. The existing supervisor still owns
 timeout and process-group cleanup. Tests run shared assertions on disposable NATS and
 check denied appends, incomplete results and refusal by the qualification reader.
 
 `memory-image.test.ts` builds the actual `infra/package/Dockerfile` with the root
-`.dockerignore`. It checks that repository tests are absent, then calls all five memory
+`.dockerignore`. It checks that repository tests are absent, then calls all six memory
 checks inside read-only containers against disposable NATS. Only temporary credentials
 are mounted; all executable modules come from the image. Both Correct and Forget must
 be saved, and invalidation must occur only for the affected context. Admission must
@@ -184,7 +184,7 @@ require two contexts per mutation and check whether their requesters should matc
 Only fixture credentials are mounted; the helper and assertions come from the image.
 The existing supervisor still stops child processes on timeout or collector loss.
 
-Persistence and replacement/reload checks remain NOT RUN. Recorded Stop/reconnect
+Persistence and native replacement/reload remain NOT RUN. Recorded Stop/reconnect
 assertions are described below; native Stop/reconnect remains NOT RUN. Native recall, both qualifications, volatile replies and immutable deployment
 qualification also remain NOT RUN. The private-turn assertions below remain PARTIAL. The full nine live journeys remain incomplete. No new event or API fields,
 dependencies, authority checks or admission changes are introduced.
@@ -221,7 +221,7 @@ refuses the real host. These fixtures are not deployment qualification.
 
 Current incomplete checks: `privateTurns` is PARTIAL only when these assertions run;
 `requesterIsolation`, `sessionIsolation`, `invalidation`, `unrelatedActivity` and
-`stopReconnect` are PARTIAL server checks. `nativeRecall`, `replacementReload` and
+`stopReconnect` and `replacementReload` are PARTIAL server checks. `nativeRecall` and
 `persistence` are NOT RUN. Both complete qualifications, P4-14 and P4-15, are NOT RUN.
 Still unproved: gVisor and other process namespaces; live and fault-time storage
 scans; actual server, bridge and proxy RAM protection; native caller/catalogue launch;
@@ -283,6 +283,32 @@ The collector cannot save PASS, admission stays disabled and queued 5i3 stays he
 The package-image fixture runs the shipped helper with only disposable credentials mounted.
 No runtime import enters a test folder. Supervisor limits and cleanup remain unchanged.
 Own checks: [build receipt](../../docs/process/p4-15-pr5n/receipt.md).
+
+## Recorded replacement and cold reads
+
+P4-15 PR 5o, Part of #97, adds `memoryJourney.replacementReload` and the production
+`privateOutput` / `subscribePrivateOutput` lifecycle checks in `replacement-reload.ts`.
+The shared journey saves unrelated Correct and Forget events using the existing encrypted
+fixtures. It records computer loss and a replacement with a new computer and generation.
+A pending private reply must be captured before connection loss, then its retained
+buffer must contain only zeroes. A fresh subscriber receives nothing. A new output
+helper refuses the old computer's frame and frames with old computer or input generations.
+All captured replies are cleared after their release attempt.
+
+The helper observes synchronous buffer allocation only during capture and restores it
+before any await. Recorded sockets exercise production close callbacks and sends;
+they are not browser or bridge connections. Fresh `readChatFacts` calls use event reads
+without cached summaries. They retain the old loaded references and status, never
+execution or private input. An unrelated context and the replacement context keep their
+state. Replay leaves event positions unchanged and starts no model, tool or process.
+Fault tests supply wrong cold state, retained bytes and unexpected sends.
+
+`replacementReload` returns PARTIAL / complete=false. Other statuses and both
+qualification gates stay unchanged. Native replacement, browser reload, persistence
+and fresh-install qualification remain NOT RUN. Admission stays disabled.
+The package-image fixture runs the shipped helper with only disposable credentials mounted.
+Errors remain fixed, and the collector reader refuses a falsely complete result.
+Own checks: [build receipt](../../docs/process/p4-15-pr5o/receipt.md).
 
 ## File parser scope and invocation
 

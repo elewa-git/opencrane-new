@@ -20,7 +20,7 @@ flowchart LR
   scripts["scripts<br/>developer tools"] -.-> collector["private-memory-qualification<br/>collects observed results"]
   scripts -.-> sibling["check-local-qualification<br/>checks local results"]
   server["apps/server<br/>memory preparation"] -->|reads and rechecks results| collector
-  collector -.->|uses memory and Stop checks| server
+  collector -.->|checks memory, Stop and reply loss| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
   collector -->|measures and starts checks| docker["Docker<br/>running image and host"]
   docker -->|checks memory and two native processes| deployment["deployment<br/>event store and journey runner"]
@@ -54,7 +54,10 @@ correction and forgetting against the measured event store. It checks that unrel
 facts and other sessions keep their recorded state. It saves encrypted fixture facts
 using the deployment's memory key store. It also checks exact saved Stop delivery,
 refusal of other identities and retry after a failed send. Recorded sends do not prove
-that a native process or browser cleared memory. It records these checks as PARTIAL and missing
+that a native process or browser cleared memory. The replacement check records a
+lost computer and a new generation. It checks that a pending server reply is cleared,
+new subscribers cannot recover it, and delayed old output is refused. Cold reads
+retain saved references and status without granting execution or restoring private input. It records these checks as PARTIAL and missing
 journeys as NOT RUN. For private turns, it requires the pinned Codex executable,
 two fresh empty threads, disabled tools, separate homes in RAM and safe process limits.
 It closes the first process and checks that its home is gone while the second still
@@ -63,7 +66,7 @@ PARTIAL. Cleanup checks process start times before signalling and keeps its firs
 result, so another cleanup call leaves reused process IDs alone. Memory tool calls, full process isolation and storage checks are still pending. The package image does not
 contain Codex or its launch helpers, so its native check refuses. Tests add those
 files to a separate disposable image; they do not change the deployment image.
-Tests build the package image and run all five memory checks against a disposable event store.
+Tests build the package image and run all six memory checks against a disposable event store.
 Other tests use simulated observations and disposable containers to check refusal and cleanup.
 They do not qualify a deployment or enable memory.
 

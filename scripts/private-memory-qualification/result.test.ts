@@ -59,20 +59,25 @@ it('refuses a caller whose silo differs from the measured deployment', otherSilo
 
 async function incompleteRun(status: string, name: string) {
   const deployment = await initialQualificationFixture();
-  if (deployment.result.result !== 'PASS') throw new Error('Fixture collection failed');
+  if (deployment.result.result !== 'PASS') {
+    throw new Error('Fixture collection failed');
+  }
   const checks = { ...deployment.result.checks, [name]: status };
   deployment.replace({ ...deployment.result, result: 'PARTIAL', checks });
   await expect(readDeploymentQualification('test')).rejects.toThrow();
 }
 const incompleteChecks = [['PARTIAL', 'invalidation'], ['NOT RUN', 'invalidation'],
-  ['PARTIAL', 'stopReconnect']];
+  ['PARTIAL', 'stopReconnect'], ['PARTIAL', 'replacementReload']];
 it.each(incompleteChecks)('keeps %s %s results out of admission', incompleteRun);
 
-async function falselyCompleteStop() {
+async function falselyCompleteCheck(name: string) {
   const deployment = await initialQualificationFixture();
-  if (deployment.result.result !== 'PASS') throw new Error('Fixture collection failed');
-  const checks = { ...deployment.result.checks, stopReconnect: 'PARTIAL' };
+  if (deployment.result.result !== 'PASS') {
+    throw new Error('Fixture collection failed');
+  }
+  const checks = { ...deployment.result.checks, [name]: 'PARTIAL' };
   deployment.replace({ ...deployment.result, checks });
   await expect(readDeploymentQualification('test')).rejects.toThrow();
 }
-it('refuses a PASS claim whose Stop check is still PARTIAL', falselyCompleteStop);
+it.each(['stopReconnect', 'replacementReload'])(
+  'refuses a PASS claim whose %s check is still PARTIAL', falselyCompleteCheck);

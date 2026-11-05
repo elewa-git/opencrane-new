@@ -1,0 +1,1 @@
+- The packaged private-memory runner checks recorded computer replacement, lost private replies and cold reads. It reports these server checks as PARTIAL; native replacement, browser reload and persistence remain unproved.
