@@ -1817,3 +1817,11 @@ The joined session/loader fixture uses real caller, assembler and proxy helpers 
 a scripted local native peer. It checks separate catalogues, cancellation and lost replies.
 Production bridge hand-off and recall dispatch remain unfinished.
 See the [scope and checks](../../docs/process/p4-15-pr4m/README.robot.md).
+
+## Recall loading through the bridge — P4-15 PR 4m part 2
+
+The computer side of the exchange is implemented. Its exact volatile messages,
+checks and remaining server work are in the
+[recall loading contract](../../docs/process/p4-15-pr4m/README.robot.md#computer-side-loading).
+The runner now calls `startPrivate` and `loadPrivate`; the server does not yet send
+these requests. This does not enable admission or qualify deployment.

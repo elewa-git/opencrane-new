@@ -147,6 +147,8 @@ function handleNativeProtocol(
     }
     void receive(value).catch(failed);
   }
+  function failed() { socket.destroy(); }
+  lines.on('error', failed);
   lines.on('line', line);
   socket.resume();
 }
@@ -166,6 +168,7 @@ async function startNativeSocket(
     function failed() {
       socket.destroy();
     }
+    socket.on('error', failed);
     void native(socket).catch(failed);
   }
   const server = net.createServer(connected);
@@ -193,11 +196,11 @@ function createSessions(proxy: ProxyFixture, launchKey: string) {
   function notification() {
     /* No model turn runs in this fixture. */
   }
-  async function open(id = 'first') {
-    const identity = { turnId: id, conversation: 'chat', generation: 1,
+  async function open(id = 'first', conversation = 'chat') {
+    const identity = { turnId: id, conversation, generation: 1,
       inputGeneration: 1, expires: Date.now() + 60_000 };
     const launch = { ...identity, abort: new AbortController() };
-    const options = { runtimeProxy: { privateCaller: register }, generation: 1,
+    const options = { runtimeProxy: { privateCaller: register, privateAuthority: callers }, generation: 1,
       launchKey, initialiseParams: {}, notification };
     function start() {
       return openPrivateSession(options);
@@ -233,13 +236,13 @@ function createLoads({ callers, mcp }: ProxyFixture) {
     return mcp.discovered(catalogue);
   }
   const driver = { rpc, catalogue, dropCatalogue, discovered };
-  return threadLoads(driver);
+  return { loads: threadLoads(driver), driver };
 }
 
 async function prepareApproval(
   id: string,
   open: ReturnType<typeof createSessions>['open'],
-  loads: ReturnType<typeof createLoads>,
+  loads: ReturnType<typeof createLoads>['loads'],
   callers: ProxyFixture['callers'],
 ) {
   const opened = await open(id);
@@ -265,7 +268,7 @@ async function prepareApproval(
 function createCleanup(
   directory: string,
   discovery: DiscoveryControls,
-  loads: ReturnType<typeof createLoads>,
+  loads: ReturnType<typeof createLoads>['loads'],
   sessions: ReturnType<typeof createSessions>,
   proxy: ProxyFixture,
   replacement: Awaited<ReturnType<typeof redirectPrivateSocket>>,
@@ -306,7 +309,7 @@ export async function preflightFixture() {
   const server = await startNativeSocket(socketPath, launchKey, send, discovery);
   const replacement = await redirectPrivateSocket(socketPath);
   const sessions = createSessions(proxy, launchKey);
-  const loads = createLoads(proxy);
+  const { loads, driver } = createLoads(proxy);
   const close = createCleanup(
     directory, discovery, loads, sessions, proxy, replacement, server, listener,
   );
@@ -320,6 +323,6 @@ export async function preflightFixture() {
     discovery.loseReload = true;
   }
   return { open: sessions.open, prepare, received: discovery.received,
-    callers: proxy.callers, loads, mcp: proxy.mcp, close, pauseDiscovery,
+    callers: proxy.callers, loads, driver, mcp: proxy.mcp, close, pauseDiscovery,
     resume: discovery.resume.resolve, dropReloadReply };
 }

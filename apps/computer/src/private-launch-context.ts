@@ -50,5 +50,6 @@ export function launchBoundRunner(runner: ReturnType<typeof turnRunner>) {
     return receipt;
   }
   return { gate: runner.gate, start, prepareRoutine, connectionLost, interrupt, stopBridge,
+    loadRecall: runner.loadRecall.bind(runner),
     acknowledge: runner.acknowledge.bind(runner), readArtifact: runner.readArtifact.bind(runner) };
 }

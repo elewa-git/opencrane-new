@@ -163,7 +163,7 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
   });
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Proxy listen failed');
-  return { caller, approvals, privateCaller, url: `http://127.0.0.1:${address.port}`, close: async () => {
+  return { caller, approvals, privateCaller, privateAuthority, url: `http://127.0.0.1:${address.port}`, close: async () => {
     privateAuthority.close();
     server.closeAllConnections(); control.closeAllConnections();
     await Promise.all([server, control].map(listener => new Promise<void>((resolve, reject) => listener.close(error => error ? reject(error) : resolve()))));

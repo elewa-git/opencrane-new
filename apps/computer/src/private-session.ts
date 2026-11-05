@@ -8,7 +8,8 @@ import { record } from './http.ts';
 import type { proxy } from './proxy.ts';
 
 type SessionOptions = {
-  runtimeProxy: Pick<Awaited<ReturnType<typeof proxy>>, 'privateCaller'>;
+  runtimeProxy: Pick<Awaited<ReturnType<typeof proxy>>, 'privateCaller'>
+    & Partial<Pick<Awaited<ReturnType<typeof proxy>>, 'privateAuthority'>>;
   generation: number;
   launchKey: string;
   initialiseParams: Record<string, unknown>;
@@ -116,5 +117,8 @@ export async function openPrivateSession(options: SessionOptions) {
       throw new Error('Private thread refused');
     }
   }
-  return { rpc, close, closed };
+  const authority = runtimeProxy.privateAuthority;
+  const recallOwner = authority ? { ...binding, registration, caller: registration.caller,
+    authority } : undefined;
+  return { rpc, close, closed, recallOwner };
 }
