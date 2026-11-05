@@ -139,12 +139,14 @@ function privatePreparation(threadId: string) {
   const lifetime = Promise.withResolvers<void>();
   const startup = Promise.withResolvers<void>();
   const close = vi.fn();
+  const started = Promise.withResolvers<void>();
   async function rpc() {
+    started.resolve();
     await startup.promise;
     return { thread: { id: threadId, ephemeral: true, path: null } };
   }
   const session = { rpc, close, closed: lifetime.promise };
-  return { session, lifetime, startup };
+  return { session, lifetime, startup, started };
 }
 
 function trackCleanup(work: Promise<void>) {
@@ -177,7 +179,7 @@ async function keepsReplacementAfterCancellation(stage: 'open' | 'start' | 'clos
     await opened.promise;
     if (stage !== 'open') {
       releaseOpen.resolve();
-      await Promise.resolve();
+      await original.started.promise;
     }
     if (stage === 'close') {
       original.startup.resolve();

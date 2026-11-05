@@ -15,7 +15,9 @@ export function createRoutineComposition(options: { enabled?: boolean; replay?: 
 
   async function send(wake: (assistantId: string) => Promise<Ready>) {
     const unknown = { status: 'unknown' as const };
-    if (!enabled || used) return unknown;
+    if (!enabled || used) {
+      return unknown;
+    }
     used = true;
     try {
       const input = structuredClone(raw);
