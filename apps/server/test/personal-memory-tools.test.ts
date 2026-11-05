@@ -6,15 +6,15 @@ import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz'
 import { openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { losslessJson } from '@opencrane/events/lossless-json';
-import { envelope, MemberAccessRefused, privateCallers } from '@opencrane/models';
+import { envelope, MemberAccessRefused, privateCallers, readToolPolicy }
+  from '@opencrane/models';
 import { memoryScopeId } from '@opencrane/projections';
 import { catalogueEvidence, toolEvidence } from '@opencrane/models/testing';
 import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
-import { readToolPolicy } from '@opencrane/models';
 import { privateToolOffer } from './support/private-catalogue.ts';
-import * as preparation from '../src/chat/personal-memory-tools.ts';
 import { initialQualificationFixture } from './support/initial-qualification.ts';
-import { preparePersonalMemoryTools } from '../src/chat/personal-memory-tools.ts';
+import { preparePersonalMemoryTools, preparePersonalRecallLoad }
+  from '../src/chat/personal-memory-tools.ts';
 import { checkPrivateTurnTools, type TurnToolServerState } from '../src/chat/turn-tools.ts';
 import { correctTool, forgetTool, recallTool, rememberTool } from '../src/memory/mcp.ts';
 
@@ -26,10 +26,11 @@ async function processModule() {
   const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process');
   return { ...actual };
 }
-vi.mock('node:fs', async function filesystem(importOriginal) {
-  const original = await importOriginal<typeof import('node:fs')>();
-  return { ...original };
-});
+async function filesystemModule() {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return { ...actual };
+}
+vi.mock('node:fs', filesystemModule);
 vi.mock('node:crypto', cryptoModule);
 vi.mock('node:child_process', processModule);
 
@@ -529,7 +530,7 @@ async function recallLoadFixture() {
 
 async function preparesSavedRecall() {
   const setup = await recallLoadFixture();
-  const load = await preparation.preparePersonalRecallLoad(setup.input, setup.pending);
+  const load = await preparePersonalRecallLoad(setup.input, setup.pending);
   const expected = { ...setup.pending, type: 'recall_load', tools: privateToolOffer('recall') };
   expect(load.request).toEqual(expected);
   expect(JSON.stringify(load.request)).not.toContain(setup.input.caller);
@@ -552,7 +553,7 @@ const changedReceipts = [
 ];
 async function refusesDiscoveryReceipt(change: object) {
   const setup = await recallLoadFixture();
-  const load = await preparation.preparePersonalRecallLoad(setup.input, setup.pending);
+  const load = await preparePersonalRecallLoad(setup.input, setup.pending);
   const reply = { ...setup.pending, type: 'recall_loaded', ...change };
   await expect(load.complete(reply)).rejects.toThrow('memory_context_unavailable');
   const correct = { ...setup.pending, type: 'recall_loaded' };
@@ -565,7 +566,7 @@ const discoveryChanges = ['removal', 'demotion', 'grant', 'policy', 'qualificati
   'replacement', 'closure', 'Stop', 'caller', 'activity'] as const;
 async function rechecksAfterDiscovery(change: typeof discoveryChanges[number]) {
   const setup = await recallLoadFixture();
-  const load = await preparation.preparePersonalRecallLoad(setup.input, setup.pending);
+  const load = await preparePersonalRecallLoad(setup.input, setup.pending);
   if (change === 'removal') await removal(setup);
   if (change === 'demotion') {
     const demotedMember = {
@@ -631,7 +632,7 @@ it.each(discoveryChanges)('rechecks saved access and identity after discovery: %
 async function refusesInitialReceipt(change: object) {
   const setup = await recallLoadFixture();
   const pending = { ...setup.pending, ...change };
-  await expect(preparation.preparePersonalRecallLoad(setup.input, pending))
+  await expect(preparePersonalRecallLoad(setup.input, pending))
     .rejects.toThrow('memory_context_unavailable');
   expect(setup.check).not.toHaveBeenCalled();
 }
@@ -644,7 +645,7 @@ async function ignoresClaimedPreparation() {
   setup.input.turn.firstClose = { sequence: 999, status: 'failed' };
   setup.input.qualification.result = 'FAIL';
   setup.state.policyTools[0]!.mode = 'block';
-  const load = await preparation.preparePersonalRecallLoad(setup.input, setup.pending);
+  const load = await preparePersonalRecallLoad(setup.input, setup.pending);
   const reply = { ...setup.pending, type: 'recall_loaded' };
   expect(await load.complete(reply)).toEqual(privateToolOffer('recall'));
   expect(setup.input.readServer).not.toHaveBeenCalled();
@@ -654,9 +655,10 @@ it('reads saved admission, policy and deployment instead of supplied preparation
 
 async function refusesLateDiscovery() {
   const setup = await recallLoadFixture();
-  const load = await preparation.preparePersonalRecallLoad(setup.input, setup.pending);
+  const load = await preparePersonalRecallLoad(setup.input, setup.pending);
   const late = performance.now() + 10_001;
-  vi.spyOn(performance, 'now').mockReturnValue(late);
+  const clock = vi.spyOn(performance, 'now');
+  clock.mockReturnValue(late);
   const reply = { ...setup.pending, type: 'recall_loaded' };
   await expect(load.complete(reply)).rejects.toThrow('memory_context_unavailable');
 }

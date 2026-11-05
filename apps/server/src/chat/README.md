@@ -122,5 +122,6 @@ flowchart LR
   computer -->|completed private reply| chat
   chat -->|private reply and clearance| reader[Authenticated reader]
   chat -->|checks fixed access positions and spending| models[Models]
-  chat -->|checks deployment results| collector[Memory qualification collector]
+  collector["private-memory-qualification<br/>checks deployment results"]
+  chat -->|checks deployment results| collector
 ```
