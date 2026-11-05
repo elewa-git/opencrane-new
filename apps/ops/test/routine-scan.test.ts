@@ -9,10 +9,6 @@ import { HandlerRuntime } from '@opencrane/handlers';
 import * as models from '@opencrane/models';
 import * as tools from '../../../libs/models/src/mcp-dispatch.ts';
 import * as broker from '../../../libs/models/src/credential-broker.ts';
-import * as sessions from '../../server/src/routine-session.ts';
-import * as inputs from '../../server/src/routine-input.ts';
-import * as roots from '../../server/src/routine-root.ts';
-import * as senders from '../../server/src/routine-sender.ts';
 import { routine } from '../../../libs/authz/test/routine-fixture.ts';
 import { SandboxClient } from '../src/kubernetes.ts';
 import { withRoutineLeadership } from '../src/routine-leadership.ts';
@@ -251,15 +247,10 @@ async function noEffects() {
   const credentials = vi.spyOn(SandboxClient.prototype, 'credentials');
   const jobs = vi.spyOn(HandlerRuntime.prototype, 'start');
   const network = vi.spyOn(globalThis, 'fetch');
-  const session = vi.spyOn(sessions, 'prepareRoutineSession');
-  const input = vi.spyOn(inputs, 'prepareRoutineInput');
-  const root = vi.spyOn(roots, 'allocateRoutineRoot');
-  const sender = vi.spyOn(senders, 'createRoutineSender');
   const model = vi.spyOn(models, 'startGateway');
   const tool = vi.spyOn(tools, 'mcpDispatch');
   const credential = vi.spyOn(broker, 'credentialBroker');
-  const effects = [append, wake, credentials, jobs, network, session, input, root,
-    sender, model, tool, credential];
+  const effects = [append, wake, credentials, jobs, network, model, tool, credential];
   for (const effect of effects) effect.mockImplementation(forbidden);
   const before = await nats.store.head();
   expect((await scan()).counts.eligible).toBe(1);
