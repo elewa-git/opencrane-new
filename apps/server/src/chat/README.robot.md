@@ -70,7 +70,8 @@ qualification checks. An invalid receipt consumes the attempt too. No receipt me
 no completed preparation; completion after the original ten-second limit refuses.
 The returned catalogue is not permission to release input or credentials.
 
-Membership and grant positions remain fixed across discovery, including past team grants.
+Membership and memory-tool grant positions remain fixed across discovery, including
+past team grants.
 Conversation history loads before the two-second check over small access streams.
 Saved Stop, closure, replacement and control changes refuse; unrelated activity does not.
 Preparation and completion reject saved invalidated or ended memory even while the Stop
