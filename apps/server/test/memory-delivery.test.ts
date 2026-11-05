@@ -21,7 +21,8 @@ import { initialQualificationFixture } from './support/initial-qualification.ts'
 import { fixture } from '../../computer/test/bridge-gate-fixture.ts';
 import { createLogger } from '@opencrane/observability';
 import { assistantProcessor } from '../src/chat/bridge-poll.ts';
-import type { AgentSession } from '../src/chat/bridge-conversation.ts';
+import { assistantSnapshot, processConversation, type AgentSession }
+  from '../src/chat/bridge-conversation.ts';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
@@ -1424,14 +1425,18 @@ async function prepareRecallTurn() {
   const turn = { type: 'turn', id: 'recall-turn', conversationId: 'chat', requesterId: 'alice',
     assistantId: 'assistant', executionMode: 'restricted', text: 'Preparing private input', token: 'preparing',
     expiresAt: Date.now() + 60_000, tools };
+  const baseFrame = { ...turn, tools: undefined };
   const recall = { requesterId: 'alice', expiresAt: turn.expiresAt,
-    baseMessageBytes: Buffer.byteLength(JSON.stringify(turn)) };
+    baseMessageBytes: Buffer.byteLength(JSON.stringify(baseFrame)) };
   const delivery = { turnId: turn.id, sentAt: performance.now(), tools, recall };
   link.sentTurns.set('chat', delivery);
   const sent: Record<string, unknown>[] = [];
   const originalSend = link.socket.send.bind(link.socket);
   function send(data: Parameters<typeof originalSend>[0]) {
-    sent.push(JSON.parse(String(data)) as Record<string, unknown>);
+    if (typeof data === 'string') {
+      const parsed: unknown = JSON.parse(data);
+      sent.push(z.record(z.string(), z.unknown()).parse(parsed));
+    }
     originalSend(data);
   }
   vi.spyOn(link.socket, 'send').mockImplementation(send);
@@ -1443,6 +1448,9 @@ async function discoversBeforePrivateDispatch() {
   test.native.pauseDiscovery();
   link.socket.send(JSON.stringify(test.turn));
   function discovering() {
+    expect(link.rejection).toBeUndefined();
+    function refused(frame: Record<string, unknown>) { return typeof frame['refused'] === 'string'; }
+    expect(test.sent.find(refused)?.['refused']).toBeUndefined();
     expect(test.native.received).toContain('mcpServerStatus/list');
   }
   await vi.waitFor(discovering, { timeout: 10_000 });
@@ -1461,3 +1469,81 @@ async function discoversBeforePrivateDispatch() {
 }
 it('saves admission and loads recall over the bridge before releasing private input or credentials',
   discoversBeforePrivateDispatch);
+
+const recallWithdrawals = [
+  ['removal', 'member-alice', 'member.removed', { memberId: 'alice', removedBy: 'owner' }],
+  ['grant', grantStream('mcp_server', 'memory'), 'grant.revoked', {
+    resourceType: 'mcp_server', resourceId: 'memory', granteeKind: 'assistant',
+    granteeId: 'assistant', revokedBy: 'alice',
+  }],
+  ['policy', 'mcp-memory', 'mcp.server_unpublished', {
+    serverId: 'memory', unpublishedBy: 'alice',
+  }],
+  ['replacement', 'computer-assistant', 'computer.ready', {
+    assistantId: 'assistant', computerId: 'computer', generation: 2, podUid: 'replacement',
+  }],
+  ['closure', 'conversation-chat', 'conversation.closed', {
+    conversationId: 'chat', closedBy: 'alice',
+  }],
+  ['Stop', 'conversation-chat', 'agent.turn_stop_requested', {
+    conversationId: 'chat', turnId: 'recall-turn', requestedBy: 'alice',
+  }],
+] as const;
+async function refusesRecallWithdrawal(_name: string, subject: string, type: string, data: object) {
+  const test = await prepareRecallTurn();
+  test.native.pauseDiscovery();
+  link.socket.send(JSON.stringify(test.turn));
+  function discovering() { expect(test.native.received).toContain('mcpServerStatus/list'); }
+  await vi.waitFor(discovering, { timeout: 10_000 });
+  await append(subject, type, data);
+  test.native.resume();
+  function refused() {
+    function isRefusal(frame: Record<string, unknown>) { return typeof frame['refused'] === 'string'; }
+    expect(test.sent.find(isRefusal)).toBeDefined();
+  }
+  await vi.waitFor(refused, { timeout: 10_000 });
+  await link.settled();
+  expect(test.native.received).not.toContain('turn/start');
+  expect(computer.grants.has('returned-native-1')).toBe(false);
+}
+it.each(recallWithdrawals)('withholds private input and credentials after saved %s during discovery',
+  refusesRecallWithdrawal);
+
+async function refusesLostRecall() {
+  const test = await prepareRecallTurn();
+  test.native.dropReloadReply();
+  link.socket.send(JSON.stringify(test.turn));
+  function refused() {
+    expect(test.native.received).toContain('config/mcpServer/reload');
+    expect(test.native.mcp.size).toBe(0);
+  }
+  await vi.waitFor(refused, { timeout: 10_000 });
+  await link.settled();
+  expect(test.native.received).not.toContain('turn/start');
+  expect(computer.grants.has('returned-native-1')).toBe(false);
+  function isLoad(frame: Record<string, unknown>) { return frame['type'] === 'recall_load'; }
+  expect(test.sent.filter(isLoad)).toHaveLength(1);
+}
+it('abandons a lost recall discovery reply without resending or releasing a grant', refusesLostRecall);
+
+async function offersQualifiedRecall() {
+  const test = await prepareRecallTurn();
+  link.sentTurns.delete('chat');
+  const rows = await history(nats.store, 'computer-assistant', 'test');
+  const assistant = assistantSnapshot(rows, 'personal', 'test');
+  const options = { silo: 'test', store: nats.store, keys, binding: iam, db: storage.db };
+  function connectedComputer() {
+    const connected = { ...link, connectionId: 1 };
+    return Promise.resolve(connected);
+  }
+  await processConversation(options, computer.issuer, sessions[0]!, assistant,
+    new Set(), connectedComputer);
+  function isOffer(frame: Record<string, unknown>) { return frame['type'] === 'turn'; }
+  const offered = test.sent.find(isOffer);
+  expect(offered?.['tools']).toEqual(privateToolOffer('recall'));
+  function dispatched() { expect(test.native.received).toContain('turn/start'); }
+  await vi.waitFor(dispatched, { timeout: 10_000 });
+  expect(computer.grants.has('returned-native-1')).toBe(true);
+}
+it('offers recall from saved policy on a qualified personal turn and completes discovery',
+  offersQualifiedRecall);

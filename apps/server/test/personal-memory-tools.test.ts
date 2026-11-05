@@ -869,3 +869,17 @@ async function refusesCompetingRecallLoad() {
 }
 it('refuses completion when another recall loads references after its snapshot',
   refusesCompetingRecallLoad);
+
+async function confirmsRecallBeforeRelease() {
+  const setup = await recallLoadFixture();
+  const load = await preparePersonalRecallLoad(setup.input, setup.pending);
+  await expect(load.confirm()).rejects.toThrow('memory_context_unavailable');
+  const reply = { ...setup.pending, type: 'recall_loaded' };
+  await load.complete(reply);
+  await expect(load.confirm()).resolves.toBeUndefined();
+  await removal(setup);
+  setup.deployment.remove();
+  await expect(load.confirm()).rejects.toThrow(MemberAccessRefused);
+}
+it('requires completed discovery and repeats membership before releasing credentials',
+  confirmsRecallBeforeRelease);
