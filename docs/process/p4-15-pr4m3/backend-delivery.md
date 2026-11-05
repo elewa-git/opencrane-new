@@ -47,7 +47,7 @@ claim follows from those complementary checks.
 
 ## Earlier own checks
 
-- PASS: test-first commit `b534d50f8`. Native dispatch completed, then the stored-fact
+- PASS: test-first commit `39785f238`. Native dispatch completed, then the stored-fact
   assertion failed because the original discovery fixture had no forwarding grant.
 - PASS: 737 selected tests, including 460 unchanged security-rule cases.
 - PASS: all seven new backend checks twice on the final code; the computer recall
@@ -70,7 +70,8 @@ after the checks. Global admission remains disabled.
 
 ## Repair scope and own checks
 
-Implementation: `27c08211f` (access fix `230e840df`), rebased onto `origin/main` at `dad578424`.
+Implementation: `ccff8799e` (access order and real proxy grants), based on
+`origin/main` at `79afe7aff`.
 Environment: disposable local services, not a fresh installation.
 
 The final projection query now precedes access confirmation. Confirmation retains the
@@ -86,7 +87,7 @@ Renewal is settled at its final access check's read. Correct or Forget saved aft
 read is ordered after renewal and enforced at the next confirmation. Renewal releases
 no memory text; its existing assertions are unchanged.
 
-- PASS: failing-first commit `deccb8d7c`. Four withdrawal cases returned the fact,
+- PASS: failing-first commit `91df00ed1`. Four withdrawal cases returned the fact,
   expired and cancelled grants were accepted, and the catalogue survived expiry.
   These seven expected failures were recorded before the fixes.
 - PASS: all 14 backend cases in the first complete run after the fixes.
@@ -107,7 +108,8 @@ no memory text; its existing assertions are unchanged.
 
 The first selected run covers `recall-backend-delivery.test.ts`, `memory-dispatch.test.ts`,
 `memory-delivery.test.ts`, `memory-mcp.test.ts`, `private-recall-preflight.test.ts`,
-`private-recall-runner.test.ts` and `private-proxy.test.ts`. The repeat covers the same files except the unchanged `memory-mcp.test.ts`. Commands use
+`private-recall-runner.test.ts` and `private-proxy.test.ts`. The repeat covers the same files
+except the unchanged `memory-mcp.test.ts`. Commands use
 `nice -n 10 npx vitest run <selected files> --maxWorkers=1 --no-file-parallelism`.
 
 Repair logs: `/tmp/p4-15-pr4m5-fix-*.log`. Checks use `nice -n 10`, one test worker,
