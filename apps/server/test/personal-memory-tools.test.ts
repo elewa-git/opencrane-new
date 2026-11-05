@@ -690,6 +690,7 @@ async function loadedRecallFixture() {
 
 async function invalidateRecall(setup: Awaited<ReturnType<typeof loadedRecallFixture>>,
   kind: 'corrected' | 'forgotten') {
+  expect(setup.append).not.toHaveBeenCalled();
   await setup.journey.change(kind);
   expect(await setup.journey.invalidate()).toMatchObject({ status: 'invalidated' });
   setup.append.mockClear();
@@ -744,6 +745,7 @@ for (const stage of ['before preparation', 'before completion', 'during completi
 async function refusesEndedMemoryContext() {
   const setup = await loadedRecallFixture();
   const load = await preparePersonalRecallLoad(setup.input, setup.pending);
+  expect(setup.append).not.toHaveBeenCalled();
   const ended = { ...setup.journey.prepared, action: 'ended', reason: 'ended' };
   await setup.journey.append('conversation-conversation', 'agent.memory_context_recorded', ended);
   setup.append.mockClear();
@@ -798,6 +800,7 @@ for (const stage of ['before completion', 'during completion'] as const) {
     const load = await preparePersonalRecallLoad(setup.input, setup.pending);
     const reply = { ...setup.pending, type: 'recall_loaded' };
     async function changeReference() {
+      expect(setup.append).not.toHaveBeenCalled();
       await setup.journey.change(kind);
       setup.append.mockClear();
       const chat = await readChatFacts(setup.input.store, 'test', 'conversation', 'turn');
@@ -837,3 +840,32 @@ async function acceptsCurrentLoadedReferences() {
 }
 it('accepts recall discovery while loaded references are still current',
   acceptsCurrentLoadedReferences);
+
+async function refusesCompetingRecallLoad() {
+  const setup = await loadedRecallFixture();
+  const load = await preparePersonalRecallLoad(setup.input, setup.pending);
+  const waiting = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  async function delayedPermission(...args: Parameters<typeof setup.realCheck>) {
+    waiting.resolve();
+    await resume.promise;
+    return setup.realCheck(...args);
+  }
+  setup.check.mockImplementationOnce(delayedPermission);
+  const reply = { ...setup.pending, type: 'recall_loaded' };
+  const completion = load.complete(reply);
+  const refused = expect(completion).rejects.toThrow('memory_context_unavailable');
+  await waiting.promise;
+  expect(setup.append).not.toHaveBeenCalled();
+  const otherFact = { ...setup.journey.memoryWrittenExample,
+    scopeId: setup.journey.scopeId, memoryId: 'other' };
+  await setup.journey.append(`scope-${setup.journey.scopeId}`, 'memory.written', otherFact);
+  const otherReference = { ...setup.journey.reference, memoryId: 'other' };
+  const otherCall = { callDigest: 'c'.repeat(64), dispatchDigest: 'd'.repeat(64) };
+  await setup.journey.load([otherReference], otherCall);
+  setup.append.mockClear();
+  resume.resolve();
+  await refused;
+}
+it('refuses completion when another recall loads references after its snapshot',
+  refusesCompetingRecallLoad);
