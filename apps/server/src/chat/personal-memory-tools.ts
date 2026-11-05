@@ -223,6 +223,10 @@ export async function preparePersonalRecallLoad(input: RecallLoadInput, pending:
         return refuseRecallLoad(original, deadline, error);
       }
     }
+    const identity = { caller: original.caller!, grant: original.grant! };
+    if (!checkPrivateTurnTools(prepared.tools, identity)) {
+      throw new LoadedMemoryRefused();
+    }
     return { request, complete };
   } catch (error) {
     return refuseRecallLoad(original, deadline, error);
