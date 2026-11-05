@@ -1,0 +1,1 @@
+Assistant and uploaded images now appear in chat and open in the file preview. Replies open published workspace files through their file cards and show a plain note when a file is unavailable. Well-formed SVG files can be viewed as images or downloaded.

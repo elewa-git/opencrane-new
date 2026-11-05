@@ -1385,7 +1385,15 @@ captures at 1280 and 390 pixels against the built app with ordinary browser fixt
 
 Uploaded file records with a `turnId` supply file details without making a second card.
 The corresponding `agent.file_changed` event puts the card in the assistant's reply.
-Refusals reuse the upload reason wording. Inline images and reply links are not included.
+Refusals reuse the upload reason wording. PNG, JPEG, GIF, WebP and SVG cards load
+thumbnails through the existing conversation file route. The preview fetches SVG
+through that route and renders it only as an image. Reply links beginning with
+`/workspace/artifacts/` or `file:///workspace/artifacts/` resolve by file name
+against published files this viewer may open. An unmatched or ambiguous name shows
+“File not available”. Other local file paths also show this note without exposing
+the path. Ordinary HTTPS and email links still work.
+`npm run visual:assistant-files-2` captures both widths with an intercepted API.
+Fresh-install qualification remains NOT RUN.
 
 ## Volatile personal reply state
 

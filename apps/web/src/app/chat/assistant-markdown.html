@@ -66,6 +66,15 @@
       @case ('link') {
         <a [href]="part.href" target="_blank" rel="noopener noreferrer">{{ part.text }}</a>
       }
+      @case ('workspace-file') {
+        @if (publishedFile(part.href); as path) {
+          <button type="button" class="workspace-file-link" (click)="openFile(path)">
+            {{ fileLabel(part.text, path) }}
+          </button>
+        } @else {
+          <span>File not available</span>
+        }
+      }
       @case ('citation') {
         <button type="button" class="citation" [attr.aria-label]="'Citation ' + part.text"
           (click)="citationOpened.emit('Citation [' + part.text + ']')">

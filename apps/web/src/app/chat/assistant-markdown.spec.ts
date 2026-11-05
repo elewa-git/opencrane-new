@@ -21,6 +21,60 @@ function mount(text: string) {
   return { fixture, root };
 }
 
+function opensPublishedWorkspaceLink() {
+  const { fixture, root } = mount('[Open drawing](/workspace/artifacts/drawing.svg)');
+  fixture.componentRef.setInput('availableFiles', ['uploads/chat/file/drawing.svg']);
+  fixture.detectChanges();
+  const opened = vi.fn();
+  fixture.componentInstance.fileOpened.subscribe(opened);
+  const button = root.querySelector<HTMLButtonElement>('button.workspace-file-link');
+  expect(button?.textContent?.trim()).toBe('Open drawing');
+  expect(root.textContent).not.toContain('/workspace/artifacts');
+  button?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  button?.click();
+  expect(opened).toHaveBeenCalledWith('uploads/chat/file/drawing.svg');
+}
+
+it('opens a published workspace link without exposing its path', opensPublishedWorkspaceLink);
+
+function showsUnavailableWorkspaceFile() {
+  const { root } = mount('[Private plan](/workspace/artifacts/private.svg)');
+  expect(root.textContent).toContain('File not available');
+  expect(root.textContent).not.toContain('/workspace/artifacts');
+  expect(root.querySelector('a, button')).toBeNull();
+}
+
+it('shows a plain note for a workspace file the viewer cannot open',
+  showsUnavailableWorkspaceFile);
+
+function hidesUnpublishedLocalFileLinks() {
+  const destinations = ['../drawing.svg', '/tmp/drawing.svg', 'file:///tmp/drawing.svg'];
+  for (const destination of destinations) {
+    const { fixture, root } = mount(`[Open file](${destination})`);
+    fixture.componentRef.setInput('availableFiles', ['uploads/chat/file/drawing.svg']);
+    fixture.detectChanges();
+    expect(root.textContent).toBe('File not available');
+    expect(root.textContent).not.toContain(destination);
+    expect(root.querySelector('a, button')).toBeNull();
+  }
+}
+
+it('hides local file destinations that do not name a published file',
+  hidesUnpublishedLocalFileLinks);
+
+function replacesRawWorkspacePath() {
+  const { fixture, root } = mount(
+    '[/workspace/artifacts/drawing.svg](/workspace/artifacts/drawing.svg)',
+  );
+  fixture.componentRef.setInput('availableFiles', ['uploads/chat/file/drawing.svg']);
+  fixture.detectChanges();
+  expect(root.textContent).toContain('drawing.svg');
+  expect(root.textContent).not.toContain('/workspace/artifacts/');
+}
+
+it('replaces a raw workspace path used as link text with the file name',
+  replacesRawWorkspacePath);
+
 afterEach(function restoreMocks() {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -62,7 +116,9 @@ function keepsHostileText() {
     + '[relative](/settings) [file](file:///example) [encoded](java&#x73;cript:alert)';
   const { root } = mount(hostile);
   expect(root.querySelector('img, script, a')).toBeNull();
-  expect(root.textContent).toBe(hostile);
+  const withoutRelativePath = hostile.replace('[relative](/settings)', 'File not available');
+  const expected = withoutRelativePath.replace('[file](file:///example)', 'File not available');
+  expect(root.textContent).toBe(expected);
 }
 
 function rendersMultilineBold() {

@@ -18,7 +18,7 @@ flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages and file drops where Attach is available"] -->|requests and tab sign-out| web
   web -->|requests and live updates| server["apps/server<br/>the back end"]
-  server -->|saved updates and private reply clearance| web
+  server -->|saved updates, file cards and private reply clearance| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
   web -->|saved replies and tool activity| capture["Chat workspace<br/>reply details and isolated diagrams"]
@@ -36,6 +36,9 @@ For everyone, the website:
 - Shows sign-in, first-owner setup and the welcome survey.
 - Supports assistant sessions and direct or group chats with colleagues.
   Assistant replies show headings, lists, quotes, code and safe links.
+  Links to published workspace files open their previews. Local file links that
+  cannot be opened show a plain note without their paths. Uploaded and assistant
+  images appear in the chat and open the same file preview.
   Code blocks have a copy button. Mermaid diagrams appear as images, with their
   source shown as code until the block closes or when a diagram cannot be drawn.
   Drawing happens in a separate browser document that cannot contact the network.

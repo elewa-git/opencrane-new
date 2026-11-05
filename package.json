@@ -40,6 +40,7 @@
     "lint:changelog": "node scripts/changelog-gather.mjs --check",
     "visual:uploads-reasons": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-uploads-reasons.mjs",
     "visual:chat-markdown": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-chat-markdown.mjs",
+    "visual:assistant-files-2": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-assistant-files-2.mjs",
     "visual:chat-tool-inline": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-chat-tool-inline.mjs",
     "visual:chat-mermaid": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-chat-mermaid.mjs",
     "visual:chat-drag-drop": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-chat-drag-drop.mjs",

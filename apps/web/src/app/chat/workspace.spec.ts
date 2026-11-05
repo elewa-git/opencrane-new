@@ -2339,3 +2339,34 @@ async function rendersAssistantMarkdown() {
 
 it('renders Markdown only in assistant replies, including live updates and citations',
   rendersAssistantMarkdown);
+
+async function opensPublishedImageLink() {
+  const time = '2026-10-04T10:00:00Z';
+  const rows = [
+    { id: 'message', position: 1, type: 'message.posted', time,
+      data: { text: 'Show the drawing', authorId: 'me' } },
+    { id: 'upload', position: 2, type: 'file.uploaded', time,
+      data: { conversationId: 'chat', fileId: 'drawing', turnId: 'message',
+        uploadedBy: 'me', name: 'drawing.svg', size: 80, mime: 'image/svg+xml' } },
+    { id: 'card', position: 3, type: 'agent.file_changed', time,
+      data: { turnId: 'message', path: 'uploads/chat/drawing/drawing.svg',
+        changeType: 'created' } },
+    { id: 'reply', position: 4, type: 'agent.message_delta', time,
+      data: { turnId: 'message', messageId: 'reply',
+        text: '[Drawing](/workspace/artifacts/drawing.svg) '
+          + '[Private](/workspace/artifacts/private.svg)' } },
+  ];
+  const capture = await createCaptureWorkspace(rows);
+  const card = capture.root.querySelector('oc-conversation-file-card');
+  expect(card?.querySelector('button img')?.getAttribute('src')).toContain('preview=true');
+  expect(capture.root.textContent).toContain('File not available');
+  expect(capture.root.textContent).not.toContain('/workspace/artifacts/');
+  capture.root.querySelector<HTMLButtonElement>('.workspace-file-link')?.click();
+  capture.fixture.detectChanges();
+  expect(capture.fixture.componentInstance['preview']())
+    .toBe('uploads/chat/drawing/drawing.svg');
+  capture.fixture.destroy();
+}
+
+it('opens a published image link through the file preview and hides unavailable links',
+  opensPublishedImageLink);

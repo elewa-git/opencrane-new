@@ -33,7 +33,9 @@ or leaving the session removes it. Signing out in another tab also removes it.
 Returning tabs check their session again. Reconnecting cannot recover the reply.
 
 Assistant replies show Markdown headings, lists, quotes, inline formatting and code.
-Code blocks have a copy button. Links open in a new tab and allow only HTTPS and email.
+Code blocks have a copy button. Web and email links open in a new tab. Links to
+published workspace files open that file's preview. Other local file links show a
+plain note without a link or path.
 HTML stays text. Mermaid diagrams appear as images once their code block closes.
 Drawing happens in a separate browser document with network access blocked.
 An unfinished, oversized or unsupported diagram keeps its source and copy button. Citations still open the existing preview.
@@ -112,6 +114,8 @@ If a screenshot save reply is lost, the website checks Files before offering ano
 action. The viewer and chat show the same save status and keep keyboard focus while
 Files are checked. A saved screenshot appears in the transcript and Files with its
 name and capture details. Its preview shows the image and offers download.
+Uploaded and assistant images also appear as thumbnails in their chat cards.
+Opening one uses the same preview. SVG files appear only as images or downloads.
 Failed saves, scan refusals, failed previews and access changes have separate messages.
 
 ## How it connects

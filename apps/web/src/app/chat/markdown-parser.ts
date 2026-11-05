@@ -1,5 +1,5 @@
 interface InlinePart {
-  kind: 'text' | 'code' | 'bold' | 'italic' | 'link' | 'citation';
+  kind: 'text' | 'code' | 'bold' | 'italic' | 'link' | 'workspace-file' | 'citation';
   text: string;
   href?: string;
 }
@@ -23,6 +23,33 @@ function safeLink(value: string): boolean {
   }
 }
 
+function localFileLink(value: string): boolean {
+  if (/^file:/iu.test(value)) return true;
+  if (value.startsWith('//')) return false;
+  if (value.startsWith('/') || value.startsWith('./') || value.startsWith('../')) {
+    return true;
+  }
+  if (value.includes(':')) return false;
+  return /\.[a-z0-9]+(?:[?#]|$)/iu.test(value);
+}
+
+function describeInlineMatch(match: RegExpMatchArray): InlinePart {
+  const [whole, code, bold, starItalic, underscoreItalic, label, href, citation] = match;
+  if (code !== undefined) return { kind: 'code', text: code };
+  if (bold !== undefined) return { kind: 'bold', text: bold };
+  if (starItalic !== undefined || underscoreItalic !== undefined) {
+    return { kind: 'italic', text: starItalic ?? underscoreItalic ?? '' };
+  }
+  if (label !== undefined && href !== undefined && localFileLink(href)) {
+    return { kind: 'workspace-file', text: label, href };
+  }
+  if (label !== undefined && href !== undefined && safeLink(href)) {
+    return { kind: 'link', text: label, href };
+  }
+  if (citation !== undefined) return { kind: 'citation', text: citation };
+  return { kind: 'text', text: whole ?? '' };
+}
+
 function parseInline(text: string): InlinePart[] {
   // Keep each alternative bounded by its own delimiter, including unmatched input.
   const pattern = /`([^`\n]+)`|\*\*([^*]+)\*\*|\*([^*\n]+)\*|_([^_\n]+)_|\[([^[\]\n]+)\]\(([^()\s]+)\)|\[(\d+)\]/g;
@@ -32,20 +59,8 @@ function parseInline(text: string): InlinePart[] {
     if (match.index > position) {
       parts.push({ kind: 'text', text: text.slice(position, match.index) });
     }
-    const [whole, code, bold, starItalic, underscoreItalic, label, href, citation] = match;
-    let part: InlinePart = { kind: 'text', text: whole };
-    if (code !== undefined) {
-      part = { kind: 'code', text: code };
-    } else if (bold !== undefined) {
-      part = { kind: 'bold', text: bold };
-    } else if (starItalic !== undefined || underscoreItalic !== undefined) {
-      part = { kind: 'italic', text: starItalic ?? underscoreItalic ?? '' };
-    } else if (label !== undefined && href !== undefined && safeLink(href)) {
-      part = { kind: 'link', text: label, href };
-    } else if (citation !== undefined) {
-      part = { kind: 'citation', text: citation };
-    }
-    parts.push(part);
+    const whole = match[0];
+    parts.push(describeInlineMatch(match));
     position = match.index + whole.length;
   }
   if (position < text.length) parts.push({ kind: 'text', text: text.slice(position) });

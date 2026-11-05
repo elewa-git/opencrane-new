@@ -66,6 +66,23 @@ it('shows a screenshot image, its facts and the original download link', async (
   expect(closeButtons).toHaveLength(1);
 });
 
+async function showsSvgAsImage() {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>';
+  const headers = { 'content-type': 'image/svg+xml' };
+  const responseOptions = { headers };
+  const response = new Response(svg, responseOptions);
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+  const { fixture, root } = await createPreview();
+  fixture.componentRef.setInput('path', 'artifacts/drawing.svg');
+  fixture.detectChanges();
+  expect(root.querySelector('img')?.getAttribute('src')).toContain('/files/view?path=');
+  expect(root.querySelector('script, iframe, section[aria-label="Preview content"] svg'))
+    .toBeNull();
+  expect(root.textContent).not.toContain('alert(1)');
+}
+
+it('shows SVG only through an image from the checked file route', showsSvgAsImage);
+
 it('checks access and reloads the image after a 403', async () => {
   const fetch = vi.spyOn(globalThis, 'fetch');
   fetch.mockResolvedValueOnce(new Response('{}', { status: 403 }));

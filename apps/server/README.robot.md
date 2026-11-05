@@ -6894,8 +6894,15 @@ uses the upload type checks, scanner, storage and current access rules. Stable r
 keep retries from creating extra cards. File records carry an optional `turnId`; these files
 are not delivered back to the computer. `agent.file_changed` names the downloadable upload
 or carries a fixed refusal reason. No workspace path or file bytes enter the event log.
-Inline image thumbnails and reply links remain for the next part. SVG stays refused because
-this part reuses the current upload formats without adding active image handling.
+The web app shows image thumbnails and opens published file links through the
+same conversation file route. The type worker accepts a well-formed SVG with an
+`svg` root, but refuses document type declarations and entity declarations. The
+worker sends SVG with an XML declaration through the same XML checks even when
+file-type reports `application/xml`. The route serves it as `image/svg+xml` with
+`nosniff`, `default-src 'none'; sandbox`,
+and download or inline disposition. The browser uses an image element only.
+This lets people see SVG without treating its markup as a page. The route's
+sandbox still applies if someone opens the file address directly.
 
 The server saves `agent.file_publication_started` before pulling any publication bytes.
 Its digest binds the ordered artifact list to the conversation and turn. Exact retries

@@ -95,7 +95,7 @@ async function publishesAssistantFiles() {
     }
     expect(JSON.stringify(rows)).not.toContain(bytes.toString());
     const refusals = [
-      { name: 'unsafe.svg', bytes: Buffer.from('<svg><script>alert(1)</script></svg>'),
+      { name: 'unsafe.exe', bytes: Buffer.from('Not a supported file'),
         reason: 'unsupported_type' },
       { name: 'infected.txt', bytes: Buffer.from(
         'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'), reason: 'infected' },

@@ -9,6 +9,29 @@ export function fileType(path: string): string {
   return extension.toUpperCase().slice(0, 5);
 }
 
+export function fileCreator(author: 'you' | 'person' | 'agent'):
+  'you' | 'participant' | 'assistant' {
+  if (author === 'agent') return 'assistant';
+  if (author === 'person') return 'participant';
+  return 'you';
+}
+
+export function hasAttachment(path: string, attachments: ChatAttachment[]): boolean {
+  for (const file of attachments) {
+    if (file.path === path) return true;
+  }
+  return false;
+}
+
+function inlineImage(path: string): boolean {
+  return /\.(?:png|jpe?g|gif|webp|svg)$/iu.test(fileName(path));
+}
+
+export function imageThumbnailUrl(conversationId: string, path: string, mayRead: boolean): string {
+  if (!mayRead || !inlineImage(path)) return '';
+  return fileUrl(conversationId, path, true);
+}
+
 export function fileUrl(conversationId: string, path: string, preview = false): string {
   // Show only uploaded files and screenshots this person can read.
   const conversation = encodeURIComponent(conversationId);
