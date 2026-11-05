@@ -36,7 +36,7 @@ function freshContainer() {
     HostConfig: { ReadonlyRootfs: true }, Mounts: [] as { Destination: string }[],
     Config: { Env: ['SILO_ID=fixture-silo'], Labels: {
       'com.docker.compose.project': 'opencrane-dev-1',
-      'com.docker.compose.project.working_dir': root,
+      'com.docker.compose.project.working_dir': `${root}/infra/dev-stack`,
     } },
   };
 }

@@ -2173,9 +2173,9 @@ The image-owned collector runner may populate the installation itself.
 `DEV_STACK_ID` and `MEMORY_CLAIMED_ID` must name the same existing secondary claim.
 The launcher reuses `requireStageBStack`, checks the slot's silo setting and requires
 the protected collector target to match that silo and the full container id.
-Docker Compose project and working-directory labels must match the slot and this
-worktree. The image revision must match this checkout's commit. The root-owned
-configuration and its parent directories must be protected; the launcher never
+The Compose project label must match the slot; its working-directory label must
+name this worktree's `infra/dev-stack` folder, as the existing launch command does.
+The image revision must match this checkout's commit. The root-owned configuration and its parent directories must be protected; the launcher never
 creates or replaces that configuration. Another target's prior evidence stays intact.
 
 The existing no-argument `collectDeployment()` checks the read-only container, code

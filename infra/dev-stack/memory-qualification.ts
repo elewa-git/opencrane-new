@@ -74,7 +74,7 @@ async function checkLocalTarget(id: string | undefined, claimed: string) {
   }
   if (container.Id !== target.containerId ||
       labels['com.docker.compose.project'] !== `opencrane-dev-${id}` ||
-      labels['com.docker.compose.project.working_dir'] !== root) {
+      labels['com.docker.compose.project.working_dir'] !== `${root}/infra/dev-stack`) {
     throw new Error('wrong_container');
   }
   const images = docker(['image', 'inspect', container.Image]);
