@@ -25,6 +25,10 @@ interface Worker {
   now?: () => number;
   continuation?: Continuation | null;
 }
+type DueReceipt = Awaited<ReturnType<typeof claimRoutineDue>>;
+// Return only after delivery and its computer start request have settled.
+type Handoff = (due: DueReceipt & { routineId: string },
+  leadership: Pick<Worker, 'signal' | 'checkCurrent'>) => Promise<{ status: 'sent' | 'unknown' }>;
 
 function requireInput(worker: Worker, checkedAt: number) {
   const continuation = worker.continuation;
@@ -127,15 +131,16 @@ export function scanRoutineCandidates(db: Query, store: EventStore, worker: Work
 
 /** Await each checked command before reporting completed candidate progress. */
 export function dispatchRoutineCandidates(db: Query, store: EventStore,
-  worker: Worker & { binding: Binding }) {
+  worker: Worker & { binding: Binding }, handoff?: Handoff) {
   if (!worker.binding || worker.binding.silo !== worker.silo) {
     throw new Error('Routine scan unavailable');
   }
-  return inspectPage(db, store, worker, worker.binding);
+  return inspectPage(db, store, worker, worker.binding, handoff);
 }
 
 async function dispatchCandidate(store: EventStore, worker: Worker, binding: Binding,
-  candidate: Awaited<ReturnType<typeof readCandidate>>, observed: ReturnType<typeof observation>) {
+  candidate: Awaited<ReturnType<typeof readCandidate>>, observed: ReturnType<typeof observation>,
+  handoff?: Handoff) {
   const { state, position, claims } = candidate;
   const { category, occurrence } = observed;
   if (!occurrence || category === 'future') {
@@ -148,18 +153,30 @@ async function dispatchCandidate(store: EventStore, worker: Worker, binding: Bin
   const trustedWorker = { ...worker, binding };
   const previous = claims.get(occurrence.occurrenceId);
   let result;
+  let due: DueReceipt | undefined;
   if (previous) {
     // Recover the original claim even after its delivery reply or broker dedupe has expired.
     result = await claimRoutineDue(store, trustedWorker, previous);
+    due = result;
   } else if (category === 'late') {
     result = await recordRoutineMissed(store, trustedWorker, input);
   } else if (category === 'eligible') {
     result = await claimRoutineDue(store, trustedWorker, input);
+    due = result;
   } else {
     result = await skipRoutineOccurrence(store, trustedWorker, input);
   }
   if (result.status !== 'confirmed' || result.executionAvailable !== false) {
     throw new Error('Routine command unavailable');
+  }
+  if (due && handoff) {
+    const checkedDue = { ...due, routineId: state.routineId };
+    const leadership = { signal: worker.signal, checkCurrent: worker.checkCurrent };
+    // Drain admitted work under its own deadlines, including a cold computer wake.
+    const delivery = await handoff(checkedDue, leadership);
+    if (delivery.status !== 'sent') {
+      throw new Error('Routine delivery unavailable');
+    }
   }
 }
 
@@ -177,7 +194,8 @@ function pageContinuation(page: Page, examined: number, lastCompleted: Page['row
     generation: page.generation, checkedAt };
 }
 
-async function inspectPage(db: Query, store: EventStore, worker: Worker, binding?: Binding) {
+async function inspectPage(db: Query, store: EventStore, worker: Worker, binding?: Binding,
+  handoff?: Handoff) {
   try {
     const deadline = performance.now() + 10_000;
     const stopCandidatesAt = deadline - 1000;
@@ -237,7 +255,7 @@ async function inspectPage(db: Query, store: EventStore, worker: Worker, binding
         if (performance.now() >= stopCandidatesAt) {
           break;
         }
-        await dispatchCandidate(store, worker, binding, candidate, observed);
+        await dispatchCandidate(store, worker, binding, candidate, observed, handoff);
         checkTime();
       }
       counts[observed.category] += 1;

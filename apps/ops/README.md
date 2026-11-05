@@ -18,7 +18,7 @@ under `apps`. [apps/server](../server/README.md) saves changes as
 flowchart LR
   apps["apps<br/>applications"] --> ops["apps/ops<br/>workers and recovery checks"]
   apps --> server["apps/server<br/>back end"]
-  server -.->|tests use helper| ops
+  server -.->|tests supply checked routine delivery| ops
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
   ops -->|saves results and checked routine scan commands| nats
@@ -67,7 +67,9 @@ so a new id cannot fall behind the current scan. A slow page returns its complet
 progress for the next call. The scanner stops when ownership is lost and waits
 for its current read. A separate internal dispatch call uses the same inspection,
 then awaits a checked claim, skip or daily downtime record before reporting progress.
-It recovers saved claims with their original expiry. It starts no model or tool work.
+It recovers saved claims with their original expiry. An optional internal callback can
+continue checked due work and must finish delivery before returning. The scan keeps
+its leadership checks and waits for that callback. Automatic execution remains disabled.
 
 1. **A change is saved.** A worker copies the event into the matching table.
    Reactions run any required background work and save its results as new events.
