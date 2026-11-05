@@ -158,7 +158,7 @@ async function startComputer(setup: Setup, memory: MemoryOptions) {
     setup.gatewayChild()?.kill('SIGKILL');
   }
   onTestFinished(closeBridge);
-  return { native, link, grants };
+  return { native, link, grants, grant };
 }
 
 function isTurnStart(method: string) {

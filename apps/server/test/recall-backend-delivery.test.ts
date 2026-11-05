@@ -6,7 +6,11 @@ import { expect, it, vi } from 'vitest';
 import { recallBackend, factText, scopeId, threadId } from './support/recall-backend.ts';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 
-vi.mock('node:net', { spy: true });
+function createMockOptions() {
+  return { spy: true };
+}
+const mockOptions = vi.hoisted(createMockOptions);
+vi.mock('node:net', mockOptions);
 async function filesystem() {
   const original = await vi.importActual<typeof import('node:fs')>('node:fs');
   return { ...original };
@@ -54,11 +58,16 @@ async function recallsStoredFact() {
 it('delivers a stored personal fact to the admitted native thread through the real backend',
   recallsStoredFact, 120_000);
 
-const fact = z.strictObject({ memoryId: z.string(), revision: z.number(), text: z.string(),
-  kind: z.literal('fact'), pinned: z.boolean(), expiresAt: z.null(), savedAt: z.string() });
-const page = z.object({ result: z.object({ content: z.array(z.unknown()),
-  structuredContent: z.strictObject({ scopeId: z.string(), facts: z.array(fact),
-    returnedCount: z.number(), nextCursor: z.string().nullable(), recallProof: z.string() }) }) });
+const factShape = { memoryId: z.string(), revision: z.number(), text: z.string(),
+  kind: z.literal('fact'), pinned: z.boolean(), expiresAt: z.null(), savedAt: z.string() };
+const fact = z.strictObject(factShape);
+const pageShape = { scopeId: z.string(), facts: z.array(fact),
+  returnedCount: z.number(), nextCursor: z.string().nullable(), recallProof: z.string() };
+const structuredContent = z.strictObject(pageShape);
+const resultShape = { content: z.array(z.unknown()), structuredContent };
+const result = z.object(resultShape);
+const responseShape = { result };
+const page = z.object(responseShape);
 
 async function evidenceFailure(outcome: 'held' | 'denied' | 'unknown') {
   const test = await recallBackend();
@@ -205,3 +214,97 @@ async function isolatesSamePersonSessions() {
 }
 it('keeps backend recall separate in two sessions belonging to the same person',
   isolatesSamePersonSessions, 120_000);
+
+async function refusesWithdrawalDuringFinalQuery(change: 'stop' | 'removal' | 'closure' | 'replacement') {
+  const test = await recallBackend();
+  await test.start();
+  const store = test.setup.nats.store;
+  const append = store.append.bind(store);
+  const query = test.setup.db.query.bind(test.setup.db);
+  let loaded = false;
+  let changed = false;
+  async function observeAppend(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    const parsed = memoryContextRecordedEventSchema.safeParse(command.event);
+    if (parsed.success && parsed.data.data.delivery === 'recall') {
+      expect(result.status).toBe('appended');
+      loaded = true;
+    }
+    return result;
+  }
+  async function withdrawDuringQuery(...args: Parameters<typeof query>) {
+    const result = await query(...args);
+    if (loaded && !changed && String(args[0]).includes('projection_generations')) {
+      changed = true;
+      expect(test.wire.results).toBe(0);
+      if (change === 'stop') {
+        const data = { conversationId: 'chat', turnId: test.turnId, requestedBy: 'alice' };
+        await test.setup.append('conversation-chat', 'agent.turn_stop_requested', data);
+      } else if (change === 'removal') {
+        const data = { memberId: 'alice', removedBy: 'alice' };
+        await test.setup.append('member-alice', 'member.removed', data);
+      } else if (change === 'replacement') {
+        const data = { assistantId: 'assistant', computerId: 'computer',
+          generation: 2, podUid: 'replacement' };
+        await test.setup.append('computer-assistant', 'computer.ready', data);
+      } else {
+        const data = { conversationId: 'chat', closedBy: 'alice' };
+        await test.setup.append('participation-chat', 'conversation.closed', data);
+      }
+      // Keep the caller registered to represent delayed withdrawal reactions.
+      expect(test.native.callers.permits(test.turnId, test.turnId, threadId)).toBe(true);
+    }
+    return result;
+  }
+  vi.spyOn(store, 'append').mockImplementation(observeAppend);
+  vi.spyOn(test.setup.db, 'query').mockImplementation(withdrawDuringQuery);
+  const args = { scopeId, query: 'garden' };
+  const response = await test.native.recall(threadId, args);
+  expect(changed).toBe(true);
+  const refusal = { result: { isError: true } };
+  expect(response).toMatchObject(refusal);
+  expect(response).not.toHaveProperty('result.structuredContent');
+  expect(JSON.stringify(response)).not.toContain(factText);
+  expect(test.deliveries).toEqual([]);
+  const saved = await readChatFacts(store, 'test', 'chat', test.turnId);
+  expect(saved.memoryContext?.recallCalls).toBe(1);
+}
+it.each(['stop', 'removal', 'closure', 'replacement'] as const)(
+  'refuses recall when %s is saved during the final projection query',
+  refusesWithdrawalDuringFinalQuery, 120_000);
+
+async function refusesInvalidGrant(reason: 'expired' | 'cancelled') {
+  const test = await recallBackend();
+  await test.start();
+  if (reason === 'cancelled') {
+    await test.grant(threadId, 'chat', '', 0, test.turnId);
+  }
+  let expires = Date.now() + 60_000;
+  if (reason === 'expired') {
+    expires = Date.now() - 1;
+  }
+  await expect(test.grant(threadId, 'chat', 'replacement-pass', expires, test.turnId))
+    .rejects.toThrow('refused');
+}
+it.each(['expired', 'cancelled'] as const)(
+  'refuses a %s grant through the backend fixture control path', refusesInvalidGrant, 120_000);
+
+async function expiresRenewedCatalogue() {
+  const test = await recallBackend();
+  await test.start();
+  const firstExpiry = Date.now() + 200;
+  await test.grant(threadId, 'chat', 'short-pass', firstExpiry, test.turnId);
+  const renewedExpiry = Date.now() + 2000;
+  await test.grant(threadId, 'chat', 'renewed-pass', renewedExpiry, test.turnId);
+  await delay(Math.max(0, firstExpiry - Date.now()) + 25);
+  expect(test.native.mcp.size).toBe(1);
+  await delay(Math.max(0, renewedExpiry - Date.now()) + 25);
+  expect(test.native.mcp.size).toBe(0);
+  const args = { scopeId, query: 'garden' };
+  const response = await test.native.recall(threadId, args);
+  expect(response).not.toHaveProperty('result.structuredContent');
+  expect(JSON.stringify(response)).not.toContain(factText);
+  expect(test.wire.paths).toEqual([]);
+}
+it('renews the real catalogue timer and removes the catalogue at expiry',
+  expiresRenewedCatalogue, 120_000);
