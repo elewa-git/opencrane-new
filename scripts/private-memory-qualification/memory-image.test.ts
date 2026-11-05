@@ -38,7 +38,7 @@ it('keeps repository tests and their private fixtures out of the package image',
 
 async function executesMemoryCheck(
   name: 'invalidation' | 'unrelatedActivity' | 'requesterIsolation' |
-    'sessionIsolation' | 'stopReconnect',
+    'sessionIsolation' | 'stopReconnect' | 'replacementReload',
 ): Promise<void> {
   const fixture = await natsFixture();
   const containerName = `private-memory-image-test-${randomUUID()}`;
@@ -91,9 +91,10 @@ async function executesMemoryCheck(
       }
     }
     expect(changes).toEqual(['memory.corrected', 'memory.forgotten']);
-    const expectedInvalidations = name === 'unrelatedActivity' ? 0 : 2;
+    const expectedInvalidations = ['unrelatedActivity', 'replacementReload'].includes(name) ? 0 : 2;
     expect(invalidations).toBe(expectedInvalidations);
-    if (name === 'requesterIsolation' || name === 'sessionIsolation' || name === 'stopReconnect') {
+    if (name === 'requesterIsolation' || name === 'sessionIsolation' || name === 'stopReconnect' ||
+        name === 'replacementReload') {
       expect(requesters).toHaveLength(4);
       const sameRequester = name !== 'requesterIsolation';
       expect(requesters[0] === requesters[1]).toBe(sameRequester);
@@ -108,5 +109,6 @@ async function executesMemoryCheck(
   }
 }
 
-it.each(['invalidation', 'unrelatedActivity', 'requesterIsolation', 'sessionIsolation', 'stopReconnect'] as const)(
+it.each(['invalidation', 'unrelatedActivity', 'requesterIsolation', 'sessionIsolation',
+  'stopReconnect', 'replacementReload'] as const)(
   'executes %s from the package image against disposable NATS', executesMemoryCheck, 45_000);

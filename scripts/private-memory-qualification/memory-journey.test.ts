@@ -5,8 +5,10 @@ import { natsFixture } from '@opencrane/event-store/testing';
 import { probeHost } from './host-probe.ts';
 import { runJourney } from './journey.ts';
 import { stopInvalidatedMemory } from '../../apps/server/src/memory/stop.ts';
+import { privateOutput } from '../../apps/server/src/chat/private-output.ts';
 import { memoryAdmission } from '../../apps/server/src/chat/memory-admission.ts';
 
+vi.mock('../../apps/server/src/chat/private-output.ts', { spy: true });
 vi.mock('./host-probe.ts', { spy: true });
 vi.mock('../../apps/server/src/memory/stop.ts', { spy: true });
 afterEach(vi.restoreAllMocks);
@@ -20,7 +22,7 @@ const request = {
   runId: '11111111-1111-4111-8111-111111111111',
   challengeId: '22222222-2222-4222-8222-222222222222',
 };
-async function observesStore(name: string, role = 'command', silo = 'test', badStop = false): Promise<void> {
+async function observesStore(name: string, role = 'command', silo = 'test', badObservation = false): Promise<void> {
   const fixture = await natsFixture();
   const directory = await mkdtemp('.tools/memory-journey-');
   vi.stubEnv('MEMORY_KEY_DIRECTORY', directory);
@@ -29,7 +31,7 @@ async function observesStore(name: string, role = 'command', silo = 'test', badS
   vi.stubEnv('SILO_ID', silo);
   try {
     const result = await runJourney(JSON.stringify({ ...request, name }));
-    if (role === 'command' && silo === 'test' && !badStop) {
+    if (role === 'command' && silo === 'test' && !badObservation) {
       expect(result).toMatchObject({ ...request, name, result: 'PARTIAL', complete: false });
       const storePosition = await fixture.store.head();
       const changes: string[] = [];
@@ -42,8 +44,9 @@ async function observesStore(name: string, role = 'command', silo = 'test', badS
       expect(changes).toEqual(['memory.corrected', 'memory.forgotten']);
     } else {
       expect(result).toEqual({ result: 'FAIL', reason: 'journey_failed' });
-      if (!badStop) {
-        expect(await fixture.store.head()).toBe(0);
+      if (!badObservation) {
+        const position = await fixture.store.head();
+        expect(position).toBe(0);
       }
     }
     expect(memoryAdmission.state).toBe('disabled');
@@ -55,7 +58,8 @@ async function observesStore(name: string, role = 'command', silo = 'test', badS
 async function completedJourney(name: string) {
   await observesStore(name);
 }
-it.each(['invalidation', 'unrelatedActivity', 'requesterIsolation', 'sessionIsolation', 'stopReconnect', 'replacementReload'])(
+it.each(['invalidation', 'unrelatedActivity', 'requesterIsolation', 'sessionIsolation',
+  'stopReconnect', 'replacementReload'])(
   'executes %s on the configured event store without claiming live qualification',
   completedJourney, 30_000);
 
@@ -72,13 +76,15 @@ it.each(['invalidation', 'stopReconnect', 'replacementReload'])(
 async function deniedAppend(name: string): Promise<void> {
   await observesStore(name, 'projection');
 }
-it.each(['invalidation', 'requesterIsolation', 'sessionIsolation', 'stopReconnect', 'replacementReload'])(
+it.each(['invalidation', 'requesterIsolation', 'sessionIsolation',
+  'stopReconnect', 'replacementReload'])(
   'refuses when the measured store rejects %s', deniedAppend, 30_000);
 
 async function wrongSilo(name: string): Promise<void> {
   await observesStore(name, 'command', 'foreign');
 }
-it.each(['requesterIsolation', 'sessionIsolation', 'stopReconnect', 'replacementReload'])(
+it.each(['requesterIsolation', 'sessionIsolation',
+  'stopReconnect', 'replacementReload'])(
   'refuses %s before writes when the configured silo differs', wrongSilo, 30_000);
 
 async function privateFailure() {
@@ -86,3 +92,12 @@ async function privateFailure() {
   await observesStore('stopReconnect', 'command', 'test', true);
 }
 it('returns only the fixed failure when a Stop assertion throws', privateFailure, 30_000);
+
+async function privateOutputFailure() {
+  vi.mocked(privateOutput).mockImplementation(failOutput);
+  await observesStore('replacementReload', 'command', 'test', true);
+}
+function failOutput(): never {
+  throw new Error('private-fixture-error');
+}
+it('hides private output assertion errors', privateOutputFailure, 30_000);

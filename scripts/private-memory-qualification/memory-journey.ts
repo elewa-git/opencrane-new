@@ -8,6 +8,7 @@ import { history } from '@opencrane/models';
 import { memoryScopeId } from '@opencrane/projections';
 import { readChatFacts } from '../../apps/server/src/chat/chat-summary.ts';
 import { invalidateMemoryContext } from '../../apps/server/src/memory/invalidation.ts';
+import { checkReplacementOutput } from './replacement-reload.ts';
 import { stopInvalidatedMemory } from '../../apps/server/src/memory/stop.ts';
 
 export function memoryJourney(store: EventStore, silo: string, conversationId = 'chat',
@@ -191,8 +192,33 @@ export function memoryJourney(store: EventStore, silo: string, conversationId = 
     assert.equal(await store.head(other.subject), otherPosition);
     assert.equal(await store.head(subject), targetPosition);
   }
+  async function replacementReload(kind: 'corrected' | 'forgotten') {
+    const other = await otherContext(requesterId);
+    const before = await readChatFacts(store, silo, conversationId, 'turn');
+    const otherBefore = await readChatFacts(store, silo, other.conversationId, 'turn');
+    await unrelatedChange(kind);
+    const otherPosition = await store.head(other.subject);
+    const preparation = memoryContextRecordedEventSchema.shape.data.parse(prepared);
+    const nextTurn = await checkReplacementOutput(store, silo, preparation, append);
+    const nextBefore = await readChatFacts(store, silo, conversationId, nextTurn);
+    const position = await store.head();
+    // Rebuild from events alone. Saved references never grant execution or contain private input.
+    const cold = { readStream: store.readStream.bind(store) };
+    const after = await readChatFacts(cold, silo, conversationId, 'turn');
+    assert.equal(after.memoryContext?.status, 'loaded');
+    assert.equal(after.memoryContext.executionAvailable, false);
+    assert.deepEqual(after.memoryContext.references, [reference]);
+    assert.deepEqual(after.memoryContext, before.memoryContext);
+    const otherAfter = await readChatFacts(cold, silo, other.conversationId, 'turn');
+    assert.deepEqual(otherAfter.memoryContext, otherBefore.memoryContext);
+    const nextAfter = await readChatFacts(cold, silo, conversationId, nextTurn);
+    assert.deepEqual(nextAfter.memoryContext, nextBefore.memoryContext);
+    assert.equal(await store.head(other.subject), otherPosition);
+    assert.equal(await store.head(), position);
+  }
   return { scopeId, memoryWrittenExample, reference, input, prepared, append, load,
-    start, change, invalidate, exactInvalidation, unrelatedChange, isolatedContext, stopReconnect };
+    start, change, invalidate, exactInvalidation, unrelatedChange, isolatedContext, stopReconnect,
+    replacementReload };
 }
 
 // Record server sends only. These observations cannot prove that a native child cleared memory.

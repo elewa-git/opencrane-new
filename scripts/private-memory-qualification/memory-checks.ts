@@ -6,7 +6,7 @@ import { memoryJourney } from './memory-journey.ts';
 
 export async function checkMemory(
   name: 'invalidation' | 'unrelatedActivity' | 'requesterIsolation' |
-    'sessionIsolation' | 'stopReconnect',
+    'sessionIsolation' | 'stopReconnect' | 'replacementReload',
   siloId: string,
 ) {
   const silo = process.env['SILO_ID'];
@@ -30,6 +30,8 @@ export async function checkMemory(
         await journey.exactInvalidation(kind);
       } else if (name === 'unrelatedActivity') {
         await journey.unrelatedChange(kind);
+      } else if (name === 'replacementReload') {
+        await journey.replacementReload(kind);
       } else if (name === 'stopReconnect') {
         await journey.stopReconnect(kind);
       } else {

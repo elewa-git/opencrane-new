@@ -42,7 +42,7 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
   }
   if (request.name === 'invalidation' || request.name === 'unrelatedActivity' ||
       request.name === 'requesterIsolation' || request.name === 'sessionIsolation' ||
-      request.name === 'stopReconnect') {
+      request.name === 'stopReconnect' || request.name === 'replacementReload') {
     try {
       const { checkMemory } = await import('./memory-checks.ts');
       await checkMemory(request.name, request.siloId);

@@ -403,9 +403,9 @@ const isolationSubstitutions = [
 it.each(isolationSubstitutions)(
   'refuses %s results from another %s', foreignIsolation);
 
-async function savesPartialStop(): Promise<void> {
+async function savesPartialCheck(name: string): Promise<void> {
   function partial(response: Record<string, unknown>) {
-    if (response['name'] === 'stopReconnect') {
+    if (response['name'] === name) {
       response['result'] = 'PARTIAL';
       response['complete'] = false;
     }
@@ -417,7 +417,22 @@ async function savesPartialStop(): Promise<void> {
   alter = partial;
   vi.mocked(writeFileSync).mockImplementation(write);
   const result = await collectDeployment();
-  expect(result).toMatchObject({ result: 'PARTIAL', checks: { stopReconnect: 'PARTIAL' } });
+  expect(result).toMatchObject({ result: 'PARTIAL', checks: { [name]: 'PARTIAL' } });
   expect(JSON.parse(saved)).toEqual(result);
 }
-it('saves only PARTIAL when recorded Stop delivery is incomplete', savesPartialStop);
+it.each(['stopReconnect', 'replacementReload'])(
+  'saves only PARTIAL when %s is incomplete', savesPartialCheck);
+
+async function refusesCompleteReplacement(): Promise<void> {
+  function falselyComplete(response: Record<string, unknown>) {
+    if (response['name'] === 'replacementReload') {
+      response['result'] = 'PARTIAL';
+      response['complete'] = true;
+    }
+  }
+  alter = falselyComplete;
+  const result = await collectDeployment();
+  expect(result).toEqual({ result: 'FAIL', reason: 'collection_failed' });
+}
+it('refuses a replacement child that claims its PARTIAL check is complete',
+  refusesCompleteReplacement);
