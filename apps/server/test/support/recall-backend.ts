@@ -16,6 +16,8 @@ import { recallTool, registerMemoryMcp } from '../../src/memory/mcp.ts';
 import Fastify from 'fastify';
 import { initialQualificationFixture } from './initial-qualification.ts';
 import { testAuthConfig } from './test-auth-config.ts';
+import { recallProxy } from './recall-proxy.ts';
+import { proxyGrants } from '../../../computer/src/proxy-control.ts';
 
 export const scopeId = memoryScopeId('test', 'person', 'alice');
 export const factText = 'My favourite walking destination is the winter garden.';
@@ -121,9 +123,9 @@ async function startComputer(setup: Setup, memory: MemoryOptions) {
   onTestFinished(computer.close);
   computer.socket.terminate();
   await once(computer.socket, 'close');
-  const grants = new Map<string, { turnId: string; computer: string; token: string;
-    expires: number; conversation: string }>();
-  const native = await preflightFixture(`http://127.0.0.1:${setup.options.port}`, grants);
+  const gateway = `http://127.0.0.1:${setup.options.port}`;
+  const runtime = await recallProxy(gateway);
+  const native = await preflightFixture(gateway, runtime);
   onTestFinished(native.close);
   computer.driver.privateSession = native.openCurrent;
   Object.assign(computer.driver, native.driver);
@@ -134,16 +136,10 @@ async function startComputer(setup: Setup, memory: MemoryOptions) {
     return { value: computerPass, expiresAt: Date.now() + 120_000, gateIdentity };
   }
   computer.driver.credential = credential;
-  function grant(thread: string, conversation: string, token: string,
-    expires: number, turnId: string) {
-    if (token) {
-      const value = { turnId, computer: computerPass, token, expires, conversation };
-      grants.set(thread, value);
-    } else {
-      grants.delete(thread);
-    }
-    return Promise.resolve();
+  function grantCredential() {
+    return { computer: computerPass, generation: gateIdentity.generation };
   }
+  const grant = proxyGrants(runtime.control, grantCredential);
   computer.driver.grant = grant;
   const deployment = await initialQualificationFixture();
   expect(deployment.result.result).toBe('PASS');
@@ -158,7 +154,7 @@ async function startComputer(setup: Setup, memory: MemoryOptions) {
     setup.gatewayChild()?.kill('SIGKILL');
   }
   onTestFinished(closeBridge);
-  return { native, link, grants, grant };
+  return { native, link, grant };
 }
 
 function isTurnStart(method: string) {

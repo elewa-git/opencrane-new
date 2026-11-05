@@ -1651,6 +1651,8 @@ async function checkRenewalMemoryBoundary(change: 'correct' | 'forget',
       expect(issuance).toHaveBeenCalledOnce();
       let refusedSequence = 2;
       if (timing === 'final_access_read') {
+        // Order changes saved after the final access read after this renewal.
+        // Release no memory text here; refuse those changes at the next confirmation.
         expect(scopeReads).toBe(2);
         expect(reply).toHaveProperty('token', expect.any(String));
         expect(reply).not.toHaveProperty('context');

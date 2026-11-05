@@ -18,7 +18,8 @@ import { threadLoads } from '../src/thread-loads.ts';
 import { parseTurn, type ToolServer } from '../src/turn-frame.ts';
 import { record } from '../src/http.ts';
 
-function createProxyFixture(gateway: string, grants: Map<string, ProxyGrant>) {
+function createProxyFixture(gateway: string) {
+  const grants = new Map<string, ProxyGrant>();
   function waiting() {
     return false;
   }
@@ -41,9 +42,17 @@ function createProxyFixture(gateway: string, grants: Map<string, ProxyGrant>) {
   return { approvals, mcp, callers, register, registrations };
 }
 
-type ProxyFixture = ReturnType<typeof createProxyFixture>;
+type ProxyFixture = ReturnType<typeof createProxyFixture> & {
+  url?: string;
+  control?: (path: string, input: unknown) => Promise<void>;
+  close?: () => Promise<void>;
+};
 
-async function startMcpListener({ callers, mcp }: ProxyFixture) {
+async function startMcpListener(proxy: ProxyFixture) {
+  if (proxy.url && proxy.close) {
+    return { send: mcpSender(proxy.url), close: proxy.close };
+  }
+  const { callers, mcp } = proxy;
   async function receiveMcp(request: IncomingMessage, response: ServerResponse) {
     const caller = callers.identify(request.headers.authorization ?? '');
     function permits(turnId: string, thread?: string) {
@@ -68,6 +77,17 @@ async function startMcpListener({ callers, mcp }: ProxyFixture) {
     throw new Error('Missing fixture address');
   }
   const origin = `http://127.0.0.1:${address.port}`;
+  async function close() {
+    listener.closeAllConnections();
+    function finish(resolve: () => void) {
+      listener.close(resolve);
+    }
+    await new Promise<void>(finish);
+  }
+  return { send: mcpSender(origin), close };
+}
+
+function mcpSender(origin: string) {
   async function send(endpoint: string, caller: string, method = 'tools/list',
     params: Record<string, unknown> = {}, extraHeaders: Record<string, string> = {}) {
     const headers = { ...extraHeaders, authorization: `Bearer ${caller}`, 'mcp-method': method,
@@ -79,7 +99,7 @@ async function startMcpListener({ callers, mcp }: ProxyFixture) {
     const response = await fetch(origin + new URL(endpoint).pathname, options);
     return record(await response.json());
   }
-  return { listener, send };
+  return send;
 }
 
 type NativeRecall = (args: object, headers: Record<string, string>, callId: string)
@@ -230,24 +250,33 @@ function createSessions(proxy: ProxyFixture, launchKey: string) {
   return { open, sessions };
 }
 
-function createLoads({ callers, mcp }: ProxyFixture) {
+function createLoads({ callers, mcp, control }: ProxyFixture) {
   function rpc() {
     return Promise.reject(new Error('Ordinary RPC refused'));
   }
   function catalogue(loadKey: string, conversation: string, tools: ToolServer[],
     thread: string | undefined, turnId: string, generations?: object) {
     const input = { loadKey, conversation, tools, thread, turnId, ...generations };
+    if (control) {
+      return control('/catalogue', input);
+    }
     expect(callers.check(input)).toBe(true);
     mcp.catalogue(input, true);
     return Promise.resolve();
   }
   function dropCatalogue(loadKey: string) {
     const catalogue = { loadKey };
+    if (control) {
+      return control('/catalogue/drop', catalogue);
+    }
     mcp.drop(catalogue);
     return Promise.resolve();
   }
   function discovered(loadKey: string) {
     const catalogue = { loadKey };
+    if (control) {
+      return control('/catalogue/ready', catalogue);
+    }
     return mcp.discovered(catalogue);
   }
   const driver = { rpc, catalogue, dropCatalogue, discovered };
@@ -288,7 +317,7 @@ function createCleanup(
   proxy: ProxyFixture,
   replacement: Awaited<ReturnType<typeof redirectPrivateSocket>>,
   server: net.Server,
-  listener: Awaited<ReturnType<typeof startMcpListener>>['listener'],
+  endpoint: Awaited<ReturnType<typeof startMcpListener>>,
 ) {
   async function close() {
     discovery.resume.resolve();
@@ -303,11 +332,7 @@ function createCleanup(
     const closed = once(server, 'close');
     server.close();
     await closed;
-    listener.closeAllConnections();
-    function finish(resolve: () => void) {
-      listener.close(resolve);
-    }
-    await new Promise<void>(finish);
+    await endpoint.close();
     const removal = { recursive: true, force: true };
     rmSync(directory, removal);
   }
@@ -315,19 +340,20 @@ function createCleanup(
 }
 
 export async function preflightFixture(gateway = 'http://127.0.0.1:1',
-  grants = new Map<string, ProxyGrant>()) {
+  runtime?: ProxyFixture) {
   const directory = mkdtempSync(`${tmpdir()}/recall-preflight-`);
   const socketPath = `${directory}/native.sock`;
   const launchKey = 'a'.repeat(64);
-  const proxy = createProxyFixture(gateway, grants);
-  const { listener, send } = await startMcpListener(proxy);
+  const proxy = runtime ?? createProxyFixture(gateway);
+  const endpoint = await startMcpListener(proxy);
+  const { send } = endpoint;
   const discovery = createDiscoveryControls();
   const server = await startNativeSocket(socketPath, launchKey, send, discovery);
   const replacement = await redirectPrivateSocket(socketPath);
   const sessions = createSessions(proxy, launchKey);
   const { loads, driver } = createLoads(proxy);
   const close = createCleanup(
-    directory, discovery, loads, sessions, proxy, replacement, server, listener,
+    directory, discovery, loads, sessions, proxy, replacement, server, endpoint,
   );
   function prepare(id = 'first') {
     return prepareApproval(id, sessions.open, loads, proxy.callers);

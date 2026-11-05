@@ -42,7 +42,9 @@ Recall saves its references before returning fact text or signed proof of what w
 
 An assistant's personal write must name every loaded fact as a dependency. Any loaded group fact or assistant note prevents that write. Removed write access or a disabled assistant refuses the save within the original access deadline. The server checks again after reading the latest references, including when a grant was removed and restored during the write. The agent's own built-in memory stays disabled.
 
-Before renewing a turn pass, the server checks every loaded fact and its current access. It checks after the last memory read and again after signing, within the original time limit. Correction, forgetting, expiry or lost access returns no pass. An invalid older memory record does not block ordinary message sending or stopping, but memory operations still refuse it. Facts with expired or unusable supporting facts are left out of private-turn previews. [Private turns](../../../../GLOSSARY.md#private-turn) on shared computers keep memory off until disk isolation has been proven live.
+Before renewing a turn pass, the server checks every loaded fact and its current access. It checks after the last memory read and again after signing, within the original time limit. Correction, forgetting, expiry or lost access found by the final check returns no pass.
+A correction or forget saved after that check is enforced at the next confirmation.
+Renewing a pass releases no memory text. An invalid older memory record does not block ordinary message sending or stopping, but memory operations still refuse it. Facts with expired or unusable supporting facts are left out of private-turn previews. [Private turns](../../../../GLOSSARY.md#private-turn) on shared computers keep memory off until disk isolation has been proven live.
 
 **Nightly choices.** A member can choose an assistant and paying group and explicitly accept a cost limit. The server checks their access and returns the saved choice. Only the person who set it up can read its blocked or missed history. The history contains dates and fact references rather than memory text, and reading it starts no work. Status shows whether facts are waiting and the next 02:00 UTC boundary. Execution is still disabled.
 
@@ -60,7 +62,9 @@ the computer finishes before the next check. Repeated checks send no duplicate n
 A saved member removal, confirmed denial or saved assistant deactivation clears the reply
 even when another permission check is unavailable. Unavailable checks alone leave the check pending.
 An addition saved at expiry cannot block clearing output from an earlier loaded fact.
-Recall saves the time used to check its facts and checks again before returning text.
+Recall saves the time used to check its facts and checks access after the last database
+read, immediately before returning text. A Stop, removal, closure or replacement saved
+during that read refuses the result, even before the computer receives the withdrawal.
 It saves the loaded references before returning a result through the gateway. If saving
 fails or its outcome is unknown, the caller receives no fact text. An uncertain result
 is never sent again automatically.
