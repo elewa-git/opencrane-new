@@ -88,3 +88,6 @@ All tests, builds, lint and typechecks ran under `nice -n 10`. Root test command
 used a throwaway PostgreSQL container on a random loopback port through `PG_TEST_URL`.
 The container and its volume were removed. The full root suite and fresh-install
 qualification remain NOT RUN. Native admission remains disabled.
+
+The [collection checks](retention-receipt.md) record later heap snapshots, cancellation
+timing, named failure diagnostics and ten browser runs under load.
