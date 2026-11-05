@@ -1,0 +1,1 @@
+- Private personal replies can reach the active browser session without entering saved messages or the socket cache. Matching clearance, Stop and connection loss discard them. Display remains for the next part.

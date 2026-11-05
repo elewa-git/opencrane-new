@@ -15,12 +15,13 @@ let position: number;
 let feedRows: ChatRow[];
 let status: number;
 let posts: number;
+let heldFeed: Promise<Response> | undefined;
 
-function response(body: unknown): Response {
-  return new Response(JSON.stringify(body), { status });
+function response(body: unknown): Promise<Response> {
+  return Promise.resolve(new Response(JSON.stringify(body), { status }));
 }
-async function fetchFixture(input: RequestInfo | URL, options?: RequestInit): Promise<Response> {
-  const path = String(input);
+function fetchFixture(input: RequestInfo | URL, options?: RequestInit): Promise<Response> {
+  const path = input instanceof Request ? input.url : String(input);
   if (options?.method === 'POST') {
     posts += 1;
     return response({ status: 'appended' });
@@ -31,6 +32,7 @@ async function fetchFixture(input: RequestInfo | URL, options?: RequestInit): Pr
     return response({ rows: [{ conversationId: 'chat', assistantId: 'assistant',
       mode: 'agent_session', createdBy: 'me', createdAt: '2026-11-05T00:00:00Z' }] });
   }
+  if (heldFeed) return heldFeed;
   return response({ rows: feedRows, position, generation: 2, computerState: 'ready' });
 }
 function createSocket(): SocketLike {
@@ -53,7 +55,12 @@ function event(type: string, data?: ChatRow['data']): void {
 }
 async function setup(): Promise<void> {
   history.replaceState({}, '', '/workspace?conversation=chat');
-  sockets = []; feedRows = []; position = 0; status = 200; posts = 0;
+  sockets = [];
+  feedRows = [];
+  position = 0;
+  status = 200;
+  posts = 0;
+  heldFeed = undefined;
   vi.spyOn(globalThis, 'fetch').mockImplementation(fetchFixture);
   vi.spyOn(console, 'warn').mockImplementation(ignoreWarning);
   TestBed.configureTestingModule({ providers: [ChatSession,
@@ -218,3 +225,62 @@ function excludeShared(): void {
   expect(chat.privateReply()).toBeNull();
 }
 it('excludes shared assistant sessions', excludeShared);
+
+async function lateReadCannotRestore(): Promise<void> {
+  send(reply);
+  let finish!: (response: Response) => void;
+  function hold(resolve: (response: Response) => void): void { finish = resolve; }
+  heldFeed = new Promise(hold);
+  const refreshing = chat.refresh();
+  send(clearance);
+  const data = { rows: [row('agent.turn_started')], position, generation: 2,
+    computerState: 'ready' };
+  finish(new Response(JSON.stringify(data)));
+  await refreshing;
+  send(reply);
+  expect(chat.privateReply()).toBeNull();
+}
+it('late HTTP history cannot restore a cleared reply', lateReadCannotRestore);
+
+async function projectionReplacement(): Promise<void> {
+  send(reply);
+  const data = { rows: [], position: 0, generation: 3, computerState: 'ready' };
+  heldFeed = Promise.resolve(new Response(JSON.stringify(data)));
+  await chat.refresh();
+  expect(chat.privateReply()).toBeNull();
+  send(reply);
+  expect(chat.privateReply()).toBeNull();
+}
+it('a replacement HTTP projection clears a reply', projectionReplacement);
+
+function directSession(): void {
+  chat.conversations.set([{ conversationId: 'chat', mode: 'direct',
+    participantIds: ['me', 'colleague'], createdBy: 'me', createdAt: '2026-11-05T00:00:00Z' }]);
+  send(reply);
+  expect(chat.privateReply()).toBeNull();
+}
+it('excludes direct sessions', directSession);
+
+async function uploadRetainsReply(): Promise<void> {
+  send(reply);
+  vi.spyOn(XMLHttpRequest.prototype, 'open').mockImplementation(ignoreRequest);
+  vi.spyOn(XMLHttpRequest.prototype, 'setRequestHeader').mockImplementation(ignoreRequest);
+  vi.spyOn(XMLHttpRequest.prototype, 'send').mockImplementation(completeUpload);
+  const connections = sockets.length;
+  await chat.upload(new File(['fixture'], 'fixture.txt'));
+  expect(chat.uploadBatch.pendingDelivery()).toBe('file');
+  expect(sockets).toHaveLength(connections);
+  expect(chat.privateReply()).toEqual(reply);
+}
+it('uploading retains the reply and the current socket', uploadRetainsReply);
+
+function ignoreRequest(): void {
+  // Keep this browser-state check away from the network.
+}
+function completeUpload(this: XMLHttpRequest): void {
+  const savedStatus = { value: 201 };
+  const savedBody = { value: JSON.stringify({ fileId: 'file' }) };
+  Object.defineProperty(this, 'status', savedStatus);
+  Object.defineProperty(this, 'responseText', savedBody);
+  this.onload?.(new ProgressEvent('load'));
+}

@@ -18,7 +18,7 @@ flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages and file drops where Attach is available"] --> web
   web -->|requests and live updates| server["apps/server<br/>the back end"]
-  server -->|assistant file cards and file refusal codes| web
+  server -->|saved updates and private reply clearance| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
   web -->|saved replies and tool activity| capture["Chat workspace<br/>reply details and isolated diagrams"]
@@ -39,6 +39,8 @@ For everyone, the website:
   Code blocks have a copy button. Mermaid diagrams appear as images, with their
   source shown as code until the block closes or when a diagram cannot be drawn.
   Drawing happens in a separate browser document that cannot contact the network.
+- Receives private personal replies in page memory without saving them in message history.
+  Display of these replies is not built yet. Disconnecting or losing access discards them.
 - Expands saved command and tool details under their activity lines in chat.
 - Lists recent and archived conversations and opens saved chat links.
 - Shows tool actions for review and lets the requester approve or deny them.

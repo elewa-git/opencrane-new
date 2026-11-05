@@ -446,3 +446,8 @@ topic conversation, conversationId, turnId, threadId, positive generation and
 inputGeneration. It accepts no payload, position or additional fields. Both private
 notifications stay outside `serverMessageSchema` until browser history exclusion and
 consumption are implemented together in P4-15 PR 3l.
+
+`serverMessageSchema` now includes `privateReplySchema` and
+`privateOutputClearedSchema`. They remain outside `chatMessageSchema`, the positioned
+feed contract. The browser delivers both through an uncached observable; neither
+notification changes a saved catch-up position. Client messages remain unchanged.

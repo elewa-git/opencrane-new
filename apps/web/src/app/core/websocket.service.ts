@@ -44,6 +44,10 @@ export class WebSocketService implements OnDestroy {
   private readonly historySignal = signal<ServerMessage[]>([]);
   private readonly lastMessageSignal = signal<ServerMessage | undefined>(undefined);
   private readonly incoming = new Subject<ServerMessage>();
+  private readonly privateFrames = new Subject<Extract<ServerMessage,
+    { type: 'private_reply' | 'private_output_cleared' }>>();
+  /** Deliver only to current listeners; never retain private frames for later readers. */
+  readonly privateReceived = this.privateFrames.asObservable();
   private readonly policyClose = new Subject<void>();
   private readonly connectionClose = new Subject<void>();
   /** Include each checked message, even when several arrive in one render. */
@@ -109,6 +113,7 @@ export class WebSocketService implements OnDestroy {
     const socket = this.socket;
     this.socket = undefined;
     if (socket) {
+      this.connectionClose.next();
       socket.onopen = null;
       socket.onclose = null;
       socket.onerror = null;
@@ -212,6 +217,10 @@ export class WebSocketService implements OnDestroy {
   }
 
   private pushMessage(message: ServerMessage): void {
+    if (message.type === 'private_reply' || message.type === 'private_output_cleared') {
+      this.privateFrames.next(message);
+      return;
+    }
     this.lastMessageSignal.set(message);
     this.historySignal.update((history) => [...history, message].slice(-MAX_HISTORY));
     // Store first so an access-loss subscriber can synchronously clear this event too.

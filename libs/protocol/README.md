@@ -33,7 +33,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.->|chat, approval and other replies| protocol["libs/protocol<br/>shared reply shapes"]
+  web["apps/web<br/>browser app"] -.->|chat replies and private clearances| protocol["libs/protocol<br/>shared reply shapes"]
   server["apps/server<br/>back end"] -.->|chat replies and clearances| protocol
   projections["libs/projections<br/>read tables"] -.->|saved resolution history| protocol
   models["libs/models<br/>AI rules and spending"] -.-> protocol
@@ -51,6 +51,8 @@ flowchart LR
 The server returns a reply and the browser checks it against the same shape.
 Chat tool results use a separate display shape that excludes private adapter details.
 Completed private reply notifications carry existing chat text fields without a saved cursor.
+Both notifications are accepted by the socket message schema. Browsers deliver them
+without retaining them in their recent-message cache.
 A separate clearance carries only the matching chat, turn, thread and input identities.
 An effect detail can include an original resolution receipt, with integer euro cents.
 Older replies without that field still work. Parsing a receipt grants no access.
