@@ -158,16 +158,3 @@ export async function prepareMemoryQualification(signal?: AbortSignal): Promise<
     }
   }
 }
-
-if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
-  try {
-    if (process.argv.length !== 2) {
-      throw new Error('unexpected_arguments');
-    }
-    await prepareMemoryQualification();
-    process.stdout.write('Collection checked\n');
-  } catch {
-    process.stderr.write('Memory qualification refused\n');
-    process.exitCode = 1;
-  }
-}

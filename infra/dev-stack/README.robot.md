@@ -2195,7 +2195,7 @@ upload or alternative target can be supplied. Errors contain only a fixed refusa
 nice -n 10 npx vitest run --config infra/dev-stack/memory-qualification.config.mjs
 ```
 
-These fixtures run real collector validation against controlled filesystem and
-Docker observations. Their synthetic PASS is not a live receipt. This build starts
+The CI Node test entry runs the same Vitest fixtures. They run real collector
+validation against controlled filesystem and Docker observations. Their synthetic PASS is not a live receipt. This build starts
 no slot and makes no model calls. Live collection remains NOT RUN for 5i4 on its
 own new installation; the shared runner and admission remain unchanged.

@@ -1,3 +1,3 @@
 export default {
-  test: { include: ['infra/dev-stack/memory-qualification.test.ts'], maxWorkers: 1 },
+  test: { include: ['infra/dev-stack/memory-qualification.fixtures.ts'], maxWorkers: 1 },
 };
