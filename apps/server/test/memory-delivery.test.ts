@@ -29,6 +29,7 @@ import { conversationKeys } from '../src/chat/keys.ts';
 import { invalidateMemoryAccess, invalidateMemoryContext } from '../src/memory/invalidation.ts';
 
 let storage: Awaited<ReturnType<typeof database>>;
+let deployment: Awaited<ReturnType<typeof initialQualificationFixture>>;
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let computer: Awaited<ReturnType<typeof fixture>>;
 let link: Awaited<ReturnType<typeof connectBridge>>;
@@ -83,7 +84,7 @@ async function prepareInitialDelivery() {
     catalogueDigest: catalogue.schemaDigest, connectionId: 'server', accountMode: 'none',
     policyRevision: policy.policyRevision, reviewedBy: 'alice', tools: [choice] });
   await append('mcp-memory', 'mcp.server_published', { serverId: 'memory', publishedBy: 'alice' });
-  const deployment = await initialQualificationFixture();
+  deployment = await initialQualificationFixture();
   expect(deployment.result.result).toBe('PASS');
   return { db: storage.db, keyDirectory, feed: { memberId } };
 }
@@ -1547,3 +1548,23 @@ async function offersQualifiedRecall() {
 }
 it('offers recall from saved policy on a qualified personal turn and completes discovery',
   offersQualifiedRecall);
+
+async function preparesSlowRecallBeforeAccess() {
+  const test = await prepareRecallTurn();
+  let delayed = false;
+  async function slowQualification() {
+    const facts = await readChatFacts(nats.store, 'test', 'chat', 'recall-turn');
+    if (!delayed && facts.memoryContext?.initialLoaded) {
+      delayed = true;
+      await delay(2100);
+    }
+  }
+  deployment.observe(slowQualification);
+  link.socket.send(JSON.stringify(test.turn));
+  function dispatched() { expect(test.native.received).toContain('turn/start'); }
+  await vi.waitFor(dispatched, { timeout: 10_000 });
+  expect(delayed).toBe(true);
+  expect(computer.grants.has('returned-native-1')).toBe(true);
+}
+it('finishes slow recall confirmation before starting the short credential access check',
+  preparesSlowRecallBeforeAccess);
