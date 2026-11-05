@@ -56,6 +56,7 @@ interface TurnToolServer {
 }
 
 export interface TurnDelivery {
+  recall?: { requesterId: string; expiresAt: number; baseMessageBytes: number };
   turnId: string;
   sentAt: number;
   tools: TurnToolServer[];
@@ -65,6 +66,13 @@ const logger = createLogger('bridge');
 
 export async function buildTurnTools(input: TurnToolInput): Promise<TurnToolServer[]> {
   return assembleTurnTools(input);
+}
+
+// Offer definitions before a native thread exists; discovery still needs saved admission.
+export function buildRecallOffer(input: TurnToolInput) {
+  const memory = { serverId: 'memory' };
+  const restricted = { ...input, rows: [memory], approvalWaiting: false };
+  return assembleTurnTools(restricted, [recallTool]);
 }
 
 type PersonalMemoryInput = Omit<TurnToolInput, 'rows' | 'approvalWaiting'> & {

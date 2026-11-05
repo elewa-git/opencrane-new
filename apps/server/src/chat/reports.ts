@@ -448,3 +448,13 @@ function verifyReportReplay(previous: StoredEvent, report: z.infer<typeof report
 function receiptFor(report: Report) {
   return { sequence: report.sequence, digest: reportDigest(report) };
 }
+
+export function turnStatus(type: string) {
+  if (type === 'agent.turn_started') {
+    return 'started';
+  }
+  if (type === 'agent.turn_completed') {
+    return 'completed';
+  }
+  return 'failed';
+}

@@ -1,3 +1,4 @@
+import { recallBridge } from './recall-bridge.ts';
 import { privateOutput } from './private-output.ts';
 import { pullArtifact, type ArtifactPublication } from '../files/artifacts.ts';
 import { routineBridge, routineStartRefusal } from '../routine-bridge.ts';
@@ -27,7 +28,7 @@ import { turnCommand, TurnAdmissionRejected,
 import { recordBudgetRefusal } from './budget-refusal.ts';
 import { readChatFacts } from './chat-summary.ts';
 import { chatHistory } from './commands.ts';
-import { recordBridgeReports, canCombineReports, ReportRejected } from './reports.ts';
+import { recordBridgeReports, canCombineReports, ReportRejected, turnStatus } from './reports.ts';
 import { bridgeApprovals } from './bridge-approvals.ts';
 import { resumeBridgeReports } from './bridge-resume.ts';
 import type { ChatOptions } from './routes.ts';
@@ -37,6 +38,7 @@ type BridgeOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'store' | 
   Pick<Parameters<typeof bridgeControl>[0], 'stopExecution'>;
 type RoutineStart = NonNullable<Parameters<typeof turnCommand>[1]['routineStart']>;
 type ReportOptions = BridgeOptions & { routineStart: RoutineStart;
+  recall: ReturnType<typeof recallBridge>;
   output: ReturnType<typeof privateOutput>; memory: ReturnType<typeof memoryBridge>;
   routines: ReturnType<typeof routineBridge> };
 type BridgeInput = { url: string; computerId: string; assistantId: string; bearer: string };
@@ -70,12 +72,6 @@ function combineQueuedReport(batch: ReportBatch | undefined, value: unknown,
   batch.textLength += report.text?.length ?? 0;
   batch.bytes += bytes;
   return true;
-}
-
-function turnStatus(type: string) {
-  if (type === 'agent.turn_started') return 'started';
-  if (type === 'agent.turn_completed') return 'completed';
-  return 'failed';
 }
 
 async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
@@ -187,6 +183,9 @@ function reportReceiver(options: ReportOptions, input: BridgeInput,
   let legacyPending = Promise.resolve();
   const queues = new Map<string, ReportQueue>();
   function receiveReceipt(value: unknown) {
+    if (options.recall.receive(value)) {
+      return true;
+    }
     if (control.receive(value)) return true;
     const memoryReceipt = options.memory.receive(value);
     const routineReceipt = options.routines.receive(value);
@@ -289,7 +288,10 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   const output = privateOutput(options, input, socket);
   const memory = memoryBridge(options, input, socket, output.clearBinding);
   const routines = routineBridge(options, input, socket);
-  const reportOptions = { ...options, routineStart, memory, routines, output };
+  // Keep offered identities on this connection; a reconnect cannot reuse a pending load.
+  const sentTurns = new Map<string, TurnDelivery>();
+  const recall = recallBridge(options, input, socket, sentTurns);
+  const reportOptions = { ...options, routineStart, memory, routines, output, recall };
   const reports = reportReceiver(reportOptions, input, tokens, socket, refuse, approvals, control);
   socket.on('message', reports.receiveReport);
   try {
@@ -308,8 +310,6 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     transfers = work.catch(terminateSocket);
     return work;
   }
-  // Remember delivery only for this socket; reconnecting must send pending turns again.
-  const sentTurns = new Map<string, TurnDelivery>();
   async function settled() {
     const reportsDone = reports.settled();
     await approvals.settled();

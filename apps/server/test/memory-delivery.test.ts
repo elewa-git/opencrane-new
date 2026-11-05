@@ -1,10 +1,14 @@
+import { preflightFixture } from '../../computer/test/private-recall-preflight-fixture.ts';
+import { privateToolOffer } from './support/private-catalogue.ts';
+import { recallTool } from '../src/memory/mcp.ts';
+import { losslessJson } from '@opencrane/events/lossless-json';
 import { createHash, randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from 'vitest';
 import { memoryContextRecordedEventSchema, parseEventByType } from '@opencrane/events';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { history, readToolPolicy } from '@opencrane/models';
@@ -17,13 +21,15 @@ import { initialQualificationFixture } from './support/initial-qualification.ts'
 import { fixture } from '../../computer/test/bridge-gate-fixture.ts';
 import { createLogger } from '@opencrane/observability';
 import { assistantProcessor } from '../src/chat/bridge-poll.ts';
-import type { AgentSession } from '../src/chat/bridge-conversation.ts';
+import { assistantSnapshot, processConversation, type AgentSession }
+  from '../src/chat/bridge-conversation.ts';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
 import { invalidateMemoryAccess, invalidateMemoryContext } from '../src/memory/invalidation.ts';
 
 let storage: Awaited<ReturnType<typeof database>>;
+let deployment: Awaited<ReturnType<typeof initialQualificationFixture>>;
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let computer: Awaited<ReturnType<typeof fixture>>;
 let link: Awaited<ReturnType<typeof connectBridge>>;
@@ -42,6 +48,7 @@ const binding = { conversationId: 'chat', turnId: 'turn', requesterId: 'alice',
 let prepared = { ...binding, projectionGeneration: 'projection', action: 'prepared',
   delivery: null, callDigest: null, dispatchDigest: null, additions: [], scopePositions: [],
   byteCount: 0, hasOmissions: false, reason: 'none' };
+vi.mock('node:net', { spy: true });
 vi.mock('node:fs', async function filesystem(importOriginal) {
   const original = await importOriginal<typeof import('node:fs')>();
   return { ...original };
@@ -77,7 +84,7 @@ async function prepareInitialDelivery() {
     catalogueDigest: catalogue.schemaDigest, connectionId: 'server', accountMode: 'none',
     policyRevision: policy.policyRevision, reviewedBy: 'alice', tools: [choice] });
   await append('mcp-memory', 'mcp.server_published', { serverId: 'memory', publishedBy: 'alice' });
-  const deployment = await initialQualificationFixture();
+  deployment = await initialQualificationFixture();
   expect(deployment.result.result).toBe('PASS');
   return { db: storage.db, keyDirectory, feed: { memberId } };
 }
@@ -1371,3 +1378,243 @@ async function accessAppendRace(kind: 'lost' | 'recall' | 'expiry') {
 }
 it.each(['lost', 'recall', 'expiry'] as const)(
   'converges after an access withdrawal races with %s', accessAppendRace);
+
+async function prepareRecallTurn() {
+  computer.finish('thread-1');
+  async function ended() {
+    const facts = await readChatFacts(nats.store, 'test', 'chat', 'turn');
+    expect(facts.turnEnded).toBe(true);
+  }
+  await vi.waitFor(ended);
+  const native = await preflightFixture();
+  onTestFinished(native.close);
+  computer.driver.privateSession = native.openCurrent;
+  Object.assign(computer.driver, native.driver);
+  const gateIdentity = { verifier: computer.issuer.jwks.keys[0], issuer: 'fixture',
+    silo: 'test', computer: 'computer', assistant: 'assistant', generation: 1, podUid: 'pod' };
+  function credential() {
+    return { value: 'test', expiresAt: Date.now() + 120_000, gateIdentity };
+  }
+  computer.driver.credential = credential;
+  const definition = JSON.stringify(recallTool);
+  const revision = losslessJson(definition).digest;
+  const metadata = { name: 'recall', reviewed: true, costCents: 0 };
+  const tool = { ...toolEvidence(metadata), definition, revision };
+  const catalogue = catalogueEvidence([tool]);
+  const checkedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
+  const discovered = { serverId: 'memory', connectionId: 'server', accountMode: 'none',
+    checkedAt, expiresAt, serverInfo: { name: 'OpenCrane memory', version: '1' }, ...catalogue };
+  await append('mcp-memory', 'mcp.server_discovered', discovered);
+  const policy = await readToolPolicy(nats.store, 'test', 'memory');
+  const choice = { name: 'recall', revision, reviewDigest: toolReviewDigest(tool), mode: 'allow' };
+  const reviewed = { serverId: 'memory', catalogueDigest: catalogue.schemaDigest,
+    connectionId: 'server', accountMode: 'none', policyRevision: policy.policyRevision,
+    reviewedBy: 'alice', tools: [choice] };
+  await append('mcp-memory', 'mcp.server_reviewed', reviewed);
+  const published = { serverId: 'memory', publishedBy: 'alice' };
+  await append('mcp-memory', 'mcp.server_published', published);
+  const encrypted = keys.encrypt('test', 'chat', 'Recall my fact');
+  const message = { conversationId: 'chat', authorId: 'alice', authorKind: 'human',
+    contentType: 'text', ...encrypted };
+  await append('conversation-chat', 'message.posted', message, 'recall-turn');
+  const started = { conversationId: 'chat', turnId: 'recall-turn', requesterId: 'alice',
+    assistantId: 'assistant', computerId: 'computer', threadId: 'returned-native-1',
+    task: 'chat_turn', executionMode: 'restricted' };
+  await append('computer-assistant', 'computer.turn_started', started);
+  const tools = privateToolOffer('recall');
+  const turn = { type: 'turn', id: 'recall-turn', conversationId: 'chat', requesterId: 'alice',
+    assistantId: 'assistant', executionMode: 'restricted', text: 'Preparing private input', token: 'preparing',
+    expiresAt: Date.now() + 60_000, tools };
+  const baseFrame = { ...turn, tools: undefined };
+  const recall = { requesterId: 'alice', expiresAt: turn.expiresAt,
+    baseMessageBytes: Buffer.byteLength(JSON.stringify(baseFrame)) };
+  const delivery = { turnId: turn.id, sentAt: performance.now(), tools, recall };
+  link.sentTurns.set('chat', delivery);
+  const sent: Record<string, unknown>[] = [];
+  const originalSend = link.socket.send.bind(link.socket);
+  function send(data: Parameters<typeof originalSend>[0]) {
+    if (typeof data === 'string') {
+      const parsed: unknown = JSON.parse(data);
+      sent.push(z.record(z.string(), z.unknown()).parse(parsed));
+    }
+    originalSend(data);
+  }
+  vi.spyOn(link.socket, 'send').mockImplementation(send);
+  return { native, turn, sent };
+}
+
+async function discoversBeforePrivateDispatch() {
+  const test = await prepareRecallTurn();
+  test.native.pauseDiscovery();
+  link.socket.send(JSON.stringify(test.turn));
+  function discovering() {
+    expect(link.rejection).toBeUndefined();
+    function refused(frame: Record<string, unknown>) { return typeof frame['refused'] === 'string'; }
+    expect(test.sent.find(refused)?.['refused']).toBeUndefined();
+    expect(test.native.received).toContain('mcpServerStatus/list');
+  }
+  await vi.waitFor(discovering, { timeout: 10_000 });
+  expect(test.native.received).not.toContain('turn/start');
+  expect(computer.grants.has('returned-native-1')).toBe(false);
+  function isLoad(frame: Record<string, unknown>) { return frame['type'] === 'recall_load'; }
+  expect(test.sent.filter(isLoad)).toHaveLength(1);
+  test.native.resume();
+  function dispatched() { expect(test.native.received).toContain('turn/start'); }
+  await vi.waitFor(dispatched, { timeout: 10_000 });
+  await link.settled();
+  expect(computer.grants.has('returned-native-1')).toBe(true);
+  expect(test.native.mcp.size).toBe(1);
+  const facts = await readChatFacts(nats.store, 'test', 'chat', 'recall-turn');
+  expect(facts.memoryContext?.initialLoaded).toBe(true);
+  const receivedBeforeRenewal = [...test.native.received];
+  const sentBeforeRenewal = test.sent.length;
+  await expect(computer.channel.renew('returned-native-1')).resolves.toBeUndefined();
+  await link.settled();
+  const renewalFrames = test.sent.slice(sentBeforeRenewal);
+  expect(renewalFrames).toHaveLength(1);
+  expect(renewalFrames[0]).toMatchObject({ type: 'ack' });
+  expect(renewalFrames[0]?.['token']).toEqual(expect.any(String));
+  expect(renewalFrames[0]).not.toHaveProperty('initialInput');
+  expect(renewalFrames[0]).not.toHaveProperty('refused');
+  expect(computer.grants.has('returned-native-1')).toBe(true);
+  expect(test.native.received).toEqual(receivedBeforeRenewal);
+  expect(test.native.mcp.size).toBe(1);
+  const renewed = await readChatFacts(nats.store, 'test', 'chat', 'recall-turn');
+  expect(renewed.memoryContext).toEqual(facts.memoryContext);
+}
+it('loads recall before private dispatch and renews without repeating discovery or input',
+  discoversBeforePrivateDispatch);
+
+const recallRenewalWithdrawals = ['corrected', 'forgotten', 'removal', 'Stop'] as const;
+async function refusesRecallRenewal(change: typeof recallRenewalWithdrawals[number]) {
+  const test = await prepareRecallTurn();
+  link.socket.send(JSON.stringify(test.turn));
+  function dispatched() {
+    expect(test.native.received).toContain('turn/start');
+  }
+  await vi.waitFor(dispatched, { timeout: 10_000 });
+  await expect(computer.channel.renew('returned-native-1')).resolves.toBeUndefined();
+  if (change === 'corrected' || change === 'forgotten') {
+    await changed(change);
+  } else if (change === 'removal') {
+    const removed = { memberId: 'alice', removedBy: 'owner' };
+    await append('member-alice', 'member.removed', removed);
+  } else {
+    const stopped = { conversationId: 'chat', turnId: 'recall-turn', requestedBy: 'alice' };
+    await append('conversation-chat', 'agent.turn_stop_requested', stopped);
+  }
+  // Leave the withdrawal reaction idle to prove renewal checks the saved change itself.
+  const sentBeforeRenewal = test.sent.length;
+  const receivedBeforeRenewal = [...test.native.received];
+  await expect(computer.channel.renew('returned-native-1')).rejects.toThrow();
+  await link.settled();
+  const renewalFrames = test.sent.slice(sentBeforeRenewal);
+  expect(renewalFrames).toHaveLength(1);
+  expect(renewalFrames[0]).toMatchObject({ type: 'ack' });
+  expect(renewalFrames[0]?.['refused']).toEqual(expect.any(String));
+  expect(renewalFrames[0]).not.toHaveProperty('token');
+  expect(renewalFrames[0]).not.toHaveProperty('initialInput');
+  expect(test.native.received).toEqual(receivedBeforeRenewal);
+}
+it.each(recallRenewalWithdrawals)('refuses recall grant renewal after saved %s',
+  refusesRecallRenewal);
+
+const recallWithdrawals = [
+  ['removal', 'member-alice', 'member.removed', { memberId: 'alice', removedBy: 'owner' }],
+  ['grant', grantStream('mcp_server', 'memory'), 'grant.revoked', {
+    resourceType: 'mcp_server', resourceId: 'memory', granteeKind: 'assistant',
+    granteeId: 'assistant', revokedBy: 'alice',
+  }],
+  ['policy', 'mcp-memory', 'mcp.server_unpublished', {
+    serverId: 'memory', unpublishedBy: 'alice',
+  }],
+  ['replacement', 'computer-assistant', 'computer.ready', {
+    assistantId: 'assistant', computerId: 'computer', generation: 2, podUid: 'replacement',
+  }],
+  ['closure', 'conversation-chat', 'conversation.closed', {
+    conversationId: 'chat', closedBy: 'alice',
+  }],
+  ['Stop', 'conversation-chat', 'agent.turn_stop_requested', {
+    conversationId: 'chat', turnId: 'recall-turn', requestedBy: 'alice',
+  }],
+] as const;
+async function refusesRecallWithdrawal(_name: string, subject: string, type: string, data: object) {
+  const test = await prepareRecallTurn();
+  test.native.pauseDiscovery();
+  link.socket.send(JSON.stringify(test.turn));
+  function discovering() { expect(test.native.received).toContain('mcpServerStatus/list'); }
+  await vi.waitFor(discovering, { timeout: 10_000 });
+  await append(subject, type, data);
+  test.native.resume();
+  function refused() {
+    function isRefusal(frame: Record<string, unknown>) { return typeof frame['refused'] === 'string'; }
+    expect(test.sent.find(isRefusal)).toBeDefined();
+  }
+  await vi.waitFor(refused, { timeout: 10_000 });
+  await link.settled();
+  expect(test.native.received).not.toContain('turn/start');
+  expect(computer.grants.has('returned-native-1')).toBe(false);
+}
+it.each(recallWithdrawals)('withholds private input and credentials after saved %s during discovery',
+  refusesRecallWithdrawal);
+
+async function refusesLostRecall() {
+  const test = await prepareRecallTurn();
+  test.native.dropReloadReply();
+  link.socket.send(JSON.stringify(test.turn));
+  function refused() {
+    expect(test.native.received).toContain('config/mcpServer/reload');
+    expect(test.native.mcp.size).toBe(0);
+  }
+  await vi.waitFor(refused, { timeout: 10_000 });
+  await link.settled();
+  expect(test.native.received).not.toContain('turn/start');
+  expect(computer.grants.has('returned-native-1')).toBe(false);
+  function isLoad(frame: Record<string, unknown>) { return frame['type'] === 'recall_load'; }
+  expect(test.sent.filter(isLoad)).toHaveLength(1);
+}
+it('abandons a lost recall discovery reply without resending or releasing a grant', refusesLostRecall);
+
+async function offersQualifiedRecall() {
+  const test = await prepareRecallTurn();
+  link.sentTurns.delete('chat');
+  const rows = await history(nats.store, 'computer-assistant', 'test');
+  const assistant = assistantSnapshot(rows, 'personal', 'test');
+  const options = { silo: 'test', store: nats.store, keys, binding: iam, db: storage.db };
+  function connectedComputer() {
+    const connected = { ...link, connectionId: 1 };
+    return Promise.resolve(connected);
+  }
+  await processConversation(options, computer.issuer, sessions[0]!, assistant,
+    new Set(), connectedComputer);
+  function isOffer(frame: Record<string, unknown>) { return frame['type'] === 'turn'; }
+  const offered = test.sent.find(isOffer);
+  expect(offered?.['tools']).toEqual(privateToolOffer('recall'));
+  function dispatched() { expect(test.native.received).toContain('turn/start'); }
+  await vi.waitFor(dispatched, { timeout: 10_000 });
+  expect(computer.grants.has('returned-native-1')).toBe(true);
+}
+it('offers recall from saved policy on a qualified personal turn and completes discovery',
+  offersQualifiedRecall);
+
+async function preparesSlowRecallBeforeAccess() {
+  const test = await prepareRecallTurn();
+  let loadedProbes = 0;
+  async function slowQualification() {
+    const facts = await readChatFacts(nats.store, 'test', 'chat', 'recall-turn');
+    if (facts.memoryContext?.initialLoaded) loadedProbes++;
+    // Let initial loading finish: each of its two confirmations checks the installation twice.
+    if (loadedProbes === 5) {
+      await delay(2100);
+    }
+  }
+  deployment.observe(slowQualification);
+  link.socket.send(JSON.stringify(test.turn));
+  function dispatched() { expect(test.native.received).toContain('turn/start'); }
+  await vi.waitFor(dispatched, { timeout: 10_000 });
+  expect(loadedProbes).toBeGreaterThanOrEqual(5);
+  expect(computer.grants.has('returned-native-1')).toBe(true);
+}
+it('finishes slow recall confirmation before starting the short credential access check',
+  preparesSlowRecallBeforeAccess);

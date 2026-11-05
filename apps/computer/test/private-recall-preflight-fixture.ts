@@ -322,7 +322,12 @@ export async function preflightFixture() {
   function dropReloadReply() {
     discovery.loseReload = true;
   }
-  return { open: sessions.open, prepare, received: discovery.received,
+  async function openCurrent() {
+    const launch = privateLaunchContext.getStore()!;
+    const opened = await sessions.open(launch.turnId, launch.conversation);
+    return opened.session;
+  }
+  return { open: sessions.open, openCurrent, prepare, received: discovery.received,
     callers: proxy.callers, loads, driver, mcp: proxy.mcp, close, pauseDiscovery,
     resume: discovery.resume.resolve, dropReloadReply };
 }
