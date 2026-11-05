@@ -288,7 +288,7 @@ connection and pending request; copied JSON grants nothing.
 
 This proves only one bounded part. The service does not resolve an image, prove
 that a part belongs to it, unpack all layers or claim complete coverage. Those
-checks and the image consumer remain later work. Unsupported or oversized parts
+checks and worker wiring remain later work. Unsupported or oversized parts
 must refuse there too. Nothing writes `mcp.image_checked` or opens admission.
 Signature, vulnerability and licence gates remain independent.
 
@@ -296,3 +296,35 @@ Signature, vulnerability and licence gates remain independent.
 processes. Its delayed-cleanup fixture isolates transport capacity; other failure
 tests use the owned scan operation and retire the handle. Deployed rotation,
 fresh-install clean/EICAR and full image coverage remain NOT RUN.
+
+## Image part consumer
+
+P5-6b PR 3 adds `image-client.mjs`. Trusted deployment code calls
+`scanImagePart(settings, bytes, binding, signal?)`. Settings contain `url`,
+`caFile`, `privateKeyPath`, `issuer`, `silo`, and independently approved scanner
+`imageDigest` and `manifestDigest`. File references use existing secret custody;
+no key value or caller-supplied fetch URL belongs in settings. The URL must name
+our fixed private HTTPS service at `/scan/image-part`, without credentials,
+query or fragment. CA and hostname verification stay enabled; redirects refuse.
+
+The binding contains `silo`, `serverId`, `attemptId`, `platform` and
+`targetImageDigest` as specified above. Each call issues an image-worker pass
+through `tokenIssuer.scanner`, with a new UUID. Bytes wait for `100 Continue`.
+Issuance, transfer and reply share 60 seconds; input is at most 20 MiB and the
+JSON reply at most 4 KiB. Only a complete, strictly validated reply on that
+connection can produce a result. Unknown fields and all binding mismatches refuse.
+The client checks approved scanner digests, three distinct database records,
+valid hashes/versions/build dates, a complete update check younger than 24 hours,
+and expiry capped by the pass, database and two minutes after checking.
+
+The returned function takes the current bytes and binding again and returns only
+`clean` or `infected`. Call it at use: it checks their identity and both wall and
+elapsed time again. It retains no part buffer and exports no reusable JSON proof.
+Cancellation destroys pending sockets and clears collected reply buffers.
+Failures have only `Image part scan refused`, with no cause or service diagnostics.
+A lost reply requires a new scan. No worker event or image admission is added.
+
+The scripts test runs in ordinary CI discovery, with real TLS/ES256 and the
+existing service factory; scanner verdicts remain fixtures. Full image membership,
+layer coverage, worker wiring and live clean/EICAR remain later work. The builder's
+[receipt](../../docs/process/p5-6b-pr3/checks.md) records the exact checks.

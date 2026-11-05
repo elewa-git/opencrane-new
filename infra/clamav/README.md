@@ -20,7 +20,7 @@ flowchart LR
   infra --> nats["infra/nats<br/>event log settings"]
   stack -->|builds and starts the Linux amd64 image| clamav
   server["apps/server<br/>file uploads"] -->|sends file bytes over HTTPS| launcher
-  worker["image worker<br/>planned caller"] -.->|sends image parts| launcher
+  worker["image part client<br/>worker wiring planned"] -->|checks HTTPS scan replies| launcher
   packaging["packaging job"] -->|checks image databases| clamav
   launcher["separate HTTPS service"] -->|limits requests and checks caller passes| clamav
 ```
@@ -57,8 +57,9 @@ flowchart LR
 
 7. **An image worker requests a part scan.** The separate image route accepts only
    image-worker passes. It returns the part hash and size with the silo, server,
-   installation attempt, platform and image digest. The full image caller and
-   coverage checks are not built yet. Image admission stays closed.
+   installation attempt, platform and image digest. A separate client checks these
+   facts, the approved scanner digests and unchanged bytes again when used. Worker
+   wiring and whole-image coverage are not built yet. Image admission stays closed.
 
 ## How to run or test it
 
