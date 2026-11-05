@@ -43,3 +43,51 @@ PostgreSQL projections. No full root suite, stack, model call, image promotion o
 host setting change is part of this work. Authority and security-rule tests stay
 unchanged. No event or public API field is added. Failure forwarding, withdrawal,
 challenge/install binding and supervision retain their existing contracts.
+
+## Protection refusal fixes
+
+5 November 2026. Rebased onto `7570a266c`. Failing-test commit: `eea9604fc`.
+Implementation: `64bb8c776`; portable fixture expectations: `7c703b1b4`.
+Environment: shared development host and disposable Docker containers, not a
+fresh deployment. No live qualification was attempted.
+
+The runner now keeps a fixed failure category instead of reducing every failure
+to false. The collector saves that category and its plain message. The launcher
+keeps both when it withdraws earlier evidence. Unknown categories, extra fields
+and private paths are refused. The native helper still measures the actual runner.
+Request fixtures now build named objects before serialising them.
+
+The first tests reproduced the missing detail: 43 probe, journey and collector
+assertions, 17 helper assertions, and 15 selected Docker assertions failed before
+the implementation. The tests were committed first.
+
+The first wider run had two failures. One expected the wrong category for the
+local host. Its replacement checks the exact refusal against the fixed allowlist
+and requires the matching saved message; the controlled launcher fixture now
+makes its missing cgroup explicit. The other failure was the native `shell_tool`
+case's existing cleanup assertion, which found an app-server process or a private
+home after refusal. No cleanup assertion, production check or timeout was relaxed. The unchanged
+native suite then passed twice, including that cleanup assertion.
+
+| Own check | Result | Evidence |
+| --- | --- | --- |
+| Rebase | PASS | `origin/main` at `7570a266c` is an ancestor; rebase finished. |
+| Failing first | PASS | The test-only commit precedes the implementation. |
+| Final combined collector run | PASS | 298/298 tests across ten selected suites. |
+| Changed suites repeated | PASS | Every changed suite passed twice; the corrected 77-test collector suite also passed separately. |
+| Native package image repeated | PASS | 41/41 in the final combined run and 41/41 in the last standalone run. |
+| Local launcher | PASS | 42/42 twice after making the missing cgroup explicit. |
+| Repository and collector typechecks | PASS | All workspaces, package, dev-stack and collector; changed fixtures checked again. |
+| Full lint and Knip | PASS | Zero errors; 37 existing lint warnings. |
+| Events and changelog | PASS | 158 event types agree; the branch fragment passes. |
+| Full root suite | NOT RUN | Excluded from this task. |
+| Deployment qualifications | NOT RUN | No fresh installation or live memory journey. Memory remains disabled. |
+
+The selected collector suites were `container-probe`, `journey`, `deployment`,
+`runner-protection`, `runner-image`, `container-process`, `journey-container`,
+`native-image`, `host-probe` and `result`, using the collector's Vitest config.
+The launcher used `infra/dev-stack/memory-qualification.config.mjs`.
+All checks, builds and tests used `nice -n 10`. Test runs used the requested
+`PG_TEST_URL`; none used PostgreSQL projections. Fixture containers and images
+were removed by their test cleanup. No stack, model call, image promotion or
+host configuration change ran.
