@@ -309,7 +309,9 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   const mode = await requiredExecutionMode(kind, requested.executionMode, options.silo);
   const previousDelivery = link.sentTurns.get(conversation.conversationId);
   // Keep the original expiry while a private thread starts; never resend its offer.
-  if (previousDelivery?.turnId === message.event.id && previousDelivery.recall) return;
+  if (previousDelivery?.turnId === message.event.id && previousDelivery.recall) {
+    return;
+  }
   const accepted = started.has(message.event.id);
   // Retry busy computers until they accept the turn, without flooding the connection.
   const resendDue = !accepted && performance.now() - (previousDelivery?.sentAt ?? 0) >= 1000;
@@ -338,8 +340,12 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
 function rememberTurnDelivery(sentTurns: Map<string, TurnDelivery>, conversationId: string,
   turn: ReturnType<typeof turnMessage>, baseMessageBytes: number) {
   const delivery = sentTurns.get(conversationId);
-  if (!delivery) return;
-  function isMemoryTool(tool: TurnDelivery['tools'][number]) { return tool.serverId === 'memory'; }
+  if (!delivery) {
+    return;
+  }
+  function isMemoryTool(tool: TurnDelivery['tools'][number]) {
+    return tool.serverId === 'memory';
+  }
   if (turn.executionMode === 'restricted' && delivery.tools.some(isMemoryTool)) {
     delivery.recall = { requesterId: turn.requesterId, expiresAt: turn.expiresAt, baseMessageBytes };
   }

@@ -281,7 +281,9 @@ function createRecallCompletion(input: Input, prepared: RecallPreparation, deadl
   }
   async function confirm() {
     try {
-      if (!accepted) throw new LoadedMemoryRefused();
+      if (!accepted) {
+        throw new LoadedMemoryRefused();
+      }
       const completed = await completeRecallLoad(input, prepared, accepted, deadline);
       prepared.measured.confirm();
       completed.current.confirm();

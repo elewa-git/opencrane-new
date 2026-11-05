@@ -22,13 +22,17 @@ export function recallBridge(options: Options, computer: Computer, socket: WebSo
   function ended(turnId: string) {
     const active = pending.get(turnId);
     pending.delete(turnId);
-    if (active) clearTimeout(active.timer);
+    if (active) {
+      clearTimeout(active.timer);
+    }
     callers.remove(turnId);
     active?.reply?.reject(new LoadedMemoryRefused());
   }
   const callers = privateCallers(ended);
   function close() {
-    for (const turnId of pending.keys()) ended(turnId);
+    for (const turnId of pending.keys()) {
+      ended(turnId);
+    }
     callers.close();
   }
   socket.once('close', close);
@@ -39,7 +43,9 @@ export function recallBridge(options: Options, computer: Computer, socket: WebSo
   }
   function receive(value: unknown) {
     const parsed = message.safeParse(value);
-    if (!parsed.success) return false;
+    if (!parsed.success) {
+      return false;
+    }
     const { type, turnId } = parsed.data;
     if (type === 'agent.turn_failed' || type === 'agent.turn_completed') {
       ended(turnId);
@@ -51,15 +57,21 @@ export function recallBridge(options: Options, computer: Computer, socket: WebSo
     }
     if (type === 'recall_loaded') {
       const active = pending.get(turnId);
-      if (!active?.reply) throw new LoadedMemoryRefused();
+      if (!active?.reply) {
+        throw new LoadedMemoryRefused();
+      }
       active.reply.resolve(value);
       delete active.reply;
       return true;
     }
-    if (type !== 'recall_pending') return false;
+    if (type !== 'recall_pending') {
+      return false;
+    }
     const receipt = recallReceipt.parse(value);
     const delivery = deliveries.get(receipt.conversationId);
-    if (pending.has(turnId) || pending.size >= 2) throw new LoadedMemoryRefused();
+    if (pending.has(turnId) || pending.size >= 2) {
+      throw new LoadedMemoryRefused();
+    }
     const checkedDelivery = requireDelivery(receipt, delivery, options, computer);
     const expire = ended.bind(undefined, turnId);
     const timer = setTimeout(expire, Math.min(10_000, receipt.expiresAt - Date.now()));
@@ -70,7 +82,9 @@ export function recallBridge(options: Options, computer: Computer, socket: WebSo
   async function prepare(turn: Turn, replay: boolean) {
     const active = pending.get(turn.turnId);
     const delivery = deliveries.get(turn.conversationId);
-    if (!active && !delivery?.recall) return undefined;
+    if (!active && !delivery?.recall) {
+      return undefined;
+    }
     if (turn.executionMode !== 'restricted' || turn.sharingClass || turn.rootId) {
       throw new LoadedMemoryRefused();
     }
@@ -97,7 +111,9 @@ export function recallBridge(options: Options, computer: Computer, socket: WebSo
 
 function recallInput(options: Options, computer: Computer, turn: Turn, active: Pending,
   callers: ReturnType<typeof privateCallers>): Input {
-  if (!options.binding) throw new LoadedMemoryRefused();
+  if (!options.binding) {
+    throw new LoadedMemoryRefused();
+  }
   const receipt = active.receipt;
   const grant = { silo: options.silo, assistantId: computer.assistantId,
     computerId: computer.computerId, requesterId: turn.requesterId, conversation: turn.conversationId,
