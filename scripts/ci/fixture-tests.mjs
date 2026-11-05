@@ -23,6 +23,7 @@ const fixtureGroups = {
     'apps/server/test/live-view-k3d.test.ts',
     'apps/server/test/provider-login.test.ts',
     'apps/web/test/chat-browser.test.ts',
+    'apps/web/test/private-reply-browser.test.ts',
   ],
 };
 

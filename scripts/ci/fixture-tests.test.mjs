@@ -33,6 +33,7 @@ function partitionsTests() {
     'apps/server/test/live-view-k3d.test.ts',
     'apps/server/test/provider-login.test.ts',
     'apps/web/test/chat-browser.test.ts',
+    'apps/web/test/private-reply-browser.test.ts',
   ]);
   verifyFiles(fixtureFiles, [imageFiles, browserFiles]);
   for (const group of ['1', '2', '3', '4']) {
