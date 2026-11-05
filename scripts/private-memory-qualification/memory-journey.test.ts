@@ -31,9 +31,9 @@ async function observesStore(name: string, role = 'command', silo = 'test', badS
     const result = await runJourney(JSON.stringify({ ...request, name }));
     if (role === 'command' && silo === 'test' && !badStop) {
       expect(result).toMatchObject({ ...request, name, result: 'PARTIAL', complete: false });
-      const position = await fixture.store.head();
+      const storePosition = await fixture.store.head();
       const changes: string[] = [];
-      for (let sequence = 1; sequence <= position; sequence += 1) {
+      for (let sequence = 1; sequence <= storePosition; sequence += 1) {
         const row = await fixture.store.readEvent(sequence);
         if (['memory.corrected', 'memory.forgotten'].includes(row.event.type)) {
           changes.push(row.event.type);
@@ -42,7 +42,9 @@ async function observesStore(name: string, role = 'command', silo = 'test', badS
       expect(changes).toEqual(['memory.corrected', 'memory.forgotten']);
     } else {
       expect(result).toEqual({ result: 'FAIL', reason: 'journey_failed' });
-      if (!badStop) expect(await fixture.store.head()).toBe(0);
+      if (!badStop) {
+        expect(await fixture.store.head()).toBe(0);
+      }
     }
     expect(memoryAdmission.state).toBe('disabled');
   } finally {

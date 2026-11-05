@@ -9,7 +9,9 @@ afterEach(vi.restoreAllMocks);
 async function collectorOutput() {
   const deployment = await initialQualificationFixture();
   expect(deployment.result.result).toBe('PASS');
-  if (deployment.result.result !== 'PASS') throw new Error('Fixture collection failed');
+  if (deployment.result.result !== 'PASS') {
+    throw new Error('Fixture collection failed');
+  }
   const proof = await readDeploymentQualification('test');
   expect(proof.runId).toBe(deployment.result.runId);
   expect(proof.confirm).not.toThrow();
