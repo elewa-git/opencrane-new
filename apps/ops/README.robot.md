@@ -1073,14 +1073,25 @@ and continuations from before a rebuild are refused. The caller must retain each
 returned continuation; reusing one repeats that page, and losing it starts a new
 scan. No durable progress or exactly-once execution is claimed by these counts.
 
-Base: downtime writer #873 merged as `f8d3e36b16324655c297c434fc1a58c2b8ae77c5`.
-Its contract and builder reports were read before implementation. This first part
-holds all command dispatch to remain within the requested size limit. Later work
-must call `claimRoutineDue`, `skipRoutineOccurrence` or `recordRoutineMissed` with
-fresh event positions and revisions; it must never dispatch from these counts.
-Weekly downtime recording, append cancellation integration, lost-receipt/dedupe
-identity tests across dispatch, tick registration and process enablement remain
-NOT RUN here. `createRoutineSender` remains disabled. Live qualification is NOT RUN.
+The read-only API remains unchanged. P4-24 PR 8f adds
+`dispatchRoutineCandidates(db, store, worker)` with a trusted `binding` alongside
+silo, clock, continuation and the leadership signal/check. It uses the same bounded
+inspection. Exact event positions, revisions and calendar dates select due, skip
+or daily missed commands; counts never authorise writes. Future/inactive rows do
+not write. Late unclaimed weekly candidates refuse until their downtime writer exists.
+A previously saved due is recovered through its original checked command input,
+including the position before its append. Its occurrence and `startBy` stay fixed.
+Recovery does not advance that claimed slot. Later scheduling still needs a saved
+schedule change; this slice adds no new cursor writer.
+
+Dispatch awaits each command before counting progress. No further command starts
+after the nine-second admission budget. An admitted command keeps its own read and
+access deadlines and is drained even beyond the page budget. A fresh final leadership
+check takes at most one second. Failure, cancellation or an unsafe result refuses
+the whole page; no continuation claims that work completed. Retry reads events again.
+Each call inspects a routine once; further bounded downtime ranges need another scan.
+Read-only calls retain their ten-second read deadline. No tick, process setting,
+sender, wake or enable switch is registered. Fresh-install live qualification is NOT RUN.
 
 `test/routine-scan.test.ts` uses disposable PostgreSQL/NATS with real leadership,
 projection and history reads. It covers 51-row pagination, silo exclusion, updates
@@ -1088,5 +1099,7 @@ between pages, insertion before the previous id, retained-cursor restart, replay
 old-table refusal, lag, changed events after selection, unavailable history after
 progress, slow-read continuation, cancellation, backwards clocks, Brussels/Apia
 and the sixty-second limit.
-Replay and scan append no events and call no execution service. OpenFGA integration
-belongs to the deferred checked-command dispatch; this read-only scan has no IAM port.
+Replay and the read-only scan append no events and call no execution service.
+`test/routine-dispatch.test.ts` adds real OpenFGA and checked writes, racing scans,
+restart/dedupe recovery, changed access, lease loss, shutdown and page-budget checks.
+Both paths keep execution unavailable. The read-only scan has no IAM port.
