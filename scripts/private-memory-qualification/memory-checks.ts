@@ -5,7 +5,8 @@ import type { MemoryIdentity } from '@opencrane/events';
 import { memoryJourney } from './memory-journey.ts';
 
 export async function checkMemory(
-  name: 'invalidation' | 'unrelatedActivity' | 'requesterIsolation' | 'sessionIsolation',
+  name: 'invalidation' | 'unrelatedActivity' | 'requesterIsolation' |
+    'sessionIsolation' | 'stopReconnect',
   siloId: string,
 ) {
   const silo = process.env['SILO_ID'];
@@ -29,6 +30,8 @@ export async function checkMemory(
         await journey.exactInvalidation(kind);
       } else if (name === 'unrelatedActivity') {
         await journey.unrelatedChange(kind);
+      } else if (name === 'stopReconnect') {
+        await journey.stopReconnect(kind);
       } else {
         let otherRequester = identity;
         if (name === 'requesterIsolation') otherRequester = randomUUID();

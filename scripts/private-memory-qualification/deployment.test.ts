@@ -402,3 +402,22 @@ const isolationSubstitutions = [
 ];
 it.each(isolationSubstitutions)(
   'refuses %s results from another %s', foreignIsolation);
+
+async function savesPartialStop(): Promise<void> {
+  function partial(response: Record<string, unknown>) {
+    if (response['name'] === 'stopReconnect') {
+      response['result'] = 'PARTIAL';
+      response['complete'] = false;
+    }
+  }
+  let saved = '';
+  function write(_file: unknown, value: unknown) {
+    saved = String(value);
+  }
+  alter = partial;
+  vi.mocked(writeFileSync).mockImplementation(write);
+  const result = await collectDeployment();
+  expect(result).toMatchObject({ result: 'PARTIAL', checks: { stopReconnect: 'PARTIAL' } });
+  expect(JSON.parse(saved)).toEqual(result);
+}
+it('saves only PARTIAL when recorded Stop delivery is incomplete', savesPartialStop);

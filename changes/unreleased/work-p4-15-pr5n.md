@@ -1,0 +1,1 @@
+The private memory runner now checks saved Stop delivery and reconnect refusal for Correct and Forget inside the package image. These server assertions remain partial; native and browser clearance, persistence and full qualification are still unproved. Memory admission stays disabled.
