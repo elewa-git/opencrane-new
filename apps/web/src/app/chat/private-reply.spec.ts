@@ -284,3 +284,14 @@ function completeUpload(this: XMLHttpRequest): void {
   Object.defineProperty(this, 'responseText', savedBody);
   this.onload?.(new ProgressEvent('load'));
 }
+
+async function historyReplacesTurn(): Promise<void> {
+  send(reply);
+  feedRows = [row('agent.turn_started', { turnId: 'next' })];
+  await chat.refresh();
+  expect(chat.privateReply()).toBeNull();
+  const next = { ...reply, turnId: 'next', data: { turnId: 'next', text: 'Next fixture' } };
+  send(next);
+  expect(chat.privateReply()).toBeNull();
+}
+it('a replacement turn in HTTP history clears text without enabling delivery', historyReplacesTurn);
