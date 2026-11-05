@@ -180,7 +180,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|sign-out, requests, Office uploads, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks saved membership before personal memory tools and history errors; prepares allowances; checks routine admission; applies Stop, Pause and Retire; verifies termination and admin authority; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
-  server -->|reads and saves opt-in, metadata, receipts, memory changes, account choices, pauses, retirements, paused ownership changes, routine sessions, inputs, cancellations and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, routine sessions, inputs, cancellations and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
@@ -504,6 +504,8 @@ night. It shows the next 02:00 UTC boundary for waiting facts.
    Acceptance finds account records in the member table and checks their events.
    It reads newer events too, so delayed background work cannot hide an active account.
    It records the signed-in account and keeps concurrent invitations from admitting it twice.
+   If another request accepts the same invitation first, the server reads that saved join
+   and returns its result to a matching retry. A different command receives a refusal.
    If an admin renews the invitation during acceptance, the person must accept the
    renewed invitation. The old invitation cannot grant its earlier role.
 4. **A person chats with an assistant.** The server sends the turn to that person's

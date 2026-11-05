@@ -8,6 +8,7 @@ import { tokenIssuer } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { until } from '@opencrane/authz/testing';
 import { event } from '@opencrane/event-store/testing';
+import { isEventStoreUnavailable } from '@opencrane/event-store';
 import { foldRoutine, type EventEnvelope } from '@opencrane/events';
 import { BudgetActor, history, rootTotals } from '@opencrane/models';
 import { conversationKeys, ProjectionRunner, routines } from '@opencrane/projections';
@@ -269,6 +270,17 @@ async function dispatch(options: Options = { enabled: true }, continuation = fal
   }
   return progress;
 }
+async function projectionReaderReady() {
+  try {
+    await nats.reader.head();
+    return true;
+  } catch (error) {
+    if (isEventStoreUnavailable(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
 async function runState() {
   const rows = await history(nats.store, 'routine-orders', 'test');
   let state;
@@ -307,6 +319,8 @@ async function reachesNativeThread() {
   await waitForDuplicateWindow(nats);
   await nats.stop();
   await nats.restart();
+  // Wait for the separate projection connection before reading through it again.
+  await until(projectionReaderReady);
   await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
   expect(await assertSingleRun()).toEqual(original);
   expect(preparedComputer.executedThreads).toEqual(['native-1']);
@@ -327,6 +341,8 @@ async function recoversLostReply() {
   await waitForDuplicateWindow(nats);
   await nats.stop();
   await nats.restart();
+  // Wait for the separate projection connection before reading through it again.
+  await until(projectionReaderReady);
   expect(await dispatch()).toMatchObject({ examined: 1 });
   await until(preparedComputer.executed);
   expect(await assertSingleRun()).toEqual(original);

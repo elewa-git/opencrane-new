@@ -1288,6 +1288,18 @@ are refused. Reuse the same command id and arguments after an ambiguous 503.
 Acceptance reads member history and makes at most one conditional append to that
 member's stream. It never writes PostgreSQL, OpenFGA or a command ledger. The
 returned sequence lets a caller wait for a listener's projection checkpoint.
+If the member stream changes during the final access check, acceptance reads it again
+for both identity-bound and email invitations. A saved matching command returns
+`already_joined`; another command returns `invitation_not_pending`. A changed inviter
+still causes `inviter_authority_ended` before this recovery. No second join is saved.
+`test/member-joined.test.ts` holds two accepts at this check and saves one join
+before the other reads the changed member stream.
+
+`test/routine-handoff.test.ts` uses separate NATS connections for commands and
+projection reads. After its NATS restart, it waits until the projection connection
+can read the saved stream before dispatching again. The lost-reply case still checks
+the original occurrence, identifiers and start deadline, one send and one saved run.
+[Own load checks](../../docs/process/evidence/ci-flakes-29.md).
 See the [invitation contract](../../docs/architecture/events.md#organisation-members-and-teams)
 for identity/expiry requirements, retries and the missing bootstrap policy.
 

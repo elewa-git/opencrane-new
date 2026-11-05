@@ -213,6 +213,7 @@ function racingStore(): JoinStore {
       memberHeadReads += 1;
       if (memberHeadReads === 2) bothAccessChecks.resolve();
       await bothAccessChecks.promise;
+      // Save the first join before the other request checks the changed member stream.
       if (!firstMemberHeadReturned) {
         firstMemberHeadReturned = true;
       } else {
@@ -223,7 +224,11 @@ function racingStore(): JoinStore {
   }
   async function append(command: Parameters<JoinStore['append']>[0]) {
     const result = await nats.store.append(command);
-    if (command.event.type === 'member.joined') savedJoin.resolve();
+    const event = command.event;
+    if (typeof event === 'object' && event !== null && 'type' in event &&
+        event.type === 'member.joined') {
+      savedJoin.resolve();
+    }
     return result;
   }
   return {
