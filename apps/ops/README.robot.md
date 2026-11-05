@@ -1103,3 +1103,11 @@ Replay and the read-only scan append no events and call no execution service.
 `test/routine-dispatch.test.ts` adds real OpenFGA and checked writes, racing scans,
 restart/dedupe recovery, changed access, lease loss, shutdown and page-budget checks.
 Both paths keep execution unavailable. The read-only scan has no IAM port.
+
+### Internal routine delivery callback
+
+`dispatchRoutineCandidates` accepts an optional fourth callback for confirmed due receipts.
+It passes the original leadership signal/check and awaits fully drained delivery.
+Unknown delivery refuses progress; a long wake cannot admit another candidate after nine seconds.
+The existing composition switch stays default-off. No production callback is registered.
+See [the contract and tests](../../docs/process/p4-24-pr10g/README.robot.md).

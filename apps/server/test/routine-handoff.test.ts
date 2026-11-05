@@ -129,7 +129,6 @@ async function startComputer() {
   const executedThreads: string[] = [];
   const frames: Record<string, unknown>[] = [];
   let nativeStarts = 0;
-  let closedSessions = 0;
   function grant() {
     return Promise.resolve();
   }
@@ -140,7 +139,6 @@ async function startComputer() {
     const lifetime = Promise.withResolvers<void>();
     let threadId: string | undefined;
     function close() {
-      closedSessions++;
       lifetime.resolve();
     }
     function rpc(method: string, params: Record<string, unknown>) {
@@ -208,9 +206,6 @@ async function startComputer() {
   return { link, wake, close, executed, executedThreads, frames, send: track,
     get nativeStarts() {
       return nativeStarts;
-    },
-    get closedSessions() {
-      return closedSessions;
     } };
 }
 async function cleanup() {
@@ -247,7 +242,12 @@ async function dispatch(options: Options = { enabled: true }, continuation = fal
     const input = { routineId: due.routineId, occurrenceId: due.occurrenceId };
     const invocation = createRoutineComposition(options, nats.store, keys, worker, input,
       actor, due.turnId);
-    return invocation.send(wake);
+    const result = await invocation.send(wake);
+    if (result.status === 'sent') {
+      await until(preparedComputer.executed);
+      await preparedComputer.link.settled();
+    }
+    return result;
   };
   async function work(lease: Lease) {
     leaseSignal = lease.signal;
@@ -267,7 +267,10 @@ async function runState() {
   for (const row of rows) {
     state = foldRoutine(state, row.event);
   }
-  return state!;
+  if (!state) {
+    throw new Error('Fixture routine unavailable');
+  }
+  return state;
 }
 async function assertSingleRun() {
   const run = (await runState()).activeRun!;
@@ -285,7 +288,7 @@ async function assertSingleRun() {
     expect(counts.get(type)).toBe(1);
   }
   expect(actor.state.roots[0]).toMatchObject({ payingGroupId: 'sales', allowanceCents: 1000 });
-  expect(rootTotals(actor.state, run.rootId)).toEqual({
+  expect(rootTotals(actor.state, actor.state.roots[0]!.rootId)).toEqual({
     settledCents: 0, heldCents: 0, availableCents: 1000 });
   return run;
 }
@@ -330,7 +333,8 @@ async function disabled(options: Options) {
   expect(actor.state.roots).toEqual([]);
   expect(preparedComputer.frames).toEqual([]);
 }
-it.each([{}, { enabled: true, replay: true }])('keeps execution disabled: %j', disabled);
+const disabledOptions = [{}, { enabled: true, replay: true }];
+it.each(disabledOptions)('keeps execution disabled: %j', disabled);
 async function fourteenSecondWake() {
   const created = routine('routine.created');
   const other = { ...created, id: 'second', commandId: 'second', subject: 'routine-second',
@@ -347,7 +351,8 @@ async function fourteenSecondWake() {
     return preparedComputer.wake(assistantId);
   }
   wake = delayed;
-  await dispatch({ enabled: true }, true);
+  const enabled = { enabled: true };
+  await dispatch(enabled, true);
   await until(preparedComputer.executed);
   await assertSingleRun();
   expect(await nats.store.head('routine-second')).toBeGreaterThan(0);
@@ -376,10 +381,7 @@ async function cancelsWake(shutdown: boolean) {
     if (shutdown) {
       stop.abort();
     } else {
-      await storage.db.query(`SELECT pg_terminate_backend(pid) FROM pg_locks
-        WHERE locktype = 'advisory' AND granted AND
-        classid = (hashtextextended('opencrane:projection:routine-leader:test', 0) >> 32)::int
-        AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`);
+      await terminateLease();
     }
     function cancelled() {
       expect(leaseSignal.aborted).toBe(true);
@@ -395,3 +397,62 @@ async function cancelsWake(shutdown: boolean) {
 }
 it.each([false, true])('drains cancelled wake before releasing leadership, shutdown=%s',
   cancelsWake);
+async function terminateLease() {
+  await storage.db.query(`SELECT pg_terminate_backend(pid) FROM pg_locks
+    WHERE locktype = 'advisory' AND granted AND
+    classid = (hashtextextended('opencrane:projection:routine-leader:test', 0) >> 32)::int
+    AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`);
+}
+async function losesLeadership(stage: string) {
+  const append = nats.store.append.bind(nats.store);
+  let reached = false;
+  async function interrupt(...args: Parameters<typeof append>) {
+    if (proposedEvent.parse(args[0].event).type === stage) {
+      reached = true;
+      await terminateLease();
+    }
+    return append(...args);
+  }
+  const fault = vi.spyOn(nats.store, 'append');
+  fault.mockImplementation(interrupt);
+  await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  expect(reached).toBe(true);
+  expect(preparedComputer.executedThreads).toEqual([]);
+  expect((await runState()).activation).toBeNull();
+}
+it.each(['conversation.created', 'routine.run_activation_admitted'])(
+  'refuses an old worker when its leadership session ends before %s', losesLeadership);
+async function refusesAfterWake(kind: string) {
+  async function changed(assistantId: string) {
+    if (kind === 'expired') {
+      now += 60_001;
+    } else if (kind === 'removed') {
+      const data = { memberId: 'alice', removedBy: 'admin' };
+      const removed = record('removed', 'member-alice', 'member.removed', data);
+      await nats.seed([removed]);
+    } else {
+      await nats.seed([routine(`routine.${kind}`)]);
+    }
+    return preparedComputer.wake(assistantId);
+  }
+  wake = changed;
+  await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  expect(preparedComputer.executedThreads).toEqual([]);
+  expect(actor.state.roots).toEqual([]);
+}
+it.each(['expired', 'removed', 'paused', 'retired'])(
+  'refuses %s work after wake without claiming completed progress', refusesAfterWake);
+async function ignoresNonDue(kind: string) {
+  if (kind === 'future') {
+    now -= 1;
+  } else if (kind === 'missed') {
+    now += 60_001;
+  } else {
+    await nats.seed([routine('routine.paused')]);
+  }
+  wake = vi.fn(forbidden);
+  expect(await dispatch()).toMatchObject({ examined: 1 });
+  expect(wake).not.toHaveBeenCalled();
+  expect((await runState()).activeRun).toBeNull();
+}
+it.each(['future', 'missed', 'inactive'])('does not hand off a %s candidate', ignoresNonDue);
