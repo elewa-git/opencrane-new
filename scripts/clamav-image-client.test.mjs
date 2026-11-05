@@ -274,7 +274,8 @@ async function changedDuringTransfer(kind) {
 test.each(['bytes', 'binding'])('refuses changed %s while awaiting', changedDuringTransfer);
 async function expiryCap(kind) {
   const now = Math.floor(Date.now() / 1000) * 1000 + 500;
-  vi.spyOn(Date, 'now').mockReturnValue(now);
+  const clockSpy = vi.spyOn(Date, 'now');
+  clockSpy.mockReturnValue(now);
   function alter(result) {
     const now = Date.now();
     let expires = now + 119500;
@@ -294,7 +295,8 @@ async function expiryCap(kind) {
       }
       expires = now + 2000;
     } else if (kind === 'transfer') {
-      vi.spyOn(Date, 'now').mockReturnValue(now + 11000);
+      const transferClockSpy = vi.spyOn(Date, 'now');
+      transferClockSpy.mockReturnValue(now + 11000);
     }
     if (kind !== 'transfer') {
       result.expiresAt = new Date(expires).toISOString();
@@ -309,11 +311,14 @@ async function useAgain(kind) {
   const validate = await scanImagePart(settings, bytes, binding);
   const now = Date.now();
   if (kind === 'wall') {
-    vi.spyOn(Date, 'now').mockReturnValue(now + 11000);
+    const wallClockSpy = vi.spyOn(Date, 'now');
+    wallClockSpy.mockReturnValue(now + 11000);
   } else if (kind === 'backwards') {
-    vi.spyOn(Date, 'now').mockReturnValue(now - 60000);
+    const backwardsClockSpy = vi.spyOn(Date, 'now');
+    backwardsClockSpy.mockReturnValue(now - 60000);
   } else if (kind === 'monotonic') {
-    vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 11000);
+    const monotonicClockSpy = vi.spyOn(performance, 'now');
+    monotonicClockSpy.mockReturnValue(performance.now() + 11000);
   }
   function use() {
     validate(kind === 'bytes' ? Buffer.from('other part') : bytes, binding);
