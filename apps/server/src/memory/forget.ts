@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { authorityFence, readActiveMember, memoryReferences } from '@opencrane/models';
 import { memoryErasureHistory, memoryIdentity, memoryKeys } from '@opencrane/projections';
 import { memoryForgottenEventSchema, memoryCleanupRecordedEventSchema,
-  memoryValueEventSchema, memoryCorrectedEventSchema } from '@opencrane/events';
+  memoryValueEventSchema, memoryCorrectedEventSchema, memoryWrittenEventSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { memoryAccessChecks, resolveScope, scopeAccess, requireForgetAccess, MemoryRefused,
   type MemoryOptions, type Scope } from './access.ts';
@@ -302,6 +302,26 @@ export async function readAgentChange(options: MemoryOptions, requester: string,
   }
   const state = await commandHistory(options, scope.scopeId, requester, commandId,
     performance.now() + 10_000, [], 'agent');
+  if (state.original?.event.type === 'memory.written') {
+    const saved = memoryWrittenEventSchema.parse(state.original.event);
+    const data = saved.data;
+    if (!('schemaVersion' in data)) {
+      throw new MemoryRefused();
+    }
+    const receipt = { outcome: 'saved', changeId: saved.id, memoryId: data.memoryId,
+      revision: data.revision, scopeId: data.scopeId,
+      audience: { kind: 'person', ownerId: requester }, savedAt: saved.time };
+    if (!options.keyDirectory) {
+      throw new MemoryRefused();
+    }
+    const keys = memoryKeys(options.keyDirectory);
+    const references = memoryReferences(state.rows, options.silo, scope.scopeId, keys);
+    const contentStatus = references.current(data);
+    if (contentStatus !== 'current') {
+      return { ...receipt, contentStatus };
+    }
+    return receipt;
+  }
   if (state.original?.event.type !== 'memory.corrected' &&
     state.original?.event.type !== 'memory.forgotten') {
     return { outcome: 'unknown' };

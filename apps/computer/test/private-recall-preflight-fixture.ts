@@ -102,14 +102,14 @@ function mcpSender(origin: string) {
   return send;
 }
 
-type NativeRecall = (args: object, headers: Record<string, string>, callId: string)
+type NativeMemoryCall = (name: string, args: object, headers: Record<string, string>, callId: string)
   => Promise<Record<string, unknown>>;
 
-function createDiscoveryControls() {
+function createDiscoveryControls(remember: boolean) {
   const received: string[] = [];
   const resume = Promise.withResolvers<void>();
-  const calls = new Map<string, NativeRecall>();
-  return { received, resume, calls, holdDiscovery: false, loseReload: false };
+  const calls = new Map<string, NativeMemoryCall>();
+  return { received, resume, calls, remember, holdDiscovery: false, loseReload: false };
 }
 
 type DiscoveryControls = ReturnType<typeof createDiscoveryControls>;
@@ -142,15 +142,16 @@ function handleNativeProtocol(
         endpoint = String(record(server)['url']);
         expect(await send(endpoint, caller, 'server/discover')).toHaveProperty('error');
       }
-      async function recall(args: object, headers: Record<string, string>, callId: string) {
+      async function callMemory(name: string, args: object,
+        headers: Record<string, string>, callId: string) {
         const metadata = { threadId: thread.id, callId,
           'io.modelcontextprotocol/clientCapabilities': {},
           'io.modelcontextprotocol/protocolVersion': '2026-07-28' };
-        const params = { name: 'recall', arguments: args, _meta: metadata };
-        const callHeaders = { ...headers, 'mcp-name': 'recall' };
+        const params = { name, arguments: args, _meta: metadata };
+        const callHeaders = { ...headers, 'mcp-name': name };
         return send(endpoint, caller, 'tools/call', params, callHeaders);
       }
-      discovery.calls.set(thread.id, recall);
+      discovery.calls.set(thread.id, callMemory);
       result = { thread };
     }
     if (method === 'config/mcpServer/reload' && discovery.loseReload) {
@@ -168,7 +169,12 @@ function handleNativeProtocol(
       result = await send(endpoint, caller);
       const offered = record(record(result)['result']);
       const expected: unknown = JSON.parse(privateToolOffer('recall')[0]!.definitions[0]!);
-      expect(offered['tools']).toEqual([expected]);
+      const expectedTools = [expected];
+      if (discovery.remember) {
+        const definition: unknown = JSON.parse(privateToolOffer('remember')[0]!.definitions[0]!);
+        expectedTools.push(definition);
+      }
+      expect(offered['tools']).toEqual(expectedTools);
     }
     if (method === 'thread/loaded/list') {
       result = { data: [] };
@@ -340,14 +346,14 @@ function createCleanup(
 }
 
 export async function preflightFixture(gateway = 'http://127.0.0.1:1',
-  runtime?: ProxyFixture) {
+  runtime?: ProxyFixture, remember = false) {
   const directory = mkdtempSync(`${tmpdir()}/recall-preflight-`);
   const socketPath = `${directory}/native.sock`;
   const launchKey = 'a'.repeat(64);
   const proxy = runtime ?? createProxyFixture(gateway);
   const endpoint = await startMcpListener(proxy);
   const { send } = endpoint;
-  const discovery = createDiscoveryControls();
+  const discovery = createDiscoveryControls(remember);
   const server = await startNativeSocket(socketPath, launchKey, send, discovery);
   const replacement = await redirectPrivateSocket(socketPath);
   const sessions = createSessions(proxy, launchKey);
@@ -369,15 +375,19 @@ export async function preflightFixture(gateway = 'http://127.0.0.1:1',
     const opened = await sessions.open(launch.turnId, launch.conversation);
     return opened.session;
   }
-  function recall(thread: string, args: object, headers: Record<string, string> = {},
+  function call(thread: string, name: string, args: object, headers: Record<string, string> = {},
     callId: string = randomUUID()) {
-    const call = discovery.calls.get(thread);
-    if (!call) {
+    const nativeCall = discovery.calls.get(thread);
+    if (!nativeCall) {
       throw new Error('Native thread has not started');
     }
-    return call(args, headers, callId);
+    return nativeCall(name, args, headers, callId);
   }
-  return { recall, open: sessions.open, openCurrent, prepare, received: discovery.received,
+  function recall(thread: string, args: object, headers: Record<string, string> = {},
+    callId: string = randomUUID()) {
+    return call(thread, 'recall', args, headers, callId);
+  }
+  return { call, recall, open: sessions.open, openCurrent, prepare, received: discovery.received,
     callers: proxy.callers, loads, driver, mcp: proxy.mcp, close, pauseDiscovery,
     resume: discovery.resume.resolve, dropReloadReply };
 }

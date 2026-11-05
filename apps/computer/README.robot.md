@@ -1840,3 +1840,6 @@ Installation checks the private caller's generation, input generation and turn i
 removal prevents later installation for that turn. Catalogue renewal uses the real expiry
 timer. The fixture observes the real catalogue size without replacing its behaviour.
 The scripted native peer and synthetic deployment observations remain test inputs only.
+
+The [Remember contract](../../docs/process/p4-15-pr4n/README.robot.md) extends the admitted
+private thread to reviewed Recall and Remember. Correct and Forget remain held.

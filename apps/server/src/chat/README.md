@@ -12,9 +12,9 @@ checks. It refuses invalidated or ended memory, changed loaded facts and a calle
 closed while those checks waited. It checks saved references without decrypting facts.
 For an offered recall catalogue, the bridge waits for discovery before releasing private
 input or a pass. It repeats the checks before and after signing that pass. A lost reply
-ends the attempt without resending it. Qualified personal turns offer only the reviewed
-recall definition. Recall returns stored facts through the gateway after saving their
-loaded references. Deployment checks remain unfinished.
+ends the attempt without resending it. Qualified personal turns can offer reviewed Recall
+and Remember. The [chat contracts](README.robot.md) record the limits. Recall returns
+stored facts through the gateway after saving their loaded references. Deployment checks remain unfinished.
 
 This folder handles conversations between people and with assistants. It saves messages, sends assistant work to the right computer and returns replies and live updates while checking who may read each chat.
 

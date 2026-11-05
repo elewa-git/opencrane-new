@@ -12,7 +12,7 @@ import { fixture as bridgeFixture } from '../../../computer/test/bridge-gate-fix
 import { preflightFixture } from '../../../computer/test/private-recall-preflight-fixture.ts';
 import { connectBridge } from '../../src/chat/bridge.ts';
 import { assistantSnapshot, processConversation } from '../../src/chat/bridge-conversation.ts';
-import { recallTool, registerMemoryMcp } from '../../src/memory/mcp.ts';
+import { recallTool, rememberTool, correctTool, forgetTool, registerMemoryMcp } from '../../src/memory/mcp.ts';
 import Fastify from 'fastify';
 import { initialQualificationFixture } from './initial-qualification.ts';
 import { testAuthConfig } from './test-auth-config.ts';
@@ -22,7 +22,7 @@ export const scopeId = memoryScopeId('test', 'person', 'alice');
 export const factText = 'My favourite walking destination is the winter garden.';
 export const threadId = 'returned-native-1';
 
-export async function recallBackend() {
+export async function recallBackend(remember = false) {
   const setup = await fixture(2000, 20000, false, 'gpt-6-luna', false, 'manual',
     'sales', 'restricted');
   async function closeServices() {
@@ -36,7 +36,7 @@ export async function recallBackend() {
   const projectionOptions = { decrypt: keys.decrypt };
   const projection = memoryProjection(projectionOptions);
   await setup.runner.initialise(projection);
-  await governRecall(setup);
+  await governRecall(setup, remember);
   async function write(memoryId: string, text = factText, pinned = false) {
     const identity = { silo: 'test', scopeId, scopeKind: 'person' as const,
       ownerId: 'alice', memoryId, revision: 1 };
@@ -55,12 +55,12 @@ export async function recallBackend() {
     binding: setup.binding, feed: { memberId }, identity: setup.identity,
     dispatchGeneration: 'memory-instance', keyDirectory };
   const backend = await startBackend(setup, memory);
-  const computer = await startComputer(setup, memory);
+  const computer = await startComputer(setup, memory, remember);
   async function admit(conversationId = 'chat', nativeThread = threadId) {
     return prepareChat(setup, memory, computer, conversationId, nativeThread);
   }
   const first = await admit();
-  return { setup, ...computer, ...backend, ...first, admit, write, projection };
+  return { setup, ...computer, ...backend, ...first, admit, write, projection, memory };
 }
 
 type MemoryOptions = NonNullable<Parameters<typeof registerMemoryMcp>[2]>;
@@ -117,14 +117,14 @@ function observeDeliveries(setup: Setup) {
   return { deliveries, requests, wire, observeReply, observeRequest };
 }
 
-async function startComputer(setup: Setup, memory: MemoryOptions) {
+async function startComputer(setup: Setup, memory: MemoryOptions, remember: boolean) {
   const computer = await bridgeFixture(false);
   onTestFinished(computer.close);
   computer.socket.terminate();
   await once(computer.socket, 'close');
   const gateway = `http://127.0.0.1:${setup.options.port}`;
   const runtime = await recallProxy(gateway, grantCredential);
-  const native = await preflightFixture(gateway, runtime);
+  const native = await preflightFixture(gateway, runtime, remember);
   onTestFinished(native.close);
   computer.driver.privateSession = native.openCurrent;
   Object.assign(computer.driver, native.driver);
@@ -153,7 +153,7 @@ async function startComputer(setup: Setup, memory: MemoryOptions) {
     setup.gatewayChild()?.kill('SIGKILL');
   }
   onTestFinished(closeBridge);
-  return { native, link, grant };
+  return { native, link, grant, deployment };
 }
 
 function isTurnStart(method: string) {
@@ -200,24 +200,32 @@ async function prepareChat(setup: Setup, memory: MemoryOptions,
   return { start, turnId };
 }
 
-async function governRecall(setup: Setup) {
+async function governRecall(setup: Setup, remember: boolean) {
   const registered = { serverId: 'memory', kind: 'hosted', registeredBy: 'alice',
     locator: `registry.example.test/memory@sha256:${'a'.repeat(64)}` };
   await setup.append('mcp-memory', 'mcp.server_registered', registered);
-  const definition = JSON.stringify(recallTool);
-  const metadata = { name: 'recall', reviewed: true, costCents: 0 };
-  const tool = { ...toolEvidence(metadata), definition, revision: losslessJson(definition).digest };
-  const catalogue = catalogueEvidence([tool]);
+  const definitions = remember ? [recallTool, rememberTool, correctTool, forgetTool] : [recallTool];
+  function evidence(definition: typeof definitions[number]) {
+    const encoded = JSON.stringify(definition);
+    const metadata = { name: definition.name, reviewed: true, costCents: 0 };
+    return { ...toolEvidence(metadata), definition: encoded,
+      revision: losslessJson(encoded).digest };
+  }
+  const tools = definitions.map(evidence);
+  const catalogue = catalogueEvidence(tools);
   const discovered = { serverId: 'memory', connectionId: 'server', accountMode: 'none',
     serverInfo: { name: 'OpenCrane memory', version: '1' }, ...catalogue };
   await setup.append('mcp-memory', 'mcp.server_discovered', discovered);
   await reviewCatalogue(setup, 'memory');
-  const mode = { serverId: 'memory', connectionId: 'server', toolName: 'recall',
-    toolRevision: tool.revision, mode: 'allow', setBy: 'alice' };
-  await setup.append('mcp-memory', 'mcp.tool_mode_set', mode);
+  for (const tool of tools) {
+    const mode = { serverId: 'memory', connectionId: 'server', toolName: tool.name,
+      toolRevision: tool.revision, mode: 'allow', setBy: 'alice' };
+    await setup.append('mcp-memory', 'mcp.tool_mode_set', mode);
+  }
   const published = { serverId: 'memory', publishedBy: 'alice' };
   await setup.append('mcp-memory', 'mcp.server_published', published);
-  const resources = [['memory_read', scopeId], ['mcp_server', 'memory']] as const;
+  const resources = [['memory_read', scopeId], ['memory_write', scopeId],
+    ['mcp_server', 'memory']] as const;
   const grantees = [['member', 'alice'], ['assistant', 'assistant']] as const;
   for (const [resourceType, resourceId] of resources) {
     for (const [granteeKind, granteeId] of grantees) {
