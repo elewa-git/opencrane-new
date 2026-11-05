@@ -176,6 +176,18 @@ function consumedOccurrences(rows: StoredEvent[], input: Input) {
   }
   return consumed;
 }
+function gapProgress(input: Input, skipped: Occurrence | undefined,
+  cursor: ReturnType<typeof slot>, next: Occurrence) {
+  if (!skipped) {
+    throw new MissedRefused();
+  }
+  // Record the missing local time without inventing a real missed occurrence.
+  return { version: 1 as const, routineId: input.routineId,
+    definitionRevision: input.definitionRevision, scheduleRevision: input.scheduleRevision,
+    controlRevision: input.controlRevision, occurrenceId: skipped.occurrenceId,
+    localDate: skipped.localDate, localTime: skipped.localTime, zone: skipped.zone,
+    reason: 'dst' as const, cursor, next: slot(next) };
+}
 function missedData(state: RoutineState | undefined, input: Input,
   rows: StoredEvent[], now: number) {
   const start = rangeStart(state, input, now);
@@ -186,6 +198,7 @@ function missedData(state: RoutineState | undefined, input: Input,
   let lastLocalDate = '';
   let count = 0;
   let cursor = saved.cursor;
+  let skipped: Occurrence | undefined;
   // Limit calendar work before the access check; later calls use the saved next slot.
   for (let index = 0; index < 100; index++) {
     if (now - Date.parse(occurrence.checkAt) <= 60_000) {
@@ -199,12 +212,15 @@ function missedData(state: RoutineState | undefined, input: Input,
       count++;
       cursor = slot(occurrence);
     }
+    if (occurrence.status === 'dst_skip' && !consumed.has(occurrence.occurrenceId)) {
+      skipped = occurrence;
+    }
     // Advance by local date so a whole-day gap cannot discard its next valid instant.
     const following = { ...calculation, afterLocalDate: occurrence.localDate };
     occurrence = previewRoutineOccurrences(following)[0]!;
   }
   if (count === 0) {
-    throw new MissedRefused();
+    return gapProgress(input, skipped, cursor, occurrence);
   }
   return { version: 1 as const, routineId: input.routineId,
     definitionRevision: input.definitionRevision, scheduleRevision: input.scheduleRevision,
@@ -216,8 +232,12 @@ function envelope(silo: string, input: Input, data: Missed, time: string): Event
   const hash = createHash('sha256');
   hash.update(identity);
   const id = `routine-missed-${hash.digest('hex')}`;
+  let type = 'routine.occurrences_missed';
+  if (data.reason === 'dst') {
+    type = 'routine.occurrence_skipped';
+  }
   return { id, commandId: id, silo, source: 'opencrane-server',
-    type: 'routine.occurrences_missed', subject: `routine-${data.routineId}`, time,
+    type, subject: `routine-${data.routineId}`, time,
     principal: { kind: 'system', id: 'opencrane-server' }, correlation: {}, data };
 }
 function savedReceipt(row: StoredEvent, state: RoutineState | undefined,
@@ -236,7 +256,9 @@ function previousReceipt(rows: StoredEvent[], input: Input) {
   let position = 0;
   const preceding: StoredEvent[] = [];
   for (const row of rows) {
-    if (position === input.expectedPosition && row.event.type === 'routine.occurrences_missed') {
+    const progress = row.event.type === 'routine.occurrences_missed' ||
+      row.event.type === 'routine.occurrence_skipped';
+    if (position === input.expectedPosition && progress) {
       return savedReceipt(row, state, preceding, input);
     }
     state = foldRoutineHistory(state, row.event, completedRuns);

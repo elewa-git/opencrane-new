@@ -1,1 +1,2 @@
 - Daily routines can record checked downtime ranges without starting old work. Long outages advance in bounded steps, with calendar gaps, retries and occupied runs preserved. Automatic scheduling remains disconnected.
+- Recovery after a missing local time records the skip once and keeps the next valid run available, even when no real slot was missed.

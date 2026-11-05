@@ -273,8 +273,16 @@ async function recovery() {
   const restarted = await createEventStore(connection);
   now += 86_400_000;
   expect(await recordRoutineMissed(restarted, worker(), input)).toEqual(first);
-  const changes = [{ definitionRevision: 2 }, { scheduleRevision: 2 }, { controlRevision: 2 },
-    { localDate: '2027-04-04' }, { expectedPosition: first.position }, { firstLocalDate: '2027-03-29' }, { lastLocalDate: '2027-03-31' }, { count: 99 }];
+  const changes = [
+    { definitionRevision: 2 },
+    { scheduleRevision: 2 },
+    { controlRevision: 2 },
+    { localDate: '2027-04-04' },
+    { expectedPosition: first.position },
+    { firstLocalDate: '2027-03-29' },
+    { lastLocalDate: '2027-03-31' },
+    { count: 99 },
+  ];
   for (const change of changes) {
     const request = { ...input, ...change };
     await expect(recordRoutineMissed(restarted, worker(), request)).rejects.toThrow();
@@ -319,10 +327,14 @@ async function access(kind: string, phase: string) {
     expect(await nats.store.head('routine-orders')).toBe(before + 1);
   }
 }
-it.each(['before', 'retry', 'after'])('refuses owner removal %s', access.bind(null, 'member'));
-it.each(['before', 'retry', 'after'])('refuses lost leadership %s', access.bind(null, 'worker'));
-it.each(['before', 'retry', 'after'])('refuses cancellation %s', access.bind(null, 'signal'));
-it.each(['before', 'retry', 'after'])('refuses missing receipts %s', access.bind(null, 'receipt'));
+const ownerRemoval = access.bind(null, 'member');
+const lostLeadership = access.bind(null, 'worker');
+const cancellationAccess = access.bind(null, 'signal');
+const missingReceipts = access.bind(null, 'receipt');
+it.each(['before', 'retry', 'after'])('refuses owner removal %s', ownerRemoval);
+it.each(['before', 'retry', 'after'])('refuses lost leadership %s', lostLeadership);
+it.each(['before', 'retry', 'after'])('refuses cancellation %s', cancellationAccess);
+it.each(['before', 'retry', 'after'])('refuses missing receipts %s', missingReceipts);
 async function refused(kind: string) {
   if (kind === 'history') {
     const read = vi.spyOn(nats.store, 'readStream');
