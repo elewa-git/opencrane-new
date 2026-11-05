@@ -211,7 +211,9 @@ function racingStore(): JoinStore {
   async function head(...args: Parameters<JoinStore['head']>) {
     if (args[0] === 'member-alice') {
       memberHeadReads += 1;
-      if (memberHeadReads === 2) bothAccessChecks.resolve();
+      if (memberHeadReads === 2) {
+        bothAccessChecks.resolve();
+      }
       await bothAccessChecks.promise;
       // Save the first join before the other request checks the changed member stream.
       if (!firstMemberHeadReturned) {
