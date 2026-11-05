@@ -9,6 +9,8 @@ import { losslessJson } from '@opencrane/events/lossless-json';
 import { envelope, MemberAccessRefused, privateCallers } from '@opencrane/models';
 import { memoryScopeId } from '@opencrane/projections';
 import { privateToolOffer } from './support/private-catalogue.ts';
+import * as preparation from '../src/chat/personal-memory-tools.ts';
+import { initialQualificationFixture } from './support/initial-qualification.ts';
 import { preparePersonalMemoryTools } from '../src/chat/personal-memory-tools.ts';
 import { checkPrivateTurnTools, type TurnToolServerState } from '../src/chat/turn-tools.ts';
 import { correctTool, forgetTool, recallTool, rememberTool } from '../src/memory/mcp.ts';
@@ -21,6 +23,10 @@ async function processModule() {
   const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process');
   return { ...actual, spawn: vi.fn(actual.spawn) };
 }
+vi.mock('node:fs', async function filesystem(importOriginal) {
+  const original = await importOriginal<typeof import('node:fs')>();
+  return { ...original };
+});
 vi.mock('node:crypto', cryptoModule);
 vi.mock('node:child_process', processModule);
 
@@ -41,7 +47,7 @@ function dropped() { /* No proxy runs in this preparation fixture. */ }
 
 type Operation = typeof operations[number] | 'all';
 
-async function fixture(operation: Operation = 'recall', role = 'owner') {
+async function fixture(operation: Operation = 'recall', role = 'owner', deploymentReads = false) {
   const nats = await natsFixture();
   onTestFinished(nats.close);
   const binding = await createStore(fga.apiUrl, 'test');
@@ -115,7 +121,7 @@ async function fixture(operation: Operation = 'recall', role = 'owner') {
   function noEffects() {
     expect(append).not.toHaveBeenCalled();
     expect(crypto.createDecipheriv).not.toHaveBeenCalled();
-    expect(processes.spawn).not.toHaveBeenCalled();
+    if (!deploymentReads) expect(processes.spawn).not.toHaveBeenCalled();
   }
   onTestFinished(noEffects);
   return { input, auth, check, use, realCheck, realUse, save, registration, state };
@@ -470,3 +476,122 @@ async function refusesCombinedPermission(kind: 'person' | 'assistant') {
 }
 it.each(['person', 'assistant'] as const)(
   'refuses all four tools when the %s permission callback denies access', refusesCombinedPermission);
+
+
+async function recallLoadFixture() {
+  const setup = await fixture('recall', 'owner', true);
+  await setup.save('computer-assistant', 'computer.ready', {
+    assistantId: 'assistant', computerId: 'computer', generation: 1, podUid: 'fixture',
+  }, false);
+  await setup.save('conversation-conversation', 'conversation.created', {
+    conversationId: 'conversation', mode: 'agent_session', assistantId: 'assistant',
+    createdBy: 'alice',
+  }, false);
+  const deployment = await initialQualificationFixture();
+  const pending = { type: 'recall_pending', loadId: '11111111-1111-4111-8111-111111111111',
+    silo: 'test', requesterId: 'alice', assistantId: 'assistant', computerId: 'computer',
+    conversationId: 'conversation', turnId: 'turn', threadId: 'thread', generation: 1,
+    inputGeneration: 1, expiresAt: setup.input.grant.expires };
+  return { ...setup, deployment, pending };
+}
+
+async function preparesSavedRecall() {
+  const setup = await recallLoadFixture();
+  const load = await preparation.preparePersonalRecallLoad(setup.input, setup.pending);
+  const expected = { ...setup.pending, type: 'recall_load', tools: privateToolOffer('recall') };
+  expect(load.request).toEqual(expected);
+  expect(JSON.stringify(load.request)).not.toContain(setup.input.caller);
+  expect(JSON.stringify(load.request)).not.toContain('qualification');
+  const reply = { ...setup.pending, type: 'recall_loaded' };
+  const tools = await load.complete(reply);
+  expect(tools).toEqual(privateToolOffer('recall'));
+  expect(checkPrivateTurnTools(tools, setup.input)).toBe(true);
+  await expect(load.complete(reply)).rejects.toThrow('Loaded memory unavailable');
+}
+it('prepares saved recall and accepts one exact discovery receipt without wire approval',
+  preparesSavedRecall);
+
+const changedReceipts = [
+  { loadId: '22222222-2222-4222-8222-222222222222' }, { threadId: 'other' },
+  { requesterId: 'bob' }, { conversationId: 'other' }, { turnId: 'other' },
+  { assistantId: 'other' }, { computerId: 'other' }, { silo: 'other' },
+  { generation: 2 }, { inputGeneration: 2 }, { expiresAt: 1 }, { extra: true },
+  { type: 'recall_pending' },
+];
+async function refusesDiscoveryReceipt(change: object) {
+  const setup = await recallLoadFixture();
+  const load = await preparation.preparePersonalRecallLoad(setup.input, setup.pending);
+  const reply = { ...setup.pending, type: 'recall_loaded', ...change };
+  await expect(load.complete(reply)).rejects.toThrow('Loaded memory unavailable');
+  const correct = { ...setup.pending, type: 'recall_loaded' };
+  await expect(load.complete(correct)).rejects.toThrow('Loaded memory unavailable');
+}
+it.each(changedReceipts)('consumes a refused discovery receipt without retry: %j',
+  refusesDiscoveryReceipt);
+
+const discoveryChanges = ['removal', 'demotion', 'grant', 'policy', 'qualification',
+  'replacement', 'closure', 'Stop', 'caller', 'activity'] as const;
+async function rechecksAfterDiscovery(change: typeof discoveryChanges[number]) {
+  const setup = await recallLoadFixture();
+  const load = await preparation.preparePersonalRecallLoad(setup.input, setup.pending);
+  if (change === 'removal') await removal(setup);
+  if (change === 'demotion') {
+    await setup.save('member-alice', 'member.role_changed', {
+      memberId: 'alice', previousRole: 'owner', newRole: 'member', changedBy: 'owner',
+    });
+  }
+  if (change === 'grant') {
+    await setup.save(grantSubject, 'grant.revoked', {
+      resourceType: 'mcp_server', resourceId: 'memory', granteeKind: 'assistant',
+      granteeId: 'assistant', revokedBy: 'owner',
+    }, false);
+  }
+  if (change === 'policy') setup.state.policyTools[0]!.mode = 'block';
+  if (change === 'qualification') setup.deployment.remove();
+  if (change === 'caller') setup.registration.close();
+  if (change === 'replacement') {
+    await setup.save('computer-assistant', 'computer.ready', {
+      assistantId: 'assistant', computerId: 'computer', generation: 2, podUid: 'replacement',
+    }, false);
+  }
+  if (change === 'closure') {
+    await setup.save('conversation-conversation', 'conversation.closed', {
+      conversationId: 'conversation', closedBy: 'alice',
+    }, false);
+  }
+  if (change === 'Stop') {
+    await setup.save('conversation-conversation', 'agent.turn_stop_requested', {
+      conversationId: 'conversation', turnId: 'turn', requestedBy: 'alice',
+    }, false);
+  }
+  if (change === 'activity') {
+    await setup.save('conversation-conversation', 'agent.turn_started', {
+      conversationId: 'conversation', turnId: 'neighbour', assistantId: 'assistant',
+    }, false);
+    await setup.save('conversation-conversation', 'file.uploaded', {
+      conversationId: 'conversation', fileId: 'file', uploadedBy: 'alice', name: 'safe.txt',
+      size: 1, sha256: 'a'.repeat(64), mime: 'text/plain', objectKey: 'fixture',
+    }, false);
+  }
+  const reply = { ...setup.pending, type: 'recall_loaded' };
+  if (change === 'activity') {
+    expect(await load.complete(reply)).toEqual(privateToolOffer('recall'));
+  } else if (change === 'removal') {
+    setup.input.readServer.mockRejectedValue(new Error('private-dependency-error'));
+    await expect(load.complete(reply)).rejects.toThrow(MemberAccessRefused);
+  } else {
+    await expect(load.complete(reply)).rejects.toThrow('Loaded memory unavailable');
+  }
+}
+it.each(discoveryChanges)('rechecks saved access and identity after discovery: %s',
+  rechecksAfterDiscovery);
+
+async function refusesInitialReceipt(change: object) {
+  const setup = await recallLoadFixture();
+  const pending = { ...setup.pending, ...change };
+  await expect(preparation.preparePersonalRecallLoad(setup.input, pending))
+    .rejects.toThrow('Loaded memory unavailable');
+  expect(setup.input.readServer).not.toHaveBeenCalled();
+}
+it.each(changedReceipts.slice(0, -1))('refuses changed pending identity before discovery: %j',
+  refusesInitialReceipt);
