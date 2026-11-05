@@ -19,6 +19,16 @@ package build. The runtime cleanup also removes the nested `fast-uri/test` and
 checks the packaged source folders for tests, and runs both memory checks against
 disposable NATS. It does not qualify live memory delivery or enable admission.
 
+The `runner-protection` stage builds the collector's C Node-API helper with Debian
+main GCC (GPL-3.0 with the GCC runtime exception) and libc development headers
+(LGPL-2.1-or-later). Only the helper enters the runtime stage; it uses the existing
+Node API (MIT) and glibc (LGPL-2.1-or-later). Its source uses this repository's
+AGPL-3.0-or-later licence. All are OSI-approved. No npm dependency is added and no
+reviewed image digest is changed. `runner-image.test.ts` builds this same stage
+and measures real restricted containers; these fixtures do not qualify deployment.
+Knip ignores only the helper's generated `.node` import, which exists in the image
+after compilation. The source and its TypeScript callers remain checked.
+
 `chart/.helmignore` excludes `templates/README.md` so Helm does not try to render
 the guide as a Kubernetes resource. `chart-render.test.mjs` renders the real chart
 with made-up digest-pinned images and credential reference names. It checks that

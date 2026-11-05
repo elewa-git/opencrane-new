@@ -22,8 +22,8 @@ flowchart LR
   server["apps/server<br/>memory preparation"] -->|reads and rechecks results| collector
   collector -.->|checks memory, Stop and reply loss| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
-  collector -->|measures, starts checks and reads refusals| docker["Docker<br/>running image and host"]
-  docker -->|checks memory and two native processes| deployment["deployment<br/>event store and journey runner"]
+  collector -->|measures, starts checks and reads failure reasons| docker["Docker<br/>running image and host"]
+  docker -->|checks host or runner protection| deployment["deployment<br/>event store and journey runner"]
 ```
 
 ## What it is responsible for
@@ -33,7 +33,8 @@ flowchart LR
 - Measure the source revision, image, host, silo and installation before collecting results.
 - Refuse an old or used event store, changed deployment, or missing check.
 - Refuse swap, crash dumps, unsafe process limits and unreadable host settings.
-- Save host refusals with a reminder to disable swap and core dumps.
+- Allow only prerequisite results when the container protects its runner but other processes remain unchecked.
+- Save protection refusals with a fixed message naming the failed check.
 - Accept results only from processes it starts in the measured image.
 - Save its own result in a protected file and recheck the deployment whenever it is used.
 - Refuse copied, edited, stale or foreign receipts.
@@ -71,6 +72,11 @@ Tests build the package image and run all six memory checks against a disposable
 Other tests use simulated observations and disposable containers to check refusal and cleanup.
 They do not qualify a deployment or enable memory.
 
+The container alternative reads the runner's own Linux control group, which limits
+memory and swap. An image-owned helper disables dumps in that Node process and
+measures its dumpability and core limits. This path returns only NOT RUN until
+the server, bridge, supervisor, proxy and native processes have equivalent proof.
+
 ## How to run or test it
 
 From the repository root, on the deployment host:
@@ -82,7 +88,7 @@ nice -n 10 npx tsc -p scripts/private-memory-qualification/tsconfig.json
 ```
 
 The first command needs the protected deployment configuration described in the contract below.
-It prints safe measurements and results, or one fixed failure reason.
+It prints safe measurements and results, or a fixed message naming the failed protection.
 It also saves its own result in a protected file. Initial loading reads that file
 and checks the current deployment again. Recall preparation uses the same checked
 measurements to build its tool list. Callers cannot upload replacement evidence.

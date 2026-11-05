@@ -2191,9 +2191,10 @@ and rejecting. It does not stop the collector halfway through a check. The calli
 journey must await this function before removing its slot. No command, evidence
 upload or alternative target can be supplied. Errors contain only fixed text.
 When the image runner returns `host_refused`, the launcher keeps that reason and
-the collector's fixed message in the saved FAIL result. Its error names the reason
-and reminds the operator that swap and core dumps must be disabled. No raw host
-setting, path or child output is exposed. Other failures keep the generic refusal.
+the collector's fixed message and any `protectionFailure` category in the saved FAIL
+result. Its error names the failed protection, including unmeasured swap, non-zero
+core limits, a dumpable runner or an unavailable native helper. No raw host setting,
+path or child output is exposed. Other failures keep the generic refusal.
 
 ```sh
 nice -n 10 npx vitest run --config infra/dev-stack/memory-qualification.config.mjs

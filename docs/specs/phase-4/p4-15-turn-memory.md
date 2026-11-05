@@ -78,6 +78,13 @@ history or memory tools. Never upgrade a persistent memory-free thread by adding
 
 Keep all plaintext in protected, non-swappable RAM/tmpfs, including bridge, supervisor, proxy
 and server delivery buffers. Keep swap and host/guest crash dumps disabled in qualified hosts.
+The orchestrator's 5 November 2026 default also permits equivalent container protection:
+finite positive memory, memory-swap equal to memory, zero effective soft/hard core limits,
+and measured non-dumpable processes. The owner has not answered; this is not owner approval.
+The runner must prove no swap from its own cgroup and recheck after awaited work, exec or
+identity changes. Docker settings alone cannot prove this. The first implementation checks
+only the runner and returns NOT RUN; all other plaintext-bearing processes and both complete
+qualifications still need proof before journeys or admission through this alternative.
 No SOUL.md, shared prompt file, rollout, compaction, SQLite cache, tool result, report text,
 HTTP log or debug dump goes to computer disk. Text-free ids/status may use the existing journal.
 Keep shell, file, browser, code-host, external MCP, skills, plugins and native agent spawning

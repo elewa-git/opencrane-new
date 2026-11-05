@@ -21,7 +21,8 @@ function prepare(): void {
     writeFileSync(join(context, 'Dockerfile'), source);
     imageId = docker(['build', '--network=none', '-q', context]);
     containerId = docker(['run', '-d', '--init', '--network=none', '--read-only',
-      '--tmpfs', '/run', '--cpus=0.5', imageId, 'sleep', 'infinity']);
+      '--tmpfs', '/run', '--cpus=0.5', '--memory=256m', '--memory-swap=256m',
+      '--ulimit=core=0:0', imageId, 'sleep', 'infinity']);
   } finally {
     rmSync(context, { recursive: true, force: true });
   }
@@ -53,8 +54,9 @@ async function refusesRealHost(): Promise<void> {
     expect(repeated).toMatchObject({ ...request, result: 'NOT RUN', complete: false });
   } else {
     expect(direct.status).toBe(1);
-    expect(result).toEqual({ result: 'FAIL', reason: 'host_refused' });
-    const expected = { result: 'FAIL', reason: 'host_refused' };
+    const expected = { result: 'FAIL', reason: 'host_refused',
+      protectionFailure: 'helper_unavailable' };
+    expect(result).toEqual(expected);
     await expect(runInContainer(containerId, args, JSON.stringify(request))).resolves.toEqual(expected);
     await expect(runInContainer(containerId, args, JSON.stringify(request))).resolves.toEqual(expected);
   }

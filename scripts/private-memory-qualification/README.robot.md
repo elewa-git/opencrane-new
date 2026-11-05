@@ -63,10 +63,17 @@ cannot match the new challenge. It does not accept detached receipts or signatur
 
 Only validated metadata is hashed into `receiptDigests`; no memory text is hashed.
 All child output and errors stay in process memory. A strict runner response containing
-only `result: FAIL` and `reason: host_refused` stops collection. The collector returns
-and saves that reason with the fixed message: "Host safety checks failed: swap and
-core dumps must be disabled." This reports an unmet prerequisite, without claiming
-which observation failed or exposing its value. Other failures expose only
+`result: FAIL`, `reason: host_refused` and an optional `protectionFailure` stops
+collection. The collector returns and saves that category and its fixed message.
+`protection-failure.ts` owns the allowlist and messages. Container failures distinguish
+unreadable swap controls, non-zero swap, unproved memory limits or crash kernel settings,
+failed core-limit measurement, non-zero core limits, failed dumpability measurement,
+failed dump protection, a dumpable process, changed identity and an unavailable helper.
+No observed value, private path or helper error is returned. The supervisor receives
+the same allowlist from the collector and rejects unknown categories or extra fields.
+The two-field refusal remains valid for a later safe-host check that fails; its message
+remains "Host safety checks failed: swap and core dumps must be disabled."
+Other failures expose only
 `FAIL / collection_failed`. Completed collection reports measured identity, the nine checks,
 both qualifications and receipt digests. This output is not an admission token.
 The collector atomically writes its own result to
@@ -98,13 +105,14 @@ these files; no code mount, caller executable or interpreter override is needed.
 The entry accepts no arguments and at most 4,096 stdin bytes. Its strict request has
 only the measured binding, one of the eleven existing names and a UUID challenge.
 Unknown names, extra fields, malformed formats and paths refuse before observations.
-Failures contain only `result: FAIL` and `input_invalid`, `host_refused` or
-`journey_failed` as the reason. No identity, raw observation or child output is echoed.
+Failures contain `result: FAIL` and `input_invalid`, `host_refused` or
+`journey_failed` as the reason. Container protection refusals also name the fixed
+`protectionFailure` category described above. No identity, raw observation or child output is echoed.
 The native check described below starts children in the supervisor's process group.
 
 The runner exits with status 1 for a host refusal. After stopping all children and
-removing its lock, the supervisor forwards only that exact two-field refusal with
-transport status 0. This means supervision finished; the returned result is still
+removing its lock, the supervisor forwards only the strict host refusal, with an
+optional allowlisted protection category, with transport status 0. This means supervision finished; the returned result is still
 FAIL. Other non-zero exits, extra fields, malformed output and failed cleanup do
 not forward a result. The collector validates the refusal again before saving it.
 
@@ -134,6 +142,36 @@ fixtures prove refusal and cancellation only. No stack, bootstrap or model call 
 here. Kubernetes collection remains outside this part.
 
 Own checks: [host-runner receipt](../../docs/process/p4-15-pr5h/receipt.md).
+
+## Container prerequisite split
+
+P4-15 PR 5r applies the orchestrator's 5 November 2026 default, not owner approval.
+The owner has not answered. The existing safe-host path remains. The alternative
+requires a finite positive `memory.max`, `memory.swap.max=0`, no existing swap use,
+no loaded crash kernel, zero soft/hard RLIMIT_CORE and PR_GET_DUMPABLE=0 in the
+actual runner. Docker memory-swap equal to memory is only configuration; the probe
+reads the effective controls itself. Environment claims are never evidence.
+
+The probe resolves `/proc/self/cgroup` against `/proc/self/mountinfo` and checks its
+PID in that group's `cgroup.procs`. This first part supports only cgroup v2.
+Missing, unlimited, ambiguous, escaped or unreadable observations refuse, as do
+covering mounts and membership changes. The Node-API helper sets dumpability once
+in the runner and measures it on every check. It checks identity again too. An
+exec starts a new process that needs its own protection; zero core limits and
+`CoreDumping=0` cannot replace this check. No host configuration is changed.
+The runner checks again after awaited work and before returning a receipt.
+
+This bounded first part permits only NOT RUN receipts through the container path.
+It runs no native or server journey there. Equivalent measurements for every other
+plaintext-bearing process, guest kernels and both complete qualifications remain
+NOT RUN. Existing safe-host journeys retain their PARTIAL/NOT RUN results. The
+collector still binds challenges and installations, withdraws failed evidence and
+forwards only the fixed host refusal. Injected test observations cannot qualify.
+See [own checks](../../docs/process/p4-15-pr5r/receipt.md).
+
+The Linux [cgroup contract](https://docs.kernel.org/admin-guide/cgroup-v2.html)
+defines the controls. The [exec contract](https://www.man7.org/linux/man-pages/man2/execve.2.html)
+explains why dumpability must be measured again after executing a new program.
 
 ## Image-owned memory checks
 

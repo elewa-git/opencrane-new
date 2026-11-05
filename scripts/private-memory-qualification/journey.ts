@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { probeHost } from './host-probe.ts';
+import { probeContainer } from './container-probe.ts';
+import type { ProtectionFailure } from './protection-failure.ts';
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const requestSchema = z.strictObject({
@@ -12,7 +14,8 @@ const requestSchema = z.strictObject({
     'P4-14', 'P4-15']),
 });
 
-type Refusal = { result: 'FAIL'; reason: 'input_invalid' | 'host_refused' | 'journey_failed' };
+type Refusal = { result: 'FAIL'; reason: 'input_invalid' | 'host_refused' | 'journey_failed';
+  protectionFailure?: ProtectionFailure };
 
 type Request = z.infer<typeof requestSchema>;
 type Receipt = Request & { observedAt: number; result: 'NOT RUN' | 'PARTIAL'; complete: false };
@@ -27,28 +30,50 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
   } catch {
     return { result: 'FAIL', reason: 'input_invalid' };
   }
-  if (!probeHost()) {
-    return { result: 'FAIL', reason: 'host_refused' };
+  const safeHost = probeHost();
+  if (!safeHost) {
+    const protection = probeContainer();
+    if (protection !== true) {
+      return { result: 'FAIL', reason: 'host_refused', protectionFailure: protection };
+    }
   }
   let result: Receipt['result'] = 'NOT RUN';
-  if (request.name === 'privateTurns') {
+  if (safeHost && request.name === 'privateTurns') {
     try {
       const { checkNative } = await import('./native-checks.ts');
+      if (!probeHost()) {
+        return { result: 'FAIL', reason: 'host_refused' };
+      }
       await checkNative(request.challengeId);
       result = 'PARTIAL';
     } catch {
-      return { result: 'FAIL', reason: 'journey_failed' };
+      const reason = probeHost() ? 'journey_failed' : 'host_refused';
+      return { result: 'FAIL', reason };
     }
   }
-  if (request.name === 'invalidation' || request.name === 'unrelatedActivity' ||
+  if (safeHost && (request.name === 'invalidation' || request.name === 'unrelatedActivity' ||
       request.name === 'requesterIsolation' || request.name === 'sessionIsolation' ||
-      request.name === 'stopReconnect' || request.name === 'replacementReload') {
+      request.name === 'stopReconnect' || request.name === 'replacementReload')) {
     try {
       const { checkMemory } = await import('./memory-checks.ts');
+      if (!probeHost()) {
+        return { result: 'FAIL', reason: 'host_refused' };
+      }
       await checkMemory(request.name, request.siloId);
       result = 'PARTIAL';
     } catch {
-      return { result: 'FAIL', reason: 'journey_failed' };
+      const reason = probeHost() ? 'journey_failed' : 'host_refused';
+      return { result: 'FAIL', reason };
+    }
+  }
+  if (safeHost) {
+    if (!probeHost()) {
+      return { result: 'FAIL', reason: 'host_refused' };
+    }
+  } else {
+    const protection = probeContainer();
+    if (protection !== true) {
+      return { result: 'FAIL', reason: 'host_refused', protectionFailure: protection };
     }
   }
   // These assertions cannot qualify isolation, persistence or private output delivery.

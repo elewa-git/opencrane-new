@@ -335,6 +335,9 @@ async function explainsUnsafeHost(setting: string): Promise<void> {
     observations.set('/proc/sys/kernel/core_pattern', '|/private/core-collector %p\n');
   }
   function readObservation(path: unknown): string {
+    if (path === '/proc/self/cgroup') {
+      throw new Error('Fixture cgroup is unavailable');
+    }
     const observation = observations.get(String(path));
     if (observation !== undefined) {
       return observation;
@@ -351,7 +354,8 @@ async function explainsUnsafeHost(setting: string): Promise<void> {
   };
   const { runJourney } = await import('../../scripts/private-memory-qualification/journey.ts');
   const refusal = await runJourney(JSON.stringify(request));
-  const expectedRefusal = { result: 'FAIL', reason: 'host_refused' };
+  const expectedRefusal = { result: 'FAIL', reason: 'host_refused',
+    protectionFailure: 'swap_measurement_failed' };
   expect(refusal).toEqual(expectedRefusal);
   function refuseHost(receipt: Record<string, unknown>): void {
     for (const key of Object.keys(receipt)) {
@@ -360,7 +364,7 @@ async function explainsUnsafeHost(setting: string): Promise<void> {
     Object.assign(receipt, refusal);
   }
   change = refuseHost;
-  const message = 'Host safety checks failed: swap and core dumps must be disabled.';
+  const message = 'Container swap protection could not be measured.';
   const expectedError = new Error(`memory_qualification_refused: host_refused. ${message}`);
   await expect(launch()).rejects.toThrow(expectedError);
   const expectedResult = { ...expectedRefusal, message };
@@ -427,3 +431,34 @@ async function refusesSavedResult(kind: string): Promise<void> {
 }
 it.each(['', '{malformed'])(
   'refuses missing or malformed saved result %s before continuation', refusesSavedResult);
+
+const protectionCases = [
+  ['swap_measurement_failed', 'Container swap protection could not be measured.'],
+  ['swap_not_disabled', 'Container swap allowance and current use must both be zero.'],
+  ['memory_limit_unproved', 'A finite positive container memory limit could not be proved.'],
+  ['crash_kernel_unproved', 'A disabled kernel crash dump could not be proved.'],
+  ['core_limit_measurement_failed', 'The runner core dump limits could not be measured.'],
+  ['core_limit_not_zero', 'The runner soft and hard core dump limits must both be zero.'],
+  ['dumpability_measurement_failed', 'The runner dumpability could not be measured.'],
+  ['dumpability_protection_failed', 'The runner could not disable process dumps.'],
+  ['process_dumpable', 'The runner is still dumpable.'],
+  ['process_identity_changed', 'The runner identity changed after dump protection was set.'],
+  ['helper_unavailable', 'The native runner protection helper is unavailable.'],
+];
+async function explainsProtectionFailure(protectionFailure: string, message: string): Promise<void> {
+  const refusal = { result: 'FAIL', reason: 'host_refused', protectionFailure };
+  function refuse(receipt: Record<string, unknown>): void {
+    for (const key of Object.keys(receipt)) {
+      delete receipt[key];
+    }
+    Object.assign(receipt, refusal);
+  }
+  change = refuse;
+  const expectedError = new Error(`memory_qualification_refused: host_refused. ${message}`);
+  await expect(launch()).rejects.toThrow(expectedError);
+  const expected = { ...refusal, message };
+  expect(JSON.parse(saved)).toEqual(expected);
+  expect(journeys).toBe(1);
+}
+it.each(protectionCases)(
+  'names the failed protection %s in the launcher and saved result', explainsProtectionFailure);
