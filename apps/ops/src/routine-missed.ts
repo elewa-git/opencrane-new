@@ -123,7 +123,6 @@ function slot(occurrence: Occurrence) {
 function checkedDefinition(state: RoutineState | undefined, input: Input, now: number) {
   const saved = state?.definition;
   if (!saved || state.status !== 'active' || !Number.isFinite(now) ||
-      saved.definition.schedule.frequency !== 'daily' ||
       saved.definitionRevision !== input.definitionRevision ||
       saved.scheduleRevision !== input.scheduleRevision ||
       saved.controlRevision !== input.controlRevision ||

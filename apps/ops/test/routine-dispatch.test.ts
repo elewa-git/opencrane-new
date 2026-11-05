@@ -211,9 +211,10 @@ async function weeklyDowntime() {
   expect(await nats.store.head()).toBe(3);
   const row = await nats.store.readEvent(3);
   expect(row.event.type).toBe('routine.occurrences_missed');
-  expect(row.event.data).toMatchObject({ firstLocalDate: '2027-03-27',
+  const expected = { firstLocalDate: '2027-03-27',
     lastLocalDate: '2027-03-27', count: 1, cursor: weekly.data.next,
-    next: { localDate: '2027-04-03', at: '2027-04-03T09:00:00.000Z' } });
+    next: { localDate: '2027-04-03', at: '2027-04-03T09:00:00.000Z' } };
+  expect(row.event.data).toMatchObject(expected);
   expect((await state()).activeRun).toBeNull();
   await runner.run(routines);
   const before = await storage.db.query('SELECT * FROM routine_occurrences');
@@ -438,8 +439,9 @@ async function weeklyOccupied() {
   expect(await nats.store.head()).toBe(position + 1);
   const row = await nats.store.readEvent(position + 1);
   expect(row.event.type).toBe('routine.occurrences_missed');
-  expect(row.event.data).toMatchObject({ count: 1, firstLocalDate: '2027-04-03',
-    lastLocalDate: '2027-04-03', next: { localDate: '2027-04-10' } });
+  const expected = { count: 1, firstLocalDate: '2027-04-03',
+    lastLocalDate: '2027-04-03', next: { localDate: '2027-04-10' } };
+  expect(row.event.data).toMatchObject(expected);
   const after = await state();
   expect(after.activeRun).toEqual(run);
   expect(after.activeRun?.rootId).toBe(run.rootId);

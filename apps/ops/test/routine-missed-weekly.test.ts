@@ -6,7 +6,8 @@ import { foldRoutine, routineMissedSchema, type RoutineState } from '@opencrane/
 import { calculateRoutineOccurrence } from '@opencrane/events/routine-schedule';
 import { openfga } from '../../../libs/authz/test/services.ts';
 import { routine, joinedMember } from '../../../libs/authz/test/routine-fixture.ts';
-import { shortDuplicateWindowFixture, waitForDuplicateWindow } from '../../server/test/support/duplicate-window.ts';
+import { shortDuplicateWindowFixture, waitForDuplicateWindow }
+  from '../../server/test/support/duplicate-window.ts';
 import { claimRoutineDue } from '../src/routine-due.ts';
 import { recordRoutineMissed } from '../src/routine-missed.ts';
 
@@ -97,8 +98,9 @@ async function spring() {
     cursor: { localDate: '2027-03-21', localTime: '02:30', zone: 'Europe/Brussels',
       at: '2027-03-21T01:30:00.000Z', offsetMinutes: 60 }, next };
   expect(row.event.data).toEqual(expected);
-  expect(receipt).toEqual({ status: 'confirmed', eventId: row.event.id,
-    position: 3, executionAvailable: false });
+  const expectedReceipt = { status: 'confirmed', eventId: row.event.id,
+    position: 3, executionAvailable: false };
+  expect(receipt).toEqual(expectedReceipt);
   expect(await state()).toEqual(foldRoutine(before, row.event));
   expect((await state()).activeRun).toBeNull();
   const request = { ...input, expectedPosition: receipt.position, localDate: '2027-04-04' };
@@ -106,8 +108,9 @@ async function spring() {
   now += 1;
   const later = await record(request);
   const laterRow = await nats.store.readEvent(later.position);
-  expect(laterRow.event.data).toMatchObject({ count: 1, firstLocalDate: '2027-04-04',
-    lastLocalDate: '2027-04-04', next: { localDate: '2027-04-11' } });
+  const laterRange = { count: 1, firstLocalDate: '2027-04-04',
+    lastLocalDate: '2027-04-04', next: { localDate: '2027-04-11' } };
+  expect(laterRow.event.data).toMatchObject(laterRange);
   expect(await record()).toEqual(receipt);
   expect(await nats.store.head()).toBe(4);
 }
@@ -153,8 +156,8 @@ async function gapOnly(lateness: number) {
   const next = { localDate: '2027-04-04', localTime: '02:30', zone: 'Europe/Brussels',
     at: '2027-04-04T00:30:00.000Z', offsetMinutes: 120 };
   expect(row.event.type).toBe('routine.occurrence_skipped');
-  expect(row.event.data).toMatchObject({ localDate: '2027-03-28', reason: 'dst',
-    cursor: null, next });
+  const expected = { localDate: '2027-03-28', reason: 'dst', cursor: null, next };
+  expect(row.event.data).toMatchObject(expected);
   expect(row.event.data).not.toHaveProperty('count');
   expect((await state()).definition?.next).toEqual(next);
   expect(await record(request)).toEqual(receipt);
@@ -178,8 +181,9 @@ async function bounded() {
     const receipt = await record(request);
     const row = await nats.store.readEvent(receipt.position);
     const data = routineMissedSchema.parse(row.event.data);
-    expect(data).toMatchObject({ firstLocalDate: first, lastLocalDate: last, count,
-      cursor: { localDate: last }, next: { localDate: next } });
+    const expected = { firstLocalDate: first, lastLocalDate: last, count,
+      cursor: { localDate: last }, next: { localDate: next } };
+    expect(data).toMatchObject(expected);
     expect(await record(request)).toEqual(receipt);
     request = { ...input, expectedPosition: receipt.position, localDate: next };
   }
@@ -229,9 +233,10 @@ async function scheduleEdit() {
     controlRevision: 2, localDate: '2027-04-09' };
   const receipt = await record(request);
   const row = await nats.store.readEvent(receipt.position);
-  expect(row.event.data).toMatchObject({ definitionRevision: 2, scheduleRevision: 2,
+  const expected = { definitionRevision: 2, scheduleRevision: 2,
     controlRevision: 2, firstLocalDate: '2027-04-09', lastLocalDate: '2027-04-09',
-    count: 1, next: { localDate: '2027-04-16' } });
+    count: 1, next: { localDate: '2027-04-16' } };
+  expect(row.event.data).toMatchObject(expected);
   expect(await nats.store.head()).toBe(4);
 }
 it('starts the edited weekday strictly after its effective time', scheduleEdit);
@@ -279,7 +284,7 @@ async function recovery() {
     const request = { ...input, ...change };
     await expect(recordRoutineMissed(restarted, worker(), request)).rejects.toThrow();
   }
-  expect(await restarted.head()).toBe(3);
+  expect(await restarted.head('routine-orders')).toBe(3);
   expect(JSON.stringify(row.event)).not.toMatch(/ciphertext|instructions|key:1|canary/u);
 }
 it('recovers the original weekly receipt after lost reply, dedupe expiry and restart', recovery);

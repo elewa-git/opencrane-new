@@ -998,11 +998,12 @@ fresh-install live qualification remain later work. Company credentials are unch
 ### Checked routine downtime ranges
 
 `src/routine-missed.ts` provides `recordRoutineMissed(store, worker, input)` for
-P4-24 PR 8d. Input has the same fields as due and skip. Endpoints, count, cursor,
+P4-24 PRs 8d and 8g. Input has the same fields as due and skip. Endpoints, count, cursor,
 next and the event id come from exact history and saved revisions, never replacement
 input. One conditional append saves the existing `routine.occurrences_missed`, or
 `routine.occurrence_skipped` when the checked range contains only a missing local time.
-Daily schedules use the shared local calendar rules; weekly schedules refuse.
+Daily and weekly schedules use the shared local calendar rules. Weekly progress
+follows scheduled local dates and the saved ISO weekday, never seven UTC days.
 Missing times and already claimed occurrences do not count; repeated hours count once. Only slots
 older than sixty seconds count. At most 100 past candidates are inspected per call,
 with the following candidate retained for another invocation. No empty range is saved.
@@ -1022,8 +1023,16 @@ runs, races, lost replies, restart, access loss and cancellation during append.
 The Brussels gap-only regression checks recovery on the next valid slot and exactly
 sixty seconds later, one saved skip across concurrent calls and retries, replay, and
 successful claiming of the next valid slot.
-It uses disposable services and controlled time. No caller, tick, scan or sender is
-registered. Weekly recording and fresh-install live qualification remain NOT RUN.
+It uses disposable services and controlled time. Internal dispatch calls the writer;
+no scheduler process is registered. Fresh-install live qualification remains NOT RUN.
+
+`test/routine-missed-weekly.test.ts` checks Brussels spring and autumn, Lord Howe,
+Apia and UTC. It covers the sixty-second limit, gap-only recovery, 201 valid old slots
+in `[100, 100, 1]` steps, saved next/cursor checks, the effective-time boundary and
+schedule edits. Real NATS and OpenFGA fixtures check racing writers, lost replies,
+deduplication expiry, restart, changed requests, access loss and cancellation.
+The weekly dispatch tests check one saved range, an occupied run and Stop, equal
+PostgreSQL records after replay, and no execution calls. Access checks are unchanged.
 
 ### Bounded routine candidate inspection
 
@@ -1077,8 +1086,8 @@ The read-only API remains unchanged. P4-24 PR 8f adds
 `dispatchRoutineCandidates(db, store, worker)` with a trusted `binding` alongside
 silo, clock, continuation and the leadership signal/check. It uses the same bounded
 inspection. Exact event positions, revisions and calendar dates select due, skip
-or daily missed commands; counts never authorise writes. Future/inactive rows do
-not write. Late unclaimed weekly candidates refuse until their downtime writer exists.
+or daily and weekly missed commands; counts never authorise writes. Future/inactive
+rows do not write.
 A previously saved due is recovered through its original checked command input,
 including the position before its append. Its occurrence and `startBy` stay fixed.
 Recovery does not advance that claimed slot. Later scheduling still needs a saved

@@ -1,0 +1,1 @@
+- Weekly routines now record old unclaimed slots in bounded downtime ranges, skip missing local times and preserve the next eligible slot without starting old work.
