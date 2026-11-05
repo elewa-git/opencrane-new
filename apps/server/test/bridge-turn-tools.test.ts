@@ -343,3 +343,20 @@ async function sendsQualifiedStart(memoryFree: boolean) {
 }
 it.each([false, true])('selects qualified personal work and separates explicit memory-free=%s',
   sendsQualifiedStart);
+
+async function doesNotRepeatRecallOffer() {
+  const fixture = bridgeFixture({ binding: true });
+  try {
+    await initialQualificationFixture();
+    const message = fixture.rowsBySubject.get('conversation-chat')![1]!.event;
+    const recall = { requesterId: 'person', expiresAt: Date.now() + 60_000, baseMessageBytes: 100 };
+    const delivery = { turnId: message.id, sentAt: performance.now() - 2000, tools: [], recall };
+    fixture.sentTurns.set('chat', delivery);
+    await fixture.process();
+    expect(fixture.sent).toEqual([]);
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+it('does not repeat a recall offer while its native thread or start reply is still pending',
+  doesNotRepeatRecallOffer);
