@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { probeHost } from './host-probe.ts';
+import { probeContainer } from './container-probe.ts';
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const requestSchema = z.strictObject({
@@ -27,29 +28,42 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
   } catch {
     return { result: 'FAIL', reason: 'input_invalid' };
   }
-  if (!probeHost()) {
+  const safeHost = probeHost();
+  if (!safeHost && !probeContainer()) {
     return { result: 'FAIL', reason: 'host_refused' };
   }
   let result: Receipt['result'] = 'NOT RUN';
-  if (request.name === 'privateTurns') {
+  if (safeHost && request.name === 'privateTurns') {
     try {
       const { checkNative } = await import('./native-checks.ts');
+      if (!probeHost()) {
+        return { result: 'FAIL', reason: 'host_refused' };
+      }
       await checkNative(request.challengeId);
       result = 'PARTIAL';
     } catch {
-      return { result: 'FAIL', reason: 'journey_failed' };
+      const reason = probeHost() ? 'journey_failed' : 'host_refused';
+      return { result: 'FAIL', reason };
     }
   }
-  if (request.name === 'invalidation' || request.name === 'unrelatedActivity' ||
+  if (safeHost && (request.name === 'invalidation' || request.name === 'unrelatedActivity' ||
       request.name === 'requesterIsolation' || request.name === 'sessionIsolation' ||
-      request.name === 'stopReconnect' || request.name === 'replacementReload') {
+      request.name === 'stopReconnect' || request.name === 'replacementReload')) {
     try {
       const { checkMemory } = await import('./memory-checks.ts');
+      if (!probeHost()) {
+        return { result: 'FAIL', reason: 'host_refused' };
+      }
       await checkMemory(request.name, request.siloId);
       result = 'PARTIAL';
     } catch {
-      return { result: 'FAIL', reason: 'journey_failed' };
+      const reason = probeHost() ? 'journey_failed' : 'host_refused';
+      return { result: 'FAIL', reason };
     }
+  }
+  const stillSafe = safeHost ? probeHost() : probeContainer();
+  if (!stillSafe) {
+    return { result: 'FAIL', reason: 'host_refused' };
   }
   // These assertions cannot qualify isolation, persistence or private output delivery.
   return { ...request, observedAt: Date.now(), result, complete: false };

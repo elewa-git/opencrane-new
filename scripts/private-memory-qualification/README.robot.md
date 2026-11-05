@@ -135,6 +135,36 @@ here. Kubernetes collection remains outside this part.
 
 Own checks: [host-runner receipt](../../docs/process/p4-15-pr5h/receipt.md).
 
+## Container prerequisite split
+
+P4-15 PR 5r applies the orchestrator's 5 November 2026 default, not owner approval.
+The owner has not answered. The existing safe-host path remains. The alternative
+requires a finite positive `memory.max`, `memory.swap.max=0`, no existing swap use,
+no loaded crash kernel, zero soft/hard RLIMIT_CORE and PR_GET_DUMPABLE=0 in the
+actual runner. Docker memory-swap equal to memory is only configuration; the probe
+reads the effective controls itself. Environment claims are never evidence.
+
+The probe resolves `/proc/self/cgroup` against `/proc/self/mountinfo` and checks its
+PID in that group's `cgroup.procs`. This first part supports only cgroup v2.
+Missing, unlimited, ambiguous, escaped or unreadable observations refuse, as do
+covering mounts and membership changes. The Node-API helper sets dumpability once
+in the runner and measures it on every check. It checks identity again too. An
+exec starts a new process that needs its own protection; zero core limits and
+`CoreDumping=0` cannot replace this check. No host configuration is changed.
+The runner checks again after awaited work and before returning a receipt.
+
+This bounded first part permits only NOT RUN receipts through the container path.
+It runs no native or server journey there. Equivalent measurements for every other
+plaintext-bearing process, guest kernels and both complete qualifications remain
+NOT RUN. Existing safe-host journeys retain their PARTIAL/NOT RUN results. The
+collector still binds challenges and installations, withdraws failed evidence and
+forwards only the fixed host refusal. Injected test observations cannot qualify.
+See [own checks](../../docs/process/p4-15-pr5r/receipt.md).
+
+The Linux [cgroup contract](https://docs.kernel.org/admin-guide/cgroup-v2.html)
+defines the controls. The [exec contract](https://www.man7.org/linux/man-pages/man2/execve.2.html)
+explains why dumpability must be measured again after executing a new program.
+
 ## Image-owned memory checks
 
 P4-15 PR 5j, Part of #97, owns the shared assertions in `memory-journey.ts`.

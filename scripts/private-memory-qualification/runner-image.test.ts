@@ -16,12 +16,14 @@ function cleanup(): void {
 beforeAll(build, 310_000);
 afterAll(cleanup);
 
-function run(source: string, memorySwap = '256m', core = '0:0'): string {
+function run(source: string, memorySwap = '256m', core = '0:0', identityChange = false): string {
   const name = `runner-protection-test-${randomUUID()}`;
   const options = { encoding: 'utf8' as const, timeout: 15_000 };
   try {
+    const capabilities = identityChange ? ['--cap-add=SETUID'] : [];
     const args = ['run', '--name', name, '--network=none', '--read-only',
       '--cap-drop=ALL', '--security-opt=no-new-privileges', '--pids-limit=32',
+      ...capabilities,
       '--memory=256m', `--memory-swap=${memorySwap}`, `--ulimit=core=${core}`,
       '--cpus=0.5', imageTag, 'nice', '-n', '10', 'node', '--experimental-strip-types',
       '--input-type=module', '--eval', source];
@@ -38,15 +40,15 @@ const probe = `import { probeContainer } from '${directory}/container-probe.ts';
 function acceptsRestricted(): void {
   expect(run(probe)).toBe('true');
 }
-it('measures the image-owned runner inside its restricted container', acceptsRestricted);
+it('measures the image-owned runner inside its restricted container', acceptsRestricted, 30_000);
 function refusesSwap(): void {
   expect(run(probe, '512m')).toBe('false');
 }
-it('refuses actual non-zero cgroup swap allowance', refusesSwap);
+it('refuses actual non-zero cgroup swap allowance', refusesSwap, 30_000);
 function refusesCore(core: string): void {
   expect(run(probe, '256m', core)).toBe('false');
 }
-it.each(['0:1', '1:1'])('refuses actual core limits %s', refusesCore);
+it.each(['0:1', '1:1'])('refuses actual core limits %s', refusesCore, 30_000);
 function measuresActualProcess(): void {
   const source = `import assert from 'node:assert/strict';
     import { createRequire } from 'node:module';
@@ -65,4 +67,15 @@ function measuresActualProcess(): void {
     process.stdout.write('measured');`;
   expect(run(source)).toBe('measured');
 }
-it('measures this process and refuses the unprotected process after exec', measuresActualProcess);
+it('measures this process and refuses the unprotected process after exec', measuresActualProcess,
+  30_000);
+function refusesIdentityChange(): void {
+  const source = `import assert from 'node:assert/strict';
+    import { runnerProtected } from '${directory}/runner-protection.ts';
+    assert.equal(runnerProtected(), true);
+    process.seteuid(1000);
+    assert.equal(runnerProtected(), false);
+    process.stdout.write('refused');`;
+  expect(run(source, '256m', '0:0', true)).toBe('refused');
+}
+it('remeasures dumpability after the actual runner changes identity', refusesIdentityChange, 30_000);

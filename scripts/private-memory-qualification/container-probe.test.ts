@@ -2,14 +2,24 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { probeContainer } from './container-probe.ts';
 import { runnerProtected } from './runner-protection.ts';
+import { runJourney } from './journey.ts';
 
 vi.mock('node:fs', { spy: true });
 vi.mock('./runner-protection.ts', { spy: true });
 let files: Map<string, string>;
 const mount = '29 23 0:26 / /sys/fs/cgroup ro - cgroup2 cgroup rw\n';
+const request = JSON.stringify({
+  sourceSha: 'a'.repeat(40), imageDigest: `sha256:${'b'.repeat(64)}`,
+  environmentId: 'c'.repeat(64), siloId: `sha256:${'d'.repeat(64)}`,
+  installationId: `sha256:${'e'.repeat(64)}`, freshInstall: true,
+  runId: '11111111-1111-4111-8111-111111111111',
+  challengeId: '22222222-2222-4222-8222-222222222222', name: 'privateTurns',
+});
 function read(path: unknown): string {
   const value = files.get(String(path));
-  if (value === undefined) throw new Error('private observation unavailable');
+  if (value === undefined) {
+    throw new Error('private observation unavailable');
+  }
   return value;
 }
 function unchangedPath(path: unknown): string {
@@ -17,6 +27,8 @@ function unchangedPath(path: unknown): string {
 }
 function prepare(): void {
   files = new Map([
+    ['/proc/swaps', 'Filename Type Size Used Priority\n/private/swap file 1 0 -2\n'],
+    ['/proc/sys/kernel/core_pattern', '|/private/collector %p\n'],
     ['/proc/self/cgroup', '0::/\n'], ['/proc/self/mountinfo', mount],
     ['/sys/fs/cgroup/cgroup.procs', `${process.pid}\n`],
     ['/sys/fs/cgroup/memory.max', '268435456\n'],
@@ -29,9 +41,10 @@ function prepare(): void {
   vi.mocked(runnerProtected).mockReturnValue(true);
 }
 beforeEach(prepare);
-function acceptsOwnGroup(): void {
+async function acceptsOwnGroup(): Promise<void> {
   expect(probeContainer()).toBe(true);
   expect(runnerProtected).toHaveBeenCalled();
+  expect(await runJourney(request)).toMatchObject({ result: 'NOT RUN', complete: false });
 }
 it('measures the current runner and its own finite no-swap cgroup', acceptsOwnGroup);
 
@@ -49,14 +62,16 @@ const unsafe = [
   ['/sys/fs/cgroup/memory.swap.current', '1\n'],
   ['/sys/kernel/kexec_crash_loaded', '1\n'],
 ];
-function refusesUnsafe(path: string, value: string): void {
+async function refusesUnsafe(path: string, value: string): Promise<void> {
   files.set(path, value);
   expect(probeContainer()).toBe(false);
+  expect(await runJourney(request)).toEqual({ result: 'FAIL', reason: 'host_refused' });
 }
 it.each(unsafe)('refuses an unsafe container observation %s: %s', refusesUnsafe);
-function refusesMissing(path: string): void {
+async function refusesMissing(path: string): Promise<void> {
   files.delete(path);
   expect(probeContainer()).toBe(false);
+  expect(await runJourney(request)).toEqual({ result: 'FAIL', reason: 'host_refused' });
 }
 it.each(['/proc/self/cgroup', '/proc/self/mountinfo', '/sys/fs/cgroup/cgroup.procs',
   '/sys/fs/cgroup/memory.max', '/sys/fs/cgroup/memory.swap.max',
@@ -80,10 +95,17 @@ it('resolves membership relative to the mounted cgroup root', resolvesSubgroup);
 function refusesMovedGroup(): void {
   function readAndMove(path: unknown): string {
     const value = read(path);
-    if (String(path).endsWith('memory.max')) files.set('/proc/self/cgroup', '0::/other\n');
+    if (String(path).endsWith('memory.max')) {
+      files.set('/proc/self/cgroup', '0::/other\n');
+    }
     return value;
   }
   vi.mocked(readFileSync).mockImplementation(readAndMove);
   expect(probeContainer()).toBe(false);
 }
 it('refuses membership that moves while controls are read', refusesMovedGroup);
+function refusesRedirect(): void {
+  vi.mocked(realpathSync).mockReturnValue('/different');
+  expect(probeContainer()).toBe(false);
+}
+it('refuses a cgroup path that resolves elsewhere', refusesRedirect);

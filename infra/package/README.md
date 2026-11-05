@@ -18,7 +18,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, npm, notices and installs"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, runner protection and installs"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
@@ -98,6 +98,9 @@ one filesystem layer, so removed npm and computer files are absent from the save
 The image checks follow every relative setup import and run the setup entry point
 with made-up services and settings. This checks that the packaged code loads and
 finishes the fixture; a running installation needs its own checks.
+The image also contains a small Linux helper that protects and measures the memory
+check runner itself. Its compiler stays in a separate build stage. This prerequisite
+check cannot qualify other processes or enable memory.
 A separate candidate record checks the proposed package list, saved image bytes
 and Debian main package versions. It keeps checksums for the shipped notices.
 A separate check reads kubectl's saved build information and retains the Go project

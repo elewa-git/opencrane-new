@@ -23,7 +23,7 @@ flowchart LR
   collector -.->|checks memory, Stop and reply loss| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
   collector -->|measures, starts checks and reads refusals| docker["Docker<br/>running image and host"]
-  docker -->|checks memory and two native processes| deployment["deployment<br/>event store and journey runner"]
+  docker -->|checks host or runner protection| deployment["deployment<br/>event store and journey runner"]
 ```
 
 ## What it is responsible for
@@ -33,6 +33,7 @@ flowchart LR
 - Measure the source revision, image, host, silo and installation before collecting results.
 - Refuse an old or used event store, changed deployment, or missing check.
 - Refuse swap, crash dumps, unsafe process limits and unreadable host settings.
+- Allow only prerequisite results when the container protects its runner but other processes remain unchecked.
 - Save host refusals with a reminder to disable swap and core dumps.
 - Accept results only from processes it starts in the measured image.
 - Save its own result in a protected file and recheck the deployment whenever it is used.
@@ -70,6 +71,11 @@ files to a separate disposable image; they do not change the deployment image.
 Tests build the package image and run all six memory checks against a disposable event store.
 Other tests use simulated observations and disposable containers to check refusal and cleanup.
 They do not qualify a deployment or enable memory.
+
+The container alternative reads the runner's own Linux control group, which limits
+memory and swap. An image-owned helper disables dumps in that Node process and
+measures its dumpability and core limits. This path returns only NOT RUN until
+the server, bridge, supervisor, proxy and native processes have equivalent proof.
 
 ## How to run or test it
 

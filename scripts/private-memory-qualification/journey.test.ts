@@ -96,6 +96,14 @@ async function changedDuringWork(): Promise<void> {
   });
 }
 it('refuses changed protection after awaited work without switching paths', changedDuringWork);
+async function changedBeforeReceipt(): Promise<void> {
+  vi.mocked(probeHost).mockReturnValue(false);
+  vi.mocked(probeContainer).mockReturnValueOnce(true).mockReturnValue(false);
+  expect(await runJourney(JSON.stringify(request))).toEqual({
+    result: 'FAIL', reason: 'host_refused',
+  });
+}
+it('remeasures container protection before returning the prerequisite receipt', changedBeforeReceipt);
 
 function entryRefuses(input: string, args: string[] = []): void {
   const options = { input, encoding: 'utf8' as const, timeout: 5000 };

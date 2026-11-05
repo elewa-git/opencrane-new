@@ -5,6 +5,7 @@
   ],
   "workspaces": {
     ".": {
+      "ignoreUnresolved": ["./runner-protection.node"],
       "entry": [
         "scripts/private-memory-qualification/vitest.config.mjs",
         "scripts/private-memory-qualification/run.mjs",

@@ -1,3 +1,10 @@
+FROM node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS runner-protection
+WORKDIR /app/scripts/private-memory-qualification
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev
+COPY scripts/private-memory-qualification .
+RUN nice -n 10 gcc -shared -fPIC -Wall -Wextra -Werror -I/usr/local/include/node \
+       -o runner-protection.node runner-protection.c
+
 FROM node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS build
 WORKDIR /app
 COPY . .
@@ -6,6 +13,8 @@ RUN nice -n 10 npm ci && nice -n 10 npm run build -w apps/web && nice -n 10 npm 
 FROM node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS runtime
 WORKDIR /app
 COPY --from=build /app /app
+COPY --from=runner-protection /app/scripts/private-memory-qualification/runner-protection.node \
+  /app/scripts/private-memory-qualification/runner-protection.node
 # Leave build tools and unrelated packages out of the running image.
 RUN rm -rf /app/apps/computer /app/node_modules/@opencrane/computer \
       /app/node_modules/secure-json-parse/benchmarks /app/node_modules/pino/test \
