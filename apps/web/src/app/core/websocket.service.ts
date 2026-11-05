@@ -228,7 +228,8 @@ export class WebSocketService implements OnDestroy {
 
   private pushMessage(message: ServerMessage): void {
     if (message.type === 'private_reply' || message.type === 'private_output_cleared') {
-      if (!this.session.acceptsPrivateFrames()) return;
+      // Keep withdrawal immediate even while new reply text is blocked.
+      if (message.type === 'private_reply' && !this.session.acceptsPrivateFrames()) return;
       this.privateFrames.next(message);
       return;
     }

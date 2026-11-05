@@ -38,8 +38,7 @@ function connected() {
   return globalThis.ng?.getComponent(element)?.chat.connected() ?? false;
 }
 
-async function scenario(browser, broadcast) {
-  const context = await browser.newContext();
+async function sessionFixture(context, broadcast) {
   let authenticated = true;
   let authenticationReads = 0;
   let logoutPosts = 0;
@@ -97,13 +96,29 @@ async function scenario(browser, broadcast) {
   await context.route('**/*', serve);
   await context.routeWebSocket('**/ws', acceptSocket);
   if (!broadcast) await context.addInitScript(disableBroadcast);
+  function send(frame) {
+    socket.send(JSON.stringify(frame));
+  }
+  function assertSignedOut() {
+    assert.equal(logoutPosts, 1);
+    assert.equal(socketClosed, true);
+  }
+  function readCount() {
+    return authenticationReads;
+  }
+  return { subscriptionReady, send, assertSignedOut, readCount };
+}
+
+async function scenario(browser, broadcast) {
+  const context = await browser.newContext();
+  const fixture = await sessionFixture(context, broadcast);
   try {
     const tabA = await context.newPage();
     await tabA.goto(`${origin}/workspace?conversation=chat`);
     await tabA.waitForFunction(connected);
-    await subscriptionReady;
-    socket.send(JSON.stringify(started));
-    socket.send(JSON.stringify(reply));
+    await fixture.subscriptionReady;
+    fixture.send(started);
+    fixture.send(reply);
     // Playwright serialises one function at a time, so supply its helper explicitly.
     await tabA.waitForFunction(`(${privateText})() === 'Synthetic private reply'`);
     const tabB = await context.newPage();
@@ -112,12 +127,11 @@ async function scenario(browser, broadcast) {
     const signOut = tabB.getByRole('button', { name: 'Sign out', exact: true });
     await signOut.click();
     await tabB.getByText('Signed out', { exact: true }).waitFor();
-    assert.equal(logoutPosts, 1);
     if (broadcast) {
       await tabA.waitForFunction(`(${privateText})() === null`);
       assert.equal(await tabA.evaluate(connected), false);
     }
-    const readsBeforeReturn = authenticationReads;
+    const readsBeforeReturn = fixture.readCount();
     await tabA.bringToFront();
     // Headless Chromium does not consistently emit focus when switching pages.
     function returnToTab() {
@@ -126,10 +140,10 @@ async function scenario(browser, broadcast) {
     await tabA.evaluate(returnToTab);
     await tabA.waitForFunction(`(${privateText})() === null`);
     assert.equal(await tabA.evaluate(connected), false);
-    if (!broadcast) assert(authenticationReads > readsBeforeReturn);
-    assert.equal(socketClosed, true);
-    socket.send(JSON.stringify(lateStart));
-    socket.send(JSON.stringify(lateReply));
+    if (!broadcast) assert(fixture.readCount() > readsBeforeReturn);
+    fixture.assertSignedOut();
+    fixture.send(lateStart);
+    fixture.send(lateReply);
     assert.equal(await tabA.evaluate(privateText), null);
   } finally {
     await context.close();
