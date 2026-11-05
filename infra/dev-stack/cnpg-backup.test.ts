@@ -336,14 +336,22 @@ for (const name of ['wrong hostname', 'expired', 'future', 'plaintext', 'stalled
   async function refusesPeer() {
     const input = fixture();
     let certificateName = name;
-    if (name === 'unavailable') certificateName = 'matching';
-    if (name === 'wrong hostname') certificateName = 'server';
+    if (name === 'unavailable') {
+      certificateName = 'matching';
+    }
+    if (name === 'wrong hostname') {
+      certificateName = 'server';
+    }
     const listener = await peer(directory, certificateName);
     atPeer(input, listener.port);
-    if (name === 'unavailable') await listener.close();
+    if (name === 'unavailable') {
+      await listener.close();
+    }
     try {
       let timeoutMs = 1000;
-      if (name === 'stalled') timeoutMs = 200;
+      if (name === 'stalled') {
+        timeoutMs = 200;
+      }
       const options = { timeoutMs };
       await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl, options));
       assert.equal(input.reads.length, 4);
@@ -351,9 +359,13 @@ for (const name of ['wrong hostname', 'expired', 'future', 'plaintext', 'stalled
       assert.equal(socket.destroyed, true);
       const errors: Record<string, string> = { 'wrong hostname': 'ERR_TLS_CERT_ALTNAME_INVALID',
         expired: 'CERT_HAS_EXPIRED', future: 'CERT_NOT_YET_VALID' };
-      if (errors[name]) assert.equal(socket.authorizationError, errors[name]);
+      if (errors[name]) {
+        assert.equal(socket.authorizationError, errors[name]);
+      }
     } finally {
-      if (name !== 'unavailable') await listener.close();
+      if (name !== 'unavailable') {
+        await listener.close();
+      }
     }
   }
   test(`TLS refuses ${name} peer without later reads`, refusesPeer);
@@ -405,13 +417,21 @@ for (const stage of ['before reads', 'before connection', 'during handshake', 'a
     }
     async function read(args: string[]) {
       const output = await input.kubectl(args);
-      if (stage === 'before connection' && input.reads.length === 4) abort();
-      if (stage === 'after handshake' && input.reads.length === 5) abort();
+      if (stage === 'before connection' && input.reads.length === 4) {
+        abort();
+      }
+      if (stage === 'after handshake' && input.reads.length === 5) {
+        abort();
+      }
       return output;
     }
     const listener = await peer(directory, 'stalled', abort);
-    if (stage === 'during handshake') atPeer(input, listener.port);
-    if (stage === 'before reads') abort();
+    if (stage === 'during handshake') {
+      atPeer(input, listener.port);
+    }
+    if (stage === 'before reads') {
+      abort();
+    }
     try {
       const options = { signal: controller.signal };
       await refused(checkCnpgBackupReferences(input.backup, namespace, read, options));

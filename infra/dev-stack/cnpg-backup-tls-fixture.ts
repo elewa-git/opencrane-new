@@ -77,7 +77,9 @@ export async function peer(directory: string, name = 'matching', onHello?: () =>
     server = net.createServer();
     function plain(socket: net.Socket) {
       socket.resume();
-      if (name === 'plaintext') socket.end('HTTP/1.1 200 OK\r\n\r\n');
+      if (name === 'plaintext') {
+        socket.end('HTTP/1.1 200 OK\r\n\r\n');
+      }
       onHello?.();
     }
     server.on('connection', plain);
@@ -95,7 +97,9 @@ export async function peer(directory: string, name = 'matching', onHello?: () =>
   await new Promise<void>(listen);
   const port = (server.address() as net.AddressInfo).port;
   async function close() {
-    for (const socket of sockets) socket.destroy();
+    for (const socket of sockets) {
+      socket.destroy();
+    }
     function closed(resolve: () => void) {
       server.close(resolve);
     }
