@@ -14,6 +14,13 @@ async function signOutInAnotherTab(): Promise<void> {
   const retentionArguments = ['scripts/check-private-reply-retention.mjs'];
   const retention = await execute(process.execPath, retentionArguments, options);
   expect(retention.stdout).toContain('PASS cleared private copies and diagrams are collectible');
+  const retainedArguments = [...retentionArguments, '--retain-for-test'];
+  const retained = execute(process.execPath, retainedArguments, options);
+  const diagnosticNames = ['heldClipboardCallback', 'Markdown component:', 'Markdown element:'];
+  for (const name of diagnosticNames) {
+    const diagnostic = { stderr: expect.stringContaining(name) };
+    await expect(retained).rejects.toMatchObject(diagnostic);
+  }
   const displayArguments = ['scripts/capture-p4-15-pr3l.mjs', '--development'];
   const display = await execute(process.execPath, displayArguments, options);
   expect(display.stdout).toContain('PASS private reply display, clearance and captures');
