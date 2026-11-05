@@ -185,7 +185,7 @@ async function confirmPositions(input: Input, positions: ReadonlyMap<string, num
 
 const stopIdentity = z.object({ turnId: z.string() });
 const receiptId = z.string().regex(/^[\w-]{1,200}$/u);
-const recallReceipt = z.strictObject({
+export const recallReceipt = z.strictObject({
   type: z.enum(['recall_pending', 'recall_loaded']), loadId: z.uuid(),
   silo: receiptId, requesterId: receiptId, assistantId: receiptId, computerId: receiptId,
   conversationId: receiptId, turnId: receiptId, threadId: receiptId,
@@ -225,10 +225,10 @@ export async function preparePersonalRecallLoad(input: RecallLoadInput, pending:
     scopeId: memoryScopeId(input.silo, 'person', input.requesterId) };
   try {
     const prepared = await prepareRecallRequest(original, pending, deadline);
-    const complete = createRecallCompletion(original, prepared, deadline);
+    const completion = createRecallCompletion(original, prepared, deadline);
     prepared.measured.confirm();
     requireRecallCaller(original, prepared.tools);
-    return { request: prepared.request, complete };
+    return { request: prepared.request, ...completion };
   } catch (error) {
     return refuseRecallLoad(original, deadline, error);
   }
@@ -261,6 +261,7 @@ type RecallPreparation = Awaited<ReturnType<typeof prepareRecallRequest>>;
 
 function createRecallCompletion(input: Input, prepared: RecallPreparation, deadline: number) {
   let used = false;
+  let accepted: unknown;
   async function complete(reply: unknown) {
     try {
       if (used) {
@@ -272,12 +273,24 @@ function createRecallCompletion(input: Input, prepared: RecallPreparation, deadl
       prepared.measured.confirm();
       completed.current.confirm();
       requireRecallCaller(input, completed.tools);
+      accepted = reply;
       return completed.tools;
     } catch (error) {
       return refuseRecallLoad(input, deadline, error);
     }
   }
-  return complete;
+  async function confirm() {
+    try {
+      if (!accepted) throw new LoadedMemoryRefused();
+      const completed = await completeRecallLoad(input, prepared, accepted, deadline);
+      prepared.measured.confirm();
+      completed.current.confirm();
+      requireRecallCaller(input, completed.tools);
+    } catch (error) {
+      return refuseRecallLoad(input, deadline, error);
+    }
+  }
+  return { complete, confirm };
 }
 
 async function completeRecallLoad(input: Input, preparation: RecallPreparation,

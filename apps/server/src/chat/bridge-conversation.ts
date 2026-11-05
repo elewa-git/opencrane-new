@@ -18,7 +18,7 @@ import { requiredExecutionMode, TurnAdmissionRejected, type ExecutionMode } from
 import { chatHistory } from './commands.ts';
 import { agentSession } from './reports.ts';
 import type { ChatOptions } from './routes.ts';
-import { buildTurnTools, mayOfferTurnTools, toolsForMessage, type TurnDelivery }
+import { buildTurnTools, buildRecallOffer, mayOfferTurnTools, toolsForMessage, type TurnDelivery }
   from './turn-tools.ts';
 import { cleanClosedConversation, recoverTerminalTurns } from './close-cleanup.ts';
 
@@ -308,12 +308,15 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
     .parse(message.event.data);
   const mode = await requiredExecutionMode(kind, requested.executionMode, options.silo);
   const previousDelivery = link.sentTurns.get(conversation.conversationId);
+  // Keep the original expiry while a private thread starts; never resend its offer.
+  if (previousDelivery?.turnId === message.event.id && previousDelivery.recall) return;
   const accepted = started.has(message.event.id);
   // Retry busy computers until they accept the turn, without flooding the connection.
   const resendDue = !accepted && performance.now() - (previousDelivery?.sentAt ?? 0) >= 1000;
   if (previousDelivery?.turnId === message.event.id && !resendDue) return;
   const turn = turnMessage(options, conversation, rows, uploads, message, mode) as
     ReturnType<typeof turnMessage> & { tools?: Awaited<ReturnType<typeof buildTurnTools>> };
+  const baseMessageBytes = Buffer.byteLength(JSON.stringify(turn));
   async function buildTools() {
     if (requested.executionMode === 'memory_free') return [];
     return toolsForTurn(options, conversation, turn, kind, mode, link.approvalWaiting === true);
@@ -321,13 +324,7 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   const tools = await toolsForMessageOrEmpty(link.sentTurns, conversation.conversationId,
     message.event.id, buildTools);
   if (tools.length) turn.tools = tools;
-  const delivery = link.sentTurns.get(conversation.conversationId);
-  if (delivery) {
-    link.sentTurns.set(conversation.conversationId, {
-      ...delivery,
-      sentAt: performance.now(),
-    });
-  }
+  rememberTurnDelivery(link.sentTurns, conversation.conversationId, turn, baseMessageBytes);
   const active = await chatMembership(options.store, options.silo, turn.requesterId);
   if (!active) throw new TurnAdmissionRejected('Active silo membership required');
   const control = await controlPending();
@@ -336,6 +333,18 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   await refreshStops(true);
   if (control || pendingMessage(rows)?.event.id !== message.event.id) return;
   link.socket.send(JSON.stringify(turn));
+}
+
+function rememberTurnDelivery(sentTurns: Map<string, TurnDelivery>, conversationId: string,
+  turn: ReturnType<typeof turnMessage>, baseMessageBytes: number) {
+  const delivery = sentTurns.get(conversationId);
+  if (!delivery) return;
+  function isMemoryTool(tool: TurnDelivery['tools'][number]) { return tool.serverId === 'memory'; }
+  if (turn.executionMode === 'restricted' && delivery.tools.some(isMemoryTool)) {
+    delivery.recall = { requesterId: turn.requesterId, expiresAt: turn.expiresAt, baseMessageBytes };
+  }
+  const updated = { ...delivery, sentAt: performance.now() };
+  sentTurns.set(conversationId, updated);
 }
 
 async function toolsForMessageOrEmpty(sentTurns: Map<string, TurnDelivery>,
@@ -377,10 +386,11 @@ function emptyTools() {
 async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
   turn: ReturnType<typeof turnMessage>, kind: string, mode: ExecutionMode,
   approvalWaiting: boolean) {
-  if (!mayOfferTurnTools(kind, mode, options.binding !== undefined) ||
-      !options.binding || !options.catalogue || typeof turn.requesterId !== 'string') return [];
+  const recall = kind === 'personal' && mode === 'restricted' && !('sharingClass' in turn);
+  if (!options.binding || typeof turn.requesterId !== 'string') return [];
+  if (!recall && (!mayOfferTurnTools(kind, mode, true) || !options.catalogue)) return [];
 
-  const catalogueRows = await options.catalogue.rows(options.silo);
+  const catalogueRows = recall ? [] : await options.catalogue!.rows(options.silo);
   const auth = memberAuthorisation(options.binding);
   const serializedMessageBytes = Buffer.byteLength(JSON.stringify(turn), 'utf8');
   function serverReference(row: (typeof catalogueRows)[number]) {
@@ -432,7 +442,7 @@ async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
   }
   const readyRows = catalogueRows.filter(isPublishedServer);
   const serverRows = readyRows.map(serverReference);
-  return buildTurnTools({
+  const toolInput = {
     rows: serverRows,
     requesterId: turn.requesterId,
     assistantId: conversation.assistantId,
@@ -440,7 +450,9 @@ async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
     approvalWaiting,
     readServer,
     canUse: canUseServer,
-  });
+  };
+  if (recall) return buildRecallOffer(toolInput);
+  return buildTurnTools(toolInput);
 }
 
 function isPublishedServer(

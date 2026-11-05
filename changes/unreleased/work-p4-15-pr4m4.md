@@ -1,0 +1,1 @@
+Qualified personal turns now offer reviewed recall and wait for checked discovery over the computer bridge before private input or credentials can be released. Lost or withdrawn loads refuse dispatch. Backend delivery proof remains unfinished; admission stays disabled.

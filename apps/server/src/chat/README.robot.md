@@ -6,7 +6,7 @@ describes personal execution-mode selection, initial input delivery and its chec
 Qualified personal starts use the existing one-use memory consumer after loaded evidence.
 The private bridge acknowledgement carries the rendered input with its short-lived pass.
 Memory-free and shared work cannot receive this field. Generated memory output is still
-refused by the report writer; native memory tool launch remains unbuilt.
+refused by the report writer; backend delivery proof remains unfinished.
 
 Credential renewal recognises a saved `agent.turn_started` for the same turn. For a
 numbered start, it also requires saved initial-load evidence. The runner resends the
@@ -81,9 +81,33 @@ only new scope events. No fact is decrypted. A new load during confirmation refu
 cannot add unchecked references. Both return paths check the local caller after all waits.
 Established MemberAccessRefused takes priority over dependency failures.
 
-PARTIAL: no production bridge caller invokes this helper yet. The next split must bind
-it to authenticated delivery, cancel abandoned loads, gate initial input and credentials,
-and prove real backend recall with loaded evidence saved before bytes. The native numeric
-input generation and saved memory input generation remain distinct existing identities;
-this helper validates the former against its trusted local registration. Neither a receipt
-nor this local approval replaces saved memory evidence. Admission remains disabled.
+## Recall dispatch after admission
+
+Qualified personal turns offer only the built-in recall definition from current reviewed,
+free Allow policy and both MCP-use permissions. Shared and memory-free turns cannot use
+this offer. It supplies definitions, not approval to discover tools or read facts.
+The authenticated bridge accepts recall receipts only for an original delivery carrying
+recall metadata. That metadata records its requester, expiry and frame size on the server.
+After saving admission, `recallBridge` checks the saved requester, conversation and thread,
+then invokes `preparePersonalRecallLoad`. Its separate local registration never leaves the
+server. The computer keeps its own registry and caller credential.
+
+One strict pending receipt binds the native numeric input generation and load id for this
+connection. The helper verifies the computer generation against saved lifecycle evidence.
+The native input generation is still separate from the saved memory input generation.
+The server sends only the checked request, then waits for one loaded receipt. Duplicate,
+missing, changed or refused replies cannot release input or credentials. Socket loss,
+terminal reports and the ten-second pending limit abandon the attempt without resend.
+
+Completion checks the original positions and deployment result. `confirm` repeats those
+checks before and after signing credentials, retaining the original preparation deadline.
+The complete frame limit includes the offered definitions and signed credentials.
+The initial-memory consumer still saves loaded evidence and checks access before input.
+Its synchronous release also requires the original live connection and pending attempt.
+An established membership refusal remains decisive. No new event or wire field is added.
+
+The joined fixture uses the production chat sender and supplies saved admission, then runs
+production preparation, the bridge, computer runner, loader, proxy and scripted native
+discovery. It does not call a model or recall facts. PARTIAL: real gateway/backend recall,
+including saved loaded evidence before result bytes, remains for the next split before PR 4n. Admission
+stays disabled. Fixtures do not qualify deployment.

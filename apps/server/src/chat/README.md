@@ -9,7 +9,10 @@ The recall preparation helper checks a saved private turn before offering its to
 It checks the computer's discovery receipt once, then repeats access, policy and deployment
 checks. It refuses invalidated or ended memory, changed loaded facts and a caller that
 closed while those checks waited. It checks saved references without decrypting facts.
-Connecting this helper to live bridge dispatch is still pending.
+For an offered recall catalogue, the bridge waits for discovery before releasing private
+input or a pass. It repeats the checks before and after signing that pass. A lost reply
+ends the attempt without resending it. Qualified personal turns offer only the reviewed
+recall definition. Backend delivery proof and deployment checks remain unfinished.
 
 This folder handles conversations between people and with assistants. It saves messages, sends assistant work to the right computer and returns replies and live updates while checking who may read each chat.
 
@@ -120,7 +123,7 @@ flowchart LR
   server[Server] --> chat[Chat]
   server --> memory[Memory]
   chat -->|selects and checks input| memory
-  chat -->|one-use private input| computer[Assistant computer]
+  chat -->|recall definitions and one-use private input| computer[Assistant computer]
   computer -->|completed private reply| chat
   chat -->|private reply and clearance| reader[Authenticated reader]
   chat -->|checks access, spending and loaded references| models[Models]
