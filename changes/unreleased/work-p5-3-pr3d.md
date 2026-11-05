@@ -1,0 +1,1 @@
+- Verify the referenced backup endpoint's TLS certificate and Service hostname within the existing deadline. Cancelled checks close their sockets; backup and recovery installation remain blocked.

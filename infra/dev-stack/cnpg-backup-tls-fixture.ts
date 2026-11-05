@@ -11,7 +11,8 @@ const connect = tls.connect;
 export const attempts: tls.TLSSocket[] = [];
 
 export function mapServiceDNS() {
-  function lookup(_hostname: string, _options: unknown, callback: (error: null, addresses: Array<{ address: string; family: number }>) => void) {
+  function lookup(_hostname: string, _options: unknown,
+    callback: (error: null, addresses: Array<{ address: string; family: number }>) => void) {
     callback(null, [{ address: '127.0.0.1', family: 4 }]);
   }
   function mapped(options: tls.ConnectionOptions) {
@@ -19,7 +20,8 @@ export function mapServiceDNS() {
     assert.equal(options.servername, backupHostname);
     assert.equal(options.rejectUnauthorized, true);
     assert.equal(options.checkServerIdentity, undefined);
-    const socket = connect({ ...options, lookup });
+    const mappedOptions = { ...options, lookup };
+    const socket = connect(mappedOptions);
     attempts.push(socket);
     return socket;
   }
@@ -48,7 +50,8 @@ commonName = supplied
   const args = ['ca', '-batch', '-notext', '-config', `${name}.conf`,
     '-in', `${name}.csr`, '-out', `${name}.crt`, '-extfile', `${name}.ext`,
     '-startdate', `${year}0101000000Z`, '-enddate', `${year}0102000000Z`];
-  const result = spawnSync('openssl', args, { cwd: directory });
+  const options = { cwd: directory };
+  const result = spawnSync('openssl', args, options);
   assert.equal(result.status, 0);
 }
 

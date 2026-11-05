@@ -20,7 +20,7 @@ flowchart LR
   stack -->|starts services; checks listeners; sets up sign-in| services["Local services<br/>jobs, content and access"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
   stack -->|starts apps; keeps keys private; checks journeys, times Memory body reads and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
-  stack -->|checks ownership, backup references, nodes and certificates; stops cancelled checks| package["infra/package<br/>Helm install"]
+  stack -->|checks ownership, backup certificates and nodes; stops cancelled checks| package["infra/package<br/>Helm install"]
   stack -->|checks collection and reports host refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
 ```
@@ -57,8 +57,9 @@ available for diagnosis.
   attempt, and saves step pictures before recording success.
 - Refuses incomplete controller or credential settings for an optional PostgreSQL standby.
   Checks password format and conflicting database connections before installation.
-  Checks backup Service ownership and named Secret entries internally.
-  Stops ownership and target commands when a backup check is cancelled or runs out of time.
+  Checks backup Service ownership, named Secret entries and the endpoint certificate internally.
+  Verifies the Service hostname against the named CA without sending credentials or storage requests.
+  Stops ownership commands and secure connections when a backup check is cancelled or runs out of time.
   Backup and recovery installation remain blocked.
   Requires runtime and setup replica settings to match the chart before Helm runs.
   Checks mounted event-log certificates and keys, connection settings and account rules.

@@ -332,17 +332,26 @@ function atPeer(input: ReturnType<typeof fixture>, port: number) {
   input.backup.endpointURL = `https://${backupHostname}:${port}`;
   input.objects['backup-store'].spec.ports[0].port = port;
 }
-for (const name of ['server', 'expired', 'future', 'plaintext', 'stalled', 'unavailable']) {
+for (const name of ['wrong hostname', 'expired', 'future', 'plaintext', 'stalled', 'unavailable']) {
   async function refusesPeer() {
     const input = fixture();
-    const listener = await peer(directory, name === 'unavailable' ? 'matching' : name);
+    let certificateName = name;
+    if (name === 'unavailable') certificateName = 'matching';
+    if (name === 'wrong hostname') certificateName = 'server';
+    const listener = await peer(directory, certificateName);
     atPeer(input, listener.port);
     if (name === 'unavailable') await listener.close();
     try {
-      const options = { timeoutMs: 200 };
+      let timeoutMs = 1000;
+      if (name === 'stalled') timeoutMs = 200;
+      const options = { timeoutMs };
       await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl, options));
       assert.equal(input.reads.length, 4);
-      assert.equal(attempts.at(-1)!.destroyed, true);
+      const socket = attempts.at(-1)!;
+      assert.equal(socket.destroyed, true);
+      const errors: Record<string, string> = { 'wrong hostname': 'ERR_TLS_CERT_ALTNAME_INVALID',
+        expired: 'CERT_HAS_EXPIRED', future: 'CERT_NOT_YET_VALID' };
+      if (errors[name]) assert.equal(socket.authorizationError, errors[name]);
     } finally {
       if (name !== 'unavailable') await listener.close();
     }
@@ -423,9 +432,13 @@ for (const stage of ['initial read', 'before connection', 'after handshake', 'fi
     const input = fixture();
     const before = attempts.length;
     let now = Date.now();
-    function clock() { return now; }
+    function clock() {
+      return now;
+    }
     context.mock.method(Date, 'now', clock);
-    function expire() { now += 30_001; }
+    function expire() {
+      now += 30_001;
+    }
     async function read(args: string[]) {
       const output = await input.kubectl(args);
       if (stage === 'initial read' && input.reads.length === 1) expire();
@@ -452,12 +465,14 @@ for (const stage of ['initial read', 'before connection', 'after handshake', 'fi
 async function sharedDeadline(context: import('node:test').TestContext) {
   const input = fixture();
   const now = Date.now();
-  function clock() { return now; }
+  function clock() {
+    return now;
+  }
   context.mock.method(Date, 'now', clock);
   const controller = new AbortController();
   let limitsSignal: AbortSignal | undefined;
   const mapped = tls.connect;
-  function checked(options: tls.ConnectionOptions) {
+  function checked(options: tls.ConnectionOptions & { signal?: AbortSignal }) {
     assert.equal(options.signal, limitsSignal);
     assert.equal(options.ca, ca);
     assert.equal(options.port, input.objects['backup-store'].spec.ports[0].port);
@@ -471,7 +486,9 @@ async function sharedDeadline(context: import('node:test').TestContext) {
     limitsSignal = signal;
     return input.kubectl(args);
   }
-  function connected() { controller.abort(); }
+  function connected() {
+    controller.abort();
+  }
   const listener = await peer(directory, 'stalled', connected);
   atPeer(input, listener.port);
   try {

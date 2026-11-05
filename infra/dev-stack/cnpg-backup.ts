@@ -1,5 +1,7 @@
 import { X509Certificate } from 'node:crypto';
 import { isIP } from 'node:net';
+import tls from 'node:tls';
+import { commandTimeout } from './command-limits.ts';
 
 type Reference = { name: string; key: string };
 type Backup = {
@@ -48,12 +50,14 @@ function serviceAddress(endpoint: string, namespace: string) {
   requireValid(match);
   const port = Number(match[2] ?? '443');
   requireValid(port >= 1 && port <= 65535);
-  return { name: match[1]!, port };
+  const hostname = new URL(endpoint).hostname;
+  return { name: match[1]!, hostname, port };
 }
 
 async function read(kubectl: Kubectl, namespace: string, kind: string, name: string,
   signal: AbortSignal, deadline: number) {
-  signal.throwIfAborted();
+  const limits = { signal, deadline };
+  commandTimeout(30_000, limits);
   function abort() {
     rejectAbort(new Error(refusal));
   }
@@ -65,9 +69,10 @@ async function read(kubectl: Kubectl, namespace: string, kind: string, name: str
   signal.addEventListener('abort', abort, { once: true });
   try {
     const args = ['-n', namespace, 'get', kind.toLowerCase(), name, '-o', 'json'];
-    const request = kubectl(args, Math.max(1, deadline - Date.now()), signal, deadline);
+    const timeoutMs = commandTimeout(30_000, limits);
+    const request = kubectl(args, timeoutMs, signal, deadline);
     const output = await Promise.race([request, cancelled]);
-    signal.throwIfAborted();
+    commandTimeout(30_000, limits);
     requireValid(Buffer.byteLength(output) <= 1_048_576);
     const object = JSON.parse(output) as StoredObject;
     requireValid(object.apiVersion === 'v1' && object.kind === kind);
@@ -121,6 +126,49 @@ function certificate(value: string) {
   requireValid(Date.parse(cert.validFrom) <= Date.now() && Date.parse(cert.validTo) > Date.now());
 }
 
+function checkEndpoint(hostname: string, port: number, ca: string,
+  signal: AbortSignal, deadline: number) {
+  const limits = { signal, deadline };
+  function handshake(resolve: () => void, reject: (error: Error) => void) {
+    commandTimeout(30_000, limits);
+    const options = { host: hostname, port, servername: hostname, ca, signal,
+      rejectUnauthorized: true };
+    const socket = tls.connect(options);
+    let finished = false;
+    function finish(error?: Error) {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      signal.removeEventListener('abort', refused);
+      socket.destroy();
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    }
+    function refused() {
+      finish(new Error(refusal));
+    }
+    function verified() {
+      try {
+        commandTimeout(30_000, limits);
+        requireValid(socket.authorized);
+        finish();
+      } catch {
+        refused();
+      }
+    }
+    // Send no application data. Keep error handling until the destroyed socket closes.
+    socket.once('error', refused);
+    socket.once('close', refused);
+    socket.once('secureConnect', verified);
+    signal.addEventListener('abort', refused, { once: true });
+  }
+  return new Promise<void>(handshake);
+}
+
 async function check(backup: Backup, namespace: string, kubectl: Kubectl,
   signal: AbortSignal, deadline: number) {
   const address = serviceAddress(backup.endpointURL, namespace);
@@ -145,22 +193,29 @@ async function check(backup: Backup, namespace: string, kubectl: Kubectl,
     ownedBy(object, service);
     secrets.set(ref.name, object);
   }
-  certificate(entry(secrets.get(ca.name)!, ca.key));
+  const caCertificate = entry(secrets.get(ca.name)!, ca.key);
+  certificate(caCertificate);
   for (const ref of [access, secret]) {
     requireValid(/^[\x21-\x7e]+$/u.test(entry(secrets.get(ref.name)!, ref.key)));
   }
-  // Recheck every object after the reads above have waited on Kubernetes.
+  await checkEndpoint(address.hostname, address.port, caCertificate, signal, deadline);
+  // Recheck ownership and CA identity after waiting for the TLS handshake.
   for (const original of found) {
     const current = await read(kubectl, namespace, original.kind, original.metadata.name,
       signal, deadline);
     requireValid(current.metadata.uid === original.metadata.uid);
     requireValid(current.metadata.resourceVersion === original.metadata.resourceVersion);
   }
+  const limits = { signal, deadline };
+  commandTimeout(30_000, limits);
 }
 
 export async function checkCnpgBackupReferences(backup: Backup, namespace: string,
   kubectl: Kubectl, options: { signal?: AbortSignal; timeoutMs?: number } = {}) {
   try {
+    for (const key of Object.keys(options)) {
+      requireValid(key === 'signal' || key === 'timeoutMs');
+    }
     const timeoutMs = options.timeoutMs ?? 30_000;
     requireValid(Number.isInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 30_000);
     const deadline = Date.now() + timeoutMs;
