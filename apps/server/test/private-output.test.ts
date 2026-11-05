@@ -137,10 +137,10 @@ async function cleanup() {
 }
 beforeEach(initialise, 60_000);
 afterEach(cleanup, 30_000);
-async function subscribe(conversationId = 'first', sub = 'alice') {
+async function subscribe(conversationId = 'first', sub = 'alice', cookie?: string) {
   const session = { sub, orgId: 'org-test', roles: [], authTime: 0,
     exp: Math.floor(Date.now() / 1000) + 3600 };
-  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}`,
+  const headers = { cookie: cookie ?? `${config.cookieName}=${encodeSession(config, session)}`,
     origin: new URL(config.redirectUri).origin };
   const websocketOptions = { headers };
   const socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, websocketOptions);
@@ -159,7 +159,7 @@ async function subscribe(conversationId = 'first', sub = 'alice') {
     expect(JSON.stringify(frames)).toContain('"ready"');
   }
   await vi.waitFor(ready);
-  return { socket, frames };
+  return { socket, frames, headers };
 }
 function report() {
   return { type: 'private_reply', conversationId: 'first', turnId: 'first', threadId: 'first',
@@ -689,3 +689,34 @@ function isPreparation(row: Awaited<ReturnType<typeof history>>[number]) {
 }
 it('keeps old turn, thread and input identities separate from the next delivered reply',
   oldInvalidationKeepsNextReply);
+
+async function signOutEndsPrivateDelivery() {
+  const first = await subscribe();
+  const sameSession = await subscribe('second', 'alice', first.headers.cookie);
+  const otherSession = await subscribe('second');
+  const otherMember = await subscribe('bob', 'bob');
+  let closeCode: number | undefined;
+  function closed(code: number) {
+    closeCode = code;
+  }
+  first.socket.once('close', closed);
+  const logout = { method: 'POST' as const, url: '/auth/logout', headers: first.headers };
+  const result = await app.inject(logout);
+  expect(result.statusCode).toBe(200);
+  function signedOut() {
+    expect(closeCode).toBe(1008);
+    expect(sameSession.socket.readyState).toBe(WebSocket.CLOSED);
+  }
+  await vi.waitFor(signedOut);
+  await send();
+  expect(privateFrames(first.frames)).toEqual([]);
+  expect(privateFrames(sameSession.frames)).toEqual([]);
+  await flushBrowser(otherSession.socket);
+  await flushBrowser(otherMember.socket);
+  expect(otherSession.socket.readyState).toBe(WebSocket.OPEN);
+  expect(otherMember.socket.readyState).toBe(WebSocket.OPEN);
+  expect(privateFrames(otherSession.frames)).toEqual([]);
+  expect(privateFrames(otherMember.frames)).toEqual([]);
+}
+it('ends private delivery on every socket for the signed-out cookie only',
+  signOutEndsPrivateDelivery);
