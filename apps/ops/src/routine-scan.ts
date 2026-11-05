@@ -109,6 +109,7 @@ function observation(state: RoutineState, now: number) {
 export async function scanRoutineCandidates(db: Query, store: EventStore, worker: Worker) {
   try {
     const deadline = performance.now() + 10_000;
+    const stopCandidatesAt = deadline - 1000;
     const now = worker.now ?? Date.now;
     const continuation = worker.continuation;
     let checkedAt = continuation?.checkedAt ?? now();
@@ -140,22 +141,33 @@ export async function scanRoutineCandidates(db: Query, store: EventStore, worker
       throw new Error('Routine scan refused');
     }
     const counts = { eligible: 0, gap: 0, late: 0, occupied: 0, future: 0, inactive: 0 };
+    let examined = 0;
+    let lastCompleted: (typeof page.rows)[number] | undefined;
     for (const row of page.rows) {
+      // Reserve time to verify ownership before returning completed progress.
+      if (performance.now() >= stopCandidatesAt) {
+        break;
+      }
       await requireLeadership();
       const state = await readCandidate(store, worker.silo, row.routine_id,
         Number(row.position), deadline, check);
       check();
       const category = observation(state, checkedAt);
       counts[category] += 1;
+      examined += 1;
+      lastCompleted = row;
     }
     await requireLeadership();
     let next: Continuation | null = null;
-    if (page.rows.length === 50) {
-      next = { silo: worker.silo, afterRoutineId: page.rows[49]!.routine_id,
-        afterCreatedPosition: Number(page.rows[49]!.created_position),
+    if (examined < page.rows.length || page.rows.length === 50) {
+      if (!lastCompleted) {
+        throw new Error('Routine scan made no progress');
+      }
+      next = { silo: worker.silo, afterRoutineId: lastCompleted.routine_id,
+        afterCreatedPosition: Number(lastCompleted.created_position),
         generation: page.generation, checkedAt };
     }
-    return { examined: page.rows.length, counts, continuation: next,
+    return { examined, counts, continuation: next,
       executionAvailable: false as const };
   } catch {
     // Keep private event and database details out of worker results.
