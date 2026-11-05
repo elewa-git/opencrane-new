@@ -1030,3 +1030,15 @@ It refuses matching damaged custody in both folders. A decryption guard also che
 that later deletion, identity and stability refusals never read an earlier live fact.
 The [package contract](../../infra/package/README.robot.md#memory-restore-preflight)
 owns validation limits and the explicit remaining qualification.
+
+## Routine candidate pages
+
+`routineCandidatePage` reads at most 50 `(routine_id, position)` references for one
+silo, ordered strictly after the supplied routine id. The existing `routines_pkey`
+index on `(silo, routine_id)` serves this query; no duplicate index is added.
+Changing a definition or run cannot move a row between pages. No status, next-time
+or occupied-run filter hides candidates. The helper selects no private JSON.
+It requires the routine checkpoint to reach the caller's captured event position
+and returns the projection generation so a caller can refuse a pre-rebuild cursor.
+SQL selects references only; the ops scanner reads real history and decides in
+TypeScript. Keep readers stopped during offline replay, as for other routine reads.

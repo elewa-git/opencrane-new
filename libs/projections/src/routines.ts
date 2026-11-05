@@ -151,3 +151,23 @@ async function saveState(db: Query, state: RoutineState,
 }
 
 export const routines: Projection = { name: 'routines', create, drop, apply };
+
+/** Read references only. Use the primary key so updates cannot move a row between pages. */
+export async function routineCandidatePage(db: Query, silo: string, afterRoutineId: string,
+  minimumPosition: number, deadline: number) {
+  const options = { deadline };
+  const checkpoint = await db.query<{ sequence: string; generation: string }>(
+    `SELECT sequence, generation FROM projection_checkpoints
+      JOIN projection_generations USING (name) WHERE name = 'routines'`, [], options);
+  const position = Number(checkpoint.rows[0]?.sequence);
+  const generation = Number(checkpoint.rows[0]?.generation);
+  if (!Number.isSafeInteger(position) || position < minimumPosition ||
+      !Number.isSafeInteger(generation) || generation < 0) {
+    throw new Error('Routine projection unavailable');
+  }
+  const result = await db.query<{ routine_id: string; position: string }>(
+    `SELECT routine_id, position FROM routines
+      WHERE silo = $1 AND routine_id > $2 ORDER BY routine_id LIMIT 50`,
+    [silo, afterRoutineId], options);
+  return { rows: result.rows, generation };
+}

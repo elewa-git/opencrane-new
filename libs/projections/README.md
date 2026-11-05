@@ -38,7 +38,7 @@ PostgreSQL, the database for the read tables.
 ```mermaid
 flowchart LR
   models["libs/models<br/>model and replay tests"] -.->|uses database locks and the test helper| projections
-  ops["apps/ops<br/>workers"] -->|fills read tables and checks saved changes, memory cleanup, tool evidence and surveys| projections["libs/projections<br/>read tables, change history, routines, memory and surveys"]
+  ops["apps/ops<br/>workers"] -->|fills tables, reads routine candidates and checks saved changes| projections["libs/projections<br/>read tables, change history, routines, memory and surveys"]
   server["apps/server<br/>back end"] -->|reads tables, own and admin routine lists, run pages and spending choices| pg["PostgreSQL<br/>database"]
   projections -->|saves admission, removal, role, ownership, control and spending history; keeps private audits outside feeds; saves routines and receipts| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections
@@ -207,6 +207,9 @@ the catalogue restores these saved decisions without sending tool calls.
 
 The routines worker copies saved definitions and runs into read tables.
 An owner index lets the server read small pages of one person’s routines.
+The routine scanner reads up to fifty references in a stable order for one silo.
+It checks each reference against saved events before reporting what it found.
+Paused routines, missing local times and occupied runs remain in these pages.
 A silo index supports admin pages across owners. The server checks current access
 before returning either list.
 An index lets the server read small run pages in their original order, even after a run ends. Instructions

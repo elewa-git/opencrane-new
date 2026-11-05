@@ -1,0 +1,1 @@
+- Routine scheduler preparation can inspect one page of up to 50 routine references against saved events, including missing local times and occupied runs. Automatic scheduling and command dispatch remain disabled.

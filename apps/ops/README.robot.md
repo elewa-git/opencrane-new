@@ -964,7 +964,7 @@ check and pause after that check returns. Both terminate the old session, verify
 replacement, then resume and confirm that the event count has not changed.
 Real due commands cover withheld appends and receipts, lost replies,
 owner refusal and unchanged `startBy`. Wake, model, tool and broker spies stay unused.
-No worker registration, tick queue, scan or dispatch is added. Company execution
+No worker registration, tick queue or command dispatch is added. Company execution
 remains blocked; saved unverified company bearers grant no broker access.
 
 ### Internal checked occurrence skip
@@ -992,7 +992,7 @@ saved event, beyond broker deduplication retention. Changed inputs refuse.
 time. Daily gap tests cover Apia's missing 30 December 2011 and Brussels's missing
 02:30 on 28 March 2027. They check the saved next slot, replay and retry without work.
 It also covers occupied runs, races, recovery, access loss and cancellation
-inside and after append's access check. Ticks, scans, dispatch and
+inside and after append's access check. Ticks, command dispatch and
 fresh-install live qualification remain later work. Company credentials are unchanged.
 
 ### Checked routine downtime ranges
@@ -1024,3 +1024,47 @@ sixty seconds later, one saved skip across concurrent calls and retries, replay,
 successful claiming of the next valid slot.
 It uses disposable services and controlled time. No caller, tick, scan or sender is
 registered. Weekly recording and fresh-install live qualification remain NOT RUN.
+
+### Bounded routine candidate inspection
+
+`scanRoutineCandidates(db, store, worker)` is the discovery and event revalidation
+part of P4-24 PR 8e. It takes the signal and `checkCurrent` from
+`withRoutineLeadership`, a trusted silo, an optional clock and continuation.
+It awaits all reads before returning. Cancellation, lost leadership, missing history
+or unavailable projection data returns a fixed error. It refuses a backwards clock
+within a page or when continuing from an earlier page.
+The whole page has a ten-second read deadline; each ownership check has at most
+one second. No routine history is read inside an access check.
+
+The query reads at most 50 references in immutable routine-id order using the
+existing `(silo, routine_id)` primary-key index. It includes occupied, null-next,
+paused, retired and legacy rows. A checkpoint behind the captured event-store
+position refuses, including when the index is empty. Each selected stream is read
+and folded from creation, checked against its projected position and checked again
+against its latest event position. Projection JSON never decides eligibility.
+
+Results contain only counts, continuation and `executionAvailable: false`.
+Calendar observations distinguish future, at-most-sixty-second eligible, gap,
+late, occupied and inactive records. These counts grant no authority and do not
+prove that owner access would permit a command. A null continuation means the end
+of this index page, not that no work exists. A full page requires another read,
+which may be empty. Changes after inspection and newly inserted ids before the
+continuation are found by the next sweep from the beginning. A continuation binds
+the silo, last routine id, projection generation and last observed clock value.
+Rebuilds invalidate it. No durable scan progress is written.
+
+Base: downtime writer #873 merged as `f8d3e36b16324655c297c434fc1a58c2b8ae77c5`.
+Its contract and builder reports were read before implementation. This first part
+holds all command dispatch to remain within the requested size limit. Later work
+must call `claimRoutineDue`, `skipRoutineOccurrence` or `recordRoutineMissed` with
+fresh event positions and revisions; it must never dispatch from these counts.
+Weekly downtime recording, append cancellation integration, lost-receipt/dedupe
+identity tests across dispatch, tick registration and process enablement remain
+NOT RUN here. `createRoutineSender` remains disabled. Live qualification is NOT RUN.
+
+`test/routine-scan.test.ts` uses disposable PostgreSQL/NATS with real leadership,
+projection and history reads. It covers 51-row pagination, silo exclusion, updates
+between pages, restart, replay, lag, changed events after selection, unavailable
+history, cancellation, backwards clocks, Brussels/Apia and the sixty-second limit.
+Replay and scan append no events and call no execution service. OpenFGA integration
+belongs to the deferred checked-command dispatch; this read-only scan has no IAM port.

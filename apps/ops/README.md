@@ -22,7 +22,7 @@ flowchart LR
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
   ops -->|saves results, routine claims, skips and missed ranges| nats
-  ops -->|holds routine ownership and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
+  ops -->|holds routine ownership, reads candidates and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
   ops -->|deletes forgotten keys| keys["Memory key store<br/>private storage"]
@@ -47,6 +47,7 @@ and suspension. Those checks read metadata and change no resources.
 - Provides [replay](../../GLOSSARY.md#replay), failed-job tools and upgrades for recovery.
 - Provides internal commands that claim, skip or record missed routine slots without starting work.
 - Holds one routine scheduler owner per silo while its callback prepares claims.
+- Inspects small pages of routine references against their saved events.
 
 ## Processes it handles
 
@@ -57,6 +58,11 @@ If cancellation arrives while a read waits, the old holder cannot save a new cla
 The callback must stop and await its work before returning. Only then does the helper
 release the session. Captured ownership checks stay refused after release.
 The routine worker still only updates read tables; automatic scheduling is not connected.
+
+An internal scanner reads up to fifty routine references at a time. It checks their
+saved history and reports counts without starting work. Missing local times and
+occupied runs stay visible. A delayed table or failed read cannot look like an empty
+result. The scanner stops when ownership is lost and waits for its current read.
 
 1. **A change is saved.** A worker copies the event into the matching table.
    Reactions run any required background work and save its results as new events.

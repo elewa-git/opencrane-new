@@ -6,6 +6,13 @@ import { ProjectionRunner, rebuildRoutineProjection, routines } from '@opencrane
 import { database } from '@opencrane/projections/testing';
 import { createLogger } from '@opencrane/observability';
 import { HandlerRuntime } from '@opencrane/handlers';
+import * as models from '@opencrane/models';
+import * as tools from '../../../libs/models/src/mcp-dispatch.ts';
+import * as broker from '../../../libs/models/src/credential-broker.ts';
+import * as sessions from '../../server/src/routine-session.ts';
+import * as inputs from '../../server/src/routine-input.ts';
+import * as roots from '../../server/src/routine-root.ts';
+import * as senders from '../../server/src/routine-sender.ts';
 import { routine } from '../../../libs/authz/test/routine-fixture.ts';
 import { SandboxClient } from '../src/kubernetes.ts';
 import { withRoutineLeadership } from '../src/routine-leadership.ts';
@@ -97,6 +104,11 @@ async function pages() {
   expect(repeated).toEqual(second);
   await storage.reopen();
   expect(await scan(first.continuation)).toEqual(second);
+  now -= 1;
+  await expect(scan(first.continuation)).rejects.toThrow('Routine leadership unavailable');
+  now += 1;
+  await rebuildRoutineProjection(storage.db, nats.reader, logger);
+  await expect(scan(first.continuation)).rejects.toThrow('Routine leadership unavailable');
 }
 it('crosses 51 candidates once in indexed silo order despite updated positions and restart', pages);
 
@@ -144,20 +156,25 @@ async function occupiedAndInactive() {
 it('includes occupied, paused, retired and legacy rows without treating them as work',
   occupiedAndInactive);
 
-async function changedAfterSelection() {
+async function changedAfterSelection(kind: string) {
   await save([creation('orders')]);
   const original = nats.store.readStream.bind(nats.store);
   async function* changed(...args: Parameters<typeof original>) {
-    await nats.seed([routine('routine.paused')]);
+    let change = routine('routine.paused');
+    if (kind === 'edit') {
+      change = { ...creation('orders', '2027-03-28'), id: 'edit', commandId: 'edit',
+        type: 'routine.updated' };
+    }
+    await nats.seed([change]);
     yield* original(...args);
   }
   const reads = vi.spyOn(nats.store, 'readStream');
   reads.mockImplementationOnce(changed);
   const result = await scan();
-  expect(result.counts.inactive).toBe(1);
+  expect(result.counts.inactive + result.counts.future).toBe(1);
   expect(result.counts.eligible).toBe(0);
 }
-it('reads a pause saved after selection instead of using the projected definition',
+it.each(['pause', 'edit'])('reads a %s saved after selection instead of the projected definition',
   changedAfterSelection);
 
 async function refusesLag() {
@@ -174,6 +191,7 @@ async function refusesMissingHistory() {
   await save([creation('orders')]);
   async function* missing() {
     await Promise.resolve();
+    yield* [];
   }
   const reads = vi.spyOn(nats.store, 'readStream');
   reads.mockImplementationOnce(missing);
@@ -198,7 +216,9 @@ async function cancellation() {
   await entered.promise;
   stop.abort();
   let settled = false;
-  function finished() { settled = true; }
+  function finished() {
+    settled = true;
+  }
   void pending.then(finished, finished);
   await new Promise(setImmediate);
   expect(settled).toBe(false);
@@ -221,7 +241,9 @@ async function backwardsTime() {
 }
 it('refuses a clock moving backwards while history is read', backwardsTime);
 
-function forbidden(): never { throw new Error('Forbidden effect'); }
+function forbidden(): never {
+  throw new Error('Forbidden effect');
+}
 async function noEffects() {
   await save([creation('orders')]);
   const append = vi.spyOn(nats.store, 'append');
@@ -229,7 +251,15 @@ async function noEffects() {
   const credentials = vi.spyOn(SandboxClient.prototype, 'credentials');
   const jobs = vi.spyOn(HandlerRuntime.prototype, 'start');
   const network = vi.spyOn(globalThis, 'fetch');
-  const effects = [append, wake, credentials, jobs, network];
+  const session = vi.spyOn(sessions, 'prepareRoutineSession');
+  const input = vi.spyOn(inputs, 'prepareRoutineInput');
+  const root = vi.spyOn(roots, 'allocateRoutineRoot');
+  const sender = vi.spyOn(senders, 'createRoutineSender');
+  const model = vi.spyOn(models, 'startGateway');
+  const tool = vi.spyOn(tools, 'mcpDispatch');
+  const credential = vi.spyOn(broker, 'credentialBroker');
+  const effects = [append, wake, credentials, jobs, network, session, input, root,
+    sender, model, tool, credential];
   for (const effect of effects) effect.mockImplementation(forbidden);
   const before = await nats.store.head();
   expect((await scan()).counts.eligible).toBe(1);
