@@ -9,6 +9,14 @@ async function acceptsSvgAsImage() {
 it('accepts SVG as an image, including markup that must stay inert in the browser',
   acceptsSvgAsImage);
 
+async function acceptsSvgWithXmlDeclaration() {
+  const svg = '<?xml version="1.0" encoding="UTF-8"?>'
+    + '<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>';
+  await expect(inspectFile('drawing.svg', Buffer.from(svg))).resolves.toBe('image/svg+xml');
+}
+
+it('accepts an SVG that starts with an XML declaration', acceptsSvgWithXmlDeclaration);
+
 async function refusesSvgRenamedAsText() {
   const svg = '<svg xmlns="http://www.w3.org/2000/svg"></svg>';
   await expect(inspectFile('drawing.txt', Buffer.from(svg))).rejects.toThrow();

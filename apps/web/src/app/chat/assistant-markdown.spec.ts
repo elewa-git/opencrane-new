@@ -47,6 +47,19 @@ function showsUnavailableWorkspaceFile() {
 it('shows a plain note for a workspace file the viewer cannot open',
   showsUnavailableWorkspaceFile);
 
+function hidesUnpublishedLocalFileLinks() {
+  const destinations = ['../drawing.svg', '/tmp/drawing.svg', 'file:///tmp/drawing.svg'];
+  for (const destination of destinations) {
+    const { root } = mount(`[Open file](${destination})`);
+    expect(root.textContent).toBe('File not available');
+    expect(root.textContent).not.toContain(destination);
+    expect(root.querySelector('a, button')).toBeNull();
+  }
+}
+
+it('hides local file destinations that do not name a published file',
+  hidesUnpublishedLocalFileLinks);
+
 function replacesRawWorkspacePath() {
   const { fixture, root } = mount(
     '[/workspace/artifacts/drawing.svg](/workspace/artifacts/drawing.svg)',
@@ -101,7 +114,7 @@ function keepsHostileText() {
     + '[relative](/settings) [file](file:///example) [encoded](java&#x73;cript:alert)';
   const { root } = mount(hostile);
   expect(root.querySelector('img, script, a')).toBeNull();
-  expect(root.textContent).toBe(hostile);
+  expect(root.textContent).toBe(hostile.replace('[file](file:///example)', 'File not available'));
 }
 
 function rendersMultilineBold() {
