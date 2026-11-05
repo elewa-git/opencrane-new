@@ -164,6 +164,9 @@ async function refusesOtherFailedOutput(output: string): Promise<void> {
   assertNoRunningJourney();
 }
 const failedOutputs = [
+  '{"result":"FAIL","reason":"host_refused","protectionFailure":"/private/helper"}',
+  '{"result":"FAIL","reason":"host_refused","protectionFailure":null}',
+  '{"result":"FAIL","reason":"host_refused","protectionFailure":"helper_unavailable","extra":1}',
   '{"result":"PASS"}',
   '{"result":"FAIL","reason":"journey_failed"}',
   '{"result":"FAIL","reason":"host_refused","private":"/private/setting"}',
@@ -171,3 +174,18 @@ const failedOutputs = [
 ];
 it.each(failedOutputs)(
   'rejects other failed process output %s', refusesOtherFailedOutput, 30_000);
+
+async function forwardsProtectionFailure(protectionFailure: string): Promise<void> {
+  const refusal = { result: 'FAIL', reason: 'host_refused', protectionFailure };
+  const output = JSON.stringify(refusal);
+  const source = `process.stdout.write(${JSON.stringify(output)}); process.exit(1);`;
+  const args = ['/usr/local/bin/node', '--eval', source];
+  expect(await runInContainer(containerId, args)).toEqual(refusal);
+  assertNoRunningJourney();
+  docker(['exec', containerId, 'test', '!', '-e', '/run/opencrane-memory-qualification.lock']);
+}
+it.each(['swap_measurement_failed', 'swap_not_disabled', 'memory_limit_unproved',
+  'crash_kernel_unproved', 'core_limit_measurement_failed', 'core_limit_not_zero',
+  'dumpability_measurement_failed', 'dumpability_protection_failed', 'process_dumpable',
+  'process_identity_changed', 'helper_unavailable'])(
+  'forwards only the fixed protection category %s after cleanup', forwardsProtectionFailure, 30_000);

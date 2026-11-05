@@ -42,11 +42,11 @@ function acceptsRestricted(): void {
 }
 it('measures the image-owned runner inside its restricted container', acceptsRestricted, 30_000);
 function refusesSwap(): void {
-  expect(run(probe, '512m')).toBe('false');
+  expect(run(probe, '512m')).toBe('swap_not_disabled');
 }
 it('refuses actual non-zero cgroup swap allowance', refusesSwap, 30_000);
 function refusesCore(core: string): void {
-  expect(run(probe, '256m', core)).toBe('false');
+  expect(run(probe, '256m', core)).toBe('core_limit_not_zero');
 }
 it.each(['0:1', '1:1'])('refuses actual core limits %s', refusesCore, 30_000);
 function measuresActualProcess(): void {
@@ -56,13 +56,13 @@ function measuresActualProcess(): void {
     import { runnerProtected } from '${directory}/runner-protection.ts';
     const require = createRequire(import.meta.url);
     const helper = require('${directory}/runner-protection.node');
-    assert.equal(helper.check(), false);
+    assert.equal(helper.check(), 'process_dumpable');
     assert.equal(runnerProtected(), true);
     assert.equal(helper.check(), true);
     const child = spawnSync(process.execPath, ['-e',
       "process.stdout.write(String(require('${directory}/runner-protection.node').check()))"]);
     assert.equal(child.status, 0);
-    assert.equal(child.stdout.toString(), 'false');
+    assert.equal(child.stdout.toString(), 'process_dumpable');
     assert.equal(runnerProtected(), true);
     process.stdout.write('measured');`;
   expect(run(source)).toBe('measured');
@@ -74,7 +74,7 @@ function refusesIdentityChange(): void {
     import { runnerProtected } from '${directory}/runner-protection.ts';
     assert.equal(runnerProtected(), true);
     process.seteuid(1000);
-    assert.equal(runnerProtected(), false);
+    assert.equal(runnerProtected(), 'process_dumpable');
     process.stdout.write('refused');`;
   expect(run(source, '256m', '0:0', true)).toBe('refused');
 }

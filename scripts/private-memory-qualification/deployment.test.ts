@@ -460,3 +460,47 @@ async function refusesCompleteReplacement(): Promise<void> {
 }
 it('refuses a replacement child that claims its PARTIAL check is complete',
   refusesCompleteReplacement);
+
+const protectionCases = [
+  ['swap_measurement_failed', 'Container swap protection could not be measured.'],
+  ['swap_not_disabled', 'Container swap allowance and current use must both be zero.'],
+  ['memory_limit_unproved', 'A finite positive container memory limit could not be proved.'],
+  ['crash_kernel_unproved', 'A disabled kernel crash dump could not be proved.'],
+  ['core_limit_measurement_failed', 'The runner core dump limits could not be measured.'],
+  ['core_limit_not_zero', 'The runner soft and hard core dump limits must both be zero.'],
+  ['dumpability_measurement_failed', 'The runner dumpability could not be measured.'],
+  ['dumpability_protection_failed', 'The runner could not disable process dumps.'],
+  ['process_dumpable', 'The runner is still dumpable.'],
+  ['process_identity_changed', 'The runner identity changed after dump protection was set.'],
+  ['helper_unavailable', 'The native runner protection helper is unavailable.'],
+];
+async function savesProtectionFailure(protectionFailure: string, message: string): Promise<void> {
+  function refuse(receipt: Record<string, unknown>): void {
+    for (const key of Object.keys(receipt)) {
+      delete receipt[key];
+    }
+    Object.assign(receipt, { result: 'FAIL', reason: 'host_refused', protectionFailure });
+  }
+  alter = refuse;
+  const expected = { result: 'FAIL', reason: 'host_refused', protectionFailure, message };
+  expect(await collectDeployment()).toEqual(expected);
+  const options = { flag: 'wx', mode: 0o600 };
+  expect(writeFileSync).toHaveBeenLastCalledWith(expect.any(String), JSON.stringify(expected), options);
+  expect(responses).toHaveLength(1);
+}
+it.each(protectionCases)('saves and reports the fixed message for %s', savesProtectionFailure);
+
+async function rejectsUnknownProtection(protectionFailure: unknown): Promise<void> {
+  function refuse(receipt: Record<string, unknown>): void {
+    for (const key of Object.keys(receipt)) {
+      delete receipt[key];
+    }
+    Object.assign(receipt, { result: 'FAIL', reason: 'host_refused', protectionFailure });
+  }
+  alter = refuse;
+  expect(await collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });
+  expect(writeFileSync).toHaveBeenLastCalledWith(expect.any(String),
+    '{"result":"FAIL","reason":"collection_failed"}', { flag: 'wx', mode: 0o600 });
+}
+it.each(['/private/helper', '', null, true, ['helper_unavailable']])(
+  'rejects an unknown protection failure %#', rejectsUnknownProtection);

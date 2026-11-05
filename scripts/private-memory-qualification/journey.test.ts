@@ -19,12 +19,13 @@ const request = {
 function prepare(): void {
   vi.mocked(probeHost).mockReset();
   vi.mocked(probeHost).mockReturnValue(true);
-  vi.mocked(probeContainer).mockReturnValue(false);
+  vi.mocked(probeContainer).mockReturnValue('swap_measurement_failed');
 }
 beforeEach(prepare);
 
 async function incomplete(name: string): Promise<void> {
-  const result = await runJourney(JSON.stringify({ ...request, name }));
+  const namedRequest = { ...request, name };
+  const result = await runJourney(JSON.stringify(namedRequest));
   expect(result).toMatchObject({ ...request, name, result: 'NOT RUN', complete: false });
   expect(result).toHaveProperty('observedAt', expect.any(Number));
   expect(probeHost).toHaveBeenCalledTimes(2);
@@ -44,7 +45,8 @@ const invalid: [string, unknown][] = [
   ['challengeId', `${request.challengeId}\n`],
 ];
 async function invalidField(field: string, value: unknown): Promise<void> {
-  expect(await runJourney(JSON.stringify({ ...request, [field]: value }))).toEqual({
+  const invalidRequest = { ...request, [field]: value };
+  expect(await runJourney(JSON.stringify(invalidRequest))).toEqual({
     result: 'FAIL', reason: 'input_invalid',
   });
   expect(probeHost).not.toHaveBeenCalled();
@@ -70,14 +72,17 @@ it.each(['', '{', 'null', '[]', '{}\n{}', ' '.repeat(4097), 'é'.repeat(2049)])(
 
 async function unsafeHost(): Promise<void> {
   vi.mocked(probeHost).mockReturnValue(false);
-  expect(await runJourney(JSON.stringify(request))).toEqual({ result: 'FAIL', reason: 'host_refused' });
+  expect(await runJourney(JSON.stringify(request))).toEqual({
+    result: 'FAIL', reason: 'host_refused', protectionFailure: 'swap_measurement_failed',
+  });
 }
 it('refuses a host whose observations are unsafe or unavailable', unsafeHost);
 
 async function containerPrerequisite(name: string): Promise<void> {
   vi.mocked(probeHost).mockReturnValue(false);
   vi.mocked(probeContainer).mockReturnValue(true);
-  const input = JSON.stringify({ ...request, name });
+  const namedRequest = { ...request, name };
+  const input = JSON.stringify(namedRequest);
   expect(await runJourney(input)).toMatchObject({ result: 'NOT RUN', complete: false });
   expect(probeContainer).toHaveBeenCalledTimes(2);
 }
@@ -98,9 +103,9 @@ async function changedDuringWork(): Promise<void> {
 it('refuses changed protection after awaited work without switching paths', changedDuringWork);
 async function changedBeforeReceipt(): Promise<void> {
   vi.mocked(probeHost).mockReturnValue(false);
-  vi.mocked(probeContainer).mockReturnValueOnce(true).mockReturnValue(false);
+  vi.mocked(probeContainer).mockReturnValueOnce(true).mockReturnValue('helper_unavailable');
   expect(await runJourney(JSON.stringify(request))).toEqual({
-    result: 'FAIL', reason: 'host_refused',
+    result: 'FAIL', reason: 'host_refused', protectionFailure: 'helper_unavailable',
   });
 }
 it('remeasures container protection before returning the prerequisite receipt', changedBeforeReceipt);

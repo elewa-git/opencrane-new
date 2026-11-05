@@ -8,13 +8,14 @@ vi.mock('node:fs', { spy: true });
 vi.mock('./runner-protection.ts', { spy: true });
 let files: Map<string, string>;
 const mount = '29 23 0:26 / /sys/fs/cgroup ro - cgroup2 cgroup rw\n';
-const request = JSON.stringify({
+const requestData = {
   sourceSha: 'a'.repeat(40), imageDigest: `sha256:${'b'.repeat(64)}`,
   environmentId: 'c'.repeat(64), siloId: `sha256:${'d'.repeat(64)}`,
   installationId: `sha256:${'e'.repeat(64)}`, freshInstall: true,
   runId: '11111111-1111-4111-8111-111111111111',
   challengeId: '22222222-2222-4222-8222-222222222222', name: 'privateTurns',
-});
+};
+const request = JSON.stringify(requestData);
 function read(path: unknown): string {
   const value = files.get(String(path));
   if (value === undefined) {
@@ -63,23 +64,25 @@ const unsafe = [
   ['/sys/kernel/kexec_crash_loaded', '1\n'],
 ];
 async function refusesUnsafe(path: string, value: string): Promise<void> {
+  const expected = failureFor(path);
   files.set(path, value);
-  expect(probeContainer()).toBe(false);
-  expect(await runJourney(request)).toEqual({ result: 'FAIL', reason: 'host_refused' });
+  expect(probeContainer()).toBe(expected);
+  expect(await runJourney(request)).toEqual({ result: 'FAIL', reason: 'host_refused', protectionFailure: expected });
 }
 it.each(unsafe)('refuses an unsafe container observation %s: %s', refusesUnsafe);
 async function refusesMissing(path: string): Promise<void> {
+  const expected = missingFailureFor(path);
   files.delete(path);
-  expect(probeContainer()).toBe(false);
-  expect(await runJourney(request)).toEqual({ result: 'FAIL', reason: 'host_refused' });
+  expect(probeContainer()).toBe(expected);
+  expect(await runJourney(request)).toEqual({ result: 'FAIL', reason: 'host_refused', protectionFailure: expected });
 }
 it.each(['/proc/self/cgroup', '/proc/self/mountinfo', '/sys/fs/cgroup/cgroup.procs',
   '/sys/fs/cgroup/memory.max', '/sys/fs/cgroup/memory.swap.max',
   '/sys/fs/cgroup/memory.swap.current', '/sys/kernel/kexec_crash_loaded'])(
   'refuses missing container controls %s', refusesMissing);
 function refusesProcess(): void {
-  vi.mocked(runnerProtected).mockReturnValue(false);
-  expect(probeContainer()).toBe(false);
+  vi.mocked(runnerProtected).mockReturnValue('process_dumpable');
+  expect(probeContainer()).toBe('process_dumpable');
 }
 it('refuses a dumpable, unlimited or unmeasurable runner', refusesProcess);
 function resolvesSubgroup(): void {
@@ -101,11 +104,31 @@ function refusesMovedGroup(): void {
     return value;
   }
   vi.mocked(readFileSync).mockImplementation(readAndMove);
-  expect(probeContainer()).toBe(false);
+  expect(probeContainer()).toBe('swap_measurement_failed');
 }
 it('refuses membership that moves while controls are read', refusesMovedGroup);
 function refusesRedirect(): void {
   vi.mocked(realpathSync).mockReturnValue('/different');
-  expect(probeContainer()).toBe(false);
+  expect(probeContainer()).toBe('swap_measurement_failed');
 }
 it('refuses a cgroup path that resolves elsewhere', refusesRedirect);
+
+function missingFailureFor(path: string): string {
+  if (path.endsWith('memory.max')) return 'memory_limit_unproved';
+  if (path.endsWith('kexec_crash_loaded')) return 'crash_kernel_unproved';
+  return 'swap_measurement_failed';
+}
+function failureFor(path: string): string {
+  if (path.includes('memory.swap.')) return 'swap_not_disabled';
+  return missingFailureFor(path);
+}
+async function namesRunnerFailure(protectionFailure: 'helper_unavailable' | 'core_limit_not_zero' |
+  'process_dumpable'): Promise<void> {
+  vi.mocked(runnerProtected).mockReturnValue(protectionFailure);
+  expect(probeContainer()).toBe(protectionFailure);
+  expect(await runJourney(request)).toEqual({
+    result: 'FAIL', reason: 'host_refused', protectionFailure,
+  });
+}
+it.each(['helper_unavailable', 'core_limit_not_zero', 'process_dumpable'] as const)(
+  'preserves %s when swap and memory controls are safe', namesRunnerFailure);
