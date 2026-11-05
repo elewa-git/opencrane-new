@@ -1467,8 +1467,22 @@ async function discoversBeforePrivateDispatch() {
   expect(test.native.mcp.size).toBe(1);
   const facts = await readChatFacts(nats.store, 'test', 'chat', 'recall-turn');
   expect(facts.memoryContext?.initialLoaded).toBe(true);
+  const receivedBeforeRenewal = [...test.native.received];
+  const sentBeforeRenewal = test.sent.length;
+  await expect(computer.channel.renew('returned-native-1')).resolves.toBeUndefined();
+  await link.settled();
+  const renewalFrames = test.sent.slice(sentBeforeRenewal);
+  expect(renewalFrames).toHaveLength(1);
+  expect(renewalFrames[0]).toMatchObject({ type: 'ack', token: expect.any(String) });
+  expect(renewalFrames[0]).not.toHaveProperty('initialInput');
+  expect(renewalFrames[0]).not.toHaveProperty('refused');
+  expect(computer.grants.has('returned-native-1')).toBe(true);
+  expect(test.native.received).toEqual(receivedBeforeRenewal);
+  expect(test.native.mcp.size).toBe(1);
+  const renewed = await readChatFacts(nats.store, 'test', 'chat', 'recall-turn');
+  expect(renewed.memoryContext).toEqual(facts.memoryContext);
 }
-it('saves admission and loads recall over the bridge before releasing private input or credentials',
+it('loads recall before private dispatch and renews without repeating discovery or input',
   discoversBeforePrivateDispatch);
 
 const recallWithdrawals = [
