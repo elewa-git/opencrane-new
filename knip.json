@@ -23,7 +23,8 @@
         "scripts/ci/run-tests.mjs",
         "scripts/ci/refresh-timings.mjs",
         "scripts/ci/*.test.mjs",
-        "scripts/check-chat-mermaid.mjs"
+        "scripts/check-chat-mermaid.mjs",
+        "scripts/check-private-reply-signout.mjs"
       ],
       "project": [
         "scripts/private-memory-qualification/*.ts",

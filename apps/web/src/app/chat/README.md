@@ -29,7 +29,8 @@ This folder contains the workspace where people talk to their assistant, exchang
 
 Personal sessions can receive a private reply in page memory, outside saved messages.
 This reply is not displayed yet. Its matching clearance, Stop, a replaced connection
-or leaving the session removes it. Reconnecting cannot recover it.
+or leaving the session removes it. Signing out in another tab also removes it.
+Returning tabs check their session again. Reconnecting cannot recover the reply.
 
 Assistant replies show Markdown headings, lists, quotes, inline formatting and code.
 Code blocks have a copy button. Links open in a new tab and allow only HTTPS and email.

@@ -1,1 +1,2 @@
 - Private personal replies can reach the active browser session without entering saved messages or the socket cache. Matching clearance, Stop and connection loss discard them. Display remains for the next part.
+- Signing out clears private replies in other open tabs. Returning tabs check the session again, and logout stops matching live connections on the server handling the request.

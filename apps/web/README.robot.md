@@ -1399,7 +1399,15 @@ Only a new turn start received after socket readiness accepts a reply. HTTP hist
 reconnect catch-up cannot enable an old turn. Completion retains an existing reply but
 refuses first delivery after completion. Output-loss metadata does not clear live text.
 Stop, failure, closure, access loss, projection replacement, socket loss/replacement,
-navigation and destruction discard it. HTTP completions cannot restore it. Uploads
+navigation and destruction discard it. HTTP completions cannot restore it.
+`BrowserSession` broadcasts sign-out before the native logout form navigates away.
+Other tabs disconnect and clear protected content immediately. Focus, pageshow and a
+return to visible state check `/auth/me` with `cache: no-store`. New private replies
+are blocked during that read; clearance still discards existing text immediately. A refused, signed-out, failed or timed-out read ends delivery;
+a late successful read cannot undo a sign-out. The read has a five-second timeout.
+`private-reply-browser.test.ts` runs two real Chromium pages with intercepted HTTP and
+WebSocket replies, including a missed broadcast. It inspects the public reply signal
+in a development build because the product does not display that signal yet. Uploads
 reuse a connected socket so they do not discard an unrelated reply.
 
 The template does not consume this state. Markdown display, cancellable private Mermaid

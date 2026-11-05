@@ -35,7 +35,8 @@ function privateText() {
 }
 function connected() {
   const element = document.querySelector('oc-workspace');
-  return globalThis.ng?.getComponent(element)?.chat.connected() ?? false;
+  const component = globalThis.ng?.getComponent(element);
+  return component?.chat.connected() ?? false;
 }
 
 async function sessionFixture(context, broadcast) {
@@ -50,13 +51,15 @@ async function sessionFixture(context, broadcast) {
   }
   const subscriptionReady = new Promise(waitForSubscription);
   async function serve(route) {
-    const path = new URL(route.request().url()).pathname;
+    const request = route.request();
+    const url = new URL(request.url());
+    const path = url.pathname;
     let body;
     if (path === '/auth/me') {
       authenticationReads += 1;
       body = { authenticated, user: { name: 'Alex' } };
     } else if (path === '/auth/logout') {
-      assert.equal(route.request().method(), 'POST');
+      assert.equal(request.method(), 'POST');
       authenticated = false;
       logoutPosts += 1;
       const response = { contentType: 'text/plain', body: 'Signed out' };

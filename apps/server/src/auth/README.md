@@ -8,6 +8,7 @@ This folder handles signing in and out of OpenCrane. It sends the browser to the
 - Checks the reply from [Zitadel](../../../../GLOSSARY.md#zitadel-sign-in-service), the sign-in service.
 - Reports whether the browser has a valid session, with safe profile details.
 - Handles a recent sign-in when a particular tool approval requires it.
+- Closes this server's live browser connections for the signed-out cookie before contacting the sign-in service.
 - Ends the local session and, when available, redirects the browser to end its sign-in service session too.
 
 Sign-in details that are too large for a browser cookie receive a clear error. Recent sign-in for an approval must belong to the same account and browser session. Sign-out must come from this website and a valid organisation session. A refusal leaves cookies unchanged; if provider sign-out is unavailable, the page explains that only the OpenCrane session ended.
@@ -18,6 +19,7 @@ Session requests and live connections require the configured organisation. Produ
 
 | File | What it does |
 | --- | --- |
+| [session-sockets.ts](session-sockets.ts) | Tracks live browser connections by cookie digest and closes them on sign-out. |
 | [routes.ts](routes.ts) | Handles sign-in, callback, sign-out and current-session requests. |
 
 ## How it connects

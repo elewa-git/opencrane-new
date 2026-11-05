@@ -1240,7 +1240,15 @@ an explicit exception; `/healthz` is public and outside `/api`.
 `GET /auth/login` redirects to the provider; `GET /auth/me` reports the session,
 including the optional signed-in profile `user.name` for display.
 `POST /auth/logout` requires the exact configured Origin and a valid session for
-the pinned organisation. Refusals clear no cookies. Success clears the local cookie
+the pinned organisation. Refusals clear no cookies or sockets. Success closes every
+`/ws` connection on this server that used the exact cookie, with code 1008, before
+waiting for the provider. The connection becomes unavailable synchronously, so pending
+private delivery fails its existing connection check. Tracking holds only a cookie
+digest and live socket references, removed when each socket closes; it is not a
+persistent session revocation list. Other cookies, including another sign-in by the
+same person, keep their connections. This tracking does not send sign-out to other
+server processes. Browser tabs also share sign-out and
+recheck their cookie when they return. Success clears the local cookie
 and answers a top-level form POST with **303 See Other**. Its `Location` is the
 provider end-session endpoint with `id_token_hint`, `client_id` and the configured
 `post_logout_redirect_uri`; the response body is empty and marked `no-store`.

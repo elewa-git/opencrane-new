@@ -5,7 +5,9 @@ import type { WebSocket } from 'ws';
 const servers = new WeakMap<Server, Map<string, Set<WebSocket>>>();
 
 function cookieDigest(cookie: string): string {
-  return createHash('sha256').update(cookie).digest('hex');
+  const hash = createHash('sha256');
+  hash.update(cookie);
+  return hash.digest('hex');
 }
 
 export function trackSessionSocket(server: Server, cookie: string, socket: WebSocket): void {
