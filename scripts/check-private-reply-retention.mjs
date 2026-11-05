@@ -32,7 +32,7 @@ function holdClipboard() {
 }
 
 function rememberReply() {
-  const element = document.querySelector('oc-assistant-markdown');
+  const element = globalThis.document.querySelector('oc-assistant-markdown');
   const diagram = element.querySelector('oc-mermaid-diagram');
   const component = globalThis.ng.getComponent(element);
   const diagramComponent = globalThis.ng.getComponent(diagram);
@@ -80,58 +80,76 @@ async function collectReply(page) {
   }
 }
 
+async function holdDiagramStartup(page) {
+  let release;
+  function hold(resolveHold) {
+    release = resolveHold;
+  }
+  const pending = new Promise(hold);
+  async function holdRenderer(route) {
+    await pending;
+    await serveAssets(route);
+  }
+  await page.route('**/mermaid-renderer.js', holdRenderer);
+  return release;
+}
+
+async function startCopies(page, pendingDiagram) {
+  const attached = { state: 'attached' };
+  if (pendingDiagram) {
+    await page.locator('.oc-mermaid-renderer').waitFor(attached);
+  } else {
+    await page.locator('img[alt="Diagram"]').waitFor();
+  }
+  await page.evaluate(rememberReply);
+  const before = await page.evaluate(retainedReferences);
+  assert.deepEqual(before, pendingDiagram ? [true, true, true, true]
+    : [true, true, true, true, true]);
+  const copyOptions = { name: 'Copy code', exact: true };
+  const copies = page.getByRole('button', copyOptions);
+  await copies.first().click();
+  await copies.last().click();
+}
+
+function finishCopies() {
+  globalThis.finishCopies();
+}
+
+async function assertAbsent(page) {
+  assert.equal(await page.locator('oc-assistant-markdown, img[alt="Diagram"]').count(), 0);
+  const markup = await page.locator('body').innerHTML();
+  assert(!markup.includes('Synthetic private code'));
+  await collectReply(page);
+}
+
 async function clearDuringCopy(browser, pendingDiagram) {
   const page = await browser.newPage();
   let releaseRenderer;
-  function hold(resolveHold) {
-    releaseRenderer = resolveHold;
-  }
-  const rendererHeld = new Promise(hold);
-  async function holdRenderer(route) {
-    await rendererHeld;
-    await serveAssets(route);
-  }
   try {
     await page.route('**/*', serveAssets);
     const fixture = await chatFixture(page, 'empty-selected');
     await page.goto(`${origin}/workspace?conversation=chat`);
+    // Finish loading the app before checking the fixture's subscription acknowledgement.
+    await page.waitForLoadState('networkidle');
     await fixture.waitForReadySocket();
     await page.evaluate(holdClipboard);
     if (pendingDiagram) {
-      await page.route('**/mermaid-renderer.js', holdRenderer);
+      releaseRenderer = await holdDiagramStartup(page);
     }
     const binding = deliverReply(fixture);
-    const attached = { state: 'attached' };
-    if (pendingDiagram) {
-      await page.locator('.oc-mermaid-renderer').waitFor(attached);
-    } else {
-      await page.locator('img[alt="Diagram"]').waitFor();
-    }
-    await page.evaluate(rememberReply);
-    const before = await page.evaluate(retainedReferences);
-    assert.deepEqual(before, pendingDiagram ? [true, true, true, true]
-      : [true, true, true, true, true]);
-    const copyOptions = { name: 'Copy code', exact: true };
-    const copies = page.getByRole('button', copyOptions);
-    await copies.first().click();
-    await copies.last().click();
+    await startCopies(page, pendingDiagram);
     const clearance = { ...binding, type: 'private_output_cleared' };
     fixture.sendFrame(clearance);
     const detached = { state: 'detached' };
     await page.locator('oc-assistant-markdown').waitFor(detached);
     await page.locator('.oc-mermaid-renderer').waitFor(detached);
     await collectReply(page);
-    function finishCopies() {
-      globalThis.finishCopies();
-    }
     await page.evaluate(finishCopies);
-    releaseRenderer();
+    releaseRenderer?.();
     await page.waitForLoadState('networkidle');
-    assert.equal(await page.locator('oc-assistant-markdown, img[alt="Diagram"]').count(), 0);
-    assert(!(await page.locator('body').innerHTML()).includes('Synthetic private code'));
-    await collectReply(page);
+    await assertAbsent(page);
   } finally {
-    releaseRenderer();
+    releaseRenderer?.();
     await page.close();
   }
 }

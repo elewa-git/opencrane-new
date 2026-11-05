@@ -28,7 +28,9 @@ function createRenderer(signal?: AbortSignal): Promise<HTMLIFrameElement> {
     function timedOut(): void {
       stopWaiting();
       frame.remove();
-      if (!signal) renderer = undefined;
+      if (!signal) {
+        renderer = undefined;
+      }
       reject(new Error('Diagram renderer did not start'));
     }
     const timer = setTimeout(timedOut, renderTimeoutMs);
@@ -102,6 +104,8 @@ export async function renderMermaid(code: string, signal?: AbortSignal): Promise
     signal?.throwIfAborted();
     return await new Promise(waitForDiagram);
   } finally {
-    if (signal) frame.remove();
+    if (signal) {
+      frame.remove();
+    }
   }
 }

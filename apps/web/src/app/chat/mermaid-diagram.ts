@@ -1,11 +1,14 @@
 import {
   ChangeDetectionStrategy, Component, effect, inject, InjectionToken, input, signal,
+  type OnDestroy,
 } from '@angular/core';
+import { untilAborted } from './until-aborted';
 
 type RenderMermaid = (code: string, signal?: AbortSignal) => Promise<{ svg: string }>;
 
 async function loadAndRender(code: string, signal?: AbortSignal): Promise<{ svg: string }> {
-  const { renderMermaid } = await import('./mermaid-renderer');
+  const loading = import('./mermaid-renderer');
+  const { renderMermaid } = await untilAborted(loading, signal);
   signal?.throwIfAborted();
   return renderMermaid(code, signal);
 }
@@ -22,10 +25,15 @@ function byteToCharacter(byte: number): string {
 }
 
 async function renderDiagram(
-  code: string, render: RenderMermaid, signal?: AbortSignal,
+  code: string, render: RenderMermaid, signal: AbortSignal, volatile: boolean,
 ): Promise<string> {
-  const result = await render(code, signal);
-  signal?.throwIfAborted();
+  let renderSignal: AbortSignal | undefined;
+  if (volatile) {
+    renderSignal = signal;
+  }
+  const drawing = render(code, renderSignal);
+  const result = await untilAborted(drawing, signal);
+  signal.throwIfAborted();
   // Join the warning's text spans without inserting untrusted SVG into the parent document.
   const text = result.svg.replace(/<\/?tspan\b[^>]*>/g, '');
   const joinedText = text.replace(/\s/g, '');
@@ -71,7 +79,8 @@ async function renderDiagram(
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class MermaidDiagram {
+export class MermaidDiagram implements OnDestroy {
+  private readonly lifetime = new AbortController();
   readonly code = input.required<string>();
   readonly closed = input.required<boolean>();
   readonly volatile = input(false);
@@ -84,6 +93,11 @@ export class MermaidDiagram {
     effect(this.renderCurrentCode.bind(this));
   }
 
+  ngOnDestroy(): void {
+    this.lifetime.abort();
+    this.copyStatus.set('');
+  }
+
   private renderCurrentCode(onCleanup: (cleanup: () => void) => void): void {
     const code = this.code();
     const closed = this.closed();
@@ -92,13 +106,13 @@ export class MermaidDiagram {
     this.renderVersion += 1;
     const version = this.renderVersion;
     const controller = new AbortController();
-    const signal = this.volatile() ? controller.signal : undefined;
+    const volatile = this.volatile();
     const cancel = this.cancelRender.bind(this, controller);
     onCleanup(cancel);
     if (!closed || code.length > 50_000) {
       return;
     }
-    void this.showDiagram(code, version, signal);
+    void this.showDiagram(code, version, controller.signal, volatile);
   }
 
   private cancelRender(controller: AbortController): void {
@@ -108,9 +122,11 @@ export class MermaidDiagram {
     this.copyStatus.set('');
   }
 
-  private async showDiagram(code: string, version: number, signal?: AbortSignal): Promise<void> {
+  private async showDiagram(
+    code: string, version: number, signal: AbortSignal, volatile: boolean,
+  ): Promise<void> {
     try {
-      const imageUrl = await renderDiagram(code, this.render, signal);
+      const imageUrl = await renderDiagram(code, this.render, signal, volatile);
       if (version === this.renderVersion) {
         this.imageUrl.set(imageUrl);
       }
@@ -124,9 +140,16 @@ export class MermaidDiagram {
 
   protected async copySource(): Promise<void> {
     try {
-      await navigator.clipboard.writeText(this.code());
+      const copying = navigator.clipboard.writeText(this.code());
+      await untilAborted(copying, this.lifetime.signal);
+      if (this.lifetime.signal.aborted) {
+        return;
+      }
       this.copyStatus.set('Copied');
     } catch {
+      if (this.lifetime.signal.aborted) {
+        return;
+      }
       this.copyStatus.set('Could not copy. Try again.');
     }
   }

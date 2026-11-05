@@ -1424,7 +1424,13 @@ reply shows “Reply unavailable”; output-loss metadata never hides a valid li
 A turn start received during subscription catch-up cannot enable delivery.
 Private Mermaid diagrams use a separate sandboxed document per drawing. Abort removes
 that document, cancels startup and response listeners, and ignores late drawing results.
-Ordinary diagrams keep their shared renderer. Focus on a removed private control returns
+Pending clipboard copies and diagram imports stop holding the reply when it is removed.
+The browser may finish a copy it already accepted, but its result cannot restore cleared text
+or copy feedback. `check-private-reply-retention.mjs` holds copies in Chromium and checks
+that WeakRef references to components, detached elements and images no longer resolve
+after clearance and forced garbage collection. It also holds diagram startup and copies
+the source while drawing waits. Ordinary diagrams keep their shared renderer.
+Focus on a removed private control returns
 to the transcript. Restriction notices follow saved `restricted_tool_refused` failures.
 No personal memory-free action is offered: that command choice is not implemented here.
 `npm run visual:p4-15-pr3l` uses intercepted HTTP/WebSocket fixtures at 1280 and 390 px.

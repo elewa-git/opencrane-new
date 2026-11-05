@@ -7,6 +7,7 @@ import { DogEar } from '../ui/paper';
 import { MermaidDiagram } from './mermaid-diagram';
 import { parseMarkdown, type MarkdownBlock } from './markdown-parser';
 import { fileName } from './file-presentation';
+import { untilAborted } from './until-aborted';
 
 @Component({
   selector: 'oc-assistant-markdown',
@@ -18,6 +19,7 @@ import { fileName } from './file-presentation';
 })
 export class AssistantMarkdown implements OnDestroy {
   private readonly element = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly lifetime = new AbortController();
   private returnFocus: HTMLElement | null = null;
   readonly text = input.required<string>();
   readonly availableFiles = input<string[]>([]);
@@ -64,7 +66,10 @@ export class AssistantMarkdown implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.lifetime.abort();
+    this.copyStatus.set(null);
     this.returnFocus?.focus();
+    this.returnFocus = null;
   }
 
   protected rememberFocus(): void {
@@ -80,14 +85,23 @@ export class AssistantMarkdown implements OnDestroy {
   }
 
   private checkFocus(): void {
-    if (!this.element.nativeElement.contains(document.activeElement)) this.returnFocus = null;
+    if (!this.element.nativeElement.contains(document.activeElement)) {
+      this.returnFocus = null;
+    }
   }
 
   protected async copyCode(block: MarkdownBlock, blockIndex: number): Promise<void> {
     try {
-      await navigator.clipboard.writeText(block.text);
+      const copying = navigator.clipboard.writeText(block.text);
+      await untilAborted(copying, this.lifetime.signal);
+      if (this.lifetime.signal.aborted) {
+        return;
+      }
       this.copyStatus.set({ blockIndex, code: block.text, text: 'Copied' });
     } catch {
+      if (this.lifetime.signal.aborted) {
+        return;
+      }
       this.copyStatus.set({ blockIndex, code: block.text, text: 'Could not copy. Try again.' });
     }
   }

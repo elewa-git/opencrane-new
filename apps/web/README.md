@@ -43,7 +43,8 @@ For everyone, the website:
   source shown as code until the block closes or when a diagram cannot be drawn.
   Drawing happens in a separate browser document that cannot contact the network.
 - Shows private personal replies in page memory without saving them in message history.
-  Clearance removes their text and diagrams. Disconnecting, losing access or signing out
+  Clearance removes their text and diagrams, including when copying or drawing is still waiting.
+  Disconnecting, losing access or signing out
   in another tab discards them. Reload explains that the reply is unavailable.
   Returning tabs check the session before accepting private frames.
 - Expands saved command and tool details under their activity lines in chat.

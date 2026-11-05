@@ -54,6 +54,64 @@ async function assertCleared(page) {
   const citationOptions = { name: 'Citation 1' };
   assert.equal(await page.getByRole('button', citationOptions).count(), 0);
 }
+function hasTouchTarget(element) {
+  const target = globalThis.getComputedStyle(element, '::before');
+  return parseFloat(target.height) >= 44 && parseFloat(target.width) >= 44;
+}
+function hasFocus(element) {
+  return element === globalThis.document.activeElement;
+}
+function containsReply(message) {
+  return message.includes('Synthetic plan') || message.includes('Draft --> Review');
+}
+async function captureLiveReply(page, fixture, delivery, width) {
+  const { binding, reply, turn } = delivery;
+  const imageOptions = { name: 'Diagram', exact: true };
+  const image = page.getByRole('img', imageOptions);
+  await image.waitFor();
+  fixture.add('agent.output_lost', turn);
+  fixture.add('agent.turn_completed', turn);
+  fixture.sendFrame(reply);
+  assert.equal(await page.locator('oc-assistant-markdown').count(), 1);
+  const otherClearance = { ...binding, type: 'private_output_cleared', threadId: 'other' };
+  fixture.sendFrame(otherClearance);
+  await image.waitFor();
+  await capture(page, 'live', width);
+}
+async function clearFocusedReply(page, fixture, binding, width) {
+  const citationOptions = { name: 'Citation 1', exact: true };
+  const citation = page.getByRole('button', citationOptions);
+  assert(await citation.evaluate(hasTouchTarget), 'Citation target is 44 px');
+  await citation.focus();
+  const clearance = { ...binding, type: 'private_output_cleared' };
+  fixture.sendFrame(clearance);
+  await assertCleared(page);
+  const transcriptOptions = { name: 'Conversation messages' };
+  const transcript = page.getByRole('region', transcriptOptions);
+  assert(await transcript.evaluate(hasFocus), 'Clearance preserves keyboard focus');
+  await page.getByText('Reply unavailable', exact).waitFor();
+  await capture(page, 'cleared', width);
+}
+async function captureRestriction(page, fixture, width) {
+  const question = { text: 'Try a local file.', authorId: 'me' };
+  const human = fixture.add('message.posted', question);
+  const restricted = { turnId: human.id, executionMode: 'restricted' };
+  fixture.add('agent.turn_started', restricted);
+  const failure = { ...restricted, reason: 'restricted_tool_refused' };
+  fixture.add('agent.turn_failed', failure);
+  const notice = 'Local file and browser writes are not available while private memory is loaded.';
+  await page.getByText(notice, exact).waitFor();
+  await page.getByText('Memory admission is disabled', exact).waitFor();
+  await capture(page, 'restriction', width);
+}
+async function reloadClearedReply(page, fixture, reply) {
+  fixture.sendFrame(reply);
+  await page.reload();
+  await fixture.waitForReadySocket();
+  await page.getByText('Reply unavailable', exact).waitFor();
+  await assertCleared(page);
+  assert.equal(fixture.commands.length, 0, 'Reload sends no command');
+}
 async function displayAndClear(browser, width) {
   const options = { viewport: { width, height: 900 }, reducedMotion: 'reduce' };
   const page = await browser.newPage(options);
@@ -64,56 +122,11 @@ async function displayAndClear(browser, width) {
   page.on('console', recordConsole);
   try {
     const fixture = await openChat(page);
-    const { binding, reply, turn } = deliver(fixture);
-    const imageOptions = { name: 'Diagram', exact: true };
-    const image = page.getByRole('img', imageOptions);
-    await image.waitFor();
-    fixture.add('agent.output_lost', turn);
-    fixture.add('agent.turn_completed', turn);
-    fixture.sendFrame(reply);
-    assert.equal(await page.locator('oc-assistant-markdown').count(), 1);
-    const otherClearance = { ...binding, type: 'private_output_cleared', threadId: 'other' };
-    fixture.sendFrame(otherClearance);
-    await image.waitFor();
-    await capture(page, 'live', width);
-    const citationOptions = { name: 'Citation 1', exact: true };
-    const citation = page.getByRole('button', citationOptions);
-    function hasTouchTarget(element) {
-      const target = globalThis.getComputedStyle(element, '::before');
-      return parseFloat(target.height) >= 44 && parseFloat(target.width) >= 44;
-    }
-    assert(await citation.evaluate(hasTouchTarget), 'Citation target is 44 px');
-    await citation.focus();
-    const clearance = { ...binding, type: 'private_output_cleared' };
-    fixture.sendFrame(clearance);
-    await assertCleared(page);
-    const transcriptOptions = { name: 'Conversation messages' };
-    const transcript = page.getByRole('region', transcriptOptions);
-    function hasFocus(element) {
-      return element === globalThis.document.activeElement;
-    }
-    assert(await transcript.evaluate(hasFocus), 'Clearance preserves keyboard focus');
-    await page.getByText('Reply unavailable', exact).waitFor();
-    await capture(page, 'cleared', width);
-    const question = { text: 'Try a local file.', authorId: 'me' };
-    const human = fixture.add('message.posted', question);
-    const restricted = { turnId: human.id, executionMode: 'restricted' };
-    fixture.add('agent.turn_started', restricted);
-    const failure = { ...restricted, reason: 'restricted_tool_refused' };
-    fixture.add('agent.turn_failed', failure);
-    await page.getByText('Local file and browser writes are not available while private memory is loaded.',
-      exact).waitFor();
-    await page.getByText('Memory admission is disabled', exact).waitFor();
-    await capture(page, 'restriction', width);
-    fixture.sendFrame(reply);
-    await page.reload();
-    await fixture.waitForReadySocket();
-    await page.getByText('Reply unavailable', exact).waitFor();
-    await assertCleared(page);
-    assert.equal(fixture.commands.length, 0, 'Reload sends no command');
-    function containsReply(message) {
-      return message.includes('Synthetic plan') || message.includes('Draft --> Review');
-    }
+    const delivery = deliver(fixture);
+    await captureLiveReply(page, fixture, delivery, width);
+    await clearFocusedReply(page, fixture, delivery.binding, width);
+    await captureRestriction(page, fixture, width);
+    await reloadClearedReply(page, fixture, delivery.reply);
     assert(!consoleMessages.some(containsReply), 'Console contains no reply text');
   } finally {
     await page.close();
