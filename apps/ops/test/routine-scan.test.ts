@@ -20,7 +20,8 @@ let runner: ProjectionRunner;
 let stop: AbortController;
 let now: number;
 let databaseUrl: string;
-const logger = createLogger('routine-scan-test', { level: 'silent' });
+const loggerOptions = { level: 'silent' };
+const logger = createLogger('routine-scan-test', loggerOptions);
 type Continuation = Awaited<ReturnType<typeof scanRoutineCandidates>>['continuation'];
 
 async function setup() {
@@ -79,7 +80,8 @@ async function scan(continuation: Continuation = null) {
 async function pages() {
   const events: EventEnvelope[] = [];
   for (let index = 0; index < 51; index += 1) {
-    events.push(creation(`item-${String(index).padStart(2, '0')}`));
+    const event = creation(`item-${String(index).padStart(2, '0')}`);
+    events.push(event);
   }
   const foreign = { ...creation('foreign'), silo: 'other' };
   events.push(foreign);
@@ -154,7 +156,8 @@ async function progressesWithSlowReads() {
   function monotonicClock() {
     return elapsed;
   }
-  vi.spyOn(performance, 'now').mockImplementation(monotonicClock);
+  const timer = vi.spyOn(performance, 'now');
+  timer.mockImplementation(monotonicClock);
   const original = nats.store.readStream.bind(nats.store);
   async function* slow(...args: Parameters<typeof original>) {
     yield* original(...args);
@@ -189,6 +192,56 @@ async function progressesWithSlowReads() {
 it('returns completed progress so repeated bounded calls finish despite slow history reads',
   progressesWithSlowReads);
 
+async function refusesUnsafeReadAfterProgress() {
+  const first = creation('first');
+  const second = creation('second');
+  await save([first, second]);
+  const original = nats.store.readStream.bind(nats.store);
+  async function* missingSecond(...args: Parameters<typeof original>) {
+    if (args[0] === 'routine-first') {
+      yield* original(...args);
+    }
+  }
+  const reads = vi.spyOn(nats.store, 'readStream');
+  reads.mockImplementation(missingSecond);
+  await expect(scan()).rejects.toThrow('Routine leadership unavailable');
+  expect(reads).toHaveBeenCalledTimes(2);
+}
+it('refuses unsafe history even after completing an earlier candidate',
+  refusesUnsafeReadAfterProgress);
+
+async function requiresReplayForOlderRows() {
+  const first = creation('first');
+  const second = creation('second');
+  const edited = { ...first, id: 'edited', commandId: 'edited', type: 'routine.updated' };
+  await save([first, second, edited]);
+  // Recreate the table shape used before original event positions were stored.
+  await storage.db.query('ALTER TABLE routines DROP COLUMN IF EXISTS created_position');
+  await runner.initialise(routines);
+  await expect(scan()).rejects.toThrow('Routine leadership unavailable');
+  await rebuildRoutineProjection(storage.db, nats.reader, logger);
+  const reads = vi.spyOn(nats.store, 'readStream');
+  expect((await scan()).examined).toBe(2);
+  expect(reads.mock.calls[0]?.[0]).toBe('routine-first');
+  expect(reads.mock.calls[1]?.[0]).toBe('routine-second');
+}
+it('refuses older rows until replay restores their original event order',
+  requiresReplayForOlderRows);
+
+async function refusesOldContinuation() {
+  const events: EventEnvelope[] = [];
+  for (let index = 0; index < 51; index += 1) {
+    const event = creation(`item-${String(index).padStart(2, '0')}`);
+    events.push(event);
+  }
+  await save(events);
+  const first = await scan();
+  expect(first.continuation).not.toBeNull();
+  Reflect.deleteProperty(first.continuation!, 'afterCreatedPosition');
+  await expect(scan(first.continuation)).rejects.toThrow('Routine leadership unavailable');
+}
+it('refuses an older continuation without the original event position', refusesOldContinuation);
+
 const calendars = [
   ['Europe/Brussels', '02:30', '2027-03-28', '2027-03-28T01:00:00.000Z', 'gap'],
   ['Pacific/Apia', '00:00', '2011-12-30', '2011-12-30T10:00:00.000Z', 'gap'],
@@ -198,7 +251,8 @@ const calendars = [
 ] as const;
 async function calendar(zone: string, localTime: string, localDate: string,
   instant: string, category: string) {
-  await save([creation('calendar', localDate, zone, localTime)]);
+  const event = creation('calendar', localDate, zone, localTime);
+  await save([event]);
   now = Date.parse(instant);
   const result = await scan();
   expect(result.counts).toHaveProperty(category, 1);
@@ -219,9 +273,11 @@ async function occupiedAndInactive() {
     principal: { kind: 'system' as const, id: 'opencrane-server' } };
   await save([created, due]);
   expect((await scan()).counts.occupied).toBe(1);
-  await save([routine('routine.paused')]);
+  const paused = routine('routine.paused');
+  await save([paused]);
   expect((await scan()).counts.inactive).toBe(1);
-  await save([routine('routine.retired')]);
+  const retired = routine('routine.retired');
+  await save([retired]);
   const legacy = { ...creation('legacy'), data: { routineId: 'legacy', assistantId: 'old',
     schedule: '* * * * *', createdBy: 'alice' } };
   await save([legacy]);
@@ -234,7 +290,8 @@ it('includes occupied, paused, retired and legacy rows without treating them as 
   occupiedAndInactive);
 
 async function changedAfterSelection(kind: string) {
-  await save([creation('orders')]);
+  const event = creation('orders');
+  await save([event]);
   const original = nats.store.readStream.bind(nats.store);
   async function* changed(...args: Parameters<typeof original>) {
     let change = routine('routine.paused');
@@ -255,7 +312,8 @@ it.each(['pause', 'edit'])('reads a %s saved after selection instead of the proj
   changedAfterSelection);
 
 async function refusesLag() {
-  await nats.seed([creation('orders')]);
+  const event = creation('orders');
+  await nats.seed([event]);
   await expect(scan()).rejects.toThrow('Routine leadership unavailable');
   await runner.run(routines);
   expect((await scan()).examined).toBe(1);
@@ -265,7 +323,8 @@ async function refusesLag() {
 it('refuses projection lag and a missing checkpoint instead of claiming an empty page', refusesLag);
 
 async function refusesMissingHistory() {
-  await save([creation('orders')]);
+  const event = creation('orders');
+  await save([event]);
   async function* missing() {
     await Promise.resolve();
     yield* [];
@@ -277,7 +336,9 @@ async function refusesMissingHistory() {
 it('refuses a selected row whose exact history is unavailable', refusesMissingHistory);
 
 async function cancellation() {
-  await save([creation('first'), creation('second')]);
+  const first = creation('first');
+  const second = creation('second');
+  await save([first, second]);
   const entered = Promise.withResolvers<void>();
   const resume = Promise.withResolvers<void>();
   const original = nats.store.readStream.bind(nats.store);
@@ -306,7 +367,8 @@ async function cancellation() {
 it('stops before another candidate and awaits the current history read on shutdown', cancellation);
 
 async function backwardsTime() {
-  await save([creation('orders')]);
+  const event = creation('orders');
+  await save([event]);
   const original = nats.store.readStream.bind(nats.store);
   async function* backwards(...args: Parameters<typeof original>) {
     now -= 1;
@@ -322,7 +384,8 @@ function forbidden(): never {
   throw new Error('Forbidden effect');
 }
 async function noEffects() {
-  await save([creation('orders')]);
+  const event = creation('orders');
+  await save([event]);
   const append = vi.spyOn(nats.store, 'append');
   const wake = vi.spyOn(SandboxClient.prototype, 'mode');
   const credentials = vi.spyOn(SandboxClient.prototype, 'credentials');
