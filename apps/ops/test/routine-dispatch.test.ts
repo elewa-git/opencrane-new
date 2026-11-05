@@ -413,7 +413,9 @@ async function readOnlyAndReplay() {
 it('keeps read-only invocation and replay free of commands and execution effects', readOnlyAndReplay);
 
 async function weeklyOccupied() {
-  await save([creation()]);
+  const created = creation();
+  const events = [created];
+  await save(events);
   await dispatch();
   const run = (await state()).activeRun!;
   const { definition: _definition, source: _source, slot: _slot,

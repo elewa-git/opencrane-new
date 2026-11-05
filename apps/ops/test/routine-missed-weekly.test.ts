@@ -53,7 +53,10 @@ function creation(localDate = input.localDate, zone = 'Europe/Brussels',
   const calculation = { silo: 'test', routineId: 'orders', scheduleRevision: 1,
     schedule, localDate };
   const occurrence = calculateRoutineOccurrence(calculation);
-  const effectiveAt = new Date(Date.parse(occurrence.checkAt) - 1).toISOString();
+  const checkAtMilliseconds = Date.parse(occurrence.checkAt);
+  const effectiveAtMilliseconds = checkAtMilliseconds - 1;
+  const effectiveAtDate = new Date(effectiveAtMilliseconds);
+  const effectiveAt = effectiveAtDate.toISOString();
   let next = null;
   if (occurrence.status === 'scheduled') {
     next = { localDate, localTime, zone, at: occurrence.at,
@@ -129,7 +132,8 @@ const calendars = [
 async function calendar(zone: string, localTime: string, weekday: number, first: string,
   last: string, lastAt: string, offsetMinutes: number, nextDate: string, nextAt: string,
   count: number) {
-  await save(creation(first, zone, localTime, weekday));
+  const created = creation(first, zone, localTime, weekday);
+  await save(created);
   now = Date.parse(nextAt) + 60_000;
   const request = { ...input, localDate: first };
   const receipt = await record(request);
@@ -169,7 +173,8 @@ async function gapOnly(lateness: number) {
 it.each([0, 60_000])('records just one weekly gap at recovery lateness %i ms', gapOnly);
 
 async function bounded() {
-  await save(creation('2023-01-01', 'UTC', '09:00'));
+  const created = creation('2023-01-01', 'UTC', '09:00');
+  await save(created);
   now = Date.parse('2026-11-08T09:01:00.000Z');
   let request = { ...input, localDate: '2023-01-01' };
   const endpoints = [

@@ -21,7 +21,7 @@ flowchart LR
   server -.->|tests supply checked routine delivery| ops
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
-  ops -->|saves results and daily or weekly routine records| nats
+  ops -->|saves checked results and daily or weekly routine records| nats
   ops -->|holds routine ownership, reads routine pages and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
