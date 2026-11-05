@@ -208,13 +208,13 @@ async function saved(type: string, subject: string) {
   }
   return rows.filter(matches);
 }
-async function assertCounts() {
+async function assertCounts(threadId = 'native-1') {
   expect(await saved('conversation.created', `conversation-${conversationId}`)).toHaveLength(1);
   expect(await saved('message.posted', `conversation-${conversationId}`)).toHaveLength(1);
   expect(await saved('budget.root_allowance_set', 'budget-test')).toHaveLength(1);
   expect(await saved('routine.run_activation_admitted', 'routine-orders')).toHaveLength(1);
   const root = actor.state.roots[0]!;
-  expect(root).toMatchObject({ payingGroupId: 'sales', allowanceCents: 1000, threadId: 'native-1' });
+  expect(root).toMatchObject({ payingGroupId: 'sales', allowanceCents: 1000, threadId });
   expect(rootTotals(actor.state, root.rootId)).toEqual({
     settledCents: 0, heldCents: 0, availableCents: 1000 });
   const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
@@ -278,7 +278,8 @@ async function savedStageFault(stage: string, after: boolean) {
     if (fail) forbidden();
     return result;
   }
-  const fault = vi.spyOn(nats.store, 'append').mockImplementation(failStage);
+  const fault = vi.spyOn(nats.store, 'append');
+  fault.mockImplementation(failStage);
   await compose().send(preparedComputer.wake);
   function reachedFault() {
     return injected;
@@ -291,9 +292,26 @@ async function savedStageFault(stage: string, after: boolean) {
   actor = new BudgetActor(nats.store, 'test');
   await actor.start(10_000, 10_000, 'sales');
   const before = await nats.store.head();
-  expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
-  expect(await nats.store.head()).toBe(before);
-  expect(preparedComputer.executedThreads).toEqual([]);
+  const beforeAllocation = stage === 'conversation.created' || stage === 'message.posted'
+    || (stage === 'budget.root_allowance_set' && !after);
+  if (beforeAllocation) {
+    expect(preparedComputer.executedThreads).toEqual([]);
+    expect(await saved('routine.run_activation_admitted', 'routine-orders')).toEqual([]);
+    expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'sent' });
+    await until(preparedComputer.executed);
+    expect(preparedComputer.executedThreads).toEqual(['native-2']);
+    expect(preparedComputer.nativeStarts).toBe(2);
+    await assertCounts('native-2');
+    const recoveredPosition = await nats.store.head();
+    expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+    expect(await nats.store.head()).toBe(recoveredPosition);
+    expect(preparedComputer.executedThreads).toEqual(['native-2']);
+    expect(preparedComputer.nativeStarts).toBe(2);
+  } else {
+    expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+    expect(await nats.store.head()).toBe(before);
+    expect(preparedComputer.executedThreads).toEqual([]);
+  }
   expect(actor.state.roots.length).toBeLessThanOrEqual(1);
   expect(actor.state.reservations).toEqual([]);
   for (const type of stages) {
@@ -305,8 +323,9 @@ async function savedStageFault(stage: string, after: boolean) {
   }
 }
 for (const stage of stages) {
-  it.each([false, true])(`refuses resend after ${stage} fault, saved=%s`,
-    savedStageFault.bind(undefined, stage));
+  const checkStageFault = savedStageFault.bind(undefined, stage);
+  it.each([false, true])(`recovers only before allocation after ${stage} fault, saved=%s`,
+    checkStageFault);
 }
 
 async function change(kind: string) {
