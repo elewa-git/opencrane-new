@@ -1551,12 +1551,12 @@ it('offers recall from saved policy on a qualified personal turn and completes d
 
 async function preparesSlowRecallBeforeAccess() {
   const test = await prepareRecallTurn();
-  let loadedChecks = 0;
+  let loadedProbes = 0;
   async function slowQualification() {
     const facts = await readChatFacts(nats.store, 'test', 'chat', 'recall-turn');
-    if (facts.memoryContext?.initialLoaded) loadedChecks++;
-    // Let initial loading finish its two confirmations before delaying recall's next check.
-    if (loadedChecks === 3) {
+    if (facts.memoryContext?.initialLoaded) loadedProbes++;
+    // Let initial loading finish: each of its two confirmations checks the installation twice.
+    if (loadedProbes === 5) {
       await delay(2100);
     }
   }
@@ -1564,7 +1564,7 @@ async function preparesSlowRecallBeforeAccess() {
   link.socket.send(JSON.stringify(test.turn));
   function dispatched() { expect(test.native.received).toContain('turn/start'); }
   await vi.waitFor(dispatched, { timeout: 10_000 });
-  expect(loadedChecks).toBeGreaterThanOrEqual(3);
+  expect(loadedProbes).toBeGreaterThanOrEqual(5);
   expect(computer.grants.has('returned-native-1')).toBe(true);
 }
 it('finishes slow recall confirmation before starting the short credential access check',
