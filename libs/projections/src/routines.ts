@@ -17,6 +17,11 @@ async function create(db: Query): Promise<void> {
   await db.query(`CREATE TABLE IF NOT EXISTS routines (
     silo TEXT NOT NULL, routine_id TEXT NOT NULL, state JSONB NOT NULL,
     event_id TEXT NOT NULL, position BIGINT NOT NULL, PRIMARY KEY (silo, routine_id))`);
+  // Leave older rows at zero until replay recovers their original event positions.
+  await db.query(`ALTER TABLE routines
+    ADD COLUMN IF NOT EXISTS created_position BIGINT NOT NULL DEFAULT 0`);
+  await db.query(`CREATE INDEX IF NOT EXISTS routines_silo_created_position
+    ON routines (silo, created_position)`);
   await db.query(`CREATE INDEX IF NOT EXISTS routines_owner_position
     ON routines (silo, (state #>> '{definition,definition,ownerId}'), position)`);
   await db.query(`CREATE INDEX IF NOT EXISTS routines_silo_position
@@ -144,7 +149,8 @@ async function insertOccurrence(db: Query, event: EventEnvelope, routineId: stri
 }
 async function saveState(db: Query, state: RoutineState,
   event: EventEnvelope, position: number): Promise<void> {
-  await db.query(`INSERT INTO routines VALUES ($1,$2,$3,$4,$5)
+  await db.query(`INSERT INTO routines
+    (silo, routine_id, state, event_id, position, created_position) VALUES ($1,$2,$3,$4,$5,$5)
     ON CONFLICT (silo, routine_id) DO UPDATE
     SET state = EXCLUDED.state, event_id = EXCLUDED.event_id, position = EXCLUDED.position`,
   [state.silo, state.routineId, JSON.stringify(state), event.id, position]);
@@ -152,8 +158,8 @@ async function saveState(db: Query, state: RoutineState,
 
 export const routines: Projection = { name: 'routines', create, drop, apply };
 
-/** Read references only. Use the primary key so updates cannot move a row between pages. */
-export async function routineCandidatePage(db: Query, silo: string, afterRoutineId: string,
+/** Read references in original event order so later additions follow the saved cursor. */
+export async function routineCandidatePage(db: Query, silo: string, afterCreatedPosition: number,
   minimumPosition: number, deadline: number) {
   const options = { deadline };
   const checkpoint = await db.query<{ sequence: string; generation: string }>(
@@ -161,13 +167,22 @@ export async function routineCandidatePage(db: Query, silo: string, afterRoutine
       JOIN projection_generations USING (name) WHERE name = 'routines'`, [], options);
   const position = Number(checkpoint.rows[0]?.sequence);
   const generation = Number(checkpoint.rows[0]?.generation);
-  if (!Number.isSafeInteger(position) || position < minimumPosition ||
+  if (!Number.isSafeInteger(afterCreatedPosition) || afterCreatedPosition < 0 ||
+      !Number.isSafeInteger(position) || position < minimumPosition ||
       !Number.isSafeInteger(generation) || generation < 0) {
     throw new Error('Routine projection unavailable');
   }
-  const result = await db.query<{ routine_id: string; position: string }>(
-    `SELECT routine_id, position FROM routines
-      WHERE silo = $1 AND routine_id > $2 ORDER BY routine_id LIMIT 50`,
-    [silo, afterRoutineId], options);
+  const older = await db.query<{ routine_id: string }>(
+    `SELECT routine_id FROM routines WHERE silo = $1 AND created_position = 0 LIMIT 1`,
+    [silo], options);
+  if (older.rows.length > 0) {
+    throw new Error('Routine projection needs replay');
+  }
+  const result = await db.query<{
+    routine_id: string; position: string; created_position: string;
+  }>(
+    `SELECT routine_id, position, created_position FROM routines
+      WHERE silo = $1 AND created_position > $2 ORDER BY created_position LIMIT 50`,
+    [silo, afterCreatedPosition], options);
   return { rows: result.rows, generation };
 }

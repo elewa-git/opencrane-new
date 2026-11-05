@@ -9,6 +9,7 @@ import { routineCandidatePage, type Query } from '@opencrane/projections';
 interface Continuation {
   silo: string;
   afterRoutineId: string;
+  afterCreatedPosition: number;
   generation: number;
   checkedAt: number;
 }
@@ -133,7 +134,7 @@ export async function scanRoutineCandidates(db: Query, store: EventStore, worker
     const minimumPosition = await store.head(undefined, deadline);
     check();
     const page = await routineCandidatePage(db, worker.silo,
-      continuation?.afterRoutineId ?? '', minimumPosition, deadline);
+      continuation?.afterCreatedPosition ?? 0, minimumPosition, deadline);
     check();
     if (continuation && continuation.generation !== page.generation) {
       throw new Error('Routine scan refused');
@@ -151,6 +152,7 @@ export async function scanRoutineCandidates(db: Query, store: EventStore, worker
     let next: Continuation | null = null;
     if (page.rows.length === 50) {
       next = { silo: worker.silo, afterRoutineId: page.rows[49]!.routine_id,
+        afterCreatedPosition: Number(page.rows[49]!.created_position),
         generation: page.generation, checkedAt };
     }
     return { examined: page.rows.length, counts, continuation: next,
