@@ -19,11 +19,16 @@ let nats: Awaited<ReturnType<typeof natsFixture>>;
 let runner: ProjectionRunner;
 let stop: AbortController;
 let now: number;
+let databaseUrl: string;
 const logger = createLogger('routine-scan-test', { level: 'silent' });
 type Continuation = Awaited<ReturnType<typeof scanRoutineCandidates>>['continuation'];
 
 async function setup() {
   storage = await database('pg');
+  const current = await storage.db.query<{ name: string }>('SELECT current_database() AS name');
+  const address = new URL(process.env['PG_TEST_URL']!);
+  address.pathname = `/${current.rows[0]!.name}`;
+  databaseUrl = address.href;
   nats = await natsFixture();
   runner = new ProjectionRunner(storage.db, nats.reader, logger);
   await runner.initialise(routines);
@@ -67,7 +72,7 @@ async function scan(continuation: Continuation = null) {
     const worker = { ...lease, silo: 'test', now: clock, continuation };
     result = await scanRoutineCandidates(storage.db, nats.store, worker);
   }
-  const options = { databaseUrl: process.env['PG_TEST_URL']!, silo: 'test', signal: stop.signal };
+  const options = { databaseUrl, silo: 'test', signal: stop.signal };
   await withRoutineLeadership(options, work);
   return result!;
 }
