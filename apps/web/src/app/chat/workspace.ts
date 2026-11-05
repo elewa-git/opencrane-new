@@ -406,7 +406,8 @@ export class Workspace implements OnInit {
     const turns = this.chat.turns();
     const recovery = this.chat.computer() + String(this.chat.recoveredLostTurn());
     const renderedTurns = turns.map(turnContent);
-    const content = recovery + renderedTurns.join('');
+    const privateTurnId = this.chat.privateReply()?.turnId ?? '';
+    const content = recovery + privateTurnId + renderedTurns.join('');
     if (content !== this.lastTranscript) {
       this.lastTranscript = content;
       const element = this.transcriptElement()?.nativeElement;

@@ -1397,7 +1397,7 @@ Fresh-install qualification remains NOT RUN.
 
 ## Volatile personal reply state
 
-P4-15 PR 3l is split at browser state. `private-reply.ts` holds one private reply for
+`private-reply.ts` holds one private reply for
 an owned personal session. `WebSocketService.privateReceived` checks frames through
 `serverMessageSchema` and bypasses both the 20-frame cache and ordinary `received`.
 The first live server frame supplies thread, computer generation and input generation;
@@ -1414,11 +1414,30 @@ return to visible state check `/auth/me` with `cache: no-store`. New private rep
 are blocked during that read; clearance still discards existing text immediately. A refused, signed-out, failed or timed-out read ends delivery;
 a late successful read cannot undo a sign-out. The read has a five-second timeout.
 `private-reply-browser.test.ts` runs two real Chromium pages with intercepted HTTP and
-WebSocket replies, including a missed broadcast. It inspects the public reply signal
-in a development build because the product does not display that signal yet. Uploads
+WebSocket replies, including a missed broadcast. It checks the rendered reply and
+connection state in a development build. Uploads
 reuse a connected socket so they do not discard an unrelated reply.
 
-The template does not consume this state. Markdown display, cancellable private Mermaid
-rendering, unavailable/restriction screenshots and `visual:p4-15-pr3l` remain the next
-part. Native admission is still disabled. The [receipt](../../docs/process/p4-15-pr3l/receipt.md)
-records the implemented scope and own checks.
+The workspace renders this signal separately from saved rows, using `AssistantMarkdown`.
+Clearance removes its DOM, citation labels and generic status. A cleared or lost personal
+reply shows “Reply unavailable”; output-loss metadata never hides a valid live reply.
+A turn start received during subscription catch-up cannot enable delivery.
+Private Mermaid diagrams use a separate sandboxed document per drawing. Abort removes
+that document, cancels startup and response listeners, and ignores late drawing results.
+Pending clipboard copies and diagram imports stop holding the reply when it is removed.
+The browser may finish a copy it already accepted, but its result cannot restore cleared text
+or copy feedback. `check-private-reply-retention.mjs` holds copies in Chromium and checks
+that WeakRef references to components, detached elements and images no longer resolve
+after clearance and forced garbage collection. It also holds diagram startup and copies
+the source while drawing waits. It waits for both copy handlers to settle, all reply
+controllers to abort and queued cancellation callbacks to finish before three GC passes.
+Both held browser writes remain pending during the first collection check. The check then
+releases the writes and delayed script route and checks collection again. A failure saves
+a heap snapshot in the temporary directory and names paths that still reach the reply.
+The browser test also keeps an intentional callback reference and requires the check to
+fail with that callback's name. Ordinary diagrams keep their shared renderer.
+Focus on a removed private control returns
+to the transcript. Restriction notices follow saved `restricted_tool_refused` failures.
+No personal memory-free action is offered: that command choice is not implemented here.
+`npm run visual:p4-15-pr3l` uses intercepted HTTP/WebSocket fixtures at 1280 and 390 px.
+Native admission stays disabled. See the [display receipt](../../docs/process/p4-15-pr3l/display-receipt.md).

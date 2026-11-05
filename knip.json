@@ -16,6 +16,7 @@
         "scripts/capture-assistant-files-2.mjs",
         "scripts/capture-chat-tool-inline.mjs",
         "scripts/capture-chat-mermaid.mjs",
+        "scripts/capture-p4-15-pr3l.mjs",
         "scripts/capture-uploads-reasons.mjs",
         "scripts/capture-chat-drag-drop.mjs",
         "scripts/check-stage-b-polish.mjs",
@@ -25,7 +26,8 @@
         "scripts/ci/refresh-timings.mjs",
         "scripts/ci/*.test.mjs",
         "scripts/check-chat-mermaid.mjs",
-        "scripts/check-private-reply-signout.mjs"
+        "scripts/check-private-reply-signout.mjs",
+        "scripts/check-private-reply-retention.mjs"
       ],
       "project": [
         "scripts/private-memory-qualification/*.ts",

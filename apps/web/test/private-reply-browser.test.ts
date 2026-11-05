@@ -11,6 +11,20 @@ async function signOutInAnotherTab(): Promise<void> {
   const argumentsList = ['scripts/check-private-reply-signout.mjs'];
   const result = await execute(process.execPath, argumentsList, options);
   expect(result.stdout).toContain('PASS two-tab sign-out and return-time session checks in Chromium');
+  const retentionArguments = ['scripts/check-private-reply-retention.mjs'];
+  const retention = await execute(process.execPath, retentionArguments, options);
+  expect(retention.stdout).toContain('PASS cleared private copies and diagrams are collectible');
+  const retainedArguments = [...retentionArguments, '--retain-for-test'];
+  const retained = execute(process.execPath, retainedArguments, options);
+  const diagnosticNames = ['heldClipboardCallback', 'Markdown component:', 'Markdown element:'];
+  for (const name of diagnosticNames) {
+    const expected: unknown = expect.stringContaining(name);
+    const diagnostic = { stderr: expected };
+    await expect(retained).rejects.toMatchObject(diagnostic);
+  }
+  const displayArguments = ['scripts/capture-p4-15-pr3l.mjs', '--development'];
+  const display = await execute(process.execPath, displayArguments, options);
+  expect(display.stdout).toContain('PASS private reply display, clearance and captures');
 }
 
 it('clears private replies when another tab signs out, including a missed notification',

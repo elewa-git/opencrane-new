@@ -26,6 +26,7 @@ export class PrivateReplyState {
   private readonly feedSubscription = this.socket.received.subscribe(this.feedMessage.bind(this));
   private readonly value = signal<Reply | null>(null);
   readonly reply = this.value.asReadonly();
+  readonly unavailableTurnId = signal('');
   private turnId = '';
   private ready = false;
   private projectionGeneration: number | undefined;
@@ -79,6 +80,7 @@ export class PrivateReplyState {
     if (frame.turnId !== this.turnId) return;
     if (this.identity && !sameIdentity(this.identity, frame)) return;
     if (frame.type === 'private_output_cleared') {
+      this.unavailableTurnId.set(frame.turnId);
       this.clear();
       return;
     }
@@ -106,6 +108,8 @@ export class PrivateReplyState {
   }
 
   clear(): void {
+    const reply = this.value();
+    if (reply) this.unavailableTurnId.set(reply.turnId);
     this.value.set(null);
     this.identity = null;
     this.accepting = false;
