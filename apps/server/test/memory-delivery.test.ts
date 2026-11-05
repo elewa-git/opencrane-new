@@ -1485,6 +1485,39 @@ async function discoversBeforePrivateDispatch() {
 it('loads recall before private dispatch and renews without repeating discovery or input',
   discoversBeforePrivateDispatch);
 
+const recallRenewalWithdrawals = ['corrected', 'forgotten', 'removal', 'Stop'] as const;
+async function refusesRecallRenewal(change: typeof recallRenewalWithdrawals[number]) {
+  const test = await prepareRecallTurn();
+  link.socket.send(JSON.stringify(test.turn));
+  function dispatched() {
+    expect(test.native.received).toContain('turn/start');
+  }
+  await vi.waitFor(dispatched, { timeout: 10_000 });
+  await expect(computer.channel.renew('returned-native-1')).resolves.toBeUndefined();
+  if (change === 'corrected' || change === 'forgotten') {
+    await changed(change);
+  } else if (change === 'removal') {
+    const removed = { memberId: 'alice', removedBy: 'owner' };
+    await append('member-alice', 'member.removed', removed);
+  } else {
+    const stopped = { conversationId: 'chat', turnId: 'recall-turn', requestedBy: 'alice' };
+    await append('conversation-chat', 'agent.turn_stop_requested', stopped);
+  }
+  // Leave the withdrawal reaction idle to prove renewal checks the saved change itself.
+  const sentBeforeRenewal = test.sent.length;
+  const receivedBeforeRenewal = [...test.native.received];
+  await expect(computer.channel.renew('returned-native-1')).rejects.toThrow();
+  await link.settled();
+  const renewalFrames = test.sent.slice(sentBeforeRenewal);
+  expect(renewalFrames).toHaveLength(1);
+  expect(renewalFrames[0]).toMatchObject({ type: 'ack', refused: expect.any(String) });
+  expect(renewalFrames[0]).not.toHaveProperty('token');
+  expect(renewalFrames[0]).not.toHaveProperty('initialInput');
+  expect(test.native.received).toEqual(receivedBeforeRenewal);
+}
+it.each(recallRenewalWithdrawals)('refuses recall grant renewal after saved %s',
+  refusesRecallRenewal);
+
 const recallWithdrawals = [
   ['removal', 'member-alice', 'member.removed', { memberId: 'alice', removedBy: 'owner' }],
   ['grant', grantStream('mcp_server', 'memory'), 'grant.revoked', {
