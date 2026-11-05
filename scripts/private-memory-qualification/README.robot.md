@@ -63,10 +63,17 @@ cannot match the new challenge. It does not accept detached receipts or signatur
 
 Only validated metadata is hashed into `receiptDigests`; no memory text is hashed.
 All child output and errors stay in process memory. A strict runner response containing
-only `result: FAIL` and `reason: host_refused` stops collection. The collector returns
-and saves that reason with the fixed message: "Host safety checks failed: swap and
-core dumps must be disabled." This reports an unmet prerequisite, without claiming
-which observation failed or exposing its value. Other failures expose only
+`result: FAIL`, `reason: host_refused` and an optional `protectionFailure` stops
+collection. The collector returns and saves that category and its fixed message.
+`protection-failure.ts` owns the allowlist and messages. Container failures distinguish
+unreadable swap controls, non-zero swap, unproved memory limits or crash kernel settings,
+failed core-limit measurement, non-zero core limits, failed dumpability measurement,
+failed dump protection, a dumpable process, changed identity and an unavailable helper.
+No observed value, private path or helper error is returned. The supervisor receives
+the same allowlist from the collector and rejects unknown categories or extra fields.
+The two-field refusal remains valid for a later safe-host check that fails; its message
+remains "Host safety checks failed: swap and core dumps must be disabled."
+Other failures expose only
 `FAIL / collection_failed`. Completed collection reports measured identity, the nine checks,
 both qualifications and receipt digests. This output is not an admission token.
 The collector atomically writes its own result to
@@ -98,13 +105,14 @@ these files; no code mount, caller executable or interpreter override is needed.
 The entry accepts no arguments and at most 4,096 stdin bytes. Its strict request has
 only the measured binding, one of the eleven existing names and a UUID challenge.
 Unknown names, extra fields, malformed formats and paths refuse before observations.
-Failures contain only `result: FAIL` and `input_invalid`, `host_refused` or
-`journey_failed` as the reason. No identity, raw observation or child output is echoed.
+Failures contain `result: FAIL` and `input_invalid`, `host_refused` or
+`journey_failed` as the reason. Container protection refusals also name the fixed
+`protectionFailure` category described above. No identity, raw observation or child output is echoed.
 The native check described below starts children in the supervisor's process group.
 
 The runner exits with status 1 for a host refusal. After stopping all children and
-removing its lock, the supervisor forwards only that exact two-field refusal with
-transport status 0. This means supervision finished; the returned result is still
+removing its lock, the supervisor forwards only the strict host refusal, with an
+optional allowlisted protection category, with transport status 0. This means supervision finished; the returned result is still
 FAIL. Other non-zero exits, extra fields, malformed output and failed cleanup do
 not forward a result. The collector validates the refusal again before saving it.
 

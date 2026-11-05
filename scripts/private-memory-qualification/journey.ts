@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { probeHost } from './host-probe.ts';
 import { probeContainer } from './container-probe.ts';
+import type { ProtectionFailure } from './protection-failure.ts';
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const requestSchema = z.strictObject({
@@ -13,7 +14,8 @@ const requestSchema = z.strictObject({
     'P4-14', 'P4-15']),
 });
 
-type Refusal = { result: 'FAIL'; reason: 'input_invalid' | 'host_refused' | 'journey_failed' };
+type Refusal = { result: 'FAIL'; reason: 'input_invalid' | 'host_refused' | 'journey_failed';
+  protectionFailure?: ProtectionFailure };
 
 type Request = z.infer<typeof requestSchema>;
 type Receipt = Request & { observedAt: number; result: 'NOT RUN' | 'PARTIAL'; complete: false };
@@ -29,8 +31,11 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
     return { result: 'FAIL', reason: 'input_invalid' };
   }
   const safeHost = probeHost();
-  if (!safeHost && !probeContainer()) {
-    return { result: 'FAIL', reason: 'host_refused' };
+  if (!safeHost) {
+    const protection = probeContainer();
+    if (protection !== true) {
+      return { result: 'FAIL', reason: 'host_refused', protectionFailure: protection };
+    }
   }
   let result: Receipt['result'] = 'NOT RUN';
   if (safeHost && request.name === 'privateTurns') {
@@ -61,9 +66,15 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
       return { result: 'FAIL', reason };
     }
   }
-  const stillSafe = safeHost ? probeHost() : probeContainer();
-  if (!stillSafe) {
-    return { result: 'FAIL', reason: 'host_refused' };
+  if (safeHost) {
+    if (!probeHost()) {
+      return { result: 'FAIL', reason: 'host_refused' };
+    }
+  } else {
+    const protection = probeContainer();
+    if (protection !== true) {
+      return { result: 'FAIL', reason: 'host_refused', protectionFailure: protection };
+    }
   }
   // These assertions cannot qualify isolation, persistence or private output delivery.
   return { ...request, observedAt: Date.now(), result, complete: false };

@@ -1,0 +1,18 @@
+// Return fixed messages so failed measurements cannot expose paths or observed values.
+export const protectionMessages = {
+  swap_measurement_failed: 'Container swap protection could not be measured.',
+  swap_not_disabled: 'Container swap allowance and current use must both be zero.',
+  memory_limit_unproved: 'A finite positive container memory limit could not be proved.',
+  crash_kernel_unproved: 'A disabled kernel crash dump could not be proved.',
+  core_limit_measurement_failed: 'The runner core dump limits could not be measured.',
+  core_limit_not_zero: 'The runner soft and hard core dump limits must both be zero.',
+  dumpability_measurement_failed: 'The runner dumpability could not be measured.',
+  dumpability_protection_failed: 'The runner could not disable process dumps.',
+  process_dumpable: 'The runner is still dumpable.',
+  process_identity_changed: 'The runner identity changed after dump protection was set.',
+  helper_unavailable: 'The native runner protection helper is unavailable.',
+};
+export type ProtectionFailure = keyof typeof protectionMessages;
+export function isProtectionFailure(value: unknown): value is ProtectionFailure {
+  return typeof value === 'string' && Object.hasOwn(protectionMessages, value);
+}

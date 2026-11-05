@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { z } from 'zod';
+import { protectionMessages } from './protection-failure.ts';
 
 const tag = `private-native-test:${randomUUID()}`;
 const packageTag = `${tag}-package`;
@@ -262,7 +263,8 @@ function refusesFault(name: string): void {
 }
 it.each(faults)('refuses %s without returning native output', refusesFault, 60_000);
 function refusesHost(): void {
-  const expected = { result: 'FAIL', reason: 'host_refused' };
+  const expected = { result: 'FAIL', reason: 'host_refused',
+    protectionFailure: 'memory_limit_unproved' };
   expect(run('host')).toEqual(expected);
   expect(run('host', packageTag)).toEqual(expected);
 }
@@ -278,8 +280,9 @@ async function collectorEof(): Promise<void> {
   const containerName = startContainer('collector EOF', tag);
   try {
     const source = readFileSync(new URL('./supervisor.mjs', import.meta.url), 'utf8');
+    const failures = Object.keys(protectionMessages);
     const args = ['exec', '-i', containerName, 'node', '--input-type=module', '--eval',
-      source, JSON.stringify(nativeCommand(tag))];
+      source, JSON.stringify(failures), JSON.stringify(nativeCommand(tag))];
     const options = { stdio: 'pipe' as const };
     const child = spawn('/usr/bin/docker', args, options);
     function closed(resolve: (code: number | null) => void): void {

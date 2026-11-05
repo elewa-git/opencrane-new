@@ -382,14 +382,16 @@ async function withdrawsPassForPartialRunner(): Promise<void> {
     expect(child.status).toBe(1);
     expect(child.stderr).toBe('');
     const refusal: unknown = JSON.parse(child.stdout);
-    const expectedRefusal = { result: 'FAIL', reason: 'host_refused' };
+    const expectedRefusal = { result: 'FAIL', reason: 'host_refused',
+      protectionFailure: 'swap_measurement_failed' };
     expect(refusal).toEqual(expectedRefusal);
     for (const key of Object.keys(response)) delete response[key];
     Object.assign(response, refusal);
   }
   alter = partial;
   const failure = { result: 'FAIL', reason: 'host_refused',
-    message: 'Host safety checks failed: swap and core dumps must be disabled.' };
+    protectionFailure: 'swap_measurement_failed',
+    message: 'Container swap protection could not be measured.' };
   expect(await collectDeployment()).toEqual(failure);
   expect(JSON.parse(saved)).toEqual(failure);
   expect(responses).toHaveLength(12);
@@ -479,7 +481,8 @@ async function savesProtectionFailure(protectionFailure: string, message: string
     for (const key of Object.keys(receipt)) {
       delete receipt[key];
     }
-    Object.assign(receipt, { result: 'FAIL', reason: 'host_refused', protectionFailure });
+    const refusal = { result: 'FAIL', reason: 'host_refused', protectionFailure };
+    Object.assign(receipt, refusal);
   }
   alter = refuse;
   const expected = { result: 'FAIL', reason: 'host_refused', protectionFailure, message };
@@ -495,7 +498,8 @@ async function rejectsUnknownProtection(protectionFailure: unknown): Promise<voi
     for (const key of Object.keys(receipt)) {
       delete receipt[key];
     }
-    Object.assign(receipt, { result: 'FAIL', reason: 'host_refused', protectionFailure });
+    const refusal = { result: 'FAIL', reason: 'host_refused', protectionFailure };
+    Object.assign(receipt, refusal);
   }
   alter = refuse;
   expect(await collectDeployment()).toEqual({ result: 'FAIL', reason: 'collection_failed' });

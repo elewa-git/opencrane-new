@@ -16,20 +16,43 @@ static napi_value boolean_result(napi_env env, bool value) {
     return result;
 }
 
+static napi_value failure_result(napi_env env, const char *failure) {
+    napi_value result;
+    if (napi_create_string_utf8(env, failure, NAPI_AUTO_LENGTH, &result) != napi_ok) {
+        return NULL;
+    }
+    return result;
+}
+
 static napi_value protect(napi_env env, napi_callback_info info) {
     (void)info;
-    return boolean_result(env, prctl(PR_SET_DUMPABLE, 0L, 0L, 0L, 0L) == 0);
+    if (prctl(PR_SET_DUMPABLE, 0L, 0L, 0L, 0L) != 0) {
+        return failure_result(env, "dumpability_protection_failed");
+    }
+    return boolean_result(env, true);
 }
 
 static napi_value check(napi_env env, napi_callback_info info) {
     (void)info;
     struct rlimit limits;
-    bool safe = getrlimit(RLIMIT_CORE, &limits) == 0;
-    safe = safe && limits.rlim_cur == 0 && limits.rlim_max == 0;
-    safe = safe && prctl(PR_GET_DUMPABLE, 0L, 0L, 0L, 0L) == 0;
-    safe = safe && getuid() == real_uid && geteuid() == effective_uid;
-    safe = safe && getgid() == real_gid && getegid() == effective_gid;
-    return boolean_result(env, safe);
+    if (getrlimit(RLIMIT_CORE, &limits) != 0) {
+        return failure_result(env, "core_limit_measurement_failed");
+    }
+    if (limits.rlim_cur != 0 || limits.rlim_max != 0) {
+        return failure_result(env, "core_limit_not_zero");
+    }
+    int dumpable = prctl(PR_GET_DUMPABLE, 0L, 0L, 0L, 0L);
+    if (dumpable < 0) {
+        return failure_result(env, "dumpability_measurement_failed");
+    }
+    if (dumpable != 0) {
+        return failure_result(env, "process_dumpable");
+    }
+    if (getuid() != real_uid || geteuid() != effective_uid ||
+        getgid() != real_gid || getegid() != effective_gid) {
+        return failure_result(env, "process_identity_changed");
+    }
+    return boolean_result(env, true);
 }
 
 static napi_value initialise(napi_env env, napi_value exports) {

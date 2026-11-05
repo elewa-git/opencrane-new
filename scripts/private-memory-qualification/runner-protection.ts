@@ -1,9 +1,10 @@
 import { createRequire } from 'node:module';
+import { isProtectionFailure, type ProtectionFailure } from './protection-failure.ts';
 
 const require = createRequire(import.meta.url);
 type Helper = { protect(): unknown; check(): unknown };
 let helper: Helper | undefined;
-let started = false;
+let started: true | ProtectionFailure = 'helper_unavailable';
 
 function isHelper(value: unknown): value is Helper {
   return value !== null && typeof value === 'object' &&
@@ -11,19 +12,29 @@ function isHelper(value: unknown): value is Helper {
     'check' in value && typeof value.check === 'function';
 }
 
-export function runnerProtected(): boolean {
+function measuredResult(value: unknown): true | ProtectionFailure {
+  if (value === true || isProtectionFailure(value)) {
+    return value;
+  }
+  return 'helper_unavailable';
+}
+
+export function runnerProtected(): true | ProtectionFailure {
   try {
     if (!helper) {
       const loaded: unknown = require('./runner-protection.node');
       if (!isHelper(loaded)) {
-        return false;
+        return 'helper_unavailable';
       }
       helper = loaded;
-      started = helper.protect() === true;
+      started = measuredResult(helper.protect());
     }
     // Measure again without repairing dumpability after an identity change.
-    return started && helper.check() === true;
+    if (started !== true) {
+      return started;
+    }
+    return measuredResult(helper.check());
   } catch {
-    return false;
+    return 'helper_unavailable';
   }
 }

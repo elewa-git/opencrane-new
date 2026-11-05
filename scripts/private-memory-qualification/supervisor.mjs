@@ -3,7 +3,8 @@ import { mkdirSync, readdirSync, readFileSync, rmdirSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const lock = '/run/opencrane-memory-qualification.lock';
-const args = JSON.parse(process.argv[1]);
+const protectionFailures = JSON.parse(process.argv[1]);
+const args = JSON.parse(process.argv[2]);
 let child;
 let childClosed = Promise.resolve();
 let locked = false;
@@ -54,8 +55,15 @@ function isHostRefusal() {
   try {
     const buffer = Buffer.concat(output);
     const result = JSON.parse(buffer.toString('utf8'));
-    return result !== null && Object.keys(result).length === 2 &&
-      result.result === 'FAIL' && result.reason === 'host_refused';
+    if (result === null || result.result !== 'FAIL' || result.reason !== 'host_refused') {
+      return false;
+    }
+    const keys = Object.keys(result);
+    if (keys.length === 2) {
+      return true;
+    }
+    // Use the collector's fixed allowlist, passed with the command.
+    return keys.length === 3 && protectionFailures.includes(result.protectionFailure);
   } catch {
     return false;
   }

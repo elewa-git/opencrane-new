@@ -1,16 +1,18 @@
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { protectionMessages } from './protection-failure.ts';
 
 export async function runInContainer(
   containerId: string, args: string[], input = '',
 ): Promise<unknown> {
   const sourceUrl = new URL('./supervisor.mjs', import.meta.url);
   const source = await readFile(sourceUrl, 'utf8');
+  const failures = Object.keys(protectionMessages);
   const settings = ['--workdir', '/app', '--env', 'NODE_OPTIONS=', '--env', 'NODE_PATH=',
     '--env', 'LD_PRELOAD='];
   const command = ['--host', 'unix:///var/run/docker.sock', 'exec', ...settings, '-i',
     containerId, '/usr/local/bin/node', '--input-type=module', '--eval', source,
-    JSON.stringify(args)];
+    JSON.stringify(failures), JSON.stringify(args)];
   const output = await attachedProcess(command, input);
   return JSON.parse(output) as unknown;
 }

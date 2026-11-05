@@ -114,12 +114,18 @@ function refusesRedirect(): void {
 it('refuses a cgroup path that resolves elsewhere', refusesRedirect);
 
 function missingFailureFor(path: string): string {
-  if (path.endsWith('memory.max')) return 'memory_limit_unproved';
-  if (path.endsWith('kexec_crash_loaded')) return 'crash_kernel_unproved';
+  if (path.endsWith('memory.max')) {
+    return 'memory_limit_unproved';
+  }
+  if (path.endsWith('kexec_crash_loaded')) {
+    return 'crash_kernel_unproved';
+  }
   return 'swap_measurement_failed';
 }
 function failureFor(path: string): string {
-  if (path.includes('memory.swap.')) return 'swap_not_disabled';
+  if (path.includes('memory.swap.')) {
+    return 'swap_not_disabled';
+  }
   return missingFailureFor(path);
 }
 async function namesRunnerFailure(protectionFailure: 'helper_unavailable' | 'core_limit_not_zero' |

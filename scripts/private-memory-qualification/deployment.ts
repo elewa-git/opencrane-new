@@ -4,6 +4,9 @@ import { closeSync, constants, fstatSync, openSync, readFileSync, renameSync, wr
 import { z } from 'zod';
 import { checks, qualifications } from './collect.ts';
 import { runInContainer } from './container-process.ts';
+import {
+  isProtectionFailure, protectionMessages, type ProtectionFailure,
+} from './protection-failure.ts';
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const containerSchema = z.object({
@@ -27,6 +30,7 @@ const receiptSchema = bindingSchema.extend({
 });
 const hostRefusalSchema = z.strictObject({
   result: z.literal('FAIL'), reason: z.literal('host_refused'),
+  protectionFailure: z.custom<ProtectionFailure>(isProtectionFailure).optional(),
 });
 const freshSchema = z.strictObject({
   created: z.iso.datetime(), lastSequence: z.number().int().nonnegative(),
@@ -50,7 +54,8 @@ try {
 type Binding = z.infer<typeof bindingSchema>;
 type Status = 'PASS' | 'PARTIAL' | 'NOT RUN';
 type Result = { result: 'FAIL'; reason: 'collection_failed' } |
-  { result: 'FAIL'; reason: 'host_refused'; message: string } | Binding & {
+  { result: 'FAIL'; reason: 'host_refused';
+    protectionFailure?: ProtectionFailure | undefined; message: string } | Binding & {
   result: 'PASS' | 'PARTIAL'; checks: Record<string, Status>; qualifications: Record<string, Status>;
   receiptDigests: string[];
 };
@@ -274,8 +279,11 @@ export async function collectDeployment(...unexpectedArguments: unknown[]): Prom
       await assertInstallation(containerId, before, streamCreated);
       const receipt = await runCheck(containerId, binding, name);
       if (receipt.result === 'FAIL') {
-        const refusal: Result = { ...receipt,
-          message: 'Host safety checks failed: swap and core dumps must be disabled.' };
+        let message = 'Host safety checks failed: swap and core dumps must be disabled.';
+        if (receipt.protectionFailure) {
+          message = protectionMessages[receipt.protectionFailure];
+        }
+        const refusal: Result = { ...receipt, message };
         saveResult(refusal);
         return refusal;
       }
