@@ -55,7 +55,7 @@ async function observesStore(name: string, role = 'command', silo = 'test', badS
 async function completedJourney(name: string) {
   await observesStore(name);
 }
-it.each(['invalidation', 'unrelatedActivity', 'requesterIsolation', 'sessionIsolation', 'stopReconnect'])(
+it.each(['invalidation', 'unrelatedActivity', 'requesterIsolation', 'sessionIsolation', 'stopReconnect', 'replacementReload'])(
   'executes %s on the configured event store without claiming live qualification',
   completedJourney, 30_000);
 
@@ -66,19 +66,19 @@ async function failedJourney(name: string): Promise<void> {
   const result = await runJourney(JSON.stringify({ ...request, name }));
   expect(result).toEqual({ result: 'FAIL', reason: 'journey_failed' });
 }
-it.each(['invalidation', 'stopReconnect'])(
+it.each(['invalidation', 'stopReconnect', 'replacementReload'])(
   'refuses unavailable %s without exposing connection settings', failedJourney);
 
 async function deniedAppend(name: string): Promise<void> {
   await observesStore(name, 'projection');
 }
-it.each(['invalidation', 'requesterIsolation', 'sessionIsolation', 'stopReconnect'])(
+it.each(['invalidation', 'requesterIsolation', 'sessionIsolation', 'stopReconnect', 'replacementReload'])(
   'refuses when the measured store rejects %s', deniedAppend, 30_000);
 
 async function wrongSilo(name: string): Promise<void> {
   await observesStore(name, 'command', 'foreign');
 }
-it.each(['requesterIsolation', 'sessionIsolation', 'stopReconnect'])(
+it.each(['requesterIsolation', 'sessionIsolation', 'stopReconnect', 'replacementReload'])(
   'refuses %s before writes when the configured silo differs', wrongSilo, 30_000);
 
 async function privateFailure() {

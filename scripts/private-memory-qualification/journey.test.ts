@@ -25,7 +25,7 @@ async function incomplete(name: string): Promise<void> {
   expect(probeHost).toHaveBeenCalledOnce();
 }
 it.each(['nativeRecall',
-  'replacementReload', 'persistence', ...qualifications])('never completes %s on host checks alone', incomplete);
+  'persistence', ...qualifications])('never completes %s on host checks alone', incomplete);
 
 const invalid: [string, unknown][] = [
   ['sourceSha', 'a'.repeat(39)], ['imageDigest', 'latest'], ['environmentId', '../private'],
