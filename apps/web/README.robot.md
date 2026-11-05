@@ -1429,7 +1429,13 @@ The browser may finish a copy it already accepted, but its result cannot restore
 or copy feedback. `check-private-reply-retention.mjs` holds copies in Chromium and checks
 that WeakRef references to components, detached elements and images no longer resolve
 after clearance and forced garbage collection. It also holds diagram startup and copies
-the source while drawing waits. Ordinary diagrams keep their shared renderer.
+the source while drawing waits. It waits for both copy handlers to settle, all reply
+controllers to abort and queued cancellation callbacks to finish before three GC passes.
+Both held browser writes remain pending during the first collection check. The check then
+releases the writes and delayed script route and checks collection again. A failure saves
+a heap snapshot in the temporary directory and names paths that still reach the reply.
+The browser test also keeps an intentional callback reference and requires the check to
+fail with that callback's name. Ordinary diagrams keep their shared renderer.
 Focus on a removed private control returns
 to the transcript. Restriction notices follow saved `restricted_tool_refused` failures.
 No personal memory-free action is offered: that command choice is not implemented here.

@@ -18,7 +18,8 @@ async function signOutInAnotherTab(): Promise<void> {
   const retained = execute(process.execPath, retainedArguments, options);
   const diagnosticNames = ['heldClipboardCallback', 'Markdown component:', 'Markdown element:'];
   for (const name of diagnosticNames) {
-    const diagnostic = { stderr: expect.stringContaining(name) };
+    const expected: unknown = expect.stringContaining(name);
+    const diagnostic = { stderr: expected };
     await expect(retained).rejects.toMatchObject(diagnostic);
   }
   const displayArguments = ['scripts/capture-p4-15-pr3l.mjs', '--development'];
