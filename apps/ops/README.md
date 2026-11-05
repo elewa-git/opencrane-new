@@ -21,7 +21,7 @@ flowchart LR
   server -.->|tests supply checked routine delivery| ops
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
-  ops -->|saves results and checked routine scan commands| nats
+  ops -->|saves checked results and daily or weekly routine records| nats
   ops -->|holds routine ownership, reads routine pages and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
@@ -66,10 +66,11 @@ result. New routines follow existing ones in the order they were first saved,
 so a new id cannot fall behind the current scan. A slow page returns its completed
 progress for the next call. The scanner stops when ownership is lost and waits
 for its current read. A separate internal dispatch call uses the same inspection,
-then awaits a checked claim, skip or daily downtime record before reporting progress.
+then awaits a checked claim, skip or daily or weekly downtime record before reporting progress.
 It recovers saved claims with their original expiry. An optional internal callback can
 continue checked due work and must finish delivery before returning. The scan keeps
 its leadership checks and waits for that callback. Automatic execution remains disabled.
+Weekly downtime records cover scheduled local dates and start no model or tool work.
 
 1. **A change is saved.** A worker copies the event into the matching table.
    Reactions run any required background work and save its results as new events.
@@ -103,11 +104,14 @@ A separate internal command records a missing local time or a slot blocked by an
 occupied run. It advances the schedule without replacing that run, even during Ask
 or Stop. Retries return the same saved receipt after checking access and leadership.
 
-Another internal command records old unclaimed daily slots in a compact downtime range.
+Another internal command records old unclaimed daily or weekly slots in a compact
+downtime range.
 It counts real calendar slots, keeps any occupied run and leaves recent slots eligible.
 If downtime contains only a missing local time, it records that skip once and keeps
 the next valid slot available to claim.
-Long outages continue in bounded steps. A saved receipt never grants execution.
+Weekly schedules follow the chosen local weekday, including clock changes.
+Long outages continue in bounded steps of at most one hundred scheduled dates.
+A saved receipt never grants execution.
 
 A reviewed template defines how hosted tools may run. Separate Kubernetes rules check
 the image and settings and limit who may create or scale a tool. Starting hosted tools

@@ -198,7 +198,7 @@ async function missedProgress() {
 }
 it('continues bounded daily ranges without recounting or starting old work', missedProgress);
 
-async function refusesWeekly() {
+async function weeklyDowntime() {
   const created = creation();
   const schedule = { ...created.data.definition.schedule, frequency: 'weekly' as const,
     weekday: 6 };
@@ -207,10 +207,27 @@ async function refusesWeekly() {
   const weekly = { ...created, data };
   await save([weekly]);
   now += 60_001;
-  await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
-  expect(await nats.store.head()).toBe(2);
+  expect((await dispatch()).counts.late).toBe(1);
+  expect(await nats.store.head()).toBe(3);
+  const row = await nats.store.readEvent(3);
+  expect(row.event.type).toBe('routine.occurrences_missed');
+  const expected = { firstLocalDate: '2027-03-27',
+    lastLocalDate: '2027-03-27', count: 1, cursor: weekly.data.next,
+    next: { localDate: '2027-04-03', at: '2027-04-03T09:00:00.000Z' } };
+  expect(row.event.data).toMatchObject(expected);
+  expect((await state()).activeRun).toBeNull();
+  await runner.run(routines);
+  const before = await storage.db.query('SELECT * FROM routine_occurrences');
+  const savedState = await storage.db.query('SELECT * FROM routines');
+  await rebuildRoutineProjection(storage.db, nats.reader, logger);
+  const after = await storage.db.query('SELECT * FROM routine_occurrences');
+  const rebuiltState = await storage.db.query('SELECT * FROM routines');
+  expect(after.rows).toEqual(before.rows);
+  expect(rebuiltState.rows).toEqual(savedState.rows);
+  expect((await state()).executionAvailable).toBe(false);
+  expect(await nats.store.head()).toBe(3);
 }
-it('refuses late weekly work until its downtime writer exists', refusesWeekly);
+it('dispatches one weekly downtime range and rebuilds it without execution', weeklyDowntime);
 
 async function changedDuringPreparation(kind: string) {
   const created = creation();
@@ -394,3 +411,45 @@ async function readOnlyAndReplay() {
   expect(await nats.store.head()).toBe(2);
 }
 it('keeps read-only invocation and replay free of commands and execution effects', readOnlyAndReplay);
+
+async function weeklyOccupied() {
+  const created = creation();
+  const events = [created];
+  await save(events);
+  await dispatch();
+  const run = (await state()).activeRun!;
+  const { definition: _definition, source: _source, slot: _slot,
+    firedAt: _firedAt, startBy: _startBy, ...runBinding } = run;
+  const controlData = { ...runBinding, actorId: 'alice', source: 'owner',
+    reason: 'owner_requested', affectedRun: run.occurrenceId, next: null };
+  const stopping = { ...routine('routine.run_stop_requested'),
+    principal: { kind: 'human' as const, id: 'alice' }, data: controlData };
+  await save([stopping]);
+  const replacement = creation('2027-04-03');
+  const schedule = { ...replacement.data.definition.schedule,
+    frequency: 'weekly' as const, weekday: 6 };
+  const definition = { ...replacement.data.definition, schedule };
+  const data = { ...replacement.data, definition, definitionRevision: 2,
+    scheduleRevision: 2 };
+  const edited = { ...replacement, id: 'edit', commandId: 'edit',
+    type: 'routine.updated', data };
+  await save([edited]);
+  const before = await state();
+  const position = await nats.store.head();
+  now = Date.parse('2027-04-03T09:01:00.001Z');
+  expect((await dispatch()).counts.late).toBe(1);
+  expect(await nats.store.head()).toBe(position + 1);
+  const row = await nats.store.readEvent(position + 1);
+  expect(row.event.type).toBe('routine.occurrences_missed');
+  const expected = { count: 1, firstLocalDate: '2027-04-03',
+    lastLocalDate: '2027-04-03', next: { localDate: '2027-04-10' } };
+  expect(row.event.data).toMatchObject(expected);
+  const after = await state();
+  expect(after.activeRun).toEqual(run);
+  expect(after.activeRun?.rootId).toBe(run.rootId);
+  expect(after.activation).toEqual(before.activation);
+  expect(after.stopRequested).toBe(true);
+  expect(after.executionAvailable).toBe(false);
+}
+it('records weekly downtime through dispatch while retaining the occupied run, root and Stop',
+  weeklyOccupied);
