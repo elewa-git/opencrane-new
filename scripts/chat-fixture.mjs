@@ -173,7 +173,12 @@ export async function chatFixture(page, scenario = 'live', options = {}) {
     await waitForReadySocket();
     socket?.close({ code: 1013, reason: 'fixture connection dropped' });
   }
+  function sendFrame(frame) {
+    socket?.send(JSON.stringify(frame));
+  }
   return {
+    sendFrame,
+    waitForReadySocket,
     commands,
     add,
     closeSocket,

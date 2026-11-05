@@ -392,3 +392,17 @@ async function clearanceDuringSessionCheck(): Promise<void> {
 }
 it('honours private clearance while the returning tab checks its session',
   clearanceDuringSessionCheck);
+
+function startDuringCatchUp(): void {
+  service.connect();
+  sockets.at(-1)?.onopen?.(new Event('open'));
+  TestBed.tick();
+  event('agent.turn_started', nextTurn);
+  const ready = { version: 1, topic: 'conversation', conversationId: 'chat', type: 'ready',
+    position, generation: 2 };
+  send(ready);
+  send(nextReply);
+  expect(chat.privateReply()).toBeNull();
+  expect(posts).toBe(0);
+}
+it('never enables a turn start received during subscription catch-up', startDuringCatchUp);
