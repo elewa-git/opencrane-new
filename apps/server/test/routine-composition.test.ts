@@ -9,7 +9,7 @@ import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz'
 import { until } from '@opencrane/authz/testing';
 import { natsFixture, event } from '@opencrane/event-store/testing';
 import { foldRoutine, type EventEnvelope } from '@opencrane/events';
-import { BudgetActor, history, rootTotals } from '@opencrane/models';
+import { BudgetActor, history, priceTableId, rootTotals } from '@opencrane/models';
 import { conversationKeys } from '@opencrane/projections';
 import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
@@ -133,7 +133,7 @@ async function startComputer() {
       closedSessions++;
       lifetime.resolve();
     }
-    async function rpc(method: string, params: Record<string, unknown>) {
+    function rpc(method: string, params: Record<string, unknown>) {
       if (method === 'thread/start') {
         nativeStarts++;
         threadId = `native-${nativeStarts}`;
@@ -144,7 +144,8 @@ async function startComputer() {
         expect(JSON.stringify(params)).toContain('Private routine instructions');
         executedThreads.push(String(threadId));
       }
-      return { thread: { id: threadId, ephemeral: true, path: null }, turn: { id: 'native-turn' } };
+      return Promise.resolve({ thread: { id: threadId, ephemeral: true, path: null },
+        turn: { id: 'native-turn' } });
     }
     return Promise.resolve({ rpc, close, closed: lifetime.promise });
   }
@@ -170,9 +171,9 @@ async function startComputer() {
     send(bytes);
   }
   vi.spyOn(link.socket, 'send').mockImplementation(track);
-  async function wake(assistantId: string) {
+  function wake(assistantId: string) {
     expect(assistantId).toBe('sales-assistant');
-    return { link, generation: 1 };
+    return Promise.resolve({ link, generation: 1 });
   }
   async function close() {
     link.socket.terminate();
@@ -183,7 +184,7 @@ async function startComputer() {
   function executed() {
     return executedThreads.length === 1;
   }
-  return { link, wake, close, executed, executedThreads, frames,
+  return { link, wake, close, executed, executedThreads, frames, send: track,
     get nativeStarts() { return nativeStarts; }, get closedSessions() { return closedSessions; } };
 }
 async function cleanup() {
@@ -221,19 +222,32 @@ async function assertCounts() {
 }
 async function reachesPreparedThread() {
   const invocation = compose();
+  async function wake(assistantId: string) {
+    advanceWake();
+    return preparedComputer.wake(assistantId);
+  }
   const results = await Promise.all([
-    invocation.send(preparedComputer.wake), invocation.send(preparedComputer.wake),
+    invocation.send(wake), invocation.send(wake),
   ]);
   expect(results).toContainEqual({ status: 'sent' });
   await until(preparedComputer.executed);
   expect(preparedComputer.executedThreads).toEqual(['native-1']);
   await assertCounts();
+  const root = actor.state.roots[0]!;
+  const call = { requesterId: 'alice', conversationId, turnId,
+    assistantId: 'sales-assistant', payingGroupId: 'sales', threadId: 'native-1',
+    computerId: 'computer', generation: 1, model: 'gpt-6.1-sol', priceTableId,
+    contextDigest: '0'.repeat(64) };
+  const hold = await actor.reserve(call, 100, undefined, undefined, root.rootId);
+  await actor.uncertain(hold, 'settle_timeout');
   const before = await nats.store.head();
   await nats.stop();
   await nats.restart();
   expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
   expect(await nats.store.head()).toBe(before);
   expect(preparedComputer.nativeStarts).toBe(1);
+  expect(rootTotals(actor.state, root.rootId)).toEqual({
+    settledCents: 0, heldCents: 100, availableCents: 900 });
 }
 it('sends one checked due to its native thread, despite duplicate invocation and restart',
   reachesPreparedThread);
@@ -264,19 +278,19 @@ async function savedStageFault(stage: string, after: boolean) {
     if (fail) forbidden();
     return result;
   }
-  vi.spyOn(nats.store, 'append').mockImplementation(failStage);
+  const fault = vi.spyOn(nats.store, 'append').mockImplementation(failStage);
   await compose().send(preparedComputer.wake);
   function reachedFault() {
     return injected;
   }
   await until(reachedFault);
   await preparedComputer.link.settled();
-  vi.mocked(nats.store.append).mockRestore();
-  const before = await nats.store.head();
+  fault.mockRestore();
   await nats.stop();
   await nats.restart();
   actor = new BudgetActor(nats.store, 'test');
   await actor.start(10_000, 10_000, 'sales');
+  const before = await nats.store.head();
   expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
   expect(await nats.store.head()).toBe(before);
   expect(preparedComputer.executedThreads).toEqual([]);
@@ -306,6 +320,14 @@ async function change(kind: string) {
     await nats.seed([removed]);
   }
 }
+function advanceWake() {
+  const monotonic = performance.now.bind(performance);
+  function afterWake() {
+    return monotonic() + 14_000;
+  }
+  now += 14_000;
+  vi.spyOn(performance, 'now').mockImplementation(afterWake);
+}
 async function refusesChangedAccess(kind: string, late: boolean) {
   const append = nats.store.append.bind(nats.store);
   let injected = false;
@@ -320,12 +342,7 @@ async function refusesChangedAccess(kind: string, late: boolean) {
   }
   async function wake(assistantId: string) {
     if (!late) {
-      const monotonic = performance.now.bind(performance);
-      function afterWake() {
-        return monotonic() + 14_000;
-      }
-      now += 14_000;
-      vi.spyOn(performance, 'now').mockImplementation(afterWake);
+      advanceWake();
       await change(kind);
     }
     return preparedComputer.wake(assistantId);
@@ -353,7 +370,7 @@ for (const kind of ['member', 'pause', 'worker']) {
 
 async function lostSendReply() {
   const socket = preparedComputer.link.socket;
-  const send = socket.send.bind(socket);
+  const send = preparedComputer.send;
   function loseReply(bytes: Parameters<typeof send>[0]) {
     send(bytes);
     if (typeof bytes === 'string' && frameSchema.parse(JSON.parse(bytes))['type'] === 'turn') {
@@ -368,3 +385,64 @@ async function lostSendReply() {
   expect(preparedComputer.executedThreads).toEqual(['native-1']);
 }
 it('never repeats a send whose transport reply was lost', lostSendReply);
+
+async function refusesPreparation(kind: string) {
+  const link = preparedComputer.link;
+  if (kind === 'missing') {
+    vi.spyOn(link, 'prepareRoutineThread').mockRejectedValue(new Error('private-native-canary'));
+  } else if (kind === 'thread') {
+    const prepare = link.prepareRoutineThread;
+    async function wrongThread(...supplied: Parameters<typeof prepare>) {
+      await prepare(...supplied);
+      return 'not-the-native-thread';
+    }
+    vi.spyOn(link, 'prepareRoutineThread').mockImplementation(wrongThread);
+  }
+  async function wake(assistantId: string) {
+    const ready = await preparedComputer.wake(assistantId);
+    if (kind === 'computer') {
+      return { ...ready, link: { ...link, computerId: 'wrong-computer' } };
+    }
+    return ready;
+  }
+  await compose().send(wake);
+  if (kind === 'thread') {
+    function refused() {
+      return preparedComputer.closedSessions > 0;
+    }
+    await until(refused);
+  }
+  expect(preparedComputer.executedThreads).toEqual([]);
+  expect(link.socket.readyState).toBe(link.socket.OPEN);
+}
+it.each(['missing', 'computer', 'thread'])('refuses %s preparation without closing the bridge',
+  refusesPreparation);
+
+async function anotherThread() {
+  const append = nats.store.append.bind(nats.store);
+  let injected = false;
+  async function startOther(...supplied: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'computer.turn_started' && !injected) {
+      injected = true;
+      const other = { assistantId: 'sales-assistant', computerId: 'computer',
+        conversationId: 'other', turnId: 'other-turn', threadId: 'other-thread',
+        requesterId: 'alice', task: 'chat_turn', executionMode: 'restricted' };
+      await nats.seed([record('other-start', 'computer-sales-assistant',
+        'computer.turn_started', other)]);
+    }
+    return append(...supplied);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(startOther);
+  expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'sent' });
+  await until(preparedComputer.executed);
+  expect(injected).toBe(true);
+  await assertCounts();
+}
+it('allows another thread to start during the checked computer append', anotherThread);
+
+async function refusesBeforeWake() {
+  owned = false;
+  await inert({ enabled: true });
+}
+it('checks worker ownership before allowing wake', refusesBeforeWake);

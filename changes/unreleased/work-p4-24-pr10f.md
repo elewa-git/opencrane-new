@@ -1,0 +1,1 @@
+- Connect checked routine preparation to its native thread and single-use sender through an internal adapter. Automatic execution remains disabled; replay performs no work.
