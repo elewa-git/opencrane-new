@@ -14,12 +14,12 @@ saved identity are checked again before and after signing credentials. Local cal
 registrations stay separate on server and computer; neither crosses the wire.
 
 The first test commit is `e66075b7d`. Its completed failing run reached native thread
-creation, then failed because the server sent no load request. Two earlier fixture
-attempts did not reach that boundary: the previous turn was still running, then an
-empty placeholder was rejected by turn parsing. The corrected test retains both checks.
+creation, then failed because the server sent no load request.
 Test commit `6dd76c8aa` then proved the normal sender omitted the recall offer.
 Test commit `bca09b37d` proved an offered turn could be sent again before its native
 thread or start reply arrived. The sender now keeps the original offer.
+Test commit `4f84a56a9` reproduced a refusal when recall confirmation took over two
+seconds. Moving it before the credential access check made the same test pass.
 
 ## Own checks
 
@@ -36,8 +36,9 @@ The existing preparation suite separately uses disposable OpenFGA.
 - PASS: full typecheck and final server typechecks; `check:events` (158 event types).
 - PASS: full lint, including Knip, documentation, links, fixtures, licences and changelog.
   ESLint reported zero errors and 35 existing size warnings. Focused final code lint passed.
-- PARTIAL: the final full-file repetitions are running when this snapshot is written.
-  The draft PR records their completed results and CI on its pushed head.
+- PASS: the final 243-test selection twice, before the timing correction.
+- PARTIAL: two full-file repeats after that correction and pushed-head CI are running.
+  The draft PR records their completed results.
 - NOT RUN: full root suite, development stacks, paid calls or live qualification.
 
 ## Remaining work

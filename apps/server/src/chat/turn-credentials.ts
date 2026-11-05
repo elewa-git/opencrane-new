@@ -37,13 +37,14 @@ export async function releaseTurnCredentials(options: BridgeOptions,
     if (!tokens) throw new Error('Turn issuer unavailable');
     const initial = input?.renewal ? undefined
       : await initialMemoryFor(options, context, binding, report.replay === true);
+    // Finish recall history and deployment reads before starting the short credential check.
+    await confirmRecall(recall);
     const confirmMemory = await turnMemoryCheck(options, context, binding);
     await confirmMemory();
     await requireTurnMember(options.store, options.silo, binding.requesterId);
     const credentials = computerCredentials(options.store, tokens, options.silo);
     const turn = { ...binding, assistantId: context.assistantId,
       model: binding.model ?? modelForTask(binding.task) };
-    await confirmRecall(recall);
     const grant = await credentials.turn(turn);
     // Check only new activity after signing; keep full history outside the access deadline.
     await requireTurnMember(options.store, options.silo, binding.requesterId);
