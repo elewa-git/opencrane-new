@@ -335,6 +335,9 @@ async function explainsUnsafeHost(setting: string): Promise<void> {
     observations.set('/proc/sys/kernel/core_pattern', '|/private/core-collector %p\n');
   }
   function readObservation(path: unknown): string {
+    if (path === '/proc/self/cgroup') {
+      throw new Error('Fixture cgroup is unavailable');
+    }
     const observation = observations.get(String(path));
     if (observation !== undefined) {
       return observation;

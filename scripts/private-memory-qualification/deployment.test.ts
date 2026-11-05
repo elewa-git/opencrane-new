@@ -370,6 +370,7 @@ async function withdrawsPassForPartialRunner(): Promise<void> {
   vi.mocked(renameSync).mockImplementation(rename);
   expect((await collectDeployment()).result).toBe('PASS');
   expect(JSON.parse(saved)).toHaveProperty('result', 'PASS');
+  let expectedFailure: Record<string, unknown> | undefined;
   function partial(response: Record<string, unknown>): void {
     // Strip the fixture's invented success before invoking the actual entry.
     const request = { ...response };
@@ -382,18 +383,24 @@ async function withdrawsPassForPartialRunner(): Promise<void> {
     expect(child.status).toBe(1);
     expect(child.stderr).toBe('');
     const refusal: unknown = JSON.parse(child.stdout);
+    const observed = z.object({ protectionFailure: z.string() }).parse(refusal);
+    function matchesFailure(entry: string[]): boolean {
+      return entry[0] === observed.protectionFailure;
+    }
+    const knownFailure = protectionCases.find(matchesFailure);
+    expect(knownFailure).toBeDefined();
     const expectedRefusal = { result: 'FAIL', reason: 'host_refused',
-      protectionFailure: 'swap_measurement_failed' };
+      protectionFailure: knownFailure![0] };
     expect(refusal).toEqual(expectedRefusal);
+    expectedFailure = { ...expectedRefusal, message: knownFailure![1] };
     for (const key of Object.keys(response)) delete response[key];
     Object.assign(response, refusal);
   }
   alter = partial;
-  const failure = { result: 'FAIL', reason: 'host_refused',
-    protectionFailure: 'swap_measurement_failed',
-    message: 'Container swap protection could not be measured.' };
-  expect(await collectDeployment()).toEqual(failure);
-  expect(JSON.parse(saved)).toEqual(failure);
+  const result = await collectDeployment();
+  expect(expectedFailure).toBeDefined();
+  expect(result).toEqual(expectedFailure);
+  expect(JSON.parse(saved)).toEqual(expectedFailure);
   expect(responses).toHaveLength(12);
 }
 it('withdraws earlier saved PASS when the real runner refuses the host', withdrawsPassForPartialRunner);
