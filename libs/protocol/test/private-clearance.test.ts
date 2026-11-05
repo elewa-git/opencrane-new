@@ -19,7 +19,8 @@ function strictIdentity() {
   expect(privateOutputClearedSchema.safeParse(invalidGeneration).success).toBe(false);
   const reply = { ...frame, type: 'private_reply', data: { text: 'fixture', turnId: 'turn' } };
   expect(privateReplySchema.safeParse(reply).success).toBe(true);
-  expect(serverMessageSchema.safeParse(reply).success).toBe(false);
+  expect(serverMessageSchema.safeParse(reply).success).toBe(true);
+  expect(serverMessageSchema.safeParse(frame).success).toBe(true);
 }
-it('accepts only the complete payload-free clearance identity and keeps reply admission unchanged',
+it('accepts only the complete payload-free clearance identity and admits live frames on the socket',
   strictIdentity);

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { closeSessionSockets } from './session-sockets.ts';
 // The four browser-facing auth routes: start a login, finish it, log out,
 // and report who (if anyone) is signed in. All the OIDC and cookie logic
 // lives in @opencrane/auth; this file just wires it to Fastify.
@@ -152,6 +153,8 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
     if (!isOrganisationSession(config, session)) {
       return reply.code(403).send({ error: 'wrong organisation' });
     }
+    // End live delivery before waiting for the identity provider.
+    closeSessionSockets(app.server, readCookie(request, config.cookieName)!);
     // Keep the token in the navigation header; never put it in a response body.
     const address = await buildLogoutUrl(config, session.idToken);
     const provider = z.url({ protocol: /^https?$/u }).safeParse(address);

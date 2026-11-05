@@ -1386,3 +1386,31 @@ captures at 1280 and 390 pixels against the built app with ordinary browser fixt
 Uploaded file records with a `turnId` supply file details without making a second card.
 The corresponding `agent.file_changed` event puts the card in the assistant's reply.
 Refusals reuse the upload reason wording. Inline images and reply links are not included.
+
+## Volatile personal reply state
+
+P4-15 PR 3l is split at browser state. `private-reply.ts` holds one private reply for
+an owned personal session. `WebSocketService.privateReceived` checks frames through
+`serverMessageSchema` and bypasses both the 20-frame cache and ordinary `received`.
+The first live server frame supplies thread, computer generation and input generation;
+HTTP history deliberately omits those fields. Later clearance must match all of them.
+Projection generation is checked separately and never compared with computer generation.
+Only a new turn start received after socket readiness accepts a reply. HTTP history and
+reconnect catch-up cannot enable an old turn. Completion retains an existing reply but
+refuses first delivery after completion. Output-loss metadata does not clear live text.
+Stop, failure, closure, access loss, projection replacement, socket loss/replacement,
+navigation and destruction discard it. HTTP completions cannot restore it.
+`BrowserSession` broadcasts sign-out before the native logout form navigates away.
+Other tabs disconnect and clear protected content immediately. Focus, pageshow and a
+return to visible state check `/auth/me` with `cache: no-store`. New private replies
+are blocked during that read; clearance still discards existing text immediately. A refused, signed-out, failed or timed-out read ends delivery;
+a late successful read cannot undo a sign-out. The read has a five-second timeout.
+`private-reply-browser.test.ts` runs two real Chromium pages with intercepted HTTP and
+WebSocket replies, including a missed broadcast. It inspects the public reply signal
+in a development build because the product does not display that signal yet. Uploads
+reuse a connected socket so they do not discard an unrelated reply.
+
+The template does not consume this state. Markdown display, cancellable private Mermaid
+rendering, unavailable/restriction screenshots and `visual:p4-15-pr3l` remain the next
+part. Native admission is still disabled. The [receipt](../../docs/process/p4-15-pr3l/receipt.md)
+records the implemented scope and own checks.

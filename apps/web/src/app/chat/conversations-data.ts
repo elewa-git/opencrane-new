@@ -1,5 +1,6 @@
+import { conversationStatus, type Turn } from './chat-state';
 import { computed, signal } from '@angular/core';
-import { chatListSchema, sessionSlug, type ChatConversation } from '@opencrane/protocol';
+import { chatListSchema, sessionSlug, type ChatConversation, type ChatRow } from '@opencrane/protocol';
 
 export function workspaceTitle(
   denied: boolean, selected: string,
@@ -254,4 +255,35 @@ export async function resumeAgentSession(
   if (row?.mode !== 'agent_session') return { kind: 'missing' };
   const displayed = displayAgentSessions([row]);
   return { kind: 'found', row: displayed[0]! };
+}
+
+export function selectedSessionAssistant(
+  selected: () => ChatConversation | undefined, ownAssistant: () => string | null,
+): string | null {
+  const conversation = selected();
+  if (conversation?.mode === 'agent_session') return conversation.assistantId;
+  return ownAssistant();
+}
+
+export function updateSessionSummaries(
+  conversations: ChatConversation[], selected: string, rows: ChatRow[], turns: Turn[],
+): ChatConversation[] {
+  let title: string | undefined;
+  let latest: Turn | undefined;
+  for (const turn of turns) {
+    if (turn.author === 'agent') latest = turn;
+    if (!title && (turn.author === 'you' || turn.author === 'person') && turn.text) {
+      title = sessionSlug(turn.text);
+    }
+  }
+  let status = conversationStatus(latest?.state);
+  for (const row of rows) {
+    if (row.type === 'conversation.closed') status = 'closed';
+  }
+  function updateConversation(row: ChatConversation): ChatConversation {
+    if (row.conversationId !== selected) return row;
+    if (title) return { ...row, title, status };
+    return { ...row, status };
+  }
+  return conversations.map(updateConversation);
 }

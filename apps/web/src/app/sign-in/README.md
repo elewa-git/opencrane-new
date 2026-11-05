@@ -5,6 +5,7 @@ This folder shows the website's sign-in card, the short wait before company sign
 ## What it is responsible for
 
 - Checks the current session on the home page.
+- Tells other tabs to clear protected content before the sign-out form leaves the page.
 - Opens single sign-on through the company sign-in service after a cancellable wait.
 - Explains that email sign-in is unavailable; the email field cannot submit.
 - Shows a fixed, safe explanation when sign-in is rejected and offers another attempt.

@@ -1,7 +1,7 @@
 // Share these WebSocket message schemas between the server and browser so their types
 // cannot drift. Keep them in this package so the browser does not depend on the server's
 // Node-only code.
-import { chatSubscribeSchema, chatMessageSchema } from './chat.ts';
+import { chatSubscribeSchema, chatMessageSchema, privateReplySchema, privateOutputClearedSchema } from './chat.ts';
 import { z } from 'zod';
 import { subscribeSchema, realtimeMessageSchema } from './realtime.ts';
 
@@ -59,7 +59,8 @@ export const eventValidationResultSchema = z
 export type EventValidationResult = z.infer<typeof eventValidationResultSchema>;
 
 // Every message the server can send down the socket.
-export const serverMessageSchema = z.union([helloEchoSchema, errorMessageSchema, eventValidationResultSchema, realtimeMessageSchema, chatMessageSchema]);
+export const serverMessageSchema = z.union([helloEchoSchema, errorMessageSchema, eventValidationResultSchema, realtimeMessageSchema, chatMessageSchema,
+  privateReplySchema, privateOutputClearedSchema]);
 
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
 

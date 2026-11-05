@@ -1,18 +1,19 @@
+import { PrivateReplyState } from './private-reply';
 import { sendUpload } from './upload';
 import { UploadBatch } from './upload-batch';
 import { toolTransitionAnnouncement } from './chat-announcement';
 import { Injectable, computed, effect, inject, signal, type OnDestroy } from '@angular/core';
 import { z } from 'zod';
-import { sessionSlug, chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema, type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
+import { chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema, type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
 import type { ComputerState, MemoryAdmission } from '@opencrane/protocol';
 import { WebSocketService } from '../core/websocket.service';
-import { conversationStatus, isActiveTurn, lastConfirmedTurnAt,
+import { isActiveTurn, lastConfirmedTurnAt,
   recoveredLostTurn, shouldAnnounceBudgetStop, transcript, uploadedFile } from './chat-state';
 import { shortTime } from './file-presentation';
 import { ChatSessionStop, type StopScreen } from './chat-session-stop';
 import { ReadFailure, requestChat, savedChatChange } from './chat-session-http';
 import { displayAgentSessions, includeRequestedConversation, isTeamConversation,
-  resumeAgentSession, selectedSessionPayingGroupId }
+  resumeAgentSession, selectedSessionPayingGroupId, updateSessionSummaries, selectedSessionAssistant }
   from './conversations-data';
 
 @Injectable()
@@ -20,6 +21,8 @@ export class ChatSession implements OnDestroy {
   private readonly socket = inject(WebSocketService);
   readonly conversations = signal<ChatConversation[]>([]);
   readonly rows = signal<ChatRow[]>([]);
+  private readonly privateState = new PrivateReplyState(this);
+  readonly privateReply = this.privateState.reply;
   readonly selected = signal('');
   readonly memberId = signal('');
   readonly displayName = signal('You');
@@ -55,7 +58,8 @@ export class ChatSession implements OnDestroy {
   readonly selectedConversation = computed(() =>
     this.conversations().find(row => row.conversationId === this.selected()));
   readonly teamSession = computed(this.isTeamSession.bind(this));
-  readonly selectedAssistantId = computed(this.assistantForSelectedSession.bind(this));
+  readonly selectedAssistantId = computed(
+    selectedSessionAssistant.bind(null, this.selectedConversation, this.assistantId));
   readonly lastConfirmedTurnAt = computed(() => lastConfirmedTurnAt(this.turns()));
   readonly active = computed(() => this.turns().filter(isActiveTurn).at(-1));
   readonly attachments = computed(() => this.rows().flatMap(row => { const file = uploadedFile(row); return file ? [file] : []; }));
@@ -251,9 +255,11 @@ export class ChatSession implements OnDestroy {
     return selectedSessionPayingGroupId(this.conversations(), this.selected());
   }
   async stop(): Promise<void> {
+    this.privateState.clear();
     await this.stopState.stop();
   }
   ngOnDestroy(): void {
+    this.privateState.destroy();
     this.clearUpload();
     this.stopState.reset();
     ++this.revision;
@@ -285,11 +291,6 @@ export class ChatSession implements OnDestroy {
   }
   private isTeamSession(): boolean {
     return isTeamConversation(this.selectedConversation());
-  }
-  private assistantForSelectedSession(): string | null {
-    const conversation = this.selectedConversation();
-    if (conversation?.mode === 'agent_session') return conversation.assistantId;
-    return this.assistantId();
   }
   private subscribeWhenConnected(): void {
     if (this.denied() || !this.selected()) return;
@@ -358,7 +359,7 @@ export class ChatSession implements OnDestroy {
       }
       await this.ensureConversation(pending.conversation);
       if (revision !== this.revision) return;
-      this.socket.connect();
+      if (!this.connected()) this.socket.connect();
       const reportProgress = this.uploadBatch.reportProgress.bind(this.uploadBatch);
       this.uploadBatch.transfer = sendUpload(
         pending.conversation, pending.file, pending.key, reportProgress,
@@ -389,6 +390,7 @@ export class ChatSession implements OnDestroy {
     while (more) {
       const feed = chatFeedSchema.parse(await requestChat(`/api/conversations/${id}/messages?since=${this.position}`));
       if (revision !== this.revision) return;
+      this.privateState.checkProjection(feed.generation);
       if (this.position && feed.generation !== this.generation) { this.position = 0; this.rows.set([]); continue; }
       this.generation = feed.generation;
       this.setComputerState(feed.computerState);
@@ -399,6 +401,7 @@ export class ChatSession implements OnDestroy {
     }
   }
   private receive(message: ServerMessage): void {
+    if (message.type === 'private_reply' || message.type === 'private_output_cleared') return;
     if (this.denied() || !this.selected()) return;
     if (!('topic' in message) || message.topic !== 'conversation' || message.conversationId !== this.selected()) return;
     if (message.type === 'refused') { this.fail(new ReadFailure(403)); return; }
@@ -427,7 +430,7 @@ export class ChatSession implements OnDestroy {
       return;
     }
     const announceBudgetStop = shouldAnnounceBudgetStop(parsed.data, this.turns);
-    const added = this.apply(parsed.data);
+    const added = this.apply(parsed.data, this.conversationReady);
     const toolAnnouncement = toolTransitionAnnouncement(
       added, this.conversationReady, parsed.data, this.turns());
     if (toolAnnouncement) this.announcement.set(toolAnnouncement);
@@ -456,20 +459,16 @@ export class ChatSession implements OnDestroy {
   queuedReference(): string {
     return this.pending?.id ?? '';
   }
-  private apply(row: ChatRow): boolean {
+  private apply(row: ChatRow, liveStart = false): boolean {
     if (row.position <= this.position) return false;
+    this.privateState.apply(row, liveStart);
     this.position = row.position;
     this.rows.update(rows => [...rows.filter(existing => existing.id !== row.id), row].sort((a, b) => (a.position || Infinity) - (b.position || Infinity)));
-    this.updateSummary();
+    const summaries = updateSessionSummaries(
+      this.conversations(), this.selected(), this.rows(), this.turns());
+    this.conversations.set(summaries);
     this.stopState.apply(row);
     return true;
-  }
-  private updateSummary(): void {
-    const turns = this.turns(), latest = turns.filter(turn => turn.author === 'agent').at(-1);
-    const title = turns.find(turn => (turn.author === 'you' || turn.author === 'person') && turn.text)?.text;
-    const status = this.rows().some(row => row.type === 'conversation.closed')
-      ? 'closed' : conversationStatus(latest?.state);
-    this.conversations.update(rows => rows.map(row => row.conversationId === this.selected() ? { ...row, ...(title ? { title: sessionSlug(title) } : {}), status } : row));
   }
   private fail(error: unknown): void {
     if (error instanceof ReadFailure && [401, 403].includes(error.status)) {
