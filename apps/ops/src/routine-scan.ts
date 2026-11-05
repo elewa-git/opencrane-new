@@ -25,6 +25,8 @@ function requireInput(worker: Worker, checkedAt: number) {
   const continuation = worker.continuation;
   if (!Number.isFinite(checkedAt) || !/^[\w-]{1,200}$/u.test(worker.silo) ||
       (continuation && (continuation.silo !== worker.silo ||
+        !Number.isSafeInteger(continuation.afterCreatedPosition) ||
+        continuation.afterCreatedPosition < 1 ||
         !/^[\w-]{1,200}$/u.test(continuation.afterRoutineId)))) {
     throw new Error('Routine scan refused');
   }

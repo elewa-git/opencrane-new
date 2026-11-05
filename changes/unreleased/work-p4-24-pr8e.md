@@ -1,1 +1,2 @@
 - Routine scheduler preparation can inspect one page of up to 50 routine references against saved events, including missing local times and occupied runs. Automatic scheduling and command dispatch remain disabled.
+- Routine scans include routines added between pages and return completed progress before the page deadline. Existing routine tables need an offline replay to recover their original event order. Automatic scheduling remains off.

@@ -22,7 +22,7 @@ flowchart LR
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
   ops -->|saves results, routine claims, skips and missed ranges| nats
-  ops -->|holds routine ownership, reads candidates and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
+  ops -->|holds routine ownership, reads routine pages and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
   ops -->|deletes forgotten keys| keys["Memory key store<br/>private storage"]
@@ -62,7 +62,10 @@ The routine worker still only updates read tables; automatic scheduling is not c
 An internal scanner reads up to fifty routine references at a time. It checks their
 saved history and reports counts without starting work. Missing local times and
 occupied runs stay visible. A delayed table or failed read cannot look like an empty
-result. The scanner stops when ownership is lost and waits for its current read.
+result. New routines follow existing ones in the order they were first saved,
+so a new id cannot fall behind the current scan. A slow page returns its completed
+progress for the next call. The scanner stops when ownership is lost and waits
+for its current read.
 
 1. **A change is saved.** A worker copies the event into the matching table.
    Reactions run any required background work and save its results as new events.

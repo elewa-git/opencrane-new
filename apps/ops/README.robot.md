@@ -1034,10 +1034,17 @@ It awaits all reads before returning. Cancellation, lost leadership, missing his
 or unavailable projection data returns a fixed error. It refuses a backwards clock
 within a page or when continuing from an earlier page.
 The whole page has a ten-second read deadline; each ownership check has at most
-one second. No routine history is read inside an access check.
+one second. After nine seconds it starts no further candidates, leaving time for
+the final ownership check. It returns counts and continuation through the last
+fully checked candidate. An incomplete or unsafe read still refuses the call;
+so do lost ownership, a failed final check or a page with no completed progress.
+No routine history is read inside an access check.
 
-The query reads at most 50 references in immutable routine-id order using the
-existing `(silo, routine_id)` primary-key index. It includes occupied, null-next,
+The query reads at most 50 references in original event order using the
+`(silo, created_position)` index. Edits preserve each row's original position;
+a newly added routine follows existing candidates even when its id sorts earlier.
+Older rows with an unknown original position refuse scanning until offline replay
+restores it from events. It includes occupied, null-next,
 paused, retired and legacy rows. A checkpoint behind the captured event-store
 position refuses, including when the index is empty. Each selected stream is read
 and folded from creation, checked against its projected position and checked again
@@ -1047,11 +1054,24 @@ Results contain only counts, continuation and `executionAvailable: false`.
 Calendar observations distinguish future, at-most-sixty-second eligible, gap,
 late, occupied and inactive records. These counts grant no authority and do not
 prove that owner access would permit a command. A null continuation means the end
-of this index page, not that no work exists. A full page requires another read,
-which may be empty. Changes after inspection and newly inserted ids before the
-continuation are found by the next sweep from the beginning. A continuation binds
-the silo, last routine id, projection generation and last observed clock value.
-Rebuilds invalidate it. No durable scan progress is written.
+of the candidates visible to that page query, not that no work exists. A full or
+time-limited page requires another call, which may be empty. Following each returned
+continuation inspects each routine once in the scan, including additions projected
+before the final page query. Later additions and changes to already inspected
+routines belong to the next scan from the beginning.
+
+Pickup is bounded by candidate count: with N earlier, uninspected routines, an
+addition is reached within N + 1 calls that each complete at least one candidate,
+or ceil((N + 1) / 50) full pages. Additions after the final query have that bound
+in the next scan. Each call takes at most ten seconds of reads; caller delays,
+projection lag and refused reads cannot have a wall-clock guarantee. There is no
+automatic next scan while scheduling is disabled.
+
+A continuation binds the silo, last routine id, original event position, projection
+generation and last observed clock value. Old continuations without the position
+and continuations from before a rebuild are refused. The caller must retain each
+returned continuation; reusing one repeats that page, and losing it starts a new
+scan. No durable progress or exactly-once execution is claimed by these counts.
 
 Base: downtime writer #873 merged as `f8d3e36b16324655c297c434fc1a58c2b8ae77c5`.
 Its contract and builder reports were read before implementation. This first part
@@ -1064,7 +1084,9 @@ NOT RUN here. `createRoutineSender` remains disabled. Live qualification is NOT 
 
 `test/routine-scan.test.ts` uses disposable PostgreSQL/NATS with real leadership,
 projection and history reads. It covers 51-row pagination, silo exclusion, updates
-between pages, restart, replay, lag, changed events after selection, unavailable
-history, cancellation, backwards clocks, Brussels/Apia and the sixty-second limit.
+between pages, insertion before the previous id, retained-cursor restart, replay,
+old-table refusal, lag, changed events after selection, unavailable history after
+progress, slow-read continuation, cancellation, backwards clocks, Brussels/Apia
+and the sixty-second limit.
 Replay and scan append no events and call no execution service. OpenFGA integration
 belongs to the deferred checked-command dispatch; this read-only scan has no IAM port.
