@@ -115,6 +115,34 @@ async function pages() {
 }
 it('crosses 51 candidates once in indexed silo order despite updated positions and restart', pages);
 
+async function includesConcurrentInsertion() {
+  const events: EventEnvelope[] = [];
+  for (let index = 0; index < 51; index += 1) {
+    const event = creation(`item-${String(index).padStart(2, '0')}`);
+    events.push(event);
+  }
+  await save(events);
+  const reads = vi.spyOn(nats.store, 'readStream');
+  const first = await scan();
+  expect(first.examined).toBe(50);
+  expect(first.continuation?.afterRoutineId).toBe('item-49');
+  const inserted = creation('item-00-new');
+  await save([inserted]);
+  const second = await scan(first.continuation);
+  expect(second.examined).toBe(2);
+  expect(second.counts.eligible).toBe(2);
+  expect(second.continuation).toBeNull();
+  const subjects: string[] = [];
+  for (const call of reads.mock.calls) {
+    subjects.push(call[0]);
+  }
+  expect(subjects.slice(50)).toEqual(['routine-item-50', 'routine-item-00-new']);
+  expect(subjects).toHaveLength(52);
+  expect(new Set(subjects).size).toBe(52);
+}
+it('includes an earlier id inserted between pages without repeating inspected routines',
+  includesConcurrentInsertion);
+
 const calendars = [
   ['Europe/Brussels', '02:30', '2027-03-28', '2027-03-28T01:00:00.000Z', 'gap'],
   ['Pacific/Apia', '00:00', '2011-12-30', '2011-12-30T10:00:00.000Z', 'gap'],
