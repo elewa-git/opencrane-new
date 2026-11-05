@@ -1,0 +1,1 @@
+- Trusted image part callers can now validate authenticated scan replies against their own bytes and request, approved scanner digests and fresh database facts. Whole-image coverage and admission remain later work.
