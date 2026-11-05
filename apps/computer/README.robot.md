@@ -7,7 +7,7 @@ base supplies its Debian packages once a digest is recorded. See the
 [CI test contracts](../../scripts/ci/README.robot.md) for file coverage and reports.
 The upload base, launcher build and runtime write the same apt settings before
 their first package request: 30-second HTTP and HTTPS timeouts, five retries,
-an eight-minute limit for each apt command, and an error if any package index
+a 25-minute limit for each apt command, and an error if any package index
 fails to download. The Dockerfiles keep the pinned Debian snapshots and package
 list. The image build step has a 30-minute limit inside the 60-minute fixture job.
 

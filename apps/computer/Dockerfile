@@ -10,8 +10,8 @@ RUN printf '%s\n' \
     'APT::Update::Error-Mode "any";' \
     > /etc/apt/apt.conf.d/80-opencrane-network
 RUN sed -i 's|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/20261001T000000Z|; s|http://deb.debian.org/debian$|http://snapshot.debian.org/archive/debian/20261001T000000Z|' /etc/apt/sources.list.d/debian.sources && \
-    timeout -v -k 10s 8m apt-get -o Acquire::Check-Valid-Until=false update -qq && \
-    timeout -v -k 10s 8m apt-get install -y --no-install-recommends gcc libc6-dev
+    timeout -v -k 10s 25m apt-get -o Acquire::Check-Valid-Until=false update -qq && \
+    timeout -v -k 10s 25m apt-get install -y --no-install-recommends gcc libc6-dev
 COPY tool-user.c /tmp/tool-user.c
 RUN gcc -O2 -Wall -Wextra -Werror -o /tool-user /tmp/tool-user.c
 # The pinned base image supplies Codex and the native launcher that applies seccomp.
@@ -27,10 +27,10 @@ RUN printf '%s\n' \
 RUN sed -i 's|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/20261001T000000Z|; s|http://deb.debian.org/debian$|http://snapshot.debian.org/archive/debian/20261001T000000Z|' /etc/apt/sources.list.d/debian.sources
 COPY apt.lock /tmp/apt.lock
 COPY collect-licences.py /tmp/collect-licences.py
-RUN timeout -v -k 10s 8m apt-get -o Acquire::Check-Valid-Until=false update -qq && \
-    xargs timeout -v -k 10s 8m apt-get install -y --no-install-recommends < /tmp/apt.lock && \
+RUN timeout -v -k 10s 25m apt-get -o Acquire::Check-Valid-Until=false update -qq && \
+    xargs timeout -v -k 10s 25m apt-get install -y --no-install-recommends < /tmp/apt.lock && \
     sed 's/20261001T000000Z/20261002T000000Z/g' /etc/apt/sources.list.d/debian.sources > /etc/apt/sources.list.d/inherited.sources && \
-    timeout -v -k 10s 8m apt-get -o Acquire::Check-Valid-Until=false update -qq && \
+    timeout -v -k 10s 25m apt-get -o Acquire::Check-Valid-Until=false update -qq && \
     mkdir -p /usr/share/opencrane && \
     python3 /tmp/collect-licences.py apt > /usr/share/opencrane/apt-packages.json && \
     rm -rf /var/lib/apt/lists/* /tmp/apt.lock /tmp/collect-licences.py /etc/apt/sources.list.d/inherited.sources /lifecycle /desktop && \
