@@ -103,7 +103,10 @@ export async function readDeploymentQualification(silo: string) {
     if (savedResult() !== saved) throw new Error('qualification_changed');
   }
   confirm();
-  return { runId: result.runId, confirm };
+  const runtime = { sourceSha: result.sourceSha, imageDigest: result.imageDigest,
+    environmentId: result.environmentId };
+  const qualification = { ...runtime, result: result.result, checks: result.checks };
+  return { runId: result.runId, confirm, catalogue: { runtime, qualification } };
 }
 
 function hash(value: string): string {

@@ -79,7 +79,9 @@ It parses the collector's complete output shape and requires nine PASS checks, b
 complete qualifications and eleven distinct receipt digests. It independently measures
 the current deployment and event-stream creation, checks the silo, and rechecks the
 configuration and result after the measurements. It returns the collector run id and a
-synchronous check that those protected files still match. The initial-load command
+synchronous check that those protected files still match. Its local `catalogue` value
+contains the measured runtime identity and the nine checked results for recall assembly.
+It carries no caller credential and is never a bridge message. The initial-load command
 retains that id, rechecks access after deployment reads, then checks the files without
 another wait before each append. It repeats the checks after saving.
 This reader requires local Docker access on the deployment host; no HTTP route exposes it.

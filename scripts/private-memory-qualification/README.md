@@ -19,7 +19,7 @@ It uses Docker on the deployment host and reads the deployment's event store.
 flowchart LR
   scripts["scripts<br/>developer tools"] -.-> collector["private-memory-qualification<br/>collects observed results"]
   scripts -.-> sibling["check-local-qualification<br/>checks local results"]
-  server["apps/server<br/>disabled initial loading"] -->|reads and rechecks results| collector
+  server["apps/server<br/>memory preparation"] -->|reads and rechecks results| collector
   collector -.->|uses memory and Stop checks| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
   collector -->|measures and starts checks| docker["Docker<br/>running image and host"]
@@ -80,7 +80,8 @@ nice -n 10 npx tsc -p scripts/private-memory-qualification/tsconfig.json
 The first command needs the protected deployment configuration described in the contract below.
 It prints safe measurements and results, or one fixed failure reason.
 It also saves its own result in a protected file. Initial loading reads that file
-and checks the current deployment again. Callers cannot upload replacement evidence.
+and checks the current deployment again. Recall preparation uses the same checked
+measurements to build its tool list. Callers cannot upload replacement evidence.
 
 ## Where to read more
 
