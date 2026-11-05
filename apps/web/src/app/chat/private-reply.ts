@@ -95,10 +95,10 @@ export class PrivateReplyState {
       return;
     }
     const turnId = row.data.turnId;
-    if (row.type === 'agent.turn_started' && liveStart && this.ready && turnId && turnId !== this.turnId) {
+    if (row.type === 'agent.turn_started' && turnId && turnId !== this.turnId) {
       this.clear();
       this.turnId = turnId;
-      this.accepting = true;
+      this.accepting = liveStart && this.ready;
     }
     if (turnId !== this.turnId) return;
     if (row.type === 'agent.turn_completed') this.accepting = false;
