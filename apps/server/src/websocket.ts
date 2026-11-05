@@ -25,6 +25,7 @@ import {
 } from '@opencrane/protocol';
 
 import { conversationSubscription } from './chat/realtime.ts';
+import { trackSessionSocket } from './auth/session-sockets.ts';
 import { memberSubscription, type RealtimeOptions } from './realtime.ts';
 
 export const WEBSOCKET_PATH = '/ws';
@@ -127,6 +128,12 @@ export function attachWebSocketServer(
       socket.close(1008, 'session unavailable');
       return;
     }
+    const cookie = parseCookieHeader(request.headers.cookie)[authConfig.cookieName];
+    if (!cookie) {
+      socket.close(1008, 'session unavailable');
+      return;
+    }
+    trackSessionSocket(httpServer, cookie, socket);
     const subscribe = memberSubscription(socket, session, authConfig, logger, realtime);
     const chat = conversationSubscription(socket, session, authConfig, realtime?.chat);
     let subscribed = false;
