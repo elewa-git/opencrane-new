@@ -153,6 +153,44 @@ async function calendar(zone: string, localTime: string, first: string, last: st
 }
 it.each(calendars)('counts %s calendar slots and leaves exactly 60 seconds eligible', calendar);
 
+async function gapOnly(lateness: number) {
+  const original = creation();
+  const effectiveAt = '2027-03-27T12:00:00.000Z';
+  const data = { ...original.data, effectiveAt, cursor: null, next: null };
+  const updated = { ...original, id: 'gap-only', commandId: 'gap-only',
+    type: 'routine.updated', time: effectiveAt, data };
+  await nats.seed([updated]);
+  now = Date.parse('2027-03-29T00:30:00.000Z') + lateness;
+  const request = { ...input, expectedPosition: 3, localDate: '2027-03-28' };
+  const before = await state();
+  const [receipt, repeated] = await Promise.all([record(request), record(request)]);
+  expect(repeated).toEqual(receipt);
+  expect(receipt.executionAvailable).toBe(false);
+  const row = await nats.store.readEvent(receipt.position);
+  const next = { localDate: '2027-03-29', localTime: '02:30', zone: 'Europe/Brussels',
+    at: '2027-03-29T00:30:00.000Z', offsetMinutes: 120 };
+  const expected = { localDate: '2027-03-28', localTime: '02:30', zone: 'Europe/Brussels',
+    reason: 'dst', cursor: null, next };
+  expect(row.event.type).toBe('routine.occurrence_skipped');
+  expect(row.event.data).toMatchObject(expected);
+  expect(row.event.data).not.toHaveProperty('count');
+  expect(await nats.store.head()).toBe(4);
+  const after = await state();
+  expect(after).toEqual(foldRoutine(before, row.event));
+  expect(after.activeRun).toBeNull();
+  expect(after.executionAvailable).toBe(false);
+  expect(after.definition?.next).toEqual(next);
+  const stale = { ...request, expectedPosition: receipt.position };
+  await expect(record(stale)).rejects.toThrow(/^Routine missed refused$/u);
+  const dueInput = { ...stale, localDate: '2027-03-29' };
+  await expect(record(dueInput)).rejects.toThrow(/^Routine missed refused$/u);
+  await claimRoutineDue(nats.store, worker(), dueInput);
+  expect((await state()).activeRun?.slot).toEqual(next);
+  expect(await record(request)).toEqual(receipt);
+  expect(await nats.store.head()).toBe(5);
+}
+it.each([0, 60_000])('recovers a Brussels gap once and preserves the next slot at %i ms', gapOnly);
+
 async function bounded() {
   now = Date.parse('2028-01-01T12:00:00Z');
   const first = await record();
