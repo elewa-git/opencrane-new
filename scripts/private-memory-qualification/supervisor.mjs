@@ -50,7 +50,18 @@ function groupIsRunning() {
   return false;
 }
 
-async function finish(success) {
+function isHostRefusal() {
+  try {
+    const buffer = Buffer.concat(output);
+    const result = JSON.parse(buffer.toString('utf8'));
+    return result !== null && Object.keys(result).length === 2 &&
+      result.result === 'FAIL' && result.reason === 'host_refused';
+  } catch {
+    return false;
+  }
+}
+
+async function finish(code) {
   if (stopping) {
     return;
   }
@@ -65,7 +76,9 @@ async function finish(success) {
     if (locked) {
       rmdirSync(lock);
     }
-    if (success && size <= 65_536) {
+    // Forward only the fixed host refusal from a failed runner, after cleanup succeeds.
+    const completed = code === 0 || (code === 1 && isHostRefusal());
+    if (completed && size <= 65_536) {
       process.stdout.end(Buffer.concat(output), exitSuccessfully);
       return;
     }
@@ -78,10 +91,10 @@ function exitSuccessfully() {
   process.exit(0);
 }
 function cancel() {
-  void finish(false);
+  void finish(null);
 }
 function closed(code) {
-  void finish(code === 0);
+  void finish(code);
 }
 function collect(buffer, keep) {
   size += buffer.length;

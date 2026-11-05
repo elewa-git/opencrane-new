@@ -22,7 +22,7 @@ flowchart LR
   server["apps/server<br/>memory preparation"] -->|reads and rechecks results| collector
   collector -.->|checks memory, Stop and reply loss| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
-  collector -->|measures and starts checks| docker["Docker<br/>running image and host"]
+  collector -->|measures, starts checks and reads refusals| docker["Docker<br/>running image and host"]
   docker -->|checks memory and two native processes| deployment["deployment<br/>event store and journey runner"]
 ```
 
@@ -33,6 +33,7 @@ flowchart LR
 - Measure the source revision, image, host, silo and installation before collecting results.
 - Refuse an old or used event store, changed deployment, or missing check.
 - Refuse swap, crash dumps, unsafe process limits and unreadable host settings.
+- Save host refusals with a reminder to disable swap and core dumps.
 - Accept results only from processes it starts in the measured image.
 - Save its own result in a protected file and recheck the deployment whenever it is used.
 - Refuse copied, edited, stale or foreign receipts.

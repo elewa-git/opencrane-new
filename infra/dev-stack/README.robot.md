@@ -2162,3 +2162,44 @@ Live checks are NOT RUN. Endpoint TLS identity, storage permissions and identity
 image/helper approval, real base backup/WAL and recovery of `projections`, `handlers`
 and `openfga` remain required before enablement. A valid CA entry does not prove
 that the endpoint serves a certificate signed by it or accepts the credentials.
+
+## Checked local memory collection
+
+Part of #97, P4-15 PR 5q. The single stack-owning 5i4 journey imports
+`prepareMemoryQualification(signal?)` from `memory-qualification.ts` before any
+bootstrap or native journey work. It runs once per process and never bootstraps.
+The image-owned collector runner may populate the installation itself.
+
+`DEV_STACK_ID` and `MEMORY_CLAIMED_ID` must name the same existing secondary claim.
+The launcher reuses `requireStageBStack`, checks the slot's silo setting and requires
+the protected collector target to match that silo and the full container id.
+The Compose project label must match the slot; its working-directory label must
+name this worktree's `infra/dev-stack` folder, as the existing launch command does.
+The image revision must match this checkout's commit. The root-owned configuration and its parent directories must be protected; the launcher never
+creates or replaces that configuration. Another target's prior evidence stays intact.
+
+The existing no-argument `collectDeployment()` checks the read-only container, code
+mounts, image, source, host, silo, start and untouched EVENTS stream before its
+journeys. A purge does not make a used stream fresh. Collection withdraws an earlier
+PASS first. Only complete PASS followed by `readDeploymentQualification()` for the
+same run allows return. Partial, missing, malformed or replaced evidence refuses.
+The launcher uses the collector's existing protected result format and location.
+
+AbortSignal, SIGINT, SIGTERM and SIGHUP request cancellation. Cancellation waits
+for the whole collector, including supervisor cleanup, before withdrawing its result
+and rejecting. It does not stop the collector halfway through a check. The calling
+journey must await this function before removing its slot. No command, evidence
+upload or alternative target can be supplied. Errors contain only fixed text.
+When the image runner returns `host_refused`, the launcher keeps that reason and
+the collector's fixed message in the saved FAIL result. Its error names the reason
+and reminds the operator that swap and core dumps must be disabled. No raw host
+setting, path or child output is exposed. Other failures keep the generic refusal.
+
+```sh
+nice -n 10 npx vitest run --config infra/dev-stack/memory-qualification.config.mjs
+```
+
+The CI Node test entry runs the same Vitest fixtures. They run real collector
+validation against controlled filesystem and Docker observations. Their synthetic PASS is not a live receipt. This build starts
+no slot and makes no model calls. Live collection remains NOT RUN for 5i4 on its
+own new installation; the shared runner and admission remain unchanged.

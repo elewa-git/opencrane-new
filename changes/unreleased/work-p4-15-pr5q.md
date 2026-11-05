@@ -1,0 +1,2 @@
+- Check a claimed local slot before collecting memory qualification evidence. Refuse foreign targets and incomplete results, and wait for cleanup on cancellation. Live qualification remains untested.
+- Keep unsafe-host refusals in memory collection errors and saved results, with a plain reminder to disable swap and core dumps.

@@ -25,6 +25,9 @@ const receiptSchema = bindingSchema.extend({
   name: z.string(), challengeId: z.uuid(), observedAt: z.number().int(),
   result: z.enum(['PASS', 'PARTIAL', 'NOT RUN']), complete: z.boolean(),
 });
+const hostRefusalSchema = z.strictObject({
+  result: z.literal('FAIL'), reason: z.literal('host_refused'),
+});
 const freshSchema = z.strictObject({
   created: z.iso.datetime(), lastSequence: z.number().int().nonnegative(),
   eventCount: z.number().int().nonnegative(),
@@ -46,7 +49,8 @@ try {
 `;
 type Binding = z.infer<typeof bindingSchema>;
 type Status = 'PASS' | 'PARTIAL' | 'NOT RUN';
-type Result = { result: 'FAIL'; reason: 'collection_failed' } | Binding & {
+type Result = { result: 'FAIL'; reason: 'collection_failed' } |
+  { result: 'FAIL'; reason: 'host_refused'; message: string } | Binding & {
   result: 'PASS' | 'PARTIAL'; checks: Record<string, Status>; qualifications: Record<string, Status>;
   receiptDigests: string[];
 };
@@ -207,7 +211,12 @@ async function runCheck(containerId: string, binding: Binding, name: string) {
   const startedAt = Date.now();
   const args = ['/usr/local/bin/node', '--experimental-strip-types',
     '/app/scripts/private-memory-qualification/journey.mjs'];
-  const receipt = receiptSchema.parse(await runInContainer(containerId, args, input));
+  const response = await runInContainer(containerId, args, input);
+  const refusal = hostRefusalSchema.safeParse(response);
+  if (refusal.success) {
+    return refusal.data;
+  }
+  const receipt = receiptSchema.parse(response);
   assertSame(request, receipt);
   if (receipt.complete !== (receipt.result === 'PASS')) {
     throw new Error('inconsistent_receipt');
@@ -264,6 +273,12 @@ export async function collectDeployment(...unexpectedArguments: unknown[]): Prom
     for (const name of [...checks, ...qualifications]) {
       await assertInstallation(containerId, before, streamCreated);
       const receipt = await runCheck(containerId, binding, name);
+      if (receipt.result === 'FAIL') {
+        const refusal: Result = { ...receipt,
+          message: 'Host safety checks failed: swap and core dumps must be disabled.' };
+        saveResult(refusal);
+        return refusal;
+      }
       receiptDigests.push(receipt.digest);
       if (receipt.result !== 'PASS') {
         status = 'PARTIAL';
