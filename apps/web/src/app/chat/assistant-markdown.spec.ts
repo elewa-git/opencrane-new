@@ -415,3 +415,33 @@ it('keeps source when Mermaid resolves with a warning image', refusesWarningImag
 it('ignores an older successful render after a newer diagram', ignoresLateSuccess);
 it('ignores an older failed render after a newer diagram', ignoresLateFailure);
 it('offers another try when Mermaid source copying is refused', handlesMermaidCopyRefusal);
+
+async function cancelsPrivateDiagramWhenRemoved(): Promise<void> {
+  let finish!: (result: { svg: string }) => void;
+  let cancellation: AbortSignal | undefined;
+  function hold(resolve: typeof finish): void {
+    finish = resolve;
+  }
+  const pending = new Promise<{ svg: string }>(hold);
+  function draw(_code: string, signal?: AbortSignal): Promise<{ svg: string }> {
+    cancellation = signal;
+    return pending;
+  }
+  renderMermaid.mockImplementationOnce(draw);
+  const fixture = TestBed.createComponent(AssistantMarkdown);
+  fixture.componentRef.setInput('volatile', true);
+  fixture.componentRef.setInput('text', '```mermaid\ngraph LR\nPrivate --> Plan\n```');
+  fixture.detectChanges();
+  await settleDiagram(fixture);
+  expect(cancellation?.aborted).toBe(false);
+  fixture.componentRef.setInput('text', '');
+  fixture.detectChanges();
+  expect(cancellation?.aborted).toBe(true);
+  finish({ svg: '<svg>Private plan</svg>' });
+  await settleDiagram(fixture);
+  const root: HTMLElement = fixture.nativeElement;
+  expect(root.querySelector('img, oc-mermaid-diagram, [role=status]')).toBeNull();
+  expect(root.textContent).not.toContain('Private');
+}
+it('cancels a private diagram and ignores its completion after removal',
+  cancelsPrivateDiagramWhenRemoved);
