@@ -256,11 +256,14 @@ async function refusesWithdrawalDuringFinalQuery(change: 'stop' | 'removal' | 'c
     }
     return result;
   }
-  vi.spyOn(store, 'append').mockImplementation(observeAppend);
-  vi.spyOn(test.setup.db, 'query').mockImplementation(withdrawDuringQuery);
+  const appends = vi.spyOn(store, 'append');
+  appends.mockImplementation(observeAppend);
+  const queries = vi.spyOn(test.setup.db, 'query');
+  queries.mockImplementation(withdrawDuringQuery);
   const args = { scopeId, query: 'garden' };
   const response = await test.native.recall(threadId, args);
   expect(changed).toBe(true);
+  expect(test.native.callers.permits(test.turnId, test.turnId, threadId)).toBe(true);
   const refusal = { result: { isError: true } };
   expect(response).toMatchObject(refusal);
   expect(response).not.toHaveProperty('result.structuredContent');

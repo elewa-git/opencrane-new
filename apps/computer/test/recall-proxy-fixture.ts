@@ -1,11 +1,12 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { vi } from 'vitest';
-import { proxy } from '../../../computer/src/proxy.ts';
-import { proxyControl } from '../../../computer/src/proxy-control.ts';
-import * as proxyModule from '../../../computer/src/mcp-proxy.ts';
+import { proxy } from '../src/proxy.ts';
+import { proxyControl, proxyGrants } from '../src/proxy-control.ts';
+import * as proxyModule from '../src/mcp-proxy.ts';
 
-export async function recallProxy(gateway: string) {
+export async function recallProxy(gateway: string,
+  credential: Parameters<typeof proxyGrants>[1]) {
   const directory = mkdtempSync(`${tmpdir()}/recall-proxy-`);
   const controlSocket = `${directory}/control.sock`;
   const options = { callerPath: `${directory}/caller`, controlSocket, port: 0 };
@@ -35,6 +36,7 @@ export async function recallProxy(gateway: string) {
     const removal = { recursive: true, force: true };
     rmSync(directory, removal);
   }
-  return { mcp, callers, registrations, register, control, close,
+  const grant = proxyGrants(control, credential);
+  return { mcp, callers, registrations, register, control, close, grant,
     approvals: runtime.approvals, url: runtime.url };
 }

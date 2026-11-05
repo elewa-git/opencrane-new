@@ -16,8 +16,7 @@ import { recallTool, registerMemoryMcp } from '../../src/memory/mcp.ts';
 import Fastify from 'fastify';
 import { initialQualificationFixture } from './initial-qualification.ts';
 import { testAuthConfig } from './test-auth-config.ts';
-import { recallProxy } from './recall-proxy.ts';
-import { proxyGrants } from '../../../computer/src/proxy-control.ts';
+import { recallProxy } from '../../../computer/test/recall-proxy-fixture.ts';
 
 export const scopeId = memoryScopeId('test', 'person', 'alice');
 export const factText = 'My favourite walking destination is the winter garden.';
@@ -124,7 +123,7 @@ async function startComputer(setup: Setup, memory: MemoryOptions) {
   computer.socket.terminate();
   await once(computer.socket, 'close');
   const gateway = `http://127.0.0.1:${setup.options.port}`;
-  const runtime = await recallProxy(gateway);
+  const runtime = await recallProxy(gateway, grantCredential);
   const native = await preflightFixture(gateway, runtime);
   onTestFinished(native.close);
   computer.driver.privateSession = native.openCurrent;
@@ -139,7 +138,7 @@ async function startComputer(setup: Setup, memory: MemoryOptions) {
   function grantCredential() {
     return { computer: computerPass, generation: gateIdentity.generation };
   }
-  const grant = proxyGrants(runtime.control, grantCredential);
+  const grant = runtime.grant;
   computer.driver.grant = grant;
   const deployment = await initialQualificationFixture();
   expect(deployment.result.result).toBe('PASS');
