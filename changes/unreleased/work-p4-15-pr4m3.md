@@ -1,1 +1,2 @@
 - Prepare a recall catalogue from saved private-turn admission and accept one exact discovery receipt after checking current access, tool policy and deployment evidence again. Live bridge dispatch and backend delivery proof remain unfinished; memory admission stays disabled.
+- Refuse recall preparation after saved memory invalidation, changed loaded references or caller cancellation during the final checks, including while the Stop reaction is pending.

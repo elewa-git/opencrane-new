@@ -7,7 +7,9 @@ A start report alone is not enough. Renewal does not prepare or resend the initi
 
 The recall preparation helper checks a saved private turn before offering its tool list.
 It checks the computer's discovery receipt once, then repeats access, policy and deployment
-checks. Connecting this helper to live bridge dispatch is still pending.
+checks. It refuses invalidated or ended memory, changed loaded facts and a caller that
+closed while those checks waited. It checks saved references without decrypting facts.
+Connecting this helper to live bridge dispatch is still pending.
 
 This folder handles conversations between people and with assistants. It saves messages, sends assistant work to the right computer and returns replies and live updates while checking who may read each chat.
 
@@ -121,7 +123,7 @@ flowchart LR
   chat -->|one-use private input| computer[Assistant computer]
   computer -->|completed private reply| chat
   chat -->|private reply and clearance| reader[Authenticated reader]
-  chat -->|checks fixed access positions and spending| models[Models]
+  chat -->|checks access, spending and loaded references| models[Models]
   collector["private-memory-qualification<br/>checks deployment results"]
   chat -->|checks deployment results| collector
 ```

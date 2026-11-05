@@ -73,6 +73,11 @@ The returned catalogue is not permission to release input or credentials.
 Membership and grant positions remain fixed across discovery, including past team grants.
 Conversation history loads before the two-second check over small access streams.
 Saved Stop, closure, replacement and control changes refuse; unrelated activity does not.
+Preparation and completion reject saved invalidated or ended memory even while the Stop
+reaction is pending. They reuse `prepareLoadedMemory` to check loaded references and their
+read permissions. Scope history loads before the short access check; later checks read
+only new scope events. No fact is decrypted. A new load during confirmation refuses so it
+cannot add unchecked references. Both return paths check the local caller after all waits.
 Established MemberAccessRefused takes priority over dependency failures.
 
 PARTIAL: no production bridge caller invokes this helper yet. The next split must bind
