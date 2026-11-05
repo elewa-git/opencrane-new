@@ -591,8 +591,9 @@ async function stopsOwnershipChild(kind, cancellation, dispatchDelayMs = 0) {
   const globals = { Date: clock, AbortSignal };
   const commandTimeout = loadPrivateFunction('infra/dev-stack/command-limits.ts',
     'commandTimeout', {}, process, globals);
+  const checkerDependencies = { './command-limits.ts': { commandTimeout } };
   const checkCnpgBackupReferences = loadPrivateFunction('infra/dev-stack/cnpg-backup.ts',
-    'checkCnpgBackupReferences', {}, process, globals);
+    'checkCnpgBackupReferences', checkerDependencies, process, globals);
   const owner = { worktree: process.cwd(), slot: '1', context: 'k3d-opencrane-target-1',
     namespace: 'opencrane-package-1', namespaceUid: 'owned', release: 'opencrane-package-1' };
   const target = { worktree: owner.worktree, slot: '1', context: owner.context,
