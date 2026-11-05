@@ -255,6 +255,9 @@ async function savedRecallTools(input: Input,
   const activity = await approvalActivity(input.store, input.silo, input.assistantId,
     grant.conversation, grant.turnId, deadline);
   const chat = await readChatFacts(input.store, input.silo, grant.conversation, grant.turnId);
+  if (chat.memoryContext?.status === 'invalidated' || chat.memoryContext?.status === 'ended') {
+    throw new LoadedMemoryRefused();
+  }
   const computer = activity.computer;
   const lifecycle = z.object({ computerId: z.literal(grant.computerId),
     generation: z.literal(grant.generation) });
