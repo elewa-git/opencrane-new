@@ -143,6 +143,52 @@ async function includesConcurrentInsertion() {
 it('includes an earlier id inserted between pages without repeating inspected routines',
   includesConcurrentInsertion);
 
+async function progressesWithSlowReads() {
+  const events: EventEnvelope[] = [];
+  for (let index = 0; index < 51; index += 1) {
+    const event = creation(`slow-${String(index).padStart(2, '0')}`);
+    events.push(event);
+  }
+  await save(events);
+  let elapsed = performance.now();
+  function monotonicClock() {
+    return elapsed;
+  }
+  vi.spyOn(performance, 'now').mockImplementation(monotonicClock);
+  const original = nats.store.readStream.bind(nats.store);
+  async function* slow(...args: Parameters<typeof original>) {
+    yield* original(...args);
+    elapsed += 250;
+  }
+  const reads = vi.spyOn(nats.store, 'readStream');
+  reads.mockImplementation(slow);
+  let continuation: Continuation = null;
+  let examined = 0;
+  let calls = 0;
+  do {
+    const started = elapsed;
+    const result = await scan(continuation);
+    expect(result.examined).toBeGreaterThan(0);
+    expect(result.counts.eligible).toBe(result.examined);
+    expect(elapsed - started).toBeLessThan(10_000);
+    examined += result.examined;
+    continuation = result.continuation;
+    calls += 1;
+    expect(calls).toBeLessThanOrEqual(3);
+  } while (continuation);
+  expect(calls).toBeGreaterThan(1);
+  expect(examined).toBe(51);
+  const subjects: string[] = [];
+  for (const call of reads.mock.calls) {
+    subjects.push(call[0]);
+  }
+  expect(subjects).toHaveLength(51);
+  expect(new Set(subjects).size).toBe(51);
+  expect(subjects[50]).toBe('routine-slow-50');
+}
+it('returns completed progress so repeated bounded calls finish despite slow history reads',
+  progressesWithSlowReads);
+
 const calendars = [
   ['Europe/Brussels', '02:30', '2027-03-28', '2027-03-28T01:00:00.000Z', 'gap'],
   ['Pacific/Apia', '00:00', '2011-12-30', '2011-12-30T10:00:00.000Z', 'gap'],
