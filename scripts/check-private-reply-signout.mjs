@@ -19,19 +19,20 @@ const reply = { ...identity, type: 'private_reply',
   data: { text: 'Synthetic private reply', turnId: 'turn' } };
 const ready = { version: 1, topic: 'conversation', conversationId: 'chat',
   type: 'ready', position: 0, generation: 1 };
-const started = { ...ready, type: 'event', position: 1,
-  row: { id: 'start', position: 1, type: 'agent.turn_started',
+const question = { ...ready, type: 'event', position: 1,
+  row: { id: 'turn', position: 1, type: 'message.posted',
+    data: { text: 'Show a plan.', authorId: 'me' }, time: '2026-11-05T00:00:00Z' } };
+const started = { ...ready, type: 'event', position: 2,
+  row: { id: 'start', position: 2, type: 'agent.turn_started',
     data: { turnId: 'turn' }, time: '2026-11-05T00:00:00Z' } };
-const lateStart = { ...started, position: 2,
-  row: { ...started.row, id: 'next', position: 2, data: { turnId: 'next' } } };
+const lateStart = { ...started, position: 3,
+  row: { ...started.row, id: 'next', position: 3, data: { turnId: 'next' } } };
 const lateReply = { ...reply, turnId: 'next',
   data: { text: 'Late private reply', turnId: 'next' } };
 
-// Inspect the public state in a development build until private reply display exists.
 function privateText() {
-  const element = globalThis.document.querySelector('oc-workspace');
-  const component = globalThis.ng?.getComponent(element);
-  return component?.chat.privateReply()?.data.text ?? null;
+  const reply = globalThis.document.querySelector('oc-assistant-markdown');
+  return reply?.textContent?.trim() ?? null;
 }
 function connected() {
   const element = globalThis.document.querySelector('oc-workspace');
@@ -120,6 +121,7 @@ async function scenario(browser, broadcast) {
     await tabA.goto(`${origin}/workspace?conversation=chat`);
     await tabA.waitForFunction(connected);
     await fixture.subscriptionReady;
+    fixture.send(question);
     fixture.send(started);
     fixture.send(reply);
     // Playwright serialises one function at a time, so supply its helper explicitly.

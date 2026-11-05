@@ -81,3 +81,13 @@ time { color: var(--oc-ink-muted); font-size: 11px; }
   background: #eefafc;
   color: var(--oc-accent-dark);
 }
+.private-notice {
+  display: block;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #f0cfa9;
+  border-radius: 9px;
+  background: #fff8ef;
+}
+.private-notice.restriction { border-color: #a9e7ef; background: #eefafc; }
+.private-notice.disabled { border-color: #d2d8da; background: #f1f4f5; }

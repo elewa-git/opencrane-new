@@ -98,6 +98,10 @@
           </section>
         }
         @for (turn of chat.turns(); track turn.author + turn.id) {
+          @let privateReply = turn.author === 'agent' && chat.privateReply()?.turnId === turn.id
+            ? chat.privateReply() : null;
+          @let unavailable = turn.author === 'agent' && !privateReply && !teamSession()
+            && (chat.unavailablePrivateTurnId() === turn.id || (turn.state === 'lost' && !turn.text));
           <article class="message"
             [class.own]="turn.author === 'you'"
             [class.agent-turn]="turn.author === 'agent'"
@@ -112,6 +116,27 @@
                 <oc-tool-activity-line [record]="tool"
                   (detailsOpened)="openToolDetails(tool, $event)" />
               }
+              @if (privateReply) {
+                <div class="prose ink">
+                  <oc-assistant-markdown [text]="privateReply.data.text" [volatile]="true" />
+                </div>
+                <p class="turn-status" role="status">Private reply · available only on this page.</p>
+              }
+              @if (unavailable) {
+                <oc-shared-state class="private-notice" kind="needs_input" message="Reply unavailable"
+                  detail="Nothing was repeated. Ask again with what you need."
+                  [announce]="true" [showAction]="false" />
+              }
+              @if (turn.reason === 'restricted_tool_refused' && !teamSession()) {
+                <oc-shared-state class="private-notice restriction" kind="needs_input"
+                  message="Local file and browser writes are not available while private memory is loaded."
+                  detail="This request stopped. Nothing was repeated." [showAction]="false" />
+                @if (chat.memoryAdmission().state === 'disabled') {
+                  <oc-shared-state class="private-notice disabled" kind="disabled"
+                    message="Memory admission is disabled"
+                    [detail]="memoryAdmissionDetail()" [showAction]="false" />
+                }
+              }
               @if (turn.text && turn.author === 'agent') {
                 <div class="prose ink">
                   <oc-assistant-markdown [text]="turn.text" [availableFiles]="readableFiles()"
@@ -125,7 +150,10 @@
               @if (turn.author === 'agent' && chat.stopNotConfirmedFor(turn.id)) {
                 <p class="turn-status failed" role="status">Stop not confirmed. The agent may still be working.</p>
               }
-              @if (turn.author === 'agent' && turn.state === 'working' && !turn.text && !turn.budgetStop) { <div class="folding" role="status"><oc-fold-loader /> Folding…</div> }
+              @if (turn.author === 'agent' && turn.state === 'working' && !turn.text
+                && !turn.budgetStop && !privateReply && !unavailable) {
+                <div class="folding" role="status"><oc-fold-loader /> Folding…</div>
+              }
               @for (file of turn.files; track file) {
                 <oc-conversation-file-card [conversationId]="chat.selected()" [path]="file"
                   [createdAt]="turn.time" [createdBy]="fileCreator(turn.author)"
@@ -144,7 +172,7 @@
                   [reconnectedAt]="chat.reconnectedAt()" [endedAt]="turn.endReportedAt ?? ''"
                   [denied]="chat.denied()" />
               }
-              @if (turn.author === 'agent' && turn.state !== 'working') {
+              @if (turn.author === 'agent' && turn.state !== 'working' && !privateReply && !unavailable) {
                 <p class="turn-status" [class.stopped]="turn.state === 'stopped'"
                   [class.failed]="turn.state === 'failed' || turn.state === 'lost'"
                   role="status">

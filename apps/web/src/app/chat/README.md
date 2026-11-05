@@ -28,9 +28,11 @@ This folder contains the workspace where people talk to their assistant, exchang
 ## Replies and Stop
 
 Personal sessions can receive a private reply in page memory, outside saved messages.
-This reply is not displayed yet. Its matching clearance, Stop, a replaced connection
+It appears as safe Markdown. Its matching clearance, Stop, a replaced connection
 or leaving the session removes it. Signing out in another tab also removes it.
 Returning tabs check their session again. Reconnecting cannot recover the reply.
+Clearing a reply removes its diagrams and cancels drawing still in progress.
+Keyboard focus moves to the conversation if a removed reply control had focus.
 
 Assistant replies show Markdown headings, lists, quotes, inline formatting and code.
 Code blocks have a copy button. Web and email links open in a new tab. Links to

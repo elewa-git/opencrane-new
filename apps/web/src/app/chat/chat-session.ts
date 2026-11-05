@@ -23,6 +23,7 @@ export class ChatSession implements OnDestroy {
   readonly rows = signal<ChatRow[]>([]);
   private readonly privateState = new PrivateReplyState(this);
   readonly privateReply = this.privateState.reply;
+  readonly unavailablePrivateTurnId = this.privateState.unavailableTurnId.asReadonly();
   readonly selected = signal('');
   readonly memberId = signal('');
   readonly displayName = signal('You');

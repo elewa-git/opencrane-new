@@ -437,9 +437,11 @@ async function cancelsPrivateDiagramWhenRemoved(): Promise<void> {
   fixture.componentRef.setInput('text', '');
   fixture.detectChanges();
   expect(cancellation?.aborted).toBe(true);
-  finish({ svg: '<svg>Private plan</svg>' });
+  const result = { svg: '<svg>Private plan</svg>' };
+  finish(result);
   await settleDiagram(fixture);
-  const root: HTMLElement = fixture.nativeElement;
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No reply element');
   expect(root.querySelector('img, oc-mermaid-diagram, [role=status]')).toBeNull();
   expect(root.textContent).not.toContain('Private');
 }

@@ -16,6 +16,7 @@
         "scripts/capture-assistant-files-2.mjs",
         "scripts/capture-chat-tool-inline.mjs",
         "scripts/capture-chat-mermaid.mjs",
+        "scripts/capture-p4-15-pr3l.mjs",
         "scripts/capture-uploads-reasons.mjs",
         "scripts/capture-chat-drag-drop.mjs",
         "scripts/check-stage-b-polish.mjs",

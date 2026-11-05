@@ -1,5 +1,6 @@
 import {
-  ChangeDetectionStrategy, Component, computed, input, output, signal,
+  ChangeDetectionStrategy, Component, computed, ElementRef, inject, input, output, signal,
+  type OnDestroy,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { DogEar } from '../ui/paper';
@@ -13,10 +14,14 @@ import { fileName } from './file-presentation';
   templateUrl: './assistant-markdown.html',
   styleUrls: ['./transcript.css', './assistant-markdown.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '(focusin)': 'rememberFocus()', '(focusout)': 'forgetFocus()' },
 })
-export class AssistantMarkdown {
+export class AssistantMarkdown implements OnDestroy {
+  private readonly element = inject<ElementRef<HTMLElement>>(ElementRef);
+  private returnFocus: HTMLElement | null = null;
   readonly text = input.required<string>();
   readonly availableFiles = input<string[]>([]);
+  readonly volatile = input(false);
   readonly citationOpened = output<string>();
   readonly fileOpened = output<string>();
   protected readonly blocks = computed(this.parseReply.bind(this));
@@ -56,6 +61,26 @@ export class AssistantMarkdown {
   protected fileLabel(label: string, path: string): string {
     if (label.includes('/workspace/artifacts/')) return fileName(path);
     return label;
+  }
+
+  ngOnDestroy(): void {
+    this.returnFocus?.focus();
+  }
+
+  protected rememberFocus(): void {
+    if (!this.volatile()) return;
+    // Remember the parent before Angular detaches the focused control.
+    const element = this.element.nativeElement;
+    this.returnFocus = element.closest<HTMLElement>('.transcript');
+  }
+
+  protected forgetFocus(): void {
+    // Let destruction restore focus before a removal-triggered blur clears the parent.
+    queueMicrotask(this.checkFocus.bind(this));
+  }
+
+  private checkFocus(): void {
+    if (!this.element.nativeElement.contains(document.activeElement)) this.returnFocus = null;
   }
 
   protected async copyCode(block: MarkdownBlock, blockIndex: number): Promise<void> {
