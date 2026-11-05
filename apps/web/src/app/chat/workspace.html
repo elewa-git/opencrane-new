@@ -114,8 +114,8 @@
               }
               @if (turn.text && turn.author === 'agent') {
                 <div class="prose ink">
-                  <oc-assistant-markdown [text]="turn.text"
-                    (citationOpened)="preview.set($event)" />
+                  <oc-assistant-markdown [text]="turn.text" [availableFiles]="readableFiles()"
+                    (citationOpened)="preview.set($event)" (fileOpened)="preview.set($event)" />
                   @if (turn.state === 'working') { <span class="caret" aria-hidden="true"></span> }
                 </div>
               }
@@ -131,7 +131,7 @@
                   [createdAt]="turn.time" [createdBy]="fileCreator(turn.author)"
                   [downloadAllowed]="canDownload(file)"
                   [screenshot]="screenshotFactsForPath(file)"
-                  [thumbnailUrl]="isScreenshot(file) ? screenshotUrl(file) : ''"
+                  [thumbnailUrl]="imageThumbnailUrl(chat.selected(), file, canDownloadPreview(file))"
                   (opened)="preview.set($event)" (filesOpened)="showFiles()" />
               }
               @if (turn.screenshotRejected) {
@@ -443,7 +443,7 @@
         @for (file of screenshots(); track file.fileId) {
           <button type="button" class="panel-file screenshot-panel-file"
             (click)="preview.set(file.path)">
-            <img class="screenshot-thumbnail" [src]="screenshotUrl(file.path)" alt=""
+            <img class="screenshot-thumbnail" [src]="fileUrl(chat.selected(), file.path, true)" alt=""
               loading="lazy" (error)="hideBrokenThumbnail($event)">
             <span class="file-type screenshot-type" hidden>{{ type(file.name) }}</span>
             <span class="screenshot-panel-details">

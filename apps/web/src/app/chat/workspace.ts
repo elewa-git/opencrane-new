@@ -39,8 +39,8 @@ import { FoldLoader } from '../ui/fold-loader/fold-loader';
 import { FilePreview } from './file-preview';
 import { LiveView } from '../live-view/live-view';
 import {
-  capturedByLine, displayTextParts, fileName, fileScreenshotCreator, fileType, fileUrl,
-  hasScreenshotFile, hasTranscriptScreenshot,
+  capturedByLine, displayTextParts, fileCreator, fileName, fileScreenshotCreator, fileType,
+  fileUrl, hasAttachment, hasScreenshotFile, hasTranscriptScreenshot, imageThumbnailUrl,
   isOwnedAgentFile, isScreenshotAttachment, screenshotFacts, screenshotFactsForPath, screenshotIdFromFile,
   shortTime, utcDateTime,
   type ScreenshotFacts,
@@ -101,6 +101,7 @@ export class Workspace implements OnInit {
   protected readonly captureViewModel = computed(this.capturePresentation.bind(this));
   protected readonly statusChecking = signal(false);
   protected readonly files = computed(() => [...new Set(this.chat.turns().filter(turn => turn.author === 'agent').flatMap(turn => turn.files))]);
+  protected readonly readableFiles = computed(this.publishedFiles.bind(this));
   protected readonly title = computed(this.currentTitle.bind(this));
   protected readonly teamConversations = computed(this.listTeamConversations.bind(this));
   protected readonly personalConversations = computed(this.listPersonalConversations.bind(this));
@@ -470,14 +471,11 @@ export class Workspace implements OnInit {
     return '';
   }
   protected searchChanged(event: Event): void { if (event.target instanceof HTMLInputElement) this.search.set(event.target.value); }
-  protected isScreenshot(path: string): boolean { return this.screenshots().some(file => file.path === path); }
-  protected fileCreator(author: 'you' | 'person' | 'agent'): 'you' | 'participant' | 'assistant' {
-    if (author === 'agent') return 'assistant';
-    if (author === 'person') return 'participant';
-    return 'you';
-  }
-  protected screenshotUrl(path: string): string {
-    return fileUrl(this.chat.selected(), path, true);
+  protected readonly fileCreator = fileCreator;
+  protected readonly fileUrl = fileUrl;
+  protected readonly imageThumbnailUrl = imageThumbnailUrl;
+  private publishedFiles(): string[] {
+    return this.files().filter(this.canDownloadPreview.bind(this));
   }
   private screenshotFiles(): ChatAttachment[] {
     return this.chat.attachments().filter(isScreenshotAttachment);
@@ -496,6 +494,7 @@ export class Workspace implements OnInit {
   }
   protected canDownloadPreview(path: string): boolean {
     if (this.isClosedConversation()) return false;
+    if (!hasAttachment(path, this.chat.attachments())) return false;
     // Keep downloads available for files made by this conversation's owner.
     const ownedAgentFile = isOwnedAgentFile(
       path, this.files(), this.chat.selected(), this.chat.conversations(), this.chat.memberId());

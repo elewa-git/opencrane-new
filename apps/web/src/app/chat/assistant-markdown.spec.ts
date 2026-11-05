@@ -21,26 +21,44 @@ function mount(text: string) {
   return { fixture, root };
 }
 
-it('opens a published workspace link without exposing its path', () => {
+function opensPublishedWorkspaceLink() {
   const { fixture, root } = mount('[Open drawing](/workspace/artifacts/drawing.svg)');
-  fixture.componentRef.setInput('availableFiles', ['artifacts/drawing.svg']);
+  fixture.componentRef.setInput('availableFiles', ['uploads/chat/file/drawing.svg']);
   fixture.detectChanges();
   const opened = vi.fn();
   fixture.componentInstance.fileOpened.subscribe(opened);
-  const button = root.querySelector('button.workspace-file-link');
-  expect(button?.textContent).toBe('Open drawing');
+  const button = root.querySelector<HTMLButtonElement>('button.workspace-file-link');
+  expect(button?.textContent?.trim()).toBe('Open drawing');
   expect(root.textContent).not.toContain('/workspace/artifacts');
   button?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   button?.click();
-  expect(opened).toHaveBeenCalledWith('artifacts/drawing.svg');
-});
+  expect(opened).toHaveBeenCalledWith('uploads/chat/file/drawing.svg');
+}
 
-it('shows a plain note for a workspace file the viewer cannot open', () => {
+it('opens a published workspace link without exposing its path', opensPublishedWorkspaceLink);
+
+function showsUnavailableWorkspaceFile() {
   const { root } = mount('[Private plan](/workspace/artifacts/private.svg)');
   expect(root.textContent).toContain('File not available');
   expect(root.textContent).not.toContain('/workspace/artifacts');
   expect(root.querySelector('a, button')).toBeNull();
-});
+}
+
+it('shows a plain note for a workspace file the viewer cannot open',
+  showsUnavailableWorkspaceFile);
+
+function replacesRawWorkspacePath() {
+  const { fixture, root } = mount(
+    '[/workspace/artifacts/drawing.svg](/workspace/artifacts/drawing.svg)',
+  );
+  fixture.componentRef.setInput('availableFiles', ['uploads/chat/file/drawing.svg']);
+  fixture.detectChanges();
+  expect(root.textContent).toContain('drawing.svg');
+  expect(root.textContent).not.toContain('/workspace/artifacts/');
+}
+
+it('replaces a raw workspace path used as link text with the file name',
+  replacesRawWorkspacePath);
 
 afterEach(function restoreMocks() {
   vi.restoreAllMocks();

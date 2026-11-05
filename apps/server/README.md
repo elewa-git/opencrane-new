@@ -189,7 +189,7 @@ flowchart LR
   computer -.->|records private thread for memory discovery| server
   server -.->|prepares up to four private memory tools| computer
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
-  server -->|file refusal codes| web
+  server -->|files, image types and refusal codes| web
   server -->|checks upload bytes over HTTPS| runtime
   runtime -->|checks memory reads and personal changes| server
 ```
@@ -310,6 +310,8 @@ can be used now is checked separately. Missing evidence never means it is safe t
 
 The server checks files the assistant creates through the same type checks, virus
 scanner and storage as uploads. Accepted files appear as assistant file cards.
+It accepts well-formed SVG files as images. The file route serves them with an
+image content type and a sandbox when a person opens one.
 The first file report fixes the turn's file list. Retries keep that list and its original
 size allowance, so a repeated completion cannot add more cards.
 People need current conversation access to preview or download them.

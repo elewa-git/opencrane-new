@@ -6,10 +6,12 @@ This folder handles files people attach to conversations. It checks the file's c
 
 - Checks the signed-in member, current conversation access and the website making a write.
 - Checks file names and supported document, image and text formats against their contents.
+- Accepts well-formed SVG as an image. It refuses document type and entity declarations.
 - Runs document inspection separately with time and memory limits, so an unsafe file cannot stall the server.
 - Scans bytes before saving them in [MinIO](../../../../GLOSSARY.md#minio-file-storage), the file store.
 - Saves upload or rejection records, and recognises a repeated upload without saving it twice.
 - Lists and serves files only within the person's current conversation access.
+- Serves SVG through the same access check with a strict sandbox and content type header.
 - Sends clean files to the assistant's computer and waits for its confirmation before that chat's next turn.
 
 Office files can include chart workbooks, printer settings and web or email links.

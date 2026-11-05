@@ -111,23 +111,26 @@ it('keeps focus on one screenshot button while retrying its thumbnail', () => {
   expect(root.querySelector('a')).toBeNull();
 });
 
+function showsImageThumbnail(extension: string) {
+  const fixture = TestBed.createComponent(ConversationFileCard);
+  fixture.componentRef.setInput('conversationId', 'chat');
+  fixture.componentRef.setInput('path', `uploads/chat/file/photo.${extension}`);
+  fixture.componentRef.setInput('createdAt', '2026-10-04T10:00:00Z');
+  fixture.componentRef.setInput('createdBy', 'you');
+  fixture.componentRef.setInput('downloadAllowed', true);
+  const thumbnailUrl = `/api/conversations/chat/files/view?path=photo.${extension}&preview=true`;
+  fixture.componentRef.setInput('thumbnailUrl', thumbnailUrl);
+  fixture.detectChanges();
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No conversation file card');
+  const thumbnail = root.querySelector('button img');
+  expect(thumbnail?.getAttribute('src')).toContain(`photo.${extension}`);
+  const opened = vi.fn();
+  fixture.componentInstance.opened.subscribe(opened);
+  const button = thumbnail?.closest('button');
+  button?.click();
+  expect(opened).toHaveBeenCalledWith(`uploads/chat/file/photo.${extension}`);
+}
+
 it.each(['png', 'jpg', 'gif', 'webp'])(
-  'shows a %s upload as a thumbnail inside its preview button', extension => {
-    const fixture = TestBed.createComponent(ConversationFileCard);
-    fixture.componentRef.setInput('conversationId', 'chat');
-    fixture.componentRef.setInput('path', `uploads/chat/file/photo.${extension}`);
-    fixture.componentRef.setInput('createdAt', '2026-10-04T10:00:00Z');
-    fixture.componentRef.setInput('createdBy', 'you');
-    fixture.componentRef.setInput('downloadAllowed', true);
-    fixture.componentRef.setInput('thumbnailUrl', `/api/conversations/chat/files/view?path=photo.${extension}&preview=true`);
-    fixture.detectChanges();
-    const root: HTMLElement = fixture.nativeElement;
-    const thumbnail = root.querySelector('button img');
-    expect(thumbnail?.getAttribute('src')).toContain(`photo.${extension}`);
-    const opened = vi.fn();
-    fixture.componentInstance.opened.subscribe(opened);
-    const button = thumbnail?.closest('button');
-    button?.click();
-    expect(opened).toHaveBeenCalledWith(`uploads/chat/file/photo.${extension}`);
-  },
-);
+  'shows a %s upload as a thumbnail inside its preview button', showsImageThumbnail);

@@ -15,6 +15,21 @@
   border-color: #9fdde8;
 }
 
+.file-thumbnail {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.file-thumbnail img,
+.file-thumbnail .thumbnail-error {
+  display: block;
+  width: 88px;
+  height: 62px;
+  object-fit: contain;
+  background: #f0f3f3;
+}
+
 .file-card strong {
   display: block;
   overflow: hidden;
@@ -88,6 +103,11 @@
 }
 
 @media (max-width: 700px) {
+  .file-thumbnail img,
+  .file-thumbnail .thumbnail-error {
+    width: 100%;
+    height: 140px;
+  }
   .file-card .screenshot-thumbnail {
     grid-column: 1 / -1;
   }

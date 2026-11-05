@@ -7,6 +7,8 @@ h4, h5, h6 { font-size: 16px; }
 ul, ol { padding-left: 24px; }
 blockquote { border-left: 3px solid #9fdde8; padding-left: 14px; color: var(--oc-ink-muted); }
 a { color: var(--oc-accent-dark); text-decoration: underline; }
+.workspace-file-link { padding: 0; border: 0; background: none;
+  color: var(--oc-accent-dark); font: inherit; text-decoration: underline; cursor: pointer; }
 code { font: 12px var(--oc-font-mono); background: #eef1f2; border-radius: 3px; padding: 2px 4px; }
 .code-block { border: 1px solid #dee3e4; border-radius: 9px; overflow: hidden; }
 .code-heading { display: flex; align-items: center; justify-content: space-between;

@@ -151,6 +151,33 @@ function readOfficePart(zip: ZipFile, entry: Entry): Promise<Buffer> {
   }
 }
 
+function inspectSvg(bytes: Buffer): string {
+  const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  // Reject declarations that could make XML depend on other files or entities.
+  if (/<!DOCTYPE|<!ENTITY/iu.test(text) || XMLValidator.validate(text) !== true) {
+    throw new InspectionRefusal('invalid_file', 'Unsupported file type');
+  }
+  const parser = new XMLParser();
+  const document: unknown = parser.parse(text);
+  if (!document || typeof document !== 'object' || !('svg' in document)) {
+    throw new InspectionRefusal('content_mismatch', 'Unsupported file type');
+  }
+  return 'image/svg+xml';
+}
+
+function inspectPlainText(bytes: Buffer): string {
+  const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  function isControlCharacter(character: string): boolean {
+    return character.charCodeAt(0) < 32 && !'\t\n\r'.includes(character);
+  }
+  const hasControlCharacters = [...text].some(isControlCharacter);
+  const hasActiveContent = /^\s*(?:#!|<svg|<!doctype html|<html)/iu.test(text);
+  if (hasControlCharacters || hasActiveContent) {
+    throw new InspectionRefusal('content_mismatch', 'Unsupported file type');
+  }
+  return 'text/plain';
+}
+
 async function inspectFile(
   name: string,
   bytes: Buffer,
@@ -167,17 +194,11 @@ async function inspectFile(
     throw new InspectionRefusal('unsafe_name', 'Unsupported file type');
   }
   const detected = await fileTypeFromBuffer(bytes);
+  if (extension === 'svg' && !detected) {
+    return inspectSvg(bytes);
+  }
   if (textTypes.has(extension) && !detected && !bytes.subarray(0, 4).equals(Buffer.from('MZ\0\0'))) {
-    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    function isControlCharacter(character: string) {
-      return character.charCodeAt(0) < 32 && !'\t\n\r'.includes(character);
-    }
-    const hasControlCharacters = [...text].some(isControlCharacter);
-    const hasActiveContent = /^\s*(?:#!|<svg|<!doctype html|<html)/iu.test(text);
-    if (hasControlCharacters || hasActiveContent) {
-      throw new InspectionRefusal('content_mismatch', 'Unsupported file type');
-    }
-    return 'text/plain';
+    return inspectPlainText(bytes);
   }
   const mime = allowed.get(extension);
   if (['doc', 'xls', 'ppt'].includes(extension)) return legacyOffice(bytes, extension, mime!);

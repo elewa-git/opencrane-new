@@ -167,14 +167,20 @@ export class FilePreview implements OnDestroy {
     const chunks = await previewBytes(response);
     const type = response.headers.get('content-type')?.split(';')[0] ?? '';
     const blob = new Blob(chunks, { type });
-    this.url.set(URL.createObjectURL(blob));
     this.evidenceAt.set(new Date().toISOString());
-    if (['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(type)) {
+    if (type === 'image/svg+xml') {
+      // Let the file route enforce access and its sandbox when the browser loads SVG.
+      this.url.set(`${this.originalUrl()}&preview=true`);
       this.kind.set('image');
-    } else if (type === 'application/pdf') {
-      this.setPdfPreview();
-    } else if (type.startsWith('text/') && type !== 'text/html') {
-      this.text.set(await blob.text());
+    } else {
+      this.url.set(URL.createObjectURL(blob));
+      if (['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(type)) {
+        this.kind.set('image');
+      } else if (type === 'application/pdf') {
+        this.setPdfPreview();
+      } else if (type.startsWith('text/') && type !== 'text/html') {
+        this.text.set(await blob.text());
+      }
     }
     this.statusKind.set('ready');
     if (this.kind() || this.text()) this.status.set('Preview ready');
@@ -195,7 +201,7 @@ export class FilePreview implements OnDestroy {
 
   private revokeUrl(): void {
     const currentUrl = this.url();
-    if (currentUrl) URL.revokeObjectURL(currentUrl);
+    if (currentUrl.startsWith('blob:')) URL.revokeObjectURL(currentUrl);
     this.url.set('');
   }
 
@@ -219,7 +225,7 @@ export class FilePreview implements OnDestroy {
 
   private previewImageAlt(): string {
     const facts = this.screenshot();
-    return facts ? screenshotCaption(facts.computerId) : this.path();
+    return facts ? screenshotCaption(facts.computerId) : this.filename();
   }
 }
 

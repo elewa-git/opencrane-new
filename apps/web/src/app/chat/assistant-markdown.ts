@@ -5,6 +5,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { DogEar } from '../ui/paper';
 import { MermaidDiagram } from './mermaid-diagram';
 import { parseMarkdown, type MarkdownBlock } from './markdown-parser';
+import { fileName } from './file-presentation';
 
 @Component({
   selector: 'oc-assistant-markdown',
@@ -15,7 +16,9 @@ import { parseMarkdown, type MarkdownBlock } from './markdown-parser';
 })
 export class AssistantMarkdown {
   readonly text = input.required<string>();
+  readonly availableFiles = input<string[]>([]);
   readonly citationOpened = output<string>();
+  readonly fileOpened = output<string>();
   protected readonly blocks = computed(this.parseReply.bind(this));
   protected readonly copyStatus = signal<{
     blockIndex: number;
@@ -25,6 +28,34 @@ export class AssistantMarkdown {
 
   private parseReply(): MarkdownBlock[] {
     return parseMarkdown(this.text());
+  }
+
+  protected publishedFile(link: string | undefined): string {
+    if (!link) return '';
+    const prefix = link.startsWith('file://') ? 'file:///workspace/artifacts/'
+      : '/workspace/artifacts/';
+    if (!link.startsWith(prefix)) return '';
+    let name: string;
+    try {
+      name = decodeURIComponent(link.slice(prefix.length));
+    } catch {
+      return '';
+    }
+    if (!name || name.includes('/') || name.includes('\\')) return '';
+    function matchesName(file: string): boolean {
+      return fileName(file) === name;
+    }
+    const matches = this.availableFiles().filter(matchesName);
+    return matches.length === 1 ? matches[0] ?? '' : '';
+  }
+
+  protected openFile(path: string): void {
+    this.fileOpened.emit(path);
+  }
+
+  protected fileLabel(label: string, path: string): string {
+    if (label.includes('/workspace/artifacts/')) return fileName(path);
+    return label;
   }
 
   protected async copyCode(block: MarkdownBlock, blockIndex: number): Promise<void> {

@@ -13,6 +13,7 @@
         "infra/package/upgrade-recovery*.test.ts",
         "infra/package/computer-volume-inventory.ts",
         "scripts/capture-chat-markdown.mjs",
+        "scripts/capture-assistant-files-2.mjs",
         "scripts/capture-chat-tool-inline.mjs",
         "scripts/capture-chat-mermaid.mjs",
         "scripts/capture-uploads-reasons.mjs",
