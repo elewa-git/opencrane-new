@@ -51,9 +51,12 @@ async function setup() {
   const joined = joinedMember('alice');
   await save([joined]);
   forbidden.mockClear();
-  vi.spyOn(models, 'startGateway').mockImplementation(forbidden);
-  vi.spyOn(tools, 'mcpDispatch').mockImplementation(forbidden);
-  vi.spyOn(SandboxClient.prototype, 'mode').mockImplementation(forbidden);
+  const startGatewaySpy = vi.spyOn(models, 'startGateway');
+  startGatewaySpy.mockImplementation(forbidden);
+  const mcpDispatchSpy = vi.spyOn(tools, 'mcpDispatch');
+  mcpDispatchSpy.mockImplementation(forbidden);
+  const sandboxModeSpy = vi.spyOn(SandboxClient.prototype, 'mode');
+  sandboxModeSpy.mockImplementation(forbidden);
 }
 async function cleanup() {
   expect(forbidden).not.toHaveBeenCalled();
@@ -121,7 +124,8 @@ async function recoversDue() {
     await append(...args);
     throw new Error('private-service-canary');
   }
-  vi.spyOn(nats.store, 'append').mockImplementationOnce(loseReply);
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  appendSpy.mockImplementationOnce(loseReply);
   await expect(dispatch()).rejects.toThrow(/^Routine leadership unavailable$/u);
   const original = (await state()).activeRun!;
   expect(original.startBy).toBe('2027-03-27T09:01:00.000Z');
@@ -231,7 +235,8 @@ async function changedDuringPreparation(kind: string) {
     }
     yield* read(...args);
   }
-  vi.spyOn(nats.store, 'readStream').mockImplementation(changed);
+  const readStreamSpy = vi.spyOn(nats.store, 'readStream');
+  readStreamSpy.mockImplementation(changed);
   await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
   expect(await nats.store.head()).toBe(3);
   expect((await state()).activeRun).toBeNull();
@@ -296,9 +301,12 @@ async function cancellation(stage: string) {
     }
     return head(...args);
   }
-  vi.spyOn(nats.store, 'readStream').mockImplementation(preparation);
-  vi.spyOn(nats.store, 'append').mockImplementation(appendChecked);
-  vi.spyOn(nats.store, 'head').mockImplementation(accessHead);
+  const readStreamSpy = vi.spyOn(nats.store, 'readStream');
+  readStreamSpy.mockImplementation(preparation);
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  appendSpy.mockImplementation(appendChecked);
+  const headSpy = vi.spyOn(nats.store, 'head');
+  headSpy.mockImplementation(accessHead);
   let settled = false;
   function finished() {
     settled = true;
@@ -334,7 +342,8 @@ async function refusesUnsafeAppend(status: 'conflict' | 'unavailable') {
   const created = creation();
   await save([created]);
   const result = { status, cause: new Error('private-service-canary') };
-  vi.spyOn(nats.store, 'append').mockResolvedValueOnce(result);
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  appendSpy.mockResolvedValueOnce(result);
   await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
   expect(await nats.store.head()).toBe(2);
 }
@@ -352,7 +361,8 @@ async function pageBudget() {
   function elapsedTime() {
     return monotonic() + elapsed;
   }
-  vi.spyOn(performance, 'now').mockImplementation(elapsedTime);
+  const performanceNowSpy = vi.spyOn(performance, 'now');
+  performanceNowSpy.mockImplementation(elapsedTime);
   const read = nats.store.readStream.bind(nats.store);
   let reads = 0;
   async function* preparation(...args: Parameters<typeof read>) {
@@ -362,7 +372,8 @@ async function pageBudget() {
     }
     yield* read(...args);
   }
-  vi.spyOn(nats.store, 'readStream').mockImplementation(preparation);
+  const readStreamSpy = vi.spyOn(nats.store, 'readStream');
+  readStreamSpy.mockImplementation(preparation);
   const result = await dispatch();
   expect(result.examined).toBe(1);
   expect(result.continuation?.afterRoutineId).toBe('orders');
