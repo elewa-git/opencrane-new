@@ -302,6 +302,54 @@ async function refusesIncomplete(status: string): Promise<void> {
 }
 it.each(['PARTIAL', 'NOT RUN', 'malformed'])(
   'never continues from %s results', refusesIncomplete);
+
+async function explainsUnsafeHost(setting: string): Promise<void> {
+  const observations = new Map([
+    ['/proc/swaps', 'Filename Type Size Used Priority\n'],
+    ['/proc/sys/kernel/core_pattern', '\n'],
+  ]);
+  if (setting === 'swap') {
+    observations.set('/proc/swaps',
+      'Filename Type Size Used Priority\n/private/swap file 1 0 -2\n');
+  } else {
+    observations.set('/proc/sys/kernel/core_pattern', '|/private/core-collector %p\n');
+  }
+  function readObservation(path: unknown): string {
+    const observation = observations.get(String(path));
+    if (observation !== undefined) {
+      return observation;
+    }
+    return readProtected(path);
+  }
+  vi.mocked(files.readFileSync).mockImplementation(readObservation);
+  const request = {
+    sourceSha, imageDigest, environmentId: 'c'.repeat(64),
+    siloId: `sha256:${'d'.repeat(64)}`, installationId: `sha256:${'e'.repeat(64)}`,
+    freshInstall: true, name: 'privateTurns',
+    runId: '11111111-1111-4111-8111-111111111111',
+    challengeId: '22222222-2222-4222-8222-222222222222',
+  };
+  const { runJourney } = await import('../../scripts/private-memory-qualification/journey.ts');
+  const refusal = await runJourney(JSON.stringify(request));
+  const expectedRefusal = { result: 'FAIL', reason: 'host_refused' };
+  expect(refusal).toEqual(expectedRefusal);
+  function refuseHost(receipt: Record<string, unknown>): void {
+    for (const key of Object.keys(receipt)) {
+      delete receipt[key];
+    }
+    Object.assign(receipt, refusal);
+  }
+  change = refuseHost;
+  const message = 'Host safety checks failed: swap and core dumps must be disabled.';
+  const expectedError = new Error(`memory_qualification_refused: host_refused. ${message}`);
+  await expect(launch()).rejects.toThrow(expectedError);
+  const expectedResult = { ...expectedRefusal, message };
+  expect(JSON.parse(saved)).toEqual(expectedResult);
+  expect(journeys).toBe(1);
+}
+it.each(['swap', 'core dumps'])(
+  'explains enabled %s in the launcher error and saved refusal', explainsUnsafeHost);
+
 async function withdrawsEarlierPass(): Promise<void> {
   await launch();
   expect(JSON.parse(saved)).toHaveProperty('result', 'PASS');
