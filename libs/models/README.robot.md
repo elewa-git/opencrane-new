@@ -6,6 +6,11 @@ For people, read [README.md](README.md) first.
 turn events. It keeps ordinary messages, files and other turns separate from
 closure, replacement and memory changes that refuse the current turn.
 
+`requireActiveConversationTurn` checks previously read history for Stop, completion
+or failure of the requested turn. Credential renewal uses this same check as model
+decisions before starting the short access check. Later activity checks read only
+new events, so the saved-history check must run first.
+
 ## Private company OAuth preparation (Part of #50)
 
 `prepareCompanyOAuthAttempt` is internal, with no route or package export. Trusted

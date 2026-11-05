@@ -3,7 +3,8 @@
 The [qualified start contract](README.robot.md) explains initial personal memory delivery.
 Renewing a pass for an already started turn checks access and loaded memory again.
 For a numbered start, the server also requires a saved record that initial memory loaded.
-A start report alone is not enough. Renewal does not prepare or resend the initial memory.
+A start report alone is not enough. Renewal does not repeat recall discovery or resend
+the initial memory. Correct, Forget, removal and Stop still refuse renewal.
 
 The recall preparation helper checks a saved private turn before offering its tool list.
 It checks the computer's discovery receipt once, then repeats access, policy and deployment
@@ -124,6 +125,7 @@ flowchart LR
   server --> memory[Memory]
   chat -->|selects and checks input| memory
   chat -->|recall definitions and one-use private input| computer[Assistant computer]
+  computer -->|requests checked pass renewal| chat
   computer -->|completed private reply| chat
   chat -->|private reply and clearance| reader[Authenticated reader]
   chat -->|checks access, spending and loaded references| models[Models]

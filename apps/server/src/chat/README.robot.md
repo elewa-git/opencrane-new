@@ -13,10 +13,15 @@ numbered start, it also requires saved initial-load evidence. The runner resends
 same report number when renewing; an equal or later number can renew only after that
 load. A larger number cannot bypass missing initial-delivery dependencies or qualification
 withdrawn before preparation. Without loaded evidence, replay still refuses initial delivery.
-Renewal does not prepare or resend initial memory, and needs neither the memory read
-database nor the member feed. The existing loaded-reference and membership checks still
+Renewal decides from saved start and initial-load evidence before recall preparation.
+It does not repeat recall discovery or prepare or resend initial memory, and needs neither
+the memory read database nor the member feed. The existing loaded-reference and membership checks still
 run before and after signing. Older starts without report numbers predate initial delivery
 and remain renewable through the same access checks.
+
+`test/memory-delivery.test.ts` renews a recall turn through the real computer channel.
+It checks one grant reply, no repeated discovery or input, and unchanged memory evidence.
+Correct, Forget, removal and Stop each refuse renewal before the withdrawal reaction runs.
 
 The withdrawal fixture now supplies a disposable PostgreSQL memory projection, encrypted
 facts, recall settings, permissions and simulated deployment qualification. Its first

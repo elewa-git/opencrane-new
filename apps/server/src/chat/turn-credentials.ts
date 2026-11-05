@@ -3,7 +3,8 @@ import type { WebSocket } from 'ws';
 import { prepareInitialMemory } from '../memory/initial-delivery.ts';
 import { computerCredentials, type tokenIssuer } from '@opencrane/auth';
 import { approvalActivity, confirmDecisionAccess, decisionAuthorityFence,
-  LoadedMemoryRefused, MemberAccessRefused, prepareLoadedMemory } from '@opencrane/models';
+  LoadedMemoryRefused, MemberAccessRefused, prepareLoadedMemory,
+  requireActiveConversationTurn } from '@opencrane/models';
 import { modelForTask } from '@opencrane/models/routing';
 import { z } from 'zod';
 import { chatHistory } from './commands.ts';
@@ -201,6 +202,8 @@ async function turnMemoryCheck(options: BridgeOptions,
     const deadline = performance.now() + 10_000;
     const activity = await approvalActivity(options.store, options.silo, context.assistantId,
       turn.conversationId, turn.turnId, deadline);
+    // Refuse Stops already saved before the later activity checks begin watching new events.
+    requireActiveConversationTurn(activity.conversation, turn.turnId);
     const computerSchema = z.object({ computerId: z.string(), generation: z.int().positive() });
     const computer = computerSchema.parse(activity.computer.lifecycle?.event.data);
     if (computer.computerId !== context.computerId) throw new LoadedMemoryRefused();
