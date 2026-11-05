@@ -19,11 +19,16 @@ const actualOutput = await vi.importActual<typeof import('../src/chat/private-ou
 let fixture: Awaited<ReturnType<typeof natsFixture>>;
 let journey: ReturnType<typeof memoryJourney>;
 async function prepare() {
-  vi.mocked(readChatFacts).mockReset();
-  vi.mocked(privateOutput).mockReset();
-  vi.mocked(subscribePrivateOutput).mockReset();
+  const readChatFactsSpy = vi.mocked(readChatFacts);
+  readChatFactsSpy.mockReset();
+  const privateOutputSpy = vi.mocked(privateOutput);
+  privateOutputSpy.mockReset();
+  const subscribePrivateOutputSpy = vi.mocked(subscribePrivateOutput);
+  subscribePrivateOutputSpy.mockReset();
   fixture = await natsFixture();
-  const keys = memoryKeys(dirname(fixture.env().NATS_CA_FILE));
+  const fixtureSettings = fixture.env();
+  const fixtureDirectory = dirname(fixtureSettings.NATS_CA_FILE);
+  const keys = memoryKeys(fixtureDirectory);
   function encode(identity: MemoryIdentity) {
     keys.provision(identity);
     return keys.encrypt(identity, 'Fixture memory');
@@ -39,14 +44,14 @@ beforeEach(prepare);
 afterEach(close);
 
 async function replacesAndReloads(kind: 'corrected' | 'forgotten') {
-  const spawn = vi.mocked(childProcess.spawn);
-  const execute = vi.mocked(childProcess.execFile);
-  spawn.mockClear();
-  execute.mockClear();
+  const spawnSpy = vi.mocked(childProcess.spawn);
+  const executeSpy = vi.mocked(childProcess.execFile);
+  spawnSpy.mockClear();
+  executeSpy.mockClear();
   const fetch = vi.spyOn(globalThis, 'fetch');
   await journey.replacementReload(kind);
-  expect(spawn).not.toHaveBeenCalled();
-  expect(execute).not.toHaveBeenCalled();
+  expect(spawnSpy).not.toHaveBeenCalled();
+  expect(executeSpy).not.toHaveBeenCalled();
   expect(fetch).not.toHaveBeenCalled();
 }
 it.each(['corrected', 'forgotten'] as const)(
@@ -79,7 +84,8 @@ async function refusesColdChange(field: string, target: string) {
     }
     return facts;
   }
-  vi.mocked(readChatFacts).mockImplementation(changed);
+  const readChatFactsSpy = vi.mocked(readChatFacts);
+  readChatFactsSpy.mockImplementation(changed);
   await expect(journey.replacementReload('forgotten')).rejects.toThrow(AssertionError);
 }
 const coldChanges = [['status', 'old'], ['execution', 'old'], ['references', 'old'],
@@ -102,7 +108,8 @@ async function refusesRetainedBytes() {
     }
     return result;
   }
-  vi.spyOn(Buffer.prototype, 'fill').mockImplementation(retain);
+  const fillSpy = vi.spyOn(Buffer.prototype, 'fill');
+  fillSpy.mockImplementation(retain);
   await expect(journey.replacementReload('forgotten')).rejects.toThrow(AssertionError);
 }
 it('refuses a pending private reply whose bytes survive connection loss', refusesRetainedBytes);
@@ -112,7 +119,8 @@ async function refusesUnexpectedSend() {
     actualOutput.subscribePrivateOutput(...args);
     args[0].socket.send('{}');
   }
-  vi.mocked(subscribePrivateOutput).mockImplementation(changed);
+  const subscribePrivateOutputSpy = vi.mocked(subscribePrivateOutput);
+  subscribePrivateOutputSpy.mockImplementation(changed);
   await expect(journey.replacementReload('corrected')).rejects.toThrow(AssertionError);
 }
 it('refuses a frame sent to a fresh subscriber', refusesUnexpectedSend);
@@ -130,7 +138,8 @@ async function refusesLateSend(call: number) {
     }
     return { ...output, release };
   }
-  vi.mocked(privateOutput).mockImplementation(changed);
+  const privateOutputSpy = vi.mocked(privateOutput);
+  privateOutputSpy.mockImplementation(changed);
   await expect(journey.replacementReload('corrected')).rejects.toThrow(AssertionError);
   expect(releases).toBe(call);
 }
