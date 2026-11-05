@@ -4,10 +4,15 @@ import { X509Certificate } from 'node:crypto';
 import { parseAllDocuments } from 'yaml';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { test, before, after } from 'node:test';
-import { certificates } from '../../libs/event-store/test/certificates.ts';
+import { test, before, after, mock } from 'node:test';
+import tls from 'node:tls';
+import { certificates, issueCertificate } from '../../libs/event-store/test/certificates.ts';
 import { checkCnpgBackupReferences } from './cnpg-backup.ts';
 
+import { attempts, backupHostname, datedLeaf, mapServiceDNS, peer }
+  from './cnpg-backup-tls-fixture.ts';
+
+let matching: Awaited<ReturnType<typeof peer>>;
 const namespace = 'opencrane-package-1';
 const refusal = 'CNPG backup references are incomplete or incompatible';
 const privateValue = 'private-value-/private/path';
@@ -19,8 +24,16 @@ async function prepare() {
   await certificates(directory);
   ca = await readFile(`${directory}/ca.crt`, 'utf8');
   leaf = await readFile(`${directory}/server.crt`, 'utf8');
+  const extensions = `subjectAltName=DNS:${backupHostname}\nextendedKeyUsage=serverAuth\n`;
+  await issueCertificate(directory, 'matching', '/CN=fixture', extensions);
+  await datedLeaf(directory, 'expired', 2000);
+  await datedLeaf(directory, 'future', 2100);
+  matching = await peer(directory);
+  mapServiceDNS();
 }
 async function cleanup() {
+  mock.restoreAll();
+  await matching.close();
   await rm(directory, { recursive: true, force: true });
 }
 before(prepare);
@@ -34,7 +47,7 @@ function fixture() {
   const backup = {
     enabled: true, renderOnly: true, method: 'barmanObjectStore',
     destinationPath: 's3://database-backups/local-check',
-    endpointURL: `https://backup-store.${namespace}.svc:9000`,
+    endpointURL: `https://backup-store.${namespace}.svc:${matching.port}`,
     endpointCA: { name: 'backup-trust', key: 'ca.crt' },
     s3Credentials: {
       accessKeyId: { name: 'backup-identity', key: 'ACCESS_KEY_ID' },
@@ -55,7 +68,7 @@ function fixture() {
     namespace: { apiVersion: 'v1', kind: 'Namespace',
       metadata: { name: namespace, uid: 'namespace-uid', resourceVersion: '1' } },
     'backup-store': { ...service, spec: { type: 'ClusterIP', clusterIP: '10.43.0.8',
-      ports: [{ port: 9000, protocol: 'TCP' }], selector: { app: 'fixture' } } },
+      ports: [{ port: matching.port, protocol: 'TCP' }], selector: { app: 'fixture' } } },
     'backup-trust': { ...trust, type: 'Opaque', data: { 'ca.crt': encoded(ca) } },
     'backup-identity': { ...identity, type: 'Opaque', data: {
       ACCESS_KEY_ID: encoded('fixture-access'), ACCESS_SECRET_KEY: encoded(privateValue),
@@ -110,7 +123,11 @@ async function accepts() {
       input.backup = { ...input.backup, ...rendered };
     }
   }
+  const before = attempts.length;
   await checkCnpgBackupReferences(input.backup, namespace, input.kubectl);
+  assert.equal(attempts.length, before + 1);
+  assert.equal(attempts.at(-1)!.destroyed, true);
+  assert.equal(Buffer.concat(matching.received).length, 0);
   for (const name of Object.keys(input.objects)) {
     function matches(value: string) {
       return value === name;
@@ -310,3 +327,185 @@ for (const field of ['uid', 'resourceVersion']) {
   }
   test(`Namespace refuses changed ${field}`, refusesNamespaceChange);
 }
+
+function atPeer(input: ReturnType<typeof fixture>, port: number) {
+  input.backup.endpointURL = `https://${backupHostname}:${port}`;
+  input.objects['backup-store'].spec.ports[0].port = port;
+}
+for (const name of ['server', 'expired', 'future', 'plaintext', 'stalled', 'unavailable']) {
+  async function refusesPeer() {
+    const input = fixture();
+    const listener = await peer(directory, name === 'unavailable' ? 'matching' : name);
+    atPeer(input, listener.port);
+    if (name === 'unavailable') await listener.close();
+    try {
+      const options = { timeoutMs: 200 };
+      await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl, options));
+      assert.equal(input.reads.length, 4);
+      assert.equal(attempts.at(-1)!.destroyed, true);
+    } finally {
+      if (name !== 'unavailable') await listener.close();
+    }
+  }
+  test(`TLS refuses ${name} peer without later reads`, refusesPeer);
+}
+async function foreignCA() {
+  const input = fixture();
+  const foreignDirectory = await mkdtemp(`${tmpdir()}/cnpg-foreign-`);
+  try {
+    await certificates(foreignDirectory);
+    const foreign = await readFile(`${foreignDirectory}/ca.crt`, 'utf8');
+    input.objects['backup-trust'].data['ca.crt'] = encoded(foreign);
+    await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+    assert.equal(input.reads.length, 4);
+  } finally {
+    await rm(foreignDirectory, { recursive: true, force: true });
+  }
+}
+test('TLS refuses a foreign CA even with the matching SAN', foreignCA);
+
+for (const name of ['namespace', 'backup-store', 'backup-trust']) {
+  for (const field of ['uid', 'resourceVersion']) {
+    async function changesDuringHandshake() {
+      const input = fixture();
+      let handshakes = 0;
+      function change() {
+        handshakes += 1;
+        input.objects[name].metadata[field] = 'replacement';
+      }
+      const listener = await peer(directory, 'matching', change);
+      atPeer(input, listener.port);
+      try {
+        await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+        assert.equal(handshakes, 1);
+        assert(input.reads.length > 4);
+      } finally {
+        await listener.close();
+      }
+    }
+    test(`TLS rechecks ${name} ${field} after the handshake`, changesDuringHandshake);
+  }
+}
+for (const stage of ['before reads', 'before connection', 'during handshake', 'after handshake']) {
+  async function abortWork() {
+    const input = fixture();
+    const controller = new AbortController();
+    const before = attempts.length;
+    function abort() {
+      controller.abort(new Error(privateValue));
+    }
+    async function read(args: string[]) {
+      const output = await input.kubectl(args);
+      if (stage === 'before connection' && input.reads.length === 4) abort();
+      if (stage === 'after handshake' && input.reads.length === 5) abort();
+      return output;
+    }
+    const listener = await peer(directory, 'stalled', abort);
+    if (stage === 'during handshake') atPeer(input, listener.port);
+    if (stage === 'before reads') abort();
+    try {
+      const options = { signal: controller.signal };
+      await refused(checkCnpgBackupReferences(input.backup, namespace, read, options));
+      const expected = stage === 'during handshake' || stage === 'after handshake' ? 1 : 0;
+      assert.equal(attempts.length - before, expected);
+      const expectedReads = { 'before reads': 0, 'before connection': 4,
+        'during handshake': 4, 'after handshake': 5 };
+      assert.equal(input.reads.length, expectedReads[stage as keyof typeof expectedReads]);
+      if (expected) assert.equal(attempts.at(-1)!.destroyed, true);
+    } finally {
+      await listener.close();
+    }
+  }
+  test(`TLS cancellation ${stage} stops later work`, abortWork);
+}
+for (const stage of ['initial read', 'before connection', 'after handshake', 'final read']) {
+  async function expiredWork(context: import('node:test').TestContext) {
+    const input = fixture();
+    const before = attempts.length;
+    let now = Date.now();
+    function clock() { return now; }
+    context.mock.method(Date, 'now', clock);
+    function expire() { now += 30_001; }
+    async function read(args: string[]) {
+      const output = await input.kubectl(args);
+      if (stage === 'initial read' && input.reads.length === 1) expire();
+      if (stage === 'before connection' && input.reads.length === 4) expire();
+      if (stage === 'final read' && input.reads.length === 8) expire();
+      return output;
+    }
+    const listener = await peer(directory, 'matching', expire);
+    if (stage === 'after handshake') atPeer(input, listener.port);
+    try {
+      await refused(checkCnpgBackupReferences(input.backup, namespace, read));
+      const expected = stage === 'after handshake' || stage === 'final read' ? 1 : 0;
+      assert.equal(attempts.length - before, expected);
+      if (expected) assert.equal(attempts.at(-1)!.destroyed, true);
+      const expectedReads = { 'initial read': 1, 'before connection': 4,
+        'after handshake': 4, 'final read': 8 };
+      assert.equal(input.reads.length, expectedReads[stage as keyof typeof expectedReads]);
+    } finally {
+      await listener.close();
+    }
+  }
+  test(`TLS absolute deadline at ${stage} stops work before timer delivery`, expiredWork);
+}
+async function sharedDeadline(context: import('node:test').TestContext) {
+  const input = fixture();
+  const now = Date.now();
+  function clock() { return now; }
+  context.mock.method(Date, 'now', clock);
+  const controller = new AbortController();
+  let limitsSignal: AbortSignal | undefined;
+  const mapped = tls.connect;
+  function checked(options: tls.ConnectionOptions) {
+    assert.equal(options.signal, limitsSignal);
+    assert.equal(options.ca, ca);
+    assert.equal(options.port, input.objects['backup-store'].spec.ports[0].port);
+    return mapped(options);
+  }
+  context.mock.method(tls, 'connect', checked);
+  async function read(args: string[], timeout?: number, signal?: AbortSignal, deadline?: number) {
+    assert.equal(deadline, now + 1000);
+    assert.equal(timeout, 1000);
+    if (limitsSignal) assert.equal(signal, limitsSignal);
+    limitsSignal = signal;
+    return input.kubectl(args);
+  }
+  function connected() { controller.abort(); }
+  const listener = await peer(directory, 'stalled', connected);
+  atPeer(input, listener.port);
+  try {
+    const options = { timeoutMs: 1000, signal: controller.signal };
+    await refused(checkCnpgBackupReferences(input.backup, namespace, read, options));
+    assert.equal(limitsSignal?.aborted, true);
+    assert.equal(attempts.at(-1)!.destroyed, true);
+  } finally {
+    await listener.close();
+  }
+}
+test('TLS and object reads share cancellation and the original deadline', sharedDeadline);
+
+for (const option of [
+  { tlsVerified: true }, { probe: async function supplied() {} },
+  { endpointURL: 'https://foreign.example' }, { rejectUnauthorized: false },
+]) {
+  async function refusesOverride() {
+    const input = fixture();
+    const before = attempts.length;
+    const options = { timeoutMs: 1000, ...option };
+    await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl, options));
+    assert.equal(attempts.length, before);
+    assert.equal(input.reads.length, 0);
+  }
+  test(`TLS refuses supplied option ${Object.keys(option)[0]}`, refusesOverride);
+}
+async function privateNetworkFailure(context: import('node:test').TestContext) {
+  const input = fixture();
+  function fails() {
+    throw new AggregateError([new Error(directory), new Error(ca)], privateValue);
+  }
+  context.mock.method(tls, 'connect', fails);
+  await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+  assert.equal(input.reads.length, 4);
+}
+test('TLS discards nested network diagnostics and CA data', privateNetworkFailure);
