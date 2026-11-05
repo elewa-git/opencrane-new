@@ -19,7 +19,7 @@ Session requests and live connections require the configured organisation. Produ
 
 | File | What it does |
 | --- | --- |
-| [session-sockets.ts](session-sockets.ts) | Tracks live browser connections by cookie digest and closes them on sign-out. |
+| [session-sockets.ts](session-sockets.ts) | Tracks live browser connections by a one-way hash of their cookie and closes them on sign-out. |
 | [routes.ts](routes.ts) | Handles sign-in, callback, sign-out and current-session requests. |
 
 ## How it connects

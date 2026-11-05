@@ -7,7 +7,7 @@ This folder keeps the website's live connection to the server running. It lets c
 - Checks incoming messages against the shared message rules before passing them to pages.
 - Sends private replies and their clearance straight to current listeners, outside the recent-message cache.
 - Reconnects after a dropped connection, with varied waits so browsers do not all retry together.
-- Shares sign-out between tabs and checks the session when a tab returns. Private replies wait for that check.
+- Shares sign-out between tabs and checks the session when a tab returns. Blocks new private replies during that check.
 - Stops reconnecting after an access-related closure and tells open chats to clear their content.
 - Supplies replaceable browser navigation and connection helpers for checks.
 
