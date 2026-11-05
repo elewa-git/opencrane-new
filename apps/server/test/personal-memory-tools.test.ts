@@ -741,3 +741,42 @@ async function refusesEndedMemoryContext() {
 }
 it('refuses discovery completion after saved memory ended without a turn-end event',
   refusesEndedMemoryContext);
+
+async function refusesLatePreparationCancellation(stage: 'access' | 'activity') {
+  const setup = await recallLoadFixture();
+  const waiting = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  const readHead = setup.input.store.head.bind(setup.input.store);
+  let historyDeadline: number | undefined;
+  let conversationReads = 0;
+  let delayed = false;
+  async function delayedHead(...args: Parameters<typeof readHead>) {
+    const position = await readHead(...args);
+    if (args[0] === undefined && historyDeadline === undefined) {
+      historyDeadline = args[1];
+    }
+    if (args[0] === 'conversation-conversation') {
+      conversationReads += 1;
+    }
+    const finalAccess = stage === 'access' && conversationReads === 2
+      && args[0] === 'mcp-memory' && args[1] === historyDeadline;
+    const finalActivity = stage === 'activity' && conversationReads === 3
+      && args[0] === 'conversation-conversation';
+    if (!delayed && (finalAccess || finalActivity)) {
+      delayed = true;
+      waiting.resolve();
+      await resume.promise;
+    }
+    return position;
+  }
+  vi.spyOn(setup.input.store, 'head').mockImplementation(delayedHead);
+  const preparation = preparePersonalRecallLoad(setup.input, setup.pending);
+  const refused = expect(preparation).rejects.toThrow('memory_context_unavailable');
+  await waiting.promise;
+  setup.registration.close();
+  resume.resolve();
+  await refused;
+}
+it.each(['access', 'activity'] as const)(
+  'refuses recall preparation when its caller closes during final %s confirmation',
+  refusesLatePreparationCancellation);
