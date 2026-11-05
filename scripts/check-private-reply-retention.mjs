@@ -161,7 +161,8 @@ async function waitForCancellation(page) {
     const session = await page.context().newCDPSession(page);
     try {
       const diagnostic = await replyRetainers(session);
-      throw new Error(`Reply operations did not cancel:\n${diagnostic}`, { cause: error });
+      const options = { cause: error };
+      throw new Error(`Reply operations did not cancel:\n${diagnostic}`, options);
     } finally {
       await session.detach();
     }

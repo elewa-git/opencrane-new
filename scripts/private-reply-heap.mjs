@@ -40,7 +40,8 @@ function heapGraph(snapshot) {
         if (weakMap) {
           owner = Number(weakMap[1]);
         }
-        node.edges.push({ target: targetOffset / nodeWidth, name, owner });
+        const edge = { target: targetOffset / nodeWidth, name, owner };
+        node.edges.push(edge);
       }
     }
   }
@@ -54,7 +55,8 @@ function pathsFromRoot(graph) {
   const queue = [0];
   function visit(source, edge) {
     if (!parents.has(edge.target)) {
-      parents.set(edge.target, { source, name: edge.name });
+      const parent = { source, name: edge.name };
+      parents.set(edge.target, parent);
       reachedIds.add(graph[edge.target].id);
       queue.push(edge.target);
     }
@@ -64,7 +66,8 @@ function pathsFromRoot(graph) {
     for (const edge of graph[source].edges) {
       if (edge.owner !== undefined && !reachedIds.has(edge.owner)) {
         const waiting = waitingForMap.get(edge.owner) ?? [];
-        waiting.push({ source, edge });
+        const pending = { source, edge };
+        waiting.push(pending);
         waitingForMap.set(edge.owner, waiting);
       } else {
         visit(source, edge);
