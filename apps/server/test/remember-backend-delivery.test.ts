@@ -28,13 +28,17 @@ async function processes() {
 vi.mock('node:child_process', processes);
 
 const text = 'My walking destination is the summer garden.';
-const content = z.object({ recallProof: z.string() });
-const result = z.object({ structuredContent: content });
-const recalled = z.object({ result });
+const recallContentShape = { recallProof: z.string() };
+const recallContentSchema = z.object(recallContentShape);
+const recallResultShape = { structuredContent: recallContentSchema };
+const recallResultSchema = z.object(recallResultShape);
+const recallResponseShape = { result: recallResultSchema };
+const recallResponseSchema = z.object(recallResponseShape);
 async function rememberInput(test: Awaited<ReturnType<typeof recallBackend>>, thread = threadId) {
   const query = { scopeId, query: 'garden' };
   const response = await test.native.recall(thread, query);
-  const recallProof = recalled.parse(response).result.structuredContent.recallProof;
+  const parsed = recallResponseSchema.parse(response);
+  const recallProof = parsed.result.structuredContent.recallProof;
   const reference = { scopeId, memoryId: 'garden', revision: 1 };
   return { scopeId, commandId: 'native-remember', text, kind: 'fact', pinned: false,
     expiresAt: null, sources: [], dependsOn: [reference], recallProof };
@@ -53,12 +57,15 @@ async function savesRememberReceipt() {
   const writes = rows.filter(matches);
   expect(writes).toHaveLength(1);
   const saved = memoryWrittenEventSchema.parse(writes[0]!.event);
-  expect(saved.principal).toEqual({ kind: 'agent', id: 'alice' });
+  const expectedPrincipal = { kind: 'agent', id: 'alice' };
+  expect(saved.principal).toEqual(expectedPrincipal);
   const receipt = { outcome: 'saved', changeId: saved.id, memoryId: saved.data.memoryId,
     revision: 1, scopeId, audience: { kind: 'person', ownerId: 'alice' }, savedAt: saved.time };
-  expect(response).toEqual({ jsonrpc: '2.0', id: 1,
-    result: { content: [], structuredContent: receipt } });
-  expect(saved.data).toMatchObject({ dependsOn: args.dependsOn, ownerId: 'alice' });
+  const expectedResponse = { jsonrpc: '2.0', id: 1,
+    result: { content: [], structuredContent: receipt } };
+  expect(response).toEqual(expectedResponse);
+  const expectedData = { dependsOn: args.dependsOn, ownerId: 'alice' };
+  expect(saved.data).toMatchObject(expectedData);
   await test.setup.runner.run(test.projection);
   const query = { scopeId, query: 'summer' };
   const found = await test.native.recall(threadId, query);
@@ -85,11 +92,14 @@ async function lostRememberReply() {
   }
   vi.spyOn(test.setup.nats.store, 'append').mockImplementation(loseReply);
   const response = await test.native.call(threadId, 'remember', args);
-  expect(response).toMatchObject({ result: { structuredContent: { outcome: 'unknown' } } });
+  const expectedResponse = { result: { structuredContent: { outcome: 'unknown' } } };
+  expect(response).toMatchObject(expectedResponse);
   const scope = { scopeId, scopeKind: 'person' as const, ownerId: 'alice' };
   const status = await readAgentChange(test.memory, 'alice', scope, args.commandId);
-  expect(status).toMatchObject({ outcome: 'saved', revision: 1, scopeId });
-  expect(await readAgentChange(test.memory, 'alice', scope, args.commandId)).toEqual(status);
+  const expectedStatus = { outcome: 'saved', revision: 1, scopeId };
+  expect(status).toMatchObject(expectedStatus);
+  const repeatedStatus = await readAgentChange(test.memory, 'alice', scope, args.commandId);
+  expect(repeatedStatus).toEqual(status);
   expect(attempts).toBe(1);
   expect(JSON.stringify(status)).not.toContain(text);
 }
@@ -224,7 +234,8 @@ async function refusesWithdrawalAtAppend(change: Withdrawal) {
   const append = store.append.bind(store);
   let changed = false;
   async function withdrawBeforeAppend(command: Parameters<typeof append>[0]) {
-    if (command.event.commandId === args.commandId) {
+    const parsed = memoryWrittenEventSchema.safeParse(command.event);
+    if (parsed.success && parsed.data.commandId === args.commandId) {
       changed = true;
       await saveWithdrawal(test, change);
     }
@@ -263,7 +274,8 @@ async function withdrawsBeforeRelease(reason: 'qualification' | 'reference') {
   expect(response).not.toHaveProperty('result.structuredContent');
   const scope = { scopeId, scopeKind: 'person' as const, ownerId: 'alice' };
   const status = await readAgentChange(test.memory, 'alice', scope, args.commandId);
-  expect(status).toMatchObject({ outcome: 'saved' });
+  const expectedStatus = { outcome: 'saved' };
+  expect(status).toMatchObject(expectedStatus);
 }
 it.each(['qualification', 'reference'] as const)(
   'withholds the Remember receipt if %s changes while saving', withdrawsBeforeRelease, 120_000);
@@ -284,7 +296,8 @@ async function isolatesRememberSessions() {
   const foreignProof = await test.native.call(otherThread, 'remember', first);
   expect(foreignProof).not.toHaveProperty('result.structuredContent');
   const saved = await test.native.call(otherThread, 'remember', second);
-  expect(saved).toMatchObject({ result: { structuredContent: { outcome: 'saved', revision: 1 } } });
+  const expectedResponse = { result: { structuredContent: { outcome: 'saved', revision: 1 } } };
+  expect(saved).toMatchObject(expectedResponse);
 }
 it('keeps Remember catalogues and proofs separate in two sessions for the same person',
   isolatesRememberSessions, 120_000);

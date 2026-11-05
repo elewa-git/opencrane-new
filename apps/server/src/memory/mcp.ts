@@ -172,23 +172,25 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
       if (input.sources.length > 0) throw new Error('Agent source refused');
       checkRecallProof(config.cookieSecret, context, input.recallProof, input.dependsOn,
         evidence.inputGeneration);
-      // Check the captured access positions without repeating permission reads.
-      const confirmAccess = memory ? writeAuthority : rights.confirm;
+      // Recheck Stop and computer changes as well as the original access positions.
       const confirmLineage = confirmAgentLineage(options!, context, evidence, input.dependsOn,
-        confirmAccess, deadline);
-      const fresh = Object.assign(confirmLineage, writeAuthority);
+        rights.confirm, deadline);
+      async function confirmAccess() {
+        await writeAuthority();
+      }
+      const fresh = Object.assign(confirmAccess, writeAuthority);
       async function confirm() {
         qualification?.confirm();
         if (memory) {
           await memory.confirm(fresh);
-        } else {
-          await confirmLineage();
         }
+        // Finish reference reads before the full turn, computer and access confirmation.
+        await confirmLineage();
         qualification?.confirm();
       }
       const agent = { deadline: writeAuthority.deadline,
         conversation: context.conversation, turn: context.turn,
-        requestId: context.requestId, confirm, checkAccess: writeAuthority };
+        requestId: context.requestId, confirm, checkAccess: rights.confirm };
       const { operation: _operation, scopeId: _scopeId, recallProof: _proof, ...command } = input;
       const receipt = await remember(options!, context.requester, rights.scope, command, agent);
       await confirm();

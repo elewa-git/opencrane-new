@@ -227,13 +227,19 @@ async function restrictNativeItems(kind: typeof nativeItems[number], remember = 
     await waitLoaded(test, pending);
     const item = { id: 'call', type: 'mcpToolCall', server: test.tools[0]!.key, tool: 'recall' };
     item.tool = kind;
-    if (kind === 'external') item.server = 'external';
+    if (kind === 'external') {
+      item.server = 'external';
+    }
     if (kind === 'commandExecution' || kind === 'fileChange' || kind === 'webSearch'
-      || kind === 'collabAgentToolCall') item.type = kind;
+      || kind === 'collabAgentToolCall') {
+      item.type = kind;
+    }
     const event = { method: 'item/started', params: { threadId: pending['threadId'], item } };
     test.computer.channel.notification(event);
+    const expectedPermission = kind === 'recall' || (remember && kind === 'remember');
     function expectedAccess() {
-      expect(test.native.callers.permits('first', 'first')).toBe(kind === 'recall' || (remember && kind === 'remember'));
+      const permitted = test.native.callers.permits('first', 'first');
+      expect(permitted).toBe(expectedPermission);
     }
     await vi.waitFor(expectedAccess);
     expect(test.native.received).not.toContain('turn/start');

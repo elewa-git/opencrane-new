@@ -1,1 +1,2 @@
 - Prepared personal memory threads can offer reviewed Remember alongside Recall, return the real saved receipt and read original-command status after a lost append reply. Qualification and access checks still gate delivery; admission, Correct/Forget delivery and live qualification remain held.
+- Remember refuses a write if Stop or a replacement computer generation is saved while it waits for its database lock or before the final append check.

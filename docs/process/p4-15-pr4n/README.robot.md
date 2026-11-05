@@ -2,7 +2,7 @@
 
 For people, read [README.md](README.md) first.
 
-Part of #97, P4-15 PR 4n. Base: `7570a266c41110bb9b94595c4596817ec13487b2`.
+Part of #97, P4-15 PR 4n. Rebased base: `8d4de0b0a`.
 Merged prerequisites: PR 4m (#867), `64586a95c1b0b5d1c38126b017561520981af09c`;
 PR 3k (#871), `6031183ebb29f8023edf914adb04913a58088884`.
 The later production recall/backend work (#883) is included in the base.
@@ -21,6 +21,10 @@ Remember retains complete loaded-reference lineage. A turn with saved native ini
 loading now remeasures deployment qualification before the write handler's access check.
 It confirms qualification and loaded references before saving and before releasing a receipt.
 The common reference validator reuses the captured access positions and checks later events.
+Remember uses the full `rights.confirm()` after those checks and at the final event append.
+It checks later turn, Stop and computer events with the original access positions and
+deadline. A saved Stop or replacement generation prevents a write while local caller
+withdrawal is delayed, including when the call has waited for its database lock.
 Older governed protocol fixtures without native initial loading retain their existing contract;
 they do not qualify native deployment. History still loads before the short access check.
 The existing agent-command status reader now recognises saved Remember revisions and checks
@@ -56,3 +60,33 @@ Selected suites: `remember-backend-delivery`, `recall-backend-delivery`,
 
 NOT RUN: full root suite, model calls, development stacks and fresh-install qualification.
 Correct/Forget production delivery and the complete journey remain held. Admission stays off.
+
+## Stop and replacement regression checks
+
+Date: 5 November 2026. Failing-first commit: `0e9e63abc`, after rebasing onto
+`8d4de0b0a`. The rebase completed and the base is an ancestor of the branch.
+
+The four new backend cases first failed: each found one saved memory write where zero
+were required. Two hold a real PostgreSQL command lock, save Stop or a replacement
+computer generation, then release it. Two save those events before the event store's
+final append check. All keep the local caller registered. With full confirmation
+restored, all four pass with zero saved writes and no returned memory receipt or text.
+
+These checks use the existing local NATS, PostgreSQL, OpenFGA, gateway, backend and
+proxy fixture. They use a scripted native peer and deployment observations, rather
+than a fresh installation. PostgreSQL for this run is the supplied test service at
+`127.0.0.1:55432`. All commands use `nice -n 10`; Vitest uses one worker and
+`--no-file-parallelism`. Logs on the task host are `/tmp/p4-15-pr4n-red.log` and
+`/tmp/p4-15-pr4n-green.log`.
+
+The test schemas and expected responses now have names. The notification branches
+use braces, and the permission assertion has separate expected and observed values.
+An initial typecheck found an unchecked `unknown` event in the new append test hook;
+the hook now validates it with the existing event schema.
+
+An initial full-confirmation change passed the four refusal cases but failed four normal
+Remember cases in the six-file run (219 passed, 4 failed). The reference validator was
+repeating the full permission check. The final ordering keeps the captured access check
+inside reference validation, then runs full turn, computer and access confirmation.
+It also uses full confirmation at append. The normal-save control and all four refusal
+cases pass with this ordering. No timeout or assertion was relaxed.
