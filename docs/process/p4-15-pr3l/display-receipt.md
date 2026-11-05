@@ -46,3 +46,45 @@ The reference frames are THR-71 and THR-72. Personal restriction screens have no
 memory-free button because that command choice is not implemented for personal sessions.
 NOT RUN: fresh-install qualification and the full root suite. Native admission stays
 disabled. Direct/shared sessions, server authority checks and event names are unchanged.
+
+## Pending copy correction
+
+5 November 2026. Source: `7a3a2f9b2`.
+Fetched origin and rebased onto `5dbd530c2`. The rebase completed, and that main
+commit is an ancestor of the branch. File-preview changes from main were preserved.
+
+Failing-test commit: `e664ccaa1`. Chromium held two clipboard writes while clearing
+a reply containing private code and a rendered diagram. After forced garbage
+collection, all five WeakRef references still resolved: the reply component and
+element, the diagram component and element, and its image. The assertion failed
+before the implementation changed.
+
+The correction ends application waits for copies, diagram imports and drawing when
+the reply is removed. It also detaches callbacks from the abort signal and settled
+promise, so the browser's pending operation cannot retain private content. Late
+success or failure cannot restore copy feedback. The capture script now separates
+live display, focused clearance, restriction notices and reload into named steps.
+
+Own checks in this development worktree, using synthetic browser fixtures:
+
+- PASS twice: 175 Angular tests across workspace, Markdown, private replies and sockets.
+- PASS twice: `vitest run apps/web/test/private-reply-browser.test.ts --maxWorkers=1`.
+  Chromium checks sign-out, display, clearance, focus and reload at both widths.
+  The new memory regression holds copies with a rendered diagram and with diagram
+  startup delayed. After clearance and garbage collection, every WeakRef stops
+  resolving. Releasing late clipboard success and failure leaves the reply absent.
+- PASS: all 460 unchanged event-security tests.
+- PASS: repository typecheck and event catalogue agreement (158 types).
+- PASS: targeted lint for the changed rendering code and browser scripts.
+- PASS: full lint, including Knip and changelog validation, with no errors and
+  35 existing function-length warnings.
+
+Two earlier combined browser runs failed before delivery because the fixture socket
+was not ready. The regression now waits for the app's initial loads before checking
+subscription readiness. The final two runs passed with the same readiness timeout
+and memory assertions.
+
+All tests, builds, lint and typechecks ran under `nice -n 10`. Root test commands
+used a throwaway PostgreSQL container on a random loopback port through `PG_TEST_URL`.
+The container and its volume were removed. The full root suite and fresh-install
+qualification remain NOT RUN. Native admission remains disabled.
