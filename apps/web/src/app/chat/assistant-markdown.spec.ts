@@ -50,7 +50,9 @@ it('shows a plain note for a workspace file the viewer cannot open',
 function hidesUnpublishedLocalFileLinks() {
   const destinations = ['../drawing.svg', '/tmp/drawing.svg', 'file:///tmp/drawing.svg'];
   for (const destination of destinations) {
-    const { root } = mount(`[Open file](${destination})`);
+    const { fixture, root } = mount(`[Open file](${destination})`);
+    fixture.componentRef.setInput('availableFiles', ['uploads/chat/file/drawing.svg']);
+    fixture.detectChanges();
     expect(root.textContent).toBe('File not available');
     expect(root.textContent).not.toContain(destination);
     expect(root.querySelector('a, button')).toBeNull();
@@ -114,7 +116,9 @@ function keepsHostileText() {
     + '[relative](/settings) [file](file:///example) [encoded](java&#x73;cript:alert)';
   const { root } = mount(hostile);
   expect(root.querySelector('img, script, a')).toBeNull();
-  expect(root.textContent).toBe(hostile.replace('[file](file:///example)', 'File not available'));
+  const withoutRelativePath = hostile.replace('[relative](/settings)', 'File not available');
+  const expected = withoutRelativePath.replace('[file](file:///example)', 'File not available');
+  expect(root.textContent).toBe(expected);
 }
 
 function rendersMultilineBold() {

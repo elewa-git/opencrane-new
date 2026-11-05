@@ -310,8 +310,9 @@ can be used now is checked separately. Missing evidence never means it is safe t
 
 The server checks files the assistant creates through the same type checks, virus
 scanner and storage as uploads. Accepted files appear as assistant file cards.
-It accepts well-formed SVG files as images. The file route serves them with an
-image content type and a sandbox when a person opens one.
+It accepts well-formed SVG files as images, including ones with an XML declaration.
+The file route serves them with an image content type and a sandbox when a
+person opens one.
 The first file report fixes the turn's file list. Retries keep that list and its original
 size allowance, so a repeated completion cannot add more cards.
 People need current conversation access to preview or download them.

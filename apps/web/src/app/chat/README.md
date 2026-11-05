@@ -34,8 +34,8 @@ Returning tabs check their session again. Reconnecting cannot recover the reply.
 
 Assistant replies show Markdown headings, lists, quotes, inline formatting and code.
 Code blocks have a copy button. Web and email links open in a new tab. Links to
-published workspace files open that file's preview. Unavailable files show a plain
-note without a link.
+published workspace files open that file's preview. Other local file links show a
+plain note without a link or path.
 HTML stays text. Mermaid diagrams appear as images once their code block closes.
 Drawing happens in a separate browser document with network access blocked.
 An unfinished, oversized or unsupported diagram keeps its source and copy button. Citations still open the existing preview.

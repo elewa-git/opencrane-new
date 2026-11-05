@@ -68,9 +68,10 @@ it('shows a screenshot image, its facts and the original download link', async (
 
 async function showsSvgAsImage() {
   const svg = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>';
-  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(svg, {
-    headers: { 'content-type': 'image/svg+xml' },
-  }));
+  const headers = { 'content-type': 'image/svg+xml' };
+  const responseOptions = { headers };
+  const response = new Response(svg, responseOptions);
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
   const { fixture, root } = await createPreview();
   fixture.componentRef.setInput('path', 'artifacts/drawing.svg');
   fixture.detectChanges();

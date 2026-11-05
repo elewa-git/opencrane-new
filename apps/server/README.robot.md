@@ -6897,7 +6897,9 @@ or carries a fixed refusal reason. No workspace path or file bytes enter the eve
 The web app shows image thumbnails and opens published file links through the
 same conversation file route. The type worker accepts a well-formed SVG with an
 `svg` root, but refuses document type declarations and entity declarations. The
-route serves it as `image/svg+xml` with `nosniff`, `default-src 'none'; sandbox`,
+worker sends SVG with an XML declaration through the same XML checks even when
+file-type reports `application/xml`. The route serves it as `image/svg+xml` with
+`nosniff`, `default-src 'none'; sandbox`,
 and download or inline disposition. The browser uses an image element only.
 This lets people see SVG without treating its markup as a page. The route's
 sandbox still applies if someone opens the file address directly.

@@ -178,6 +178,12 @@ function inspectPlainText(bytes: Buffer): string {
   return 'text/plain';
 }
 
+function shouldInspectSvg(extension: string, detectedMime: string | undefined): boolean {
+  if (extension !== 'svg') return false;
+  // Check XML-detected SVG with the same root and declaration rules as other SVG files.
+  return detectedMime === undefined || detectedMime === 'application/xml';
+}
+
 async function inspectFile(
   name: string,
   bytes: Buffer,
@@ -194,7 +200,7 @@ async function inspectFile(
     throw new InspectionRefusal('unsafe_name', 'Unsupported file type');
   }
   const detected = await fileTypeFromBuffer(bytes);
-  if (extension === 'svg' && !detected) {
+  if (shouldInspectSvg(extension, detected?.mime)) {
     return inspectSvg(bytes);
   }
   if (textTypes.has(extension) && !detected && !bytes.subarray(0, 4).equals(Buffer.from('MZ\0\0'))) {

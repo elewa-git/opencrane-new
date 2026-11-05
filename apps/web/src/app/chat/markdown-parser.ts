@@ -23,9 +23,14 @@ function safeLink(value: string): boolean {
   }
 }
 
-function workspaceLink(value: string): boolean {
-  return value.startsWith('/workspace/artifacts/')
-    || value.startsWith('file:///workspace/artifacts/');
+function localFileLink(value: string): boolean {
+  if (/^file:/iu.test(value)) return true;
+  if (value.startsWith('//')) return false;
+  if (value.startsWith('/') || value.startsWith('./') || value.startsWith('../')) {
+    return true;
+  }
+  if (value.includes(':')) return false;
+  return /\.[a-z0-9]+(?:[?#]|$)/iu.test(value);
 }
 
 function describeInlineMatch(match: RegExpMatchArray): InlinePart {
@@ -35,7 +40,7 @@ function describeInlineMatch(match: RegExpMatchArray): InlinePart {
   if (starItalic !== undefined || underscoreItalic !== undefined) {
     return { kind: 'italic', text: starItalic ?? underscoreItalic ?? '' };
   }
-  if (label !== undefined && href !== undefined && workspaceLink(href)) {
+  if (label !== undefined && href !== undefined && localFileLink(href)) {
     return { kind: 'workspace-file', text: label, href };
   }
   if (label !== undefined && href !== undefined && safeLink(href)) {

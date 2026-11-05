@@ -1390,8 +1390,10 @@ thumbnails through the existing conversation file route. The preview fetches SVG
 through that route and renders it only as an image. Reply links beginning with
 `/workspace/artifacts/` or `file:///workspace/artifacts/` resolve by file name
 against published files this viewer may open. An unmatched or ambiguous name shows
-“File not available”. `npm run visual:assistant-files-2` captures both widths with
-an intercepted API. Fresh-install qualification remains NOT RUN.
+“File not available”. Other local file paths also show this note without exposing
+the path. Ordinary HTTPS and email links still work.
+`npm run visual:assistant-files-2` captures both widths with an intercepted API.
+Fresh-install qualification remains NOT RUN.
 
 ## Volatile personal reply state
 
