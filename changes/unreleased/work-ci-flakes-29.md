@@ -1,0 +1,2 @@
+- Return the saved invitation result when two requests accept the same invite at once, while keeping a single recorded join.
+- Make the routine lost-reply check wait for its projection reader after NATS restarts, preserving its exactly-once and identity checks under load.

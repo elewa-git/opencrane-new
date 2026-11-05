@@ -288,11 +288,9 @@ async function confirmInvitation(store: JoinStore, events: StoredEvent[], input:
     if (!['owner', 'admin'].includes(latestInviter.role)) {
       return { status: 'refused', reason: 'inviter_authority_ended' };
     }
-    // Explain a competing join instead of leaving the accepting account unsure.
-    if (!invitation.invitedIdentity) {
-      const rechecked = await changedEmailInvitation(store, input, context, now());
-      if (rechecked) return rechecked;
-    }
+    // Explain a competing join for both identity-bound and email invitations.
+    const rechecked = await changedEmailInvitation(store, input, context, now());
+    if (rechecked) return rechecked;
     throw error;
   }
   if (memberSequence !== undefined) {
