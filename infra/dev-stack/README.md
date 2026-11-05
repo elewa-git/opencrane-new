@@ -17,11 +17,11 @@ assistant computers run.
 flowchart LR
   infra["infra<br/>infrastructure"] --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
-  stack -->|starts services; checks listener addresses| services["Local services<br/>jobs, content and access"]
-  stack -->|sets up test sign-in| zitadel["Zitadel<br/>sign-in service"]
+  stack -->|starts services; checks listeners; sets up sign-in| services["Local services<br/>jobs, content and access"]
   stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
   stack -->|starts apps; keeps keys private; checks journeys, times Memory body reads and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|checks ownership, backup references, nodes and certificates; stops cancelled checks| package["infra/package<br/>Helm install"]
+  stack -->|checks fresh memory collection| collector["scripts/private-memory-qualification<br/>deployment checks"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
 ```
 
@@ -68,6 +68,8 @@ available for diagnosis.
 - Checks sign-in, personal memory reads, saves, correction and forgetting on an
   empty installation. Checks supplied memory receipts and records incomplete
   journeys honestly.
+- Checks the claimed slot and protected deployment target before memory collection.
+  Refuses incomplete results before the calling journey can continue.
 - Keeps original receipts and separates browser checks from untested native
   memory.
 - Lets a spare slot own a three-node Kubernetes test cluster. Saved ownership
@@ -105,7 +107,10 @@ available for diagnosis.
    Each has its own ports, data and separate private key directories for surveys and
    memory. Restart keeps those keys. Models and computers cannot read those directories;
    cleanup removes only that claimed copy.
-4. **The daily check runs.** A timer updates a separate checkout of the main branch,
+4. **A journey prepares memory collection.** The launcher checks one claimed slot,
+   then waits for the existing collector and its cleanup. It does not set up an owner;
+   the collector’s runner may already have populated the installation.
+5. **The daily check runs.** A timer updates a separate checkout of the main branch,
    starts a fresh spare stack with the free model and runs the browser journeys.
    It saves the result and private failure logs outside the repository, then removes
    that stack. If both spare stacks are busy, it records a skipped run.

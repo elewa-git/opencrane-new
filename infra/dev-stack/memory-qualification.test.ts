@@ -22,6 +22,7 @@ let pending: string;
 let container: ReturnType<typeof freshContainer>;
 let stream: { created: string; lastSequence: number; eventCount: number };
 let host: string;
+let revision: string;
 let journeys: number;
 let writes: number;
 let change: (response: Record<string, unknown>) => void;
@@ -41,39 +42,64 @@ function freshContainer() {
 }
 function unchanged(): void {}
 function protectedStat() {
-  return Object.assign(new files.Stats(), originalStat, { uid: 0, mode: 0o100600, size: 150 });
+  return Object.assign(Object.create(Object.getPrototypeOf(originalStat)) as files.Stats, originalStat, { uid: 0, mode: 0o100600, size: 150 });
 }
 function readProtected(descriptor: unknown): string {
-  if (descriptor === 42) return target;
-  if (descriptor === 43) return saved;
-  throw new Error('Unexpected private read');
+  if (descriptor === 42) {
+    return target;
+  }
+  if (descriptor === 43) {
+    return saved;
+  }
+  return originalSync.readFileSync(descriptor as string, 'utf8');
 }
 function openProtected(path: unknown): number {
-  if (path === targetPath) return 42;
-  if (path === resultPath) return 43;
+  if (path === targetPath) {
+    return 42;
+  }
+  if (path === resultPath) {
+    return 43;
+  }
   throw new Error('Unexpected private open');
 }
 async function readLocal(path: unknown): Promise<string> {
-  if (path === `${directory}/stack-owner`) return `worktree=${root}\npid=1\n`;
-  if (path === `${directory}/settings.env`) return 'SILO_ID=fixture-silo\n';
-  return await originalFiles.readFile(path as string, 'utf8');
+  if (path === `${directory}/stack-owner`) {
+    return `worktree=${root}\npid=1\n`;
+  }
+  if (path === `${directory}/settings.env`) {
+    return 'SILO_ID=fixture-silo\n';
+  }
+  if (path instanceof URL && path.pathname.endsWith('/supervisor.mjs')) {
+    return supervisorSource;
+  }
+  throw new Error('Unexpected local read');
 }
-const originalFiles = await vi.importActual<typeof asyncFiles>('node:fs/promises');
+const supervisorSource = await asyncFiles.readFile(
+  new URL('../../scripts/private-memory-qualification/supervisor.mjs', import.meta.url), 'utf8');
+const originalSync = await vi.importActual<typeof files>('node:fs');
 function writeResult(_path: unknown, content: unknown): void {
   pending = String(content);
   writes += 1;
 }
-function renameResult(): void { saved = pending; }
+function renameResult(): void {
+  saved = pending;
+}
 function docker(file: unknown, args: unknown): string {
-  if (file === '/usr/bin/git') return sourceSha;
+  if (file === '/usr/bin/git') {
+    return sourceSha;
+  }
   expect(file).toBe('/usr/bin/docker');
   const command = args as string[];
   expect(command.slice(0, 2)).toEqual(['--host', 'unix:///var/run/docker.sock']);
-  if (command[2] === 'info') return JSON.stringify(host);
-  if (command[2] === 'inspect') return JSON.stringify([container]);
+  if (command[2] === 'info') {
+    return JSON.stringify(host);
+  }
+  if (command[2] === 'inspect') {
+    return JSON.stringify([container]);
+  }
   expect(command.slice(2, 4)).toEqual(['image', 'inspect']);
   return JSON.stringify([{ Id: container.Image,
-    Config: { Labels: { 'org.opencontainers.image.revision': sourceSha } } }]);
+    Config: { Labels: { 'org.opencontainers.image.revision': revision } } }]);
 }
 function spawnDocker(file: string, args: readonly string[] = []): ReturnType<typeof spawn> {
   expect(file).toBe('/usr/bin/docker');
@@ -96,14 +122,17 @@ function spawnDocker(file: string, args: readonly string[] = []): ReturnType<typ
         change(receipt);
         response = receipt;
       }
-      stdout.emit('data', Buffer.from(JSON.stringify(response)));
-      child.emit('close', 0);
+      function cleanedUp(): void {
+        stdout.emit('data', Buffer.from(JSON.stringify(response)));
+        child.emit('close', 0);
+      }
+      if (pause && !command.includes('--eval')) {
+        release = cleanedUp;
+        return;
+      }
+      cleanedUp();
     }
-    if (pause) {
-      release = reply;
-    } else {
-      queueMicrotask(reply);
-    }
+    queueMicrotask(reply);
   }
   stdin.on('data', receive);
   return child;
@@ -120,6 +149,7 @@ function prepare(): void {
   container = freshContainer();
   stream = { created: '2026-01-01T00:00:02Z', eventCount: 0, lastSequence: 0 };
   host = 'fixture-host';
+  revision = sourceSha;
   journeys = 0;
   writes = 0;
   change = unchanged;
@@ -128,11 +158,17 @@ function prepare(): void {
   vi.mocked(files.openSync).mockImplementation(openProtected);
   vi.mocked(files.readFileSync).mockImplementation(readProtected);
   vi.mocked(files.fstatSync).mockImplementation(protectedStat);
+  function parentStat() {
+    return Object.assign(protectedStat(), { mode: 0o40755 });
+  }
+  vi.mocked(files.lstatSync).mockImplementation(parentStat);
   vi.mocked(files.closeSync).mockReturnValue(undefined);
   vi.mocked(files.writeFileSync).mockImplementation(writeResult);
   vi.mocked(files.renameSync).mockImplementation(renameResult);
   vi.mocked(asyncFiles.readFile).mockImplementation(readLocal);
-  async function realpath(path: unknown): Promise<string> { return String(path); }
+  async function realpath(path: unknown): Promise<string> {
+    return String(path);
+  }
   vi.mocked(asyncFiles.realpath).mockImplementation(realpath);
   vi.mocked(execFileSync).mockImplementation(docker);
   vi.mocked(spawn).mockImplementation(spawnDocker);
@@ -159,20 +195,50 @@ async function collectsOnceBeforeContinuation(): Promise<void> {
 it('collects once and leaves the populated install without a second bootstrap',
   collectsOnceBeforeContinuation);
 async function refusesLocalTarget(kind: string): Promise<void> {
-  if (kind === 'claim') vi.stubEnv('MEMORY_CLAIMED_ID', '2');
-  if (kind === 'owner') vi.stubEnv('DEV_STACK_ID', '0');
+  if (kind === 'claim') {
+    vi.stubEnv('MEMORY_CLAIMED_ID', '2');
+  }
+  if (kind === 'owner') {
+    vi.stubEnv('DEV_STACK_ID', '0');
+  }
   if (kind === 'worktree') {
-    async function foreign(): Promise<string> { return 'worktree=/other\n'; }
+    async function foreign(): Promise<string> {
+      return 'worktree=/other\n';
+    }
     vi.mocked(asyncFiles.readFile).mockImplementation(foreign);
   }
-  if (kind === 'container') container.Id = 'd'.repeat(64);
-  if (kind === 'project') container.Config.Labels['com.docker.compose.project'] = 'owner';
+  if (kind === 'container') {
+    container.Id = 'd'.repeat(64);
+  }
+  if (kind === 'source') {
+    revision = 'd'.repeat(40);
+  }
+  if (kind === 'container silo') {
+    container.Config.Env = ['SILO_ID=other'];
+  }
+  if (kind === 'malformed target') {
+    target = '{}';
+  }
+  if (kind === 'project') {
+    container.Config.Labels['com.docker.compose.project'] = 'owner';
+  }
   if (kind === 'container worktree') {
     container.Config.Labels['com.docker.compose.project.working_dir'] = '/other';
   }
-  if (kind === 'silo') target = JSON.stringify({ containerId, siloId: 'other' });
-  if (kind === 'unsafe') {
-    function unsafe() { return Object.assign(protectedStat(), { uid: 1000 }); }
+  if (kind === 'silo') {
+    target = JSON.stringify({ containerId, siloId: 'other' });
+  }
+  if (kind === 'unsafe' || kind === 'writable target') {
+    function unsafe() {
+      const stat = protectedStat();
+      if (kind === 'unsafe') {
+        stat.uid = 1000;
+      }
+      if (kind === 'writable target') {
+        stat.mode = 0o100620;
+      }
+      return stat;
+    }
     vi.mocked(files.fstatSync).mockImplementation(unsafe);
   }
   await expect(launch()).rejects.toThrow('memory_qualification_refused');
@@ -181,12 +247,20 @@ async function refusesLocalTarget(kind: string): Promise<void> {
   expect(saved).toBe('prior evidence');
 }
 it.each(['claim', 'owner', 'worktree', 'container', 'project', 'container worktree',
-  'silo', 'unsafe'])('refuses %s before collection and preserves prior evidence', refusesLocalTarget);
+  'silo', 'unsafe', 'source', 'container silo', 'malformed target', 'writable target'])('refuses %s before collection and preserves prior evidence', refusesLocalTarget);
 async function refusesBeforeJourney(kind: string): Promise<void> {
-  if (kind === 'mounted') container.Mounts = [{ Destination: '/app' }];
-  if (kind === 'writable') container.HostConfig.ReadonlyRootfs = false;
-  if (kind === 'used') stream.eventCount = 1;
-  if (kind === 'purged') stream.lastSequence = 5;
+  if (kind === 'mounted') {
+    container.Mounts = [{ Destination: '/app' }];
+  }
+  if (kind === 'writable') {
+    container.HostConfig.ReadonlyRootfs = false;
+  }
+  if (kind === 'used') {
+    stream.eventCount = 1;
+  }
+  if (kind === 'purged') {
+    stream.lastSequence = 5;
+  }
   await expect(launch()).rejects.toThrow('memory_qualification_refused');
   expect(journeys).toBe(0);
 }
@@ -194,10 +268,18 @@ it.each(['mounted', 'writable', 'used', 'purged'])(
   'refuses %s installation before any journey or bootstrap', refusesBeforeJourney);
 async function refusesReplacement(kind: string): Promise<void> {
   function replace(): void {
-    if (kind === 'host') host = 'replacement-host';
-    if (kind === 'image') container.Image = `sha256:${'d'.repeat(64)}`;
-    if (kind === 'start') container.State.StartedAt = '2026-01-01T00:00:02Z';
-    if (kind === 'stream') stream.created = '2026-01-01T00:00:03Z';
+    if (kind === 'host') {
+      host = 'replacement-host';
+    }
+    if (kind === 'image') {
+      container.Image = `sha256:${'d'.repeat(64)}`;
+    }
+    if (kind === 'start') {
+      container.State.StartedAt = '2026-01-01T00:00:02Z';
+    }
+    if (kind === 'stream') {
+      stream.created = '2026-01-01T00:00:03Z';
+    }
   }
   change = replace;
   await expect(launch()).rejects.toThrow('memory_qualification_refused');
@@ -210,7 +292,9 @@ async function refusesIncomplete(status: string): Promise<void> {
   function incomplete(receipt: Record<string, unknown>): void {
     receipt['result'] = status;
     receipt['complete'] = false;
-    if (status === 'malformed') delete receipt['challengeId'];
+    if (status === 'malformed') {
+      delete receipt['challengeId'];
+    }
   }
   change = incomplete;
   await expect(launch()).rejects.toThrow('memory_qualification_refused');
@@ -224,26 +308,54 @@ async function withdrawsEarlierPass(): Promise<void> {
   vi.resetModules();
   stream.eventCount = 0;
   stream.lastSequence = 0;
-  function fail(receipt: Record<string, unknown>): void { delete receipt['challengeId']; }
+  function fail(receipt: Record<string, unknown>): void {
+    delete receipt['challengeId'];
+  }
   change = fail;
   await expect(launch()).rejects.toThrow('memory_qualification_refused');
   expect(JSON.parse(saved)).toHaveProperty('result', 'FAIL');
 }
 it('a fresh failed collection withdraws an earlier saved PASS', withdrawsEarlierPass);
-async function waitsForCleanup(): Promise<void> {
+async function waitsForCleanup(kind: string): Promise<void> {
   pause = true;
   const controller = new AbortController();
   let settled = false;
-  function finished(): void { settled = true; }
+  function finished(): void {
+    settled = true;
+  }
   const operation = launch(controller.signal);
   const outcome = expect(operation).rejects.toThrow('memory_qualification_refused');
   void operation.then(finished, finished);
-  await vi.waitFor(function waiting() { expect(release).toBeTypeOf('function'); });
-  controller.abort();
+  function waiting(): void {
+    expect(release).toBeTypeOf('function');
+  }
+  await vi.waitFor(waiting);
+  if (kind === 'signal') {
+    process.emit('SIGTERM');
+  }
+  if (kind === 'abort') {
+    controller.abort();
+  }
   expect(settled).toBe(false);
   pause = false;
   release!();
   await outcome;
   expect(JSON.parse(saved)).toHaveProperty('result', 'FAIL');
 }
-it('cancellation waits for collector cleanup and withdraws its result', waitsForCleanup);
+it.each(['signal', 'abort'])(
+  '%s cancellation waits for collector cleanup and withdraws its result', waitsForCleanup);
+
+async function refusesSavedResult(kind: string): Promise<void> {
+  function replaceResult(): void {
+    saved = pending;
+    if (JSON.parse(pending).result === 'PASS') {
+      saved = kind;
+    }
+  }
+  vi.mocked(files.renameSync).mockImplementation(replaceResult);
+  await expect(launch()).rejects.toThrow('memory_qualification_refused');
+  expect(journeys).toBe(11);
+  expect(JSON.parse(saved)).toHaveProperty('result', 'FAIL');
+}
+it.each(['', '{malformed'])(
+  'refuses missing or malformed saved result %s before continuation', refusesSavedResult);
