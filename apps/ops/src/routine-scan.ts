@@ -1,10 +1,15 @@
 import { isDeepStrictEqual } from 'node:util';
-import { foldRoutineHistory } from '@opencrane/authz';
+import { foldRoutineHistory, type Binding } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
 import { routineRecordIdentitySchema, type RoutineState } from '@opencrane/events';
 import { calculateRoutineOccurrence, previewRoutineOccurrences }
   from '@opencrane/events/routine-schedule';
 import { routineCandidatePage, type Query } from '@opencrane/projections';
+import { claimRoutineDue } from './routine-due.ts';
+import { skipRoutineOccurrence } from './routine-skip.ts';
+import { recordRoutineMissed } from './routine-missed.ts';
+
+type CommandInput = Parameters<typeof claimRoutineDue>[2];
 
 interface Continuation {
   silo: string;
@@ -36,6 +41,7 @@ async function readCandidate(store: EventStore, silo: string, routineId: string,
   projectedPosition: number, deadline: number, check: () => void) {
   let state: RoutineState | undefined;
   let position = 0;
+  const claims = new Map<string, CommandInput>();
   const completed = new Map<string, NonNullable<RoutineState['activeRun']>>();
   const subject = `routine-${routineId}`;
   for await (const row of store.readStream(subject, 1, deadline)) {
@@ -47,6 +53,13 @@ async function readCandidate(store: EventStore, silo: string, routineId: string,
       throw new Error('Routine history unavailable');
     }
     state = foldRoutineHistory(state, row.event, completed);
+    if (row.event.type === 'routine.due' && state.activeRun) {
+      const run = state.activeRun;
+      const input = { routineId, expectedPosition: position,
+        localDate: run.slot.localDate, definitionRevision: run.definitionRevision,
+        scheduleRevision: run.scheduleRevision, controlRevision: run.controlRevision };
+      claims.set(run.occurrenceId, input);
+    }
     position = row.sequence;
   }
   check();
@@ -56,12 +69,12 @@ async function readCandidate(store: EventStore, silo: string, routineId: string,
       position < projectedPosition || position !== latest) {
     throw new Error('Routine history unavailable');
   }
-  return state;
+  return { state, position, claims };
 }
 
 function observation(state: RoutineState, now: number) {
   if (state.status !== 'active') {
-    return 'inactive';
+    return { category: 'inactive' as const, occurrence: null };
   }
   const saved = state.definition;
   if (!saved) {
@@ -93,22 +106,78 @@ function observation(state: RoutineState, now: number) {
   }
   const lateness = now - Date.parse(occurrence.checkAt);
   if (lateness < 0) {
-    return 'future';
+    return { category: 'future' as const, occurrence };
   }
   if (lateness > 60_000) {
-    return 'late';
+    return { category: 'late' as const, occurrence };
   }
   if (occurrence.status === 'dst_skip') {
-    return 'gap';
+    return { category: 'gap' as const, occurrence };
   }
   if (state.activeRun) {
-    return 'occupied';
+    return { category: 'occupied' as const, occurrence };
   }
-  return 'eligible';
+  return { category: 'eligible' as const, occurrence };
 }
 
 /** Inspect one page under withRoutineLeadership. Counts never authorise a command. */
-export async function scanRoutineCandidates(db: Query, store: EventStore, worker: Worker) {
+export function scanRoutineCandidates(db: Query, store: EventStore, worker: Worker) {
+  return inspectPage(db, store, worker);
+}
+
+/** Await each checked command before reporting completed candidate progress. */
+export function dispatchRoutineCandidates(db: Query, store: EventStore,
+  worker: Worker & { binding: Binding }) {
+  if (!worker.binding || worker.binding.silo !== worker.silo) {
+    throw new Error('Routine scan unavailable');
+  }
+  return inspectPage(db, store, worker, worker.binding);
+}
+
+async function dispatchCandidate(store: EventStore, worker: Worker, binding: Binding,
+  candidate: Awaited<ReturnType<typeof readCandidate>>, observed: ReturnType<typeof observation>) {
+  const { state, position, claims } = candidate;
+  const { category, occurrence } = observed;
+  if (!occurrence || category === 'future') {
+    return;
+  }
+  const saved = state.definition!;
+  const input = { routineId: state.routineId, expectedPosition: position,
+    localDate: occurrence.localDate, definitionRevision: saved.definitionRevision,
+    scheduleRevision: saved.scheduleRevision, controlRevision: saved.controlRevision };
+  const trustedWorker = { ...worker, binding };
+  const previous = claims.get(occurrence.occurrenceId);
+  let result;
+  if (previous) {
+    // Recover the original claim even after its delivery reply or broker dedupe has expired.
+    result = await claimRoutineDue(store, trustedWorker, previous);
+  } else if (category === 'late') {
+    result = await recordRoutineMissed(store, trustedWorker, input);
+  } else if (category === 'eligible') {
+    result = await claimRoutineDue(store, trustedWorker, input);
+  } else {
+    result = await skipRoutineOccurrence(store, trustedWorker, input);
+  }
+  if (result.status !== 'confirmed' || result.executionAvailable !== false) {
+    throw new Error('Routine command unavailable');
+  }
+}
+
+type Page = Awaited<ReturnType<typeof routineCandidatePage>>;
+function pageContinuation(page: Page, examined: number, lastCompleted: Page['rows'][number] | undefined,
+  silo: string, checkedAt: number): Continuation | null {
+  if (examined === page.rows.length && page.rows.length < 50) {
+    return null;
+  }
+  if (!lastCompleted) {
+    throw new Error('Routine scan made no progress');
+  }
+  return { silo, afterRoutineId: lastCompleted.routine_id,
+    afterCreatedPosition: Number(lastCompleted.created_position),
+    generation: page.generation, checkedAt };
+}
+
+async function inspectPage(db: Query, store: EventStore, worker: Worker, binding?: Binding) {
   try {
     const deadline = performance.now() + 10_000;
     const stopCandidatesAt = deadline - 1000;
@@ -116,19 +185,28 @@ export async function scanRoutineCandidates(db: Query, store: EventStore, worker
     const continuation = worker.continuation;
     let checkedAt = continuation?.checkedAt ?? now();
     requireInput(worker, checkedAt);
-    function check() {
+    function checkTime() {
       const current = now();
-      if (worker.signal.aborted || performance.now() >= deadline ||
+      if (worker.signal.aborted ||
           !Number.isFinite(current) || current < checkedAt) {
         throw new Error('Routine scan refused');
       }
       checkedAt = current;
     }
-    async function requireLeadership() {
-      check();
-      const expires = Math.min(deadline, performance.now() + 1000);
+    function check() {
+      checkTime();
+      if (performance.now() >= deadline) {
+        throw new Error('Routine scan refused');
+      }
+    }
+    async function requireLeadership(finishing = false) {
+      checkTime();
+      let expires = Math.min(deadline, performance.now() + 1000);
+      if (finishing && binding) {
+        expires = performance.now() + 1000;
+      }
       const current = await worker.checkCurrent(expires);
-      check();
+      checkTime();
       if (!current || performance.now() >= expires) {
         throw new Error('Routine scan refused');
       }
@@ -151,24 +229,23 @@ export async function scanRoutineCandidates(db: Query, store: EventStore, worker
         break;
       }
       await requireLeadership();
-      const state = await readCandidate(store, worker.silo, row.routine_id,
+      const candidate = await readCandidate(store, worker.silo, row.routine_id,
         Number(row.position), deadline, check);
       check();
-      const category = observation(state, checkedAt);
-      counts[category] += 1;
+      const observed = observation(candidate.state, checkedAt);
+      if (binding) {
+        if (performance.now() >= stopCandidatesAt) {
+          break;
+        }
+        await dispatchCandidate(store, worker, binding, candidate, observed);
+        checkTime();
+      }
+      counts[observed.category] += 1;
       examined += 1;
       lastCompleted = row;
     }
-    await requireLeadership();
-    let next: Continuation | null = null;
-    if (examined < page.rows.length || page.rows.length === 50) {
-      if (!lastCompleted) {
-        throw new Error('Routine scan made no progress');
-      }
-      next = { silo: worker.silo, afterRoutineId: lastCompleted.routine_id,
-        afterCreatedPosition: Number(lastCompleted.created_position),
-        generation: page.generation, checkedAt };
-    }
+    await requireLeadership(true);
+    const next = pageContinuation(page, examined, lastCompleted, worker.silo, checkedAt);
     return { examined, counts, continuation: next,
       executionAvailable: false as const };
   } catch {

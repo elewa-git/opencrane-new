@@ -21,7 +21,7 @@ flowchart LR
   server -.->|tests use helper| ops
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
-  ops -->|saves results, routine claims, skips and missed ranges| nats
+  ops -->|saves results and checked routine scan commands| nats
   ops -->|holds routine ownership, reads routine pages and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
@@ -47,7 +47,7 @@ and suspension. Those checks read metadata and change no resources.
 - Provides [replay](../../GLOSSARY.md#replay), failed-job tools and upgrades for recovery.
 - Provides internal commands that claim, skip or record missed routine slots without starting work.
 - Holds one routine scheduler owner per silo while its callback prepares claims.
-- Inspects small pages of routine references against their saved events.
+- Inspects small pages of routine references and dispatches checked commands from saved events.
 
 ## Processes it handles
 
@@ -65,7 +65,9 @@ occupied runs stay visible. A delayed table or failed read cannot look like an e
 result. New routines follow existing ones in the order they were first saved,
 so a new id cannot fall behind the current scan. A slow page returns its completed
 progress for the next call. The scanner stops when ownership is lost and waits
-for its current read.
+for its current read. A separate internal dispatch call uses the same inspection,
+then awaits a checked claim, skip or daily downtime record before reporting progress.
+It recovers saved claims with their original expiry. It starts no model or tool work.
 
 1. **A change is saved.** A worker copies the event into the matching table.
    Reactions run any required background work and save its results as new events.

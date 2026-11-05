@@ -1,0 +1,1 @@
+- Routine scans can now save checked claims, skips and daily downtime progress, recover original claims after retries, and drain commands safely on shutdown. Automatic scheduling remains disconnected.
