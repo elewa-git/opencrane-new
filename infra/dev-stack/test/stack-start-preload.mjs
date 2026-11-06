@@ -89,6 +89,10 @@ function spawnFixture(_command, args, options) {
     assert.equal(options.env.CONTENT_DATABASE_URL, 'postgres://fixture.invalid/server');
     assert.equal(options.env.DATABASE_URL, 'postgres://fixture.invalid/dispatcher');
   }
+  if (args.includes('apps/server/src/main.ts')) {
+    const scannerConfigured = Boolean(options.env.SCANNER_URL && options.env.SCANNER_CA_FILE);
+    record(`scanner-configured ${scannerConfigured}`);
+  }
   const child = new EventEmitter();
   child.pid = nextPid++;
   child.unref = function unref() {};

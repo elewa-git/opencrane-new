@@ -30,6 +30,8 @@ async function ownerStart(start: StartOptions = {}) {
       DEV_STACK_DIR: directory,
       DEV_STACK_ID: 'owner',
       DEV_REAL_PROVIDER_FILE: '/synthetic-key-file',
+      DEV_SCANNER_URL: 'https://127.0.0.1:25099/scan/upload',
+      DEV_SCANNER_CA_FILE: `${directory}/ca.crt`,
       START_FAILURE: start.failure ?? '',
       START_SIGNAL: start.signal ?? '',
       START_WEB_READY_MS: start.webReadyMs?.toString() ?? '',
@@ -87,6 +89,15 @@ async function startsRoutineProjection() {
 
 test('fresh startup runs the routine projection needed by provider binding reads',
   startsRoutineProjection);
+
+async function startsServerWithScanner() {
+  const result = await ownerStart();
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.operations, /scanner-configured true/u);
+}
+
+test('fresh startup gives the server its authenticated scanner settings',
+  startsServerWithScanner);
 
 async function modeSavedAfterChecks() {
   const result = await ownerStart();
