@@ -1,34 +1,130 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
-import { baseImage } from './base-image.mjs';
 
+const repositoryRoot = resolve(import.meta.dirname, '../..');
+const helperPath = 'scripts/ci/base-image.mjs';
 const digestPath = 'apps/computer/test/base-image-digest.txt';
+const inputsPath = 'apps/computer/test/base-image-inputs.txt';
 const imageName = 'ghcr.io/elewa-git/opencrane-ci-computer-base';
+const digest = `sha256:${'a'.repeat(64)}`;
+const inputPaths = [
+  '.dockerignore',
+  'apps/computer/apt.lock',
+  'apps/computer/tool-user.c',
+  'apps/computer/test/upload-base.Dockerfile',
+  'spikes/s0-1b-proxy-gvisor/package.json',
+  'spikes/s0-1b-proxy-gvisor/package-lock.json',
+];
 
-test('the checked-in digest is empty or a complete sha256 digest', () => {
-  const digest = readFileSync(digestPath, 'utf8');
-  const image = baseImage(digest);
-  assert.ok(image === '' || image.startsWith(`${imageName}@sha256:`));
+function copyFixtureFile(root, path) {
+  const destination = join(root, path);
+  mkdirSync(dirname(destination), { recursive: true });
+  copyFileSync(join(repositoryRoot, path), destination);
+}
+
+function makeFixture() {
+  const root = mkdtempSync(join(tmpdir(), 'ci-base-image-'));
+  copyFixtureFile(root, helperPath);
+  for (const path of inputPaths) copyFixtureFile(root, path);
+  mkdirSync(dirname(join(root, digestPath)), { recursive: true });
+  writeFileSync(join(root, digestPath), '');
+  return root;
+}
+
+function runHelper(root, argumentsList = []) {
+  return spawnSync(process.execPath, [join(root, helperPath), ...argumentsList], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+}
+
+function recordCurrentImage(root) {
+  const hash = runHelper(root, ['hash']);
+  assert.equal(hash.status, 0, hash.stderr);
+  assert.match(hash.stdout, /^sha256:[0-9a-f]{64}$/u);
+  writeFileSync(join(root, digestPath), `${digest}\n`);
+  writeFileSync(join(root, inputsPath), `${hash.stdout}\n`);
+}
+
+function fixtureTest(name, run) {
+  test(name, () => {
+    const root = makeFixture();
+    try {
+      run(root);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+function buildStep() {
+  const workflow = readFileSync(join(repositoryRoot, '.github/workflows/ci.yml'), 'utf8');
+  const match = workflow.match(
+    /- name: Build the upload test computer\n\s+run: \|\n([\s\S]*?)(?=\n\s+- name:)/u,
+  );
+  assert.ok(match, 'CI build step is present');
+  const lines = match[1].split('\n');
+  const commands = lines.map(function removeIndent(line) { return line.slice(10); });
+  return commands.join('\n');
+}
+
+function runCiBuildStep(root) {
+  const fakeBin = join(root, 'fake-bin');
+  mkdirSync(fakeBin);
+  writeFileSync(join(fakeBin, 'docker'), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$DOCKER_LOG"\n', {
+    mode: 0o755,
+  });
+  const dockerLog = join(root, 'docker.log');
+  const result = spawnSync('sh', ['-eu', '-c', buildStep()], {
+    cwd: root,
+    encoding: 'utf8',
+    env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, DOCKER_LOG: dockerLog },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  return readFileSync(dockerLog, 'utf8');
+}
+
+fixtureTest('an empty digest selects the source build', (root) => {
+  const result = runHelper(root);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, '');
+  assert.match(runCiBuildStep(root), /^buildx bake /u);
 });
 
-test('the image name uses the complete digest', () => {
-  const digest = `sha256:${'a'.repeat(64)}`;
-  assert.equal(baseImage(digest), `${imageName}@${digest}`);
-  assert.throws(() => baseImage('sha256:abc'));
-  assert.throws(() => baseImage('sha256:' + 'A'.repeat(64)));
+fixtureTest('a valid digest with matching inputs selects the saved image', (root) => {
+  recordCurrentImage(root);
+  const result = runHelper(root);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, `${imageName}@${digest}`);
+  const command = runCiBuildStep(root);
+  assert.match(command, /^buildx build /u);
+  assert.match(command, /--build-arg COMPUTER_BASE=ghcr\.io/u);
+  assert.match(command, /--build-arg COMPUTER_APT_BASE=ghcr\.io/u);
 });
 
-test('CI gives the digest to both base arguments and builds from source while empty', () => {
-  const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
-  assert.match(workflow, /node scripts\/ci\/base-image\.mjs/u);
-  assert.match(workflow, /--build-arg COMPUTER_BASE="\$image"/u);
-  assert.match(workflow, /--build-arg COMPUTER_APT_BASE="\$image"/u);
-  assert.match(workflow, /docker buildx bake -f apps\/computer\/test\/upload-bake\.hcl --load/u);
+fixtureTest('an invalid digest fails before the build', (root) => {
+  writeFileSync(join(root, digestPath), 'sha256:bad\n');
+  const result = runHelper(root);
+  assert.notEqual(result.status, 0);
+  assert.equal(result.stdout, '');
+  assert.match(result.stderr, /must contain one full sha256 digest/u);
+});
+
+fixtureTest('changed launcher source selects the source build with the same digest', (root) => {
+  recordCurrentImage(root);
+  writeFileSync(join(root, 'apps/computer/tool-user.c'), '\n/* changed */\n', { flag: 'a' });
+  const result = runHelper(root);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, '');
+  assert.match(runCiBuildStep(root), /^buildx bake /u);
 });
 
 test('the saved base skips both snapshot stages', () => {
-  const dockerfile = readFileSync('apps/computer/Dockerfile', 'utf8');
+  const dockerfile = readFileSync(join(repositoryRoot, 'apps/computer/Dockerfile'), 'utf8');
   const runtimeStart = dockerfile.indexOf('FROM ${COMPUTER_APT_BASE} AS runtime');
   assert.ok(runtimeStart > 0);
   const fallback = dockerfile.slice(0, runtimeStart);
@@ -36,7 +132,7 @@ test('the saved base skips both snapshot stages', () => {
   assert.match(fallback, /COPY --from=launcher-build \/tool-user/u);
   assert.doesNotMatch(runtime, /snapshot\.debian\.org|apt-get|launcher-build/u);
 
-  const savedBase = readFileSync('apps/computer/test/upload-base.Dockerfile', 'utf8');
+  const savedBase = readFileSync(join(repositoryRoot, 'apps/computer/test/upload-base.Dockerfile'), 'utf8');
   assert.match(savedBase, /COPY apps\/computer\/apt\.lock/u);
   assert.match(savedBase, /COPY --from=launcher-build \/tool-user/u);
 });
