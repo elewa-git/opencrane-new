@@ -509,6 +509,10 @@ first policy already blocks images, connections, fonts and external stylesheets.
 The second also blocks scripts, including scripts from this website. The complete
 browser bundle avoids later imports while drawing; it is larger than the former
 flowchart-only lazy download and remains absent from ordinary replies.
+If the page removes the iframe while the JavaScript module remains loaded, the next
+diagram creates a new one. A failed start or drawing timeout also gets one fresh
+attempt. Saved replies draw again when they mount after reload or when a person
+returns to the chat.
 `public/mermaid-renderer.js` is checked by TypeScript and ESLint. It initialises
 Mermaid once with strict security, no HTML labels, fatal-only logging, suppressed
 error drawings, 50,000 source characters and 500 edges. The secure list protects
@@ -540,7 +544,9 @@ diagrams at both widths with intercepted API replies. Its images are under
 regressions for network isolation, lazy loading, protected settings, one-time
 initialisation and limits. `apps/web/test/chat-browser.test.ts` runs it in browser CI.
 The component tests also cover successive deltas, warning results, stale success
-and failure, and refused clipboard access.
+and failure, refused clipboard access, and drawing two replies again. The Chromium
+check covers a removed or stalled renderer, saved replies after reload, and returning
+from another chat at 1280 and 390 pixels.
 
 After sign-in, choose **Open workspace** (`/workspace`). Personal Agent sessions
 use the real bridge's `GET /api/chat`, conversation commands and resumable `/ws`

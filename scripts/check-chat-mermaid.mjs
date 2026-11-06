@@ -167,6 +167,10 @@ function removeRenderer(element) {
   element.remove();
 }
 
+function stopRenderer() {
+  globalThis.removeEventListener('message', globalThis.receiveDiagram);
+}
+
 try {
   await page.addInitScript(observeInitialisation);
   await page.route('**/*', serveAssets);
@@ -291,16 +295,33 @@ try {
   await secondReplyImage.waitFor({ timeout: 20_000 });
   assert.equal(await replyImages.count(), 3, 'Both messages must show every valid diagram');
 
+  const replacementRenderer = page.frames().find(isRenderer);
+  assert(replacementRenderer, 'A later reply needs a fresh renderer');
+  await replacementRenderer.evaluate(stopRenderer);
+  const lastQuestion = fixture.add('message.posted', {
+    text: 'Draw one more route', authorId: 'me',
+  });
+  const lastTurn = { turnId: lastQuestion.id };
+  fixture.add('agent.turn_started', lastTurn);
+  fixture.add('agent.message_delta', {
+    ...lastTurn, messageId: 'last-reply',
+    text: '```mermaid\ngraph LR\nLast --> Diagram\n```',
+  });
+  fixture.add('agent.turn_completed', lastTurn);
+  const lastReplyImage = page.locator('oc-assistant-markdown').nth(2).getByRole('img');
+  await lastReplyImage.waitFor({ timeout: 35_000 });
+  assert.equal(await replyImages.count(), 4, 'A stalled renderer must recover for later replies');
+
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.reload();
-    await replyImages.nth(3).waitFor({ timeout: 20_000 });
-    assert.equal(await replyImages.count(), 4,
+    await replyImages.nth(4).waitFor({ timeout: 20_000 });
+    assert.equal(await replyImages.count(), 5,
       `Saved diagrams must redraw after reload at ${width}px`);
     await selectSession(page, 'county-rollout', width);
     await page.goto(origin + '/workspace?conversation=chat');
-    await replyImages.nth(3).waitFor({ timeout: 20_000 });
-    assert.equal(await replyImages.count(), 4,
+    await replyImages.nth(4).waitFor({ timeout: 20_000 });
+    assert.equal(await replyImages.count(), 5,
       `Saved diagrams must redraw after navigation at ${width}px`);
   }
   console.log('PASS Mermaid Chromium: isolation, lazy loading, settings and limits');

@@ -3,6 +3,8 @@ let nextDiagramId = 0;
 const renderTimeoutMs = 15_000;
 const abortListenerOptions = { once: true };
 
+class DiagramRenderTimeout extends Error {}
+
 function createRenderer(signal?: AbortSignal): Promise<HTMLIFrameElement> {
   const frame = document.createElement('iframe');
   frame.title = 'Diagram renderer';
@@ -28,9 +30,6 @@ function createRenderer(signal?: AbortSignal): Promise<HTMLIFrameElement> {
     function timedOut(): void {
       stopWaiting();
       frame.remove();
-      if (!signal) {
-        renderer = undefined;
-      }
       reject(new Error('Diagram renderer did not start'));
     }
     const timer = setTimeout(timedOut, renderTimeoutMs);
@@ -48,18 +47,54 @@ function createRenderer(signal?: AbortSignal): Promise<HTMLIFrameElement> {
   return new Promise(waitForReady);
 }
 
+async function sharedRenderer(): Promise<HTMLIFrameElement> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    renderer ??= createRenderer();
+    const pendingRenderer = renderer;
+    try {
+      const frame = await pendingRenderer;
+      if (frame.isConnected) {
+        return frame;
+      }
+    } catch (error) {
+      if (renderer === pendingRenderer) {
+        renderer = undefined;
+      }
+      if (attempt === 1) {
+        throw error;
+      }
+      continue;
+    }
+    // Discard the cached promise when the hidden document has been removed.
+    if (renderer === pendingRenderer) {
+      renderer = undefined;
+    }
+  }
+  throw new Error('Diagram renderer was removed');
+}
+
 export async function renderMermaid(code: string, signal?: AbortSignal): Promise<{ svg: string }> {
+  try {
+    return await renderOnce(code, signal);
+  } catch (error) {
+    if (signal || !(error instanceof DiagramRenderTimeout)) {
+      throw error;
+    }
+    // Give a valid reply one fresh renderer when the old document stops answering.
+    return renderOnce(code);
+  }
+}
+
+async function renderOnce(code: string, signal?: AbortSignal): Promise<{ svg: string }> {
   // Keep the library and its document absent until a complete diagram needs them.
   signal?.throwIfAborted();
-  let pendingRenderer: Promise<HTMLIFrameElement>;
+  let frame: HTMLIFrameElement;
   if (signal) {
     // Destroy private library state with its document; leave ordinary diagrams alone.
-    pendingRenderer = createRenderer(signal);
+    frame = await createRenderer(signal);
   } else {
-    renderer ??= createRenderer();
-    pendingRenderer = renderer;
+    frame = await sharedRenderer();
   }
-  const frame = await pendingRenderer;
   nextDiagramId += 1;
   const id = nextDiagramId;
 
@@ -77,7 +112,11 @@ export async function renderMermaid(code: string, signal?: AbortSignal): Promise
     }
     function timedOut(): void {
       stopWaiting();
-      reject(new Error('Diagram rendering timed out'));
+      if (!signal && frame.isConnected) {
+        frame.remove();
+        renderer = undefined;
+      }
+      reject(new DiagramRenderTimeout('Diagram rendering timed out'));
     }
     const timer = setTimeout(timedOut, renderTimeoutMs);
     function receiveDiagram(event: MessageEvent<unknown>): void {
