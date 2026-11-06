@@ -1,1 +1,1 @@
-Routine metadata checks remain reliable on busy CI runners while retaining the same access checks and stale-owner refusal.
+Routine metadata checks reuse their test services while keeping fresh events and permissions for every case, avoiding repeated startup on busy CI runners.
