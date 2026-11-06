@@ -153,6 +153,20 @@ async function probeNetwork() {
   await new Promise(allowViolationEvents);
   return violations;
 }
+
+async function selectSession(page, title, width) {
+  let navigation = page.locator('nav.rail');
+  if (width < 1100) {
+    await page.getByRole('button', { name: 'Open session navigation' }).click();
+    navigation = page.locator('#workspace-navigation');
+  }
+  await navigation.locator('.session-row').filter({ hasText: title }).click();
+}
+
+function removeRenderer(element) {
+  element.remove();
+}
+
 try {
   await page.addInitScript(observeInitialisation);
   await page.route('**/*', serveAssets);
@@ -258,6 +272,37 @@ try {
   assert.equal(await iframe.count(), 1);
   assert.equal(await renderer.locator('.error-icon, .error-text').count(), 0);
   assert.deepEqual(requests, []);
+
+  await iframe.evaluate(removeRenderer);
+
+  fixture.add('agent.turn_completed', turn);
+  const nextQuestion = fixture.add('message.posted', {
+    text: 'Draw another route', authorId: 'me',
+  });
+  const nextTurn = { turnId: nextQuestion.id };
+  fixture.add('agent.turn_started', nextTurn);
+  fixture.add('agent.message_delta', {
+    ...nextTurn, messageId: 'second-reply',
+    text: '```mermaid\ngraph LR\nSecond --> Diagram\n```',
+  });
+  fixture.add('agent.turn_completed', nextTurn);
+  const replyImages = page.locator('oc-assistant-markdown img[alt="Diagram"]');
+  const secondReplyImage = page.locator('oc-assistant-markdown').nth(1).getByRole('img');
+  await secondReplyImage.waitFor({ timeout: 20_000 });
+  assert.equal(await replyImages.count(), 3, 'Both messages must show every valid diagram');
+
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.reload();
+    await replyImages.nth(3).waitFor({ timeout: 20_000 });
+    assert.equal(await replyImages.count(), 4,
+      `Saved diagrams must redraw after reload at ${width}px`);
+    await selectSession(page, 'county-rollout', width);
+    await page.goto(origin + '/workspace?conversation=chat');
+    await replyImages.nth(3).waitFor({ timeout: 20_000 });
+    assert.equal(await replyImages.count(), 4,
+      `Saved diagrams must redraw after navigation at ${width}px`);
+  }
   console.log('PASS Mermaid Chromium: isolation, lazy loading, settings and limits');
 } finally {
   await browser.close();
