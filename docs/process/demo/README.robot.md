@@ -4,6 +4,19 @@ For people, read [README.md](README.md) first.
 
 ## Latest qualification attempt
 
+The 6 November 2026 current-main rehearsal is **FAIL**. The pinned starting source was
+`2e860bac3b6099790e40ef38bb917408b1d6573a`. `npm ci` passed, and secondary
+slot 1 was claimed. Fresh `demo-up.sh` stopped at `Provider setup default: timeout`
+after owner bootstrap passed. The [receipt](../demo-rehearsal/test-version-2026-11-06/receipt.md)
+records the failure, all unrun rows, unknown startup spending and cleanup. A separate
+wait fix at `00e8ae22f49a972ef9f13413d38cf08c01a709e3` also failed a fresh
+start. The dispatcher completed the default-binding reaction without writing the
+binding. The smoke, ten-step script and live member memory check are **NOT RUN**.
+Neither 6 November source is qualified for the owner refresh. The prior qualified source remains
+`f11df5c56fe08e4bac477cc4c3f375288568c0cd`.
+
+### Earlier qualification
+
 The fifth 23 October 2026 attempt for #569 is **PASS**. The qualified source is
 `f11df5c56fe08e4bac477cc4c3f375288568c0cd`, the starting `origin/main`, including
 the checker-3 correction in #615 and the Stop correction in #611. Fresh startup,

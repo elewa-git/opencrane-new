@@ -48,8 +48,11 @@ request records is not a recovery step. Assistant creation does not prove readin
 
 ### Secondary rehearsal
 
-Only one live rehearsal uses the shared machine at a time. The latest fresh rehearsal
-passed both screen widths, including Stop and keeping the partial reply after reload.
+Only one live rehearsal uses the shared machine at a time. The last completed fresh
+rehearsal passed both screen widths, including Stop and keeping the partial reply after reload.
+The [6 November current-main rehearsal](../demo-rehearsal/test-version-2026-11-06/receipt.md)
+stopped twice during fresh provider setup. Its smoke, script and member memory check did
+not run. The owner-refresh source below is still the earlier qualified commit.
 Keep the remaining allowance for all paid runs together within 2,000 cents per UTC day, including unknown
 holds. Startup's 2,000-cent ceiling is per stack; it is not a shared daily counter.
 
