@@ -52,7 +52,8 @@ async function cleanup() {
   await fga?.close();
   await nats?.close();
 }
-beforeEach(setup, 30_000);
+// Allow disposable NATS and OpenFGA to start when the CI runner is busy.
+beforeEach(setup, 90_000);
 afterEach(cleanup);
 function request(actor = 'alice', routineId = 'orders', orgId = 'org-test') {
   const session = { sub: actor, orgId, roles: [], authTime: 1790856000, exp: 2000000000 };
