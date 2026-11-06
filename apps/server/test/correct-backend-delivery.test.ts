@@ -294,6 +294,57 @@ async function withdrawsAtAppend(change: Withdrawal) {
 it.each(withdrawals)('checks saved %s inside the final append callback',
   withdrawsAtAppend, 120_000);
 
+const releaseChanges = [...withdrawals, 'deadline'] as const;
+async function withdrawsAfterSave(change: typeof releaseChanges[number]) {
+  const test = await correctionFixture();
+  const store = test.setup.nats.store;
+  const append = store.append.bind(store);
+  const saved = Promise.withResolvers<number>();
+  const acknowledge = Promise.withResolvers<void>();
+  async function delayAcknowledgement(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    if (memoryCorrectedEventSchema.safeParse(command.event).success) {
+      expect(result.status).toBe('appended');
+      saved.resolve(command.deadline!);
+      await acknowledge.promise;
+    }
+    return result;
+  }
+  vi.spyOn(store, 'append').mockImplementation(delayAcknowledgement);
+  const pending = test.native.call(threadId, 'correct', test.args);
+  function finishedBeforeSave(): never {
+    throw new Error('Correct finished before saving the correction');
+  }
+  try {
+    const deadline = await Promise.race([saved.promise, pending.then(finishedBeforeSave)]);
+    expect(await corrections(test)).toHaveLength(1);
+    if (change === 'deadline') {
+      vi.spyOn(performance, 'now').mockReturnValue(deadline + 1);
+    } else {
+      await saveWithdrawal(test, change);
+    }
+    acknowledge.resolve();
+    const response = await pending;
+    expect(await corrections(test)).toHaveLength(1);
+    if (change === 'unrelated') {
+      const expected = { result: { structuredContent: { outcome: 'accepted', revision: 2 } } };
+      expect(response).toMatchObject(expected);
+    } else {
+      const message = 'The tool did not confirm a result. It may have received the request. '
+        + 'OpenCrane will not send it again.';
+      const expected = { jsonrpc: '2.0', id: 1,
+        result: { isError: true, content: [{ type: 'text', text: message }] } };
+      expect(response).toEqual(expected);
+    }
+    expect(JSON.stringify(response)).not.toContain(text);
+  } finally {
+    acknowledge.resolve();
+    await pending;
+  }
+}
+it.each(releaseChanges)('checks %s before releasing a saved Correct receipt',
+  withdrawsAfterSave, 120_000);
+
 async function releasesOnlyCurrentOutput(correct: boolean) {
   const test = await correctionFixture();
   function current() {

@@ -107,11 +107,19 @@ type NativeMemoryCall = (name: string, args: object, headers: Record<string, str
   identity?: CallIdentity)
   => Promise<Record<string, unknown>>;
 
-function createDiscoveryControls(remember: boolean) {
+type MemoryNames = readonly ('recall' | 'remember' | 'correct')[];
+
+function createDiscoveryControls(remember: boolean | MemoryNames) {
+  let names: MemoryNames = ['recall'];
+  if (remember === true) {
+    names = ['recall', 'remember', 'correct'];
+  } else if (remember !== false) {
+    names = remember;
+  }
   const received: string[] = [];
   const resume = Promise.withResolvers<void>();
   const calls = new Map<string, NativeMemoryCall>();
-  return { received, resume, calls, remember, holdDiscovery: false, loseReload: false };
+  return { received, resume, calls, names, holdDiscovery: false, loseReload: false };
 }
 
 type DiscoveryControls = ReturnType<typeof createDiscoveryControls>;
@@ -170,13 +178,10 @@ function handleNativeProtocol(
       await send(endpoint, caller, 'server/discover');
       result = await send(endpoint, caller);
       const offered = record(record(result)['result']);
-      const expected: unknown = JSON.parse(privateToolOffer('recall')[0]!.definitions[0]!);
-      const expectedTools = [expected];
-      if (discovery.remember) {
-        const definition: unknown = JSON.parse(privateToolOffer('remember')[0]!.definitions[0]!);
+      const expectedTools: unknown[] = [];
+      for (const name of discovery.names) {
+        const definition: unknown = JSON.parse(privateToolOffer(name)[0]!.definitions[0]!);
         expectedTools.push(definition);
-        const correction: unknown = JSON.parse(privateToolOffer('correct')[0]!.definitions[0]!);
-        expectedTools.push(correction);
       }
       expect(offered['tools']).toEqual(expectedTools);
     }
@@ -350,7 +355,7 @@ function createCleanup(
 }
 
 export async function preflightFixture(gateway = 'http://127.0.0.1:1',
-  runtime?: ProxyFixture, remember = false) {
+  runtime?: ProxyFixture, remember: boolean | MemoryNames = false) {
   const directory = mkdtempSync(`${tmpdir()}/recall-preflight-`);
   const socketPath = `${directory}/native.sock`;
   const launchKey = 'a'.repeat(64);
