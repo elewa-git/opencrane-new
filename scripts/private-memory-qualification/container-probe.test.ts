@@ -147,7 +147,9 @@ async function refusesCoreHelper(): Promise<void> {
   };
   expect(await runJourney(request)).toEqual(expected);
 }
-it('refuses a core_pattern helper when suid_dumpable is 2', refusesCoreHelper);
+it.each(['1\n', '2\n'])(
+  'refuses a core_pattern helper when suid_dumpable is %s', refusesCoreHelper,
+);
 
 const coreSettings = [
   ['/proc/sys/kernel/core_pattern', 'core_pattern_unreadable'],
