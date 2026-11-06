@@ -70,7 +70,7 @@ async function execute(command, args) {
     else stdout = 'fixture';
   }
   if (command === 'docker' && args.includes('compose')) {
-    const services = ['postgres', 'nats', 'minio', 'clamav', 'openfga', 'models'];
+    const services = ['postgres', 'nats', 'minio', 'clamav', 'scanner', 'openfga', 'models'];
     if (args.includes('ps')) stdout = [...containers].join('\n');
     for (const service of services) {
       if (args.includes('up') && args.includes(service)) containers.add(service);
@@ -184,6 +184,11 @@ export async function authEnv() { return {}; }
 const replacements = new Map([
   ['/infra/dev-stack/config.ts', configSource],
   ['/infra/dev-stack/ports.ts', 'export async function checkPorts() { globalThis.startFixture.failureAt("infrastructure-check"); }'],
+  ['/infra/dev-stack/scanner-settings.ts', `export async function scannerSettings() {
+    return { SCANNER_URL: 'https://127.0.0.1:25099/scan/upload',
+      SCANNER_CA_FILE: '/fixture/scanner-ca.crt' };
+  }
+  export async function scannerReady() { return process.env.START_SCANNER_MISSING !== '1'; }`],
   ['/infra/dev-stack/model-network.ts', 'export async function modelFirewall() {}'],
   ['/infra/dev-stack/minio-tokens.ts', 'export async function issueMinioLease() {}'],
   ['/infra/dev-stack/provider-setup.ts', 'export async function setupDevProvider(settings, path) { await globalThis.startFixture.setup(path); }'],

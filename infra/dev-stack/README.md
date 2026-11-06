@@ -18,7 +18,7 @@ flowchart LR
   infra["infra<br/>infrastructure"] --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|starts services; checks listeners; sets up sign-in| services["Local services<br/>jobs, content and access"]
-  stack -->|starts the local daemon| clamav["infra/clamav<br/>virus scanner"]
+  stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
   stack -->|starts apps; keeps keys private; checks journeys, times Memory body reads and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|checks ownership, backup certificates and nodes; stops cancelled checks| package["infra/package<br/>Helm install"]
   stack -->|checks collection and reports host refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
@@ -35,9 +35,9 @@ The dispatcher uses the server's read-only content connection to coordinate gate
 configuration changes. Its background jobs keep their own database.
 The routines worker keeps routine read tables current. Provider settings use those
 tables to check whether an existing routine would be affected by a change.
-Uploads use a separate authenticated scanner service. A stack that has no scanner
-address or CA certificate file now stops before starting its apps. The local
-ClamAV daemon alone cannot accept those upload requests.
+Uploads use a separate authenticated scanner service. Each stack starts that service
+with private certificates and the local ClamAV daemon. Startup waits for the service
+before it starts the server.
 
 ## What it is responsible for
 
@@ -46,6 +46,7 @@ its body. A body that does not finish fails after ten seconds, leaving that stat
 available for diagnosis.
 
 - Starts and stops local services and apps with private local credentials.
+- Starts the scanner for uploads and checks its HTTPS connection before the server starts.
 - Checks that stack listeners use loopback or this machine's Tailscale addresses.
 - Waits for the website to answer before starting browser checks.
 - Prepares Kubernetes so background workers can start one

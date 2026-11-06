@@ -205,6 +205,11 @@ proof. Upload/image consumers and fresh-database qualification remain NOT RUN.
 
 ## Authenticated HTTPS uploads
 
+The development stack starts this HTTPS wrapper beside its pinned local ClamAV
+container. Its local adapter supplies development database facts, so it cannot
+qualify a production scanner release. The development CA, server certificate and
+per-stack signing key stay in the stack's private state directory.
+
 P5-6a PR 6 adds `createScannerService({ scanner, tls, trust, clock? })` in
 `service.mjs`. Supply a `launchScanner` handle, TLS key/certificate material from
 existing custody, and public trust entries `{ issuer, jwks, services }`.

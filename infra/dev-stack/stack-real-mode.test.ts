@@ -151,10 +151,10 @@ test('eligible fresh and matching saved modes reach setup', acceptsMatchingModes
 
 async function refusesMissingScanner() {
   const failure = await startupFailure({ id: '1', scanner: false });
-  assert.equal(failure, 'Error: Authenticated scanner settings are required before startup');
+  assert.equal(failure, 'Error: flock failed; see the private last-error.log');
 }
 
-test('fresh startup refuses an absent authenticated scanner before setup',
+test('fresh startup can prepare local scanner settings without an override',
   refusesMissingScanner);
 
 function shellQuote(value: string) {

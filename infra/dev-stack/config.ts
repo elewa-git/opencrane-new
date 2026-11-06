@@ -127,7 +127,9 @@ export async function generate(origin: string) {
   }
   await privateSettings(true);
   // Written last: an interrupted generator is safe to rerun.
-  await writeEnv('settings', { ...ports, DEV_STACK_DIR: directory, ...(secondary ? { DEV_STACK_ROOT: root, DEV_STACK_UID: String(process.getuid!()), DEV_STACK_GID: String(process.getgid!()) } : {}), SILO_ID: 'dev', ORIGIN: origin,
+  await writeEnv('settings', { ...ports, DEV_STACK_DIR: directory,
+    DEV_STACK_ROOT: root, DEV_STACK_UID: String(process.getuid!()),
+    DEV_STACK_GID: String(process.getgid!()), SILO_ID: 'dev', ORIGIN: origin,
     OPENFGA_API_URL: `http://127.0.0.1:${ports['FGA_PORT']}` });
 }
 

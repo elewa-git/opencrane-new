@@ -14,6 +14,7 @@ type StartOptions = {
   webReadyMs?: number;
   webExitMs?: number;
   listener?: string;
+  scannerMissing?: boolean;
 };
 
 async function ownerStart(start: StartOptions = {}) {
@@ -24,21 +25,18 @@ async function ownerStart(start: StartOptions = {}) {
     if (start.previousMode !== undefined) {
       await writeFile(`${directory}/settings.env`, `DEV_REAL_PROVIDER=${start.previousMode}\n`);
     }
-    const scannerCaFile = `${home}/scanner-ca.crt`;
-    await writeFile(scannerCaFile, 'fixture certificate');
     const environment = {
       HOME: home,
       PATH: '/nonexistent',
       DEV_STACK_DIR: directory,
       DEV_STACK_ID: 'owner',
       DEV_REAL_PROVIDER_FILE: '/synthetic-key-file',
-      DEV_SCANNER_URL: 'https://127.0.0.1:25099/scan/upload',
-      DEV_SCANNER_CA_FILE: scannerCaFile,
       START_FAILURE: start.failure ?? '',
       START_SIGNAL: start.signal ?? '',
       START_WEB_READY_MS: start.webReadyMs?.toString() ?? '',
       START_WEB_EXIT_MS: start.webExitMs?.toString() ?? '',
       START_LISTENER: start.listener ?? '',
+      START_SCANNER_MISSING: start.scannerMissing ? '1' : '',
     };
     const args = ['--experimental-strip-types', '--import',
       './infra/dev-stack/test/stack-start-preload.mjs', 'infra/dev-stack/stack.ts',
@@ -96,10 +94,21 @@ async function startsServerWithScanner() {
   const result = await ownerStart();
   assert.equal(result.status, 0, result.output);
   assert.match(result.operations, /scanner-configured true/u);
+  assert.ok(result.services.containers.includes('scanner'));
 }
 
-test('fresh startup gives the server its authenticated scanner settings',
+test('fresh startup starts the scanner and gives the server its settings',
   startsServerWithScanner);
+
+async function missingScannerStopsStartup() {
+  const result = await ownerStart({ scannerMissing: true, webReadyMs: 1 });
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.failure, /Timed out waiting for authenticated scanner/u);
+  assertRestored(result);
+}
+
+test('missing scanner service refuses startup and stops its container',
+  missingScannerStopsStartup);
 
 async function modeSavedAfterChecks() {
   const result = await ownerStart();

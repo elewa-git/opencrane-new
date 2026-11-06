@@ -1984,14 +1984,26 @@ Run `infra/dev-stack/install-daily-fresh-timer.sh` to install or update the user
 
 ### Authenticated scanner settings
 
-The dev stack now requires `DEV_SCANNER_URL` and `DEV_SCANNER_CA_FILE` at startup.
-The URL must use HTTPS and end at `/scan/upload`; the CA file must be readable and
-non-empty. Startup passes these values as `SCANNER_URL` and `SCANNER_CA_FILE` to the
-server. An absent setting stops startup before any services are changed. The
-separate scanner must already trust this stack's token issuer and silo. The local
-Compose ClamAV daemon is not that HTTPS service. A fresh stack cannot qualify
-uploads until a reviewed scanner release and its trust settings are available.
-The nightly fresh run needs the same settings before it can test file uploads.
+Each stack starts the pinned ClamAV image and the authenticated HTTPS service from
+`infra/clamav/service.mjs`. It creates `scanner-ca.key`, `scanner-ca.crt`,
+`scanner-server.key` and `scanner-server.crt` in its private state directory. All four
+files have mode 0600. The existing per-stack token signing key issues scanner passes
+for the server. The scanner service reads only its public verification keys, its own
+certificate and the stack's silo from private settings. Compose publishes only
+`127.0.0.1:SCANNER_PORT`; secondary
+slots have separate fixed ports. Startup checks the TLS certificate and waits for the
+service before it starts the server. `down.sh` removes the service with the stack.
+
+The development service scans bytes with the pinned local ClamAV container. It uses
+the authenticated service and pass checks from the upload tests. Its database facts
+are development fixtures; they are not a reviewed scanner release. Production still
+requires the separate reviewed image and database checks in `infra/clamav/launch.mjs`.
+`DEV_SCANNER_URL` and `DEV_SCANNER_CA_FILE` are optional together. When supplied, the
+stack checks that HTTPS service instead of starting its own service. Missing or
+insecure settings, or a service that does not answer over trusted TLS, stop startup.
+The server receives `SCANNER_URL` and `SCANNER_CA_FILE`. The dispatcher and model
+worker also receive them; secondary models use the Compose service address and a
+private copy of the CA file at `scanner-model-ca.crt`.
 
 ## Ownership browser check
 
