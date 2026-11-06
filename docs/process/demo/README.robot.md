@@ -10,9 +10,12 @@ slot 1 was claimed. Fresh `demo-up.sh` stopped at `Provider setup default: timeo
 after owner bootstrap passed. The [receipt](../demo-rehearsal/test-version-2026-11-06/receipt.md)
 records the failure, all unrun rows, unknown startup spending and cleanup. A separate
 wait fix at `00e8ae22f49a972ef9f13413d38cf08c01a709e3` also failed a fresh
-start. The dispatcher completed the default-binding reaction without writing the
-binding. The smoke, ten-step script and live member memory check are **NOT RUN**.
-Neither 6 November source is qualified for the owner refresh. The prior qualified source remains
+start. A later read-only check found a saved default binding but 503 responses from
+every binding GET. The repaired source, `9fe3cae7d988f6c8ca590efa0ffd49be004239b9`,
+starts the routines projection that those reads require. Fresh provider setup passed.
+The built-in real-model journey then failed its scanned supplier PDF check. Seeding,
+the separate smoke, ten-step script and live member memory check are **NOT RUN**.
+No 6 November source is qualified for the owner refresh. The prior qualified source remains
 `f11df5c56fe08e4bac477cc4c3f375288568c0cd`.
 
 ### Earlier qualification

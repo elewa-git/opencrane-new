@@ -1,8 +1,9 @@
 # Current main rehearsal, 6 November 2026
 
-**FAIL: both fresh secondary starts stopped during provider setup.** The Stage A smoke,
-ten-step script and member memory check are **NOT RUN**. Neither source qualifies
-the owner refresh. No failed paid call or product step was retried.
+**FAIL: the latest fresh secondary start passed provider setup, then stopped in the
+built-in PDF journey.** Seeding, the separate smoke, the ten-step Stage A script and
+the member memory check are **NOT RUN**. No new source qualifies the owner refresh.
+The earlier failed starts remain recorded below.
 
 ## Source and setup
 
@@ -110,3 +111,63 @@ All Stage A rows above remain **NOT RUN** at both widths; there are no new
 pictures or timings for them. The previous owner-refresh SHA in the guide
 remains the last qualified source. The new pinned SHA is **not qualified**.
 The orchestrator owns the product fix and a further fresh qualification.
+
+## Startup repair and further fresh starts
+
+The source for the first new attempt was `fc9d87e8b2a3d19266ad23b5f43c03cef6e5cf04`.
+A regression test showed that the default handler could finish when its history read
+missed the model selection event. The handler now fails that read so dispatch can retry.
+The test failed on the earlier source and passed after the fix. The provider binding
+guard suite passed twice, with 39 tests each time.
+
+That fresh attempt still stopped at `Provider setup default: timeout`. A read-only
+check before cleanup found a `provider.model_binding_set` for `silo_default` at event
+position 46. Every provider binding GET in the server log returned 503. This corrects
+the earlier inference that the dispatcher had never written a binding: the old log
+did not include binding events, so it could not prove their absence. No key or private
+event data was copied into this receipt.
+
+The cause was the secondary start list: it did not run the routines read worker.
+Provider binding GET now checks that worker's progress before returning a choice.
+The missing worker kept every GET at 503 even though the choice was saved. A startup
+test failed with the old list and passed after adding `routines`. The full startup
+test file passed twice, 45 tests each time. The repaired source was
+`9fe3cae7d988f6c8ca590efa0ffd49be004239b9`.
+
+At that source, the next fresh start passed owner bootstrap, provider setup and
+website readiness. Its built-in journey stopped before running because the fleet
+task marker was set. The private failure record said automated journeys require a
+secondary stack and no fleet task. The launcher cleaned slot 1.
+
+The owner had explicitly authorised this secondary rehearsal. The next fresh start
+used the same source with that marker omitted for the launcher process. It passed
+owner bootstrap, provider setup and website readiness. The built-in real-model
+journey then failed at **scanned supplier PDF total and delivery date**. The private
+error named that check. Its saved outcome file records PASS for the owner streamed
+reply and reload, Stop and reload, and a later member reply through the default.
+The PDF check is FAIL. The launcher cleaned slot 1 before seeding. Its separate
+smoke, Stage A script and member memory check did not run. The journey guard code
+and the owner stack were not changed.
+
+| Check on repaired source | Result |
+| --- | --- |
+| Fresh provider setup and saved default choice | PASS |
+| Built-in journey: first three checks | PASS |
+| Built-in journey: scanned supplier PDF | FAIL |
+| Demo seed | NOT RUN |
+| Separate smoke at 1280px and 390px | NOT RUN |
+| Ten Stage A steps at both widths | NOT RUN |
+| Member memory-off row | NOT RUN |
+| Owner refresh | NOT RUN |
+
+No new Stage A picture or timing exists. The earlier Stage A table remains accurate
+for this run too. The built-in journey's saved receipt records four reservations:
+49 reserved cents in total, 7 charged cents known and one unresolved 16-cent hold.
+That receipt was kept privately outside the removed slot. Other startup calls and
+the earlier fresh starts have unknown final charges and holds, so the total for
+these attempts is **unknown**.
+The last three attempts supplied allowance values of 990, 989 and 988 cents; the
+authorised journey attempt supplied 987 cents. These values are limits supplied to
+the runs, not measured charges. No further paid check was started after the PDF
+failure. Slot 1 was removed by launcher cleanup after every failed start. The owner
+stack and its processes, ports and data were untouched.
