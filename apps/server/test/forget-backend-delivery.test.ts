@@ -4,10 +4,15 @@ import { losslessJson } from '@opencrane/events/lossless-json';
 import { memoryForgottenEventSchema, memoryContextRecordedEventSchema,
   memoryCleanupRecordedEventSchema } from '@opencrane/events';
 import { history, authorityFence, prepareLoadedMemory, readToolPolicy } from '@opencrane/models';
-import { expect, it, vi } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
+import Fastify from 'fastify';
+import { encodeSession } from '@opencrane/auth';
+import { registerMemoryCommands } from '../src/memory/commands-routes.ts';
+import { testAuthConfig } from './support/test-auth-config.ts';
+import { memoryClock } from './support/memory-clock.ts';
 import { z } from 'zod';
 import { Client } from 'pg';
-import { memoryScopeId, type Db } from '@opencrane/projections';
+import { computers, groups, memoryScopeId, type Db } from '@opencrane/projections';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { subscribePrivateOutput } from '../src/chat/private-output.ts';
 import { forgetTool } from '../src/memory/mcp.ts';
@@ -156,6 +161,134 @@ async function recoversForgetReceipt(lost: boolean) {
 }
 it.each([false, true])('recovers the exact Forget receipt without resending (lost=%s)',
   recoversForgetReceipt, 120_000);
+
+async function recoveryRoute(test: Backend) {
+  const app = Fastify();
+  const config = testAuthConfig({ expectedOrgId: 'org-acme' });
+  const member = { memberId: 'bob', email: 'bob@example.test', displayName: 'Bob', role: 'member' };
+  const joined = await test.setup.append('member-bob', 'member.joined', member);
+  await test.setup.auth.handler.handle(joined, test.setup.db);
+  const team = { teamId: 'sales', name: 'Sales', createdBy: 'alice' };
+  await test.setup.append('team-sales', 'team.created', team);
+  const membership = { teamId: 'sales', memberId: 'alice', addedBy: 'alice' };
+  await test.setup.append('team-sales', 'team.member_added', membership);
+  await test.setup.runner.initialise(groups);
+  await test.setup.runner.initialise(computers);
+  await test.setup.runner.run(groups);
+  await test.setup.runner.run(computers);
+  function memberId(_silo: string, _issuer: string, subject: string) {
+    return Promise.resolve(subject);
+  }
+  const options = { ...test.memory, feed: { memberId } };
+  registerMemoryCommands(app, config, options);
+  await app.ready();
+  async function closeRecovery() {
+    await app.close();
+  }
+  onTestFinished(closeRecovery);
+  function recover(requester: string, requestedScope = scopeId, commandId = 'native-forget') {
+    const session = { sub: requester, orgId: 'org-acme', roles: ['member'],
+      authTime: 1790856000, exp: 2000000000 };
+    const cookie = `${config.cookieName}=${encodeSession(config, session)}`;
+    const url = `/api/memory/${requestedScope}/agent-changes/${commandId}`;
+    const request = { method: 'GET' as const, url, headers: { cookie } };
+    return app.inject(request);
+  }
+  return recover;
+}
+
+const recoveryRefusals = ['removed', 'foreign', 'shared'] as const;
+async function refusesRecovery(reason: typeof recoveryRefusals[number]) {
+  const test = await forgetFixture();
+  memoryClock();
+  const response = await test.native.call(threadId, 'forget', test.args);
+  expect(response).toHaveProperty('result.structuredContent.outcome', 'accepted');
+  const recover = await recoveryRoute(test);
+  const control = await recover('alice');
+  expect(control.statusCode, control.body).toBe(200);
+  expect(control.json()).toHaveProperty('outcome', 'accepted');
+  let requester = 'alice';
+  let requestedScope = scopeId;
+  if (reason === 'removed') {
+    const removal = { memberId: 'alice', removedBy: 'alice' };
+    await test.setup.append('member-alice', 'member.removed', removal);
+  }
+  if (reason === 'foreign') {
+    requester = 'bob';
+  }
+  if (reason === 'shared') {
+    requestedScope = memoryScopeId('test', 'group', 'sales');
+  }
+  const before = await test.setup.nats.store.head();
+  const files = readdirSync(test.memory.keyDirectory);
+  const appends = vi.spyOn(test.setup.nats.store, 'append');
+  appends.mockClear();
+  const decrypts = vi.spyOn(crypto, 'createDecipheriv');
+  const keyBytes = vi.spyOn(crypto, 'randomBytes');
+  const refused = await recover(requester, requestedScope);
+  expect(refused.statusCode, refused.body).toBe(404);
+  expect(refused.json()).toEqual({ status: 'refused' });
+  expect(refused.body).not.toContain(text);
+  expect(appends).not.toHaveBeenCalled();
+  expect(await test.setup.nats.store.head()).toBe(before);
+  expect(readdirSync(test.memory.keyDirectory)).toEqual(files);
+  // Allow only the session cookie to be decrypted; never decrypt a memory value.
+  expect(decrypts).toHaveBeenCalledTimes(1);
+  expect(keyBytes).not.toHaveBeenCalledWith(32);
+}
+it.each(recoveryRefusals)('refuses authenticated Forget recovery for %s access',
+  refusesRecovery, 120_000);
+
+async function isolatesRecoveryPrincipals() {
+  const test = await forgetFixture();
+  memoryClock();
+  const recover = await recoveryRoute(test);
+  const data = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
+    memoryId: 'collision-only', revision: 2, expectedRevision: 1 };
+  const base = { commandId: test.args.commandId, silo: 'test', subject: `scope-${scopeId}`,
+    type: 'memory.forgotten', source: 'opencrane-server', time: new Date().toISOString(),
+    correlation: {}, data };
+  const human = { ...base, id: 'human-collision', principal: { kind: 'human', id: 'alice' } };
+  const foreign = { ...base, id: 'agent-collision', principal: { kind: 'agent', id: 'bob' } };
+  const events = [memoryForgottenEventSchema.parse(human), memoryForgottenEventSchema.parse(foreign)];
+  await test.setup.nats.seed(events);
+  const files = readdirSync(test.memory.keyDirectory);
+  const before = await test.setup.nats.store.head();
+  const appends = vi.spyOn(test.setup.nats.store, 'append');
+  const decrypts = vi.spyOn(crypto, 'createDecipheriv');
+  const keyBytes = vi.spyOn(crypto, 'randomBytes');
+  const absent = await recover('alice');
+  expect(absent.statusCode, absent.body).toBe(200);
+  expect(absent.json()).toEqual({ outcome: 'unknown' });
+  expect(appends).not.toHaveBeenCalled();
+  expect(await test.setup.nats.store.head()).toBe(before);
+  expect(readdirSync(test.memory.keyDirectory)).toEqual(files);
+  expect(decrypts).toHaveBeenCalledTimes(1);
+  expect(keyBytes).not.toHaveBeenCalledWith(32);
+  keyBytes.mockRestore();
+  decrypts.mockRestore();
+  appends.mockRestore();
+  const response = await test.native.call(threadId, 'forget', test.args);
+  expect(response).toHaveProperty('result.structuredContent.outcome', 'accepted');
+  const rows = await tombstones(test);
+  const saved = memoryForgottenEventSchema.parse(rows.at(-1)!.event);
+  const afterSave = await test.setup.nats.store.head();
+  const statusAppends = vi.spyOn(test.setup.nats.store, 'append');
+  const statusDecrypts = vi.spyOn(crypto, 'createDecipheriv');
+  const statusKeyBytes = vi.spyOn(crypto, 'randomBytes');
+  const status = await recover('alice');
+  const expected = { operation: 'forget', outcome: 'accepted', changeId: saved.id,
+    memoryId: 'garden', revision: 2, scopeId, audience: { kind: 'person', ownerId: 'alice' },
+    acceptedAt: saved.time, hidden: true, cleanupStatus: 'pending' };
+  expect(status.json()).toEqual(expected);
+  expect(statusAppends).not.toHaveBeenCalled();
+  expect(await test.setup.nats.store.head()).toBe(afterSave);
+  expect(readdirSync(test.memory.keyDirectory)).toEqual(files);
+  expect(statusDecrypts).toHaveBeenCalledTimes(1);
+  expect(statusKeyBytes).not.toHaveBeenCalledWith(32);
+}
+it('isolates authenticated recovery from human and other agent command id collisions',
+  isolatesRecoveryPrincipals, 120_000);
 
 const refusals = ['revision', 'proof', 'unloaded', 'scope',
   'review', 'ask', 'block', 'qualification', 'caller', 'generation', 'thread',
@@ -370,6 +503,67 @@ async function withdrawsAfterSave(change: typeof releaseChanges[number]) {
 }
 it.each(releaseChanges)('checks %s before releasing a saved Forget receipt',
   withdrawsAfterSave, 120_000);
+
+async function qualificationDuringConfirmation(withdraw: boolean) {
+  const test = await forgetFixture();
+  // Keep the race about qualification rather than elapsed time on the shared host.
+  memoryClock();
+  const store = test.setup.nats.store;
+  const append = store.append.bind(store);
+  const readStream = store.readStream.bind(store);
+  let saved = false;
+  let held = false;
+  const reading = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function observeSave(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    if (memoryForgottenEventSchema.safeParse(command.event).success) {
+      expect(result.status).toBe('appended');
+      saved = true;
+    }
+    return result;
+  }
+  async function* holdConfirmation(...args: Parameters<typeof readStream>) {
+    yield* readStream(...args);
+    if (saved && !held && args[0] === 'conversation-chat') {
+      expect(args[1]).toBeGreaterThan(1);
+      held = true;
+      reading.resolve();
+      await release.promise;
+    }
+  }
+  vi.spyOn(store, 'append').mockImplementation(observeSave);
+  vi.spyOn(store, 'readStream').mockImplementation(holdConfirmation);
+  const pending = test.native.call(threadId, 'forget', test.args);
+  function endedBeforeRead(): never {
+    throw new Error('Forget finished before its post-save confirmation read');
+  }
+  try {
+    await Promise.race([reading.promise, pending.then(endedBeforeRead)]);
+    expect(await tombstones(test)).toHaveLength(1);
+    if (withdraw) {
+      test.deployment.remove();
+    }
+    release.resolve();
+    const response = await pending;
+    if (withdraw) {
+      const message = 'The tool did not confirm a result. It may have received the request. '
+        + 'OpenCrane will not send it again.';
+      const expected = { jsonrpc: '2.0', id: 1,
+        result: { isError: true, content: [{ type: 'text', text: message }] } };
+      expect(response).toEqual(expected);
+    } else {
+      expect(response).toHaveProperty('result.structuredContent.outcome', 'accepted');
+    }
+    expect(await tombstones(test)).toHaveLength(1);
+    expect(JSON.stringify(response)).not.toContain(text);
+  } finally {
+    release.resolve();
+    await pending;
+  }
+}
+it.each([false, true])('checks qualification withdrawn during post-save access reads: %s',
+  qualificationDuringConfirmation, 120_000);
 
 async function releasesOnlyCurrentOutput(forgotten: boolean) {
   const test = await forgetFixture();

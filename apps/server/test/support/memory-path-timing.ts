@@ -2,6 +2,8 @@ import { vi } from 'vitest';
 import type { fixture } from '@opencrane/models/testing';
 import * as delivery from '../../src/memory/recall-delivery.ts';
 import * as lineage from '../../src/memory/agent-lineage.ts';
+import * as preparation from '../../../../libs/models/src/memory-prepare-request.ts';
+import * as context from '../../../../libs/models/src/memory-context.ts';
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 type Step = 'history' | 'scope' | 'IAM' | 'grant' | 'loaded-reference';
@@ -11,12 +13,16 @@ export function timeMemoryPath(setup: Fixture, slowStep: Step, delay: () => Prom
   const started = performance.now();
   const samples: { step: Step; startedMs: number; durationMs: number }[] = [];
   let delayed = false;
+  let delayFinished = false;
+  let accessObserved = false;
+  let earlyAccess = false;
   async function measure<Value>(step: Step, work: () => Promise<Value>) {
     const before = performance.now();
     try {
       if (step === slowStep && !delayed) {
         delayed = true;
         await delay();
+        delayFinished = true;
       }
       return await work();
     } finally {
@@ -74,7 +80,25 @@ export function timeMemoryPath(setup: Fixture, slowStep: Step, delay: () => Prom
     }
     return measure('IAM', read);
   }
+  function observeAccess() {
+    accessObserved = true;
+    if (!delayFinished) {
+      earlyAccess = true;
+    }
+  }
+  const originalStarted = preparation.memoryAccessStarted;
+  function accessStarted(...args: Parameters<typeof originalStarted>) {
+    observeAccess();
+    return originalStarted(...args);
+  }
+  const originalRights = context.memoryRights;
+  function rights(...args: Parameters<typeof originalRights>) {
+    observeAccess();
+    return originalRights(...args);
+  }
   const spies = [
+    vi.spyOn(preparation, 'memoryAccessStarted').mockImplementation(accessStarted),
+    vi.spyOn(context, 'memoryRights').mockImplementation(rights),
     vi.spyOn(delivery, 'readRecallContext').mockImplementation(history),
     vi.spyOn(lineage, 'checkAgentChange').mockImplementation(loaded),
     vi.spyOn(setup.nats.store, 'readStream').mockImplementation(stream),
@@ -94,5 +118,8 @@ export function timeMemoryPath(setup: Fixture, slowStep: Step, delay: () => Prom
   function wasDelayed() {
     return delayed;
   }
-  return { report, restore, delayed: wasDelayed };
+  function preparedBeforeAccess() {
+    return accessObserved && !earlyAccess;
+  }
+  return { report, restore, delayed: wasDelayed, preparedBeforeAccess };
 }

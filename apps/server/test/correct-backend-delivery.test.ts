@@ -9,6 +9,7 @@ import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { subscribePrivateOutput } from '../src/chat/private-output.ts';
 import { correctTool } from '../src/memory/mcp.ts';
 import { readAgentChange } from '../src/memory/forget.ts';
+import { memoryClock } from './support/memory-clock.ts';
 import { commandReference } from '../src/memory/command-history.ts';
 import { recallBackend, scopeId, threadId } from './support/recall-backend.ts';
 
@@ -96,8 +97,11 @@ async function correctsLoadedTarget() {
 it('corrects the loaded target, keeps other references and refuses the old loaded turn',
   correctsLoadedTarget, 120_000);
 
-async function lostCorrectionReply() {
+async function lostCorrectionReply(expired: boolean) {
   const test = await correctionFixture();
+  const clock = memoryClock();
+  const savedReply = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
   const append = test.setup.nats.store.append.bind(test.setup.nats.store);
   let attempts = 0;
   async function loseReply(command: Parameters<typeof append>[0]) {
@@ -105,25 +109,52 @@ async function lostCorrectionReply() {
     if (memoryCorrectedEventSchema.safeParse(command.event).success) {
       attempts += 1;
       expect(saved.status).toBe('appended');
+      savedReply.resolve();
+      await release.promise;
       return { status: 'unavailable' as const, cause: new Error('Reply lost') };
     }
     return saved;
   }
   vi.spyOn(test.setup.nats.store, 'append').mockImplementation(loseReply);
-  const response = await test.native.call(threadId, 'correct', test.args);
-  const expectedResponse = { result: { structuredContent: { outcome: 'unknown' } } };
-  expect(response).toMatchObject(expectedResponse);
+  const pending = test.native.call(threadId, 'correct', test.args);
+  function endedBeforeSave(): never {
+    throw new Error('Correct ended before saving its event');
+  }
+  try {
+    await Promise.race([savedReply.promise, pending.then(endedBeforeSave)]);
+    expect(await corrections(test)).toHaveLength(1);
+    if (expired) {
+      clock.advance(2001);
+    }
+  } finally {
+    release.resolve();
+  }
+  const response = await pending;
+  if (expired) {
+    const message = 'The tool did not confirm a result. It may have received the request. '
+      + 'OpenCrane will not send it again.';
+    const expected = { jsonrpc: '2.0', id: 1,
+      result: { isError: true, content: [{ type: 'text', text: message }] } };
+    expect(response).toEqual(expected);
+  } else {
+    const expectedResponse = { result: { structuredContent: { outcome: 'unknown' } } };
+    expect(response).toMatchObject(expectedResponse);
+  }
+  const rows = await corrections(test);
+  const saved = memoryCorrectedEventSchema.parse(rows[0]!.event);
   const scope = { scopeId, scopeKind: 'person' as const, ownerId: 'alice' };
   const status = await readAgentChange(test.memory, 'alice', scope, test.args.commandId);
-  const expectedStatus = { operation: 'correct', outcome: 'accepted', revision: 2, scopeId };
-  expect(status).toMatchObject(expectedStatus);
+  const expectedStatus = { operation: 'correct', outcome: 'accepted', changeId: saved.id,
+    memoryId: 'garden', revision: 2, scopeId, audience: { kind: 'person', ownerId: 'alice' },
+    acceptedAt: saved.time, contentStatus: 'current', cleanupStatus: 'pending' };
+  expect(status).toEqual(expectedStatus);
   const repeated = await readAgentChange(test.memory, 'alice', scope, test.args.commandId);
   expect(repeated).toEqual(status);
   expect(attempts).toBe(1);
   expect(await corrections(test)).toHaveLength(1);
   expect(JSON.stringify(status)).not.toContain(text);
 }
-it('reconciles the original Correct command after a lost reply without another revision',
+it.each([false, true])('recovers the exact Correct receipt after a lost reply (expired=%s)',
   lostCorrectionReply, 120_000);
 
 const refusals = ['revision', 'omitted', 'foreign', 'target', 'old-target', 'scope',
