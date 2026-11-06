@@ -28,6 +28,7 @@ import * as memoryPreparation from '../../../libs/models/src/memory-prepare-requ
 import * as correctionCommands from '../src/memory/correct.ts';
 import * as forgetCommands from '../src/memory/forget.ts';
 import { timeMemoryPath } from './support/memory-path-timing.ts';
+import { initialQualificationFixture } from './support/initial-qualification.ts';
 
 declare module 'vitest' {
   interface TaskMeta {
@@ -42,6 +43,16 @@ async function cryptoModule() {
   return { ...actual, createCipheriv: vi.fn(actual.createCipheriv) };
 }
 vi.mock('node:crypto', cryptoModule);
+async function filesystem() {
+  const original = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return { ...original };
+}
+vi.mock('node:fs', filesystem);
+async function processes() {
+  const original = await vi.importActual<typeof import('node:child_process')>('node:child_process');
+  return { ...original };
+}
+vi.mock('node:child_process', processes);
 
 let setup: Awaited<ReturnType<typeof fixture>>;
 let app: ReturnType<typeof buildServer>;
@@ -195,7 +206,11 @@ async function close() {
   app = undefined!;
   const currentSetup = setup;
   setup = undefined!;
-  await closeMemoryServices(currentSetup, currentApp);
+  try {
+    await closeMemoryServices(currentSetup, currentApp);
+  } finally {
+    vi.restoreAllMocks();
+  }
 }
 async function closeMemoryServices(target: typeof setup | undefined,
   backend: typeof app | undefined) {
@@ -2485,6 +2500,10 @@ async function loadChangeFacts(revision: number, recordLoaded = true) {
 }
 async function changeRequest(operation: 'correct' | 'forget', checkControl = true, revision = 1,
   recordLoaded = true) {
+  if (operation === 'correct') {
+    // Match the saved initial load with the deployment evidence now required for native writes.
+    await initialQualificationFixture();
+  }
   const catalogue = memoryCatalogue;
   for (const tool of [recallTool, forgetTool, correctTool]) {
     await setup.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',

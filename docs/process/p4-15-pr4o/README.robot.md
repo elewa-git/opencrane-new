@@ -44,6 +44,14 @@ Final logs: `/tmp/p4-15-pr4o-tests1.log`, `/tmp/p4-15-pr4o-tests2.log`,
 `/tmp/p4-15-pr4o-lint2.log`, `/tmp/p4-15-pr4o-typecheck2.log` and
 `/tmp/p4-15-pr4o-typecheck-server.log`. GitHub CI is reported on the draft PR's pushed head.
 
+CI on `a11f04f51`: FAIL. Existing Correct fixtures supplied a saved initial load without
+deployment qualification, so 24 cases correctly received a refusal. Those fixtures now
+provide qualification through the existing helper and restore their mocks after each test.
+The server typecheck and full lint passed after this fixture repair. All 50 Correct and
+correction cases in `memory-mcp.test.ts` passed twice; 174 unrelated cases were skipped.
+Logs: `/tmp/p4-15-pr4o-compat1.log`, `/tmp/p4-15-pr4o-compat2.log`,
+`/tmp/p4-15-pr4o-lint3.log` and `/tmp/p4-15-pr4o-typecheck-compat.log`.
+
 The joined tests cover the exact structured receipt, complete dependencies, revision-two
 reads, old-turn output refusal, original-command recovery, policy and identity refusals.
 Held PostgreSQL locks and final-append injections cover Stop, closure, replacement,
