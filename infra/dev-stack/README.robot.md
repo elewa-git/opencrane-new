@@ -1407,6 +1407,9 @@ quoted model test, enable `modelForTask('chat_turn')` and `gpt-6-luna`, explicit
 select the silo default, drain, then switch on. Every write waits for its receipt.
 After enabling models, setup waits up to 120 seconds for `seed-provider-default` to
 record the first binding. It then reads that position for the explicit Owner selection.
+Fresh startup runs the `routines` projection worker. Provider binding reads require
+its checkpoint, even when no routine exists; without the worker, they return 503
+while the saved default binding remains hidden from setup.
 The limit matches the fresh secondary service readiness wait. A regression test
 delays the first binding past 30 seconds and checks that setup sends no second paid test.
 This avoids racing the scheduled binding; it still makes only one selection write

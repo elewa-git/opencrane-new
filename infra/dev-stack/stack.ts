@@ -550,7 +550,7 @@ async function up(fresh: boolean) {
   }
   const binding = await readEnv('binding');
   for (const name of ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets',
-    'audit', 'memory']) {
+    'audit', 'memory', 'routines']) {
     const projectionEnv = await readEnv('projection');
     if (!secondary && memoryKeyDirectory) {
       projectionEnv['MEMORY_KEY_DIRECTORY'] = memoryKeyDirectory;

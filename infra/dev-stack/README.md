@@ -33,6 +33,8 @@ tables and a separate jobs database, [NATS](../../GLOSSARY.md#nats) for the even
 
 The dispatcher uses the server's read-only content connection to coordinate gateway
 configuration changes. Its background jobs keep their own database.
+The routines worker keeps routine read tables current. Provider settings use those
+tables to check whether an existing routine would be affected by a change.
 
 ## What it is responsible for
 
