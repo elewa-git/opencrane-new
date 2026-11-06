@@ -1,0 +1,2 @@
+- Internal routine delivery now waits for its saved start and acknowledgement before reporting progress; refused, timed-out or cancelled delivery stays uncertain and cannot resend. Automatic execution remains disabled.
+- Cancelled routine delivery now prevents delayed credentials and records unconfirmed-start Stop intent while keeping the occurrence occupied.

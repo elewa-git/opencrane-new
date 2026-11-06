@@ -1120,3 +1120,9 @@ It passes the original leadership signal/check and awaits fully drained delivery
 Unknown delivery refuses progress; a long wake cannot admit another candidate after nine seconds.
 The existing composition switch stays default-off. No production callback is registered.
 See [the contract and tests](../../docs/process/p4-24-pr10g/README.robot.md).
+
+The server composition now supplies bounded start completion through its production
+bridge path. Dispatch still awaits the callback and rechecks leadership before progress.
+Tests no longer supply a separate execution wait. The fourteen-second wake and
+nine-second next-candidate cutoff retain their separate purposes.
+See [the completion contract](../../docs/process/p4-24-pr10h/README.robot.md).

@@ -54,7 +54,7 @@ export const routineMissedSchema = identity.extend({ firstLocalDate: z.iso.date(
 export const routineActivationSchema = identity.extend({ ...run, senderAttemptId: id,
   admission: reference });
 export const routineStopSchema = routineControlSchema.extend({ ...run,
-  source: z.enum(['owner', 'admin', 'approval']) });
+  source: z.enum(['owner', 'admin', 'approval', 'delivery']) });
 export const routineFinishedSchema = identity.extend({ ...run,
   outcome: z.enum(['succeeded', 'failed', 'cancelled', 'interrupted']),
   reason, terminalEvidence: reference, resultReference: reference.optional() });
@@ -108,7 +108,7 @@ function validDefinitionOwner(type: string, data: z.infer<typeof modernIdentity>
 }
 
 function validAccessCause(type: string, data: z.infer<typeof modernIdentity>) {
-  if (data.source === 'approval') {
+  if (data.source === 'approval' || data.source === 'delivery') {
     return type === 'routine.run_stop_requested' && data.actorId === 'opencrane-server' &&
       data.cause !== undefined;
   }

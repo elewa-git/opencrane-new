@@ -1,3 +1,4 @@
+import { stopUnconfirmedRoutine } from './routine-delivery-stop.ts';
 import type { connectBridge } from './chat/bridge.ts';
 import { cancelRoutineThread } from './chat/routine-thread.ts';
 import { claimRoutineActivation, readRoutineActivation } from './routine-activation.ts';
@@ -33,7 +34,7 @@ export function createRoutineSender(options: { enabled?: boolean; replay?: boole
   const enabled = options.enabled === true && options.replay !== true;
   let used = false;
   let awaitingStart = false;
-  async function send(wake: () => Promise<Link>) {
+  async function send(wake: () => Promise<Link>, signal?: AbortSignal) {
     const unknown = { status: 'unknown' as const };
     if (!enabled || used) return unknown;
     used = true;
@@ -63,14 +64,18 @@ export function createRoutineSender(options: { enabled?: boolean; replay?: boole
       if (link.socket.readyState !== link.socket.OPEN) return unknown;
       // Consume this live authority before the transport can lose its reply.
       awaitingStart = true;
-      link.bindRoutineStart(checked.turnId, checkStart);
       // Treat a missing transport reply as a possible delivery.
       sent = true;
-      link.socket.send(bytes);
+      const accepted = await sendRoutineTurn(link, bytes, checked.turnId, checkStart,
+        args[2], signal);
+      if (!accepted) {
+        return await unconfirmedDelivery(store, worker.silo, admitted, sent);
+      }
       return { status: 'sent' as const };
     } catch {
-      return unknown;
+      return await unconfirmedDelivery(store, worker.silo, admitted, sent);
     } finally {
+      awaitingStart = false;
       if (link && admitted && !sent) {
         cancelRoutineThread(link.socket, admitted.turnId, admitted.run.conversationId);
       }
@@ -94,4 +99,39 @@ export function createRoutineSender(options: { enabled?: boolean; replay?: boole
     }
   }
   return { send };
+}
+
+async function sendRoutineTurn(link: Link, bytes: string, turnId: string,
+  check: Parameters<Link['bindRoutineStart']>[1], worker: Arguments[2], signal?: AbortSignal) {
+  if (signal?.aborted) {
+    return false;
+  }
+  const completion = link.bindRoutineStart(turnId, check, worker.checkCurrent, signal);
+  try {
+    link.socket.send(bytes);
+    const accepted = await completion.pending;
+    if (!accepted || signal?.aborted) {
+      return false;
+    }
+    const current = await worker.checkCurrent(performance.now() + 1000);
+    return current && !signal?.aborted && link.socket.readyState === link.socket.OPEN;
+  } finally {
+    completion.cancel();
+  }
+}
+
+async function unconfirmedDelivery(store: Arguments[0], silo: string,
+  admitted: Awaited<ReturnType<typeof claimRoutineActivation>> | undefined, sent: boolean) {
+  const unknown = { status: 'unknown' as const };
+  if (admitted && sent) {
+    const admission = { routineId: admitted.run.routineId,
+      eventId: admitted.receipt.eventId, position: admitted.receipt.position };
+    try {
+      await stopUnconfirmedRoutine(store, silo, admission);
+    } catch {
+      // Retain admission and the occupied run when saving Stop is unavailable.
+      return unknown;
+    }
+  }
+  return unknown;
 }

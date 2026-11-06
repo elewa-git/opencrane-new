@@ -1,6 +1,7 @@
+import { isDeepStrictEqual } from 'node:util';
 import { foldRoutineHistory } from '@opencrane/authz';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
-import { parseEventByType, routineControlSchema, routineStopSchema,
+import { parseEventByType, routineActivationSchema, routineControlSchema, routineStopSchema,
   type EventEnvelope, type RoutineState } from '@opencrane/events';
 import { readRoutineApproval } from './routine-approval-evidence.ts';
 import { currentMembership } from './ownership.ts';
@@ -76,10 +77,40 @@ async function requireApprovalStop(store: EventStore, state: RoutineState | unde
   }
 }
 
+async function requireDeliveryStop(store: EventStore, state: RoutineState | undefined,
+  source: StoredEvent, deadline: number) {
+  const stop = routineStopSchema.parse(source.event.data);
+  if (stop.source !== 'delivery') {
+    return;
+  }
+  if (!stop.cause || stop.cause.position >= source.sequence ||
+      stop.reason !== 'start_unconfirmed' || stop.affectedRun !== state?.activeRun?.occurrenceId) {
+    throw new Error('Invalid routine prohibition');
+  }
+  const activation = await readDeliveryAdmission(store, source.event.subject,
+    source.event.silo, stop.cause, deadline);
+  if (activation.occurrenceId !== stop.occurrenceId ||
+      !isDeepStrictEqual(activation, state?.activation)) {
+    throw new Error('Invalid routine prohibition');
+  }
+}
+
+async function readDeliveryAdmission(store: EventStore, subject: string, silo: string,
+  cause: { eventId: string; position: number }, deadline: number) {
+  const saved = await readEventAt(store, subject, cause.position, deadline);
+  const parsed = parseEventByType(saved?.event);
+  if (!saved || !parsed.success || saved.event.id !== cause.eventId ||
+      saved.event.silo !== silo || saved.event.type !== 'routine.run_activation_admitted') {
+    throw new Error('Invalid routine prohibition');
+  }
+  return routineActivationSchema.parse(saved.event.data);
+}
+
 async function requireLifecycleRun(store: EventStore, state: RoutineState | undefined,
   source: StoredEvent, claimPosition: number, deadline: number) {
   if (source.event.type === 'routine.run_stop_requested') {
     await requireApprovalStop(store, state, source, claimPosition, deadline);
+    await requireDeliveryStop(store, state, source, deadline);
     return;
   }
   if (!isLifecycleProhibition(source.event)) {

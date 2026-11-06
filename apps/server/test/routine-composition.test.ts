@@ -442,10 +442,14 @@ async function lostSendReply() {
   const sendSpy = vi.spyOn(socket, 'send');
   sendSpy.mockImplementation(loseReply);
   expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
-  await until(preparedComputer.executed);
+  function refused() {
+    return preparedComputer.closedSessions === 1;
+  }
+  await until(refused);
+  await preparedComputer.link.settled();
   expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
   await assertCounts();
-  expect(preparedComputer.executedThreads).toEqual(['native-1']);
+  expect(preparedComputer.executedThreads).toEqual([]);
 }
 it('never repeats a send whose transport reply was lost', lostSendReply);
 

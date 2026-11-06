@@ -944,3 +944,12 @@ validates bridge input only; it is not stored as event data.
 `digest` of the ordered artifact list before upload. Its stable event id allows one list
 per turn, including partial recovery. It records no bytes or private path and triggers
 no reaction. Later publication records remain `file.uploaded` and `agent.file_changed`.
+
+## Unconfirmed routine delivery
+
+`routine.run_stop_requested` accepts source `delivery` only with the server system
+actor and a strict `cause: { eventId, position }`. The writer uses reason
+`start_unconfirmed` and the exact activation admission as cause. The Stop reader
+checks that earlier admission against the occupied occurrence and sender attempt.
+This adds no event type or effect subscription. The existing fold keeps the run
+occupied and sets stopRequested; it does not invent a finished outcome.

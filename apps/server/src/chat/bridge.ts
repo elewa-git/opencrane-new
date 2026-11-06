@@ -1,3 +1,4 @@
+import { pendingRoutineStarts } from './routine-start.ts';
 import { recallBridge } from './recall-bridge.ts';
 import { privateOutput } from './private-output.ts';
 import { pullArtifact, type ArtifactPublication } from '../files/artifacts.ts';
@@ -38,6 +39,7 @@ type BridgeOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'store' | 
   Pick<Parameters<typeof bridgeControl>[0], 'stopExecution'>;
 type RoutineStart = NonNullable<Parameters<typeof turnCommand>[1]['routineStart']>;
 type ReportOptions = BridgeOptions & { routineStart: RoutineStart;
+  starts: ReturnType<typeof pendingRoutineStarts>;
   recall: ReturnType<typeof recallBridge>;
   output: ReturnType<typeof privateOutput>; memory: ReturnType<typeof memoryBridge>;
   routines: ReturnType<typeof routineBridge> };
@@ -77,6 +79,7 @@ function combineQueuedReport(batch: ReportBatch | undefined, value: unknown,
 async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
   tokens: Tokens | undefined, socket: WebSocket,
   report: z.infer<typeof reportDetails>, batch: ReportBatch) {
+  const routineDelivery = options.starts.delivery(report.turnId);
   // Save reports already accepted into the bounded queue after a disconnect.
   // Otherwise a replay can fill the queue again before its saved position advances.
   const context = { ...input, ...options,
@@ -127,7 +130,11 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
       options.routines.ended(report.turnId);
     }
   }
-  if (!initialReleased) sendAcknowledgement(socket, batch.sequences, acknowledgement);
+  if (report.type === 'agent.turn_started' && report.senderAttemptId !== undefined) {
+    await routineDelivery(acknowledgement, result === 'duplicate', batch.sequences);
+  } else if (!initialReleased) {
+    sendAcknowledgement(socket, batch.sequences, acknowledgement);
+  }
 }
 
 async function deliverFile(options: BridgeOptions, input: BridgeInput, socket: WebSocket,
@@ -270,28 +277,16 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     if (code === 1008 && !control.receipt) rejection ??= 'Bridge gate refused';
   }
   socket.once('close', closed);
-  const routineStarts = new Map<string, RoutineStart>();
-  function bindRoutineStart(turnId: string, check: RoutineStart) {
-    if (routineStarts.has(turnId)) throw new ReportRejected('Routine sender already bound');
-    routineStarts.set(turnId, check);
-  }
-  async function routineStart(report: Parameters<RoutineStart>[0]) {
-    const check = routineStarts.get(report.turnId);
-    routineStarts.delete(report.turnId);
-    if (!check) throw new ReportRejected('Routine start unavailable');
-    return check(report);
-  }
-  function forgetRoutineStarts() {
-    routineStarts.clear();
-  }
-  socket.once('close', forgetRoutineStarts);
+  const starts = pendingRoutineStarts(socket);
+  const routineStart = starts.check;
   const output = privateOutput(options, input, socket);
   const memory = memoryBridge(options, input, socket, output.clearBinding);
   const routines = routineBridge(options, input, socket);
   // Keep offered identities on this connection; a reconnect cannot reuse a pending load.
   const sentTurns = new Map<string, TurnDelivery>();
   const recall = recallBridge(options, input, socket, sentTurns);
-  const reportOptions = { ...options, routineStart, memory, routines, output, recall };
+  const reportOptions = { ...options, routineStart, starts,
+    memory, routines, output, recall };
   const reports = reportReceiver(reportOptions, input, tokens, socket, refuse, approvals, control);
   socket.on('message', reports.receiveReport);
   try {
@@ -318,7 +313,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   }
   return {
     socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting, control, memory, routines,
-    bindRoutineStart, computerId: input.computerId, assistantId: input.assistantId,
+    bindRoutineStart: starts.bind, computerId: input.computerId, assistantId: input.assistantId,
     prepareRoutineThread: prepareRoutineThread.bind(undefined, socket),
     get rejection() { return rejection; },
     settled,

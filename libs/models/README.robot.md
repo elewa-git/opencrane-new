@@ -4870,3 +4870,13 @@ at the original position and keeps the original deadline. Every authority call s
 checks receipts, live permissions, turn activity and changed access positions. No reader
 is shared between checks, commands or turns. This avoids repeated membership, assistant
 and ownership reads inside initial memory preparation and loading.
+
+## Unconfirmed routine delivery Stop
+
+`readRootStopEvidence` accepts source `delivery` only when reason is
+`start_unconfirmed`, affectedRun matches the occupied occurrence, and cause identifies
+an earlier `routine.run_activation_admitted` on the same silo and routine stream.
+The saved sender attempt must match the current activation. The existing fold checks
+all run identifiers and revisions. Budget and bridge cleanup share this reader.
+No current lease or owner permission is needed to remove the cancelled attempt's
+permission to run. No allowance or uncertain hold is released by this check.

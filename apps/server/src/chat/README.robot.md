@@ -133,3 +133,18 @@ and turn limits, and separate same-person sessions. The tests in `memory-deliver
 `personal-recall-tools.test.ts` and the computer recall suites retain the discovery refusal
 matrix. These are complementary checks; this fixture does not repeat every discovery
 failure through the backend. See the [own-check receipt](../../../../docs/process/p4-15-pr4m3/backend-delivery.md).
+
+## Routine hand-off completion
+
+The bridge completes a routine sender's one-use wait only after the matching start
+is saved and its existing credential acknowledgement path finishes without refusal.
+The wait lasts at most ten seconds after preparation; cancellation and socket loss
+settle it as unknown. A report captures its original pending attempt before waiting.
+Immediately before sending credentials, the bridge verifies worker ownership, then
+checks cancellation, the original deadline and the socket without yielding. Sending
+and cancellation consume the same attempt once. A late handler sends only refusal.
+The sender saves `routine.run_stop_requested` with source `delivery`, reason
+`start_unconfirmed` and the activation admission as its cause. The occurrence stays
+occupied; this is not termination evidence. Completion is local hand-off evidence, not a run result or
+proof of remote receipt. Automatic execution stays off. No memory path changes.
+See [the contract and own checks](../../../../docs/process/p4-24-pr10h/README.robot.md).

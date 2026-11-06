@@ -7,7 +7,8 @@ type Ready = { link: Preparation[5]; generation: number };
 
 // Keep this internal entry disabled until company calls, Ask and lifecycle Stop are connected.
 export function createRoutineComposition(options: { enabled?: boolean; replay?: boolean },
-  store: Preparation[0], keys: Preparation[1], suppliedWorker: Preparation[2], raw: unknown,
+  store: Preparation[0], keys: Preparation[1],
+  suppliedWorker: Preparation[2] & { signal?: AbortSignal }, raw: unknown,
   actor: Preparation[4], senderAttemptId: string) {
   const enabled = options.enabled === true && options.replay !== true;
   const worker = { ...suppliedWorker };
@@ -32,7 +33,7 @@ export function createRoutineComposition(options: { enabled?: boolean; replay?: 
       function connected() {
         return Promise.resolve(ready.link);
       }
-      return await sender.send(connected);
+      return await sender.send(connected, worker.signal);
     } catch {
       // Keep private failures hidden and never infer that an uncertain operation was unsent.
       return unknown;

@@ -104,3 +104,21 @@ function readsRunFactsWithoutActivating() {
 
 }
 it('checks frozen run records without accepting a human firing', readsRunFactsWithoutActivating);
+
+function bindsUnconfirmedDelivery() {
+  const data = { ...identity, ...run, actorId: 'opencrane-server', source: 'delivery',
+    reason: 'start_unconfirmed', affectedRun: 'occurrence', next: slot,
+    cause: { eventId: 'activation', position: 20 } };
+  const event = { ...envelope('routine.run_stop_requested', data),
+    principal: { kind: 'system', id: 'opencrane-server' } };
+  expect(parseEventByType(event).success).toBe(true);
+  const missingCause = { ...event, data: { ...data, cause: undefined } };
+  expect(parseEventByType(missingCause).success).toBe(false);
+  const human = { ...event, data: { ...data, actorId: 'alice' },
+    principal: { kind: 'human', id: 'alice' } };
+  expect(parseEventByType(human).success).toBe(false);
+  const wrongType = { ...event, type: 'routine.paused' };
+  expect(parseEventByType(wrongType).success).toBe(false);
+}
+it('binds unconfirmed delivery Stop to an admission reference and the server',
+  bindsUnconfirmedDelivery);

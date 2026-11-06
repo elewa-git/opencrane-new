@@ -18,7 +18,7 @@ under `apps`. [apps/server](../server/README.md) saves changes as
 flowchart LR
   apps["apps<br/>applications"] --> ops["apps/ops<br/>workers and recovery checks"]
   apps --> server["apps/server<br/>back end"]
-  server -.->|tests supply checked routine delivery| ops
+  server -.->|tests supply delivery with start confirmation| ops
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
   ops -->|saves checked results and daily or weekly routine records| nats
@@ -69,7 +69,9 @@ for its current read. A separate internal dispatch call uses the same inspection
 then awaits a checked claim, skip or daily or weekly downtime record before reporting progress.
 It recovers saved claims with their original expiry. An optional internal callback can
 continue checked due work and must finish delivery before returning. The scan keeps
-its leadership checks and waits for that callback. Automatic execution remains disabled.
+its leadership checks and waits for that callback. Server delivery now waits for the
+matching saved start and acknowledgement; writing to the connection alone cannot finish it.
+Refusal, timeout or cancellation returns no completed progress. Automatic execution remains disabled.
 Weekly downtime records cover scheduled local dates and start no model or tool work.
 
 1. **A change is saved.** A worker copies the event into the matching table.

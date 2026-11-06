@@ -29,6 +29,7 @@ import { conversationKeys } from '@opencrane/projections';
 import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
 import * as routineSession from '../src/routine-session.ts';
+import * as credentials from '../src/chat/turn-credentials.ts';
 import { prepareRoutineComputer } from '../src/routine-computer.ts';
 import { admitRoutineActivation } from '../src/routine-activation.ts';
 import { inspectRoutineSender } from '../src/routine-sender.ts';
@@ -652,7 +653,13 @@ async function losesReply(stage: string) {
       return lost;
     }
     await until(replyLost);
-    if (stage === 'send') await until(computer.executed);
+    if (stage === 'send') {
+      function refused() {
+        return computer.closedSessions === 1;
+      }
+      await until(refused);
+      expect(computer.starts).toBe(0);
+    }
     expect(await authority.send(computer.wake)).toEqual({ status: 'unknown' });
     await computer.restart();
     expect(await sender().send(computer.wake)).toEqual({ status: 'unknown' });
@@ -1199,7 +1206,7 @@ async function prohibitionBeforeAdmission() {
     return result;
   }
   vi.spyOn(nats.store, 'append').mockImplementation(prohibitAfterReport);
-  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
+  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
   function closed() {
     expect(preparedComputer.closedSessions).toBe(1);
   }
@@ -1439,3 +1446,32 @@ function delayedFixtureProjection() {
     preparesAfterProjection);
 }
 describe('delayed fixture projection', delayedFixtureProjection);
+
+async function refusesAfterCredentialPreparation(kind: string) {
+  const acknowledge = credentials.releaseTurnCredentials;
+  const originalNow = performance.now.bind(performance);
+  async function invalidate(...args: Parameters<typeof acknowledge>) {
+    await acknowledge(...args);
+    if (kind === 'ownership') {
+      owned = false;
+    } else {
+      function expired() {
+        return originalNow() + 10_001;
+      }
+      vi.spyOn(performance, 'now').mockImplementation(expired);
+    }
+  }
+  const handler = vi.spyOn(credentials, 'releaseTurnCredentials');
+  handler.mockImplementationOnce(invalidate);
+  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  function closed() {
+    return preparedComputer.closedSessions === 1;
+  }
+  await until(closed);
+  const link = await preparedComputer.wake();
+  await link.settled();
+  expect(preparedComputer.starts).toBe(0);
+}
+it.each(['ownership', 'deadline'])(
+  'checks %s after preparing credentials even without a cancellation notification',
+  refusesAfterCredentialPreparation);

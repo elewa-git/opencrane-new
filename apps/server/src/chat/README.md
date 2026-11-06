@@ -33,6 +33,11 @@ connected yet.
 - Prepares side conversations and lets members review text before sharing it back to the parent chat.
 - Refuses new work in closed chats and repairs unfinished work without disrupting other chats.
 
+Internal routine delivery waits for one matching saved start and its acknowledgement.
+A timeout, refusal or lost connection ends that wait and prevents a delayed acknowledgement
+from releasing credentials. The sender records Stop intent for unconfirmed delivery.
+This confirms delivery, not completion of the routine. Automatic execution stays disabled.
+
 Public chat routes and subscriptions reserve routine session identifiers for internal
 preparation. People cannot create, change or read those sessions through these routes.
 History and list titles also check how the session was created before opening private
@@ -126,7 +131,8 @@ flowchart LR
   server --> memory[Memory]
   chat -->|selects and checks input| memory
   chat -->|memory definitions and one-use private input| computer[Assistant computer]
-  computer -->|requests checked pass renewal| chat
+  computer -->|reports routine start and requests checked pass renewal| chat
+  chat -->|checks lease and deadline before routine credentials| computer
   computer -->|completed private reply| chat
   chat -->|private reply and clearance| reader[Authenticated reader]
   chat -->|checks access, spending and loaded references| models[Models]
