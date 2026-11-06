@@ -8,8 +8,16 @@ import { preflightFixture } from './private-recall-preflight-fixture.ts';
 
 vi.mock('node:net', { spy: true });
 
-type ToolName = 'recall' | 'remember' | 'correct';
+type ToolName = 'recall' | 'remember' | 'correct' | 'forget';
 const permittedSubsets: { names: ToolName[] }[] = [
+  { names: ['forget'] },
+  { names: ['recall', 'forget'] },
+  { names: ['remember', 'forget'] },
+  { names: ['correct', 'forget'] },
+  { names: ['recall', 'remember', 'forget'] },
+  { names: ['recall', 'correct', 'forget'] },
+  { names: ['remember', 'correct', 'forget'] },
+  { names: ['recall', 'remember', 'correct', 'forget'] },
   { names: ['recall'] },
   { names: ['remember'] },
   { names: ['correct'] },
@@ -30,7 +38,7 @@ async function selectedOffer(names: ToolName[], rememberPolicy = 'block') {
     const policy: TurnToolServerState['policyTools'][number] = {
       name, revision, reviewed: true, costCents: 0, mode: 'allow',
     };
-    if (name !== 'forget' && !names.includes(name)) {
+    if (!names.includes(name)) {
       policy.mode = 'block';
       if (name === 'remember' && rememberPolicy === 'ask') {
         policy.mode = 'ask';
@@ -91,7 +99,7 @@ async function loadsSelectedOffer(names: ToolName[], rememberPolicy?: string) {
   expect(test.native.received).not.toContain('turn/start');
   for (const name of ['recall', 'remember', 'correct', 'forget'] as const) {
     const item = { type: 'mcpToolCall', server: expected.key, tool: name };
-    const allowed = name !== 'forget' && names.includes(name);
+    const allowed = names.includes(name);
     expect(recall.permitsItem(item)).toBe(allowed);
   }
 }
@@ -119,11 +127,13 @@ async function refusesInitialOffer(reason: typeof invalidOffers[number]) {
   }
   if (reason === 'too many') {
     tools[0] = privateToolOffer('all')[0]!;
+    tools[0]!.definitions.push(server.definitions[0]!);
   }
   if (reason === 'wrong tool') {
-    server.definitions[1] = privateToolOffer('forget')[0]!.definitions[0]!;
+    const definition = { name: 'external', inputSchema: { type: 'object' } };
+    server.definitions[1] = JSON.stringify(definition);
     delete server.modes['remember'];
-    server.modes['forget'] = 'allow';
+    server.modes['external'] = 'allow';
   }
   if (reason === 'reordered') {
     server.definitions.reverse();
