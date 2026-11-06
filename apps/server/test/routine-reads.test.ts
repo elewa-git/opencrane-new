@@ -70,15 +70,15 @@ async function cleanup() {
 beforeEach(setup, 30_000);
 afterEach(cleanup);
 
-let firstServices: { nats: typeof nats; fga: typeof fga; storeId: string };
-async function saveFixtureIsolationEvent() {
-  firstServices = { nats, fga, storeId: binding.storeId };
+async function checkFixtureIsolation() {
+  const firstServices = { nats, fga, storeId: binding.storeId };
   await nats.seed([event('fixture-isolation', 'member-fixture-isolation')]);
   expect(await nats.store.head('member-fixture-isolation')).toBeGreaterThan(0);
-}
-it('saves an event in the first shared-service fixture', saveFixtureIsolationEvent);
 
-async function checkFixtureIsolation() {
+  await app.close();
+  await deleteStoreById(fga.apiUrl, binding.storeId);
+  await setup();
+
   expect(nats === firstServices.nats).toBe(true);
   expect(fga === firstServices.fga).toBe(true);
   expect(binding.storeId).not.toBe(firstServices.storeId);
