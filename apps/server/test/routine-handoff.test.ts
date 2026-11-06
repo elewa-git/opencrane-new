@@ -11,7 +11,7 @@ import { until } from '@opencrane/authz/testing';
 import { event } from '@opencrane/event-store/testing';
 import { isEventStoreUnavailable } from '@opencrane/event-store';
 import { foldRoutine, type EventEnvelope } from '@opencrane/events';
-import { BudgetActor, history, rootTotals } from '@opencrane/models';
+import { BudgetActor, history, rootTotals, readRootStopEvidence } from '@opencrane/models';
 import { conversationKeys, ProjectionRunner, routines } from '@opencrane/projections';
 import { database } from '@opencrane/projections/testing';
 import { createLogger } from '@opencrane/observability';
@@ -745,6 +745,25 @@ async function cancelsAcknowledgement(kind: string) {
   await delay(50);
   expect(preparedComputer.executedThreads).toEqual([]);
   expect(preparedComputer.nativeStarts).toBe(1);
+  const state = await runState();
+  expect(state.stopRequested).toBe(true);
+  expect(state.activeRun).not.toBeNull();
+  expect(state.lastRun).toBeNull();
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  function isStop(row: typeof rows[number]) {
+    return row.event.type === 'routine.run_stop_requested';
+  }
+  const stops = rows.filter(isStop);
+  expect(stops).toHaveLength(1);
+  const saved = stops[0]!;
+  expect(saved.event.data).toMatchObject({ source: 'delivery', reason: 'start_unconfirmed',
+    occurrenceId: state.activeRun!.occurrenceId });
+  const evidence = await readRootStopEvidence(nats.store, 'routine-orders', saved.sequence);
+  expect(evidence.routine?.stopRequested).toBe(true);
+  if (kind !== 'shutdown') {
+    await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+    expect(await nats.store.head('routine-orders')).toBe(saved.sequence);
+  }
 }
 it.each(['shutdown', 'lease loss', 'timeout'])(
   '%s while acknowledgement is held prevents credentials and execution after handling resumes',
