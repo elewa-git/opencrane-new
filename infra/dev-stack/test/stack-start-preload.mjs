@@ -26,6 +26,7 @@ if (process.env['START_RESTORE_PROCESSES'] === '1') {
     running.set(pid, name.slice(0, -4));
   }
   const previous = JSON.parse(readFileSync(`${process.env.HOME}/services.json`, 'utf8'));
+  switchedOn = previous.switchedOn;
   for (const name of previous.containers) containers.add(name);
 }
 
@@ -59,6 +60,16 @@ async function execute(command, args) {
   record(`exec ${command} ${args.join(' ')}`);
   if (args.includes('infra/dev-stack/journey.ts')) {
     throw new Error('Automated journey reached');
+  }
+  if (args.includes('upgrade-handlers')) {
+    if (process.env.START_UPGRADE_FAILURE === '1') {
+      throw new Error('private database URL: postgres://secret@fixture.invalid');
+    }
+    const changed = process.env.START_UPGRADE_REPORT === 'unsafe';
+    const plan = changed ? [{ handler: 'example', addedTypes: [],
+      removedTypes: ['old'], eventCount: 2 }] : [];
+    const report = { dryRun: true, manifestChanged: changed, plan, failedJobs: [] };
+    return { stdout: `${JSON.stringify(report)}\n`, stderr: '' };
   }
   let stdout = '';
   if (command === 'tailscale') {
@@ -108,6 +119,10 @@ function spawnFixture(_command, args, options) {
   child.pid = nextPid++;
   child.unref = function unref() {};
   running.set(child.pid, args.join(' '));
+  if (args.includes('dispatcher') && options.env.DEV_DISPATCHER_READY_FILE &&
+      process.env.START_MARKER_MISSING !== '1') {
+    writeFileSync(options.env.DEV_DISPATCHER_READY_FILE, String(child.pid));
+  }
   if (args.includes('serve')) webPid = child.pid;
   if (args.includes('routines')) routinesPid = child.pid;
   snapshot();
@@ -227,7 +242,7 @@ const packages = new Map([
     }
     export async function managedProviderCallsEnabled() {
       globalThis.startFixture.record('provider-verification');
-      return false;
+      return globalThis.startFixture.isSwitchedOn();
     }`],
 ]);
 async function setup(path) {
@@ -243,7 +258,8 @@ function recordBudgetEvent(event) {
   record('initial-budget-event');
   writeFileSync(`${process.env.HOME}/budget-event.json`, JSON.stringify(event));
 }
-globalThis.startFixture = { failureAt, setup, record, recordBudgetEvent };
+function isSwitchedOn() { return switchedOn; }
+globalThis.startFixture = { failureAt, setup, record, recordBudgetEvent, isSwitchedOn };
 function resolve(specifier, context, nextResolve) {
   if (packages.has(specifier)) return { url: `fixture:${specifier}`, shortCircuit: true };
   return nextResolve(specifier, context);

@@ -7,6 +7,7 @@ import { type HandlerName } from "@opencrane/events";
 import { event } from "@opencrane/event-store/testing";
 import { dispatch, HandlerRuntime, registerHandler, upgradeHandlers } from "../src/index.ts";
 import { scanUpgrade } from "../src/upgrade-scan.ts";
+import { checkHandlers } from "../src/registration.ts";
 import { effect, fixture, until } from "./helpers.ts";
 import { sessionDiagnostics } from "./session-diagnostics.ts";
 
@@ -248,6 +249,21 @@ function upgradeTests() {
   }
   it.each(['created', 'retry', 'active'])(
     'refuses unfinished %s jobs in both modes', unfinishedJobs);
+
+  async function unchangedManifestWithQueuedJob() {
+    const runtime = await prepare();
+    const manifest = checkHandlers(runtime.options.handlers);
+    await current.db.query('UPDATE handler_dispatcher SET manifest = $1', [manifest]);
+    await runtime.enqueue(runtime.options.handlers[0]!, event('pending'), current.db);
+    const preview = await command('--dry-run');
+    const report = JSON.parse(preview.stdout.trim().split('\n').at(-1)!);
+    expect(report.manifestChanged).toBe(false);
+    expect(report.plan).toEqual([]);
+    const jobs = await current.db.query("SELECT state FROM pgboss.job WHERE state = 'created'");
+    expect(jobs.rows.length).toBeGreaterThan(0);
+  }
+  it('previews unchanged subscriptions with a queued job so workers can restart',
+    unchangedManifestWithQueuedJob);
 
   async function failedJobs() {
     const runtime = await prepare();
