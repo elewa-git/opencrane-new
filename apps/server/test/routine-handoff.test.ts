@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
 import { generateKeyPairSync, type ECKeyPairOptions } from 'node:crypto';
 import { z } from 'zod';
 import { tokenIssuer } from '@opencrane/auth';
@@ -22,6 +23,8 @@ import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
 import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
+import * as turns from '../src/chat/turns.ts';
+import * as credentials from '../src/chat/turn-credentials.ts';
 import * as routineSession from '../src/routine-session.ts';
 import { createRoutineComposition } from '../src/routine-composition.ts';
 
@@ -247,16 +250,12 @@ async function dispatch(options: Options = { enabled: true }, continuation = fal
       const current = await lease.checkCurrent(deadline);
       return current && !lease.signal.aborted;
     }
-    const worker = { silo: 'test', binding, workerId: 'routine-worker', checkCurrent, now: clock };
+    const worker = { silo: 'test', binding, workerId: 'routine-worker',
+      checkCurrent, signal: lease.signal, now: clock };
     const input = { routineId: due.routineId, occurrenceId: due.occurrenceId };
     const invocation = createRoutineComposition(options, nats.store, keys, worker, input,
       actor, due.turnId);
-    const result = await invocation.send(wake);
-    if (result.status === 'sent') {
-      await until(preparedComputer.executed);
-      await preparedComputer.link.settled();
-    }
-    return result;
+    return invocation.send(wake);
   };
   async function work(lease: Lease) {
     leaseSignal = lease.signal;
@@ -480,3 +479,48 @@ async function ignoresNonDue(kind: string) {
   expect((await runState()).activeRun).toBeNull();
 }
 it.each(['future', 'missed', 'inactive'])('does not hand off a %s candidate', ignoresNonDue);
+
+async function waitsForStart(stage: string) {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const start = turns.turnCommand;
+  const acknowledge = credentials.releaseTurnCredentials;
+  async function heldStart(...args: Parameters<typeof start>) {
+    entered.resolve();
+    await release.promise;
+    return start(...args);
+  }
+  async function heldAcknowledgement(...args: Parameters<typeof acknowledge>) {
+    entered.resolve();
+    await release.promise;
+    return acknowledge(...args);
+  }
+  if (stage === 'start') {
+    const handler = vi.spyOn(turns, 'turnCommand');
+    handler.mockImplementationOnce(heldStart);
+  } else {
+    const handler = vi.spyOn(credentials, 'releaseTurnCredentials');
+    handler.mockImplementationOnce(heldAcknowledgement);
+  }
+  let completed = false;
+  function finished() {
+    completed = true;
+  }
+  const pending = dispatch();
+  void pending.then(finished, finished);
+  try {
+    await entered.promise;
+    await delay(50);
+    expect(completed).toBe(false);
+    expect(preparedComputer.executedThreads).toEqual([]);
+  } finally {
+    release.resolve();
+    await pending;
+  }
+  expect(await pending).toMatchObject({ examined: 1 });
+  await assertSingleRun();
+  await until(preparedComputer.executed);
+  expect(preparedComputer.executedThreads).toEqual(['native-1']);
+}
+it.each(['start', 'acknowledgement'])(
+  'awaits durable start and its %s handler before completing dispatch', waitsForStart);
