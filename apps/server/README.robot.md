@@ -5617,6 +5617,8 @@ returns instructions, encrypted definitions, custody references or private run l
 It does not call `readApproval`, decrypt, append, start jobs, wake or dispatch.
 
 `test/routine-reads.test.ts` uses disposable NATS/OpenFGA and the real server route.
+It starts each service once per file. Each test gets a new OpenFGA store and a
+recreated NATS event stream, so saved events and permissions cannot carry over.
 It covers permitted readers, stale permissions, transfer, retirement, rebuilt IAM,
 removal while loading (including failed loads), unavailable services, bounded slow
 history, unrelated chat activity, strict output and private-data canaries. Ordinary

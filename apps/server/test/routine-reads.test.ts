@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { jetstreamManager } from '@nats-io/jetstream';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
-import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
+import { createStore, deleteStoreById, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
@@ -14,6 +15,7 @@ import { testAuthConfig } from './support/test-auth-config.ts';
 const config = testAuthConfig({ expectedOrgId: 'org-test' });
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
+let streamManager: Awaited<ReturnType<typeof jetstreamManager>>;
 let binding: Awaited<ReturnType<typeof createStore>>;
 let app: ReturnType<typeof buildServer>;
 let logs: string[];
@@ -27,9 +29,23 @@ const db = { query: noSql };
 function memberId(_silo: string, _issuer: string, sub: string) {
   return Promise.resolve(sub);
 }
-async function setup() {
+async function startServices() {
   nats = await natsFixture();
   fga = await openfga();
+  streamManager = await jetstreamManager(nats.connection);
+}
+beforeAll(startServices, 120_000);
+
+async function closeServices() {
+  await fga?.close();
+  await nats?.close();
+}
+afterAll(closeServices);
+
+async function setup() {
+  // Remove every saved event, including JetStream's duplicate ids, before each test.
+  await streamManager.streams.delete('EVENTS');
+  await nats.store.ensureStream({ replicas: 1 });
   binding = await createStore(fga.apiUrl, 'test');
   const auth = memberAuthorisation(binding, nats.store);
   const members = ['alice', 'admin', 'bob'].map(joinedMember);
@@ -49,11 +65,27 @@ async function setup() {
 async function cleanup() {
   vi.restoreAllMocks();
   await app?.close();
-  await fga?.close();
-  await nats?.close();
+  await deleteStoreById(fga.apiUrl, binding.storeId);
 }
 beforeEach(setup, 30_000);
 afterEach(cleanup);
+
+async function checkFixtureIsolation() {
+  const firstServices = { nats, fga, storeId: binding.storeId };
+  await nats.seed([event('fixture-isolation', 'member-fixture-isolation')]);
+  expect(await nats.store.head('member-fixture-isolation')).toBeGreaterThan(0);
+
+  await app.close();
+  await deleteStoreById(fga.apiUrl, binding.storeId);
+  await setup();
+
+  expect(nats === firstServices.nats).toBe(true);
+  expect(fga === firstServices.fga).toBe(true);
+  expect(binding.storeId).not.toBe(firstServices.storeId);
+  expect(await nats.store.head('member-fixture-isolation')).toBe(0);
+}
+it('reuses services with a fresh permission store and event stream', checkFixtureIsolation);
+
 function request(actor = 'alice', routineId = 'orders', orgId = 'org-test') {
   const session = { sub: actor, orgId, roles: [], authTime: 1790856000, exp: 2000000000 };
   const cookie = `${config.cookieName}=${encodeSession(config, session)}`;
