@@ -339,3 +339,56 @@ Private results, masked pictures and the new slot's server, website and members
 logs were copied to `/tmp/test-version-repro/`. The slot was released and reported
 free. The owner stack was untouched. The old group-read cause remains **UNPROVED**;
 the successful group read on this slot is not a substitute for the earlier failure.
+
+## Eighth fresh start: complete fixed-source rehearsal
+
+The qualified source was `d6ee590bd486bf6e04ede9a5501be19592bba1f7`.
+Slot 1 was claimed again and installed fresh from that commit, without the inherited
+fleet-task marker. The built-in journey passed its real replies, Stop, member reply,
+scanned supplier PDF, sign-in and replay checks. The demo seed passed. Timed smoke
+passed after a 27,599 ms warm-up: 95,197 ms at 1280px and 88,364 ms at 390px.
+Its spending file recorded 16 charged cents, 35 held cents and ten calls. Both
+company ceilings were restored; the saved ceiling file was absent afterwards.
+
+The separate Stage A script passed every step at both widths. Each PASS saved its
+own masked picture before the result was written. The private receipt has 40
+masked step pictures. The times below are from that script's `results.json`.
+
+| Step | 1280px | 390px |
+| --- | --- | --- |
+| 1. Streamed reply and reload | PASS, 12,806 ms | PASS, 12,295 ms |
+| 2. Scanned quote, total/date, preview/download | PASS, 42,038 ms | PASS, 39,994 ms |
+| 3. Action history | PASS, 1,532 ms | PASS, 1,616 ms |
+| 4. Stop and partial reply after reload | PASS, 13,395 ms | PASS, 14,437 ms |
+| 5. Live member-to-owner message | PASS, 9,156 ms | PASS, 9,670 ms |
+| 6. Private shared-assistant reply | PASS, 16,208 ms | PASS, 18,435 ms |
+| 7. Group chat and unopened invite link | PASS, 16,407 ms | PASS, 12,621 ms |
+| 8. Model answer with its key hidden | PASS, 1,603 ms | PASS, 1,087 ms |
+| 9. Company ceiling refusal and restore | PASS, 17,897 ms | PASS, 14,357 ms |
+| 10. Limit and group change history | PASS, 3,570 ms | PASS, 2,498 ms |
+
+The owner's browser read `GET /api/groups/demo-acacia` at both widths. The server
+returned HTTP 200 in 275 ms for desktop and 168 ms for phone. Neither read
+reproduced the earlier unavailable page. The earlier cause remains **UNPROVED**;
+this passing run does not prove that the temporary failure cannot recur.
+
+The member memory-off row passed at 1280px and 390px. The owner's chat context
+reported memory admission `disabled`. The member's scope list did not include the
+owner's `person` scope, and a direct member read of that scope returned HTTP 404.
+Both loaded Memory panels showed the member's own and group scope controls, with
+no facts saved. The first read-only probe attempts stopped on script mistakes:
+one used the wrong scope-kind name, another checked before loading ended, and
+another closed the desktop panel that starts open. The corrected probe waited for
+the transcript and memory search, then passed at both widths. It sent no paid turn.
+The final pictures mask email text.
+
+The final slot budget read showed 44 charged and 85 held cents: 129 cents counted
+in full for this fresh run. The sixth start's 152-cent observation and the seventh
+start's 78-cent observation bring the three saved slot totals to 359 cents, below
+the 500-cent task allowance. Older failed starts have unknown final charges and
+holds, so their combined historical total remains unknown. No paid step was
+started after the final budget read. Private step receipts, masked pictures,
+smoke JSON, memory pictures and server, website and members logs were copied to
+`/tmp/test-version-final/`; unmasked smoke pictures were not copied or published.
+Slot 1 was released after copying. The owner stack was untouched. The owner
+refresh itself remains **NOT RUN**.
