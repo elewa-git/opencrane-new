@@ -74,7 +74,7 @@ async function ownerStart(start: StartOptions = {}) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
     return { status: result.status, output: result.stdout + result.stderr, failure,
-      operations, settings, services };
+      operations, settings, services, directory };
   } finally {
     await rm(home, { recursive: true, force: true });
   }
@@ -134,6 +134,9 @@ async function missingScannerStopsStartup() {
   const result = await ownerStart({ scannerMissing: true, webReadyMs: 1 });
   assert.equal(result.status, 1, result.output);
   assert.match(result.failure, /Timed out waiting for authenticated scanner/u);
+  assert.match(result.output, /Timed out waiting for authenticated scanner scan/u);
+  assert.equal(result.output.includes(result.directory), false);
+  assert.match(result.output, /the stack's private log folder/u);
   assertRestored(result);
 }
 
