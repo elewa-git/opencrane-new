@@ -134,9 +134,10 @@ async function missingScannerStopsStartup() {
   const result = await ownerStart({ scannerMissing: true, webReadyMs: 1 });
   assert.equal(result.status, 1, result.output);
   assert.match(result.failure, /Timed out waiting for authenticated scanner/u);
-  assert.match(result.output, /Timed out waiting for authenticated scanner scan/u);
+  const expectedOutput = 'Dev stack failed: Timed out waiting for authenticated scanner scan; ' +
+    "inspect the stack's private log folder\n";
+  assert.equal(result.output, expectedOutput);
   assert.equal(result.output.includes(result.directory), false);
-  assert.match(result.output, /the stack's private log folder/u);
   assertRestored(result);
 }
 

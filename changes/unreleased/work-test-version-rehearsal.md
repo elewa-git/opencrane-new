@@ -6,6 +6,8 @@ Fresh development stacks now start an authenticated HTTPS scanner for uploads.
 Each stack has its own private scanner certificates and loopback port, and startup
 checks a signed clean scan before accepting files. A scanner for another stack, or
 one that cannot scan, stops startup. The CI grouping check includes the scanner tests.
+When that scanner check fails, the terminal explains the cause without showing the
+private stack directory.
 
 The secondary demo checker now accepts a shared session that opens while it checks
 status and saves private HTTP outcomes for group and conversation reads.

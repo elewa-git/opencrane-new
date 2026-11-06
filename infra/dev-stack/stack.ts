@@ -965,8 +965,12 @@ try {
     let message: string;
     if (error instanceof Error && error.message.startsWith('Compose stopped, but')) {
       message = error.message;
+    } else if (error instanceof Error &&
+        error.message === 'Timed out waiting for authenticated scanner scan') {
+      // Show only this known timeout. Other errors may contain private values.
+      message = `Dev stack failed: ${error.message}; inspect the stack's private log folder`;
     } else if (prepared) {
-      message = `Dev stack failed; inspect private logs in ${directory}`;
+      message = "Dev stack failed; inspect the stack's private log folder";
     } else {
       message = 'DEV_STACK_DIR must be an empty dedicated directory outside the repository, or owned by this worktree';
     }
