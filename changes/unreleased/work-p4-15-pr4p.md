@@ -1,0 +1,1 @@
+Qualified personal memory threads can deliver Forget for an exact loaded revision and recover its original receipt after a lost reply. Saved Stop, closure, replacement or removal refuses pending writes and delayed receipts. Admission remains disabled pending live qualification.

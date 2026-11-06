@@ -72,7 +72,7 @@ export async function buildTurnTools(input: TurnToolInput): Promise<TurnToolServ
 export function buildRecallOffer(input: TurnToolInput) {
   const memory = { serverId: 'memory' };
   const restricted = { ...input, rows: [memory], approvalWaiting: false };
-  return assembleTurnTools(restricted, [recallTool, rememberTool, correctTool]);
+  return assembleTurnTools(restricted, [recallTool, rememberTool, correctTool, forgetTool]);
 }
 
 type PersonalMemoryInput = Omit<TurnToolInput, 'rows' | 'approvalWaiting'> & {

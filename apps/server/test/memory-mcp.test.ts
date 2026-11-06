@@ -2500,10 +2500,8 @@ async function loadChangeFacts(revision: number, recordLoaded = true) {
 }
 async function changeRequest(operation: 'correct' | 'forget', checkControl = true, revision = 1,
   recordLoaded = true) {
-  if (operation === 'correct') {
-    // Match the saved initial load with the deployment evidence now required for native writes.
-    await initialQualificationFixture();
-  }
+  // Match the saved initial load with the deployment evidence required for native writes.
+  await initialQualificationFixture();
   const catalogue = memoryCatalogue;
   for (const tool of [recallTool, forgetTool, correctTool]) {
     await setup.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',

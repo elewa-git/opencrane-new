@@ -127,7 +127,7 @@ async function refusesInitialOffer(reason: typeof invalidOffers[number]) {
   }
   if (reason === 'too many') {
     tools[0] = privateToolOffer('all')[0]!;
-    tools[0]!.definitions.push(server.definitions[0]!);
+    tools[0].definitions.push(server.definitions[0]!);
   }
   if (reason === 'wrong tool') {
     const definition = { name: 'external', inputSchema: { type: 'object' } };

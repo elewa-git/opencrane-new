@@ -1,7 +1,8 @@
 import * as crypto from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import { losslessJson } from '@opencrane/events/lossless-json';
-import { memoryForgottenEventSchema, memoryContextRecordedEventSchema } from '@opencrane/events';
+import { memoryForgottenEventSchema, memoryContextRecordedEventSchema,
+  memoryCleanupRecordedEventSchema } from '@opencrane/events';
 import { history, authorityFence, prepareLoadedMemory, readToolPolicy } from '@opencrane/models';
 import { expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -141,7 +142,11 @@ async function recoversForgetReceipt(lost: boolean) {
   expect(duplicate).not.toHaveProperty('result.structuredContent');
   const cleanup = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
     changeId: saved.id, outcome: 'completed' };
-  const completed = await test.setup.append(`scope-${scopeId}`, 'memory.cleanup_recorded', cleanup);
+  const event = { id: 'cleanup', commandId: 'cleanup', silo: 'test', subject: `scope-${scopeId}`,
+    type: 'memory.cleanup_recorded', source: 'opencrane-worker', time: new Date().toISOString(),
+    principal: { kind: 'system', id: 'opencrane-worker' }, correlation: {}, data: cleanup };
+  const completed = memoryCleanupRecordedEventSchema.parse(event);
+  await test.setup.nats.seed([completed]);
   const finished = await readAgentChange(test.memory, 'alice', scope, test.args.commandId);
   const expectedFinished = { ...expectedStatus, cleanupStatus: 'forgotten', forgottenAt: completed.time };
   expect(finished).toEqual(expectedFinished);
