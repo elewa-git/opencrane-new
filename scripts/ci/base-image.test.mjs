@@ -80,25 +80,37 @@ function buildStep() {
   return commands.join('\n');
 }
 
-function executeCiBuildStep(root) {
+function executeCiBuildStep(root, inspectLabel = '', inspectStatus = '0') {
   const fakeBin = join(root, 'fake-bin');
   mkdirSync(fakeBin);
-  writeFileSync(join(fakeBin, 'docker'), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$DOCKER_LOG"\n', {
+  writeFileSync(join(fakeBin, 'docker'), `#!/bin/sh
+printf '%s\\n' "$*" >> "$DOCKER_LOG"
+if [ "$1 $2 $3" = 'buildx imagetools inspect' ]; then
+  printf '%s\\n' "$INSPECT_LABEL"
+  exit "$INSPECT_STATUS"
+fi
+`, {
     mode: 0o755,
   });
   const dockerLog = join(root, 'docker.log');
   const result = spawnSync('sh', ['-eu', '-c', buildStep()], {
     cwd: root,
     encoding: 'utf8',
-    env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, DOCKER_LOG: dockerLog },
+    env: {
+      ...process.env,
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      DOCKER_LOG: dockerLog,
+      INSPECT_LABEL: inspectLabel,
+      INSPECT_STATUS: inspectStatus,
+    },
   });
   let commands = '';
   if (existsSync(dockerLog)) commands = readFileSync(dockerLog, 'utf8');
   return { result, commands };
 }
 
-function runCiBuildStep(root) {
-  const execution = executeCiBuildStep(root);
+function runCiBuildStep(root, inspectLabel = '', inspectStatus = '0') {
+  const execution = executeCiBuildStep(root, inspectLabel, inspectStatus);
   assert.equal(execution.result.status, 0, execution.result.stderr);
   return execution.commands;
 }
@@ -112,13 +124,39 @@ fixtureTest('an empty digest selects the source build', (root) => {
 
 fixtureTest('a valid digest with matching inputs selects the saved image', (root) => {
   recordCurrentImage(root);
+  const expectedHash = readFileSync(join(root, inputsPath), 'utf8').trim();
   const result = runHelper(root);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, `${imageName}@${digest}`);
-  const command = runCiBuildStep(root);
-  assert.match(command, /^buildx build /u);
+  const command = runCiBuildStep(root, expectedHash);
+  assert.match(command, /^buildx imagetools inspect /u);
+  assert.match(command, /buildx build /u);
   assert.match(command, /--build-arg COMPUTER_BASE=ghcr\.io/u);
   assert.match(command, /--build-arg COMPUTER_APT_BASE=ghcr\.io/u);
+});
+
+fixtureTest('a different image label selects the source build', (root) => {
+  recordCurrentImage(root);
+  const commands = runCiBuildStep(root, `sha256:${'b'.repeat(64)}`);
+  assert.match(commands, /^buildx imagetools inspect /u);
+  assert.match(commands, /buildx bake /u);
+  assert.doesNotMatch(commands, /buildx build --load/u);
+});
+
+fixtureTest('a missing image label selects the source build', (root) => {
+  recordCurrentImage(root);
+  const commands = runCiBuildStep(root);
+  assert.match(commands, /^buildx imagetools inspect /u);
+  assert.match(commands, /buildx bake /u);
+  assert.doesNotMatch(commands, /buildx build --load/u);
+});
+
+fixtureTest('a registry inspection error selects the source build', (root) => {
+  recordCurrentImage(root);
+  const commands = runCiBuildStep(root, '', '1');
+  assert.match(commands, /^buildx imagetools inspect /u);
+  assert.match(commands, /buildx bake /u);
+  assert.doesNotMatch(commands, /buildx build --load/u);
 });
 
 fixtureTest('an invalid digest fails before the build', (root) => {
