@@ -286,6 +286,36 @@ it('keeps citations and the existing interactive placeholder outside code', keep
 
 it('renders a Mermaid block as an inert image', rendersMermaidAsAnImage);
 
+async function redrawsMermaidAfterReplyChanges() {
+  const source = '```mermaid\ngraph LR\nA --> B\n```';
+  const { root, fixture } = mount(source);
+  function imageAppears() {
+    expect(root.querySelector('img[alt="Diagram"]')).not.toBeNull();
+  }
+  await vi.waitFor(imageAppears);
+  fixture.componentRef.setInput('text', 'Another reply');
+  fixture.detectChanges();
+  expect(root.querySelector('img')).toBeNull();
+  fixture.componentRef.setInput('text', source);
+  fixture.detectChanges();
+  await vi.waitFor(imageAppears);
+  expect(renderMermaid).toHaveBeenCalledTimes(2);
+}
+
+async function drawsMermaidInTwoReplies() {
+  const first = mount('```mermaid\ngraph LR\nFirst --> Done\n```');
+  const second = mount('```mermaid\ngraph LR\nSecond --> Done\n```');
+  function bothImagesAppear() {
+    expect(first.root.querySelector('img[alt="Diagram"]')).not.toBeNull();
+    expect(second.root.querySelector('img[alt="Diagram"]')).not.toBeNull();
+  }
+  await vi.waitFor(bothImagesAppear);
+  expect(renderMermaid).toHaveBeenCalledTimes(2);
+}
+
+it('redraws a diagram when a finished reply is rendered again', redrawsMermaidAfterReplyChanges);
+it('draws diagrams in two separate replies', drawsMermaidInTwoReplies);
+
 it('shows the Mermaid source as code when rendering fails', showsSourceWhenMermaidFails);
 
 it('keeps a nested Mermaid fence inside its outer code block', keepsNestedMermaidFenceAsCode);
