@@ -55,6 +55,23 @@ async function cleanup() {
 // Allow disposable NATS and OpenFGA to start when the CI runner is busy.
 beforeEach(setup, 90_000);
 afterEach(cleanup);
+
+let firstServices: { nats: typeof nats; fga: typeof fga; storeId: string };
+async function saveFixtureIsolationEvent() {
+  firstServices = { nats, fga, storeId: binding.storeId };
+  await nats.seed([event('fixture-isolation', 'member-fixture-isolation')]);
+  expect(await nats.store.head('member-fixture-isolation')).toBeGreaterThan(0);
+}
+it('saves an event in the first shared-service fixture', saveFixtureIsolationEvent);
+
+async function checkFixtureIsolation() {
+  expect(nats === firstServices.nats).toBe(true);
+  expect(fga === firstServices.fga).toBe(true);
+  expect(binding.storeId).not.toBe(firstServices.storeId);
+  expect(await nats.store.head('member-fixture-isolation')).toBe(0);
+}
+it('reuses services with a fresh permission store and event stream', checkFixtureIsolation);
+
 function request(actor = 'alice', routineId = 'orders', orgId = 'org-test') {
   const session = { sub: actor, orgId, roles: [], authTime: 1790856000, exp: 2000000000 };
   const cookie = `${config.cookieName}=${encodeSession(config, session)}`;
