@@ -84,13 +84,15 @@ nice -n 10 node scripts/ci/run-tests.mjs fixtures-browser
 The fixture tests need Docker, PostgreSQL, Chromium and the built test image.
 The [test details](README.robot.md) explain their setup.
 
-When the package list or snapshot date changes, the
+When the package list, launcher, Codex lockfile or snapshot date changes, the
 [base image workflow](../../.github/workflows/base-image.yml) builds a new image
 on the main branch. It can also be started by hand. The package
 must be public so CI can download it without a registry password. The owner sets
 that visibility once on the GitHub package page. After the workflow finishes, its
 digest goes into [base-image-digest.txt](../../apps/computer/test/base-image-digest.txt)
-in a follow-up change. An empty file keeps the source build available.
+and its printed build inputs hash goes into
+[base-image-inputs.txt](../../apps/computer/test/base-image-inputs.txt).
+CI builds from source if either file is empty or the current inputs have changed.
 
 ## Where to read more
 

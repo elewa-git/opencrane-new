@@ -554,7 +554,8 @@ The [image refresh receipt](../../docs/process/demo-kit/image-refresh.md) record
 the failing old image, released digest and browser checks at both screen widths.
 
 CI builds `ocn-upload-computer:test` from the public saved base when its digest
-is recorded. With an empty digest file, Docker Bake builds the base from public
+and build inputs hash are recorded and the current inputs match. Otherwise Docker Bake
+builds the base from public
 pins and the production Dockerfile from source. Neither path needs the private
 registry or a running stack. The completed test computer is not published;
 release builds keep the reviewed S0.5 base by default. Run Docker Bake before
@@ -573,8 +574,9 @@ offline signatures and excluding UnRAR.
 The CI upload test base installs `apt.lock` from the 1 October snapshot and
 builds `tool-user` with tools from that same snapshot. It then installs its
 Chromium and KasmVNC packages from the 2 October snapshot. Docker Bake builds
-this base locally while the digest file is empty. When the digest is filled, CI
-uses the public saved base and skips the snapshot stages in the computer Dockerfile.
+this base locally while the digest or inputs file is empty or the inputs have changed.
+When both recorded values match, CI uses the public saved base and skips the snapshot
+stages in the computer Dockerfile.
 The default production build still installs its own apt packages and launcher
 from the snapshot on its local base image.
 

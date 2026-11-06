@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
@@ -32,6 +34,7 @@ function makeFixture() {
   for (const path of inputPaths) copyFixtureFile(root, path);
   mkdirSync(dirname(join(root, digestPath)), { recursive: true });
   writeFileSync(join(root, digestPath), '');
+  writeFileSync(join(root, inputsPath), '');
   return root;
 }
 
@@ -51,14 +54,19 @@ function recordCurrentImage(root) {
 }
 
 function fixtureTest(name, run) {
-  test(name, () => {
+  function runFixtureTest() {
     const root = makeFixture();
     try {
       run(root);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }
+  test(name, runFixtureTest);
+}
+
+function removeIndent(line) {
+  return line.slice(10);
 }
 
 function buildStep() {
@@ -68,11 +76,11 @@ function buildStep() {
   );
   assert.ok(match, 'CI build step is present');
   const lines = match[1].split('\n');
-  const commands = lines.map(function removeIndent(line) { return line.slice(10); });
+  const commands = lines.map(removeIndent);
   return commands.join('\n');
 }
 
-function runCiBuildStep(root) {
+function executeCiBuildStep(root) {
   const fakeBin = join(root, 'fake-bin');
   mkdirSync(fakeBin);
   writeFileSync(join(fakeBin, 'docker'), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$DOCKER_LOG"\n', {
@@ -84,8 +92,15 @@ function runCiBuildStep(root) {
     encoding: 'utf8',
     env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, DOCKER_LOG: dockerLog },
   });
-  assert.equal(result.status, 0, result.stderr);
-  return readFileSync(dockerLog, 'utf8');
+  let commands = '';
+  if (existsSync(dockerLog)) commands = readFileSync(dockerLog, 'utf8');
+  return { result, commands };
+}
+
+function runCiBuildStep(root) {
+  const execution = executeCiBuildStep(root);
+  assert.equal(execution.result.status, 0, execution.result.stderr);
+  return execution.commands;
 }
 
 fixtureTest('an empty digest selects the source build', (root) => {
@@ -112,6 +127,9 @@ fixtureTest('an invalid digest fails before the build', (root) => {
   assert.notEqual(result.status, 0);
   assert.equal(result.stdout, '');
   assert.match(result.stderr, /must contain one full sha256 digest/u);
+  const execution = executeCiBuildStep(root);
+  assert.notEqual(execution.result.status, 0);
+  assert.equal(execution.commands, '');
 });
 
 fixtureTest('changed launcher source selects the source build with the same digest', (root) => {

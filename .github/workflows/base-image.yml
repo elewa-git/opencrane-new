@@ -32,6 +32,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Hash the base image build inputs
+        id: inputs
+        run: echo "hash=$(node scripts/ci/base-image.mjs hash)" >> "$GITHUB_OUTPUT"
       - name: Build and publish the saved package layers
         id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
@@ -40,5 +43,8 @@ jobs:
           file: apps/computer/test/upload-base.Dockerfile
           push: true
           tags: ghcr.io/elewa-git/opencrane-ci-computer-base:main
+          labels: io.opencrane.ci.base-inputs=${{ steps.inputs.outputs.hash }}
       - name: Show the digest for the follow-up change
-        run: echo 'ghcr.io/elewa-git/opencrane-ci-computer-base@${{ steps.build.outputs.digest }}'
+        run: |
+          echo 'ghcr.io/elewa-git/opencrane-ci-computer-base@${{ steps.build.outputs.digest }}'
+          echo 'Build inputs: ${{ steps.inputs.outputs.hash }}'
