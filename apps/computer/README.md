@@ -65,7 +65,8 @@ private reply buffers are cleared before waiting for interruption to finish.
   that the proxy accepts. Cancellation removes the list. Discovery reads no facts and gives no permission to call tools.
   An offline test also makes native Codex call recall and read a test reply through
   the proxy. It checks refusals and cancellation while another private session survives.
-  The runner can load Recall and Remember through an authenticated bridge request. It matches
+  The runner can load Recall, Remember and Correct through an authenticated bridge request.
+  It matches
   the returned thread and a single-use load id, then waits for discovery before accepting
   input or a grant. The server still needs to prepare and send that request.
   These tests do not qualify deployment; live memory access remains disabled.

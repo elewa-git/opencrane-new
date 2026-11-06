@@ -68,3 +68,9 @@ the short authority check. The backend tests hold the real PostgreSQL command lo
 save Stop or a replacement generation, then release the lock and require zero writes.
 Separate cases save those events just before the append check. Local callers remain
 registered in all four cases to represent delayed withdrawal.
+
+The [Correct contract](../../../../docs/process/p4-15-pr4o/README.robot.md) extends the same
+private offer to Correct. The backend checks deployment qualification before saving and
+at append, alongside full turn confirmation with the original positions and deadline.
+Correct returns its exact text-free receipt. Original-command status resolves a lost reply
+without another revision. Public discovery still offers Recall alone; Forget stays held.

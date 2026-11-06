@@ -1,0 +1,1 @@
+- Admitted personal memory threads can correct a loaded fact through the real backend, keeping every other loaded reference and returning the saved receipt. Admission remains disabled pending live qualification.

@@ -1,10 +1,12 @@
 import { losslessJson } from '@opencrane/events/lossless-json';
-import { memoryCorrectedEventSchema } from '@opencrane/events';
-import { history, prepareLoadedMemory } from '@opencrane/models';
+import { memoryCorrectedEventSchema, memoryContextRecordedEventSchema } from '@opencrane/events';
+import { history, authorityFence, prepareLoadedMemory, readToolPolicy } from '@opencrane/models';
 import { expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Client } from 'pg';
-import type { Db } from '@opencrane/projections';
+import { memoryScopeId, type Db } from '@opencrane/projections';
+import { readChatFacts } from '../src/chat/chat-summary.ts';
+import { subscribePrivateOutput } from '../src/chat/private-output.ts';
 import { correctTool } from '../src/memory/mcp.ts';
 import { readAgentChange } from '../src/memory/forget.ts';
 import { commandReference } from '../src/memory/command-history.ts';
@@ -78,12 +80,16 @@ async function correctsLoadedTarget() {
   const claims = { silo: 'test', requester: 'alice', assistant: 'assistant', computer: 'computer',
     generation: 1, conversation: 'chat', turn: test.turnId, thread: threadId };
   const conversation = await history(test.setup.nats.store, 'conversation-chat', 'test');
-  await expect(prepareLoadedMemory(test.setup.nats.store, test.setup.binding, claims,
-    conversation, performance.now() + 10_000)).rejects.toThrow();
-  const stale = await test.native.recall(threadId, { scopeId });
+  const loaded = await prepareLoadedMemory(test.setup.nats.store, test.setup.binding, claims,
+    conversation, performance.now() + 10_000);
+  const authority = await authorityFence(test.setup.nats.store, performance.now(), []);
+  await expect(loaded.confirm(authority)).rejects.toThrow();
+  const ownScope = { scopeId };
+  const stale = await test.native.recall(threadId, ownScope);
   expect(stale).not.toHaveProperty('result.structuredContent');
   await test.setup.runner.run(test.projection);
-  const found = await test.native.recall('returned-native-2', { scopeId, query: 'summer' });
+  const freshQuery = { scopeId, query: 'summer' };
+  const found = await test.native.recall('returned-native-2', freshQuery);
   expect(JSON.stringify(found)).toContain(text);
   expect(JSON.stringify(found)).toContain('"revision":2');
 }
@@ -121,7 +127,8 @@ it('reconciles the original Correct command after a lost reply without another r
   lostCorrectionReply, 120_000);
 
 const refusals = ['revision', 'omitted', 'foreign', 'target', 'old-target', 'scope',
-  'review', 'ask', 'block', 'qualification', 'caller', 'generation', 'thread'] as const;
+  'review', 'ask', 'block', 'qualification', 'caller', 'generation', 'thread',
+  'forged-caller', 'forged-thread'] as const;
 async function refusesCorrection(reason: typeof refusals[number]) {
   const test = await correctionFixture();
   const args = test.args;
@@ -132,14 +139,15 @@ async function refusesCorrection(reason: typeof refusals[number]) {
     args.dependsOn.pop();
   }
   if (reason === 'foreign') {
-    args.dependsOn[0]!.scopeId = 'f'.repeat(64);
+    args.dependsOn[0]!.scopeId = memoryScopeId('test', 'person', 'bob');
   }
   if (reason === 'target' || reason === 'old-target') {
     const revision = reason === 'target' ? 1 : 2;
-    args.dependsOn.push({ scopeId, memoryId: 'garden', revision });
+    const target = { scopeId, memoryId: 'garden', revision };
+    args.dependsOn.push(target);
   }
   if (reason === 'scope') {
-    args.scopeId = 'f'.repeat(64);
+    args.scopeId = memoryScopeId('test', 'person', 'bob');
   }
   if (reason === 'qualification') {
     test.deployment.remove();
@@ -159,8 +167,11 @@ async function refusesCorrection(reason: typeof refusals[number]) {
     await test.setup.append('mcp-memory', 'mcp.tool_mode_set', data);
   }
   if (reason === 'review') {
-    const data = { serverId: 'memory', unpublishedBy: 'alice' };
-    await test.setup.append('mcp-memory', 'mcp.server_unpublished', data);
+    const policy = await readToolPolicy(test.setup.nats.store, 'test', 'memory');
+    const data = { serverId: 'memory', catalogueDigest: policy.catalogue!.schemaDigest,
+      connectionId: 'server', accountMode: 'none', policyRevision: policy.policyRevision,
+      reviewedBy: 'alice', tools: [] };
+    await test.setup.append('mcp-memory', 'mcp.server_reviewed', data);
   }
   let thread = threadId;
   if (reason === 'thread') {
@@ -168,7 +179,14 @@ async function refusesCorrection(reason: typeof refusals[number]) {
     const other = await test.admit('other-chat', thread);
     await other.start();
   }
-  const response = await test.native.call(thread, 'correct', args);
+  const identity: { caller?: string; threadId?: string } = {};
+  if (reason === 'forged-caller') {
+    identity.caller = 'forged';
+  }
+  if (reason === 'forged-thread') {
+    identity.threadId = 'forged';
+  }
+  const response = await test.native.call(thread, 'correct', args, {}, reason, identity);
   await expectNoCorrection(test, response);
 }
 it.each(refusals)('refuses native Correct for %s', refusesCorrection, 120_000);
@@ -275,3 +293,44 @@ async function withdrawsAtAppend(change: Withdrawal) {
 }
 it.each(withdrawals)('checks saved %s inside the final append callback',
   withdrawsAtAppend, 120_000);
+
+async function releasesOnlyCurrentOutput(correct: boolean) {
+  const test = await correctionFixture();
+  function current() {
+    return true;
+  }
+  function confirm() {
+    return Promise.resolve(true);
+  }
+  const subscriber = { store: test.setup.nats.store, silo: 'test', memberId: 'alice',
+    conversationId: 'chat', socket: test.link.socket, current, confirm };
+  subscribePrivateOutput(subscriber);
+  const send = vi.spyOn(test.link.socket, 'send');
+  const facts = await readChatFacts(test.setup.nats.store, 'test', 'chat', test.turnId);
+  const events = facts.memoryContext!.events.values();
+  const recorded = events.next().value!;
+  const evidence = memoryContextRecordedEventSchema.parse(JSON.parse(recorded)).data;
+  const output = { type: 'private_reply', sequence: 2, previousSequence: 1,
+    conversationId: 'chat', turnId: test.turnId, threadId, generation: 1,
+    inputGeneration: evidence.inputGeneration, text };
+  if (correct) {
+    const response = await test.native.call(threadId, 'correct', test.args);
+    const expected = { result: { structuredContent: { outcome: 'accepted' } } };
+    expect(response).toMatchObject(expected);
+  }
+  const bytes = Buffer.from(JSON.stringify(output));
+  test.link.socket.emit('message', bytes);
+  async function ended() {
+    const rows = await history(test.setup.nats.store, 'conversation-chat', 'test');
+    function isCompletion(row: typeof rows[number]) {
+      return row.event.type === 'agent.output_lost';
+    }
+    expect(rows.some(isCompletion)).toBe(true);
+  }
+  const waiting = { timeout: 5000 };
+  await vi.waitFor(ended, waiting);
+  await test.link.settled();
+  expect(JSON.stringify(send.mock.calls).includes(text)).toBe(!correct);
+}
+it.each([false, true])('releases generated output only while its loaded revision is current: %s',
+  releasesOnlyCurrentOutput, 120_000);

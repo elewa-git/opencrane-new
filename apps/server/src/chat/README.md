@@ -13,7 +13,7 @@ closed while those checks waited. It checks saved references without decrypting 
 For an offered recall catalogue, the bridge waits for discovery before releasing private
 input or a pass. It repeats the checks before and after signing that pass. A lost reply
 ends the attempt without resending it. Qualified personal turns can offer reviewed Recall
-and Remember. The [chat contracts](README.robot.md) record the limits. Recall returns
+Remember and Correct. The [chat contracts](README.robot.md) record the limits. Recall returns
 stored facts through the gateway after saving their loaded references. Deployment checks remain unfinished.
 
 This folder handles conversations between people and with assistants. It saves messages, sends assistant work to the right computer and returns replies and live updates while checking who may read each chat.
@@ -125,7 +125,7 @@ flowchart LR
   server[Server] --> chat[Chat]
   server --> memory[Memory]
   chat -->|selects and checks input| memory
-  chat -->|recall definitions and one-use private input| computer[Assistant computer]
+  chat -->|memory definitions and one-use private input| computer[Assistant computer]
   computer -->|requests checked pass renewal| chat
   computer -->|completed private reply| chat
   chat -->|private reply and clearance| reader[Authenticated reader]

@@ -5,7 +5,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { MemoryToolRefused, type MemoryContext, memoryRights, history, prepareLoadedMemory,
   parseMemoryRequest, verifyMemoryContext } from '@opencrane/models';
 import type { AuthConfig } from '@opencrane/auth';
-import type { MemoryOptions } from './access.ts';
+import { MemoryRefused, type MemoryOptions } from './access.ts';
 import { correct } from './correct.ts';
 import { forget } from './forget.ts';
 import { remember } from './commands.ts';
@@ -131,11 +131,10 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
     const deadline = performance.now() + remaining;
     const evidence = prepared?.evidence ?? await readRecallContext(options!, context);
     // Recheck the deployment for writes from a turn with saved native initial loading.
-    const nativeWrite = parsed.input?.operation === 'remember'
-      && evidence.chat.memoryContext?.initialLoaded;
+    const nativeWrite = needsWriteQualification(parsed.input, evidence);
     const qualification = nativeWrite ? await readDeploymentQualification(options!.silo) : undefined;
     let memory: Awaited<ReturnType<typeof prepareLoadedMemory>> | undefined;
-    if (nativeWrite) {
+    if (nativeWrite && parsed.input?.operation === 'remember') {
       const conversation = await history(options!.store, `conversation-${context.conversation}`,
         options!.silo, deadline);
       memory = await prepareLoadedMemory(options!.store, options!.binding, context,
@@ -159,11 +158,25 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
       rights.confirm, deadline, prepared?.rows);
     if (change) {
       const { operation, scopeId, memoryId, recallProof: _proof, ...command } = change.input;
-      const agent = { ...change, checkAccess: rights.writeAuthority!,
+      function confirmQualification() {
+        try {
+          qualification?.confirm();
+        } catch {
+          throw new MemoryRefused();
+        }
+      }
+      async function confirm() {
+        confirmQualification();
+        // Check the full turn with its original access positions and deadline.
+        await change!.confirm();
+        confirmQualification();
+      }
+      const agent = { ...change, confirm, checkAccess: rights.writeAuthority!,
         conversation: context.conversation, turn: context.turn, requestId: context.requestId };
       const target = { scopeId, memoryId };
       const save = operation === 'correct' ? correct : forget;
       const receipt = await save(options!, context.requester, target, command, agent);
+      confirmQualification();
       result = { content: [], structuredContent: receipt };
     }
     if (parsed.input?.operation === 'remember') {
@@ -241,4 +254,12 @@ function memoryContextConsumer(generation: string | undefined) {
     consumed.set(permit, context.exp);
   }
   return consume;
+}
+
+function needsWriteQualification(input: ReturnType<typeof parseMemoryRequest>['input'],
+  evidence: Awaited<ReturnType<typeof readRecallContext>>) {
+  if (!evidence.chat.memoryContext?.initialLoaded) {
+    return false;
+  }
+  return input?.operation === 'remember' || input?.operation === 'correct';
 }

@@ -102,7 +102,9 @@ function mcpSender(origin: string) {
   return send;
 }
 
-type NativeMemoryCall = (name: string, args: object, headers: Record<string, string>, callId: string)
+type CallIdentity = { caller?: string; threadId?: string };
+type NativeMemoryCall = (name: string, args: object, headers: Record<string, string>, callId: string,
+  identity?: CallIdentity)
   => Promise<Record<string, unknown>>;
 
 function createDiscoveryControls(remember: boolean) {
@@ -143,13 +145,13 @@ function handleNativeProtocol(
         expect(await send(endpoint, caller, 'server/discover')).toHaveProperty('error');
       }
       async function callMemory(name: string, args: object,
-        headers: Record<string, string>, callId: string) {
-        const metadata = { threadId: thread.id, callId,
+        headers: Record<string, string>, callId: string, identity: CallIdentity = {}) {
+        const metadata = { threadId: identity.threadId ?? thread.id, callId,
           'io.modelcontextprotocol/clientCapabilities': {},
           'io.modelcontextprotocol/protocolVersion': '2026-07-28' };
         const params = { name, arguments: args, _meta: metadata };
         const callHeaders = { ...headers, 'mcp-name': name };
-        return send(endpoint, caller, 'tools/call', params, callHeaders);
+        return send(endpoint, identity.caller ?? caller, 'tools/call', params, callHeaders);
       }
       discovery.calls.set(thread.id, callMemory);
       result = { thread };
@@ -378,12 +380,12 @@ export async function preflightFixture(gateway = 'http://127.0.0.1:1',
     return opened.session;
   }
   function call(thread: string, name: string, args: object, headers: Record<string, string> = {},
-    callId: string = randomUUID()) {
+    callId: string = randomUUID(), identity?: CallIdentity) {
     const nativeCall = discovery.calls.get(thread);
     if (!nativeCall) {
       throw new Error('Native thread has not started');
     }
-    return nativeCall(name, args, headers, callId);
+    return nativeCall(name, args, headers, callId, identity);
   }
   function recall(thread: string, args: object, headers: Record<string, string> = {},
     callId: string = randomUUID()) {

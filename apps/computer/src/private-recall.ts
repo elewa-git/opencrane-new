@@ -19,15 +19,20 @@ function recallTools(input: Turn) {
 }
 
 function requireRecallDefinitions(server: ReturnType<typeof parseTools>[number]) {
-  if (server.definitions.length < 1 || server.definitions.length > 2
+  if (server.definitions.length < 1 || server.definitions.length > 3
     || record(JSON.parse(server.definitions[0]!))['name'] !== 'recall'
     || server.modes['recall'] !== 'allow'
     || Object.keys(server.modes).length !== server.definitions.length) {
     throw new Error('Private recall refused');
   }
-  if (server.definitions.length === 2
+  if (server.definitions.length >= 2
     && (record(JSON.parse(server.definitions[1]!))['name'] !== 'remember'
       || server.modes['remember'] !== 'allow')) {
+    throw new Error('Private recall refused');
+  }
+  if (server.definitions.length === 3
+    && (record(JSON.parse(server.definitions[2]!))['name'] !== 'correct'
+      || server.modes['correct'] !== 'allow')) {
     throw new Error('Private recall refused');
   }
 }

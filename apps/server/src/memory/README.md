@@ -88,7 +88,7 @@ is never sent again automatically.
 flowchart LR
   server["Server"] -->|handles memory requests| memory["Memory"]
   chat["Chat"] -->|supplies saved turn facts| memory
-  gateway["AI gateway"] -->|passes checked memory calls| memory
+  gateway["AI gateway"] -->|passes checked recall and write calls| memory
   memory -->|clears withdrawn or stopped private replies| chat
   memory -->|checks access and references| models["Models library"]
   memory -->|supplies initial input once| computer["Computer input renderer"]
@@ -111,7 +111,8 @@ consumer reply never permits another delivery. Qualified private starts use this
 before receiving credentials. Admission remains disabled pending live qualification.
 
 The [memory contracts](README.robot.md) describe personal
-write receipts and status reads after a lost reply. Remember checks the current turn,
+write receipts and status reads after a lost reply. Remember and Correct check the current turn,
 Stop requests, computer generation and access again before saving. A Stop or computer
 replacement saved while the call waits for its database lock prevents the write,
-even if the computer has not yet removed the caller. Native admission remains disabled.
+even if the computer has not yet removed the caller. Correct keeps every other loaded
+reference and excludes the replaced fact from its dependencies. Native admission remains disabled.

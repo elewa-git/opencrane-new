@@ -1851,4 +1851,7 @@ timer. The fixture observes the real catalogue size without replacing its behavi
 The scripted native peer and synthetic deployment observations remain test inputs only.
 
 The [Remember contract](../../docs/process/p4-15-pr4n/README.robot.md) extends the admitted
-private thread to reviewed Recall and Remember. Correct and Forget remain held.
+private thread to reviewed Recall and Remember.
+The [Correct contract](../../docs/process/p4-15-pr4o/README.robot.md) adds Correct to that
+list and its permitted notifications. Forget remains held. The same thread, caller and
+private proxy carry the call and its structured receipt. Admission remains disabled.
