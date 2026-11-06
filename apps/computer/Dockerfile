@@ -1,4 +1,5 @@
 ARG COMPUTER_BASE=127.0.0.1:5001/opencrane/s035@sha256:6fe29bfc4455f19601bbca9e3cffa998fed57632484bb3a624a8da69beecee47
+ARG COMPUTER_APT_BASE=computer-apt-fallback
 FROM mirror.gcr.io/library/node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS npm-tools
 FROM npm-tools AS launcher-build
 RUN sed -i 's|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/20261001T000000Z|; s|http://deb.debian.org/debian$|http://snapshot.debian.org/archive/debian/20261001T000000Z|' /etc/apt/sources.list.d/debian.sources && \
@@ -6,7 +7,7 @@ RUN sed -i 's|http://deb.debian.org/debian-security|http://snapshot.debian.org/a
 COPY tool-user.c /tmp/tool-user.c
 RUN gcc -O2 -Wall -Wextra -Werror -o /tool-user /tmp/tool-user.c
 # The pinned base image supplies Codex and the native launcher that applies seccomp.
-FROM ${COMPUTER_BASE} AS runtime
+FROM ${COMPUTER_BASE} AS computer-apt-fallback
 USER root
 RUN sed -i 's|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/20261001T000000Z|; s|http://deb.debian.org/debian$|http://snapshot.debian.org/archive/debian/20261001T000000Z|' /etc/apt/sources.list.d/debian.sources
 COPY apt.lock /tmp/apt.lock
@@ -19,6 +20,8 @@ RUN apt-get -o Acquire::Check-Valid-Until=false update -qq && \
     python3 /tmp/collect-licences.py apt > /usr/share/opencrane/apt-packages.json && \
     rm -rf /var/lib/apt/lists/* /tmp/apt.lock /tmp/collect-licences.py /etc/apt/sources.list.d/inherited.sources /lifecycle /desktop && \
     find /spike -maxdepth 1 -type f -delete
+COPY --from=launcher-build /tool-user /usr/local/bin/tool-user
+FROM ${COMPUTER_APT_BASE} AS runtime
 COPY requirements.lock /tmp/requirements.lock
 RUN python3 -m venv /opt/python && /opt/python/bin/pip install --no-compile --no-cache-dir --require-hashes -r /tmp/requirements.lock && \
     rm /tmp/requirements.lock && rm -rf /opt/python/lib/python3.11/site-packages/pip* /opt/python/lib/python3.11/site-packages/setuptools* /opt/python/lib/python3.11/site-packages/pkg_resources
@@ -47,7 +50,6 @@ COPY --from=project libs/events/src/tool-call.ts /app/libs/events/src/tool-call.
 # Node 22 strips TypeScript outside node_modules; use the same link as a workspace install.
 RUN mkdir -p /app/node_modules/@opencrane && ln -s ../../libs/models /app/node_modules/@opencrane/models && \
     ln -s ../../libs/events /app/node_modules/@opencrane/events
-COPY --from=launcher-build /tool-user /usr/local/bin/tool-user
 # Codex starts a pipe connector; only the root supervisor starts the native host.
 RUN mkdir -p /usr/local/libexec && \
     mv /spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex-code-mode-host /usr/local/libexec/codex-code-mode-host && \

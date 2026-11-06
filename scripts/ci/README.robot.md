@@ -47,8 +47,23 @@ keep their existing concurrency. No extra job or browser installation is added.
 Each job writes `.tools/ci/report.json` and `.tools/ci/files-<group>.json`.
 Only the file lists are uploaded on pull requests. Main pushes also retain full
 reports for seven days. The refresh command below rebuilds timing estimates from these reports.
-The base image and computer image use separate GitHub cache scopes. Pull requests
-only read these caches; main pushes may write them.
+The image fixture reads `apps/computer/test/base-image-digest.txt` and
+`apps/computer/test/base-image-inputs.txt` with `base-image.mjs`.
+The first file accepts an empty value or one lowercase, complete sha256 digest.
+The second holds the hash of the files used to build that image. Empty files or
+changed inputs run Docker Bake from source. A matching pair prompts CI to inspect
+the exact registry digest. CI uses the public
+`ghcr.io/elewa-git/opencrane-ci-computer-base` image only when its
+`io.opencrane.ci.base-inputs` label matches the current inputs hash. A missing label,
+different label or registry error runs Docker Bake from source. The registry path
+does not evaluate either snapshot apt stage. The hash covers the Dockerfile,
+`.dockerignore`, `apt.lock`, launcher source and both Codex package files.
+The publisher puts the same hash in
+the image label `io.opencrane.ci.base-inputs`. The base workflow runs on main when
+these files or the workflow change. Its manual trigger can refresh the same tag.
+It uses standard runners and no Actions build cache.
+Record the workflow's printed digest and hash in a follow-up change after the owner makes
+the GitHub package public in the web page. Do not change package settings by API.
 
 For a local fixture run, build with
 `nice -n 10 docker buildx bake -f apps/computer/test/upload-bake.hcl --load`,
