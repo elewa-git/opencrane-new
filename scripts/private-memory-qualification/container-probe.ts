@@ -74,6 +74,28 @@ function ownsProcess(group: string): boolean {
   return entries.includes(String(process.pid));
 }
 
+function coreDumpsProtected(): true | ProtectionFailure {
+  let failure: ProtectionFailure = 'core_pattern_unreadable';
+  try {
+    const pattern = read('/proc/sys/kernel/core_pattern');
+    if (!/^[^\n]*\n$/u.test(pattern)) {
+      return failure;
+    }
+    failure = 'suid_dumpable_unreadable';
+    const privileged = read('/proc/sys/fs/suid_dumpable');
+    if (!/^[012]\n$/u.test(privileged)) {
+      return failure;
+    }
+    // Refuse pipe helpers that can ignore the runner's zero core limits.
+    if (pattern.startsWith('|') && privileged !== '0\n') {
+      return 'core_helper_enabled';
+    }
+    return true;
+  } catch {
+    return failure;
+  }
+}
+
 // Prove only this runner's prerequisites. Other processes still need their own checks.
 export function probeContainer(): true | ProtectionFailure {
   let failure: ProtectionFailure = 'swap_measurement_failed';
@@ -101,6 +123,10 @@ export function probeContainer(): true | ProtectionFailure {
     const protection = runnerProtected();
     if (protection !== true) {
       return protection;
+    }
+    const coreProtection = coreDumpsProtected();
+    if (coreProtection !== true) {
+      return coreProtection;
     }
     // Refuse a move or remount during measurement; repeat after awaited work too.
     failure = 'swap_measurement_failed';

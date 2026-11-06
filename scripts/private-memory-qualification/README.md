@@ -74,7 +74,10 @@ They do not qualify a deployment or enable memory.
 
 The container alternative reads the runner's own Linux control group, which limits
 memory and swap. An image-owned helper disables dumps in that Node process and
-measures its dumpability and core limits. This path returns only NOT RUN until
+measures its dumpability and core limits. The runner also reads `kernel.core_pattern`
+and `fs.suid_dumpable`. It refuses a crash dump helper unless `fs.suid_dumpable` is 0.
+Unreadable settings refuse too. It never changes host settings.
+This path returns only NOT RUN until
 the server, bridge, supervisor, proxy and native processes have equivalent proof.
 
 ## How to run or test it
