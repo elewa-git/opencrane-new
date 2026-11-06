@@ -88,9 +88,10 @@ Established MemberAccessRefused takes priority over dependency failures.
 
 ## Recall dispatch after admission
 
-Qualified personal turns offer Recall and Remember from current reviewed, free Allow policy
+Qualified personal turns offer Recall, Remember and Correct from reviewed, free Allow policy
 and both MCP-use permissions. The [Remember contract](../../../../docs/process/p4-15-pr4n/README.robot.md)
-records write delivery and the held operations. Shared and memory-free turns cannot use
+records Remember delivery. The [Correct contract](../../../../docs/process/p4-15-pr4o/README.robot.md)
+records replacement delivery. Forget remains excluded. Shared and memory-free turns cannot use
 this offer. It supplies definitions, not approval to discover tools or read facts.
 The authenticated bridge accepts recall receipts only for an original delivery carrying
 recall metadata. That metadata records its requester, expiry and frame size on the server.

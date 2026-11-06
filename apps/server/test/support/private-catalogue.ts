@@ -61,7 +61,8 @@ export async function privateCatalogue(callers: ReturnType<typeof privateCallers
   return { tools, input, state };
 }
 
-export { checkPrivateTurnTools, buildPrivateTurnMemoryTools } from '../../src/chat/turn-tools.ts';
+export { checkPrivateTurnTools, buildPrivateTurnMemoryTools, buildRecallOffer,
+  type TurnToolServerState } from '../../src/chat/turn-tools.ts';
 
 export function privateToolOffer(name: 'recall' | 'remember' | 'correct' | 'forget' | 'all') {
   let definition: typeof recallTool | typeof rememberTool | typeof correctTool | typeof forgetTool;
