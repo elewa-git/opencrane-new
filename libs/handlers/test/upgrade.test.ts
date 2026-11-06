@@ -262,6 +262,17 @@ function upgradeTests() {
   }
   it('reports failed jobs and lets an upgrade proceed', failedJobs);
 
+  async function countsRemovedHistory() {
+    await prepare();
+    await current.append('removed', 'member-alice', 'member.removed');
+    await current.db.query('UPDATE handler_dispatcher SET sequence = 5');
+    const preview = await command('--dry-run');
+    const removed = '"handler":"update-members","addedTypes":[],"removedTypes":' +
+      '["member.removed"],"eventCount":1';
+    expect(preview.stdout).toContain(removed);
+  }
+  it('counts history for removed subscriptions in the preview', countsRemovedHistory);
+
   async function connectedSession() {
     await prepare();
     await preparedRuntime.stop();

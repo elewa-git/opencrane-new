@@ -701,14 +701,19 @@ and working directory; it cannot mount either private directory through their pa
 The secondary stub's match-count credential lives in `models/model-managed-stub`.
 Computers receive neither private directory. Native memory remains disabled.
 
-Before bootstrap or join, startup registers the fresh handler manifest using the
-same subscription list as dispatcher. A changed manifest refuses startup without
-resetting its checkpoint, jobs or receipts. Existing slots need stopped-services
-configuration and the [handler upgrade/backfill](../../apps/ops/README.robot.md#handler-subscription-upgrade):
-prepare the two owned directories, update the three environment files, then run
-that procedure with the same dispatcher settings. Existing stub slots also move their
-`model-managed-stub` file into `models/` while services are stopped. Do not use a reset
-as an upgrade.
+Before bootstrap or join, startup uses the same subscription list as the dispatcher.
+On repeat starts it stops app processes, previews `upgrade-handlers` with PostgreSQL,
+NATS and OpenFGA available, and applies a plan only when every change has no matching
+events or adds types without removing any. An order-only change updates the saved
+subscription list without scanning history. The command gets projection NATS reader
+settings and the dispatcher's database URL, silo and model decision URL. A removal
+with matching history or unfinished jobs stops startup and names the manual command.
+An unchanged list continues. `--fresh` skips the preview. A private marker written after
+the dispatcher opens its consumer must match its running process before startup prints
+`Stack ready`. Existing slots that need manual work follow the
+[handler upgrade procedure](../../apps/ops/README.robot.md#handler-subscription-upgrade).
+Existing stub slots also move their `model-managed-stub` file into `models/` while
+services are stopped. Do not use a reset as an upgrade.
 
 The owner's optional memory wiring remains unchanged: `MEMORY_KEY_DIRECTORY`
 enables its memory worker and HTTP reads; without it reads remain unavailable.

@@ -53,7 +53,9 @@ flowchart LR
    normal retry allowance. A saved completion prevents the work from happening twice.
 3. **A release changes subscriptions.** Startup can check subscriptions before admitting members. The dispatcher reports a
    change and waits for shutdown. The upgrade adds jobs for relevant older events only once
-   every other program using the database has stopped. Completed work stays completed.
+   every other program using the database has stopped. Its preview also counts old events
+   for removed subscriptions, so the local stack can ask for manual maintenance when needed.
+   Completed work stays completed.
 
 ## How to run or test it
 

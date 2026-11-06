@@ -110,6 +110,8 @@ rebuild projections or reset the consumer. The dispatcher holds the PostgreSQL
 `handler-dispatcher` advisory lock for its whole lifetime, including when a changed
 manifest leaves it waiting for shutdown. It logs changed handlers, added/removed
 event types and `npm run ops -- upgrade-handlers --dry-run` before waiting.
+The preview counts saved events matching added or removed types. Only added types
+produce new jobs when the upgrade is applied.
 An order-only change gets a separate, plain log line. The ops host starts workers
 and the computer watcher only after this check. Computers are not suspended while
 the dispatcher waits. An operator stops them as part of the upgrade procedure.

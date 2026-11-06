@@ -295,12 +295,19 @@ has already finished an event).
    clients stopped while historical jobs run. Reactions may append further events.
    Check failed jobs and permissions before restarting clients and event writers.
 
-The JSON report contains `plan`, with changed handlers, added/removed types and
+The JSON report contains `manifestChanged`, which is true even when only subscription
+order changed. It also contains `plan`, with changed handlers, added/removed types and
 matching event counts, and `failedJobs`, with original job ids, names and streams.
+
+When the local stack sets `DEV_DISPATCHER_READY_FILE`, the dispatcher writes its PID
+there after opening its event consumer. It writes nothing while a changed subscription
+list leaves it waiting for maintenance.
+
 Dry-run changes nothing. The upgrade queues only new pairs through the saved
 dispatcher checkpoint. The durable consumer handles later events after restart.
-It never runs a reaction or publishes an event. Removed subscriptions and changes
-to order alone skip history. Old queues and receipts are retained.
+It never runs a reaction or publishes an event. The preview scans removed types to
+count their saved events; applying a removal queues no work and skips that scan.
+Changes to order alone also skip history. Old queues and receipts are retained.
 
 The scan saves jobs and progress in chunks of at most 256 events. It logs events
 scanned and jobs queued. Transient read timeouts retry with back-off. After a crash,

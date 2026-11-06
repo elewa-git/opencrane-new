@@ -2,6 +2,7 @@ import { scanConnections, connectionCleanupHandler, connectionCustodyFromFile,
   budgets, ownershipSeedHandler, ownershipConfirmationHandler, settlementHandler, modelGrantHandler,
   providerDefaultHandler, initialiseBudgetProjection, budgetStopHandler } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
+import { writeFile } from 'node:fs/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
 import { connectEventStore, type EventStore } from '@opencrane/event-store';
 import { connectProjectionDb, ProjectionRunner, auditTrail, groups, providers, members,
@@ -254,6 +255,12 @@ try {
         stop.abort();
       }
       void watcher.catch(watcherFailed);
+      const readyFile = process.env['DEV_DISPATCHER_READY_FILE'];
+      if (readyFile) {
+        // Mark readiness only after the dispatcher opens its event consumer.
+        const fileOptions = { mode: 0o600 };
+        await writeFile(readyFile, String(process.pid), fileOptions);
+      }
     }
     await dispatch(connection, runtime, stop.signal, startWorkers);
   } else {
