@@ -302,6 +302,16 @@ export function providerDefaultHandler(store: EventStore, binding: Binding) {
       throw new ProviderRefused();
     }
     const current = await inventory(store, binding.silo);
+    if (trigger.type === 'provider.models_selected') {
+      function isTrigger(row: StoredEvent) {
+        return row.event.id === trigger.id;
+      }
+      // Retry when the selection has not reached this read yet. Returning would mark
+      // the handler complete without saving the default choice.
+      if (!current.rows.some(isTrigger)) {
+        throw new Error('Provider selection unavailable');
+      }
+    }
     const identity = {
       kind: 'silo_default' as const, dependantId: binding.silo, task: 'chat_turn' as const,
     };

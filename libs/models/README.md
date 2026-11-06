@@ -389,8 +389,9 @@ Retrying an unchanged model call can recover its original unsent hold and saved 
   Ownership commands read other members’ confirmations when they need the full owner list.
 - Records provider choices and pauses for assistants and the silo default.
   An administrator can choose any eligible provider. The first verified provider
-  supplies the automatic default when nobody has chosen one. Each reply confirms
-  the change that was saved. Reusing a request id for another change is refused.
+  supplies the automatic default when nobody has chosen one. The worker retries if
+  the model selection is missing from its read. Each reply confirms the change that
+  was saved. Reusing a request id for another change is refused.
   Ordinary calls still use the existing gateway setup.
 - Signs short passes for memory calls through the gateway.
   A thread can read the person's own facts, its assistant's notes and that assistant's group facts.

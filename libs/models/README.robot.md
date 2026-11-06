@@ -1919,6 +1919,10 @@ returning its receipt, including duplicate recovery. The automatic default calls
 private binding command with `system:seed-provider-default`; public command schemas
 reject its colon. Only automatic selection follows the first verified provider.
 Explicit initial choices can use any eligible connection.
+For a `provider.models_selected` trigger, the handler requires that exact event in
+its provider history before considering the automatic choice. A missing event
+throws so the dispatcher retries. Verification before model selection can still
+finish without a choice; a saved choice or pause remains final.
 
 `apps/server/test/provider-binding-guards.test.ts` covers concurrent same-id requests,
 actor reuse, the reserved reaction id, explicit initial defaults, independent source
