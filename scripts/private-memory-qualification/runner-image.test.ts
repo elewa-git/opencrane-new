@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
 const imageTag = `runner-protection-test:${randomUUID()}`;
@@ -37,10 +38,16 @@ function run(source: string, memorySwap = '256m', core = '0:0', identityChange =
 }
 const probe = `import { probeContainer } from '${directory}/container-probe.ts';
   process.stdout.write(String(probeContainer()));`;
-function acceptsRestricted(): void {
-  expect(run(probe)).toBe('true');
+function checksRestricted(): void {
+  const pattern = readFileSync('/proc/sys/kernel/core_pattern', 'utf8');
+  const privileged = readFileSync('/proc/sys/fs/suid_dumpable', 'utf8');
+  let expected = 'true';
+  if (pattern.startsWith('|') && privileged !== '0\n') {
+    expected = 'core_helper_enabled';
+  }
+  expect(run(probe)).toBe(expected);
 }
-it('measures the image-owned runner inside its restricted container', acceptsRestricted, 30_000);
+it('checks the restricted runner and the actual host core settings', checksRestricted, 30_000);
 function refusesSwap(): void {
   expect(run(probe, '512m')).toBe('swap_not_disabled');
 }
@@ -71,10 +78,16 @@ it('measures this process and refuses the unprotected process after exec', measu
   30_000);
 function refusesIdentityChange(): void {
   const source = `import assert from 'node:assert/strict';
+    import { readFileSync } from 'node:fs';
     import { runnerProtected } from '${directory}/runner-protection.ts';
     assert.equal(runnerProtected(), true);
+    const privileged = readFileSync('/proc/sys/fs/suid_dumpable', 'utf8');
+    let expected = 'process_dumpable';
+    if (privileged === '0\\n') {
+      expected = 'process_identity_changed';
+    }
     process.seteuid(1000);
-    assert.equal(runnerProtected(), 'process_dumpable');
+    assert.equal(runnerProtected(), expected);
     process.stdout.write('refused');`;
   expect(run(source, '256m', '0:0', true)).toBe('refused');
 }

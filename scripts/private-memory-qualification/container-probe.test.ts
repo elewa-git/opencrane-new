@@ -30,6 +30,7 @@ function prepare(): void {
   files = new Map([
     ['/proc/swaps', 'Filename Type Size Used Priority\n/private/swap file 1 0 -2\n'],
     ['/proc/sys/kernel/core_pattern', '|/private/collector %p\n'],
+    ['/proc/sys/fs/suid_dumpable', '0\n'],
     ['/proc/self/cgroup', '0::/\n'], ['/proc/self/mountinfo', mount],
     ['/sys/fs/cgroup/cgroup.procs', `${process.pid}\n`],
     ['/sys/fs/cgroup/memory.max', '268435456\n'],
@@ -138,3 +139,56 @@ async function namesRunnerFailure(protectionFailure: 'helper_unavailable' | 'cor
 }
 it.each(['helper_unavailable', 'core_limit_not_zero', 'process_dumpable'] as const)(
   'preserves %s when swap and memory controls are safe', namesRunnerFailure);
+
+async function refusesCoreHelper(): Promise<void> {
+  files.set('/proc/sys/fs/suid_dumpable', '2\n');
+  const expected = {
+    result: 'FAIL', reason: 'host_refused', protectionFailure: 'core_helper_enabled',
+  };
+  expect(await runJourney(request)).toEqual(expected);
+}
+it('refuses a core_pattern helper when suid_dumpable is 2', refusesCoreHelper);
+
+const coreSettings = [
+  ['/proc/sys/kernel/core_pattern', 'core_pattern_unreadable'],
+  ['/proc/sys/fs/suid_dumpable', 'suid_dumpable_unreadable'],
+];
+async function refusesUnreadableCoreSetting(path: string, protectionFailure: string): Promise<void> {
+  files.delete(path);
+  const expected = { result: 'FAIL', reason: 'host_refused', protectionFailure };
+  expect(await runJourney(request)).toEqual(expected);
+}
+it.each(coreSettings)(
+  'refuses an unreadable core dump setting %s', refusesUnreadableCoreSetting);
+
+async function allowsCoreSetting(pattern: string, privileged: string): Promise<void> {
+  files.set('/proc/sys/kernel/core_pattern', pattern);
+  files.set('/proc/sys/fs/suid_dumpable', privileged);
+  expect(await runJourney(request)).toMatchObject({ result: 'NOT RUN', complete: false });
+  vi.mocked(runnerProtected).mockReturnValue('core_limit_not_zero');
+  expect(await runJourney(request)).toEqual({
+    result: 'FAIL', reason: 'host_refused', protectionFailure: 'core_limit_not_zero',
+  });
+}
+const allowedCoreSettings = [
+  ['|/private/collector %p\n', '0\n'],
+  ['core.%p\n', '2\n'],
+  ['\n', '0\n'],
+];
+it.each(allowedCoreSettings)(
+  'allows core dump settings case %# only with zero core limits', allowsCoreSetting);
+
+async function refusesUnknownCoreSetting(
+  path: string, value: string, protectionFailure: string,
+): Promise<void> {
+  files.set(path, value);
+  const expected = { result: 'FAIL', reason: 'host_refused', protectionFailure };
+  expect(await runJourney(request)).toEqual(expected);
+}
+const unknownCoreSettings = [
+  ['/proc/sys/kernel/core_pattern', '', 'core_pattern_unreadable'],
+  ['/proc/sys/fs/suid_dumpable', '', 'suid_dumpable_unreadable'],
+  ['/proc/sys/fs/suid_dumpable', 'unknown\n', 'suid_dumpable_unreadable'],
+];
+it.each(unknownCoreSettings)(
+  'refuses an unknown core dump setting case %#', refusesUnknownCoreSetting);

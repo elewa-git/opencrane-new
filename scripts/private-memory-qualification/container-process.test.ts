@@ -187,5 +187,6 @@ async function forwardsProtectionFailure(protectionFailure: string): Promise<voi
 it.each(['swap_measurement_failed', 'swap_not_disabled', 'memory_limit_unproved',
   'crash_kernel_unproved', 'core_limit_measurement_failed', 'core_limit_not_zero',
   'dumpability_measurement_failed', 'dumpability_protection_failed', 'process_dumpable',
-  'process_identity_changed', 'helper_unavailable'])(
+  'process_identity_changed', 'helper_unavailable', 'core_pattern_unreadable',
+  'suid_dumpable_unreadable', 'core_helper_enabled'])(
   'forwards only the fixed protection category %s after cleanup', forwardsProtectionFailure, 30_000);

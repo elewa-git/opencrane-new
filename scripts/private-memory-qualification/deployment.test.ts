@@ -471,6 +471,10 @@ it('refuses a replacement child that claims its PARTIAL check is complete',
   refusesCompleteReplacement);
 
 const protectionCases = [
+  ['core_pattern_unreadable', 'kernel.core_pattern could not be read as a known setting.'],
+  ['suid_dumpable_unreadable', 'fs.suid_dumpable could not be read as a known setting.'],
+  ['core_helper_enabled',
+    'kernel.core_pattern sends core dumps to a helper program while fs.suid_dumpable is not 0.'],
   ['swap_measurement_failed', 'Container swap protection could not be measured.'],
   ['swap_not_disabled', 'Container swap allowance and current use must both be zero.'],
   ['memory_limit_unproved', 'A finite positive container memory limit could not be proved.'],

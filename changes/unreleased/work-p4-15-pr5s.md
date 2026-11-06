@@ -1,0 +1,1 @@
+- Refuse private memory qualification when `kernel.core_pattern` sends crash dumps to a helper and `fs.suid_dumpable` is not 0, or either setting cannot be read. Keep the existing container protection checks and report a fixed reason naming the setting.

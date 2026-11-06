@@ -161,6 +161,17 @@ exec starts a new process that needs its own protection; zero core limits and
 `CoreDumping=0` cannot replace this check. No host configuration is changed.
 The runner checks again after awaited work and before returning a receipt.
 
+The container path also reads `/proc/sys/kernel/core_pattern` and
+`/proc/sys/fs/suid_dumpable`. A pipe pattern with a non-zero `suid_dumpable` returns
+`host_refused` with `protectionFailure: core_helper_enabled`: a helper program can
+ignore RLIMIT_CORE and receive a dump even when the process is non-dumpable.
+A plain file pattern, or a pipe with `suid_dumpable=0`, allows only the existing
+prerequisite result when every container protection also holds. An unreadable or
+unknown setting returns `core_pattern_unreadable` or `suid_dumpable_unreadable`.
+An empty pattern is valid only when the proc file contains its terminating newline;
+an empty read refuses. Only the fixed category and message reach logs and saved
+results; the pattern, helper path and read errors stay out. No host setting changes.
+
 This bounded first part permits only NOT RUN receipts through the container path.
 It runs no native or server journey there. Equivalent measurements for every other
 plaintext-bearing process, guest kernels and both complete qualifications remain
