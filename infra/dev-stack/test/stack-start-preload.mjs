@@ -62,12 +62,17 @@ async function execute(command, args) {
     throw new Error('Automated journey reached');
   }
   if (args.includes('upgrade-handlers')) {
-    if (process.env.START_UPGRADE_FAILURE === '1') {
+    if (process.env.START_UPGRADE_FAILURE === '1' && args.includes('--dry-run')) {
       throw new Error('private database URL: postgres://secret@fixture.invalid');
     }
-    const changed = process.env.START_UPGRADE_REPORT === 'unsafe';
+    if (process.env.START_APPLY_FAILURE === '1' &&
+        args.includes('--confirm-writers-stopped')) {
+      throw new Error('private database URL: postgres://secret@fixture.invalid');
+    }
+    const unsafe = process.env.START_UPGRADE_REPORT === 'unsafe';
+    const changed = unsafe || process.env.START_UPGRADE_REPORT === 'safe';
     const plan = changed ? [{ handler: 'example', addedTypes: [],
-      removedTypes: ['old'], eventCount: 2 }] : [];
+      removedTypes: ['old'], eventCount: unsafe ? 2 : 0 }] : [];
     const report = { dryRun: true, manifestChanged: changed, plan, failedJobs: [] };
     return { stdout: `${JSON.stringify(report)}\n`, stderr: '' };
   }

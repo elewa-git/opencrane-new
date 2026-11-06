@@ -2,7 +2,7 @@ import { scanConnections, connectionCleanupHandler, connectionCustodyFromFile,
   budgets, ownershipSeedHandler, ownershipConfirmationHandler, settlementHandler, modelGrantHandler,
   providerDefaultHandler, initialiseBudgetProjection, budgetStopHandler } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
-import { writeFile } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
 import { connectEventStore, type EventStore } from '@opencrane/event-store';
 import { connectProjectionDb, ProjectionRunner, auditTrail, groups, providers, members,
@@ -63,6 +63,18 @@ function workerProjection() {
   return projections[mode];
 }
 const stop = new AbortController();
+const readinessFile = process.env['DEV_DISPATCHER_READY_FILE'];
+let readinessRemoval: Promise<void> | undefined;
+function withdrawReadiness() {
+  if (readinessFile && !readinessRemoval) {
+    readinessRemoval = rm(readinessFile, { force: true }).catch(readinessRemovalFailed);
+  }
+}
+function readinessRemovalFailed() {
+  logger.error('Worker readiness marker could not be removed');
+  process.exitCode = 1;
+}
+stop.signal.addEventListener('abort', withdrawReadiness, { once: true });
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => stop.abort());
 const db = connectProjectionDb(required('DATABASE_URL'), (error) => {
   logger.error({ err: error }, 'Worker database connection failed');
@@ -255,11 +267,14 @@ try {
         stop.abort();
       }
       void watcher.catch(watcherFailed);
-      const readyFile = process.env['DEV_DISPATCHER_READY_FILE'];
-      if (readyFile) {
+      if (readinessFile) {
         // Mark readiness only after the dispatcher opens its event consumer.
+        stop.signal.throwIfAborted();
         const fileOptions = { mode: 0o600 };
-        await writeFile(readyFile, String(process.pid), fileOptions);
+        await writeFile(readinessFile, String(process.pid), fileOptions);
+        if (stop.signal.aborted) {
+          await rm(readinessFile, { force: true });
+        }
       }
     }
     await dispatch(connection, runtime, stop.signal, startWorkers);
@@ -276,6 +291,7 @@ try {
   }
 } finally {
   stop.abort();
+  await readinessRemoval;
   // Drain every background task before closing storage, even when another task failed.
   const tasks = await Promise.allSettled([runtime?.stop(), watcher, connectionScan]);
   for (const task of tasks) {

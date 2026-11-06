@@ -16,7 +16,7 @@ under `apps`. [apps/server](../server/README.md) saves changes as
 
 ```mermaid
 flowchart LR
-  apps["apps<br/>applications"] --> ops["apps/ops<br/>workers and recovery checks"]
+  apps["apps<br/>applications"] --> ops["apps/ops<br/>workers, recovery and readiness"]
   apps --> server["apps/server<br/>back end"]
   server -.->|tests supply delivery with start confirmation| ops
   server -->|saves changes| nats["NATS<br/>event log"]
@@ -45,6 +45,7 @@ and suspension. Those checks read metadata and change no resources.
 - Prepares reviewed tool settings for the gateway and, when configured, removes
   forgotten memory keys and old private connection copies.
 - Provides [replay](../../GLOSSARY.md#replay), failed-job tools and upgrades for recovery.
+- Removes the dispatcher's ready marker when it stops consuming events.
 - Provides internal commands that claim, skip or record missed routine slots without starting work.
 - Holds one routine scheduler owner per silo while its callback prepares claims.
 - Inspects small pages of routine references and dispatches checked commands from saved events.

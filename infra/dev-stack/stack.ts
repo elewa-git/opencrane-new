@@ -5,7 +5,7 @@ import { Client } from 'minio';
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { chmod, copyFile, mkdir, open, readFile, realpath, rm, stat } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, open, readFile, readdir, realpath, rm, stat } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import { setPriority } from 'node:os';
 import { promisify } from 'node:util';
@@ -35,6 +35,16 @@ const exec = promisify(execFile);
 // Keep a claim for 15 minutes because claim.sh exits before stack startup can finish.
 const CLAIM_GRACE_PERIOD_MS = 15 * 60 * 1000;
 const memoryKeyDirectory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
+const publicUpgradeMessages = new Set([
+  'Handler upgrade preview failed. Run npm run ops -- upgrade-handlers --dry-run ' +
+    'with data services up.',
+  'Handler subscriptions need maintenance. Run npm run ops -- upgrade-handlers --dry-run, ' +
+    'then npm run ops -- upgrade-handlers --confirm-writers-stopped after checking the plan.',
+  'Handler upgrade failed. Run npm run ops -- upgrade-handlers --dry-run ' +
+    'and check stopped services.',
+  'Dispatcher is not consuming events. Run npm run ops -- upgrade-handlers --dry-run ' +
+    'with data services up, then check the dispatcher log.',
+]);
 
 function includedProcess(name: string) {
   return !secondary || (name !== 'models' && name !== 'model-stub');
@@ -346,7 +356,7 @@ async function stop() {
     if (ownership === 'owned') await run('sudo', ['-n', 'tailscale', 'serve', '--https=443', 'off']);
   }
   await rm(`${directory}/serve-owned`, { force: true });
-  await stopProcesses([...names].reverse());
+  await stopSavedProcesses();
   if (!secondary) await modelFirewall(false);
   if (await exists(`${directory}/settings.env`)) await compose('down', '--remove-orphans');
 }
@@ -359,6 +369,19 @@ async function stopProcesses(processes: string[]) {
     }
     await rm(`${directory}/${name}.pid`, { force: true });
   }
+}
+async function stopSavedProcesses() {
+  const files = await readdir(directory);
+  function isProcessRecord(file: string) {
+    return file.endsWith('.pid');
+  }
+  function processName(file: string) {
+    return file.slice(0, -4);
+  }
+  // Stop processes from this stack's saved records, even when current settings omit a worker.
+  const records = files.filter(isProcessRecord);
+  const processes = records.map(processName);
+  await stopProcesses(processes.reverse());
 }
 async function initialiseDatabase() {
   if (await exists(`${directory}/database-ready`)) return;
@@ -511,7 +534,7 @@ async function up(fresh: boolean) {
   await compose('up', '-d', 'openfga');
   await wait(() => healthy(`${settings['OPENFGA_API_URL']}/healthz`), 'OpenFGA');
   // Stop every application database client before the upgrade command checks for other sessions.
-  await stopProcesses([...names].reverse());
+  await stopSavedProcesses();
   if (secondary) await compose('stop', 'models');
   // Skip the preview until a first or fresh start has registered its dispatcher state.
   if (!firstStart) {
@@ -1000,6 +1023,8 @@ try {
     console.error(message);
   } else if (error instanceof Error &&
       (providerSetupFailure || error.message === ownerRunRefusal)) {
+    console.error(error.message);
+  } else if (error instanceof Error && publicUpgradeMessages.has(error.message)) {
     console.error(error.message);
   } else {
     let message: string;

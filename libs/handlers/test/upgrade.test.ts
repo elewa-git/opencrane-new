@@ -256,11 +256,26 @@ function upgradeTests() {
     await current.db.query('UPDATE handler_dispatcher SET manifest = $1', [manifest]);
     await runtime.enqueue(runtime.options.handlers[0]!, event('pending'), current.db);
     const preview = await command('--dry-run');
-    const report = JSON.parse(preview.stdout.trim().split('\n').at(-1)!);
+    const report: unknown = JSON.parse(preview.stdout.trim().split('\n').at(-1)!);
+    if (typeof report !== 'object' || report === null ||
+        !('manifestChanged' in report) || !('plan' in report)) {
+      throw new Error('Handler preview report is missing');
+    }
     expect(report.manifestChanged).toBe(false);
     expect(report.plan).toEqual([]);
     const jobs = await current.db.query("SELECT state FROM pgboss.job WHERE state = 'created'");
     expect(jobs.rows.length).toBeGreaterThan(0);
+    await command('--confirm-writers-stopped');
+    await runtime.start();
+    await runtime.work(1);
+    function isPendingEffect(effect: { event_id: string }) {
+      return effect.event_id === 'pending';
+    }
+    async function queuedJobFinished() {
+      const effects = await current.effects();
+      return effects.some(isPendingEffect);
+    }
+    await until(queuedJobFinished);
   }
   it('previews unchanged subscriptions with a queued job so workers can restart',
     unchangedManifestWithQueuedJob);

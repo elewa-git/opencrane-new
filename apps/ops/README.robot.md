@@ -266,8 +266,9 @@ has already finished an event).
 
 1. Preview the plan with `npm run ops -- upgrade-handlers --dry-run`.
    Dry-run takes no lock and can run while a changed dispatcher waits. It checks
-   unfinished jobs and lists failed originals. If jobs are unfinished, drain them
-   using the previous release before requesting another preview.
+   unfinished jobs when subscriptions changed and lists failed originals. If a changed
+   list has unfinished jobs, drain them using the previous release before another preview.
+   An unchanged list can restart its workers while jobs are queued or retrying.
 2. Stop `apps/server`, computers, the model gateway and other clients that request
    decisions or append events. Leave NATS, PostgreSQL, OpenFGA and model/budget
    decision services available while the previous release drains jobs and the
@@ -301,7 +302,8 @@ matching event counts, and `failedJobs`, with original job ids, names and stream
 
 When the local stack sets `DEV_DISPATCHER_READY_FILE`, the dispatcher writes its PID
 there after opening its event consumer. It writes nothing while a changed subscription
-list leaves it waiting for maintenance.
+list leaves it waiting for maintenance. The worker removes the marker as soon as
+dispatch stops, including while a slow cleanup task is still finishing.
 
 Dry-run changes nothing. The upgrade queues only new pairs through the saved
 dispatcher checkpoint. The durable consumer handles later events after restart.

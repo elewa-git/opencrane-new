@@ -185,7 +185,9 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
               await readFile(env.DEV_DISPATCHER_READY_FILE);
               return false;
             } catch (error) {
-              if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+              if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) {
+                throw error;
+              }
               return true;
             }
           }

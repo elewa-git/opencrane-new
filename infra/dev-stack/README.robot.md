@@ -702,13 +702,15 @@ The secondary stub's match-count credential lives in `models/model-managed-stub`
 Computers receive neither private directory. Native memory remains disabled.
 
 Before bootstrap or join, startup uses the same subscription list as the dispatcher.
-On repeat starts it stops app processes, previews `upgrade-handlers` with PostgreSQL,
+On repeat starts it stops every process with a saved PID record, previews
+`upgrade-handlers` with PostgreSQL,
 NATS and OpenFGA available, and applies a plan only when every change has no matching
 events or adds types without removing any. An order-only change updates the saved
 subscription list without scanning history. The command gets projection NATS reader
 settings and the dispatcher's database URL, silo and model decision URL. A removal
-with matching history or unfinished jobs stops startup and names the manual command.
-An unchanged list continues. `--fresh` skips the preview. A private marker written after
+with matching history or unfinished jobs stops a changed-list upgrade and names the manual
+command. An unchanged list restarts workers even when jobs are queued. `--fresh` skips the
+preview. A private marker written after
 the dispatcher opens its consumer must match its running process before startup prints
 `Stack ready`. Existing slots that need manual work follow the
 [handler upgrade procedure](../../apps/ops/README.robot.md#handler-subscription-upgrade).

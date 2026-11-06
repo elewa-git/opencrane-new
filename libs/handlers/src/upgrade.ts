@@ -191,13 +191,13 @@ export async function upgradeHandlers(
   const { db } = runtime.options;
   if (dryRun) {
     const state = await inspect(runtime, source);
-    const failedJobs = await unfinishedJobs(db, Boolean(state.progress));
     if (state.row.manifest === state.manifest) {
-      return { manifestChanged: false, plan: [], failedJobs };
+      return { manifestChanged: false, plan: [], failedJobs: await failedJobs(db) };
     }
+    const failures = await unfinishedJobs(db, Boolean(state.progress));
     const plan = await scanUpgrade(runtime, source, state.changes, state.sequence,
       state.manifest, state.row.manifest, undefined, true);
-    return { manifestChanged: true, plan, failedJobs };
+    return { manifestChanged: true, plan, failedJobs: failures };
   }
   // Check the old dispatcher lock before reporting its other database connections.
   await db.transaction(requireStoppedDispatcher);

@@ -19,7 +19,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|starts services; checks listeners; sets up sign-in| services["Local services<br/>jobs, content and access"]
   stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
-  stack -->|checks subscriptions, starts apps and waits for the dispatcher| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
+  stack -->|stops saved workers, checks subscriptions and waits for the dispatcher| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|checks ownership, backup certificates and nodes; stops cancelled checks| package["infra/package<br/>Helm install"]
   stack -->|checks collection and reports host refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
@@ -46,6 +46,7 @@ its body. A body that does not finish fails after ten seconds, leaving that stat
 available for diagnosis.
 
 - Starts and stops local services and apps with private local credentials.
+- Stops every worker recorded by this stack before checking subscription changes.
 - Starts the scanner for uploads and checks one signed scan before the server starts.
 - Checks that stack listeners use loopback or this machine's Tailscale addresses.
 - Waits for the website to answer before starting browser checks.

@@ -19,8 +19,9 @@ type StartOptions = {
   stopAfterStart?: boolean;
   repeat?: boolean;
   previousMemory?: boolean;
-  upgradeReport?: 'unchanged' | 'unsafe';
+  upgradeReport?: 'unchanged' | 'safe' | 'unsafe';
   upgradeFailure?: boolean;
+  applyFailure?: boolean;
   markerMissing?: boolean;
 };
 
@@ -47,6 +48,7 @@ async function ownerStart(start: StartOptions = {}) {
       START_ROUTINES_EXIT: start.routinesExit ? '1' : '',
       START_UPGRADE_REPORT: start.upgradeReport ?? 'unchanged',
       START_UPGRADE_FAILURE: start.upgradeFailure ? '1' : '',
+      START_APPLY_FAILURE: start.applyFailure ? '1' : '',
       START_MARKER_MISSING: start.markerMissing ? '1' : '',
       START_RESTORE_PROCESSES: '',
     };
@@ -109,8 +111,11 @@ async function ownerReadiness() {
 async function repeatStopsOldMemoryWorker() {
   const result = await ownerStart({ repeat: true, previousMemory: true });
   assert.equal(result.status, 0, result.output + result.failure);
-  assert.match(result.operations, /stop .*worker.ts memory/u);
+  assert.match(result.operations, /stop memory/u);
   assert.match(result.operations, /exec .*upgrade-handlers --dry-run/u);
+  const memoryStopped = result.operations.lastIndexOf('stop memory');
+  const previewStarted = result.operations.lastIndexOf('upgrade-handlers --dry-run');
+  assert.ok(memoryStopped < previewStarted);
 }
 
 test('repeat start stops an earlier memory worker before preview when memory is now off',
@@ -145,6 +150,17 @@ async function failedUpgradeShowsCommand() {
 
 test('preview errors print fixed instructions without dependency details',
   failedUpgradeShowsCommand);
+
+async function failedApplyShowsCommand() {
+  const result = await ownerStart({ repeat: true, upgradeReport: 'safe',
+    applyFailure: true });
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /npm run ops -- upgrade-handlers --dry-run/u);
+  assert.doesNotMatch(result.output, /postgres:|secret|fixture\.invalid|\/tmp\//u);
+}
+
+test('apply errors print fixed instructions without dependency details',
+  failedApplyShowsCommand);
 
 async function missingMarkerRefusesReadiness() {
   const result = await ownerStart({ markerMissing: true, webReadyMs: 1 });

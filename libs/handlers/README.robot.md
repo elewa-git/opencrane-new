@@ -152,7 +152,8 @@ skip the history scan. New queues may remain after failure; no reaction runs her
 Events beyond the checkpoint stay with the durable consumer after restart.
 
 Dry-run takes no advisory lock, creates no tables or queues, and writes nothing.
-It works while a changed dispatcher waits. It checks unfinished jobs, lists failed
+It works while a changed dispatcher waits. It checks unfinished jobs only when the
+subscriptions changed and lists failed
 originals and counts each newly subscribed historical event, including receipted
 events. During a partial upgrade, it ignores that upgrade's parked jobs and reports
 the whole plan from sequence 1. It still refuses other unfinished jobs.

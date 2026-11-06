@@ -1,3 +1,4 @@
-Repeat development stack starts check handler subscriptions before starting apps.
-They apply safe changes while workers are stopped, report changes needing maintenance,
-and wait for the dispatcher to consume events before saying the stack is ready.
+Repeat development stack starts stop every saved worker before checking handler subscriptions.
+They apply safe changes, restart unchanged subscriptions with queued jobs, and give fixed
+instructions when maintenance is needed. The stack waits for the dispatcher to consume
+events before saying it is ready, and removes that ready marker when dispatch stops.
