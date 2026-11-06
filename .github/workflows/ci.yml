@@ -319,6 +319,16 @@ jobs:
       - name: Build the upload test computer
         run: |
           image=$(node scripts/ci/base-image.mjs)
+          if [ -n "$image" ]; then
+            if image_json=$(docker buildx imagetools inspect "$image" \
+              --format '{{json .Image}}' 2>/dev/null) && \
+              node scripts/ci/base-image.mjs verify "$image_json" 2>/dev/null; then
+              echo 'Saved CI image label matches the current build inputs.'
+            else
+              echo 'Saved CI image label could not be verified; building from source.'
+              image=''
+            fi
+          fi
           if [ -z "$image" ]; then
             nice -n 10 docker buildx bake -f apps/computer/test/upload-bake.hcl --load
           else

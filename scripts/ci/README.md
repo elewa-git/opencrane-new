@@ -44,8 +44,9 @@ It also checks native private tool discovery and recall calls with the generated
 configuration. The recall check uses local scripted replies and no external model.
 It installs Chromium because the screenshot test needs both.
 The computer test image uses a public package image from GitHub's registry when its
-digest is recorded. Until then, Docker builds those packages from the fixed Debian
-snapshot. The digest names the exact image, so a later upload cannot change a CI run.
+digest is recorded and that image's label matches the current build inputs.
+Otherwise, Docker builds those packages from the fixed Debian snapshot. The digest
+names the exact image, so a later upload cannot change a CI run.
 Chromium setup checks installed system packages first. When they are present,
 it installs only the browser and avoids an apt update or package download.
 The browser job also runs the hosted integration-row journey regression.
@@ -92,7 +93,8 @@ that visibility once on the GitHub package page. After the workflow finishes, it
 digest goes into [base-image-digest.txt](../../apps/computer/test/base-image-digest.txt)
 and its printed build inputs hash goes into
 [base-image-inputs.txt](../../apps/computer/test/base-image-inputs.txt).
-CI builds from source if either file is empty or the current inputs have changed.
+CI builds from source if either file is empty, the current inputs have changed, or
+the registry image's label cannot be checked or does not match those inputs.
 
 ## Where to read more
 

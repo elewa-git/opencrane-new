@@ -51,11 +51,14 @@ The image fixture reads `apps/computer/test/base-image-digest.txt` and
 `apps/computer/test/base-image-inputs.txt` with `base-image.mjs`.
 The first file accepts an empty value or one lowercase, complete sha256 digest.
 The second holds the hash of the files used to build that image. Empty files or
-changed inputs run Docker Bake from source. A matching pair makes Docker use the public
-`ghcr.io/elewa-git/opencrane-ci-computer-base` image for both the computer base
-and its installed Debian packages. The registry path does not evaluate either
-snapshot apt stage. The hash covers the Dockerfile, `.dockerignore`, `apt.lock`,
-launcher source and both Codex package files. The publisher puts the same hash in
+changed inputs run Docker Bake from source. A matching pair prompts CI to inspect
+the exact registry digest. CI uses the public
+`ghcr.io/elewa-git/opencrane-ci-computer-base` image only when its
+`io.opencrane.ci.base-inputs` label matches the current inputs hash. A missing label,
+different label or registry error runs Docker Bake from source. The registry path
+does not evaluate either snapshot apt stage. The hash covers the Dockerfile,
+`.dockerignore`, `apt.lock`, launcher source and both Codex package files.
+The publisher puts the same hash in
 the image label `io.opencrane.ci.base-inputs`. The base workflow runs on main when
 these files or the workflow change. Its manual trigger can refresh the same tag.
 It uses standard runners and no Actions build cache.

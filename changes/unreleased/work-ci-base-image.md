@@ -1,1 +1,1 @@
-CI computer image builds can use a saved, digest-pinned package base from GitHub's public container registry when its build inputs match. Changed inputs use the source build.
+CI computer image builds can use a saved, digest-pinned package base from GitHub's public container registry when its image label matches the current build inputs. Changed inputs or a label that cannot be verified use the source build.

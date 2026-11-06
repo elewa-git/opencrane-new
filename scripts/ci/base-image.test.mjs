@@ -80,13 +80,13 @@ function buildStep() {
   return commands.join('\n');
 }
 
-function executeCiBuildStep(root, inspectLabel = '', inspectStatus = '0') {
+function executeCiBuildStep(root, inspectImageJson = '', inspectStatus = '0') {
   const fakeBin = join(root, 'fake-bin');
   mkdirSync(fakeBin);
   writeFileSync(join(fakeBin, 'docker'), `#!/bin/sh
 printf '%s\\n' "$*" >> "$DOCKER_LOG"
 if [ "$1 $2 $3" = 'buildx imagetools inspect' ]; then
-  printf '%s\\n' "$INSPECT_LABEL"
+  printf '%s\\n' "$INSPECT_IMAGE_JSON"
   exit "$INSPECT_STATUS"
 fi
 `, {
@@ -100,7 +100,7 @@ fi
       ...process.env,
       PATH: `${fakeBin}:${process.env.PATH}`,
       DOCKER_LOG: dockerLog,
-      INSPECT_LABEL: inspectLabel,
+      INSPECT_IMAGE_JSON: inspectImageJson,
       INSPECT_STATUS: inspectStatus,
     },
   });
@@ -109,8 +109,8 @@ fi
   return { result, commands };
 }
 
-function runCiBuildStep(root, inspectLabel = '', inspectStatus = '0') {
-  const execution = executeCiBuildStep(root, inspectLabel, inspectStatus);
+function runCiBuildStep(root, inspectImageJson = '', inspectStatus = '0') {
+  const execution = executeCiBuildStep(root, inspectImageJson, inspectStatus);
   assert.equal(execution.result.status, 0, execution.result.stderr);
   return execution.commands;
 }
@@ -125,11 +125,16 @@ fixtureTest('an empty digest selects the source build', (root) => {
 fixtureTest('a valid digest with matching inputs selects the saved image', (root) => {
   recordCurrentImage(root);
   const expectedHash = readFileSync(join(root, inputsPath), 'utf8').trim();
+  const imageJson = JSON.stringify({
+    'linux/amd64': { config: { Labels: { 'io.opencrane.ci.base-inputs': expectedHash } } },
+  });
   const result = runHelper(root);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, `${imageName}@${digest}`);
-  const command = runCiBuildStep(root, expectedHash);
+  const command = runCiBuildStep(root, imageJson);
   assert.match(command, /^buildx imagetools inspect /u);
+  assert.ok(command.includes(`${imageName}@${digest}`));
+  assert.ok(command.includes('--format {{json .Image}}'));
   assert.match(command, /buildx build /u);
   assert.match(command, /--build-arg COMPUTER_BASE=ghcr\.io/u);
   assert.match(command, /--build-arg COMPUTER_APT_BASE=ghcr\.io/u);
@@ -137,7 +142,10 @@ fixtureTest('a valid digest with matching inputs selects the saved image', (root
 
 fixtureTest('a different image label selects the source build', (root) => {
   recordCurrentImage(root);
-  const commands = runCiBuildStep(root, `sha256:${'b'.repeat(64)}`);
+  const imageJson = JSON.stringify({
+    config: { Labels: { 'io.opencrane.ci.base-inputs': `sha256:${'b'.repeat(64)}` } },
+  });
+  const commands = runCiBuildStep(root, imageJson);
   assert.match(commands, /^buildx imagetools inspect /u);
   assert.match(commands, /buildx bake /u);
   assert.doesNotMatch(commands, /buildx build --load/u);
@@ -145,10 +153,12 @@ fixtureTest('a different image label selects the source build', (root) => {
 
 fixtureTest('a missing image label selects the source build', (root) => {
   recordCurrentImage(root);
-  const commands = runCiBuildStep(root);
-  assert.match(commands, /^buildx imagetools inspect /u);
-  assert.match(commands, /buildx bake /u);
-  assert.doesNotMatch(commands, /buildx build --load/u);
+  const execution = executeCiBuildStep(root, JSON.stringify({ config: { Labels: {} } }));
+  assert.equal(execution.result.status, 0, execution.result.stderr);
+  assert.match(execution.result.stdout, /label could not be verified; building from source/u);
+  assert.match(execution.commands, /^buildx imagetools inspect /u);
+  assert.match(execution.commands, /buildx bake /u);
+  assert.doesNotMatch(execution.commands, /buildx build --load/u);
 });
 
 fixtureTest('a registry inspection error selects the source build', (root) => {

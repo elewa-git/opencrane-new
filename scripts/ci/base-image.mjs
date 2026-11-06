@@ -41,9 +41,18 @@ export function baseImage(digest, recordedInputsHash) {
   return `${imageName}@${value}`;
 }
 
+export function imageMatchesInputs(imageJson) {
+  const image = JSON.parse(imageJson);
+  const platformImage = image['linux/amd64'] ?? image;
+  const label = platformImage?.config?.Labels?.['io.opencrane.ci.base-inputs'];
+  return label === buildInputsHash();
+}
+
 if (process.argv[1]?.endsWith('/base-image.mjs')) {
   if (process.argv[2] === 'hash') {
     process.stdout.write(buildInputsHash());
+  } else if (process.argv[2] === 'verify') {
+    if (!imageMatchesInputs(process.argv[3] ?? '')) process.exitCode = 1;
   } else {
     const digest = readFileSync(digestPath, 'utf8');
     const recordedInputsHash = readFileSync(inputsPath, 'utf8');
