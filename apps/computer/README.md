@@ -146,8 +146,9 @@ before image checks begin.
 Repository CI builds a separate test image once for the tests that need it.
 The [CI test guide](../../scripts/ci/README.md) explains how those files are grouped.
 The CI test image uses saved Debian packages from GitHub's registry when the
-recorded digest matches the current build inputs. The CI guide explains how to
-refresh them after a package or snapshot change. The package must be public;
+recorded digest matches the current build inputs. The first published image is
+recorded in the digest file. The CI guide explains how to refresh it after a
+package or snapshot change. The package must be public;
 the owner sets this on its GitHub page.
 Supervisor tests pause the bridge's Codex process before checking stopped executors.
 Its background workers would otherwise change during the process check. The bridge,
