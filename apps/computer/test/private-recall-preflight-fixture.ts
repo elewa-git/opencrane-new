@@ -173,6 +173,8 @@ function handleNativeProtocol(
       if (discovery.remember) {
         const definition: unknown = JSON.parse(privateToolOffer('remember')[0]!.definitions[0]!);
         expectedTools.push(definition);
+        const correction: unknown = JSON.parse(privateToolOffer('correct')[0]!.definitions[0]!);
+        expectedTools.push(correction);
       }
       expect(offered['tools']).toEqual(expectedTools);
     }
