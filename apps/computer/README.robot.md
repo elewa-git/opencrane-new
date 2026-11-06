@@ -2,8 +2,8 @@
 
 For people, read [README.md](README.md) first.
 
-Repository CI builds the upload test image in one fixture job. Its base and runtime
-use separate caches, written only by main pushes. See the
+Repository CI builds the upload test image in one fixture job. A public registry
+base supplies its Debian packages once a digest is recorded. See the
 [CI test contracts](../../scripts/ci/README.robot.md) for file coverage and reports.
 
 ## Routine start identity
@@ -553,13 +553,12 @@ replacement bridge code.
 The [image refresh receipt](../../docs/process/demo-kit/image-refresh.md) records
 the failing old image, released digest and browser checks at both screen widths.
 
-CI prepares the upload test with `sh scripts/build-test-computer.sh`. It rebuilds
-the desktop/Codex base from public pins, then uses the production Dockerfile and
-lockfiles to create `ocn-upload-computer:test` locally. No private registry, running
-stack or pre-existing image is required. This test image is never published;
-release builds keep the reviewed S0.5 base by default. Run the same preparation
-before `npm test` on a clean Linux amd64 development machine. Hosted CI caches
-the build layers, including the base and compiler stages, with Docker Bake.
+CI builds `ocn-upload-computer:test` from the public saved base when its digest
+is recorded. With an empty digest file, Docker Bake builds the base from public
+pins and the production Dockerfile from source. Neither path needs the private
+registry or a running stack. The completed test computer is not published;
+release builds keep the reviewed S0.5 base by default. Run Docker Bake before
+`npm test` on a clean Linux amd64 development machine.
 The shared Codex lockfile requires the Linux x64 package directly. npm must fail
 if that download fails. The spike image retries fetches five times and checks
 that `codex-code-mode-host` is executable immediately after installation.
@@ -570,6 +569,14 @@ Docker stand-in matches the three exact interactive-run arguments, so a path
 cannot select the wrong check. Startup failures include both output streams.
 The scanner fixture builds `infra/clamav` from its pinned public digest, including
 offline signatures and excluding UnRAR.
+
+The CI upload test base installs `apt.lock` from the 1 October snapshot and
+builds `tool-user` with tools from that same snapshot. It then installs its
+Chromium and KasmVNC packages from the 2 October snapshot. Docker Bake builds
+this base locally while the digest file is empty. When the digest is filled, CI
+uses the public saved base and skips the snapshot stages in the computer Dockerfile.
+The default production build still installs its own apt packages and launcher
+from the snapshot on its local base image.
 
 The image retains Node 22.23.1, Codex 0.159.2, Chromium 154 and KasmVNC 1.5.0
 from the pinned S0.5 digest. Added apt packages use the signed 1 October 2026

@@ -8,6 +8,12 @@ node_modules
 docs
 changes
 spikes
+!spikes/
+spikes/*
+!spikes/s0-1b-proxy-gvisor/
+spikes/s0-1b-proxy-gvisor/*
+!spikes/s0-1b-proxy-gvisor/package.json
+!spikes/s0-1b-proxy-gvisor/package-lock.json
 infra/dev-stack
 !infra/dev-stack
 infra/dev-stack/*

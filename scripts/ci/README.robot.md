@@ -47,8 +47,16 @@ keep their existing concurrency. No extra job or browser installation is added.
 Each job writes `.tools/ci/report.json` and `.tools/ci/files-<group>.json`.
 Only the file lists are uploaded on pull requests. Main pushes also retain full
 reports for seven days. The refresh command below rebuilds timing estimates from these reports.
-The base image and computer image use separate GitHub cache scopes. Pull requests
-only read these caches; main pushes may write them.
+The image fixture reads `apps/computer/test/base-image-digest.txt` with
+`base-image.mjs`. It accepts an empty file or one lowercase, complete sha256 digest.
+An empty file runs Docker Bake from source. A digest makes Docker use the public
+`ghcr.io/elewa-git/opencrane-ci-computer-base` image for both the computer base
+and its installed Debian packages. The registry path does not evaluate either
+snapshot apt stage. The new base workflow runs on main when the package lock,
+launcher source, snapshot Dockerfile or workflow changes. Its manual trigger can
+refresh the same tag. It uses standard runners and no Actions build cache.
+Record the workflow's printed digest in a follow-up change after the owner makes
+the GitHub package public in the web page. Do not change package settings by API.
 
 For a local fixture run, build with
 `nice -n 10 docker buildx bake -f apps/computer/test/upload-bake.hcl --load`,

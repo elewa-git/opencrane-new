@@ -3,14 +3,14 @@ group "default" {
 }
 
 target "base" {
-  context = "spikes/s0-1b-proxy-gvisor"
-  dockerfile = "../../apps/computer/test/upload-base.Dockerfile"
+  context = "."
+  dockerfile = "apps/computer/test/upload-base.Dockerfile"
 }
 
 target "computer" {
   context = "apps/computer"
   target = "runtime"
-  args = { COMPUTER_BASE = "upload-base" }
+  args = { COMPUTER_BASE = "upload-base", COMPUTER_APT_BASE = "upload-base" }
   contexts = {
     upload-base = "target:base"
     project = "."

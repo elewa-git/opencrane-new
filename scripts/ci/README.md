@@ -16,10 +16,9 @@ flowchart LR
   ci -->|prepares both fixture jobs| web["apps/web<br/>development build"]
   ci -->|runs files| vitest["Vitest<br/>root tests"]
   actions -->|builds for image, native configuration and demo read tests| computer["apps/computer<br/>test image"]
+  registry["GitHub registry<br/>saved base image"] -->|supplies packages| computer
   ci -->|installs for browser use| chromium["Chromium<br/>test browser"]
   ci -->|pulls exact Linux images and retries downloads| docker["Docker<br/>test containers"]
-  actions -->|restores system packages| cache["Actions cache<br/>downloaded packages"]
-  cache -->|supplies saved packages| ci
 ```
 
 ## What it is responsible for
@@ -27,6 +26,7 @@ flowchart LR
 - Run image and browser tests in parallel jobs.
 - Balance four test jobs, called shards, using saved test durations.
 - Download pinned test images before tests, retrying temporary registry failures.
+- Build the computer test image from saved Debian packages when a digest is recorded.
 - Skip expensive jobs for documentation changes only when the base commit permits it.
 - Refuse a passing result if a root test file is missing or runs twice.
 - Require every dev-stack test to run in CI or have an exclusion with a reason.
@@ -43,6 +43,9 @@ The image job runs the offline demo read through a real computer and local servi
 It also checks native private tool discovery and recall calls with the generated
 configuration. The recall check uses local scripted replies and no external model.
 It installs Chromium because the screenshot test needs both.
+The computer test image uses a public package image from GitHub's registry when its
+digest is recorded. Until then, Docker builds those packages from the fixed Debian
+snapshot. The digest names the exact image, so a later upload cannot change a CI run.
 Chromium setup checks installed system packages first. When they are present,
 it installs only the browser and avoids an apt update or package download.
 The browser job also runs the hosted integration-row journey regression.
@@ -80,6 +83,14 @@ nice -n 10 node scripts/ci/run-tests.mjs fixtures-browser
 
 The fixture tests need Docker, PostgreSQL, Chromium and the built test image.
 The [test details](README.robot.md) explain their setup.
+
+When the package list or snapshot date changes, the
+[base image workflow](../../.github/workflows/base-image.yml) builds a new image
+on the main branch. It can also be started by hand. The package
+must be public so CI can download it without a registry password. The owner sets
+that visibility once on the GitHub package page. After the workflow finishes, its
+digest goes into [base-image-digest.txt](../../apps/computer/test/base-image-digest.txt)
+in a follow-up change. An empty file keeps the source build available.
 
 ## Where to read more
 

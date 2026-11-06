@@ -316,17 +316,17 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build the upload test computer from public pins
-        uses: docker/bake-action@v6
-        with:
-          source: .
-          files: apps/computer/test/upload-bake.hcl
-          load: true
-          set: |
-            base.cache-from=type=gha,scope=upload-base
-            base.cache-to=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'type=gha,scope=upload-base,mode=max' || '' }}
-            computer.cache-from=type=gha,scope=upload-computer
-            computer.cache-to=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'type=gha,scope=upload-computer,mode=max' || '' }}
+      - name: Build the upload test computer
+        run: |
+          image=$(node scripts/ci/base-image.mjs)
+          if [ -z "$image" ]; then
+            nice -n 10 docker buildx bake -f apps/computer/test/upload-bake.hcl --load
+          else
+            nice -n 10 docker buildx build --load --build-context project=. \
+              --build-arg COMPUTER_BASE="$image" \
+              --build-arg COMPUTER_APT_BASE="$image" \
+              -t ocn-upload-computer:test apps/computer
+          fi
 
       - name: Read Chromium package cache versions
         id: chromium-cache-key
