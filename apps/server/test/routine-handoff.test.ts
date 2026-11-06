@@ -705,14 +705,19 @@ async function skipsMissingTime() {
 }
 it('a checked missing-time skip invokes no execution', skipsMissingTime);
 
-async function cancelsAcknowledgement() {
+async function cancelsAcknowledgement(kind: string) {
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const acknowledge = credentials.releaseTurnCredentials;
   async function heldAcknowledgement(...args: Parameters<typeof acknowledge>) {
-    await acknowledge(...args);
+    if (kind === 'shutdown') {
+      await acknowledge(...args);
+    }
     entered.resolve();
     await release.promise;
+    if (kind !== 'shutdown') {
+      await acknowledge(...args);
+    }
   }
   const handler = vi.spyOn(credentials, 'releaseTurnCredentials');
   handler.mockImplementationOnce(heldAcknowledgement);
@@ -720,7 +725,12 @@ async function cancelsAcknowledgement() {
   const refused = expect(pending).rejects.toThrow('Routine leadership unavailable');
   try {
     await entered.promise;
-    stop.abort();
+    if (kind === 'shutdown') {
+      stop.abort();
+    } else if (kind === 'lease loss') {
+      await terminateLease();
+    }
+    // Keep the real timer running for the timeout case.
     await refused;
     expect(preparedComputer.executedThreads).toEqual([]);
   } finally {
@@ -728,7 +738,14 @@ async function cancelsAcknowledgement() {
     await preparedComputer.link.settled();
   }
   await assertSingleRun();
+  function credentialFrame(frame: Record<string, unknown>) {
+    return frame['type'] === 'ack' && frame['token'] !== undefined;
+  }
+  expect(preparedComputer.frames.some(credentialFrame)).toBe(false);
+  await delay(50);
+  expect(preparedComputer.executedThreads).toEqual([]);
   expect(preparedComputer.nativeStarts).toBe(1);
 }
-it('cancellation settles delivery while acknowledgement is held; a late reply cannot change it',
+it.each(['shutdown', 'lease loss', 'timeout'])(
+  '%s while acknowledgement is held prevents credentials and execution after handling resumes',
   cancelsAcknowledgement);
