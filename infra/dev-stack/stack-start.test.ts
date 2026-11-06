@@ -24,6 +24,8 @@ async function ownerStart(start: StartOptions = {}) {
     if (start.previousMode !== undefined) {
       await writeFile(`${directory}/settings.env`, `DEV_REAL_PROVIDER=${start.previousMode}\n`);
     }
+    const scannerCaFile = `${home}/scanner-ca.crt`;
+    await writeFile(scannerCaFile, 'fixture certificate');
     const environment = {
       HOME: home,
       PATH: '/nonexistent',
@@ -31,7 +33,7 @@ async function ownerStart(start: StartOptions = {}) {
       DEV_STACK_ID: 'owner',
       DEV_REAL_PROVIDER_FILE: '/synthetic-key-file',
       DEV_SCANNER_URL: 'https://127.0.0.1:25099/scan/upload',
-      DEV_SCANNER_CA_FILE: `${directory}/ca.crt`,
+      DEV_SCANNER_CA_FILE: scannerCaFile,
       START_FAILURE: start.failure ?? '',
       START_SIGNAL: start.signal ?? '',
       START_WEB_READY_MS: start.webReadyMs?.toString() ?? '',

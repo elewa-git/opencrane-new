@@ -1982,6 +1982,17 @@ Run `infra/dev-stack/install-daily-fresh-timer.sh` to install or update the user
 - [infra/clamav](../clamav/README.md): the file scanner used by uploads.
 - [Why NATS JetStream holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
 
+### Authenticated scanner settings
+
+The dev stack now requires `DEV_SCANNER_URL` and `DEV_SCANNER_CA_FILE` at startup.
+The URL must use HTTPS and end at `/scan/upload`; the CA file must be readable and
+non-empty. Startup passes these values as `SCANNER_URL` and `SCANNER_CA_FILE` to the
+server. An absent setting stops startup before any services are changed. The
+separate scanner must already trust this stack's token issuer and silo. The local
+Compose ClamAV daemon is not that HTTPS service. A fresh stack cannot qualify
+uploads until a reviewed scanner release and its trust settings are available.
+The nightly fresh run needs the same settings before it can test file uploads.
+
 ## Ownership browser check
 
 Manual named organisation journeys include provider saving and the ownership handover,

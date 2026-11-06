@@ -14,6 +14,7 @@ type Startup = {
   fleet?: string;
   shell?: boolean;
   fresh?: boolean;
+  scanner?: boolean;
 };
 
 async function startupFailure(startup: Startup) {
@@ -55,6 +56,12 @@ async function startupFailure(startup: Startup) {
       HOME: home,
       DEV_STACK_ID: startup.id,
     };
+    const scannerCaFile = `${home}/scanner-ca.crt`;
+    await writeFile(scannerCaFile, 'fixture certificate');
+    if (startup.scanner !== false) {
+      environment['DEV_SCANNER_URL'] = 'https://127.0.0.1:25199/scan/upload';
+      environment['DEV_SCANNER_CA_FILE'] = scannerCaFile;
+    }
     if (startup.credential !== undefined) {
       environment['DEV_REAL_PROVIDER_FILE'] = startup.credential;
     }
@@ -141,6 +148,14 @@ test('real mode refuses disabled owner bootstrap and an empty opt-in',
   refusesIneligibleRealMode);
 test('startup checks saved provider mode before setup', refusesSavedModeChanges);
 test('eligible fresh and matching saved modes reach setup', acceptsMatchingModes);
+
+async function refusesMissingScanner() {
+  const failure = await startupFailure({ id: '1', scanner: false });
+  assert.equal(failure, 'Error: Authenticated scanner settings are required before startup');
+}
+
+test('fresh startup refuses an absent authenticated scanner before setup',
+  refusesMissingScanner);
 
 function shellQuote(value: string) {
   return "'" + value.replaceAll("'", "'\"'\"'") + "'";

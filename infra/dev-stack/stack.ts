@@ -21,6 +21,7 @@ import { envelope, managedProviderCallsEnabled } from '@opencrane/models';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 import { checkProviderMode, modelsEnvironment, startupCeilings } from './models-environment.ts';
+import { scannerSettings } from './scanner-settings.ts';
 import { setupDevProvider } from './provider-setup.ts';
 import { ownerRunRefusal, requireOwnerRun } from './owner-run.ts';
 import { approvalJourneyTool } from './journey-tool-policy.ts';
@@ -456,6 +457,7 @@ async function up(fresh: boolean) {
     throw new Error('Real provider setup requires a credential file and the dev Owner');
   }
   if (!firstStart) checkProviderMode(await readEnv('settings'), real);
+  const scanner = await scannerSettings(process.env);
   const tail = secondary ? { Self: { DNSName: '', TailscaleIPs: [] } } : JSON.parse(await run('tailscale', ['status', '--json'])) as { Self: { DNSName: string, TailscaleIPs: string[] } };
   const origin = secondary ? localOrigin : `https://${tail.Self.DNSName.replace(/\.$/u, '')}`;
   await run('flock', ['--close', `/tmp/opencrane-dev-stack-zitadel-${process.getuid!()}.lock`,
@@ -650,6 +652,7 @@ async function up(fresh: boolean) {
   }
   await start('server', ['--experimental-strip-types', 'apps/server/src/main.ts'],
     { ...await readEnv('command'), ...await authEnv(), ...await readEnv('server'), ...binding,
+      ...scanner,
       ...(tokenBootstrap ? { BOOTSTRAP_TOKEN_FILE: `${directory}/bootstrap-token.json` } : {}),
       MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`,
       MINIO_URL: `http://127.0.0.1:${settings['MINIO_PORT']}`, MINIO_CREDENTIALS_FILE: `${directory}/minio-lease.json`, CLAMD_PORT: settings['CLAMD_PORT'] ?? '43310',

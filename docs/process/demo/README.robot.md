@@ -15,6 +15,11 @@ every binding GET. The repaired source, `9fe3cae7d988f6c8ca590efa0ffd49be004239b
 starts the routines projection that those reads require. Fresh provider setup passed.
 The built-in real-model journey then failed its scanned supplier PDF check. Seeding,
 the separate smoke, ten-step script and live member memory check are **NOT RUN**.
+The next fresh secondary run found the upload request returned 503 before scanning.
+The server had neither `SCANNER_URL` nor `SCANNER_CA_FILE`. The first repair passes
+explicit authenticated scanner settings and refuses startup when they are missing.
+No reviewed scanner release is configured for this stack, so paid qualification remains
+**NOT RUN** on that repair.
 No 6 November source is qualified for the owner refresh. The prior qualified source remains
 `f11df5c56fe08e4bac477cc4c3f375288568c0cd`.
 

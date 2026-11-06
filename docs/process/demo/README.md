@@ -54,6 +54,11 @@ The [6 November current-main rehearsal](../demo-rehearsal/test-version-2026-11-0
 first stopped during provider setup. A later fresh start passed provider setup but
 failed its built-in PDF journey. Its separate smoke, script and member memory check
 did not run. The owner-refresh source below is still the earlier qualified commit.
+The later diagnosis found that the browser upload received 503 because the stack
+had no authenticated scanner service settings. A new start now refuses missing
+scanner settings before it can claim readiness. A reviewed scanner release and
+trust settings are still needed before another paid rehearsal.
+
 Keep the remaining allowance for all paid runs together within 2,000 cents per UTC day, including unknown
 holds. Startup's 2,000-cent ceiling is per stack; it is not a shared daily counter.
 

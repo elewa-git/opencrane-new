@@ -171,3 +171,58 @@ authorised journey attempt supplied 987 cents. These values are limits supplied 
 the runs, not measured charges. No further paid check was started after the PDF
 failure. Slot 1 was removed by launcher cleanup after every failed start. The owner
 stack and its processes, ports and data were untouched.
+
+## Fifth fresh start: PDF upload diagnosis
+
+At source `2b01fb6fd16118eaa0c9eb854ddfdca3a7926322`, a new claim of
+secondary slot 1 started fresh with a 500-cent stack ceiling. Startup was called
+directly so failure would leave the slot's read-only records available. Provider
+setup and website readiness passed. The built-in journey again recorded PASS for
+the owner reply and reload, Stop and reload, and the later member reply. The PDF
+check failed. No seed, smoke, Stage A step or member memory check ran. The earlier
+attempts above remain failures.
+
+The browser sent one `POST /api/conversations/.../files` at 09:53:34 UTC. The
+server returned 503 in 747 ms. The files read table contained no `supplier.pdf`
+row. There was no `file.uploaded` or `file.delivered` record for that draft.
+The Compose ClamAV daemon was healthy, but the server had no `SCANNER_URL` or
+`SCANNER_CA_FILE`. `scanFile()` rejects missing settings before it contacts the
+scanner. The browser waited for Ready and timed out. The saved private error only
+named the overall PDF check because the journey catches the browser error.
+The built-in PDF fixture contains selectable text, so this check does not need OCR.
+
+| Part of the PDF check | Observation |
+| --- | --- |
+| Browser upload | One request; 503 in 747 ms |
+| Malware scan | NOT RUN: no authenticated scanner was configured |
+| PDF conversion and OCR | NOT RUN: no file reached the computer |
+| Assistant file read | NOT RUN: no PDF turn was sent |
+| Model answer | NOT RUN: no PDF turn or model call occurred |
+
+This is a startup defect. The 26 October source `f11df5c56` used the earlier
+direct ClamAV path. Since then, `548e8c8ad` replaced that path with authenticated
+HTTPS scanning. `8c2760fc1` widened Office inspection; `3391faf4f` changed
+upload refusal reasons; `ccd0d5eb2` added desktop drag uploads; and `5dbd530c2`
+changed image upload and file presentation. `c3e7ae2e2` and `9e470b61e` changed
+backup and restore checks for file storage. Changes to chat delivery and turn
+handling were `f68811c94`, `955cfedca`, `12ca064d7`, `54cb4ff75`,
+`276a9ba2d`, `4a0fac39c`, `a7d9154d6`, `efd681e5c`, `49a796748`,
+`e40c6614d`, `bb20e43ec`, `5e5882fed`, `6031183eb` and `67e1cff99`.
+The PDF conversion in `receive-file.py`, attachment read in `turn-input.ts`,
+and built-in PDF check itself did not change. This list comes from the
+path-limited git log; only the scanner change explains the observed 503.
+
+The saved journey outcome counted 49 reserved cents: 7 charged and one unresolved
+16-cent hold. Earlier attempts include unknown final costs, so no combined
+spending total is claimed. No further paid call was made after this failure.
+Private copies of the outcome, error and server request log were kept outside
+the removed slot under `/tmp/test-version-private-attempt5/`. No screenshot was
+published. `down.sh --id 1` released the slot after those copies. The owner
+stack was not touched.
+
+The failing-first startup test was committed as `7d4d32371`. It proved that
+the fresh server did not receive scanner settings. The follow-up code passes an
+explicit HTTPS endpoint and CA file to the server and refuses startup when
+either is missing. No reviewed scanner release or trust settings were configured,
+so the repaired startup and full paid sequence are **NOT RUN**. The owner
+refresh SHA remains the earlier qualified source.
