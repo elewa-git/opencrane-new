@@ -15,6 +15,8 @@ type StartOptions = {
   webExitMs?: number;
   listener?: string;
   scannerMissing?: boolean;
+  routinesExit?: boolean;
+  stopAfterStart?: boolean;
 };
 
 async function ownerStart(start: StartOptions = {}) {
@@ -37,6 +39,7 @@ async function ownerStart(start: StartOptions = {}) {
       START_WEB_EXIT_MS: start.webExitMs?.toString() ?? '',
       START_LISTENER: start.listener ?? '',
       START_SCANNER_MISSING: start.scannerMissing ? '1' : '',
+      START_ROUTINES_EXIT: start.routinesExit ? '1' : '',
     };
     const args = ['--experimental-strip-types', '--import',
       './infra/dev-stack/test/stack-start-preload.mjs', 'infra/dev-stack/stack.ts',
@@ -44,6 +47,15 @@ async function ownerStart(start: StartOptions = {}) {
     const options = { env: environment, encoding: 'utf8' as const, timeout: 15_000 };
     const result = spawnSync(process.execPath, args, options);
     assert.ifError(result.error);
+    if (start.stopAfterStart && result.status === 0) {
+      const downEnvironment = { ...environment, START_RESTORE_PROCESSES: '1' };
+      const downArgs = args.slice(0, 4);
+      downArgs.push('down');
+      const down = spawnSync(process.execPath, downArgs,
+        { ...options, env: downEnvironment });
+      assert.ifError(down.error);
+      assert.equal(down.status, 0, down.stdout + down.stderr);
+    }
     let operations: string;
     try {
       operations = await readFile(`${home}/operations`, 'utf8');
@@ -89,6 +101,24 @@ async function startsRoutineProjection() {
 
 test('fresh startup runs the routine projection needed by provider binding reads',
   startsRoutineProjection);
+
+async function stoppedRoutineRefusesReadiness() {
+  const result = await ownerStart({ routinesExit: true });
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.failure, /routines stopped/u);
+  assert.doesNotMatch(result.output, /Stack ready:/u);
+}
+
+test('a stopped routines worker refuses final startup readiness', stoppedRoutineRefusesReadiness);
+
+async function downStopsRoutineWorker() {
+  const result = await ownerStart({ stopAfterStart: true });
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.operations, /stop routines/u);
+  assert.deepEqual(result.services.processes, []);
+}
+
+test('down stops the routines worker', downStopsRoutineWorker);
 
 async function startsServerWithScanner() {
   const result = await ownerStart();

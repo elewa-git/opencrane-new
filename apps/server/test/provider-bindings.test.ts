@@ -121,9 +121,12 @@ it.each([['bob', 'https://app.example.test', 'org-acme'],
   ['owner', 'https://foreign.test', 'org-acme'],
   ['owner', 'https://app.example.test', 'foreign']])('checks current authority and Origin', deniedRequest);
 async function seedsFirstVerified() {
-  const trigger: EventEnvelope = { ...event('seed', 'provider-secondary', 'provider.models_selected'),
-    silo: 'acme', data: { providerId: 'secondary', revision: 3, changedBy: 'owner',
-      models: ['gpt-6.1-sol'] } };
+  let trigger: EventEnvelope | undefined;
+  for await (const saved of nats.store.readStream('provider-secondary')) {
+    if (saved.event.type === 'provider.models_selected') trigger = saved.event;
+  }
+  expect(trigger).toBeDefined();
+  if (!trigger) throw new Error('Selection fixture was not saved');
   const handler = providerDefaultHandler(nats.store, binding);
   await handler.handle(trigger, pgDb(dbs.queue));
   const saved = await request('GET');

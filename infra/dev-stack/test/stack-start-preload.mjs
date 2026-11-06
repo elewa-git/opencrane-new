@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import * as files from 'node:fs/promises';
 import { registerHooks, syncBuiltinESMExports } from 'node:module';
 import childProcess from 'node:child_process';
@@ -17,6 +17,17 @@ const containers = new Set();
 const webReadyMs = process.env['START_WEB_READY_MS'];
 let elapsedMs = 0;
 let webPid;
+let routinesPid;
+
+if (process.env['START_RESTORE_PROCESSES'] === '1') {
+  for (const name of readdirSync(directory)) {
+    if (!name.endsWith('.pid')) continue;
+    const pid = Number(readFileSync(`${directory}/${name}`, 'utf8').split(' ')[0]);
+    running.set(pid, name.slice(0, -4));
+  }
+  const previous = JSON.parse(readFileSync(`${process.env.HOME}/services.json`, 'utf8'));
+  for (const name of previous.containers) containers.add(name);
+}
 
 if (webReadyMs) {
   async function advanceClock(milliseconds) {
@@ -98,6 +109,7 @@ function spawnFixture(_command, args, options) {
   child.unref = function unref() {};
   running.set(child.pid, args.join(' '));
   if (args.includes('serve')) webPid = child.pid;
+  if (args.includes('routines')) routinesPid = child.pid;
   snapshot();
   function spawned() { child.emit('spawn'); }
   queueMicrotask(spawned);
@@ -110,6 +122,7 @@ async function readFixture(path, ...args) {
   if (!match) return originalRead(path, ...args);
   const webExitMs = process.env['START_WEB_EXIT_MS'];
   if (webExitMs && elapsedMs >= Number(webExitMs)) running.delete(webPid);
+  if (process.env['START_ROUTINES_EXIT'] === '1' && switchedOn) running.delete(routinesPid);
   if (!running.has(Number(match[1]))) {
     const error = new Error('Fixture process stopped');
     error.code = 'ENOENT';
@@ -125,6 +138,7 @@ const fsDefault = (await import('node:fs/promises')).default;
 fsDefault.readFile = readFixture;
 process.kill = function killFixture(pid) {
   assert(pid < 0, 'Only fake process groups may be stopped');
+  record(`stop ${running.get(-pid)}`);
   running.delete(-pid);
   snapshot();
   return true;
