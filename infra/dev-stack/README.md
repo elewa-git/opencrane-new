@@ -60,7 +60,8 @@ available for diagnosis.
 - Checks ownership handover and refuses a last owner’s departure in manual named journeys.
 - Waits for each new rehearsal reply to finish, checks its facts and checks the saved
   text after a reload. Uses separate messages and invitations for each screen width and
-  attempt, and saves step pictures before recording success.
+  attempt, and saves step pictures before recording success. It records failed browser
+  reads privately so the request can be checked after a stopped run.
 - Refuses incomplete controller or credential settings for an optional PostgreSQL standby.
   Checks password format and conflicting database connections before installation.
   Checks backup Service ownership, named Secret entries and the endpoint certificate internally.

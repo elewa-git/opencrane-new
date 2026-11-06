@@ -1644,6 +1644,10 @@ history, at 1280 and 390 pixels. Step 5 sends from 390 pixels at both widths.
 A failure stops later steps, which are recorded as NOT RUN.
 Private `demo-rehearsal/<time>/results.json` records each step's result, duration and
 sanitised failure message. A screenshot error cannot replace the checker error.
+`diagnostics.txt` records the time, path and HTTP status of the owner's group and
+conversation reads. It records transport failures without request contents. The
+shared-session wait accepts a page navigation that completes while it checks the
+read-only status button; an error on any other page still fails the step.
 If the company-limit check and its restoration both fail, `reason` keeps the checker's
 message and `additionalReasons` records the restoration message. Both remove private
 values separately. A restoration failure after a successful check still fails the step.

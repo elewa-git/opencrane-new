@@ -298,3 +298,44 @@ Changed startup and scanner tests passed twice, 57 tests each time. The event
 security suite passed once, 460 tests. The first test run after the override
 edit failed before startup assertions because its loader fixture missed the
 new export; the fixture was repaired before the two passing runs.
+
+## Seventh fresh start: browser read diagnosis
+
+The saved server, website and members logs from the sixth start were no longer in
+the slot, so they could not establish the failed group request's status or timing.
+The earlier results and masked pictures still show a real failed group page, not a
+missing heading on a healthy page. The request's exact HTTP outcome remains unknown.
+
+A new claim returned secondary slot 1. The first `up.sh --fresh` reached website
+readiness but its built-in journey refused the inherited fleet-task marker. It made
+no Stage A call. After releasing and reclaiming slot 1, the fresh start omitted that
+marker. Its built-in journey passed the owner and member replies, Stop, scanned PDF,
+sign-in, protected routes and replay checks. The demo seed passed.
+
+The diagnostic Stage A run kept one owner browser for both widths and recorded only
+API paths, statuses and times in a private file. Its desktop steps 1–10 all passed.
+The Acacia group read was `GET /api/groups/demo-acacia`: the server returned HTTP 200
+in 159 ms at 13:18:59 UTC. The owner's signed-in session had 43,161 seconds left at
+the start of the script. This rules out session expiry in this run. It does not
+identify why the earlier group reads failed. No access check was changed.
+
+Phone steps 1–5 passed. Step 6 failed when the shared-session page navigated while
+the checker was inspecting its read-only status button. Playwright reported that
+the execution context was destroyed by navigation. This is a checker race: the
+shared session opened as requested, but the checker stopped. A focused test failed
+on the old helper and passed after the helper accepted that completed navigation.
+Phone steps 7–10 were **NOT RUN** in this attempt.
+
+A second diagnostic script run on the same slot passed desktop step 1 and stopped
+at step 2. The PDF reached Ready, but the new model reply did not show Done within
+120 seconds. Desktop steps 3–10 and all phone steps were **NOT RUN** for that run.
+No further paid call was started. The final stack budget read showed 28 charged
+and 50 held cents, counting holds in full. Combined with the earlier sixth run's
+152-cent observation, these two known slot observations total 230 cents. They do
+not settle the older attempts whose costs were not saved. The current task's next
+fresh run must remain within its 500-cent allowance.
+
+Private results, masked pictures and the new slot's server, website and members
+logs were copied to `/tmp/test-version-repro/`. The slot was released and reported
+free. The owner stack was untouched. The old group-read cause remains **UNPROVED**;
+the successful group read on this slot is not a substitute for the earlier failure.
