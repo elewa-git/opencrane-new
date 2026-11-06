@@ -26,6 +26,7 @@ import { connectBridge } from '../src/chat/bridge.ts';
 import * as turns from '../src/chat/turns.ts';
 import * as credentials from '../src/chat/turn-credentials.ts';
 import * as routineSession from '../src/routine-session.ts';
+import { stopUnconfirmedRoutine } from '../src/routine-delivery-stop.ts';
 import { createRoutineComposition } from '../src/routine-composition.ts';
 
 let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
@@ -760,6 +761,12 @@ async function cancelsAcknowledgement(kind: string) {
     occurrenceId: state.activeRun!.occurrenceId });
   const evidence = await readRootStopEvidence(nats.store, 'routine-orders', saved.sequence);
   expect(evidence.routine?.stopRequested).toBe(true);
+  const stopData = z.object({ cause: z.object({ eventId: z.string(), position: z.number() }) });
+  const cause = stopData.parse(saved.event.data).cause;
+  const admission = { routineId: 'orders', ...cause };
+  await stopUnconfirmedRoutine(nats.store, 'test', admission);
+  expect(await nats.store.head('routine-orders')).toBe(saved.sequence);
+
   if (kind !== 'shutdown') {
     await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
     expect(await nats.store.head('routine-orders')).toBe(saved.sequence);
@@ -768,3 +775,71 @@ async function cancelsAcknowledgement(kind: string) {
 it.each(['shutdown', 'lease loss', 'timeout'])(
   '%s while acknowledgement is held prevents credentials and execution after handling resumes',
   cancelsAcknowledgement);
+
+async function refusesForgedDeliveryEvidence() {
+  const acknowledge = credentials.releaseTurnCredentials;
+  async function cancel(...args: Parameters<typeof acknowledge>) {
+    await acknowledge(...args);
+    stop.abort();
+  }
+  const handler = vi.spyOn(credentials, 'releaseTurnCredentials');
+  handler.mockImplementationOnce(cancel);
+  await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  await preparedComputer.link.settled();
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  const saved = rows.at(-1)!;
+  expect(saved.event.type).toBe('routine.run_stop_requested');
+  const data = frameSchema.parse(saved.event.data);
+  const wrongCauses = [
+    { eventId: 'wrong-event', position: 1 },
+    { eventId: saved.event.id, position: saved.sequence },
+  ];
+  for (const [index, cause] of wrongCauses.entries()) {
+    const id = `forged-delivery-${index}`;
+    const forged = { ...saved.event, id, commandId: id, data: { ...data, cause } };
+    await nats.seed([forged]);
+    const position = await nats.store.head('routine-orders');
+    await expect(readRootStopEvidence(nats.store, 'routine-orders', position))
+      .rejects.toThrow('Root stop evidence refused');
+  }
+  expect(preparedComputer.executedThreads).toEqual([]);
+  expect(actor.state.roots).toHaveLength(1);
+}
+it('refuses delivery Stop evidence with a changed or non-admission cause',
+  refusesForgedDeliveryEvidence);
+
+async function cancelsDuringOwnershipCheck() {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const bind = preparedComputer.link.bindRoutineStart;
+  function holdCheck(...args: Parameters<typeof bind>) {
+    const [turnId, check, checkCurrent, signal] = args;
+    async function held(deadline: number) {
+      const current = await checkCurrent(deadline);
+      entered.resolve();
+      await release.promise;
+      return current;
+    }
+    return bind(turnId, check, held, signal);
+  }
+  const binding = vi.spyOn(preparedComputer.link, 'bindRoutineStart');
+  binding.mockImplementationOnce(holdCheck);
+  const pending = dispatch();
+  const refused = expect(pending).rejects.toThrow('Routine leadership unavailable');
+  try {
+    await entered.promise;
+    stop.abort();
+    await refused;
+  } finally {
+    release.resolve();
+    await preparedComputer.link.settled();
+  }
+  function credentialFrame(frame: Record<string, unknown>) {
+    return frame['type'] === 'ack' && frame['token'] !== undefined;
+  }
+  expect(preparedComputer.frames.some(credentialFrame)).toBe(false);
+  expect(preparedComputer.executedThreads).toEqual([]);
+  expect((await runState()).stopRequested).toBe(true);
+}
+it('cancellation wins while the final ownership check holds a previously valid answer',
+  cancelsDuringOwnershipCheck);

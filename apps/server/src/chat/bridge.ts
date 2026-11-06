@@ -79,6 +79,7 @@ function combineQueuedReport(batch: ReportBatch | undefined, value: unknown,
 async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
   tokens: Tokens | undefined, socket: WebSocket,
   report: z.infer<typeof reportDetails>, batch: ReportBatch) {
+  const routineDelivery = options.starts.delivery(report.turnId);
   // Save reports already accepted into the bounded queue after a disconnect.
   // Otherwise a replay can fill the queue again before its saved position advances.
   const context = { ...input, ...options,
@@ -133,7 +134,7 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
     function deliver() {
       sendAcknowledgement(socket, batch.sequences, acknowledgement);
     }
-    const sent = await options.starts.send(report, acknowledgement, result === 'duplicate', deliver);
+    const sent = await routineDelivery(acknowledgement, result === 'duplicate', deliver);
     if (!sent) {
       const refusal = { type: 'ack', refused: 'Routine start unavailable' };
       sendAcknowledgement(socket, batch.sequences, refusal);

@@ -34,7 +34,8 @@ connected yet.
 - Refuses new work in closed chats and repairs unfinished work without disrupting other chats.
 
 Internal routine delivery waits for one matching saved start and its acknowledgement.
-A timeout, refusal or lost connection ends that wait without authorising another send.
+A timeout, refusal or lost connection ends that wait and prevents a delayed acknowledgement
+from releasing credentials. The sender records Stop intent for unconfirmed delivery.
 This confirms delivery, not completion of the routine. Automatic execution stays disabled.
 
 Public chat routes and subscriptions reserve routine session identifiers for internal
@@ -131,6 +132,7 @@ flowchart LR
   chat -->|selects and checks input| memory
   chat -->|memory definitions and one-use private input| computer[Assistant computer]
   computer -->|reports routine start and requests checked pass renewal| chat
+  chat -->|checks lease and deadline before routine credentials| computer
   computer -->|completed private reply| chat
   chat -->|private reply and clearance| reader[Authenticated reader]
   chat -->|checks access, spending and loaded references| models[Models]

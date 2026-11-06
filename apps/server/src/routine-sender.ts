@@ -1,3 +1,4 @@
+import { stopUnconfirmedRoutine } from './routine-delivery-stop.ts';
 import type { connectBridge } from './chat/bridge.ts';
 import { cancelRoutineThread } from './chat/routine-thread.ts';
 import { claimRoutineActivation, readRoutineActivation } from './routine-activation.ts';
@@ -40,6 +41,19 @@ export function createRoutineSender(options: { enabled?: boolean; replay?: boole
     let link: Link | undefined;
     let admitted: Awaited<ReturnType<typeof claimRoutineActivation>> | undefined;
     let sent = false;
+    async function unconfirmed() {
+      if (admitted && sent) {
+        const admission = { routineId: admitted.run.routineId,
+          eventId: admitted.receipt.eventId, position: admitted.receipt.position };
+        try {
+          await stopUnconfirmedRoutine(store, worker.silo, admission);
+        } catch {
+          // Retain admission and the occupied run when saving Stop is unavailable.
+          return unknown;
+        }
+      }
+      return unknown;
+    }
     try {
       args[3] = structuredClone(raw);
       admitted = await claimRoutineActivation(...args);
@@ -68,11 +82,11 @@ export function createRoutineSender(options: { enabled?: boolean; replay?: boole
       const accepted = await sendRoutineTurn(link, bytes, checked.turnId, checkStart,
         args[2], signal);
       if (!accepted) {
-        return unknown;
+        return await unconfirmed();
       }
       return { status: 'sent' as const };
     } catch {
-      return unknown;
+      return await unconfirmed();
     } finally {
       awaitingStart = false;
       if (link && admitted && !sent) {

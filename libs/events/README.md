@@ -13,6 +13,8 @@ An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened
 A routine spending allowance can keep a fingerprint of its checked preparation.
 Retries must match it before they can recover that allowance. A routine activation
 receipt names that allocation and one sender attempt. Reading or replaying it starts no work.
+An unconfirmed delivery can record Stop intent referring to that admission. It keeps
+the occurrence occupied until termination is proved.
 
 Control refusals record the attempt, the person who made it, its conversation, a
 fingerprint of the checked request and a fixed reason. They contain no computer or private turn details.
@@ -46,7 +48,7 @@ Allow, Ask or Block choice for a tool.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions"]
-  server["apps/server<br/>back end"] -.->|checks assistant file lists and records, native termination, routine turn identities, allowance fingerprints, owner and approval Stop intent, owner-removal pauses and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
+  server["apps/server<br/>back end"] -.->|checks assistant file lists and records, native termination, routine turn identities, allowance fingerprints, owner, approval and unconfirmed delivery Stop intent, owner-removal pauses and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events

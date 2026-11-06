@@ -19,13 +19,14 @@ flowchart LR
   server -->|sends routine input| computer["apps/computer<br/>private execution"]
   computer -->|reports its start| chat["chat<br/>saved reports"]
   server --> chat
-  chat -->|confirms checked delivery| server
+  chat -->|confirms delivery or refuses delayed credentials| server
 ```
 
 ## What it is responsible for
 
 - Waits for one matching saved start and its acknowledgement.
 - Ends the wait on refusal, timeout, cancellation or connection loss.
+- Refuses delayed credentials and records Stop intent for an unconfirmed start.
 - Keeps uncertain delivery from authorising another send or another allowance.
 
 ## Processes it handles

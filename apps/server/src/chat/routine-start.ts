@@ -71,17 +71,20 @@ export function pendingRoutineStarts(socket: WebSocket) {
     pending.check = undefined;
     return check(report);
   }
-  async function send(report: { turnId: string },
-    acknowledgement: { token?: string; refused?: string }, duplicate: boolean,
-    deliver: () => void) {
-    const pending = starts.get(report.turnId);
-    const accepted = acknowledgement.token !== undefined && acknowledgement.refused === undefined
-      && !duplicate && pending?.check === undefined;
-    if (!pending || !accepted) {
-      pending?.cancel();
-      return false;
+  function delivery(turnId: string) {
+    // Capture this attempt before report handling waits; a later binding cannot replace it.
+    const pending = starts.get(turnId);
+    async function send(acknowledgement: { token?: string; refused?: string },
+      duplicate: boolean, deliver: () => void) {
+      const accepted = acknowledgement.token !== undefined && acknowledgement.refused === undefined
+        && !duplicate && pending?.check === undefined;
+      if (!pending || !accepted) {
+        pending?.cancel();
+        return false;
+      }
+      return pending.send(deliver);
     }
-    return pending.send(deliver);
+    return send;
   }
   function close() {
     for (const pending of starts.values()) {
@@ -89,5 +92,5 @@ export function pendingRoutineStarts(socket: WebSocket) {
     }
   }
   socket.once('close', close);
-  return { bind, check, send };
+  return { bind, check, delivery };
 }

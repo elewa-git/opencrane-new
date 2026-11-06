@@ -29,6 +29,7 @@ import { conversationKeys } from '@opencrane/projections';
 import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
 import * as routineSession from '../src/routine-session.ts';
+import * as credentials from '../src/chat/turn-credentials.ts';
 import { prepareRoutineComputer } from '../src/routine-computer.ts';
 import { admitRoutineActivation } from '../src/routine-activation.ts';
 import { inspectRoutineSender } from '../src/routine-sender.ts';
@@ -1445,3 +1446,32 @@ function delayedFixtureProjection() {
     preparesAfterProjection);
 }
 describe('delayed fixture projection', delayedFixtureProjection);
+
+async function refusesAfterCredentialPreparation(kind: string) {
+  const acknowledge = credentials.releaseTurnCredentials;
+  const originalNow = performance.now.bind(performance);
+  async function invalidate(...args: Parameters<typeof acknowledge>) {
+    await acknowledge(...args);
+    if (kind === 'ownership') {
+      owned = false;
+    } else {
+      function expired() {
+        return originalNow() + 10_001;
+      }
+      vi.spyOn(performance, 'now').mockImplementation(expired);
+    }
+  }
+  const handler = vi.spyOn(credentials, 'releaseTurnCredentials');
+  handler.mockImplementationOnce(invalidate);
+  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  function closed() {
+    return preparedComputer.closedSessions === 1;
+  }
+  await until(closed);
+  const link = await preparedComputer.wake();
+  await link.settled();
+  expect(preparedComputer.starts).toBe(0);
+}
+it.each(['ownership', 'deadline'])(
+  'checks %s after preparing credentials even without a cancellation notification',
+  refusesAfterCredentialPreparation);
