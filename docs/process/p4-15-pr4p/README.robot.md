@@ -74,6 +74,62 @@ and `correct-diagnostic.log`, under the same prefix. No tracked source changed f
 The second batch refused Forget after a deliberately slow IAM read. Its cause remains unproved.
 GitHub CI will be reported for the pushed head. These local failures remain FAIL.
 
+## Recovery and timing regression checks
+
+Rebased on `fc8918d5e`. Checked test source: `1dacb84a9`, 6 November 2026.
+This follow-up changes tests only. Production access checks and deadlines are unchanged.
+
+Authenticated recovery now refuses a removed member, a different owner and a shared
+scope. Human and other-agent events with the same command id cannot supply Alice's
+receipt. Each read checks that no event was appended, no memory key was generated,
+the key directory stayed unchanged and only the session cookie was decrypted.
+The valid control recovers the exact saved id and timestamp.
+
+The qualification race waits until Forget is saved, then holds the conversation read
+inside the final confirmation. Removing qualification during that wait withholds the
+receipt. Keeping qualification unchanged returns acceptance. Both cases retain one
+saved tombstone. The existing trailing qualification check passes this test.
+
+Correct lost-reply tests wait for the saved event before releasing its acknowledgement.
+They separately require an immediate unknown result and a refusal after explicit deadline
+expiry. Both recover the exact event receipt without another attempt. Slow preparation
+uses a controlled clock and observes access starting after history or IAM preparation.
+Separate cases expire the original deadline at append and require no saved change.
+Both racing Correct commands read the same unsaved state. The second then reaches its
+lock after the first releases it and must discover that first save through its locked read.
+
+A bounded real-time run of the earlier Correct tests was FAIL: one passed and four failed.
+Three failures were traced to access or lineage confirmation after the original deadline:
+remaining time was -1 ms, -1 ms and -38 ms. The fourth failure's cause remains unproved.
+This establishes those three diagnostic failures, not every historical refusal cause.
+The temporary probe was removed. Log: `/tmp/p4-15-pr4p-fix-realtime-diagnostic.log`.
+
+During fixture development, runs exposed a missing test organisation setting, an invalid
+tombstone field, a collision fixture that forgot a loaded reference, and a preparation
+observer that only watched the gateway. Those fixtures were corrected. One earlier run
+also failed while waiting for the native test turn to start; its cause remains unproved.
+The final checks below do not change those earlier results.
+
+These runs used the supplied `PG_TEST_URL` and disposable test services, with a scripted
+native peer and no model calls. All commands used `nice -n 10`. The test command selected
+all 38 changed cases in `forget-backend-delivery.test.ts`, `correct-backend-delivery.test.ts`
+and `memory-mcp.test.ts`, with `--maxWorkers=1`. The exact selection is in each log.
+The other 270 cases in those files were not selected in these two runs.
+
+| Own check | Result | Log under `/tmp/p4-15-pr4p-fix-` |
+| --- | --- | --- |
+| Changed cases, first run, 38/38 | PASS | `tests1.log` |
+| Changed cases, second run, 38/38 | PASS | `tests2.log` |
+| Full lint, including Knip | PASS | `lint.log` |
+| Final changed-file lint | PASS | `final-code-lint.log` |
+| Full typecheck | PASS | `typecheck.log` |
+| Final server typecheck | PASS | `final-server-typecheck.log` |
+| Event catalogue | PASS | `events.log` |
+| Changelog | PASS | `changelog.log` |
+
+The full root suite, development stacks and live qualification were NOT RUN.
+Admission remains disabled. CI must check the new pushed head.
+
 ## Limits
 
 Admission remains disabled. Both complete qualifications and the existing fresh-install
