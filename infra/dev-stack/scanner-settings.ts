@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { chmod, readFile, rm, writeFile } from 'node:fs/promises';
-import { request } from 'node:https';
 import { promisify } from 'node:util';
+import { scanFile } from '../../apps/server/src/files/scanner.ts';
 
 const refusal = 'Authenticated scanner settings are required before startup';
 const exec = promisify(execFile);
@@ -59,12 +60,6 @@ export async function scannerSettings(environment: NodeJS.ProcessEnv,
     `${directory}/scanner-ca.crt`);
 }
 
-export function scannerImageUrl(uploadUrl: string) {
-  const endpoint = new URL(uploadUrl);
-  endpoint.pathname = '/scan/image-part';
-  return endpoint.href;
-}
-
 async function validatedSettings(url: string, caFile: string) {
   try {
     const endpoint = new URL(url);
@@ -82,24 +77,22 @@ async function validatedSettings(url: string, caFile: string) {
   return { SCANNER_URL: url, SCANNER_CA_FILE: caFile };
 }
 
-export async function scannerReady(settings: { SCANNER_URL: string; SCANNER_CA_FILE: string }) {
+interface ScannerIdentity {
+  silo: string;
+  issuer: string;
+  privateKeyPath: string;
+}
+
+export async function scannerReady(settings: { SCANNER_URL: string; SCANNER_CA_FILE: string },
+  identity: ScannerIdentity) {
   try {
-    const ca = await readFile(settings.SCANNER_CA_FILE);
-    const endpoint = new URL(settings.SCANNER_URL);
-    endpoint.pathname = '/healthz';
-    function check(resolve: (ready: boolean) => void) {
-      function received(response: import('node:http').IncomingMessage) {
-        response.resume();
-        resolve(response.statusCode === 503);
-      }
-      const client = request(endpoint, { ca, method: 'GET', timeout: 2000 }, received);
-      function timedOut() { client.destroy(); }
-      function failed() { resolve(false); }
-      client.on('timeout', timedOut);
-      client.on('error', failed);
-      client.end();
-    }
-    return await new Promise<boolean>(check);
+    const sample = Buffer.from('OpenCrane scanner startup check');
+    const binding = { silo: identity.silo, fileId: randomUUID() };
+    const scanSettings = { url: settings.SCANNER_URL, caFile: settings.SCANNER_CA_FILE,
+      ...identity };
+    const checked = await scanFile(scanSettings, sample, binding);
+    // Require the same reply checks that an upload uses before accepting this scanner.
+    return checked() === 'clean';
   } catch {
     return false;
   }

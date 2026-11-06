@@ -4,8 +4,8 @@
 
 Fresh development stacks now start an authenticated HTTPS scanner for uploads.
 Each stack has its own private scanner certificates and loopback port, and startup
-waits for the service before accepting files. The CI grouping check includes the
-scanner tests. A custom scanner address also gives image workers the image-part route.
+checks a signed clean scan before accepting files. A scanner for another stack, or
+one that cannot scan, stops startup. The CI grouping check includes the scanner tests.
 
 The secondary demo checker now accepts a shared session that opens while it checks
 status and saves private HTTP outcomes for group and conversation reads.

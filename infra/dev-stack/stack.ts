@@ -21,7 +21,7 @@ import { envelope, managedProviderCallsEnabled } from '@opencrane/models';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 import { checkProviderMode, modelsEnvironment, startupCeilings } from './models-environment.ts';
-import { scannerImageUrl, scannerReady, scannerSettings } from './scanner-settings.ts';
+import { scannerReady, scannerSettings } from './scanner-settings.ts';
 import { setupDevProvider } from './provider-setup.ts';
 import { ownerRunRefusal, requireOwnerRun } from './owner-run.ts';
 import { approvalJourneyTool } from './journey-tool-policy.ts';
@@ -33,7 +33,14 @@ const exec = promisify(execFile);
 // Keep a claim for 15 minutes because claim.sh exits before stack startup can finish.
 const CLAIM_GRACE_PERIOD_MS = 15 * 60 * 1000;
 const memoryKeyDirectory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
-const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets', 'audit', 'minio-tokens', 'model-stub', 'models', 'dispatcher', 'server', 'web'].filter(name => !secondary || !['models', 'model-stub'].includes(name));
+
+function includedProcess(name: string) {
+  return !secondary || (name !== 'models' && name !== 'model-stub');
+}
+
+const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets',
+  'audit', 'routines', 'minio-tokens', 'model-stub', 'models', 'dispatcher', 'server',
+  'web'].filter(includedProcess);
 if (secondary || memoryKeyDirectory) {
   names.push('memory');
 }
@@ -487,10 +494,6 @@ async function up(fresh: boolean) {
   }
   const settings = { ...defaultPorts, ...await readEnv('settings') };
   const scanner = await scannerSettings(process.env, directory, settings['SCANNER_PORT']);
-  if (secondary) {
-    await copyFile(scanner.SCANNER_CA_FILE, `${directory}/scanner-model-ca.crt`);
-    await chmod(`${directory}/scanner-model-ca.crt`, 0o600);
-  }
   if (!real) await writeEnv('settings', settings);
   // Create custody before Docker can create this mount as root.
   try {
@@ -573,7 +576,9 @@ async function up(fresh: boolean) {
   const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${settings['ORIGIN']}/` });
   await save('model-jwks.json', JSON.stringify(issuer.jwks));
   if (!process.env['DEV_SCANNER_URL']) await compose('up', '-d', '--force-recreate', 'scanner');
-  await wait(() => scannerReady(scanner), 'authenticated scanner');
+  const scannerIdentity = { silo: settings['SILO_ID']!, issuer: `${settings['ORIGIN']}/`,
+    privateKeyPath: `${directory}/token-signing-key.pem` };
+  await wait(() => scannerReady(scanner, scannerIdentity), 'authenticated scanner scan');
   await save('model-stub-key', 'dev-stack-stub-only');
   const modeReader = await connectEventStore(await readEnv('command'));
   let managed: boolean;
@@ -606,7 +611,6 @@ async function up(fresh: boolean) {
     gatewayBinary = `${directory}/agentgateway`;
   }
   const modelSettings = {
-    ...scanner,
     ...binding, ...await readEnv('command'), DATABASE_URL: (await readEnv('projection'))['DATABASE_URL']!,
     DEFAULT_PAYING_GROUP_ID: process.env['DEFAULT_PAYING_GROUP_ID'] ?? 'installation-default',
     MODEL_STATE_DIR: `${directory}/models`, MODEL_JWKS_FILE: `${directory}/model-jwks.json`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
@@ -628,10 +632,6 @@ async function up(fresh: boolean) {
       database.hostname = 'postgres';
       database.port = '5432';
       await writeEnv('models', { ...base, ...models, DATABASE_URL: database.href,
-        SCANNER_URL: process.env['DEV_SCANNER_URL']
-          ? scannerImageUrl(scanner.SCANNER_URL)
-          : 'https://scanner:8443/scan/image-part',
-        SCANNER_CA_FILE: `${directory}/scanner-model-ca.crt`,
         NATS_URL: 'tls://127.0.0.1:4222', OPENFGA_API_URL: 'http://openfga:8080',
         MODEL_STUB_PAUSE_ON_STOP: '1', NODE_OPTIONS: '--max-old-space-size=256' });
       await compose('up', '-d', 'models');
@@ -645,7 +645,7 @@ async function up(fresh: boolean) {
   }
   await startModels();
   await start('dispatcher', ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'dispatcher'],
-    { ...await readEnv('dispatcher'), ...binding, ...scanner,
+    { ...await readEnv('dispatcher'), ...binding,
       MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`, ...prefixed(await readEnv('command'), 'COMMAND_'),
       CONTENT_DATABASE_URL: (await readEnv('server'))['DATABASE_URL']!,
       KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,

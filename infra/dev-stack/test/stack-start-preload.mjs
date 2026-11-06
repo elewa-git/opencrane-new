@@ -202,11 +202,6 @@ const replacements = new Map([
     return { SCANNER_URL: 'https://127.0.0.1:25099/scan/upload',
       SCANNER_CA_FILE: '/fixture/scanner-ca.crt' };
   }
-  export function scannerImageUrl(url) {
-    const endpoint = new URL(url);
-    endpoint.pathname = '/scan/image-part';
-    return endpoint.href;
-  }
   export async function scannerReady() { return process.env.START_SCANNER_MISSING !== '1'; }`],
   ['/infra/dev-stack/model-network.ts', 'export async function modelFirewall() {}'],
   ['/infra/dev-stack/minio-tokens.ts', 'export async function issueMinioLease() {}'],

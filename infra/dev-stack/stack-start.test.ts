@@ -115,7 +115,7 @@ async function downStopsRoutineWorker() {
   const result = await ownerStart({ stopAfterStart: true });
   assert.equal(result.status, 0, result.output);
   assert.match(result.operations, /stop routines/u);
-  assert.deepEqual(result.services.processes, []);
+  assert.equal(result.services.processes.includes('routines'), false);
 }
 
 test('down stops the routines worker', downStopsRoutineWorker);

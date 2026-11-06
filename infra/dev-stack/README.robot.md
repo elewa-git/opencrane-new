@@ -1995,8 +1995,9 @@ files have mode 0600. The existing per-stack token signing key issues scanner pa
 for the server. The scanner service reads only its public verification keys, its own
 certificate and the stack's silo from private settings. Compose publishes only
 `127.0.0.1:SCANNER_PORT`; secondary
-slots have separate fixed ports. Startup checks the TLS certificate and waits for the
-service before it starts the server. `down.sh` removes the service with the stack.
+slots have separate fixed ports. Startup makes one signed scan of a small clean sample
+using this stack's key and silo before it starts the server. A trusted service that
+refuses the pass or cannot scan does not pass readiness. `down.sh` removes the service.
 
 The development service scans bytes with the pinned local ClamAV container. It uses
 the authenticated service and pass checks from the upload tests. Its database facts
@@ -2005,10 +2006,8 @@ requires the separate reviewed image and database checks in `infra/clamav/launch
 `DEV_SCANNER_URL` and `DEV_SCANNER_CA_FILE` are optional together. When supplied, the
 stack checks that HTTPS service instead of starting its own service. Missing or
 insecure settings, or a service that does not answer over trusted TLS, stop startup.
-The server receives `SCANNER_URL` and `SCANNER_CA_FILE`. The dispatcher and model
-worker also receive them; secondary models use the Compose service address and a
-private copy of the CA file at `scanner-model-ca.crt`. An override uses the same
-trusted host and CA for the model worker, with `/scan/image-part` as its route.
+Only the server receives `SCANNER_URL` and `SCANNER_CA_FILE`. The dispatcher and model
+worker do not read scanner settings.
 
 ## Ownership browser check
 

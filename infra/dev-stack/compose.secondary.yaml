@@ -42,7 +42,6 @@ services:
       - ${DEV_STACK_DIR}/command.seed:${DEV_STACK_DIR}/command.seed:ro
       - ${DEV_STACK_DIR}/agentgateway:${DEV_STACK_DIR}/agentgateway:ro
       - ${DEV_STACK_DIR}/model-jwks.json:${DEV_STACK_DIR}/model-jwks.json:ro
-      - ${DEV_STACK_DIR}/scanner-model-ca.crt:${DEV_STACK_DIR}/scanner-model-ca.crt:ro
       - ${DEV_STACK_DIR}/model-stub-key:${DEV_STACK_DIR}/model-stub-key:ro
       - ${DEV_STACK_DIR}/models:${DEV_STACK_DIR}/models
       - ${DEV_STACK_DIR}/conversation-keys:${DEV_STACK_DIR}/conversation-keys

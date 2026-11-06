@@ -36,8 +36,8 @@ configuration changes. Its background jobs keep their own database.
 The routines worker keeps routine read tables current. Provider settings use those
 tables to check whether an existing routine would be affected by a change.
 Uploads use a separate authenticated scanner service. Each stack starts that service
-with private certificates and the local ClamAV daemon. Startup waits for the service
-before it starts the server.
+with private certificates and the local ClamAV daemon. Startup makes a signed clean
+scan before it starts the server. It also checks that the routines worker is running.
 
 ## What it is responsible for
 
@@ -46,7 +46,7 @@ its body. A body that does not finish fails after ten seconds, leaving that stat
 available for diagnosis.
 
 - Starts and stops local services and apps with private local credentials.
-- Starts the scanner for uploads and checks its HTTPS connection before the server starts.
+- Starts the scanner for uploads and checks one signed scan before the server starts.
 - Checks that stack listeners use loopback or this machine's Tailscale addresses.
 - Waits for the website to answer before starting browser checks.
 - Prepares Kubernetes so background workers can start one
