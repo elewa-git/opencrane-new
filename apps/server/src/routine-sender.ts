@@ -41,19 +41,6 @@ export function createRoutineSender(options: { enabled?: boolean; replay?: boole
     let link: Link | undefined;
     let admitted: Awaited<ReturnType<typeof claimRoutineActivation>> | undefined;
     let sent = false;
-    async function unconfirmed() {
-      if (admitted && sent) {
-        const admission = { routineId: admitted.run.routineId,
-          eventId: admitted.receipt.eventId, position: admitted.receipt.position };
-        try {
-          await stopUnconfirmedRoutine(store, worker.silo, admission);
-        } catch {
-          // Retain admission and the occupied run when saving Stop is unavailable.
-          return unknown;
-        }
-      }
-      return unknown;
-    }
     try {
       args[3] = structuredClone(raw);
       admitted = await claimRoutineActivation(...args);
@@ -82,11 +69,11 @@ export function createRoutineSender(options: { enabled?: boolean; replay?: boole
       const accepted = await sendRoutineTurn(link, bytes, checked.turnId, checkStart,
         args[2], signal);
       if (!accepted) {
-        return await unconfirmed();
+        return await unconfirmedDelivery(store, worker.silo, admitted, sent);
       }
       return { status: 'sent' as const };
     } catch {
-      return await unconfirmed();
+      return await unconfirmedDelivery(store, worker.silo, admitted, sent);
     } finally {
       awaitingStart = false;
       if (link && admitted && !sent) {
@@ -131,4 +118,20 @@ async function sendRoutineTurn(link: Link, bytes: string, turnId: string,
   } finally {
     completion.cancel();
   }
+}
+
+async function unconfirmedDelivery(store: Arguments[0], silo: string,
+  admitted: Awaited<ReturnType<typeof claimRoutineActivation>> | undefined, sent: boolean) {
+  const unknown = { status: 'unknown' as const };
+  if (admitted && sent) {
+    const admission = { routineId: admitted.run.routineId,
+      eventId: admitted.receipt.eventId, position: admitted.receipt.position };
+    try {
+      await stopUnconfirmedRoutine(store, silo, admission);
+    } catch {
+      // Retain admission and the occupied run when saving Stop is unavailable.
+      return unknown;
+    }
+  }
+  return unknown;
 }

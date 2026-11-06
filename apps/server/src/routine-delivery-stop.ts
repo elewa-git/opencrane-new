@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { foldRoutineHistory } from '@opencrane/authz';
-import type { EventStore } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { routineActivationSchema, routineStopSchema, type RoutineState } from '@opencrane/events';
 import { history, readRootStopEvidence } from '@opencrane/models';
 
@@ -20,13 +20,9 @@ export async function stopUnconfirmedRoutine(store: EventStore, silo: string,
         row.event.type === 'routine.run_activation_admitted') {
       activation = routineActivationSchema.parse(row.event.data);
     }
-    if (activation && row.event.type === 'routine.run_stop_requested') {
-      const stop = routineStopSchema.parse(row.event.data);
-      if (stop.source === 'delivery' && stop.cause?.eventId === admission.eventId &&
-          stop.cause.position === admission.position) {
-        await readRootStopEvidence(store, subject, row.sequence, deadline);
-        return;
-      }
+    if (activation && matchesDeliveryStop(row, admission)) {
+      await readRootStopEvidence(store, subject, row.sequence, deadline);
+      return;
     }
     state = foldRoutineHistory(state, row.event, completed);
   }
@@ -52,4 +48,13 @@ export async function stopUnconfirmedRoutine(store: EventStore, silo: string,
   if (result.status !== 'appended') {
     throw new Error('Routine delivery Stop unavailable');
   }
+}
+
+function matchesDeliveryStop(row: StoredEvent, admission: Admission) {
+  if (row.event.type !== 'routine.run_stop_requested') {
+    return false;
+  }
+  const stop = routineStopSchema.parse(row.event.data);
+  return stop.source === 'delivery' && stop.cause?.eventId === admission.eventId
+    && stop.cause.position === admission.position;
 }

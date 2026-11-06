@@ -131,14 +131,7 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
     }
   }
   if (report.type === 'agent.turn_started' && report.senderAttemptId !== undefined) {
-    function deliver() {
-      sendAcknowledgement(socket, batch.sequences, acknowledgement);
-    }
-    const sent = await routineDelivery(acknowledgement, result === 'duplicate', deliver);
-    if (!sent) {
-      const refusal = { type: 'ack', refused: 'Routine start unavailable' };
-      sendAcknowledgement(socket, batch.sequences, refusal);
-    }
+    await routineDelivery(acknowledgement, result === 'duplicate', batch.sequences);
   } else if (!initialReleased) {
     sendAcknowledgement(socket, batch.sequences, acknowledgement);
   }

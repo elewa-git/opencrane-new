@@ -87,17 +87,23 @@ async function requireDeliveryStop(store: EventStore, state: RoutineState | unde
       stop.reason !== 'start_unconfirmed' || stop.affectedRun !== state?.activeRun?.occurrenceId) {
     throw new Error('Invalid routine prohibition');
   }
-  const saved = await readEventAt(store, source.event.subject, stop.cause.position, deadline);
-  const parsed = parseEventByType(saved?.event);
-  if (!saved || !parsed.success || saved.event.id !== stop.cause.eventId ||
-      saved.event.silo !== source.event.silo || saved.event.type !== 'routine.run_activation_admitted') {
-    throw new Error('Invalid routine prohibition');
-  }
-  const activation = routineActivationSchema.parse(saved.event.data);
+  const activation = await readDeliveryAdmission(store, source.event.subject,
+    source.event.silo, stop.cause, deadline);
   if (activation.occurrenceId !== stop.occurrenceId ||
       !isDeepStrictEqual(activation, state?.activation)) {
     throw new Error('Invalid routine prohibition');
   }
+}
+
+async function readDeliveryAdmission(store: EventStore, subject: string, silo: string,
+  cause: { eventId: string; position: number }, deadline: number) {
+  const saved = await readEventAt(store, subject, cause.position, deadline);
+  const parsed = parseEventByType(saved?.event);
+  if (!saved || !parsed.success || saved.event.id !== cause.eventId ||
+      saved.event.silo !== silo || saved.event.type !== 'routine.run_activation_admitted') {
+    throw new Error('Invalid routine prohibition');
+  }
+  return routineActivationSchema.parse(saved.event.data);
 }
 
 async function requireLifecycleRun(store: EventStore, state: RoutineState | undefined,

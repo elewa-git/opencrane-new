@@ -1,6 +1,7 @@
 import type { WebSocket } from 'ws';
 import type { turnCommand } from './turns.ts';
 import { ReportRejected } from './reports.ts';
+import { sendAcknowledgement } from './turn-credentials.ts';
 
 type Check = NonNullable<Parameters<typeof turnCommand>[1]['routineStart']>;
 type Pending = { check: Check | undefined; cancel: () => void;
@@ -74,17 +75,7 @@ export function pendingRoutineStarts(socket: WebSocket) {
   function delivery(turnId: string) {
     // Capture this attempt before report handling waits; a later binding cannot replace it.
     const pending = starts.get(turnId);
-    async function send(acknowledgement: { token?: string; refused?: string },
-      duplicate: boolean, deliver: () => void) {
-      const accepted = acknowledgement.token !== undefined && acknowledgement.refused === undefined
-        && !duplicate && pending?.check === undefined;
-      if (!pending || !accepted) {
-        pending?.cancel();
-        return false;
-      }
-      return pending.send(deliver);
-    }
-    return send;
+    return acknowledgeRoutineStart.bind(undefined, socket, pending);
   }
   function close() {
     for (const pending of starts.values()) {
@@ -93,4 +84,24 @@ export function pendingRoutineStarts(socket: WebSocket) {
   }
   socket.once('close', close);
   return { bind, check, delivery };
+}
+
+async function acknowledgeRoutineStart(socket: WebSocket, pending: Pending | undefined,
+  acknowledgement: { token?: string; refused?: string }, duplicate: boolean,
+  sequences: number[]) {
+  const accepted = acknowledgement.token !== undefined && acknowledgement.refused === undefined
+    && !duplicate && pending?.check === undefined;
+  let sent = false;
+  if (pending && accepted) {
+    function deliver() {
+      sendAcknowledgement(socket, sequences, acknowledgement);
+    }
+    sent = await pending.send(deliver);
+  } else {
+    pending?.cancel();
+  }
+  if (!sent) {
+    const refusal = { type: 'ack', refused: 'Routine start unavailable' };
+    sendAcknowledgement(socket, sequences, refusal);
+  }
 }
