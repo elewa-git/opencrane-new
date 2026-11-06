@@ -1,7 +1,7 @@
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { losslessJson } from '@opencrane/events/lossless-json';
-import { buildRecallOffer, type TurnToolServerState } from '../../server/src/chat/turn-tools.ts';
-import { privateToolOffer } from '../../server/test/support/private-catalogue.ts';
+import { buildRecallOffer, privateToolOffer, type TurnToolServerState }
+  from '../../server/test/support/private-catalogue.ts';
 import { privateRecall } from '../src/private-recall.ts';
 import { parseTurn, type ToolServer } from '../src/turn-frame.ts';
 import { preflightFixture } from './private-recall-preflight-fixture.ts';
@@ -32,13 +32,16 @@ async function selectedOffer(names: ToolName[], rememberPolicy = 'block') {
     };
     if (name !== 'forget' && !names.includes(name)) {
       policy.mode = 'block';
-      if (name === 'remember' && rememberPolicy === 'ask') policy.mode = 'ask';
+      if (name === 'remember' && rememberPolicy === 'ask') {
+        policy.mode = 'ask';
+      }
       if (name === 'remember' && rememberPolicy === 'unreviewed') {
         policy.mode = 'allow';
         policy.reviewed = false;
       }
     }
-    state.discoveryTools.push({ name, revision, definition });
+    const discovered = { name, revision, definition };
+    state.discoveryTools.push(discovered);
     state.policyTools.push(policy);
   }
   function readServer() {
@@ -81,7 +84,8 @@ async function loadsSelectedOffer(names: ToolName[], rememberPolicy?: string) {
   const recall = test.prepare();
   const { receipt } = await recall.start();
   const load = { ...receipt, type: 'recall_load', tools: test.tools };
-  await expect(recall.load(load)).resolves.toEqual({ ...receipt, type: 'recall_loaded' });
+  const expectedReceipt = { ...receipt, type: 'recall_loaded' };
+  await expect(recall.load(load)).resolves.toEqual(expectedReceipt);
   expect(test.native.mcp.size).toBe(1);
   expect(test.native.received).toContain('mcpServerStatus/list');
   expect(test.native.received).not.toContain('turn/start');
@@ -113,17 +117,29 @@ async function refusesInitialOffer(reason: typeof invalidOffers[number]) {
     server.definitions = [];
     server.modes = {};
   }
-  if (reason === 'too many') tools[0] = privateToolOffer('all')[0]!;
+  if (reason === 'too many') {
+    tools[0] = privateToolOffer('all')[0]!;
+  }
   if (reason === 'wrong tool') {
     server.definitions[1] = privateToolOffer('forget')[0]!.definitions[0]!;
     delete server.modes['remember'];
     server.modes['forget'] = 'allow';
   }
-  if (reason === 'reordered') server.definitions.reverse();
-  if (reason === 'duplicate') server.definitions[1] = server.definitions[0]!;
-  if (reason === 'ask') server.modes['correct'] = 'ask';
-  if (reason === 'missing mode') delete server.modes['correct'];
-  if (reason === 'extra mode') server.modes['forget'] = 'allow';
+  if (reason === 'reordered') {
+    server.definitions.reverse();
+  }
+  if (reason === 'duplicate') {
+    server.definitions[1] = server.definitions[0]!;
+  }
+  if (reason === 'ask') {
+    server.modes['correct'] = 'ask';
+  }
+  if (reason === 'missing mode') {
+    delete server.modes['correct'];
+  }
+  if (reason === 'extra mode') {
+    server.modes['forget'] = 'allow';
+  }
   function prepare() {
     test.prepare(tools);
   }

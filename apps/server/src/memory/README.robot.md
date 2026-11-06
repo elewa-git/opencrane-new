@@ -72,5 +72,7 @@ registered in all four cases to represent delayed withdrawal.
 The [Correct contract](../../../../docs/process/p4-15-pr4o/README.robot.md) extends the same
 private offer to Correct. The backend checks deployment qualification before saving and
 at append, alongside full turn confirmation with the original positions and deadline.
-Correct returns its exact text-free receipt. Original-command status resolves a lost reply
+After saving, Correct repeats the qualification, membership and live-turn checks before
+returning its exact text-free receipt. It keeps the original access positions and deadline.
+A delayed save acknowledgement cannot release the receipt after access or the turn ends. Original-command status resolves a lost reply
 without another revision. Public discovery still offers Recall alone; Forget stays held.

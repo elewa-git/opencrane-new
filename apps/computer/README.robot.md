@@ -1853,5 +1853,9 @@ The scripted native peer and synthetic deployment observations remain test input
 The [Remember contract](../../docs/process/p4-15-pr4n/README.robot.md) extends the admitted
 private thread to reviewed Recall and Remember.
 The [Correct contract](../../docs/process/p4-15-pr4o/README.robot.md) adds Correct to that
-list and its permitted notifications. Forget remains held. The same thread, caller and
+list and its permitted notifications. The computer accepts each non-empty subset selected
+by the server in Recall, Remember, Correct order, with an Allow mode for every definition.
+Remember may be absent while Correct is allowed. Duplicates, changed order, other tools
+and extra or missing modes refuse the initial offer. Loading still requires the exact
+original list. Forget remains held. The same thread, caller and
 private proxy carry the call and its structured receipt. Admission remains disabled.

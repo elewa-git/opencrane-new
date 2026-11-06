@@ -90,7 +90,7 @@ flowchart LR
   chat["Chat"] -->|supplies saved turn facts| memory
   gateway["AI gateway"] -->|passes checked recall and write calls| memory
   memory -->|clears withdrawn or stopped private replies| chat
-  memory -->|checks access and references| models["Models library"]
+  memory -->|checks access and facts before saving and replying| models["Models library"]
   memory -->|supplies initial input once| computer["Computer input renderer"]
 ```
 
@@ -115,4 +115,6 @@ write receipts and status reads after a lost reply. Remember and Correct check t
 Stop requests, computer generation and access again before saving. A Stop or computer
 replacement saved while the call waits for its database lock prevents the write,
 even if the computer has not yet removed the caller. Correct keeps every other loaded
-reference and excludes the replaced fact from its dependencies. Native admission remains disabled.
+reference and excludes the replaced fact from its dependencies. After saving, Correct checks
+access, the current turn and the original time limit again before returning the receipt.
+Native admission remains disabled.

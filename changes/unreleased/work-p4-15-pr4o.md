@@ -1,1 +1,2 @@
 - Admitted personal memory threads can correct a loaded fact through the real backend, keeping every other loaded reference and returning the saved receipt. Admission remains disabled pending live qualification.
+- Personal correction receipts are withheld if access, the turn or the original time limit ends while saving. Private turns accept each permitted selection of Recall, Remember and Correct, including Correct when Remember is unavailable.
