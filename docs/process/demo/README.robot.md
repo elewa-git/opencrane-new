@@ -4,6 +4,18 @@ For people, read [README.md](README.md) first.
 
 ## Latest qualification attempt
 
+The latest 6 November 2026 fresh rehearsal is **PASS** at
+`d6ee590bd486bf6e04ede9a5501be19592bba1f7`. A secondary slot passed the
+built-in real-model journey, demo seed, timed smoke at both widths, all twenty
+ten-step checks, and the member memory-off row at both widths. The
+[receipt](../demo-rehearsal/test-version-2026-11-06/receipt.md) keeps the earlier
+failed starts and browser attempts, the passing run, spending and cleanup. The
+cause of the earlier group read failure remains unproved because its HTTP logs
+were removed with the earlier slot. The owner stack was untouched. The owner
+refresh itself remains **NOT RUN**.
+
+### Earlier qualification
+
 The fifth 23 October 2026 attempt for #569 is **PASS**. The qualified source is
 `f11df5c56fe08e4bac477cc4c3f375288568c0cd`, the starting `origin/main`, including
 the checker-3 correction in #615 and the Stop correction in #611. Fresh startup,

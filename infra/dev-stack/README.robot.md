@@ -1405,8 +1405,13 @@ Owner, the privately configured owner test user. Setup uses product HTTP routes 
 create OpenAI connection, save random stub credential, check reachability, accept the
 quoted model test, enable `modelForTask('chat_turn')` and `gpt-6-luna`, explicitly
 select the silo default, drain, then switch on. Every write waits for its receipt.
-After enabling models, setup waits up to 30 seconds for `seed-provider-default` to
+After enabling models, setup waits up to 120 seconds for `seed-provider-default` to
 record the first binding. It then reads that position for the explicit Owner selection.
+Fresh startup runs the `routines` projection worker. Provider binding reads require
+its checkpoint, even when no routine exists; without the worker, they return 503
+while the saved default binding remains hidden from setup.
+The limit matches the fresh secondary service readiness wait. A regression test
+delays the first binding past 30 seconds and checks that setup sends no second paid test.
 This avoids racing the scheduled binding; it still makes only one selection write
 and refuses any later conflict.
 HTTP 425 with `status: access_applying` waits 100 ms and repeats the exact input and
@@ -1486,8 +1491,8 @@ The isolation test supplies synthetic inherited keys whose values match expected
 text. Reading either key changes that text during sanitisation and fails the test.
 
 Setup still uses the product reachability check, exact consented quote, registry models,
-explicit default, drain and switch-on. The initial default-binding read waits through a temporary 503 within its existing
-thirty-second deadline. A lost write response permits only a GET of the
+explicit default, drain and switch-on. The initial default-binding read waits through a temporary 503 within its
+two-minute deadline. A lost write response permits only a GET of the
 original command receipt. Recovery requires the expected operation. An absent or unknown
 receipt never causes another POST. Incomplete setup stops; repeat startup cannot silently
 create another provider or change modes. Keep the opt-in on ordinary restarts. A fresh
@@ -1639,6 +1644,10 @@ history, at 1280 and 390 pixels. Step 5 sends from 390 pixels at both widths.
 A failure stops later steps, which are recorded as NOT RUN.
 Private `demo-rehearsal/<time>/results.json` records each step's result, duration and
 sanitised failure message. A screenshot error cannot replace the checker error.
+`diagnostics.txt` records the time, path and HTTP status of the owner's group and
+conversation reads. It records transport failures without request contents. The
+shared-session wait accepts a page navigation that completes while it checks the
+read-only status button; an error on any other page still fails the step.
 If the company-limit check and its restoration both fail, `reason` keeps the checker's
 message and `additionalReasons` records the restoration message. Both remove private
 values separately. A restoration failure after a successful check still fails the step.
@@ -1976,6 +1985,29 @@ Run `infra/dev-stack/install-daily-fresh-timer.sh` to install or update the user
 - [infra/nats](../nats/README.md): the event log's connection rules.
 - [infra/clamav](../clamav/README.md): the file scanner used by uploads.
 - [Why NATS JetStream holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
+
+### Authenticated scanner settings
+
+Each stack starts the pinned ClamAV image and the authenticated HTTPS service from
+`infra/clamav/service.mjs`. It creates `scanner-ca.key`, `scanner-ca.crt`,
+`scanner-server.key` and `scanner-server.crt` in its private state directory. All four
+files have mode 0600. The existing per-stack token signing key issues scanner passes
+for the server. The scanner service reads only its public verification keys, its own
+certificate and the stack's silo from private settings. Compose publishes only
+`127.0.0.1:SCANNER_PORT`; secondary
+slots have separate fixed ports. Startup makes one signed scan of a small clean sample
+using this stack's key and silo before it starts the server. A trusted service that
+refuses the pass or cannot scan does not pass readiness. `down.sh` removes the service.
+
+The development service scans bytes with the pinned local ClamAV container. It uses
+the authenticated service and pass checks from the upload tests. Its database facts
+are development fixtures; they are not a reviewed scanner release. Production still
+requires the separate reviewed image and database checks in `infra/clamav/launch.mjs`.
+`DEV_SCANNER_URL` and `DEV_SCANNER_CA_FILE` are optional together. When supplied, the
+stack checks that HTTPS service instead of starting its own service. Missing or
+insecure settings, or a service that does not answer over trusted TLS, stop startup.
+Only the server receives `SCANNER_URL` and `SCANNER_CA_FILE`. The dispatcher and model
+worker do not read scanner settings.
 
 ## Ownership browser check
 

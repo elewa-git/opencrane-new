@@ -550,6 +550,28 @@ async function reactionSilo() {
   expect(await nats.store.head()).toBe(before);
 }
 it('refuses a default reaction triggered by another silo', reactionSilo);
+async function delayedSelectionHistory() {
+  const { trigger } = await connection('primary');
+  const originalRead = nats.store.readStream.bind(nats.store);
+  async function* withoutSelectedModel(subject: string, from?: number, deadline?: number) {
+    for await (const row of originalRead(subject, from, deadline)) {
+      if (subject === 'provider-*' && row.event.id === trigger.id) {
+        continue;
+      }
+      yield row;
+    }
+  }
+  const readSpy = vi.spyOn(nats.store, 'readStream');
+  readSpy.mockImplementation(withoutSelectedModel);
+  const handler = providerDefaultHandler(nats.store, binding);
+  await expect(handler.handle(trigger, pgDb(dbs.queue))).rejects.toThrow();
+  readSpy.mockRestore();
+  expect(await storedBindings('primary')).toHaveLength(0);
+  await handler.handle(trigger, pgDb(dbs.queue));
+  expect(await storedBindings('primary')).toHaveLength(1);
+}
+it('retries a fresh default when selected models are missing from the first read',
+  delayedSelectionHistory);
 async function reactionEnabled() {
   const { trigger } = await connection('first', ['gpt-6-luna']);
   const handler = providerDefaultHandler(nats.store, binding);

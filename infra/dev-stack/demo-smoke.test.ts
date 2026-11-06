@@ -219,6 +219,27 @@ async function waitsForSharedSession() {
 test('demo can finish a recorded shared session by checking its saved status',
   waitsForSharedSession);
 
+async function acceptsNavigationDuringSharedSessionStatusCheck() {
+  const { waitForPrivateSessionToApply } = await import('./browser-phase4.ts');
+  let location = 'http://demo.test/workspace/shared';
+  async function evaluateAll() {
+    location = 'http://demo.test/workspace?conversation=saved';
+    throw new Error('Execution context was destroyed, most likely because of a navigation');
+  }
+  async function waitFor() {}
+  async function waitForLoadState() {}
+  function url() { return location; }
+  function getByRole() { return { evaluateAll }; }
+  function getByText() { return { waitFor }; }
+  const page = { url, getByRole, getByText, waitForLoadState } as unknown as Page;
+
+  await waitForPrivateSessionToApply(page);
+  assert.equal(location, 'http://demo.test/workspace?conversation=saved');
+}
+
+test('shared session check accepts the page navigation that finishes the request',
+  acceptsNavigationDuringSharedSessionStatusCheck);
+
 async function stopsWhileComposerLoads() {
   const { chromium } = await import('playwright');
   const { stop } = await import('./real-model-journey.ts');

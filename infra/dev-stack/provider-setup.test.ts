@@ -90,13 +90,15 @@ async function recordsSetup() {
 }
 test('provider setup uses ordered authenticated product calls and stops at each refusal', recordsSetup);
 
-async function waitsForSeededDefault(loseReply = false, absent = false, unavailable = false) {
+async function waitsForSeededDefault(loseReply = false, absent = false, unavailable = false,
+  slowBinding = false) {
   let saves = 0;
   let savedCommand = '';
   let recovered = false;
   let bindingReads = 0;
   let selections = 0;
   let paidTests = 0;
+  let modelsSelectedAt = 0;
   async function handle(request: import('node:http').IncomingMessage,
     response: import('node:http').ServerResponse) {
     let contents = '';
@@ -105,6 +107,9 @@ async function waitsForSeededDefault(loseReply = false, absent = false, unavaila
     response.setHeader('content-type', 'application/json');
     if (input.action === 'test') {
       paidTests += 1;
+    }
+    if (input.action === 'models') {
+      modelsSelectedAt = Date.now();
     }
     if (request.method === 'POST' && request.url?.endsWith('/key')) {
       saves++;
@@ -130,8 +135,9 @@ async function waitsForSeededDefault(loseReply = false, absent = false, unavaila
         response.end('sensitive-value /private/location');
         return;
       }
-      const rows = bindingReads === 1 ? [] : [{ kind: 'silo_default', position: 5 }];
-      const expectedProviderSequence = bindingReads === 1 ? 4 : 5;
+      const pending = slowBinding ? Date.now() - modelsSelectedAt < 31_000 : bindingReads === 1;
+      const rows = pending ? [] : [{ kind: 'silo_default', position: 5 }];
+      const expectedProviderSequence = pending ? 4 : 5;
       response.end(JSON.stringify({ rows, expectedProviderSequence }));
       return;
     }
@@ -167,7 +173,11 @@ async function waitsForSeededDefault(loseReply = false, absent = false, unavaila
     await setupProvider(options);
     assert(recovered, 'Read the original save command');
     assert.equal(saves, 1, 'An unknown write is never sent twice');
-    assert.equal(bindingReads, 2);
+    if (slowBinding) {
+      assert(bindingReads > 2);
+    } else {
+      assert.equal(bindingReads, 2);
+    }
     assert.equal(paidTests, 1, 'The binding read never repeats the paid test');
     assert.equal(selections, 1, 'Wait for the scheduled binding before the single owner selection');
   } finally {
@@ -191,8 +201,14 @@ function temporaryBindingTest() {
   return waitsForSeededDefault(false, false, true);
 }
 
+function slowBindingTest() {
+  return waitsForSeededDefault(false, false, false, true);
+}
+
 test('waits for a temporarily unavailable provider binding without repeating writes',
   temporaryBindingTest);
+test('waits beyond thirty seconds for a fresh default binding without repeating paid work',
+  { timeout: 45_000 }, slowBindingTest);
 test('waits for the first provider binding before explicitly selecting the default', seededDefaultTest);
 test('a lost save reply is recovered by reading its original receipt', lostReplyTest);
 test('an absent receipt after a lost response never repeats the unknown write', absentReceiptTest);

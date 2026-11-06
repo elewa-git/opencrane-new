@@ -63,7 +63,9 @@ flowchart LR
 
 ## How to run or test it
 
-The development stack builds and starts the scanner. Upload tests use the same
+The development stack builds and starts the local ClamAV daemon and an authenticated
+HTTPS service. The service uses development scan facts and does not replace the
+reviewed scanner release required for production. Upload tests use the same
 Linux amd64 image in a temporary container. The build downloads the exact image
 without attached build records that the registry mirror may lack. Refresh prepares
 files for review and does not change an already running scanner. Its `signatures.json` file records database versions,

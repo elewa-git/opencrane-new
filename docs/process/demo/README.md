@@ -48,8 +48,14 @@ request records is not a recovery step. Assistant creation does not prove readin
 
 ### Secondary rehearsal
 
-Only one live rehearsal uses the shared machine at a time. The latest fresh rehearsal
-passed both screen widths, including Stop and keeping the partial reply after reload.
+Only one live rehearsal uses the shared machine at a time. The last completed fresh
+rehearsal passed both screen widths, including Stop and keeping the partial reply after reload.
+The [6 November rehearsal](../demo-rehearsal/test-version-2026-11-06/receipt.md)
+includes earlier failed starts and browser reads. The repaired stack starts its own
+authenticated scanner. The latest fresh secondary run passed the built-in journey,
+demo seed, both smoke widths, all ten steps at both screen widths and the member
+memory check. The cause of an earlier temporary group read failure remains unknown.
+
 Keep the remaining allowance for all paid runs together within 2,000 cents per UTC day, including unknown
 holds. Startup's 2,000-cent ceiling is per stack; it is not a shared daily counter.
 
@@ -87,17 +93,17 @@ name this run's reservations, charges and holds, and failed warm-up still has ti
 
 ### OWNER-RUN: refreshing the owner checkout
 
-The qualified source is `f11df5c56fe08e4bac477cc4c3f375288568c0cd`.
-Its [fresh-install receipt](../demo-rehearsal/final-2026-10-23-5/receipt.md) records
+The qualified source is `d6ee590bd486bf6e04ede9a5501be19592bba1f7`.
+Its [fresh-install receipt](../demo-rehearsal/test-version-2026-11-06/receipt.md) records
 successful startup, both timed smoke widths and all ten demo steps at each width.
 The owner real-mode command, refreshed image, PDF seed and timed smoke are available.
 These commands require an interactive terminal and refuse any `OPENCRANE_FLEET_TASK`
 marker, including an empty one. Task launchers export that marker. No task has run
 these commands on the owner stack or checked the real phone path.
 
-The latest rehearsal passed on its first run. It used 47 charged cents and counted
-85 held cents in full. Both company limits were restored and the secondary stack
-was removed. Earlier failed attempts remain recorded in the rehearsal notes.
+The latest fresh run used 44 charged cents and counted 85 held cents in full.
+Both company limits were restored and the secondary stack was removed. Earlier
+failed attempts remain recorded in the rehearsal notes.
 
 Before choosing a SHA, confirm that it is merged into `origin/main`, includes both
 the real-provider and demo-kit changes, includes the qualified Stop image, and has

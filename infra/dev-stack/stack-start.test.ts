@@ -14,6 +14,9 @@ type StartOptions = {
   webReadyMs?: number;
   webExitMs?: number;
   listener?: string;
+  scannerMissing?: boolean;
+  routinesExit?: boolean;
+  stopAfterStart?: boolean;
 };
 
 async function ownerStart(start: StartOptions = {}) {
@@ -35,6 +38,8 @@ async function ownerStart(start: StartOptions = {}) {
       START_WEB_READY_MS: start.webReadyMs?.toString() ?? '',
       START_WEB_EXIT_MS: start.webExitMs?.toString() ?? '',
       START_LISTENER: start.listener ?? '',
+      START_SCANNER_MISSING: start.scannerMissing ? '1' : '',
+      START_ROUTINES_EXIT: start.routinesExit ? '1' : '',
     };
     const args = ['--experimental-strip-types', '--import',
       './infra/dev-stack/test/stack-start-preload.mjs', 'infra/dev-stack/stack.ts',
@@ -42,6 +47,15 @@ async function ownerStart(start: StartOptions = {}) {
     const options = { env: environment, encoding: 'utf8' as const, timeout: 15_000 };
     const result = spawnSync(process.execPath, args, options);
     assert.ifError(result.error);
+    if (start.stopAfterStart && result.status === 0) {
+      const downEnvironment = { ...environment, START_RESTORE_PROCESSES: '1' };
+      const downArgs = args.slice(0, 4);
+      downArgs.push('down');
+      const down = spawnSync(process.execPath, downArgs,
+        { ...options, env: downEnvironment });
+      assert.ifError(down.error);
+      assert.equal(down.status, 0, down.stdout + down.stderr);
+    }
     let operations: string;
     try {
       operations = await readFile(`${home}/operations`, 'utf8');
@@ -60,7 +74,7 @@ async function ownerStart(start: StartOptions = {}) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
     return { status: result.status, output: result.stdout + result.stderr, failure,
-      operations, settings, services };
+      operations, settings, services, directory };
   } finally {
     await rm(home, { recursive: true, force: true });
   }
@@ -75,6 +89,60 @@ async function ownerReadiness() {
 }
 
 test('an authorised owner real start reports readiness without an automated journey', ownerReadiness);
+
+async function startsRoutineProjection() {
+  const result = await ownerStart();
+  assert.equal(result.status, 0, result.output);
+  function isRoutineWorker(process: string) {
+    return process.includes('apps/ops/src/worker.ts routines');
+  }
+  assert.ok(result.services.processes.some(isRoutineWorker));
+}
+
+test('fresh startup runs the routine projection needed by provider binding reads',
+  startsRoutineProjection);
+
+async function stoppedRoutineRefusesReadiness() {
+  const result = await ownerStart({ routinesExit: true });
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.failure, /routines stopped/u);
+  assert.doesNotMatch(result.output, /Stack ready:/u);
+}
+
+test('a stopped routines worker refuses final startup readiness', stoppedRoutineRefusesReadiness);
+
+async function downStopsRoutineWorker() {
+  const result = await ownerStart({ stopAfterStart: true });
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.operations, /stop routines/u);
+  assert.equal(result.services.processes.includes('routines'), false);
+}
+
+test('down stops the routines worker', downStopsRoutineWorker);
+
+async function startsServerWithScanner() {
+  const result = await ownerStart();
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.operations, /scanner-configured true/u);
+  assert.ok(result.services.containers.includes('scanner'));
+}
+
+test('fresh startup starts the scanner and gives the server its settings',
+  startsServerWithScanner);
+
+async function missingScannerStopsStartup() {
+  const result = await ownerStart({ scannerMissing: true, webReadyMs: 1 });
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.failure, /Timed out waiting for authenticated scanner/u);
+  const expectedOutput = 'Dev stack failed: Timed out waiting for authenticated scanner scan; ' +
+    "inspect the stack's private log folder\n";
+  assert.equal(result.output, expectedOutput);
+  assert.equal(result.output.includes(result.directory), false);
+  assertRestored(result);
+}
+
+test('missing scanner service refuses startup and stops its container',
+  missingScannerStopsStartup);
 
 async function modeSavedAfterChecks() {
   const result = await ownerStart();

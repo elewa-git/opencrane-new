@@ -52,6 +52,29 @@ services:
       interval: 5s
       timeout: 3s
       retries: 30
+  scanner:
+    image: node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3
+    user: "${DEV_STACK_UID}:${DEV_STACK_GID}"
+    working_dir: ${DEV_STACK_ROOT}
+    command: [node, --experimental-strip-types, infra/dev-stack/scanner-service.mjs]
+    read_only: true
+    init: true
+    environment:
+      DEV_STACK_DIR: ${DEV_STACK_DIR}
+      SCANNER_PORT: "8443"
+      CLAMD_HOST: clamav
+      CLAMD_PORT: "3310"
+      SILO_ID: ${SILO_ID}
+      TOKEN_ISSUER: ${ORIGIN}/
+    volumes:
+      - ${DEV_STACK_ROOT}:${DEV_STACK_ROOT}:ro
+      - ${DEV_STACK_DIR}/scanner-server.key:${DEV_STACK_DIR}/scanner-server.key:ro
+      - ${DEV_STACK_DIR}/scanner-server.crt:${DEV_STACK_DIR}/scanner-server.crt:ro
+      - ${DEV_STACK_DIR}/model-jwks.json:${DEV_STACK_DIR}/model-jwks.json:ro
+    ports: ["127.0.0.1:${SCANNER_PORT}:8443"]
+    depends_on:
+      clamav:
+        condition: service_healthy
 volumes:
   postgres:
   nats:

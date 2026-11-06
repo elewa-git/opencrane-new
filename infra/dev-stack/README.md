@@ -18,7 +18,7 @@ flowchart LR
   infra["infra<br/>infrastructure"] --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|starts services; checks listeners; sets up sign-in| services["Local services<br/>jobs, content and access"]
-  stack -->|builds and starts| clamav["infra/clamav<br/>virus scanner"]
+  stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
   stack -->|starts apps; keeps keys private; checks journeys, times Memory body reads and saves tool evidence as it arrives| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|checks ownership, backup certificates and nodes; stops cancelled checks| package["infra/package<br/>Helm install"]
   stack -->|checks collection and reports host refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
@@ -33,6 +33,11 @@ tables and a separate jobs database, [NATS](../../GLOSSARY.md#nats) for the even
 
 The dispatcher uses the server's read-only content connection to coordinate gateway
 configuration changes. Its background jobs keep their own database.
+The routines worker keeps routine read tables current. Provider settings use those
+tables to check whether an existing routine would be affected by a change.
+Uploads use a separate authenticated scanner service. Each stack starts that service
+with private certificates and the local ClamAV daemon. Startup makes a signed clean
+scan before it starts the server. It also checks that the routines worker is running.
 
 ## What it is responsible for
 
@@ -41,6 +46,7 @@ its body. A body that does not finish fails after ten seconds, leaving that stat
 available for diagnosis.
 
 - Starts and stops local services and apps with private local credentials.
+- Starts the scanner for uploads and checks one signed scan before the server starts.
 - Checks that stack listeners use loopback or this machine's Tailscale addresses.
 - Waits for the website to answer before starting browser checks.
 - Prepares Kubernetes so background workers can start one
@@ -54,7 +60,8 @@ available for diagnosis.
 - Checks ownership handover and refuses a last owner’s departure in manual named journeys.
 - Waits for each new rehearsal reply to finish, checks its facts and checks the saved
   text after a reload. Uses separate messages and invitations for each screen width and
-  attempt, and saves step pictures before recording success.
+  attempt, and saves step pictures before recording success. It records failed browser
+  reads privately so the request can be checked after a stopped run.
 - Refuses incomplete controller or credential settings for an optional PostgreSQL standby.
   Checks password format and conflicting database connections before installation.
   Checks backup Service ownership, named Secret entries and the endpoint certificate internally.
@@ -99,7 +106,8 @@ available for diagnosis.
 
 1. **A fresh stack connects the AI.** Startup connects a free stand-in provider as
    the owner would through the product's settings APIs. It checks the provider and
-   switches it on before chat checks run. Startup waits up to five minutes for the
+   switches it on before chat checks run. On a spare stack, it allows the background
+   worker two minutes to record the first provider choice. Startup waits up to five minutes for the
    website to answer and stops if its process exits.
 2. **A developer checks a change.** A browser signs in, sends a message and checks
    the saved reply after reloading. Other journeys cover files, spending, the screen

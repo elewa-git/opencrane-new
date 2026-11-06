@@ -21,6 +21,7 @@ import { envelope, managedProviderCallsEnabled } from '@opencrane/models';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 import { checkProviderMode, modelsEnvironment, startupCeilings } from './models-environment.ts';
+import { scannerReady, scannerSettings } from './scanner-settings.ts';
 import { setupDevProvider } from './provider-setup.ts';
 import { ownerRunRefusal, requireOwnerRun } from './owner-run.ts';
 import { approvalJourneyTool } from './journey-tool-policy.ts';
@@ -32,7 +33,14 @@ const exec = promisify(execFile);
 // Keep a claim for 15 minutes because claim.sh exits before stack startup can finish.
 const CLAIM_GRACE_PERIOD_MS = 15 * 60 * 1000;
 const memoryKeyDirectory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
-const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets', 'audit', 'minio-tokens', 'model-stub', 'models', 'dispatcher', 'server', 'web'].filter(name => !secondary || !['models', 'model-stub'].includes(name));
+
+function includedProcess(name: string) {
+  return !secondary || (name !== 'models' && name !== 'model-stub');
+}
+
+const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets',
+  'audit', 'routines', 'minio-tokens', 'model-stub', 'models', 'dispatcher', 'server',
+  'web'].filter(includedProcess);
 if (secondary || memoryKeyDirectory) {
   names.push('memory');
 }
@@ -163,12 +171,19 @@ async function compose(...args: string[]) {
     const trimmed = current.trim();
     const running = new Set(trimmed.split('\n'));
     for (const service of args.slice(1)) {
-      if (!service.startsWith('-') && !running.has(service)) {
+      if (!service.startsWith('-') &&
+          (!running.has(service) || args.includes('--force-recreate'))) {
         ownerStartup.containers.add(service);
       }
     }
   }
-  return run('docker', ['compose', '--project-name', project, '--env-file', `${directory}/settings.env`, '-f', 'infra/dev-stack/compose.yaml', ...(secondary ? ['-f', 'infra/dev-stack/compose.secondary.yaml'] : []), ...args]);
+  const composeEnvironment = { ...base, DEV_STACK_ROOT: root,
+    DEV_STACK_UID: String(process.getuid!()), DEV_STACK_GID: String(process.getgid!()),
+    SCANNER_PORT: defaultPorts['SCANNER_PORT']! };
+  return run('docker', ['compose', '--project-name', project,
+    '--env-file', `${directory}/settings.env`, '-f', 'infra/dev-stack/compose.yaml',
+    ...(secondary ? ['-f', 'infra/dev-stack/compose.secondary.yaml'] : []), ...args],
+  composeEnvironment);
 }
 async function wait(check: () => Promise<boolean>, name: string,
   timeoutMs = secondary ? 120_000 : 60_000) {
@@ -478,6 +493,7 @@ async function up(fresh: boolean) {
     if (secondary) await writeEnv('models', {});
   }
   const settings = { ...defaultPorts, ...await readEnv('settings') };
+  const scanner = await scannerSettings(process.env, directory, settings['SCANNER_PORT']);
   if (!real) await writeEnv('settings', settings);
   // Create custody before Docker can create this mount as root.
   try {
@@ -550,7 +566,7 @@ async function up(fresh: boolean) {
   }
   const binding = await readEnv('binding');
   for (const name of ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets',
-    'audit', 'memory']) {
+    'audit', 'memory', 'routines']) {
     const projectionEnv = await readEnv('projection');
     if (!secondary && memoryKeyDirectory) {
       projectionEnv['MEMORY_KEY_DIRECTORY'] = memoryKeyDirectory;
@@ -559,6 +575,10 @@ async function up(fresh: boolean) {
   }
   const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${settings['ORIGIN']}/` });
   await save('model-jwks.json', JSON.stringify(issuer.jwks));
+  if (!process.env['DEV_SCANNER_URL']) await compose('up', '-d', '--force-recreate', 'scanner');
+  const scannerIdentity = { silo: settings['SILO_ID']!, issuer: `${settings['ORIGIN']}/`,
+    privateKeyPath: `${directory}/token-signing-key.pem` };
+  await wait(() => scannerReady(scanner, scannerIdentity), 'authenticated scanner scan');
   await save('model-stub-key', 'dev-stack-stub-only');
   const modeReader = await connectEventStore(await readEnv('command'));
   let managed: boolean;
@@ -625,7 +645,8 @@ async function up(fresh: boolean) {
   }
   await startModels();
   await start('dispatcher', ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'dispatcher'],
-    { ...await readEnv('dispatcher'), ...binding, MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`, ...prefixed(await readEnv('command'), 'COMMAND_'),
+    { ...await readEnv('dispatcher'), ...binding,
+      MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`, ...prefixed(await readEnv('command'), 'COMMAND_'),
       CONTENT_DATABASE_URL: (await readEnv('server'))['DATABASE_URL']!,
       KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
       TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
@@ -650,6 +671,7 @@ async function up(fresh: boolean) {
   }
   await start('server', ['--experimental-strip-types', 'apps/server/src/main.ts'],
     { ...await readEnv('command'), ...await authEnv(), ...await readEnv('server'), ...binding,
+      ...scanner,
       ...(tokenBootstrap ? { BOOTSTRAP_TOKEN_FILE: `${directory}/bootstrap-token.json` } : {}),
       MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`,
       MINIO_URL: `http://127.0.0.1:${settings['MINIO_PORT']}`, MINIO_CREDENTIALS_FILE: `${directory}/minio-lease.json`, CLAMD_PORT: settings['CLAMD_PORT'] ?? '43310',
@@ -943,8 +965,12 @@ try {
     let message: string;
     if (error instanceof Error && error.message.startsWith('Compose stopped, but')) {
       message = error.message;
+    } else if (error instanceof Error &&
+        error.message === 'Timed out waiting for authenticated scanner scan') {
+      // Show only this known timeout. Other errors may contain private values.
+      message = `Dev stack failed: ${error.message}; inspect the stack's private log folder`;
     } else if (prepared) {
-      message = `Dev stack failed; inspect private logs in ${directory}`;
+      message = "Dev stack failed; inspect the stack's private log folder";
     } else {
       message = 'DEV_STACK_DIR must be an empty dedicated directory outside the repository, or owned by this worktree';
     }

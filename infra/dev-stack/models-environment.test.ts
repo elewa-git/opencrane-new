@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import { checkProviderMode, modelsEnvironment, startupCeilings } from './models-environment.ts';
@@ -9,12 +9,16 @@ async function paidStartupFixture() {
   const home = await mkdtemp(`${tmpdir()}/paid-startup-fixture-`);
   const directory = `${home}/stack`;
   await mkdir(directory);
+  const scannerCaFile = `${home}/scanner-ca.crt`;
+  await writeFile(scannerCaFile, 'fixture certificate');
   const environment = {
     HOME: home,
     PATH: '/nonexistent',
     DEV_STACK_DIR: directory,
     DEV_STACK_ID: 'owner',
     DEV_REAL_PROVIDER_FILE: '/synthetic-key-file',
+    DEV_SCANNER_URL: 'https://127.0.0.1:25099/scan/upload',
+    DEV_SCANNER_CA_FILE: scannerCaFile,
     DEMO_ALLOWANCE_CENTS: '600',
   };
   const args = ['--experimental-strip-types', '--import',

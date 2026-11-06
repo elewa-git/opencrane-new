@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import * as files from 'node:fs/promises';
 import { registerHooks, syncBuiltinESMExports } from 'node:module';
 import childProcess from 'node:child_process';
@@ -17,6 +17,17 @@ const containers = new Set();
 const webReadyMs = process.env['START_WEB_READY_MS'];
 let elapsedMs = 0;
 let webPid;
+let routinesPid;
+
+if (process.env['START_RESTORE_PROCESSES'] === '1') {
+  for (const name of readdirSync(directory)) {
+    if (!name.endsWith('.pid')) continue;
+    const pid = Number(readFileSync(`${directory}/${name}`, 'utf8').split(' ')[0]);
+    running.set(pid, name.slice(0, -4));
+  }
+  const previous = JSON.parse(readFileSync(`${process.env.HOME}/services.json`, 'utf8'));
+  for (const name of previous.containers) containers.add(name);
+}
 
 if (webReadyMs) {
   async function advanceClock(milliseconds) {
@@ -70,7 +81,7 @@ async function execute(command, args) {
     else stdout = 'fixture';
   }
   if (command === 'docker' && args.includes('compose')) {
-    const services = ['postgres', 'nats', 'minio', 'clamav', 'openfga', 'models'];
+    const services = ['postgres', 'nats', 'minio', 'clamav', 'scanner', 'openfga', 'models'];
     if (args.includes('ps')) stdout = [...containers].join('\n');
     for (const service of services) {
       if (args.includes('up') && args.includes(service)) containers.add(service);
@@ -89,11 +100,16 @@ function spawnFixture(_command, args, options) {
     assert.equal(options.env.CONTENT_DATABASE_URL, 'postgres://fixture.invalid/server');
     assert.equal(options.env.DATABASE_URL, 'postgres://fixture.invalid/dispatcher');
   }
+  if (args.includes('apps/server/src/main.ts')) {
+    const scannerConfigured = Boolean(options.env.SCANNER_URL && options.env.SCANNER_CA_FILE);
+    record(`scanner-configured ${scannerConfigured}`);
+  }
   const child = new EventEmitter();
   child.pid = nextPid++;
   child.unref = function unref() {};
   running.set(child.pid, args.join(' '));
   if (args.includes('serve')) webPid = child.pid;
+  if (args.includes('routines')) routinesPid = child.pid;
   snapshot();
   function spawned() { child.emit('spawn'); }
   queueMicrotask(spawned);
@@ -106,6 +122,7 @@ async function readFixture(path, ...args) {
   if (!match) return originalRead(path, ...args);
   const webExitMs = process.env['START_WEB_EXIT_MS'];
   if (webExitMs && elapsedMs >= Number(webExitMs)) running.delete(webPid);
+  if (process.env['START_ROUTINES_EXIT'] === '1' && switchedOn) running.delete(routinesPid);
   if (!running.has(Number(match[1]))) {
     const error = new Error('Fixture process stopped');
     error.code = 'ENOENT';
@@ -121,6 +138,7 @@ const fsDefault = (await import('node:fs/promises')).default;
 fsDefault.readFile = readFixture;
 process.kill = function killFixture(pid) {
   assert(pid < 0, 'Only fake process groups may be stopped');
+  record(`stop ${running.get(-pid)}`);
   running.delete(-pid);
   snapshot();
   return true;
@@ -180,6 +198,11 @@ export async function authEnv() { return {}; }
 const replacements = new Map([
   ['/infra/dev-stack/config.ts', configSource],
   ['/infra/dev-stack/ports.ts', 'export async function checkPorts() { globalThis.startFixture.failureAt("infrastructure-check"); }'],
+  ['/infra/dev-stack/scanner-settings.ts', `export async function scannerSettings() {
+    return { SCANNER_URL: 'https://127.0.0.1:25099/scan/upload',
+      SCANNER_CA_FILE: '/fixture/scanner-ca.crt' };
+  }
+  export async function scannerReady() { return process.env.START_SCANNER_MISSING !== '1'; }`],
   ['/infra/dev-stack/model-network.ts', 'export async function modelFirewall() {}'],
   ['/infra/dev-stack/minio-tokens.ts', 'export async function issueMinioLease() {}'],
   ['/infra/dev-stack/provider-setup.ts', 'export async function setupDevProvider(settings, path) { await globalThis.startFixture.setup(path); }'],

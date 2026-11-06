@@ -26,6 +26,21 @@ try {
   const output = `${directory}/demo-rehearsal/${Date.now()}`;
   try {
     await mkdir(output, { recursive: true, mode: 0o700 });
+    const diagnostics: string[] = [];
+    function recordResponse(response: import('playwright').Response) {
+      const path = new URL(response.url()).pathname;
+      if (path.startsWith('/api/groups') || path.startsWith('/api/conversations')) {
+        diagnostics.push(`${new Date().toISOString()} ${path} ${response.status()}`);
+      }
+    }
+    function recordFailure(request: import('playwright').Request) {
+      const path = new URL(request.url()).pathname;
+      if (path.startsWith('/api/groups') || path.startsWith('/api/conversations')) {
+        diagnostics.push(`${new Date().toISOString()} ${path} transport failure`);
+      }
+    }
+    browser.ownerPage.on('response', recordResponse);
+    browser.ownerPage.on('requestfailed', recordFailure);
     const cookie = browser.sessions.get('owner')!.cookie;
     const options = { origin, directory, cookie };
     const extraSecrets = [cookie, cookie.slice(cookie.indexOf('=') + 1)];
@@ -39,6 +54,7 @@ try {
         process.exitCode = 1;
       }
     } finally {
+      await writeFile(`${output}/diagnostics.txt`, diagnostics.join('\n'), { mode: 0o600 });
       const budget = await demoBudget(options);
       const contents = JSON.stringify(budget, null, 2);
       await writeFile(`${output}/budget.json`, contents, { mode: 0o600 });

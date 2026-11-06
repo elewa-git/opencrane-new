@@ -563,7 +563,12 @@ export async function waitForPrivateSessionToApply(page: Page): Promise<void> {
       const notice = await page.locator('main').innerText();
       throw new Error(`The private session did not open; chooser said: ${notice}`);
     }
-    await clickStatusWhenEnabled(statusButton);
+    try {
+      await clickStatusWhenEnabled(statusButton);
+    } catch (error) {
+      // Accept a lost page context only when the shared session has opened.
+      if (!page.url().includes('/workspace?conversation=')) throw error;
+    }
     await delay(1_000);
   }
   await page.waitForLoadState('domcontentloaded');
