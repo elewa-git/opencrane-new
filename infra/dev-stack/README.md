@@ -99,7 +99,8 @@ available for diagnosis.
 
 1. **A fresh stack connects the AI.** Startup connects a free stand-in provider as
    the owner would through the product's settings APIs. It checks the provider and
-   switches it on before chat checks run. Startup waits up to five minutes for the
+   switches it on before chat checks run. On a spare stack, it allows the background
+   worker two minutes to record the first provider choice. Startup waits up to five minutes for the
    website to answer and stops if its process exits.
 2. **A developer checks a change.** A browser signs in, sends a message and checks
    the saved reply after reloading. Other journeys cover files, spending, the screen

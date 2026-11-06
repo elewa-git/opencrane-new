@@ -1405,8 +1405,10 @@ Owner, the privately configured owner test user. Setup uses product HTTP routes 
 create OpenAI connection, save random stub credential, check reachability, accept the
 quoted model test, enable `modelForTask('chat_turn')` and `gpt-6-luna`, explicitly
 select the silo default, drain, then switch on. Every write waits for its receipt.
-After enabling models, setup waits up to 30 seconds for `seed-provider-default` to
+After enabling models, setup waits up to 120 seconds for `seed-provider-default` to
 record the first binding. It then reads that position for the explicit Owner selection.
+The limit matches the fresh secondary service readiness wait. A regression test
+delays the first binding past 30 seconds and checks that setup sends no second paid test.
 This avoids racing the scheduled binding; it still makes only one selection write
 and refuses any later conflict.
 HTTP 425 with `status: access_applying` waits 100 ms and repeats the exact input and
@@ -1486,8 +1488,8 @@ The isolation test supplies synthetic inherited keys whose values match expected
 text. Reading either key changes that text during sanitisation and fails the test.
 
 Setup still uses the product reachability check, exact consented quote, registry models,
-explicit default, drain and switch-on. The initial default-binding read waits through a temporary 503 within its existing
-thirty-second deadline. A lost write response permits only a GET of the
+explicit default, drain and switch-on. The initial default-binding read waits through a temporary 503 within its
+two-minute deadline. A lost write response permits only a GET of the
 original command receipt. Recovery requires the expected operation. An absent or unknown
 receipt never causes another POST. Incomplete setup stops; repeat startup cannot silently
 create another provider or change modes. Keep the opt-in on ordinary restarts. A fresh

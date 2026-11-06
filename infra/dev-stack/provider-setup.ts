@@ -9,6 +9,8 @@ import { authEnv, directory, root } from './config.ts';
 type SetupOptions = {
   server: string; origin: string; cookie: string; silo: string; value: string; real?: boolean;
 };
+// Allow the background worker the same two minutes as a fresh secondary service start.
+const DEFAULT_BINDING_READINESS_MS = 120_000;
 const operations: Record<string, string> = {
   create: 'provider.created', save: 'provider.key_saved',
   reachability: 'provider.verification_requested', test: 'provider.verification_requested',
@@ -121,7 +123,7 @@ export async function setupProvider(options: SetupOptions) {
     return row.kind === 'silo_default';
   }
   async function seededDefault() {
-    const deadline = Date.now() + 30_000;
+    const deadline = Date.now() + DEFAULT_BINDING_READINESS_MS;
     while (Date.now() < deadline) {
       let bindings: Reply;
       try {

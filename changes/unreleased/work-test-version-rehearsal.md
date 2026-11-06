@@ -1,0 +1,1 @@
+- Give fresh demo startup two minutes for the background worker to record its first provider choice, matching spare stack service readiness.
