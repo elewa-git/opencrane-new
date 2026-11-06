@@ -76,6 +76,18 @@ async function ownerReadiness() {
 
 test('an authorised owner real start reports readiness without an automated journey', ownerReadiness);
 
+async function startsRoutineProjection() {
+  const result = await ownerStart();
+  assert.equal(result.status, 0, result.output);
+  function isRoutineWorker(process: string) {
+    return process.includes('apps/ops/src/worker.ts routines');
+  }
+  assert.ok(result.services.processes.some(isRoutineWorker));
+}
+
+test('fresh startup runs the routine projection needed by provider binding reads',
+  startsRoutineProjection);
+
 async function modeSavedAfterChecks() {
   const result = await ownerStart();
   assert.equal(result.status, 0, result.output);
