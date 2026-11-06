@@ -28,11 +28,13 @@ cannot recall the forgotten fact, even while cleanup is pending.
 
 ## Own checks
 
+Checked source: `1328b83b8`, 6 November 2026.
 Environment: Linux, Node 22, disposable PostgreSQL 17.6, NATS and OpenFGA, real gateway,
 backend, bridge and proxy, with a scripted native peer. No model runs.
 `npm ci` completed; NATS and Lychee use the supplied local binaries.
-All checks use `nice -n 10`. Tests use one worker, no file parallelism and a task-owned
-PostgreSQL database through `PG_TEST_URL`.
+All checks use `nice -n 10`. Each test run uses one worker and no file parallelism,
+with at most two workers across runs. Fixtures create separate databases on the task-owned
+PostgreSQL service through `PG_TEST_URL`.
 
 Expected initial failure: all eight catalogue combinations containing Forget refused;
 seven existing combinations passed. The joined backend test could not start its turn.
@@ -50,7 +52,27 @@ do not establish the earlier refusal cause. No assertion or deadline was relaxed
 Logs: `/tmp/p4-15-pr4p-tests1.log`, `/tmp/p4-15-pr4p-fresh-diagnostic.log` and
 `/tmp/p4-15-pr4p-confirm-probe.log`.
 
-Final validation is pending. GitHub CI will be reported for the pushed head.
+The unchanged isolated case passed on continuation. No assertion or deadline was relaxed.
+Log: `/tmp/p4-15-pr4p-resume-diagnostic.log`.
+
+| Own check | Result | Log under `/tmp/p4-15-pr4p-resume-` |
+| --- | --- | --- |
+| Lint, including Knip | PASS | `lint2.log` |
+| Typecheck | PASS | `typecheck.log` |
+| Event catalogue | PASS | `events.log` |
+| Changelog | PASS | `changelog.log` |
+| Unchanged security rules, 460 tests | PASS | `security.log` |
+| First affected batch, 519/524; Forget 37/37 | FAIL | `tests1.log` |
+| Second affected batch, 523/524; Forget 37/37 | FAIL | `tests2.log` |
+| Selected native regressions, 4/5 | FAIL | `regressions.log` |
+
+The first batch's five failures and the native regression failure were in Correct. Five selected
+cases passed with the original MCP code, four with current code, and five with diagnostics.
+These controls do not establish the earlier refusal causes. Logs: `baseline.log`, `matched-head.log`
+and `correct-diagnostic.log`, under the same prefix. No tracked source changed for these probes.
+
+The second batch refused Forget after a deliberately slow IAM read. Its cause remains unproved.
+GitHub CI will be reported for the pushed head. These local failures remain FAIL.
 
 ## Limits
 
