@@ -211,7 +211,8 @@ async function readRecallServer(input: RecallLoadInput, deadline: number) {
   }
   const discoveryTools = available.map(definition);
   function offered(tool: typeof policy.tools[number]) {
-    return tool.name === 'recall' || tool.name === 'remember' || tool.name === 'correct';
+    return tool.name === 'recall' || tool.name === 'remember' || tool.name === 'correct'
+      || tool.name === 'forget';
   }
   const offeredTools = policy.tools.filter(offered);
   const policyTools = offeredTools.map(choice);

@@ -75,4 +75,9 @@ at append, alongside full turn confirmation with the original positions and dead
 After saving, Correct repeats the qualification, membership and live-turn checks before
 returning its exact text-free receipt. It keeps the original access positions and deadline.
 A delayed save acknowledgement cannot release the receipt after access or the turn ends. Original-command status resolves a lost reply
-without another revision. Public discovery still offers Recall alone; Forget stays held.
+without another revision. Public discovery still offers Recall alone.
+
+The [Forget contract](../../../../docs/process/p4-15-pr4p/README.robot.md) extends these
+checks to Forget, using the existing command, cleanup records and invalidation.
+The exact accepted receipt says hidden and cleanup pending. Only later saved cleanup
+evidence changes that status. Original-command reads do not decrypt values or create keys.

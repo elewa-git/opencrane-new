@@ -1911,8 +1911,9 @@ The [Remember contract](../../docs/process/p4-15-pr4n/README.robot.md) extends t
 private thread to reviewed Recall and Remember.
 The [Correct contract](../../docs/process/p4-15-pr4o/README.robot.md) adds Correct to that
 list and its permitted notifications. The computer accepts each non-empty subset selected
-by the server in Recall, Remember, Correct order, with an Allow mode for every definition.
+by the server in Recall, Remember, Correct, Forget order, with an Allow mode for every definition.
 Remember may be absent while Correct is allowed. Duplicates, changed order, other tools
 and extra or missing modes refuse the initial offer. Loading still requires the exact
-original list. Forget remains held. The same thread, caller and
+original list. The [Forget contract](../../docs/process/p4-15-pr4p/README.robot.md)
+adds Forget with the same checked receipt delivery. The same thread, caller and
 private proxy carry the call and its structured receipt. Admission remains disabled.

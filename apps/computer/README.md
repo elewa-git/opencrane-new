@@ -20,8 +20,8 @@ flowchart LR
   apps --> server["apps/server<br/>back end"]
   ops -->|starts and pauses| computer
   server -->|messages, routine preparation and retry, turns, files and Stops| computer
-  computer -->|preparation replies, private exit reports, progress, results and files| server
-  server -->|qualified private input and permitted memory tools| computer
+  computer -->|preparation replies, reply removal receipts, matched native endings, progress, results and changed publication files| server
+  server -->|qualified private input and four permitted memory tools| computer
   computer -->|reports private thread and memory discovery| server
   computer -->|checks command ownership| executor["socket-denied executor"]
   computer -->|runs| desktop["Codex, browser and desktop"]
@@ -68,8 +68,8 @@ The computer saves that confirmation without private reply text.
   that the proxy accepts. Cancellation removes the list. Discovery reads no facts and gives no permission to call tools.
   An offline test also makes native Codex call recall and read a test reply through
   the proxy. It checks refusals and cancellation while another private session survives.
-  The runner can load the permitted selection of Recall, Remember and Correct through an
-  authenticated bridge request. Correct remains available when Remember is not allowed.
+  The runner can load the permitted selection of Recall, Remember, Correct and Forget through an
+  authenticated bridge request. Each tool can be allowed independently.
   It matches
   the returned thread and a single-use load id, then waits for discovery before accepting
   input or a grant. The server checks the saved turn before sending that tool list.
