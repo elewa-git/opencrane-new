@@ -59,6 +59,12 @@ export async function scannerSettings(environment: NodeJS.ProcessEnv,
     `${directory}/scanner-ca.crt`);
 }
 
+export function scannerImageUrl(uploadUrl: string) {
+  const endpoint = new URL(uploadUrl);
+  endpoint.pathname = '/scan/image-part';
+  return endpoint.href;
+}
+
 async function validatedSettings(url: string, caFile: string) {
   try {
     const endpoint = new URL(url);

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
-import { prepareScannerFiles, scannerReady, scannerSettings } from './scanner-settings.ts';
+import { prepareScannerFiles, scannerImageUrl, scannerReady,
+  scannerSettings } from './scanner-settings.ts';
 
 async function rejectsScanner() {
   const directory = await mkdtemp(`${tmpdir()}/scanner-settings-`);
@@ -29,6 +30,8 @@ async function rejectsScanner() {
       SCANNER_URL: valid.DEV_SCANNER_URL,
       SCANNER_CA_FILE: caFile,
     });
+    assert.equal(scannerImageUrl(valid.DEV_SCANNER_URL),
+      'https://127.0.0.1:25199/scan/image-part');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -21,7 +21,7 @@ import { envelope, managedProviderCallsEnabled } from '@opencrane/models';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 import { checkProviderMode, modelsEnvironment, startupCeilings } from './models-environment.ts';
-import { scannerReady, scannerSettings } from './scanner-settings.ts';
+import { scannerImageUrl, scannerReady, scannerSettings } from './scanner-settings.ts';
 import { setupDevProvider } from './provider-setup.ts';
 import { ownerRunRefusal, requireOwnerRun } from './owner-run.ts';
 import { approvalJourneyTool } from './journey-tool-policy.ts';
@@ -628,7 +628,9 @@ async function up(fresh: boolean) {
       database.hostname = 'postgres';
       database.port = '5432';
       await writeEnv('models', { ...base, ...models, DATABASE_URL: database.href,
-        SCANNER_URL: process.env['DEV_SCANNER_URL'] ?? 'https://scanner:8443/scan/image-part',
+        SCANNER_URL: process.env['DEV_SCANNER_URL']
+          ? scannerImageUrl(scanner.SCANNER_URL)
+          : 'https://scanner:8443/scan/image-part',
         SCANNER_CA_FILE: `${directory}/scanner-model-ca.crt`,
         NATS_URL: 'tls://127.0.0.1:4222', OPENFGA_API_URL: 'http://openfga:8080',
         MODEL_STUB_PAUSE_ON_STOP: '1', NODE_OPTIONS: '--max-old-space-size=256' });

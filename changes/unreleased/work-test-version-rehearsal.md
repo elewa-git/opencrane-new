@@ -5,4 +5,4 @@
 Fresh development stacks now start an authenticated HTTPS scanner for uploads.
 Each stack has its own private scanner certificates and loopback port, and startup
 waits for the service before accepting files. The CI grouping check includes the
-scanner tests.
+scanner tests. A custom scanner address also gives image workers the image-part route.

@@ -1,8 +1,8 @@
 # Current main rehearsal, 6 November 2026
 
-**FAIL: the latest fresh secondary start passed provider setup, then stopped in the
-built-in PDF journey.** Seeding, the separate smoke, the ten-step Stage A script and
-the member memory check are **NOT RUN**. No new source qualifies the owner refresh.
+**PARTIAL: the latest fresh secondary start passed the built-in journey, demo seed,
+both smoke widths and the member memory check.** The ten-step script stopped on a
+browser read in each of three attempts. No new source qualifies the owner refresh.
 The earlier failed starts remain recorded below.
 
 ## Source and setup
@@ -33,7 +33,7 @@ This is the point that timed out. The product or its startup path failed before 
 browser journey; there is no picture that could justify the permitted script-only
 retry. No retry was made.
 
-## Stage A results
+## Stage A results for the first start
 
 The times and pictures for unrun checks do not exist. The Stage A script did not
 begin, so an earlier rehearsal cannot fill these rows.
@@ -226,3 +226,75 @@ explicit HTTPS endpoint and CA file to the server and refuses startup when
 either is missing. No reviewed scanner release or trust settings were configured,
 so the repaired startup and full paid sequence are **NOT RUN**. The owner
 refresh SHA remains the earlier qualified source.
+
+## Sixth fresh start: authenticated scanner and demo checks
+
+The source was `c21904a4b03e2c8724a941b39a60a3a2181c7a76` on
+`work/test-version-rehearsal`, after fetching and rebasing on `origin/main`.
+`claim.sh` returned slot 1. The fresh start used the existing credential file
+paths and a 400-cent stack ceiling. No credential value was read or printed.
+The stack started its own ClamAV daemon and authenticated HTTPS scanner on its
+loopback port. The CA, server certificate and their private keys, plus the model
+worker's CA copy, all had mode 0600 in the slot directory. The server received
+the scanner settings, and startup waited for the scanner before the browser journey.
+
+The built-in journey passed its owner reply and reload, Stop and reload, later
+member reply, and scanned supplier PDF total and delivery date. The PDF check had
+failed before the scanner service was started. Its saved receipt records 10 charged
+cents and one unresolved 16-cent reservation. The demo seed passed. The
+separate smoke passed: warm-up took 32,092 ms, the 1280px run took 85,422 ms,
+and the 390px run took 81,045 ms. Its final receipt records 16 charged cents,
+35 held cents and ten calls. It removed its saved ceiling file after restoring
+the previous company limits.
+
+The first ten-step script attempt stopped at desktop step 5. Its member picture
+shows the first direct message, but the owner's page said direct conversations
+were unavailable. The owner did not see the message within 120 seconds. A new
+signed-in browser then received HTTP 200 and valid conversation lists for both
+people. This read did not change the failed result. A script-only retry passed
+desktop steps 1–6, then stopped at step 7 when the Acacia Trading group details
+page said groups were unavailable. The group-chat message itself passed. A new
+signed-in browser loaded that page and its API returned HTTP 200. A third script
+attempt again passed steps 1–6 and failed at the same group details heading.
+No fourth paid attempt was made. Each attempt has its own saved results and
+masked pictures; later attempts do not replace the earlier failures.
+
+| Step | 1280px, third attempt | 390px, third attempt |
+| --- | --- | --- |
+| 1. Streamed reply and reload | PASS | NOT RUN |
+| 2. Scanned quote, total/date, preview/download | PASS | NOT RUN |
+| 3. Action history | PASS | NOT RUN |
+| 4. Stop and partial reply after reload | PASS | NOT RUN |
+| 5. Live member-to-owner message at 390px | PASS | NOT RUN |
+| 6. Private shared-assistant reply | PASS | NOT RUN |
+| 7. Group chat and unopened invite link | FAIL: group chat passed; group details did not load | NOT RUN |
+| 8. Model answer with its key hidden | NOT RUN | NOT RUN |
+| 9. Company ceiling refusal and restore | NOT RUN | NOT RUN |
+| 10. Limit and group change history | NOT RUN | NOT RUN |
+
+The extra member memory row passed at both widths. The owner's live chat
+context reported memory admission `disabled`. The member's scope list excluded
+the owner's personal scope, and a direct read of it returned 404. The member's
+Memory panel loaded at 1280px and 390px. Both private pictures masked email
+addresses and credential fields. This checks access and the visible panel; it
+does not enable private memory loading for model turns.
+
+The last stack budget read showed 50 charged cents and 102 held cents, counting
+unresolved reservations in full. This fresh run therefore used 152 cents of the
+500-cent task allowance. Earlier attempts in this receipt have uncertain final
+costs, so no exact combined total is claimed. No further paid step was started
+after the third script failure. Private JSON receipts and 34 masked script
+pictures were copied to `/tmp/test-version-attempt6/receipts/`; the unmasked
+smoke pictures were not copied or published. `down.sh --id 1` removed the slot
+directory and scanner container, and `status.sh --id 1` reported `free`.
+The owner stack was untouched. This source is **PARTIAL** and does not qualify
+the owner refresh.
+
+After the live run, the override route for image workers was corrected. The
+final branch head therefore differs from the live source above and has **NOT RUN**
+the fresh journey. On the final tree, lint, typecheck, the event catalogue,
+unused-code and changelog checks passed. The CI test grouping check passed.
+Changed startup and scanner tests passed twice, 57 tests each time. The event
+security suite passed once, 460 tests. The first test run after the override
+edit failed before startup assertions because its loader fixture missed the
+new export; the fixture was repaired before the two passing runs.

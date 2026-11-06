@@ -4,22 +4,16 @@ For people, read [README.md](README.md) first.
 
 ## Latest qualification attempt
 
-The 6 November 2026 current-main rehearsal is **FAIL**. The pinned starting source was
-`2e860bac3b6099790e40ef38bb917408b1d6573a`. `npm ci` passed, and secondary
-slot 1 was claimed. Fresh `demo-up.sh` stopped at `Provider setup default: timeout`
-after owner bootstrap passed. The [receipt](../demo-rehearsal/test-version-2026-11-06/receipt.md)
-records the failure, all unrun rows, unknown startup spending and cleanup. A separate
-wait fix at `00e8ae22f49a972ef9f13413d38cf08c01a709e3` also failed a fresh
-start. A later read-only check found a saved default binding but 503 responses from
-every binding GET. The repaired source, `9fe3cae7d988f6c8ca590efa0ffd49be004239b9`,
-starts the routines projection that those reads require. Fresh provider setup passed.
-The built-in real-model journey then failed its scanned supplier PDF check. Seeding,
-the separate smoke, ten-step script and live member memory check are **NOT RUN**.
-The next fresh secondary run found the upload request returned 503 before scanning.
-The server had neither `SCANNER_URL` nor `SCANNER_CA_FILE`. The first repair passes
-explicit authenticated scanner settings and refuses startup when they are missing.
-No reviewed scanner release is configured for this stack, so paid qualification remains
-**NOT RUN** on that repair.
+The 6 November 2026 rehearsal is **PARTIAL**. The earlier fresh starts stopped in
+provider setup or at the scanned PDF upload. The latest source,
+`c21904a4b03e2c8724a941b39a60a3a2181c7a76`, starts a private authenticated
+scanner for each stack. A fresh slot 1 passed the built-in real-model journey,
+demo seed, both smoke widths and the member memory-off check. Three separate
+ten-step script attempts stopped at desktop direct chat or the seeded group
+details page. Desktop steps 8–10 and every phone step remain **NOT RUN**. The
+[receipt](../demo-rehearsal/test-version-2026-11-06/receipt.md) keeps each attempt,
+spending and cleanup. The last stack budget read counted 152 charged or held
+cents; earlier attempts have uncertain final costs. The owner stack was untouched.
 No 6 November source is qualified for the owner refresh. The prior qualified source remains
 `f11df5c56fe08e4bac477cc4c3f375288568c0cd`.
 

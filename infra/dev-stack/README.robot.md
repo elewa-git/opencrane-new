@@ -2003,7 +2003,8 @@ stack checks that HTTPS service instead of starting its own service. Missing or
 insecure settings, or a service that does not answer over trusted TLS, stop startup.
 The server receives `SCANNER_URL` and `SCANNER_CA_FILE`. The dispatcher and model
 worker also receive them; secondary models use the Compose service address and a
-private copy of the CA file at `scanner-model-ca.crt`.
+private copy of the CA file at `scanner-model-ca.crt`. An override uses the same
+trusted host and CA for the model worker, with `/scan/image-part` as its route.
 
 ## Ownership browser check
 
