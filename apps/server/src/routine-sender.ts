@@ -105,7 +105,7 @@ async function sendRoutineTurn(link: Link, bytes: string, turnId: string,
   if (signal?.aborted) {
     return false;
   }
-  const completion = link.bindRoutineStart(turnId, check, signal);
+  const completion = link.bindRoutineStart(turnId, check, worker.checkCurrent, signal);
   try {
     link.socket.send(bytes);
     const accepted = await completion.pending;

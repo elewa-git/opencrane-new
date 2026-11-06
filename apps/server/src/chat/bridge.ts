@@ -129,8 +129,18 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
       options.routines.ended(report.turnId);
     }
   }
-  if (!initialReleased) sendAcknowledgement(socket, batch.sequences, acknowledgement);
-  options.starts.complete(report, acknowledgement, result === 'duplicate');
+  if (report.type === 'agent.turn_started' && report.senderAttemptId !== undefined) {
+    function deliver() {
+      sendAcknowledgement(socket, batch.sequences, acknowledgement);
+    }
+    const sent = await options.starts.send(report, acknowledgement, result === 'duplicate', deliver);
+    if (!sent) {
+      const refusal = { type: 'ack', refused: 'Routine start unavailable' };
+      sendAcknowledgement(socket, batch.sequences, refusal);
+    }
+  } else if (!initialReleased) {
+    sendAcknowledgement(socket, batch.sequences, acknowledgement);
+  }
 }
 
 async function deliverFile(options: BridgeOptions, input: BridgeInput, socket: WebSocket,

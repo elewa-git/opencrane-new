@@ -3,32 +3,58 @@ import type { turnCommand } from './turns.ts';
 import { ReportRejected } from './reports.ts';
 
 type Check = NonNullable<Parameters<typeof turnCommand>[1]['routineStart']>;
-type Pending = { check: Check | undefined; complete: (accepted: boolean) => void };
+type Pending = { check: Check | undefined; cancel: () => void;
+  send: (deliver: () => void) => Promise<boolean> };
+type OwnershipCheck = (deadline: number) => Promise<boolean>;
 
 // Keep completion on the original connection. Saved admission cannot recreate this wait.
 export function pendingRoutineStarts(socket: WebSocket) {
   const starts = new Map<string, Pending>();
-  function bind(turnId: string, check: Check, signal?: AbortSignal) {
+  function bind(turnId: string, check: Check, checkCurrent: OwnershipCheck, signal?: AbortSignal) {
     if (starts.has(turnId)) {
       throw new ReportRejected('Routine sender already bound');
     }
     const result = Promise.withResolvers<boolean>();
     const deadline = performance.now() + 10_000;
     const timer = setTimeout(cancel, 10_000);
-    const pending: Pending = { check, complete };
+    let settled = false;
+    const pending: Pending = { check, cancel, send };
     starts.set(turnId, pending);
-    function complete(accepted: boolean) {
-      const current = performance.now() < deadline && !signal?.aborted
-        && socket.readyState === socket.OPEN;
+    function current() {
+      return !settled && starts.get(turnId) === pending && performance.now() < deadline
+        && !signal?.aborted && socket.readyState === socket.OPEN;
+    }
+    function consume() {
+      settled = true;
       clearTimeout(timer);
       signal?.removeEventListener('abort', cancel);
       if (starts.get(turnId) === pending) {
         starts.delete(turnId);
       }
-      result.resolve(accepted && current);
     }
     function cancel() {
-      complete(false);
+      if (settled) {
+        return;
+      }
+      consume();
+      result.resolve(false);
+    }
+    async function send(deliver: () => void) {
+      try {
+        if (!current() || !await checkCurrent(deadline) || !current()) {
+          cancel();
+          return false;
+        }
+        // Consume before sending, without yielding. Cancellation can no longer win.
+        consume();
+        deliver();
+        result.resolve(true);
+        return true;
+      } catch (error) {
+        consume();
+        result.resolve(false);
+        throw error;
+      }
     }
     signal?.addEventListener('abort', cancel, { once: true });
     if (signal?.aborted || socket.readyState !== socket.OPEN) {
@@ -45,21 +71,23 @@ export function pendingRoutineStarts(socket: WebSocket) {
     pending.check = undefined;
     return check(report);
   }
-  function complete(report: { type: string; turnId: string },
-    acknowledgement: { token?: string; refused?: string }, duplicate: boolean) {
-    if (report.type !== 'agent.turn_started') {
-      return;
-    }
+  async function send(report: { turnId: string },
+    acknowledgement: { token?: string; refused?: string }, duplicate: boolean,
+    deliver: () => void) {
     const pending = starts.get(report.turnId);
     const accepted = acknowledgement.token !== undefined && acknowledgement.refused === undefined
       && !duplicate && pending?.check === undefined;
-    pending?.complete(accepted);
+    if (!pending || !accepted) {
+      pending?.cancel();
+      return false;
+    }
+    return pending.send(deliver);
   }
   function close() {
     for (const pending of starts.values()) {
-      pending.complete(false);
+      pending.cancel();
     }
   }
   socket.once('close', close);
-  return { bind, check, complete };
+  return { bind, check, send };
 }
