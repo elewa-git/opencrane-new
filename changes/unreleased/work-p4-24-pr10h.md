@@ -1,0 +1,1 @@
+- Internal routine delivery now waits for its saved start and acknowledgement before reporting progress; refused, timed-out or cancelled delivery stays uncertain and cannot resend. Automatic execution remains disabled.

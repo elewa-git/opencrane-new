@@ -485,6 +485,15 @@ async function waitsForStart(stage: string) {
   const release = Promise.withResolvers<void>();
   const start = turns.turnCommand;
   const acknowledge = credentials.releaseTurnCredentials;
+  const append = nats.store.append.bind(nats.store);
+  async function heldSave(...args: Parameters<typeof append>) {
+    const result = await append(...args);
+    if (proposedEvent.parse(args[0].event).type === 'computer.turn_started') {
+      entered.resolve();
+      await release.promise;
+    }
+    return result;
+  }
   async function heldStart(...args: Parameters<typeof start>) {
     entered.resolve();
     await release.promise;
@@ -498,6 +507,9 @@ async function waitsForStart(stage: string) {
   if (stage === 'start') {
     const handler = vi.spyOn(turns, 'turnCommand');
     handler.mockImplementationOnce(heldStart);
+  } else if (stage === 'save') {
+    const handler = vi.spyOn(nats.store, 'append');
+    handler.mockImplementation(heldSave);
   } else {
     const handler = vi.spyOn(credentials, 'releaseTurnCredentials');
     handler.mockImplementationOnce(heldAcknowledgement);
@@ -522,5 +534,201 @@ async function waitsForStart(stage: string) {
   await until(preparedComputer.executed);
   expect(preparedComputer.executedThreads).toEqual(['native-1']);
 }
-it.each(['start', 'acknowledgement'])(
+it.each(['start', 'save', 'acknowledgement'])(
   'awaits durable start and its %s handler before completing dispatch', waitsForStart);
+
+async function interruptsPendingStart(kind: string) {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const start = turns.turnCommand;
+  async function heldStart(...args: Parameters<typeof start>) {
+    entered.resolve();
+    await release.promise;
+    return start(...args);
+  }
+  const handler = vi.spyOn(turns, 'turnCommand');
+  handler.mockImplementationOnce(heldStart);
+  const pending = dispatch();
+  const refused = expect(pending).rejects.toThrow('Routine leadership unavailable');
+  try {
+    await entered.promise;
+    if (kind === 'shutdown') {
+      stop.abort();
+    }
+    if (kind === 'lease loss') {
+      await terminateLease();
+    }
+    if (kind === 'socket loss') {
+      preparedComputer.link.socket.terminate();
+    }
+    // Leave the real ten-second timer running while the start handler is held.
+    await refused;
+    expect(preparedComputer.executedThreads).toEqual([]);
+  } finally {
+    release.resolve();
+    await preparedComputer.link.settled();
+  }
+  const original = await assertSingleRun();
+  if (kind !== 'shutdown') {
+    await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+    expect(await assertSingleRun()).toEqual(original);
+  }
+  expect(preparedComputer.executedThreads).toEqual([]);
+  expect(preparedComputer.nativeStarts).toBe(1);
+}
+it.each(['shutdown', 'lease loss', 'socket loss', 'timeout'])(
+  'settles pending delivery after %s and refuses a late start without another send',
+  interruptsPendingStart);
+
+async function refusesStart(kind: string) {
+  const start = turns.turnCommand;
+  async function changedStart(...args: Parameters<typeof start>) {
+    if (kind === 'replacement') {
+      const data = { assistantId: 'sales-assistant', computerId: 'replacement', generation: 2 };
+      const changed = record('replacement', 'computer-sales-assistant', 'computer.ready', data);
+      await nats.seed([changed]);
+    } else {
+      args[2] = { ...args[2], [kind]: 'wrong-identity' };
+    }
+    return start(...args);
+  }
+  const handler = vi.spyOn(turns, 'turnCommand');
+  handler.mockImplementationOnce(changedStart);
+  await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  const original = await assertSingleRun();
+  await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  expect(await assertSingleRun()).toEqual(original);
+  expect(preparedComputer.executedThreads).toEqual([]);
+  expect(preparedComputer.nativeStarts).toBe(1);
+}
+it.each(['messageId', 'rootId', 'senderAttemptId', 'threadId', 'replacement'])(
+  'refuses %s start identity without completing progress or allocating twice', refusesStart);
+
+async function refusesAcknowledgement() {
+  const acknowledge = credentials.releaseTurnCredentials;
+  async function removedBeforeAcknowledgement(...args: Parameters<typeof acknowledge>) {
+    const data = { memberId: 'alice', removedBy: 'admin' };
+    const removed = record('removed', 'member-alice', 'member.removed', data);
+    await nats.seed([removed]);
+    return acknowledge(...args);
+  }
+  const handler = vi.spyOn(credentials, 'releaseTurnCredentials');
+  handler.mockImplementationOnce(removedBeforeAcknowledgement);
+  await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  await assertSingleRun();
+  expect(preparedComputer.executedThreads).toEqual([]);
+  function credentialFrame(frame: Record<string, unknown>) {
+    return frame['type'] === 'ack' && frame['token'] !== undefined;
+  }
+  expect(preparedComputer.frames.some(credentialFrame)).toBe(false);
+}
+it('a saved start with refused credentials cannot complete dispatch', refusesAcknowledgement);
+
+async function uncertainDelivery(kind: string) {
+  const send = preparedComputer.send;
+  function losesReply(bytes: Parameters<typeof send>[0]) {
+    send(bytes);
+    if (typeof bytes !== 'string') {
+      return;
+    }
+    const frame = frameSchema.parse(JSON.parse(bytes));
+    if (frame['type'] === kind) {
+      forbidden();
+    }
+  }
+  const sending = vi.spyOn(preparedComputer.link.socket, 'send');
+  sending.mockImplementation(losesReply);
+  await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  await preparedComputer.link.settled();
+  const original = await assertSingleRun();
+  await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  expect(await assertSingleRun()).toEqual(original);
+  function isTurn(frame: Record<string, unknown>) {
+    return frame['type'] === 'turn';
+  }
+  const turns = preparedComputer.frames.filter(isTurn);
+  expect(turns.length).toBe(1);
+  expect(preparedComputer.executedThreads.length).toBeLessThanOrEqual(1);
+}
+it.each(['turn', 'ack'])(
+  'an uncertain %s write cannot complete progress or authorise another delivery', uncertainDelivery);
+
+async function repeatedReport() {
+  const report = Promise.withResolvers<Buffer>();
+  function received(bytes: Buffer) {
+    const value = frameSchema.parse(JSON.parse(bytes.toString()));
+    if (value['type'] === 'agent.turn_started') {
+      report.resolve(bytes);
+    }
+  }
+  preparedComputer.link.socket.on('message', received);
+  expect(await dispatch()).toMatchObject({ examined: 1 });
+  await until(preparedComputer.executed);
+  const original = await assertSingleRun();
+  const bytes = await report.promise;
+  preparedComputer.link.socket.emit('message', bytes);
+  preparedComputer.link.socket.emit('message', bytes);
+  await preparedComputer.link.settled();
+  await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  expect(await assertSingleRun()).toEqual(original);
+  expect(preparedComputer.executedThreads).toEqual(['native-1']);
+  function credentialFrame(frame: Record<string, unknown>) {
+    return frame['type'] === 'ack' && frame['token'] !== undefined;
+  }
+  const acknowledgements = preparedComputer.frames.filter(credentialFrame);
+  expect(acknowledgements.length).toBe(1);
+}
+it('duplicate start reports cannot complete another hand-off or grant execution twice',
+  repeatedReport);
+
+async function skipsMissingTime() {
+  const paused = routine('routine.paused');
+  await nats.seed([paused]);
+  const created = routine('routine.created');
+  const original = foldRoutine(undefined, created).definition!;
+  const schedule = { frequency: 'daily', zone: 'Europe/Brussels', localTime: '02:30' };
+  const definition = { ...original.definition, schedule };
+  const effectiveAt = '2027-03-28T00:59:59.999Z';
+  const data = { ...original, routineId: 'gap', definition, status: 'active',
+    effectiveAt, next: null };
+  const gap = { ...created, id: 'gap', commandId: 'gap', subject: 'routine-gap',
+    time: effectiveAt, data };
+  await apply([gap]);
+  now = Date.parse('2027-03-28T01:00:00Z');
+  wake = vi.fn(forbidden);
+  expect(await dispatch()).toMatchObject({ examined: 2 });
+  const rows = await history(nats.store, 'routine-gap', 'test');
+  expect(rows.at(-1)!.event.type).toBe('routine.occurrence_skipped');
+  expect(wake).not.toHaveBeenCalled();
+  expect(actor.state.roots).toEqual([]);
+  expect(preparedComputer.frames).toEqual([]);
+}
+it('a checked missing-time skip invokes no execution', skipsMissingTime);
+
+async function cancelsAcknowledgement() {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const acknowledge = credentials.releaseTurnCredentials;
+  async function heldAcknowledgement(...args: Parameters<typeof acknowledge>) {
+    await acknowledge(...args);
+    entered.resolve();
+    await release.promise;
+  }
+  const handler = vi.spyOn(credentials, 'releaseTurnCredentials');
+  handler.mockImplementationOnce(heldAcknowledgement);
+  const pending = dispatch();
+  const refused = expect(pending).rejects.toThrow('Routine leadership unavailable');
+  try {
+    await entered.promise;
+    stop.abort();
+    await refused;
+    expect(preparedComputer.executedThreads).toEqual([]);
+  } finally {
+    release.resolve();
+    await preparedComputer.link.settled();
+  }
+  await assertSingleRun();
+  expect(preparedComputer.nativeStarts).toBe(1);
+}
+it('cancellation settles delivery while acknowledgement is held; a late reply cannot change it',
+  cancelsAcknowledgement);

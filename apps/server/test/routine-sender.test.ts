@@ -652,7 +652,13 @@ async function losesReply(stage: string) {
       return lost;
     }
     await until(replyLost);
-    if (stage === 'send') await until(computer.executed);
+    if (stage === 'send') {
+      function refused() {
+        return computer.closedSessions === 1;
+      }
+      await until(refused);
+      expect(computer.starts).toBe(0);
+    }
     expect(await authority.send(computer.wake)).toEqual({ status: 'unknown' });
     await computer.restart();
     expect(await sender().send(computer.wake)).toEqual({ status: 'unknown' });
@@ -1199,7 +1205,7 @@ async function prohibitionBeforeAdmission() {
     return result;
   }
   vi.spyOn(nats.store, 'append').mockImplementation(prohibitAfterReport);
-  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
+  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
   function closed() {
     expect(preparedComputer.closedSessions).toBe(1);
   }
