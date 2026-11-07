@@ -321,7 +321,7 @@ export function bridgeSocket(
   approvals?: ReturnType<typeof approvalHolds>,
 ) {
   const pending = new Map<number, BridgeReport>();
-  const inFlight = new Map<number, number>();
+  const inFlight = new Map<number, { bytes: number; report: BridgeReport }>();
   let inFlightBytes = 0;
 
   function flushReports() {
@@ -338,7 +338,7 @@ export function bridgeSocket(
       const bytes = Buffer.byteLength(frame);
       if (inFlightBytes + bytes > 524_288 && inFlight.size > 0) return;
       pending.delete(sequence);
-      inFlight.set(sequence, bytes);
+      inFlight.set(sequence, { bytes, report });
       inFlightBytes += bytes;
       socket.send(frame);
     }
@@ -353,9 +353,16 @@ export function bridgeSocket(
   function acknowledge(sequence: unknown, value?: Record<string, unknown>) {
     runner.acknowledge(sequence, value);
     if (typeof sequence !== 'number') return;
-    inFlightBytes -= inFlight.get(sequence) ?? 0;
+    const sent = inFlight.get(sequence);
+    inFlightBytes -= sent?.bytes ?? 0;
     inFlight.delete(sequence);
     flushReports();
+    if (value?.['retryable'] === true && sent) {
+      // Keep the report and its waiting turn while the server recovers.
+      const report = sent.report;
+      function retry() { send(report); }
+      setTimeout(retry, 1000);
+    }
   }
 
   const pacedRunner: TurnRunnerPort = {

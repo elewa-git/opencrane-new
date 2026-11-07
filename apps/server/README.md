@@ -23,6 +23,9 @@ The server checks who is asking and what they may do, saves each change in the
 assistant's [computer](../../GLOSSARY.md#computer).
 A second program here, the [models process](../../GLOSSARY.md#models-process), checks
 AI calls against spending limits and tool rules.
+For an activated side conversation, the computer prepares the first restricted turn.
+The server asks the models process to check its saved request and spending allowance
+before passing the turn back to the computer.
 If reading the watched tool servers fails, calls pause and earlier tool approvals end
 before recovery can restore calls. Starting the process alone does not record a failed check.
 
@@ -190,9 +193,10 @@ flowchart LR
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
   server -->|waits briefly for Forget locks| postgres
   server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, routine Stops after deactivation or failed evidence reads, memory Stops after confirmed loss, reply removal receipts after completion, checked reports and publication files| computer["apps/computer<br/>assistant computers"]
+  server -->|checks an activated child start and its root allowance| runtime
   computer -.->|records private thread for memory discovery| server
   server -.->|prepares up to four private memory tools| computer
-  computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
+  computer -->|AI and tool calls| runtime["Private services<br/>models process, AI gateway, tools and virus scanner"]
   server -->|files, service readiness, image types and refusal codes| web
   server -->|checks upload bytes over HTTPS| runtime
   runtime -->|checks memory reads and requester account choices| server
@@ -421,11 +425,9 @@ The requester can retry a saved start failure, up to three attempts. A backgroun
 completes missing child creation, first input and activation after a restart or retry.
 Each attempt to save activation checks current access and the parent attempt again.
 A worker cannot save a start failure after another worker has activated the child.
-These children stay queued;
-they cannot start assistant work yet. Retry replies check current access before reporting
+An activated child can start its saved first input after the models process checks
+current access, the computer and its spending allowance. Retry replies check current access before reporting
 that the parent chat is closed.
-The server has a checked start command for an activated child's saved first input.
-It keeps one root and one computer turn across retries. Delivery is still queued.
 
 Owners and admins can read whether a saved publication is Applying, Ready, Disabled
 or Unknown. Ready requires matching saved gateway and server receipts. Checking a

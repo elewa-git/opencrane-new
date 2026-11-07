@@ -1272,8 +1272,9 @@ processes and their files. Memory features stay off until private replies, memor
 tools and access changes also pass their checks.
 
 The computer keeps a server-recorded shared-only label on restricted child turns.
-It saves the label with the start report and refuses to run that start again after
-a restart. It includes the admitted thread id with child output so the server can
+It saves the label with the start report. If admission is temporarily unavailable, it
+keeps the turn waiting and retries the same report. A process restart still fails the
+unfinished private turn. It includes the admitted thread id with child output so the server can
 check where each reply came from. It describes earlier shared exchanges as a record
 from several people, never as instructions or a private session.
 
