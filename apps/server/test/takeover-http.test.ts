@@ -51,6 +51,8 @@ async function setup(requestsEnabled = true, open: Parameters<typeof viewFixture
     granteeKind: 'member', grantedBy: 'owner',
   }, true);
   body = { commandId: 'control-one', requesterEventId: message.id, generation: 1 };
+  // Keep response checks independent of CPU delays during short access checks.
+  vi.spyOn(performance, 'now').mockReturnValue(performance.now());
 }
 function headers(member = 'alice', conversation = 'chat', orgId = 'org-test') {
   const config = fixture.config;
