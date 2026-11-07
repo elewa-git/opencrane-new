@@ -112,13 +112,17 @@ afterAll(async function cleanup() {
 });
 
 it('keeps one original night when managed admission is unavailable', async function originalNight() {
-  const model = vi.fn();
-  const tool = vi.fn();
+  // Observe outbound HTTP and every append through the real preparation options.
+  // Catch a network call or saved root, allowance, charge or computer start.
+  const outbound = vi.spyOn(globalThis, 'fetch');
+  outbound.mockResolvedValue(new Response('{}'));
+  const appendedTypes: string[] = [];
   const originalAppend = nats.store.append.bind(nats.store);
   let lostReply = false;
   async function appendWithLostReply(command: Parameters<typeof nats.store.append>[0]) {
     const result = await originalAppend(command);
     const savedEvent = savedEventShape.safeParse(command.event);
+    if (savedEvent.success) appendedTypes.push(savedEvent.data.type);
     if (!lostReply && savedEvent.success &&
         savedEvent.data.type === 'memory.maintenance_recorded' &&
         savedEvent.data.source === 'opencrane-server') {
@@ -129,16 +133,15 @@ it('keeps one original night when managed admission is unavailable', async funct
   }
   const appendSpy = vi.spyOn(nats.store, 'append').mockImplementation(appendWithLostReply);
   const first = await prepareNightlyMaintenance(options, scopeId, nightId, firstNight);
-  appendSpy.mockRestore();
   expect(first).toMatchObject({ outcome: 'unknown', nightId, dispatch: 'disabled' });
   const repeated = await prepareNightlyMaintenance(options, scopeId, nightId, firstNight);
   const restarted = await prepareNightlyMaintenance(options, scopeId, nightId, firstNight);
   expect(restarted).toEqual(repeated);
   expect(repeated).toMatchObject({ outcome: 'refused', reason: 'provider_unavailable',
     nightId, dispatch: 'disabled' });
-  expect(model).not.toHaveBeenCalled();
-  expect(tool).not.toHaveBeenCalled();
   await runner.run(projection);
+  expect(outbound).not.toHaveBeenCalled();
+  outbound.mockRestore();
   const scope = { scopeId, scopeKind: 'person' as const, ownerId: 'dreamer' };
   const status = await maintenanceStatus(options, scope, 'dreamer');
   expect(status).toMatchObject({ status: 'refused', dispatch: 'disabled' });
@@ -149,6 +152,8 @@ it('keeps one original night when managed admission is unavailable', async funct
     'SELECT data FROM memory_maintenance_runs WHERE silo=$1 AND scope_id=$2 ORDER BY position',
     ['acme', scopeId]);
   await runner.rebuild(projection);
+  expect(appendedTypes).toEqual(['memory.maintenance_recorded']);
+  appendSpy.mockRestore();
   const after = await options.db.query<{ data: unknown }>(
     'SELECT data FROM memory_maintenance_runs WHERE silo=$1 AND scope_id=$2 ORDER BY position',
     ['acme', scopeId]);
@@ -167,6 +172,27 @@ async function claimNight(claimDate: string, claimId: string, bindingRevision: n
     reason: action === 'due' ? null : 'qualification_blocked',
   });
 }
+
+it('checks the binding revision and later binding change separately', async function bindingChecks() {
+  const revisionNightId = '4'.repeat(64);
+  await claimNight('2026-10-17', revisionNightId, 99);
+  function revisionNight() { return new Date('2026-10-17T02:05:00.000Z'); }
+  const revisionResult = await prepareNightlyMaintenance(options, scopeId,
+    revisionNightId, revisionNight);
+  expect(revisionResult).toMatchObject({ outcome: 'refused', reason: 'binding_changed' });
+
+  const changedNightId = '5'.repeat(64);
+  await claimNight('2026-10-18', changedNightId, 1);
+  await append(`scope-${scopeId}`, 'memory.maintenance_bound', {
+    scopeId, scopeKind: 'person', ownerId: 'dreamer', memberId: 'dreamer',
+    assistantId: 'dreamer-assistant', payingGroupId: 'payer', enabled: true,
+    acceptedCapCents: 100, revision: 1,
+  });
+  function changedNight() { return new Date('2026-10-18T02:05:00.000Z'); }
+  const changedResult = await prepareNightlyMaintenance(options, scopeId,
+    changedNightId, changedNight);
+  expect(changedResult).toMatchObject({ outcome: 'refused', reason: 'binding_changed' });
+});
 
 it('refuses a changed same-night binding and input before any call', async function changedNight() {
   const bindingNightId = 'd'.repeat(64);
