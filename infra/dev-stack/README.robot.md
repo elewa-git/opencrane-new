@@ -714,6 +714,11 @@ preview. A private marker written after
 the dispatcher opens its consumer must match its running process before startup prints
 `Stack ready`. Existing slots that need manual work follow the
 [handler upgrade procedure](../../apps/ops/README.robot.md#handler-subscription-upgrade).
+The launcher also gives the server the private marker path. The server checks
+that the marked PID is still alive and returns only a boolean to authorised
+assistant chat readers. The existing live chat subscription notices marker
+changes without another browser polling loop. A missing marker cannot expose
+the operator command to a member.
 Existing stub slots also move their `model-managed-stub` file into `models/` while
 services are stopped. Do not use a reset as an upgrade.
 

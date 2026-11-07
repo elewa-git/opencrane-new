@@ -74,7 +74,13 @@ it('serves private chat commands and reads to joined members, refusing other org
   const db = pgDb(dbs.queue), auth = memberAuthorisation(binding), keys = conversationKeys(directory);
   const runner = new ProjectionRunner(db, nats.store, createLogger('chat', { level: 'silent' }));
   const feed = await connectMemberFeed(dbs.queue.options.connectionString!);
-  const app = buildServer(config, { chat: { silo: 'test', store: nats.store, db, keys, binding, feed } });
+  let dispatcherReady = false;
+  function readDispatcherReady() {
+    return Promise.resolve(dispatcherReady);
+  }
+  const chat = { silo: 'test', store: nats.store, db, keys, binding, feed,
+    dispatcherReady: readDispatcherReady };
+  const app = buildServer(config, { chat });
   try {
     for (const [subject, type, data] of [
       ['member-alice', 'member.invited', { memberId: 'alice', invitationId: 'invite', email: 'a@example.test', role: 'member', invitedBy: 'owner', invitedIdentity: { issuer: config.issuerUrl, sub: 'alice' } }],
@@ -156,10 +162,15 @@ it('serves private chat commands and reads to joined members, refusing other org
     lifecycleRead.mockClear();
     await chatRows({ silo: 'test', store: nats.store, db, keys, binding, feed },
       conversationId, 'agent_session');
+    for (const mode of ['direct', 'group'] as const) {
+      const nonAssistantFeed = await chatRows(chat, conversationId, mode);
+      expect(nonAssistantFeed.dispatcherReady).toBe(true);
+    }
     expect(lifecycleRead).not.toHaveBeenCalled();
     lifecycleRead.mockRestore();
     const messages = await app.inject({ url: `/api/conversations/${conversationId}/messages`, headers: headers() });
     expect(messages.statusCode).toBe(200); expect(messages.body).toContain('Hello computer');
+    expect(chatFeedSchema.parse(messages.json()).dispatcherReady).toBe(false);
     const turnId = messages.json<{ rows: { id: string; type: string }[] }>().rows.find(row => row.type === 'message.posted')!.id;
     for (const outcome of ['saved', 'kept_existing'] as const) {
       const delivery = envelope('test', `conversation-${conversationId}`, 'file.delivered', {
@@ -230,7 +241,7 @@ it('serves private chat commands and reads to joined members, refusing other org
       return originalQuery<Row>(sql, parameters);
     };
     db.query = countContentQueries;
-    const wss = attachWebSocketServer(app.server, app.log, config, { feed, binding, chat: { silo: 'test', store: nats.store, db, keys, binding, feed } });
+    const wss = attachWebSocketServer(app.server, app.log, config, { feed, binding, chat });
     const received: Array<ReturnType<typeof chatMessageSchema.parse>> = [];
     const connect = async (since: number, generation?: number) => {
       const ws = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, { headers: headers() });
@@ -278,6 +289,10 @@ it('serves private chat commands and reads to joined members, refusing other org
       await until(hasReplyOrClose);
       expect(closeCodes).toEqual([]);
       expect(received.some(isReady)).toBe(true);
+      expect(received.find(isReady)?.dispatcherReady).toBe(false);
+      dispatcherReady = true;
+      await until(() => received.some(message => message.type === 'ready' &&
+        message.dispatcherReady === true));
       function isEvidenceMessage(message: (typeof received)[number]) {
         return message.type === 'event' && message.row?.id === evidence.id;
       }

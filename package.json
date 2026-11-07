@@ -69,6 +69,7 @@
     "visual:screen-p4-13-forget": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-13-forget.mjs",
     "visual:p3-18-screens": "npm run build -w apps/web && node scripts/check-p3-18-screens.mjs",
     "visual:p4-14-chat": "npm run build -w apps/web && node scripts/check-p4-14-chat.mjs",
+    "visual:chat-maintenance": "node scripts/check-chat-maintenance.mjs",
     "visual:p4-4-screens": "npm run build -w apps/web && node scripts/check-p4-4-screens.mjs",
     "visual:p4-5-pr7": "npm run build -w apps/web && node scripts/capture-p4-5-pr7.mjs",
     "visual:screen-p4-22-setup-access": "node scripts/capture-screen-p4-22-setup-access.mjs",

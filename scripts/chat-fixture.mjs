@@ -147,7 +147,8 @@ export async function chatFixture(page, scenario = 'live', options = {}) {
     const computerRecovered = scenario === 'private-team-recovered';
     const computerLostAt = ['private-team-recovering', 'private-team-recovered'].includes(scenario)
       ? '2026-10-02T10:03:00.000Z' : undefined;
-    return fulfil({ rows: rows.filter(row => row.position > Number(url.searchParams.get('since') ?? 0)).slice(0, 100), position: rows.length, generation: 1, computerState, computerRecovered, computerLostAt });
+    return fulfil({ rows: rows.filter(row => row.position > Number(url.searchParams.get('since') ?? 0)).slice(0, 100), position: rows.length, generation: 1, computerState, computerRecovered, computerLostAt,
+      dispatcherReady: options.dispatcherReady ?? true });
   });
   await page.routeWebSocket('**/ws', ws => {
     socket = ws;
@@ -158,7 +159,8 @@ export async function chatFixture(page, scenario = 'live', options = {}) {
       const computerRecovered = scenario === 'private-team-recovered';
       const computerLostAt = ['private-team-recovering', 'private-team-recovered'].includes(scenario)
         ? '2026-10-02T10:03:00.000Z' : undefined;
-      ws.send(JSON.stringify({ version: 1, type: 'ready', topic: 'conversation', conversationId: input.conversationId, generation: 1, position: rows.length, computerState, computerRecovered, computerLostAt }));
+      ws.send(JSON.stringify({ version: 1, type: 'ready', topic: 'conversation', conversationId: input.conversationId, generation: 1, position: rows.length, computerState, computerRecovered, computerLostAt,
+        dispatcherReady: options.dispatcherReady ?? true }));
       socketReady = true;
     });
   });

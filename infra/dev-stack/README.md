@@ -19,7 +19,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|starts services; checks listeners; sets up sign-in| services["Local services<br/>jobs, content and access"]
   stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
-  stack -->|stops saved workers, checks subscriptions and waits for the dispatcher| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
+  stack -->|checks subscriptions and shares dispatcher readiness with chat| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|checks ownership, backup certificates and nodes; stops cancelled checks| package["infra/package<br/>Helm install"]
   stack -->|checks collection and reports host refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
@@ -152,6 +152,8 @@ events or only new event types while services are stopped. Changes that remove t
 history need a manual upgrade. The stack reports ready only after the dispatcher starts
 reading events. Detailed recovery steps, real-provider choices and daily timer settings
 are in the operator notes.
+The server reads the same private readiness marker. Chat can explain a long wait
+without showing members the operator's maintenance steps.
 
 ## Folders
 

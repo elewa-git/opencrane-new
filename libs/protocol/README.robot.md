@@ -75,6 +75,9 @@ Chat HTTP response schemas (`chatContextSchema`, `chatListSchema`,
 `chatFeedSchema`, `chatRowSchema`) validate browser reads. Known display fields
 are typed; unrendered event fields stay opaque. `WebSocketService.received` in the
 web app delivers each validated envelope without Angular signal coalescing.
+The optional `dispatcherReady` boolean travels in chat history and WebSocket
+`ready` frames. Older servers omit it, which clients treat as ready. The field
+does not name an internal process or maintenance command.
 
 Audit history uses `auditFilterSchema`, `auditDetailFilterSchema`,
 `auditResponseSchema` and `auditDetailSchema`: request/permit/conversation/turn

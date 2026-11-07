@@ -737,6 +737,7 @@ async function up(fresh: boolean) {
       MINIO_URL: `http://127.0.0.1:${settings['MINIO_PORT']}`, MINIO_CREDENTIALS_FILE: `${directory}/minio-lease.json`, CLAMD_PORT: settings['CLAMD_PORT'] ?? '43310',
       ...(!secondary && memoryKeyDirectory ? { MEMORY_KEY_DIRECTORY: memoryKeyDirectory } : {}),
       CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`,
+      DEV_DISPATCHER_READY_FILE: `${directory}/dispatcher-ready`,
       PROVIDER_SECRETS_DIR: `${directory}/provider-secrets`,
       KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
       TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/` });

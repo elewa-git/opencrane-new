@@ -220,8 +220,35 @@
     </section>
     @if (!chat.requestedUnavailable() && !chat.requestedLookupFailed()) {
     <div class="composer-dock">
-      <div class="progress" role="status" aria-live="polite">@if (chat.waiting()) { <div class="connection-strip" [class.waking]="chat.waiting() === 'starting'"><oc-icon [name]="chat.waiting() === 'starting' ? 'agent' : 'working'" /><span>@if (chat.waiting() === 'queued') { We couldn't tell whether your message was recorded. Retry checks its status before sending again. Reference: {{ chat.queuedReference() }}. Reload discards this draft. } @else if (chat.waiting() === 'starting') { Starting your computer… Your message is saved and will run when it is ready. } @else { Reconnecting — your conversation is saved. Unsent text stays on this page. }</span><small>{{ chat.waitSeconds() }}s</small>@if (chat.waiting() === 'queued') { <button type="button" [disabled]="chat.busy() || chat.computer() === 'recovering'"
-        [title]="chat.computer() === 'recovering' ? 'Sending is paused until your computer is ready' : ''" (click)="send(draft())">Retry</button> } @else if (chat.waiting() === 'reconnecting') { <button type="button" (click)="chat.reconnect()">Retry</button> }</div> }</div>
+      <div class="progress" role="status" aria-live="polite">
+        @if (chat.waiting()) {
+          <div class="connection-strip" [class.waking]="chat.waiting() === 'starting'">
+            <oc-icon [name]="chat.waiting() === 'starting' ? 'agent' : 'working'" />
+            <span>
+              @if (chat.waiting() === 'queued') {
+                We couldn't tell whether your message was recorded. Retry checks its status before
+                sending again. Reference: {{ chat.queuedReference() }}. Reload discards this draft.
+              } @else if (chat.waitingForMaintenance()) {
+                The assistant service is waiting for maintenance. Your message is saved and will
+                run afterwards.
+              } @else if (chat.waiting() === 'starting') {
+                Starting your computer… Your message is saved and will run when it is ready.
+              } @else {
+                Reconnecting — your conversation is saved. Unsent text stays on this page.
+              }
+            </span>
+            @if (!chat.waitingForMaintenance()) { <small>{{ chat.waitSeconds() }}s</small> }
+            @if (chat.waiting() === 'queued') {
+              <button type="button" [disabled]="chat.busy() || chat.computer() === 'recovering'"
+                [title]="chat.computer() === 'recovering'
+                  ? 'Sending is paused until your computer is ready' : ''"
+                (click)="send(draft())">Retry</button>
+            } @else if (chat.waiting() === 'reconnecting') {
+              <button type="button" (click)="chat.reconnect()">Retry</button>
+            }
+          </div>
+        }
+      </div>
       @for (failure of chat.uploadBatch.failures(); track failure.key) {
         <div class="upload-status" role="status" aria-live="polite">
           <span>{{ failure.file.name }} · {{ failure.error }}</span>

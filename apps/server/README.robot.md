@@ -2,6 +2,14 @@
 
 For people, read [README.md](README.md) first.
 
+## Assistant service wait signal
+
+`DEV_DISPATCHER_READY_FILE` is set only by the development stack. The server reads
+its PID marker and checks that process is alive before it sends `dispatcherReady`
+through authorised chat history and live updates. Missing and stale markers report
+`false`; an unset path reports `true`. The marker path, PID and upgrade command never
+enter the browser reply. The chat folder guide records the delivery path.
+
 ## Private work during bridge shutdown
 
 The bridge watcher closes its computer sockets as soon as shutdown is requested.

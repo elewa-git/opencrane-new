@@ -27,6 +27,7 @@ connected yet.
 
 - Creates direct, group and assistant conversations, and manages participants.
 - Returns visible history, conversation lists and each person's archive and read choices.
+- Includes the assistant service's ready or waiting state in authorised chat history and live updates.
 - Starts assistant turns, delivers files and work, and checks reports before saving replies.
 - Handles a person stopping a reply, spending stops and tool approvals.
 - Keeps private sessions separate when people share an assistant's computer.
@@ -140,7 +141,7 @@ flowchart LR
   computer -->|reports routine start and requests checked pass renewal| chat
   chat -->|checks lease, deadline and cancellation before routine credentials| computer
   computer -->|completed private reply| chat
-  chat -->|private reply and clearance| reader[Authenticated reader]
+  chat -->|private reply, clearance and service readiness| reader[Authenticated reader]
   chat -->|checks access, spending and loaded references| models[Models]
   collector["private-memory-qualification<br/>checks deployment results"]
   chat -->|checks deployment results| collector

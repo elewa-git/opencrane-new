@@ -92,6 +92,7 @@ const chatUpdateSchema = z.object({ version: z.literal(1), topic: z.literal('con
   computerState: computerStateSchema.optional(),
   computerRecovered: z.boolean().optional(),
   computerLostAt: z.string().datetime().optional(),
+  dispatcherReady: z.boolean().optional(),
 }).strict();
 
 const budgetStopNotificationSchema = chatUpdateSchema.extend({
@@ -101,6 +102,7 @@ const budgetStopNotificationSchema = chatUpdateSchema.extend({
   computerState: z.never().optional(),
   computerRecovered: z.never().optional(),
   computerLostAt: z.never().optional(),
+  dispatcherReady: z.never().optional(),
 });
 export const privateReplySchema = z.strictObject({
   version: z.literal(1), topic: z.literal('conversation'), type: z.literal('private_reply'),
@@ -120,6 +122,7 @@ export const chatFeedSchema = z.object({
   rows: z.array(chatRowSchema), position: z.int().nonnegative(), generation: z.int().nonnegative(),
   computerState: computerStateSchema, computerRecovered: z.boolean().optional(),
   computerLostAt: z.string().datetime().optional(),
+  dispatcherReady: z.boolean().optional(),
 });
 export const memoryAdmissionSchema = z.object({
   state: z.literal('disabled'),

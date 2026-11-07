@@ -27,6 +27,7 @@ interface Subscription {
   computerState: Awaited<ReturnType<typeof chatRows>>['computerState'] | '';
   computerRecovered: boolean;
   computerLostAt: string | undefined;
+  dispatcherReady: boolean;
   checking: boolean;
   joinPosition?: number;
   accessVersion?: number;
@@ -50,7 +51,7 @@ export function conversationSubscription(
       socket, session, config, options, conversationId, position: since,
       generation: requestedGeneration ?? 0, running: false, checking: false,
       ready: false, accessPassed: false, computerState: '', computerRecovered: false,
-      computerLostAt: undefined,
+      computerLostAt: undefined, dispatcherReady: true,
     };
     if (!isPublicChatId(conversationId)) {
       refuse(state);
@@ -184,7 +185,8 @@ async function loadContent(state: Subscription, mode: Mode,
     if (!previousPosition && state.ready && state.mode === mode &&
         state.position === position.position &&
         state.generation === position.generation &&
-        state.computerPosition === position.computerPosition) {
+        state.computerPosition === position.computerPosition &&
+        state.dispatcherReady === position.dispatcherReady) {
       return;
     }
     const result = await chatRows(state.options, state.conversationId, mode, state.position,
@@ -195,6 +197,8 @@ async function loadContent(state: Subscription, mode: Mode,
 }
 
 async function conversationPosition(options: ChatOptions, conversationId: string, mode: Mode) {
+  const dispatcherReady = mode === 'agent_session'
+    ? await options.dispatcherReady?.() ?? true : true;
   const result = await options.db.query<{
     position: string | null; generation: string | null; computer_position: string | null;
   }>(
@@ -212,6 +216,7 @@ async function conversationPosition(options: ChatOptions, conversationId: string
     computerPosition: mode === 'agent_session'
       ? Number(result.rows[0]?.computer_position ?? 0)
       : 0,
+    dispatcherReady,
   };
 }
 
@@ -269,12 +274,14 @@ function sendRows(state: Subscription, result: Awaited<ReturnType<typeof chatRow
   state.position = result.position;
   if (!state.ready || state.computerState !== result.computerState ||
       state.computerRecovered !== result.computerRecovered ||
-      state.computerLostAt !== result.computerLostAt) {
+      state.computerLostAt !== result.computerLostAt ||
+      state.dispatcherReady !== result.dispatcherReady) {
     state.computerState = result.computerState;
     state.computerRecovered = result.computerRecovered;
     state.computerLostAt = result.computerLostAt;
+    state.dispatcherReady = result.dispatcherReady;
     const extra = { computerState: state.computerState, computerRecovered: state.computerRecovered,
-      computerLostAt: state.computerLostAt };
+      computerLostAt: state.computerLostAt, dispatcherReady: state.dispatcherReady };
     send(state, 'ready', extra);
     state.ready = true;
   }

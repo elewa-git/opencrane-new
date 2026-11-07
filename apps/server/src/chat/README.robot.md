@@ -1,5 +1,17 @@
 # Chat contracts
 
+## Dispatcher readiness in chat
+
+Assistant session history and the existing WebSocket `ready` frame carry
+`dispatcherReady`. `false` means the dev stack's dispatcher marker is missing or
+does not match the recorded dispatcher PID and process start. This rejects a stale
+marker after its PID is reused. The server reads the marker only after chat access
+has passed.
+The live subscription checks it on its existing 100 ms cycle and sends a new `ready`
+frame when it changes, even if no conversation event was saved. Direct and group
+chats report `true`. Production has no dev marker and reports `true`.
+`test/chat-http.test.ts` checks the HTTP reply and both live readiness values.
+
 The [server contract](../../README.robot.md) describes the existing chat commands.
 The [qualified start contract](../../../../docs/process/p4-15-pr5g/README.robot.md)
 describes personal execution-mode selection, initial input delivery and its checks.

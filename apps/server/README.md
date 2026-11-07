@@ -193,7 +193,7 @@ flowchart LR
   computer -.->|records private thread for memory discovery| server
   server -.->|prepares up to four private memory tools| computer
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
-  server -->|files, image types and refusal codes| web
+  server -->|files, service readiness, image types and refusal codes| web
   server -->|checks upload bytes over HTTPS| runtime
   runtime -->|checks memory reads and personal changes| server
 ```
@@ -540,6 +540,8 @@ night. It shows the next 02:00 UTC boundary for waiting facts.
    changes. Computer state follows lifecycle events and stays in recovery until a
    new ready event appears. The worker saves this state in the computer read table,
    so each chat update reads a small record. Sleeping and waking computers show starting.
+   The same update includes a ready or waiting signal from the local assistant service.
+   It contains no operator instructions or private setup details.
 5. **A group uses a shared assistant.** An admin chooses its tools and paying group.
    Each member gets a private chat and a private turn by default. Private turns have
    no local tools. A member can choose a memory-free turn to use the group's shared

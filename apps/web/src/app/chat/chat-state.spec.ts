@@ -1,6 +1,14 @@
 import type { ChatRow } from '@opencrane/protocol';
-import { isBudgetStop, rejectedScreenshotIds, toolKind, transcript, turnOutcome,
+import { isBudgetStop, rejectedScreenshotIds, shouldShowMaintenance, toolKind, transcript, turnOutcome,
   uploadedFile } from './chat-state';
+
+it('shows maintenance only for a starting computer after the usual wait', () => {
+  expect(shouldShowMaintenance('starting', 14, false)).toBe(false);
+  expect(shouldShowMaintenance('starting', 15, false)).toBe(true);
+  expect(shouldShowMaintenance('starting', 15, true)).toBe(false);
+  expect(shouldShowMaintenance('ready', 15, false)).toBe(false);
+  expect(shouldShowMaintenance('recovering', 15, false)).toBe(false);
+});
 
 it('keeps created and modified workspace files but omits deleted files', () => {
   const rows = [

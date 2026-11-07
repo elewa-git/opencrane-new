@@ -2,6 +2,15 @@ import { z } from 'zod';
 import { fileRefusalWords } from './file-refusal-words.ts';
 import type { ChatConversation, ChatRow } from '@opencrane/protocol';
 
+const normalColdStartSeconds = 15;
+
+export function shouldShowMaintenance(
+  waiting: string, waitSeconds: number, dispatcherReady: boolean,
+): boolean {
+  return waiting === 'starting' && waitSeconds >= normalColdStartSeconds
+    && !dispatcherReady;
+}
+
 export interface Turn {
   id: string; author: 'you' | 'person' | 'agent'; text: string; time: string; endedAt?: string;
   endReportedAt?: string;

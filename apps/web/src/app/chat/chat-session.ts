@@ -7,13 +7,15 @@ import { z } from 'zod';
 import { chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema, type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
 import type { ComputerState, MemoryAdmission } from '@opencrane/protocol';
 import { WebSocketService } from '../core/websocket.service';
-import { isActiveTurn, lastConfirmedTurnAt,
-  recoveredLostTurn, shouldAnnounceBudgetStop, transcript, uploadedFile } from './chat-state';
+import { isActiveTurn, lastConfirmedTurnAt, shouldShowMaintenance,
+  recoveredLostTurn, shouldAnnounceBudgetStop, transcript, uploadedFile }
+  from './chat-state';
 import { shortTime } from './file-presentation';
 import { ChatSessionStop, type StopScreen } from './chat-session-stop';
 import { ReadFailure, requestChat, savedChatChange } from './chat-session-http';
 import { displayAgentSessions, includeRequestedConversation, isTeamConversation,
-  resumeAgentSession, selectedSessionPayingGroupId, updateSessionSummaries, selectedSessionAssistant }
+  createPendingMessage, resumeAgentSession, selectedSessionPayingGroupId,
+  updateSessionSummaries, selectedSessionAssistant }
   from './conversations-data';
 
 @Injectable()
@@ -29,6 +31,7 @@ export class ChatSession implements OnDestroy {
   readonly displayName = signal('You');
   readonly assistantId = signal<string | null>(null);
   readonly computer = signal<ComputerState>('ready');
+  readonly dispatcherReady = signal(true);
   readonly computerRecovered = signal(false);
   readonly computerLostAt = signal('');
   readonly memoryAdmission = signal<MemoryAdmission>({
@@ -46,6 +49,8 @@ export class ChatSession implements OnDestroy {
   readonly retryIn = signal(6);
   readonly waitSeconds = signal(0);
   readonly waiting = computed(() => this.queued() ? 'queued' : this.active() && this.computer() !== 'ready' ? 'starting' : this.selected() && !this.connected() && !this.loading() ? 'reconnecting' : '');
+  readonly waitingForMaintenance = computed(() => shouldShowMaintenance(
+    this.waiting(), this.waitSeconds(), this.dispatcherReady()));
   readonly busy = signal(false);
   readonly error = signal('');
   readonly announcement = signal('');
@@ -205,7 +210,12 @@ export class ChatSession implements OnDestroy {
   async send(text: string): Promise<boolean> {
     if (!this.canSend(text)) return false;
     this.reconnectedAt.set('');
-    if (!this.pending) this.pending = this.newPendingMessage(text);
+    if (!this.pending) {
+      const memoryFree = this.teamSession() && this.executionMode() === 'memory_free';
+      const created = createPendingMessage(text, this.selected(), this.creationId, memoryFree);
+      this.creationId = created.creationId;
+      this.pending = created.pending;
+    }
     this.busy.set(true); this.error.set('');
     const revision = this.revision;
     try {
@@ -224,21 +234,6 @@ export class ChatSession implements OnDestroy {
     return Boolean(text.trim() && !this.busy() && !this.active() && !this.uploadBatch.uploading()
       && !this.uploadPending() && !this.denied() && this.computer() !== 'recovering'
       && this.selectedAssistantId());
-  }
-  private newPendingMessage(text: string): { id: string; conversationId: string;
-    text: string; executionMode?: 'memory_free' } {
-    let conversationId = this.selected() || this.creationId;
-    if (!conversationId) {
-      conversationId = crypto.randomUUID();
-      this.creationId = conversationId;
-    }
-    const pending: { id: string; conversationId: string; text: string;
-      executionMode?: 'memory_free' } = { id: crypto.randomUUID(), conversationId,
-        text: text.trim() };
-    if (this.teamSession() && this.executionMode() === 'memory_free') {
-      pending.executionMode = 'memory_free';
-    }
-    return pending;
   }
   async refresh(): Promise<boolean> {
     if (this.denied() || !this.selected()) return false;
@@ -395,6 +390,7 @@ export class ChatSession implements OnDestroy {
       if (this.position && feed.generation !== this.generation) { this.position = 0; this.rows.set([]); continue; }
       this.generation = feed.generation;
       this.setComputerState(feed.computerState);
+      this.dispatcherReady.set(feed.dispatcherReady ?? true);
       this.computerRecovered.set(feed.computerRecovered ?? false);
       this.computerLostAt.set(feed.computerLostAt ?? '');
       for (const row of feed.rows) this.apply(row);
@@ -441,6 +437,9 @@ export class ChatSession implements OnDestroy {
   }
   private updateComputerState(message: ServerMessage): void {
     if (!('computerState' in message)) return;
+    if (message.dispatcherReady !== undefined) {
+      this.dispatcherReady.set(message.dispatcherReady);
+    }
     if (message.computerState) this.setComputerState(message.computerState);
     if (message.computerRecovered !== undefined) {
       this.computerRecovered.set(message.computerRecovered);

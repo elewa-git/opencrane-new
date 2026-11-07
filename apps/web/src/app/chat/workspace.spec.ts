@@ -26,6 +26,7 @@ async function createCaptureWorkspace(
   assistantKind?: 'team',
   computerState = 'ready',
   listPlacement?: 'recent-page-two' | 'archived' | 'missing' | 'changed-twice',
+  dispatcherReady = true,
 ): Promise<CaptureWorkspace> {
   history.replaceState({}, '', '/workspace?conversation=chat');
   const rows = [...initialRows];
@@ -116,7 +117,7 @@ async function createCaptureWorkspace(
       const since = Number(new URL(path, location.origin).searchParams.get('since') ?? 0);
       const visibleRows = rows.filter(row => Number(row['position']) > since);
       return Promise.resolve(new Response(JSON.stringify({ rows: visibleRows,
-        position: rows.length, generation: 1, computerState })));
+        position: rows.length, generation: 1, computerState, dispatcherReady })));
     }
     if (pathname.endsWith('/files/view')) {
       return Promise.resolve(new Response('<svg/>', {
@@ -1069,6 +1070,51 @@ it('shows stopping until the server ends the turn and keeps later tool reports',
   expect(capture.root.textContent).not.toContain('Stopping…');
   capture.fixture.destroy();
 });
+
+async function checksMaintenanceNotice(sessionKind: 'personal' | 'team') {
+  const message = { id: 'message', position: 1, type: 'message.posted',
+    time: '2026-10-04T10:00:00Z', data: { text: 'Hello', authorId: 'me' } };
+  const assistantKind = sessionKind === 'team' ? 'team' : undefined;
+  const capture = await createCaptureWorkspace(
+    [message], [], assistantKind, 'starting', undefined, false);
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    chat.waitSeconds.set(14);
+    capture.fixture.detectChanges();
+    expect(capture.root.querySelector('.connection-strip')?.textContent)
+      .toContain('Starting your computer');
+
+    chat.waitSeconds.set(15);
+    capture.fixture.detectChanges();
+    const notice = capture.root.querySelector('.connection-strip');
+    expect(notice?.textContent).toContain(
+      'The assistant service is waiting for maintenance. Your message is saved and will run afterwards.');
+    expect(notice?.querySelector('small')).toBeNull();
+
+    const ready = { version: 1, topic: 'conversation', conversationId: 'chat',
+      type: 'ready', position: 1, generation: 1, computerState: 'starting',
+      dispatcherReady: true };
+    capture.socket.onmessage?.(new MessageEvent('message', {
+      data: JSON.stringify(ready),
+    }));
+    capture.fixture.detectChanges();
+    expect(notice?.textContent).toContain('Starting your computer');
+
+    capture.socket.onopen?.(new Event('open'));
+    capture.socket.onmessage?.(new MessageEvent('message', {
+      data: JSON.stringify({ ...ready, computerState: 'ready' }),
+    }));
+    capture.fixture.detectChanges();
+    expect(capture.root.querySelector('.connection-strip')).toBeNull();
+  } finally {
+    capture.fixture.destroy();
+  }
+}
+
+it.each(['personal', 'team'] as const)(
+  'explains a long dispatcher wait and returns to the start notice for %s sessions',
+  checksMaintenanceNotice,
+);
 
 it('shows Stop not confirmed after a queued cancellation timeout without ending the turn', async () => {
   const capture = await createCaptureWorkspace([
