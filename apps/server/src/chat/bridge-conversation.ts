@@ -50,6 +50,7 @@ export type ConversationProgress = {
   // Recheck an unchanged chat while delivery or recovery still needs work.
   retry: boolean;
   connectionId?: number;
+  cursor?: number;
 };
 const turnIdData = z.object({ turnId: z.string() });
 const computerData = z.object({ computerId: z.string() });
@@ -150,6 +151,7 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
   const turnComputers = new Map<string, string>();
   const closedStatuses = new Map<string, 'completed' | 'failed'>();
   const running = new Set<string>();
+  const privateAwaitingExit = new Set<string>();
   let computerStartHead = 0;
   let controlPending = false;
   for (const row of lifecycle) {
@@ -174,13 +176,19 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
       computerStartHead = row.sequence;
       started.add(turnId);
       const mode = z.object({ executionMode: z.string().optional() }).parse(row.event.data);
-      if (mode.executionMode === 'restricted') privateStarted.add(turnId);
+      if (mode.executionMode === 'restricted') {
+        privateStarted.add(turnId);
+        privateAwaitingExit.add(turnId);
+      }
       running.add(turnId);
       turnComputers.set(turnId, computerData.parse(row.event.data).computerId);
     }
     if (row.event.type === 'computer.lost' || row.event.type === 'computer.claimed') {
       for (const turnId of running) lostTurns.add(turnId);
+      // Keep tracking private exit when a computer ending arrives first.
+      for (const turnId of privateAwaitingExit) lostTurns.add(turnId);
       running.clear();
+      privateAwaitingExit.clear();
     }
   }
   return { current, kind, closed, started, privateStarted, lostTurns,
@@ -199,7 +207,8 @@ function computerUnavailable(type: string, computerId: string, refused: Set<stri
 export async function processConversation(options: WatchOptions, tokens: Tokens,
   conversation: AgentSession, assistant: ReturnType<typeof assistantSnapshot>,
   refused: Set<string>, connection: Connection,
-  computerHistoryUnavailable = false, checkControl?: ControlCheck): Promise<ConversationProgress> {
+  computerHistoryUnavailable = false, checkControl?: ControlCheck,
+  closeCursor?: number): Promise<ConversationProgress> {
   const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
   async function refreshStops(beforeTurn = false) {
     await readNewConversationRows(options, conversation.conversationId, rows, beforeTurn);
@@ -228,7 +237,7 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   }
   if (rows.some(isConversationClosed)) {
     return cleanClosedConversation(options, conversation.conversationId,
-      conversation.assistantId, rows, assistant, refused, connection);
+      conversation.assistantId, rows, assistant, refused, connection, closeCursor);
   }
   if (await childRequestHeld(options, created)) {
     return { pending: true, retry: true };

@@ -612,7 +612,7 @@ it('bounds queued close cancellations and reads each history once per pass', asy
 });
 
 it('rechecks a queued input when a computer start arrives during the cleanup pass', async () => {
-  fixture = await bridgeFixture(true);
+  fixture = await bridgeFixture();
   const test = fixture;
   const second = await test.append('conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text',
@@ -625,7 +625,9 @@ it('rechecks a queued input when a computer start arrives during the cleanup pas
   let started = false;
   async function appendWithStart(input: Parameters<typeof append>[0]) {
     const result = await append(input);
-    if (!started && input.event.principal?.id === 'close-cleanup') {
+    const event = z.object({ type: z.string(), subject: z.string() }).parse(input.event);
+    if (!started && event.type === 'agent.turn_failed'
+      && event.subject === 'conversation-chat') {
       started = true;
       await test.append('computer-assistant', 'computer.turn_started', {
         conversationId: 'chat', assistantId: 'assistant', turnId: second.id,
@@ -637,10 +639,10 @@ it('rechecks a queued input when a computer start arrives during the cleanup pas
   }
   vi.spyOn(test.store, 'append').mockImplementation(appendWithStart);
 
-  await test.process();
+  await expect(test.process()).rejects.toThrow('Close cleanup changed; retrying');
   const rows = await chatHistory(test.store, 'test', 'chat');
   expect(rows.filter(isClosedFailure).map(turnIdOf)).not.toContain(second.id);
-  expect(await test.process()).toBe(true);
+  expect(await test.process()).toMatchObject({ pending: true });
   await test.flushFrames();
   expect(test.frames.filter(isStop)).toContainEqual(expect.objectContaining({ turnId: second.id }));
 });

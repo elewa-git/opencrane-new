@@ -23,7 +23,7 @@ The server checks who is asking and what they may do, saves each change in the
 assistant's [computer](../../GLOSSARY.md#computer).
 For a closed chat, it retries Stop for admitted work. A private turn stays pending
 until its process exit is saved or its computer is known lost. Other chats on the
-same computer can continue.
+same computer can continue. Cleanup works through queued requests in short passes.
 A second program here, the [models process](../../GLOSSARY.md#models-process), checks
 AI calls against spending limits and tool rules.
 For an activated side conversation, the computer prepares the first restricted turn.

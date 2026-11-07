@@ -7,7 +7,12 @@ export function supervisePrivateChild(child: ChildProcess, socket: Socket, priva
   let exited = false;
   let timer: NodeJS.Timeout | undefined;
   let killAttempts = 0;
-  function childExited() {
+  function childExited(code: number | null, signal: NodeJS.Signals | null) {
+    // Require the process exit result before treating socket EOF as proof of exit.
+    if (code === null && signal === null) {
+      socket.destroy();
+      return;
+    }
     if (exited) return;
     exited = true;
     if (timer) clearTimeout(timer);
@@ -15,6 +20,16 @@ export function supervisePrivateChild(child: ChildProcess, socket: Socket, priva
     rmSync(privateHome, { recursive: true, force: true });
     // End the supervisor side only after the child and its private home are gone.
     socket.end();
+  }
+  function childFailed() {
+    socket.destroy();
+    // Keep a running child and its home until the real exit event arrives.
+    if (child.pid) return;
+    if (exited) return;
+    exited = true;
+    if (timer) clearTimeout(timer);
+    children.delete(child);
+    rmSync(privateHome, { recursive: true, force: true });
   }
   function killFailed() {
     if (exited) return;
@@ -50,11 +65,12 @@ export function supervisePrivateChild(child: ChildProcess, socket: Socket, priva
     socket.destroy();
     socketClosed();
   }
-  child.on('error', childExited);
-  child.on('exit', childExited);
+  child.once('error', childFailed);
+  child.once('exit', childExited);
   child.stdin?.on('error', socketFailed);
   socket.on('error', socketFailed);
   socket.on('end', socketClosed);
   socket.on('close', socketClosed);
-  child.stdout?.pipe(socket);
+  // Keep this side open when stdout closes. Only the child exit event may end it.
+  child.stdout?.pipe(socket, { end: false });
 }

@@ -141,7 +141,8 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
         return previous.pending;
       }
       const result = await processConversation(options, tokens, conversation,
-        assistant, refused, connection, computerHistoryUnavailable, checkControl);
+        assistant, refused, connection, computerHistoryUnavailable, checkControl,
+        previous?.cursor);
       const progress = { ...result, head, computerEventId,
         computerStartHead: assistant.computerStartHead, kind: assistant.kind };
       seen.set(conversationId, progress);

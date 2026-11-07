@@ -1,6 +1,6 @@
 import { once } from 'node:events';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { createServer, connect, type Socket } from 'node:net';
+import { createServer, connect, Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { expect, it, vi } from 'vitest';
@@ -13,9 +13,12 @@ it('waits for process exit when the child closes stdout but keeps running', asyn
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Missing test socket');
-  const accepted = once(server, 'connection');
+  function acceptSocket(resolve: (socket: Socket) => void) {
+    server.once('connection', resolve);
+  }
+  const accepted = new Promise<Socket>(acceptSocket);
   const peer = connect({ host: '127.0.0.1', port: address.port, allowHalfOpen: true });
-  const [supervisorSocket] = await accepted as [Socket];
+  const supervisorSocket = await accepted;
   const child = spawn(process.execPath, ['-e',
     'process.stdout.end(); setInterval(() => {}, 1000);'],
   { stdio: ['pipe', 'pipe', 'ignore'] });

@@ -36,7 +36,8 @@ private reply or removing access, so a delayed Stop cannot affect a replacement.
 It also clears an unacknowledged reply when the target has just finished. Repeated
 Stops share the same access removal and interruption. The computer confirms that
 private reply buffers are cleared before waiting for interruption to finish.
-The supervisor confirms a private process exit after removing its temporary home.
+The supervisor waits for the private process to exit, then removes its temporary home.
+Closing the process's output alone does not confirm exit.
 The computer saves that confirmation without private reply text.
 
 - Builds the computer image with [Codex](../../GLOSSARY.md#codex), the AI agent,

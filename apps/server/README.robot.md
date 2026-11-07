@@ -10,6 +10,7 @@ start save, but cleanup requires the later restricted start before using that ex
 Cleanup also checks the report's computer id against the original turn start.
 The report has no reply text or credential. Loss or replacement of the original
 computer generation is separate evidence that the old process cannot keep running.
+This also settles a turn whose computer ending was saved before that loss.
 Routine preparations keep their separate ending rules.
 The event stays out of the public conversation feed. A fresh watcher reads these
 saved records and repairs missing turn endings through the existing commands.
@@ -438,6 +439,12 @@ server to record failure. Terminal agent reports and `computer.turn_closed` are
 repaired independently, using conditional appends. The existing computer turn
 check prevents idle suspension before its ending is saved. No close route is
 available yet. Confirmed Codex thread unload remains for a later change.
+Each pass handles at most 32 inputs or one second of work. It keeps its next input
+position for the following pass. Queued cancellations share one conversation history
+read and one computer history read per pass, except after a concurrent append forces
+a fresh read. A small computer stream position check before each queued cancellation
+stops the pass if a turn could have started since that shared read. Recovery of
+computer endings uses the same action and time limits.
 
 The progress cache checks one indexed position that includes both
 `conversation-<id>` and older `participation-<id>` close events. An older close
