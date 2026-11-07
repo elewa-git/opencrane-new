@@ -65,13 +65,15 @@ function fixture() {
   const service = object('Service', 'backup-store', 'Namespace', namespace, 'namespace-uid');
   const trust = object('Secret', 'backup-trust', 'Service', 'backup-store', 'backup-store-uid');
   const identity = object('Secret', 'backup-identity', 'Service', 'backup-store', 'backup-store-uid');
+  const annotations = { 'opencrane.dev/backup-destination': backup.destinationPath };
+  const identityMetadata = { ...identity.metadata, annotations };
   const objects: Record<string, any> = {
     namespace: { apiVersion: 'v1', kind: 'Namespace',
       metadata: { name: namespace, uid: 'namespace-uid', resourceVersion: '1' } },
     'backup-store': { ...service, spec: { type: 'ClusterIP', clusterIP: '10.43.0.8',
       ports: [{ port: matching.port, protocol: 'TCP' }], selector: { app: 'fixture' } } },
     'backup-trust': { ...trust, type: 'Opaque', data: { 'ca.crt': encoded(ca) } },
-    'backup-identity': { ...identity, type: 'Opaque', data: {
+    'backup-identity': { ...identity, metadata: identityMetadata, type: 'Opaque', data: {
       ACCESS_KEY_ID: encoded('fixture-access'), ACCESS_SECRET_KEY: encoded(privateValue),
     } },
   };
@@ -808,4 +810,16 @@ for (const grant of ['root', 'prefix-read', 'prefix-list', 'prefix-write',
     }
   }
   test(`storage refuses excessive ${grant} access on the supplied identity`, refusesExcessAccess);
+}
+
+for (const binding of [undefined, 's3://database-backups/other-silo']) {
+  async function refusesUnboundDestination() {
+    const input = fixture();
+    input.objects['backup-identity'].metadata.annotations['opencrane.dev/backup-destination'] = binding;
+    const before = matching.storage.requests.length;
+    const run = checkCnpgBackupReferences(input.backup, namespace, input.kubectl);
+    await refused(run, 'CNPG backup credential is not confined to its bucket and prefix');
+    assert.equal(matching.storage.requests.length, before);
+  }
+  test(`storage refuses a destination binding of ${binding}`, refusesUnboundDestination);
 }
