@@ -16,6 +16,9 @@ let matching: Awaited<ReturnType<typeof peer>>;
 const namespace = 'opencrane-package-1';
 const refusal = 'CNPG backup references are incomplete or incompatible';
 const cleanupRefusal = 'CNPG backup marker cannot be removed';
+const scopeRefusal = 'CNPG backup credential is not confined to its bucket and prefix';
+const successfulRequests = ['DELETE', 'PUT', 'GET', 'DELETE',
+  'GET', 'GET', 'GET', 'PUT', 'GET', 'GET', 'PUT'];
 const privateValue = 'private-value-/private/path';
 let directory: string;
 let ca: string;
@@ -128,9 +131,9 @@ async function accepts() {
   }
   const before = attempts.length;
   await checkCnpgBackupReferences(input.backup, namespace, input.kubectl);
-  assert.equal(attempts.length, before + 5);
+  assert.equal(attempts.length, before + 12);
   assert.equal(attempts.at(-1)!.destroyed, true);
-  assert.deepEqual(matching.storage.requests, ['DELETE', 'PUT', 'GET', 'DELETE']);
+  assert.deepEqual(matching.storage.requests, successfulRequests);
   assert.equal(matching.storage.objects.size, 0);
   for (const name of Object.keys(input.objects)) {
     function matches(value: string) {
@@ -402,7 +405,7 @@ for (const name of ['namespace', 'backup-store', 'backup-trust']) {
       atPeer(input, listener.port);
       try {
         await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
-        assert.equal(handshakes, 5);
+        assert.equal(handshakes, 12);
         assert(input.reads.length > 4);
       } finally {
         await listener.close();
@@ -444,7 +447,7 @@ for (const stage of ['before reads', 'before connection', 'during handshake', 'a
         expected = 1;
       }
       if (stage === 'after handshake') {
-        expected = 5;
+        expected = 12;
       }
       assert.equal(attempts.length - before, expected);
       const expectedReads = { 'before reads': 0, 'before connection': 4,
@@ -485,7 +488,7 @@ for (const stage of ['initial read', 'before connection', 'after handshake', 'fi
         expected = 1;
       }
       if (stage === 'final read') {
-        expected = 5;
+        expected = 12;
       }
       assert.equal(attempts.length - before, expected);
       if (expected) assert.equal(attempts.at(-1)!.destroyed, true);
@@ -596,6 +599,9 @@ for (const fault of ['wrong bucket', 'wrong prefix', 'wrong access', 'wrong secr
         'deny DELETE', 'changed', 'changed before delete', 'server error'];
       if (cleanupFaults.includes(fault)) {
         reason = cleanupRefusal;
+      }
+      if (fault === 'wrong bucket' || fault === 'wrong prefix') {
+        reason = scopeRefusal;
       }
       await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl), reason);
       assert.equal(input.reads.length, 4);
@@ -709,7 +715,7 @@ for (const name of ['backup-store', 'backup-trust', 'backup-identity']) {
       listener.storage.state.onRequest = replace;
       try {
         await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
-        assert.deepEqual(listener.storage.requests, ['DELETE', 'PUT', 'GET', 'DELETE']);
+        assert.deepEqual(listener.storage.requests, successfulRequests);
         assert.equal(listener.storage.objects.size, 0);
         assert(input.reads.length > 4);
       } finally {
@@ -739,7 +745,7 @@ for (const field of ['endpointURL', 'destinationPath']) {
     }
     try {
       await checkCnpgBackupReferences(input.backup, namespace, change);
-      assert.deepEqual(listener.storage.requests, ['DELETE', 'PUT', 'GET', 'DELETE']);
+      assert.deepEqual(listener.storage.requests, successfulRequests);
       assert.deepEqual(alternate.storage.requests, []);
       assert.equal(listener.storage.objects.size, 0);
     } finally {
@@ -757,7 +763,7 @@ async function removesStoredVersion() {
   listener.storage.state.fault = 'versioned';
   try {
     await checkCnpgBackupReferences(input.backup, namespace, input.kubectl);
-    assert.deepEqual(listener.storage.requests, ['DELETE', 'PUT', 'GET', 'DELETE']);
+    assert.deepEqual(listener.storage.requests, successfulRequests);
     assert.equal(listener.storage.objects.size, 0);
   } finally {
     listener.storage.objects.clear();

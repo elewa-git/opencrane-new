@@ -22,6 +22,7 @@ type StoredObject = {
   metadata: {
     name: string; namespace?: string; uid: string; resourceVersion: string;
     ownerReferences?: ObjectIdentity[];
+    annotations?: Record<string, string>;
   };
   spec?: {
     type?: string; clusterIP?: string; externalIPs?: string[]; externalName?: string;
@@ -32,6 +33,13 @@ type StoredObject = {
 };
 const refusal = 'CNPG backup references are incomplete or incompatible';
 const cleanupRefusal = 'CNPG backup marker cannot be removed';
+const scopeRefusal = 'CNPG backup credential is not confined to its bucket and prefix';
+
+class ScopeError extends Error {
+  constructor() {
+    super(scopeRefusal);
+  }
+}
 
 class CleanupError extends Error {
   constructor() {
@@ -212,14 +220,14 @@ function storageTransport(signal: AbortSignal, deadline: number) {
   return { request };
 }
 
-async function markerResponse(response: IncomingMessage, method: string,
+async function markerResponse(response: IncomingMessage,
   signal: AbortSignal, deadline: number, expectedStatuses: number[]) {
   const limits = { signal, deadline };
   try {
     commandTimeout(30_000, limits);
     const status = response.statusCode!;
     requireValid(expectedStatuses.includes(status));
-    if (status === 403 || status === 404) {
+    if (status === 403 || status === 404 || status === 412) {
       return { status, bytes: Buffer.alloc(0), etag: undefined, versionId: undefined };
     }
     const chunks: Buffer[] = [];
@@ -259,7 +267,7 @@ function storageSession(address: ReturnType<typeof serviceAddress>, ca: string,
     commandTimeout(30_000, limits);
     const options = { ...target, method, headers, query };
     const response = await client.makeRequestAsync(options, payload, statuses, 'us-east-1');
-    return markerResponse(response, method, signal, deadline, expectedStatuses);
+    return markerResponse(response, signal, deadline, expectedStatuses);
   }
   function close() {
     agent.destroy();
@@ -275,6 +283,31 @@ function versionQuery(versionId: unknown) {
   return `versionId=${encodeURIComponent(versionId)}`;
 }
 
+async function removeMarker(target: { bucketName: string; objectName: string },
+  match: Record<string, string>, query: string | undefined,
+  address: ReturnType<typeof serviceAddress>, ca: string, accessKey: string, secretKey: string) {
+  // Allow cleanup to finish after the check is cancelled or its deadline expires.
+  const cleanupSignal = AbortSignal.timeout(1000);
+  const cleanupDeadline = Date.now() + 1000;
+  const cleanup = storageSession(address, ca, accessKey, secretKey,
+    cleanupSignal, cleanupDeadline);
+  try {
+    if (query === undefined) {
+      const stored = await cleanup.exchange(target, 'HEAD', match, '', '', [200, 404]);
+      if (stored.status === 404 || stored.etag !== match['if-match']) {
+        return;
+      }
+      query = versionQuery(stored.versionId);
+    }
+    const removed = await cleanup.exchange(target, 'DELETE', match, query, '', [204]);
+    requireValid(removed.bytes.length === 0);
+  } catch {
+    throw new CleanupError();
+  } finally {
+    cleanup.close();
+  }
+}
+
 async function checkStorage(target: ReturnType<typeof destination>,
   address: ReturnType<typeof serviceAddress>, ca: string, accessKey: string, secretKey: string,
   signal: AbortSignal, deadline: number) {
@@ -287,28 +320,7 @@ async function checkStorage(target: ReturnType<typeof destination>,
   const match = { 'if-match': `"${digest}"` };
   let query: string | undefined;
   let markerMayExist = false;
-  async function removeMarker() {
-    // Allow cleanup to finish after the check is cancelled or its deadline expires.
-    const cleanupSignal = AbortSignal.timeout(1000);
-    const cleanupDeadline = Date.now() + 1000;
-    const cleanup = storageSession(address, ca, accessKey, secretKey,
-      cleanupSignal, cleanupDeadline);
-    try {
-      if (query === undefined) {
-        const stored = await cleanup.exchange(target, 'HEAD', match, '', '', [200, 404]);
-        if (stored.status === 404 || stored.etag !== match['if-match']) {
-          return;
-        }
-        query = versionQuery(stored.versionId);
-      }
-      const removed = await cleanup.exchange(target, 'DELETE', match, query, '', [204]);
-      requireValid(removed.bytes.length === 0);
-    } catch {
-      throw new CleanupError();
-    } finally {
-      cleanup.close();
-    }
-  }
+
   try {
     try {
       // Check deletion before writing. Name a version to avoid creating a delete marker.
@@ -330,15 +342,78 @@ async function checkStorage(target: ReturnType<typeof destination>,
   } finally {
     session.close();
     if (markerMayExist) {
-      await removeMarker();
+      await removeMarker(target, match, query, address, ca, accessKey, secretKey);
     }
+  }
+}
+
+async function checkConfinement(target: ReturnType<typeof destination>,
+  address: ReturnType<typeof serviceAddress>, ca: string, accessKey: string, secretKey: string,
+  signal: AbortSignal, deadline: number) {
+  const session = storageSession(address, ca, accessKey, secretKey, signal, deadline);
+  const prefixEnd = target.objectName.lastIndexOf('/');
+  const prefix = target.objectName.slice(0, prefixEnd);
+  const outsidePrefix = `${prefix}-ocn-check-${randomUUID()}`;
+  const outside = { bucketName: target.bucketName, objectName: `${outsidePrefix}/marker` };
+  const otherBucket = { bucketName: `ocn-check-${randomUUID()}`, objectName: target.objectName };
+  const root = { bucketName: target.bucketName, objectName: '' };
+  const emptyHeaders = {};
+  const random = randomBytes(32);
+  const marker = random.toString('hex');
+  const hash = createHash('md5');
+  hash.update(marker);
+  const match = { 'if-match': `"${hash.digest('hex')}"` };
+  async function deniedWrite(location: typeof outside) {
+    let mayExist = true;
+    let query: string | undefined;
+    try {
+      // Require denial even when a conditional write would otherwise find no object.
+      const result = await session.exchange(location, 'PUT', match, '', marker,
+        [200, 403, 404, 412]);
+      mayExist = result.status === 200;
+      if (result.status === 403) {
+        return;
+      }
+      if (mayExist) {
+        query = versionQuery(result.versionId);
+      }
+      throw new ScopeError();
+    } finally {
+      if (mayExist) {
+        await removeMarker(location, match, query, address, ca, accessKey, secretKey);
+      }
+    }
+  }
+  try {
+    if (prefixEnd < 1) {
+      throw new ScopeError();
+    }
+    // Refuse all root listings, including apparently empty or filtered replies.
+    await session.exchange(root, 'GET', emptyHeaders, 'list-type=2&max-keys=1', '', [403]);
+    for (const location of [outside, otherBucket]) {
+      await session.exchange(location, 'GET', emptyHeaders, '', '', [403]);
+      const listTarget = { bucketName: location.bucketName, objectName: '' };
+      const folderEnd = location.objectName.lastIndexOf('/');
+      const folder = location.objectName.slice(0, folderEnd + 1);
+      const query = `list-type=2&max-keys=1&prefix=${encodeURIComponent(folder)}`;
+      await session.exchange(listTarget, 'GET', emptyHeaders, query, '', [403]);
+      await deniedWrite(location);
+    }
+  } catch (error) {
+    if (error instanceof CleanupError) {
+      throw error;
+    }
+    throw new ScopeError();
+  } finally {
+    session.close();
   }
 }
 
 async function check(backup: Backup, namespace: string, kubectl: Kubectl,
   signal: AbortSignal, deadline: number) {
   const address = serviceAddress(backup.endpointURL, namespace);
-  const target = destination(backup.destinationPath);
+  const destinationPath = backup.destinationPath;
+  const target = destination(destinationPath);
   const ca = reference(backup.endpointCA);
   const access = reference(backup.s3Credentials.accessKeyId);
   const secret = reference(backup.s3Credentials.secretAccessKey);
@@ -363,10 +438,16 @@ async function check(backup: Backup, namespace: string, kubectl: Kubectl,
   const caCertificate = entry(secrets.get(ca.name)!, ca.key);
   certificate(caCertificate);
   for (const ref of [access, secret]) {
-    requireValid(/^[\x21-\x7e]+$/u.test(entry(secrets.get(ref.name)!, ref.key)));
+    const credential = secrets.get(ref.name)!;
+    requireValid(/^[\x21-\x7e]+$/u.test(entry(credential, ref.key)));
+    if (credential.metadata.annotations?.['opencrane.dev/backup-destination'] !== destinationPath) {
+      throw new ScopeError();
+    }
   }
   await checkEndpoint(address.hostname, address.port, caCertificate, signal, deadline);
   await checkStorage(target, address, caCertificate, entry(secrets.get(access.name)!, access.key),
+    entry(secrets.get(secret.name)!, secret.key), signal, deadline);
+  await checkConfinement(target, address, caCertificate, entry(secrets.get(access.name)!, access.key),
     entry(secrets.get(secret.name)!, secret.key), signal, deadline);
   // Recheck ownership and all reference identities after the storage requests finish.
   for (const original of found) {
@@ -394,6 +475,9 @@ export async function checkCnpgBackupReferences(backup: Backup, namespace: strin
     await check(backup, namespace, kubectl, signal, deadline);
   } catch (error) {
     // Discard parser, cancellation and dependency details; keep Secret data only in memory.
+    if (error instanceof ScopeError) {
+      throw new Error(scopeRefusal);
+    }
     if (error instanceof CleanupError) {
       throw new Error(cleanupRefusal);
     }

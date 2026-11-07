@@ -60,7 +60,7 @@ export function storageFixture() {
     const identity = authenticated(request);
     const listing = url.searchParams.has('list-type');
     const ownObject = /^\/database-backups\/local-check\/[^/]{1,100}$/u.test(path);
-    const otherBucket = !path.startsWith('/database-backups/');
+    const otherBucket = path !== '/database-backups' && !path.startsWith('/database-backups/');
     let area = otherBucket ? 'bucket' : 'prefix';
     if (listing && !url.searchParams.get('prefix') && !otherBucket) {
       area = 'root';

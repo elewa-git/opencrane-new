@@ -2183,8 +2183,8 @@ These are required fixture ownership links; this change creates no fixture resou
 
 The returned kind, API version, name, namespace, UID and resource version must match
 or be present as appropriate. Each object is read again after the storage check;
-changed UIDs or versions refuse. Reads, TLS and storage share one 30-second deadline
-and cancellation.
+changed UIDs or versions refuse. Reads, TLS and storage probes share one 30-second
+deadline and cancellation. Marker cleanup has a separate one-second deadline.
 Reads have a 1 MiB output limit. The package passes the same cancellation signal and remaining
 time through namespace ownership and target checks, including Docker inspection and
 target-node reads. Each child command stops on cancellation or its remaining deadline.
@@ -2203,16 +2203,40 @@ The storage check uses the installed MinIO client and the same CA and checked Se
 address. It snapshots the bucket and prefix from `destinationPath` before waiting.
 It accepts the chart's plain S3 path syntax, bounded to 900 characters. It sends
 signed requests with the referenced identity, using the local fixture's `us-east-1`
-region. It makes no bucket listing, location lookup, redirect or retry.
+region. It makes no location lookup, redirect or retry. Each credential Secret must
+carry the annotation `opencrane.dev/backup-destination`, set to the approved
+`destinationPath` by the owner of the fixture. Both the path and the Secret's
+ownership are checked before storage requests. Caller changes after the check
+starts cannot replace this captured destination.
 A random UUID names one marker containing 64 random hexadecimal characters.
 `If-None-Match: *` prevents overwriting an existing object. GET and DELETE use
 `If-Match` with the marker's expected ETag, the quoted MD5 of those random bytes.
 The returned bytes must match exactly. If PUT returns a version id, GET and DELETE
 name that exact version; GET must confirm it. Cleanup uses only that object name,
 ETag and optional version. It never hides stored bytes behind a deletion marker.
-Denied or uncertain cleanup refuses. Cancellation and deadline expiry stop all later
-requests, including cleanup. An interrupted PUT or refused DELETE can leave a marker;
-this is a refused check, never a permission success or a backup.
+Before PUT, a conditional DELETE names an absent random version to check deletion
+permission without creating a delete marker. A denied DELETE therefore refuses
+before any marker is written. Cleanup starts whenever PUT may have reached storage,
+including a lost reply. It uses a new connection and a separate one-second deadline,
+without the cancelled check's signal. If the PUT reply was lost, HEAD finds the
+matching marker's version before deleting it. Foreign or changed bytes are never
+removed. A failed cleanup returns `CNPG backup marker cannot be removed`.
+An outage or permission change after creation can still prevent removal; the check
+refuses and makes no claim that it removed bytes it could not reach.
+
+After removing its own marker, the checker requires HTTP 403 for a bucket-root
+listing, and for GET, ListObjectsV2 and conditional PUT outside the approved prefix
+and in a randomly named different bucket. Outside-prefix checks use a sibling
+folder, including a changed suffix to catch grants missing a folder boundary.
+Root listings refuse even if the reply is empty or filtered. Missing objects,
+missing buckets and failed write conditions are not proof of denied access.
+Outside writes use `If-Match` with an unpredictable ETag to avoid creating objects
+when the store honours conditional writes. If a store writes anyway or loses its
+reply, the checker attempts the same bounded, conditional cleanup.
+Excessive or unproved permissions return
+`CNPG backup credential is not confined to its bucket and prefix`.
+These probes test the chosen locations; they do not inspect every possible grant
+in a storage policy. They do not qualify a live store or open the installer gate.
 Responses allow at most 128 body bytes and 8 KiB of headers. Error bodies are not
 parsed. The HTTPS agent closes all its connections when the check ends.
 All Secret data stays in memory. The helper writes no private files. Errors discard
@@ -2234,7 +2258,9 @@ The chart tests delay dispatch and apply the same remaining-time assertion to ev
 `cnpg-backup-s3-fixture.ts` checks signed requests over local HTTPS. It covers scoped
 access, altered markers, denied operations, bounded replies, cancellation, late
 results and replacement of references after the probe. Each test closes its local
-listener and removes its remaining synthetic objects.
+listener. Interrupted PUT, stalled GET and denied DELETE tests assert no marker
+remains before teardown. Root and individual excessive grants are tested with
+broader identities against the same destination, rather than by changing the path.
 Live checks are NOT RUN. Image/helper approval, real scheduled base backup/WAL,
 three-database restore and standby promotion remain required before enablement.
 P5-3 remains PARTIAL. Local permission tests cannot qualify a backup or recovery.
