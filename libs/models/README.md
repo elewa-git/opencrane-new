@@ -132,7 +132,7 @@ built-in functions.
 ```mermaid
 flowchart LR
   models -.->|replay tests use the database helper| store
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks release audit bindings and company tool scopes, public tool addresses, reads, hosted image status and check requests, original call status, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, fixed positions before private replies, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal bearer and verified OAuth choices with current access and owner revocation from HTTP, admin company opt-in, explicit company choices, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature, licence and vulnerability checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks release audit bindings and company tool scopes, public tool addresses, reads, hosted image status and check requests, original call status, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, fixed positions before private replies, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal bearer and verified OAuth choices with current access and owner revocation from HTTP, admin company opt-in, explicit company choices, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature, licence and bound vulnerability checks, control, provider choice and spending"]
   server -->|asks for the saved first child start| models
   models -->|tests private sign-in, refresh and revocation requests, revokes refresh and access tokens; checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains reply withdrawal after expiry or access loss; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models and checks private callers; native child calls refused| models
@@ -246,9 +246,10 @@ only the operator's local public key and makes no network requests. Unreadable f
 make the verifier unavailable. A private licence checker then uses Syft, a tool that lists
 image packages, on those same verified bytes. It requires a separate review of the image's
 files and licence notices. Debian main exceptions apply only to reviewed OS layers.
-A private vulnerability check can use that same complete package list with a pinned
-Grype program and a reviewed, dated vulnerability database. It refuses serious findings
-and unfinished checks. These local checks do not admit or start an image. The shared
+A private vulnerability check uses the packages Syft found with a pinned Grype program
+and a reviewed, dated vulnerability database. It refuses serious findings, changed
+scan inputs and reviewed packages missing from Syft's list. These local checks do not
+admit or start an image. The shared
 production scanner and the combined result are still required.
 
 The models process prepares private connection relays and records their closure.

@@ -3645,8 +3645,10 @@ signature verifier and licence check. It receives the exact Syft SBOM made from 
 verified OCI bytes before that check removes its scratch directory. The SBOM's source
 must name the same manifest, Linux platform and layer digests. Every package must have
 a unique id and a location in those layers. The licence checker has already compared
-the SBOM with the operator's complete file and package review. Neither the installer
-nor the publisher supplies vulnerability policy.
+the SBOM with the operator's complete file and package review. The combined check
+refuses a review with extra `evidence.artifacts`, because those packages are absent
+from the SBOM Grype scans. The licence-only check can still review them. Neither the
+installer nor the publisher supplies vulnerability policy.
 
 The adapter requires Grype 0.121.0 Linux amd64 binary SHA-256
 `bd511334178bc3002eb9eb58880f89e01e35f7fed7cfbe671171127a8afa3596`.
@@ -3664,8 +3666,12 @@ old. The scan runs with automatic database and application updates disabled, a p
 config and cache, no inherited credentials, and `sbom:<private path> -o json`.
 The exact SBOM is at most 16 MiB; the database archive is at most 512 MiB. Each
 subprocess has a 60-second limit and 16 MiB output cap; the full attempt allows
-three minutes. A complete JSON report must identify this SBOM path, binary version
-and database build. Missing, duplicated or malformed output, ignored findings,
+three minutes. Grype 0.121.0 [keeps the Syft image source](https://github.com/anchore/grype/blob/v0.121.0/grype/pkg/syft_sbom_provider.go)
+and [reports an image object as its target](https://github.com/anchore/grype/blob/v0.121.0/grype/presenter/models/source.go).
+The report must name the checked image manifest, platform, layer digests, binary version
+and database build. The adapter copies input and settings before scanning and refuses
+changes to the caller's values before returning. Missing, duplicated or malformed
+output, ignored findings,
 package alerts, unknown severity and High/Critical all refuse. The result carries
 only digests, counts, dates and a receipt matching the existing vulnerability check
 shape. Raw SBOM and report bytes stay in private scratch and are removed.

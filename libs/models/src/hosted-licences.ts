@@ -32,6 +32,14 @@ async function readReview(path: string) {
   }
 }
 
+function hasSupplementaryPackages(review: Buffer) {
+  const schema = z.object({ evidence: z.object({
+    artifacts: z.array(z.unknown()).optional(),
+  }) });
+  const reviewed = schema.parse(JSON.parse(review.toString('utf8')));
+  return Boolean(reviewed.evidence.artifacts?.length);
+}
+
 async function stageImage(directory: string, blobs: Map<string, Buffer>, imageDigest: string) {
   const blobDirectory = join(directory, 'blobs', 'sha256');
   const directoryOptions = { recursive: true };
@@ -110,6 +118,10 @@ export async function inspectHostedLicences<Extra = never>(request: unknown, tru
     const evidence = { ...verification.evidence, sbomDigest: digest(scanned.stdout),
       reviewDigest: digest(review) };
     if (onSbom) {
+      // Syft's SBOM is the scanner input. Refuse reviewed packages absent from that input.
+      if (hasSupplementaryPackages(review)) {
+        return { verdict: 'fail', reasonCode: 'licence_refused' } as const;
+      }
       const document = z.object({ artifacts: z.array(z.unknown()) }).parse(
         JSON.parse(scanned.stdout));
       const packageCount = document.artifacts.length;

@@ -59,11 +59,6 @@ async function fixture(change?: (state: State) => void,
     if (state.reply === 'error') return Promise.reject(new Error('/private/report/bytes'));
     if (state.reply === 'timeout') return Promise.reject(new Error('scan timed out'));
     if (state.reply === 'lost') return Promise.resolve({ stdout: '' });
-    const source = state.report['source'];
-    if (typeof source === 'object' && source !== null &&
-        'type' in source && source.type === 'sbom-file') {
-      state.report['source'] = { type: 'sbom-file', target: args[0]!.slice(5) };
-    }
     duringScan?.(input, settings);
     const output = JSON.stringify(state.report);
     if (state.reply === 'duplicate') return Promise.resolve({ stdout: output + output });
@@ -92,10 +87,7 @@ it('records a dated digest-bound low-severity result from a fresh actual databas
     sbomDigest: digest(sbom), databaseDigest: digest(database),
     databaseUpdatedAt: '2026-11-07T10:00:00.000Z', findingCount: 1 });
   expect(result.evidence?.['expiresAt']).toBe('2026-11-08T10:00:00.000Z');
-  expect(repeated.result.evidence?.['sbomDigest']).toBe(result.evidence?.['sbomDigest']);
-  expect(repeated.result.evidence?.['databaseDigest']).toBe(result.evidence?.['databaseDigest']);
-  expect(repeated.result.evidence?.['databaseUpdatedAt'])
-    .toBe(result.evidence?.['databaseUpdatedAt']);
+  expect(repeated.result).toEqual(result);
   expect(hostedImageCheckedSchema.shape.checks.shape.vulnerability.safeParse(result.receipt).success)
     .toBe(true);
   expect(state.calls).toHaveLength(3);
@@ -162,16 +154,25 @@ it('refuses a database archive with the wrong approved digest', async () => {
 });
 
 it('refuses evidence when the caller changes checked digests during the scan', async () => {
-  function oldSource(state: State) {
-    state.report['source'] = { type: 'sbom-file' };
-  }
   function changeDigests(input: Parameters<typeof scanPinnedHostedSbom>[0],
     settings: Parameters<typeof scanPinnedHostedSbom>[1]) {
     input.imageDigest = 'b'.repeat(64);
     input.sbomDigest = 'c'.repeat(64);
     settings.databaseDigest = 'd'.repeat(64);
   }
-  const checked = await fixture(oldSource, undefined, undefined, changeDigests);
+  const checked = await fixture(undefined, undefined, undefined, changeDigests);
+  expect(checked.result).toEqual({ verdict: 'unavailable',
+    reasonCode: 'vulnerability_scan_unavailable' });
+});
+
+it('refuses evidence when the caller changes checked bytes and file settings', async () => {
+  function changeFiles(input: Parameters<typeof scanPinnedHostedSbom>[0],
+    settings: Parameters<typeof scanPinnedHostedSbom>[1]) {
+    input.sbom[0] = 0;
+    settings.binaryPath = '/replacement/grype';
+    settings.databasePath = '/replacement/database';
+  }
+  const checked = await fixture(undefined, undefined, undefined, changeFiles);
   expect(checked.result).toEqual({ verdict: 'unavailable',
     reasonCode: 'vulnerability_scan_unavailable' });
 });

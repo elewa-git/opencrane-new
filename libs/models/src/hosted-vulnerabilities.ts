@@ -29,11 +29,13 @@ const sourceSchema = z.object({ type: z.literal('image'), metadata: z.object({
   architecture: z.enum(['amd64', 'arm64']),
   layers: z.array(z.object({ digest: z.string() })).min(1).max(64),
 }) });
+const reportSourceSchema = z.object({ type: z.literal('image'),
+  target: sourceSchema.shape.metadata });
 const reportSchema = z.object({
   matches: z.array(z.unknown()),
   ignoredMatches: z.array(z.unknown()).optional(),
   alertsByPackage: z.array(z.unknown()).optional(),
-  source: z.object({ type: z.literal('sbom-file'), target: z.string() }),
+  source: reportSourceSchema,
   descriptor: z.object({ name: z.literal('grype'), version: z.literal('0.121.0'),
     db: z.object({ built: z.string(), schemaVersion: z.string() }) }),
 });
@@ -78,7 +80,7 @@ function packagesIn(input: Input) {
     }
     identifiers.add(artifact.id);
   }
-  return identifiers;
+  return { identifiers, sourceMetadata: source.metadata };
 }
 
 function findingSeverity(value: unknown, identifiers: Set<string>) {
@@ -92,13 +94,23 @@ function findingSeverity(value: unknown, identifiers: Set<string>) {
   return false;
 }
 
-function inspectReport(bytes: string, status: Object, sbomPath: string,
-  identifiers: Set<string>) {
+function inspectReport(bytes: string, status: Object,
+  sourceMetadata: z.infer<typeof sourceSchema>['metadata'], identifiers: Set<string>) {
   const report = reportSchema.parse(JSON.parse(bytes));
+  const target = report.source.target;
   if (report.descriptor.db.built !== status['built'] ||
       report.descriptor.db.schemaVersion !== status['schemaVersion'] ||
-      report.source.target !== sbomPath || report.ignoredMatches?.length ||
+      target.manifestDigest !== sourceMetadata.manifestDigest ||
+      target.os !== sourceMetadata.os ||
+      target.architecture !== sourceMetadata.architecture ||
+      target.layers.length !== sourceMetadata.layers.length ||
+      report.ignoredMatches?.length ||
       report.alertsByPackage?.length) throw new Error();
+  for (let index = 0; index < target.layers.length; index += 1) {
+    if (target.layers[index]!.digest !== sourceMetadata.layers[index]!.digest) {
+      throw new Error();
+    }
+  }
   let blocked = false;
   for (const value of report.matches) {
     if (findingSeverity(value, identifiers)) blocked = true;
@@ -112,6 +124,18 @@ function validateInput(input: Input, settings: Settings) {
       !['linux/amd64', 'linux/arm64'].includes(input.platform) ||
       input.sbom.length > 16 * 1024 * 1024) throw new Error();
   return packagesIn(input);
+}
+
+function checkedValuesUnchanged(input: Input, settings: Settings,
+  checkedInput: Input, checkedSettings: Settings) {
+  return input.imageDigest === checkedInput.imageDigest &&
+    input.sbomDigest === checkedInput.sbomDigest &&
+    input.platform === checkedInput.platform &&
+    input.packageCount === checkedInput.packageCount &&
+    Buffer.isBuffer(input.sbom) && input.sbom.equals(checkedInput.sbom) &&
+    settings.binaryPath === checkedSettings.binaryPath &&
+    settings.databasePath === checkedSettings.databasePath &&
+    settings.databaseDigest === checkedSettings.databaseDigest;
 }
 
 async function loadPinnedAssets(settings: Settings) {
@@ -156,14 +180,19 @@ function databaseStatus(output: string, now: number) {
 export async function scanPinnedHostedSbom(input: Input, settings: Settings,
   run: Run = execute, clock: () => number = Date.now) {
   let directory: string | undefined;
+  let checkedInput: Input | undefined;
+  let checkedSettings: Settings | undefined;
   let outcome: { verdict: string; reasonCode?: string; evidence?: Object;
     receipt?: Object };
   try {
     const startedAt = clock();
-    const identifiers = validateInput(input, settings);
-    const assets = await loadPinnedAssets(settings);
+    // Keep the bytes and names that are checked separate from caller-owned objects.
+    checkedInput = { ...input, sbom: Buffer.from(input.sbom) };
+    checkedSettings = { ...settings };
+    const { identifiers, sourceMetadata } = validateInput(checkedInput, checkedSettings);
+    const assets = await loadPinnedAssets(checkedSettings);
     directory = await mkdtemp(join(tmpdir(), 'hosted-vulnerability-'));
-    const paths = await stage(directory, assets.binary, assets.archive, input.sbom);
+    const paths = await stage(directory, assets.binary, assets.archive, checkedInput.sbom);
     const options = scannerOptions(directory);
     await run(paths.binaryPath,
       ['db', 'import', paths.archivePath, '--config', paths.configPath], options);
@@ -177,14 +206,14 @@ export async function scanPinnedHostedSbom(input: Input, settings: Settings,
     const finishedAt = clock();
     validDate(status['built'], finishedAt);
     if (finishedAt < checkedAt || finishedAt - startedAt > 180_000) throw new Error();
-    const result = inspectReport(scanned.stdout, status, paths.sbomPath, identifiers);
-    const evidence = { imageDigest: input.imageDigest, platform: input.platform,
-      sbomDigest: input.sbomDigest, databaseDigest: settings.databaseDigest,
+    const result = inspectReport(scanned.stdout, status, sourceMetadata, identifiers);
+    const evidence = { imageDigest: checkedInput.imageDigest, platform: checkedInput.platform,
+      sbomDigest: checkedInput.sbomDigest, databaseDigest: checkedSettings.databaseDigest,
       databaseUpdatedAt: new Date(databaseTime).toISOString(),
       engineVersion: '0.121.0', checkedAt: new Date(finishedAt).toISOString(),
       expiresAt: new Date(databaseTime + day).toISOString(),
       reportDigest: hash(Buffer.from(scanned.stdout)), findingCount: result.findingCount,
-      packageCount: input.packageCount };
+      packageCount: checkedInput.packageCount };
     const receiptFields = { checkedAt: evidence.checkedAt, expiresAt: evidence.expiresAt,
       engineVersion: evidence.engineVersion, databaseDigest: evidence.databaseDigest,
       databaseUpdatedAt: evidence.databaseUpdatedAt, reportDigest: evidence.reportDigest };
@@ -207,6 +236,10 @@ export async function scanPinnedHostedSbom(input: Input, settings: Settings,
         outcome = refused;
       }
     }
+  }
+  if (checkedInput && checkedSettings &&
+      !checkedValuesUnchanged(input, settings, checkedInput, checkedSettings)) {
+    return refused;
   }
   return outcome;
 }

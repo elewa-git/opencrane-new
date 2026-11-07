@@ -110,8 +110,10 @@ it('scans the SBOM from the signed and licence-clean image', async () => {
       valid: true, schemaVersion: '6.0.0', built }) });
     const sbomPath = args[0]!.slice(5);
     const sbomBytes = readFileSync(sbomPath);
-    const source = JSON.parse(sbomBytes.toString()).source;
-    const report = { matches: [], source: { type: 'image', target: source.metadata },
+    const sbomDocument = z.object({ source: z.object({ metadata: z.unknown() }) })
+      .parse(JSON.parse(sbomBytes.toString()));
+    const report = { matches: [],
+      source: { type: 'image', target: sbomDocument.source.metadata },
       descriptor: { name: 'grype', version: '0.121.0',
         db: { built, schemaVersion: '6.0.0' } } };
     return Promise.resolve({ stdout: JSON.stringify(report) });
