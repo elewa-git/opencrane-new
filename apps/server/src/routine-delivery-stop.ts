@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { foldRoutineHistory } from '@opencrane/authz';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import { affectedRoutineOccurrence } from './routine-bridge.ts';
+import type { EventStore } from '@opencrane/event-store';
 import { routineActivationSchema, routineStopSchema, type RoutineState } from '@opencrane/events';
 import { history, readRootStopEvidence } from '@opencrane/models';
 
@@ -20,7 +21,9 @@ export async function stopUnconfirmedRoutine(store: EventStore, silo: string,
         row.event.type === 'routine.run_activation_admitted') {
       activation = routineActivationSchema.parse(row.event.data);
     }
-    if (activation && matchesDeliveryStop(row, admission)) {
+    const affected = affectedRoutineOccurrence(row.event.type, row.event.data);
+    if (activation && affected === activation.occurrenceId) {
+      // Keep an existing checked prohibition when it cancels the delivery wait.
       await readRootStopEvidence(store, subject, row.sequence, deadline);
       return;
     }
@@ -48,13 +51,4 @@ export async function stopUnconfirmedRoutine(store: EventStore, silo: string,
   if (result.status !== 'appended') {
     throw new Error('Routine delivery Stop unavailable');
   }
-}
-
-function matchesDeliveryStop(row: StoredEvent, admission: Admission) {
-  if (row.event.type !== 'routine.run_stop_requested') {
-    return false;
-  }
-  const stop = routineStopSchema.parse(row.event.data);
-  return stop.source === 'delivery' && stop.cause?.eventId === admission.eventId
-    && stop.cause.position === admission.position;
 }

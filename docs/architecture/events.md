@@ -732,12 +732,12 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` / `routine.reassigned` | server for checked actor | routine facts | `update-openfga` applies creation, reassignment and retirement permissions and receipts; explicitly enabled internal cleanup applies verified owner Pause/Retire, admin safety pause or system owner-removal or assistant-deactivation pause evidence to the occupied run’s existing budget root; the connected bridge polls verified prohibitions to interrupt the accepted private turn; no execution |
+| `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` / `routine.reassigned` | server for checked actor | routine facts | `update-openfga` applies creation, reassignment and retirement permissions and receipts; the models process applies verified owner Pause/Retire, admin safety pause or system owner-removal or assistant-deactivation pause evidence to the occupied run’s existing budget root, then checks closure before finish; the connected bridge polls verified prohibitions to interrupt the accepted private turn; no execution |
 | `routine.due` | server system | frozen occurrence facts (pure fold only) | none; no input or root is started |
 | `routine.occurrence_skipped` / `routine.occurrences_missed` | server system | saved cursor/next facts | none |
 | `routine.run_activation_admitted` | internal server conditional command | saved exact admission and sender attempt | none; receipt only, execution remains disabled |
 | `routine.run_finished` | server system | saved run facts | none; records grant no authority |
-| `routine.run_stop_requested` | internal server command for the current owner, verified approval termination or unconfirmed delivery | saved Stop intent | none subscribed; explicitly enabled internal cleanup applies verified evidence to an existing budget root; the connected bridge polls verified intent to interrupt the accepted private turn; execution remains disabled |
+| `routine.run_stop_requested` | internal server command for the current owner, verified approval termination or unconfirmed delivery | saved Stop intent | none subscribed; the models process applies verified evidence to an existing budget root and checks saved native closure before calling finish; the connected bridge polls verified intent to interrupt the accepted private turn; execution remains disabled |
 | `delegation.started` / `delegation.completed` | server; legacy computer records are replay-only | delegations and computer-root read indexes | no effect reaction; shared native starts retain the admission’s `sharingClass`; native execution remains disabled |
 
 The activation command requires an existing checked allocation. Its `admission` reference

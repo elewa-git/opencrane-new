@@ -107,6 +107,12 @@ Members can review a completed child answer, a saved reply from a running turn o
 
 The server renews computer passes through authenticated Kubernetes management access as root. It sends the signing public key so the computer can verify the pass and save its identity. Desktop and Codex processes cannot replace passes through HTTP. [Computers](../computers/README.md) explains control intent, which blocks new work without granting control.
 
+Saved routine Stop cancels the exact turn's waiting start acknowledgement. A restarted
+bridge recovers accepted starts once when it connects, only to stop them. It never
+repeats their input or rereads the computer history for each finished chat.
+The models process releases the routine only after checked native closure and budget Stop.
+If the native turn completes before Stop reaches it, the routine still finishes as interrupted.
+
 ## Main files
 
 | File | What it does |
@@ -132,7 +138,7 @@ flowchart LR
   chat -->|selects and checks input| memory
   chat -->|memory definitions and one-use private input| computer[Assistant computer]
   computer -->|reports routine start and requests checked pass renewal| chat
-  chat -->|checks lease and deadline before routine credentials| computer
+  chat -->|checks lease, deadline and cancellation before routine credentials| computer
   computer -->|completed private reply| chat
   chat -->|private reply and clearance| reader[Authenticated reader]
   chat -->|checks access, spending and loaded references| models[Models]

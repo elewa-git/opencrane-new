@@ -114,13 +114,12 @@ function requireGeneration(summary: ComputerSummary, row: StoredEvent,
     throw new Error('Changed generation');
   }
 }
-function requireFailedClosure(closed: StoredEvent | undefined, input: Input,
+function requireNativeClosure(closed: StoredEvent | undefined, input: Input,
   summary: ComputerSummary, root: Root) {
   const thread = summary.threads.get(root.threadId);
   if (!closed || closed.event.id !== input.terminalEvidence.eventId ||
-      closed.sequence !== input.terminalEvidence.position || thread?.startedTurnIds.size !== 1 ||
-      computerTurnClosedDataSchema.parse(closed.event.data).status !== 'failed') {
-    throw new Error('Missing failed closure');
+      closed.sequence !== input.terminalEvidence.position || thread?.startedTurnIds.size !== 1) {
+    throw new Error('Missing closure');
   }
   const termination = computerTurnClosedDataSchema.parse(closed.event.data);
   if (termination.task !== 'chat_turn' || termination.nativeTermination !== 'turn_completed') {
@@ -160,7 +159,8 @@ function closure(rows: StoredEvent[], allocation: ReturnType<typeof stoppedAlloc
     }
     computerSummary.add(summary, row);
   }
-  requireFailedClosure(closed, input, summary, root);
+  // Keep the stopped run interrupted even if its native turn completed before Stop arrived.
+  requireNativeClosure(closed, input, summary, root);
 }
 async function load(store: EventStore, subject: string, silo: string, deadline: number) {
   const rows = await history(store, subject, silo, deadline);
@@ -245,7 +245,8 @@ function provenUnsaved(result: AppendResult) {
 
 /** Release only an ended, stopped run. Leave scheduling and money to their own commands. */
 export async function finishRoutine(store: EventStore, silo: string, raw: unknown,
-  options: { enabled?: boolean; replay?: boolean } = {}) {
+  options: { enabled?: boolean; replay?: boolean;
+    requireCurrent?: () => Promise<void> } = {}) {
   if (options.enabled !== true || options.replay === true) {
     return { status: 'disabled' as const };
   }
@@ -281,8 +282,12 @@ export async function finishRoutine(store: EventStore, silo: string, raw: unknow
     const writeDeadline = performance.now() + 2000;
     const checkExecution = executionCheck(store, silo, allocation.root,
       budgetRows, computerRows, writeDeadline);
+    async function checkCurrentExecution() {
+      await checkExecution();
+      await options.requireCurrent?.();
+    }
     const command = { event, expectedSequence: rows.at(-1)!.sequence,
-      deadline: writeDeadline, historyChecked: true as const, checkAccess: checkExecution };
+      deadline: writeDeadline, historyChecked: true as const, checkAccess: checkCurrentExecution };
     let result = await store.append(command);
     // Retry only a proven unsaved publication, keeping the original deadline and event identity.
     while (provenUnsaved(result) && performance.now() < writeDeadline) {

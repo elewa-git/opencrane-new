@@ -106,8 +106,8 @@ async function refused(request: unknown = input, silo = 'test') {
   expect(await nats.store.head()).toBe(before);
   expect((await folded()).activeRun).toEqual(run);
 }
-async function once() {
-  await evidence();
+async function once(status: 'failed' | 'completed') {
+  await evidence({ status });
   const before = await nats.store.head();
   const [first, second] = await Promise.all([finish(), finish()]);
   expect(second).toEqual(first);
@@ -126,7 +126,9 @@ async function once() {
   expect(state.status).toBe('active');
   expect(state.executionAvailable).toBe(false);
 }
-it('finishes once across concurrent calls, deduplication expiry and restart', once, 20_000);
+it.each(['failed', 'completed'] as const)(
+  'finishes a stopped %s turn once across concurrent calls, deduplication expiry and restart',
+  once, 20_000);
 async function lostReply() {
   await evidence();
   const before = await nats.store.head();
@@ -141,7 +143,7 @@ const wrongFields = [
   ['computerId', 'other'], ['threadId', 'other'], ['turnId', 'other'],
   ['conversationId', 'other'], ['rootId', 'other'], ['requesterId', 'bob'],
   ['payingGroupId', 'other'], ['assistantId', 'other'], ['messageId', 'other'],
-  ['status', 'completed'], ['sharingClass', 'shared_only'],
+  ['sharingClass', 'shared_only'],
 ] as const;
 async function wrongClosure(field: string, value: string) {
   await evidence({ [field]: value });
@@ -337,11 +339,12 @@ async function reusedAllocation() {
 }
 it('refuses an allocation saved before the occurrence', reusedAllocation);
 
-async function unconfirmedClosure() {
-  await evidence({ nativeTermination: undefined });
+async function unconfirmedClosure(status: 'failed' | 'completed') {
+  await evidence({ status, nativeTermination: undefined });
   await refused();
 }
-it('keeps the occurrence occupied when failure has no confirmed native termination',
+it.each(['failed', 'completed'] as const)(
+  'keeps the occurrence occupied when %s has no confirmed native termination',
   unconfirmedClosure);
 
 const neighbourRoot = { ...root, rootId: 'neighbour-root', conversationId: 'neighbour-chat',
@@ -468,3 +471,23 @@ async function relevantChangeDuringRetry(kind: 'thread reuse' | 'allocation' | '
 }
 it.each(['thread reuse', 'allocation', 'generation'] as const)(
   'rechecks relevant %s changes on a publication retry', relevantChangeDuringRetry);
+
+async function staleFinishWorker() {
+  await evidence();
+  let current = true;
+  function requireCurrent() {
+    if (!current) throw new Error('Worker unavailable');
+    return Promise.resolve();
+  }
+  const append = nats.store.append.bind(nats.store);
+  async function loseOwnership(command: AppendCommand) {
+    current = false;
+    return append(command);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementationOnce(loseOwnership);
+  const options = { enabled: true, requireCurrent };
+  await expect(finishRoutine(nats.store, 'test', input, options))
+    .rejects.toThrow(/^Routine finish refused$/u);
+  expect((await folded()).activeRun).toEqual(run);
+}
+it('refuses a worker that loses ownership immediately before finish publication', staleFinishWorker);

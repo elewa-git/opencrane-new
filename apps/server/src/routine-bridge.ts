@@ -12,7 +12,8 @@ type Turn = NonNullable<Awaited<ReturnType<typeof turnCommand>>>;
 type TrackedTurn = { turn: Turn; generation: number; ended: boolean; outputCleared: boolean;
   started: z.infer<typeof computerTurnStartedDataSchema> };
 type Root = z.infer<typeof budgetRootAllowanceSetDataSchema>;
-type Options = { store: EventStore; silo: string };
+type Options = { store: EventStore; silo: string;
+  cancelRoutineStart?: (turnId: string) => void };
 type Computer = { computerId: string; assistantId: string };
 const identityFields = ['rootId', 'conversationId', 'turnId', 'threadId',
   'requesterId', 'payingGroupId'] as const;
@@ -81,7 +82,7 @@ function matchesStartedTurn(root: Root, started: TrackedTurn['started']) {
   return started.computerId === root.computerId && started.assistantId === root.assistantId;
 }
 
-function affectedOccurrence(type: string, value: unknown) {
+export function affectedRoutineOccurrence(type: string, value: unknown) {
   if (type === 'routine.run_stop_requested') {
     return routineStopSchema.parse(value).occurrenceId;
   }
@@ -112,10 +113,11 @@ export function routineStartRefusal(report: { type: string; senderAttemptId?: st
   throw error;
 }
 
-// Track only starts accepted on this socket. Reading saved history never starts work.
+// Recover accepted starts only for cancellation. Reading saved history never starts work.
 export function routineBridge(options: Options, computer: Computer, socket: WebSocket) {
   const turns = new Map<string, TrackedTurn>();
   const checking = new Map<string, Promise<void>>();
+  let recovery: Promise<void> | undefined;
   function clear() {
     turns.clear();
   }
@@ -181,6 +183,7 @@ export function routineBridge(options: Options, computer: Computer, socket: WebS
     if (turns.get(turn.turnId) !== tracked || socket.readyState !== WebSocket.OPEN) {
       return;
     }
+    options.cancelRoutineStart?.(turn.turnId);
     const frame = { type: 'stop', conversationId: turn.conversationId,
       turnId: turn.turnId, threadId: turn.threadId };
     socket.send(JSON.stringify(frame));
@@ -226,7 +229,7 @@ export function routineBridge(options: Options, computer: Computer, socket: WebS
     const subject = `routine-${preparation.routineId}`;
     const deadline = performance.now() + 10_000;
     for await (const row of options.store.readStream(subject, preparation.claimPosition, deadline)) {
-      const occurrenceId = affectedOccurrence(row.event.type, row.event.data);
+      const occurrenceId = affectedRoutineOccurrence(row.event.type, row.event.data);
       if (occurrenceId !== preparation.occurrenceId) {
         continue;
       }
@@ -234,8 +237,51 @@ export function routineBridge(options: Options, computer: Computer, socket: WebS
       return;
     }
   }
+  async function restoreStarts() {
+    function take(summary: ComputerSummary) {
+      const recovered: TrackedTurn[] = [];
+      for (const saved of summary.turns.values()) {
+        const row = saved.firstStart;
+        if (!row || row.event.source !== 'opencrane-server' ||
+            row.event.principal?.id !== 'turn-lifecycle') {
+          continue;
+        }
+        const started = computerTurnStartedDataSchema.parse(row.event.data);
+        if (started.task !== 'chat_turn' || !started.rootId || started.executionMode !== 'restricted' ||
+            turns.has(started.turnId)) {
+          continue;
+        }
+        const accepted = acceptedStart(summary, started.turnId);
+        if (accepted) {
+          const turn: Turn = { ...started, executionMode: started.executionMode };
+          const tracked = { turn, ...accepted, ended: false, outputCleared: false };
+          recovered.push(tracked);
+        }
+      }
+      return recovered;
+    }
+    const recovered = await readStreamSummary(options.store, options.silo,
+      `computer-${computer.assistantId}`, computerSummary, performance.now() + 10_000, take);
+    if (socket.readyState === WebSocket.OPEN) {
+      for (const tracked of recovered) {
+        turns.set(tracked.turn.turnId, tracked);
+      }
+    }
+  }
+  function recover() {
+    if (!recovery) {
+      function retry(error: unknown): never {
+        recovery = undefined;
+        throw error;
+      }
+      // Share startup recovery across chats. Later starts enter through accept.
+      recovery = restoreStarts().catch(retry);
+    }
+    return recovery;
+  }
   async function check(conversationId: string) {
     try {
+      await recover();
       for (const tracked of turns.values()) {
         if (tracked.turn.conversationId === conversationId) {
           await deliver(tracked);
@@ -257,5 +303,5 @@ export function routineBridge(options: Options, computer: Computer, socket: WebS
     checking.set(conversationId, work);
     return work;
   }
-  return { accept, ended, receive, poll };
+  return { accept, ended, receive, poll, recover };
 }

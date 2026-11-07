@@ -8,7 +8,8 @@ type ResumeOptions = Pick<ChatOptions, 'silo' | 'store'>;
 type ResumeInput = { computerId: string; assistantId: string };
 
 export async function resumeBridgeReports(options: ResumeOptions, input: ResumeInput,
-  socket: WebSocket, control: ReturnType<typeof bridgeControl>) {
+  socket: WebSocket, control: ReturnType<typeof bridgeControl>,
+  recoverRoutines: () => Promise<void>) {
   function pollControl() {
     void control.send();
   }
@@ -21,6 +22,7 @@ export async function resumeBridgeReports(options: ResumeOptions, input: ResumeI
   try {
     await control.send();
     await recoverBudgetRefusals(options.store, options.silo, input.assistantId);
+    await recoverRoutines();
     const position = await reportPosition(options.store, options.silo, input.computerId);
     await control.send();
     const resume = { type: 'resume', since: position, approvalWaiting: true };

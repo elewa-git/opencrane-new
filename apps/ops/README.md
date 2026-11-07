@@ -60,6 +60,8 @@ If cancellation arrives while a read waits, the old holder cannot save a new cla
 The callback must stop and await its work before returning. Only then does the helper
 release the session. Captured ownership checks stay refused after release.
 The routine worker still only updates read tables; automatic scheduling is not connected.
+The models process in `apps/server` handles saved routine Stop and checked completion.
+Rebuilding these read tables never stops or finishes work.
 
 An internal scanner reads up to fifty routine references at a time. It checks their
 saved history and reports counts without starting work. Missing local times and

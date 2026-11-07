@@ -148,3 +148,24 @@ The sender saves `routine.run_stop_requested` with source `delivery`, reason
 occupied; this is not termination evidence. Completion is local hand-off evidence, not a run result or
 proof of remote receipt. Automatic execution stays off. No memory path changes.
 See [the contract and own checks](../../../../docs/process/p4-24-pr10h/README.robot.md).
+
+## Routine Stop and finish
+
+The saved prohibition poll cancels the exact turn's pending start wait before sending
+Stop. A handler held after credential preparation therefore returns only refusal when
+resumed. Unconfirmed-delivery recovery reuses that verified prohibition instead of
+saving another Stop source. Recovery reads accepted open starts once per connection from
+the computer summary; it grants no execution permission. Allocation, occurrence,
+private thread and generation checks
+still apply. Concurrent chat polls share the startup read, and later starts enter through
+normal admission. Startup recovery runs while the existing computer Stop timer is active.
+Finished chats do not trigger another computer-history read. Ordinary conversation history
+remains outside short access checks.
+
+The models process uses its existing budget actor to apply saved Stop and then call
+checked finish. The [server contract](../../README.robot.md#saved-routine-stop-recovery)
+describes recovery. This does not register production routine delivery.
+
+Normal completion retains the computer's checked native termination marker on the
+server closure. A saved routine Stop can therefore finish as interrupted even when
+the computer completed before receiving cancellation. The first closure remains final.

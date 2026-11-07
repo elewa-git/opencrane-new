@@ -960,7 +960,7 @@ class TurnRunner {
     return { type: 'artifact_chunk', id, offset, chunk: bytes.toString('base64') };
   }
 
-  private async finishArtifacts(input: Turn) {
+  private async finishArtifacts(input: Turn, nativeTermination: 'turn_completed' | undefined) {
     try {
       const before = this.artifactStarts.get(input.id);
       let artifacts: NonNullable<BridgeReport['artifacts']> = [];
@@ -968,7 +968,11 @@ class TurnRunner {
         artifacts = await this.driver.artifactList(before);
       }
       if (!this.isActiveTurn(input.id) || this.state.cancelled.has(input.id)) return;
-      this.appendReport(input, 'agent.turn_completed', { artifacts });
+      const completion: Partial<BridgeReport> = { artifacts };
+      if (nativeTermination) {
+        completion.nativeTermination = nativeTermination;
+      }
+      this.appendReport(input, 'agent.turn_completed', completion);
       this.releaseTurn(input.id);
     } catch {
       this.failTurn(input);
@@ -980,6 +984,11 @@ class TurnRunner {
   private completeTurn(input: Turn, _threadId: string, params: Record<string, unknown>) {
     const turn = record(params['turn']);
     if (!this.confirmedTerminal(input, turn)) return;
+    // Retain matched native evidence even when completion arrives before Stop.
+    const expected = this.state.codexTurns.get(input.id);
+    const terminalStatus = ['completed', 'interrupted', 'failed'].includes(String(turn['status']));
+    const nativeTermination = expected && turn['id'] === expected && terminalStatus
+      ? 'turn_completed' : undefined;
     if (this.stoppedTurns.has(input.id) || this.state.refusedTools.has(input.id)
       || turn['status'] !== 'completed') {
       let reason: 'model_error' | 'stop_interrupted' = 'model_error';
@@ -987,22 +996,21 @@ class TurnRunner {
       if (turn['status'] === 'interrupted' && this.state.cancelled.has(input.id)) {
         reason = 'stop_interrupted';
       }
-      // Distinguish a matching native reply from transport failure or requested cancellation.
-      const expected = this.state.codexTurns.get(input.id);
-      const terminalStatus = ['completed', 'interrupted', 'failed'].includes(String(turn['status']));
-      const nativeTermination = expected && turn['id'] === expected && terminalStatus
-        ? 'turn_completed' : undefined;
       this.failTurn(input, reason, nativeTermination);
       return;
     }
     if (!this.artifactStarts.has(input.id)) {
-      this.appendReport(input, 'agent.turn_completed');
+      const completion: Partial<BridgeReport> = {};
+      if (nativeTermination) {
+        completion.nativeTermination = nativeTermination;
+      }
+      this.appendReport(input, 'agent.turn_completed', completion);
       this.releaseTurn(input.id);
       return;
     }
     if (this.finishing.has(input.id)) return;
     this.finishing.add(input.id);
-    void this.gate.track(this.finishArtifacts(input));
+    void this.gate.track(this.finishArtifacts(input, nativeTermination));
   }
 }
 
