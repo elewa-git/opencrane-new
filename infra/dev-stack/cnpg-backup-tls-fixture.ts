@@ -59,16 +59,9 @@ commonName = supplied
 
 export async function peer(directory: string, name = 'matching', onHello?: () => void) {
   const sockets = new Set<net.Socket>();
-  const received: Buffer[] = [];
   const storage = storageFixture();
-  function data(bytes: Buffer) {
-    received.push(bytes);
-  }
   function connected(socket: net.Socket) {
     sockets.add(socket);
-  }
-  function secure(socket: tls.TLSSocket) {
-    socket.on('data', data);
   }
   function hello(_name: string, callback: (error: null, context: tls.SecureContext) => void) {
     onHello?.();
@@ -92,7 +85,6 @@ export async function peer(directory: string, name = 'matching', onHello?: () =>
     const options = { cert, key, SNICallback: hello };
     context = tls.createSecureContext(options);
     server = https.createServer(options, storage.serve);
-    server.on('secureConnection', secure);
   }
   server.on('connection', connected);
   function listen(resolve: () => void) {
@@ -109,5 +101,5 @@ export async function peer(directory: string, name = 'matching', onHello?: () =>
     }
     await new Promise<void>(closed);
   }
-  return { port, close, received, storage };
+  return { port, close, storage };
 }

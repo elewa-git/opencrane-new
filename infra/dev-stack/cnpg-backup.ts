@@ -1,10 +1,14 @@
-import { X509Certificate } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, X509Certificate } from 'node:crypto';
+import https from 'node:https';
+import type { ClientRequest, IncomingMessage } from 'node:http';
+import { Client } from 'minio';
 import { isIP } from 'node:net';
 import tls from 'node:tls';
 import { commandTimeout } from './command-limits.ts';
 
 type Reference = { name: string; key: string };
 type Backup = {
+  destinationPath: string;
   endpointURL: string;
   endpointCA: Reference;
   s3Credentials: { accessKeyId: Reference; secretAccessKey: Reference };
@@ -169,9 +173,117 @@ function checkEndpoint(hostname: string, port: number, ca: string,
   return new Promise<void>(handshake);
 }
 
+function destination(value: string) {
+  requireValid(typeof value === 'string' && value.length <= 900);
+  const match = /^s3:\/\/([a-z0-9][a-z0-9-]{1,61}[a-z0-9])((?:\/[a-zA-Z0-9_-]+)*)\/?$/u
+    .exec(value);
+  requireValid(match);
+  const prefix = match[2]!.slice(1);
+  const markerName = `ocn-check-${randomUUID()}`;
+  let objectName = markerName;
+  if (prefix) {
+    objectName = `${prefix}/${markerName}`;
+  }
+  return { bucketName: match[1]!, objectName };
+}
+
+function storageTransport(signal: AbortSignal, deadline: number) {
+  const limits = { signal, deadline };
+  function request(options: string | URL | https.RequestOptions,
+    callback?: (response: IncomingMessage) => void): ClientRequest;
+  function request(url: string | URL, options: https.RequestOptions,
+    callback?: (response: IncomingMessage) => void): ClientRequest;
+  function request(options: string | URL | https.RequestOptions,
+    callback?: https.RequestOptions | ((response: IncomingMessage) => void)) {
+    commandTimeout(30_000, limits);
+    requireValid(typeof options === 'object' && !(options instanceof URL));
+    requireValid(typeof callback === 'function');
+    const checked = { ...options, signal, maxHeaderSize: 8192 };
+    const pending = https.request(checked, callback);
+    return pending;
+  }
+  return { request };
+}
+
+async function markerResponse(response: IncomingMessage, method: string,
+  signal: AbortSignal, deadline: number) {
+  const limits = { signal, deadline };
+  try {
+    commandTimeout(30_000, limits);
+    const expectedStatus = method === 'DELETE' ? 204 : 200;
+    requireValid(response.statusCode === expectedStatus);
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of response) {
+      commandTimeout(30_000, limits);
+      const bytes = Buffer.from(chunk);
+      size += bytes.length;
+      requireValid(size <= 128);
+      chunks.push(bytes);
+    }
+    commandTimeout(30_000, limits);
+    const versionId = response.headers['x-amz-version-id'];
+    return { bytes: Buffer.concat(chunks), etag: response.headers.etag, versionId };
+  } finally {
+    response.destroy();
+  }
+}
+
+async function checkStorage(target: ReturnType<typeof destination>,
+  address: ReturnType<typeof serviceAddress>, ca: string, accessKey: string, secretKey: string,
+  signal: AbortSignal, deadline: number) {
+  const limits = { signal, deadline };
+  const agentOptions = { ca, rejectUnauthorized: true, keepAlive: false, maxCachedSessions: 0 };
+  const agent = new https.Agent(agentOptions);
+  const clientOptions = { endPoint: address.hostname, port: address.port,
+    useSSL: true, accessKey, secretKey, region: 'us-east-1', pathStyle: true,
+    transportAgent: agent, transport: storageTransport(signal, deadline),
+    retryOptions: { disableRetry: true } };
+  const client = new Client(clientOptions);
+  // Handle status codes here so the client never parses private error bodies.
+  const statuses: number[] = [];
+  for (let status = 100; status < 1000; status++) {
+    statuses.push(status);
+  }
+  let query = '';
+  async function exchange(method: string, headers: Record<string, string>, payload = '') {
+    commandTimeout(30_000, limits);
+    const options = { ...target, method, headers, query };
+    const response = await client.makeRequestAsync(options, payload, statuses, 'us-east-1');
+    return markerResponse(response, method, signal, deadline);
+  }
+  const random = randomBytes(32);
+  const marker = random.toString('hex');
+  const hash = createHash('md5');
+  hash.update(marker);
+  const digest = hash.digest('hex');
+  const match = { 'if-match': `"${digest}"` };
+  try {
+    // Require atomic creation and deletion. Never overwrite or remove another writer's object.
+    const absent = { 'if-none-match': '*' };
+    const created = await exchange('PUT', absent, marker);
+    if (created.versionId !== undefined) {
+      requireValid(typeof created.versionId === 'string' && created.versionId.length > 0);
+      query = `versionId=${encodeURIComponent(created.versionId)}`;
+    }
+    try {
+      requireValid(created.etag === match['if-match'] && created.bytes.length === 0);
+      const stored = await exchange('GET', match);
+      requireValid(stored.versionId === created.versionId);
+      requireValid(stored.etag === match['if-match'] && stored.bytes.equals(Buffer.from(marker)));
+    } finally {
+      const removed = await exchange('DELETE', match);
+      requireValid(removed.bytes.length === 0);
+    }
+  } finally {
+    agent.destroy();
+  }
+}
+
 async function check(backup: Backup, namespace: string, kubectl: Kubectl,
   signal: AbortSignal, deadline: number) {
   const address = serviceAddress(backup.endpointURL, namespace);
+  const target = destination(backup.destinationPath);
   const ca = reference(backup.endpointCA);
   const access = reference(backup.s3Credentials.accessKeyId);
   const secret = reference(backup.s3Credentials.secretAccessKey);
@@ -199,7 +311,9 @@ async function check(backup: Backup, namespace: string, kubectl: Kubectl,
     requireValid(/^[\x21-\x7e]+$/u.test(entry(secrets.get(ref.name)!, ref.key)));
   }
   await checkEndpoint(address.hostname, address.port, caCertificate, signal, deadline);
-  // Recheck ownership and CA identity after waiting for the TLS handshake.
+  await checkStorage(target, address, caCertificate, entry(secrets.get(access.name)!, access.key),
+    entry(secrets.get(secret.name)!, secret.key), signal, deadline);
+  // Recheck ownership and all reference identities after the storage requests finish.
   for (const original of found) {
     const current = await read(kubectl, namespace, original.kind, original.metadata.name,
       signal, deadline);

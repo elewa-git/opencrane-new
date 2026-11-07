@@ -3,14 +3,19 @@ import { createHash, createHmac } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 function hash(value: string | Buffer) {
-  return createHash('sha256').update(value).digest('hex');
+  const hash = createHash('sha256');
+  hash.update(value);
+  return hash.digest('hex');
 }
 function hmac(key: string | Buffer, value: string) {
-  return createHmac('sha256', key).update(value).digest();
+  const hash = createHmac('sha256', key);
+  hash.update(value);
+  return hash.digest();
 }
 function authenticated(request: IncomingMessage) {
   const authorization = request.headers.authorization ?? '';
-  const match = /^AWS4-HMAC-SHA256 Credential=fixture-access\/([^,]+), SignedHeaders=([^,]+), Signature=(.+)$/u.exec(authorization);
+  const pattern = /^AWS4-HMAC-SHA256 Credential=fixture-access\/([^,]+), SignedHeaders=([^,]+), Signature=(.+)$/u;
+  const match = pattern.exec(authorization);
   if (!match) {
     return false;
   }
@@ -20,7 +25,8 @@ function authenticated(request: IncomingMessage) {
   for (const name of names) {
     headers += `${name}:${request.headers[name]}\n`;
   }
-  const canonical = [request.method, request.url, '', headers, signed,
+  const url = new URL(request.url!, 'https://fixture.invalid');
+  const canonical = [request.method, url.pathname, url.search.slice(1), headers, signed,
     request.headers['x-amz-content-sha256']].join('\n');
   const message = ['AWS4-HMAC-SHA256', request.headers['x-amz-date'], scope,
     hash(canonical)].join('\n');
@@ -28,25 +34,36 @@ function authenticated(request: IncomingMessage) {
   for (const part of scope.split('/')) {
     key = hmac(key, part);
   }
-  return hmac(key, message).toString('hex') === signature;
+  const calculated = hmac(key, message);
+  return calculated.toString('hex') === signature;
 }
 
 export function storageFixture() {
   const objects = new Map<string, Buffer>();
   const requests: string[] = [];
-  const state = { fault: '', onRequest: (_method: string) => {} };
+  function onRequest(_method: string) {}
+  const state = { fault: '', onRequest };
   function etag(bytes: Buffer) {
-    return `"${createHash('md5').update(bytes).digest('hex')}"`;
+    const hash = createHash('md5');
+    hash.update(bytes);
+    return `"${hash.digest('hex')}"`;
   }
   async function handle(request: IncomingMessage, response: ServerResponse) {
     const method = request.method!;
-    const path = request.url!;
+    const url = new URL(request.url!, 'https://fixture.invalid');
+    const path = url.pathname;
     requests.push(method);
     state.onRequest(method);
     const allowed = /^\/database-backups\/local-check\/[^/]{1,100}$/u.test(path);
-    if (!allowed || !authenticated(request) || state.fault === `deny ${method}`) {
-      response.writeHead(403);
+    const denied = state.fault === `deny ${method}` || state.fault === 'server error';
+    if (!allowed || !authenticated(request) || denied) {
+      response.writeHead(state.fault === 'server error' ? 500 : 403);
       response.end('<Error><Message>private-value-/private/path</Message></Error>');
+      return;
+    }
+    if (state.fault === `body stall ${method}`) {
+      response.writeHead(200);
+      response.write('x');
       return;
     }
     if (state.fault === `stall ${method}`) {
@@ -68,6 +85,9 @@ export function storageFixture() {
       } else {
         objects.set(path, bytes);
         response.setHeader('etag', etag(bytes));
+        if (state.fault === 'versioned') {
+          response.setHeader('x-amz-version-id', 'fixture+/=version');
+        }
       }
       response.end();
       return;
@@ -86,11 +106,22 @@ export function storageFixture() {
     }
     if (method === 'GET') {
       response.setHeader('etag', etag(bytes));
-      response.end(bytes);
+      if (state.fault === 'versioned') {
+        response.setHeader('x-amz-version-id', 'fixture+/=version');
+      }
+      if (state.fault === 'bad body') {
+        response.end('private-value-/private/path');
+      } else if (state.fault === 'large body') {
+        response.end('x'.repeat(4096));
+      } else {
+        response.end(bytes);
+      }
       return;
     }
     assert.equal(method, 'DELETE');
-    objects.delete(path);
+    if (state.fault !== 'versioned' || url.search === '?versionId=fixture%2B%2F%3Dversion') {
+      objects.delete(path);
+    }
     response.writeHead(204);
     response.end();
   }

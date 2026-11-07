@@ -437,8 +437,12 @@ for (const stage of ['before reads', 'before connection', 'during handshake', 'a
       const options = { signal: controller.signal };
       await refused(checkCnpgBackupReferences(input.backup, namespace, read, options));
       let expected = 0;
-      if (stage === 'during handshake') expected = 1;
-      if (stage === 'after handshake') expected = 4;
+      if (stage === 'during handshake') {
+        expected = 1;
+      }
+      if (stage === 'after handshake') {
+        expected = 4;
+      }
       assert.equal(attempts.length - before, expected);
       const expectedReads = { 'before reads': 0, 'before connection': 4,
         'during handshake': 4, 'after handshake': 5 };
@@ -474,8 +478,12 @@ for (const stage of ['initial read', 'before connection', 'after handshake', 'fi
     try {
       await refused(checkCnpgBackupReferences(input.backup, namespace, read));
       let expected = 0;
-      if (stage === 'after handshake') expected = 1;
-      if (stage === 'final read') expected = 4;
+      if (stage === 'after handshake') {
+        expected = 1;
+      }
+      if (stage === 'final read') {
+        expected = 4;
+      }
       assert.equal(attempts.length - before, expected);
       if (expected) assert.equal(attempts.at(-1)!.destroyed, true);
       const expectedReads = { 'initial read': 1, 'before connection': 4,
@@ -551,3 +559,189 @@ async function privateNetworkFailure(context: import('node:test').TestContext) {
   assert.equal(input.reads.length, 4);
 }
 test('TLS discards nested network diagnostics and CA data', privateNetworkFailure);
+
+for (const fault of ['wrong bucket', 'wrong prefix', 'wrong access', 'wrong secret',
+  'deny PUT', 'deny GET', 'deny DELETE', 'missing', 'collision', 'changed',
+  'changed before delete', 'bad body', 'large body', 'server error']) {
+  async function refusesStorage(context: import('node:test').TestContext) {
+    let outputCalls = 0;
+    function output() {
+      outputCalls++;
+    }
+    for (const method of ['log', 'warn', 'error'] as const) {
+      context.mock.method(console, method, output);
+    }
+    const input = fixture();
+    const listener = await peer(directory);
+    atPeer(input, listener.port);
+    const storage = listener.storage;
+    storage.state.fault = fault;
+    storage.objects.set('/database-backups/local-check/existing', Buffer.from('untouched'));
+    if (fault === 'wrong bucket') {
+      input.backup.destinationPath = 's3://foreign-backups/local-check';
+    }
+    if (fault === 'wrong prefix') {
+      input.backup.destinationPath = 's3://database-backups/foreign';
+    }
+    if (fault === 'wrong access' || fault === 'wrong secret') {
+      const key = fault === 'wrong access' ? 'ACCESS_KEY_ID' : 'ACCESS_SECRET_KEY';
+      input.objects['backup-identity'].data[key] = encoded('foreign-identity');
+    }
+    try {
+      await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+      assert.equal(input.reads.length, 4);
+      assert.equal(outputCalls, 0);
+      assert.equal(storage.objects.get('/database-backups/local-check/existing')!.toString(),
+        'untouched');
+      storage.objects.delete('/database-backups/local-check/existing');
+      const retained = ['deny DELETE', 'collision', 'changed', 'changed before delete'];
+      assert.equal(storage.objects.size, Number(retained.includes(fault)));
+      if (fault === 'collision' || fault.startsWith('changed')) {
+        assert.equal([...storage.objects.values()][0]!.toString(), 'foreign');
+      }
+      if (fault === 'deny GET' || fault.endsWith('body')) {
+        assert.deepEqual(storage.requests, ['PUT', 'GET', 'DELETE']);
+      }
+    } finally {
+      storage.objects.clear();
+      await listener.close();
+    }
+  }
+  test(`storage refuses ${fault} and preserves unrelated objects`, refusesStorage);
+}
+
+for (const method of ['PUT', 'GET', 'DELETE']) {
+  for (const failure of ['stall', 'body stall', 'cancel', 'late']) {
+    if (failure === 'body stall' && method === 'DELETE') {
+      continue;
+    }
+    async function stopsStorage(context: import('node:test').TestContext) {
+      const input = fixture();
+      const listener = await peer(directory);
+      atPeer(input, listener.port);
+      const storage = listener.storage;
+      const controller = new AbortController();
+      let now = Date.now();
+      function clock() {
+        return now;
+      }
+      function interrupt(current: string) {
+        if (current !== method) {
+          return;
+        }
+        if (failure === 'cancel') {
+          controller.abort(new Error(privateValue));
+        }
+        if (failure === 'late') {
+          now += 30_001;
+        }
+      }
+      storage.state.onRequest = interrupt;
+      if (failure === 'late') {
+        context.mock.method(Date, 'now', clock);
+      }
+      if (failure === 'stall' || failure === 'body stall') {
+        storage.state.fault = `${failure} ${method}`;
+      }
+      const started = performance.now();
+      try {
+        const options = { signal: controller.signal, timeoutMs: 200 };
+        await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl, options));
+        assert(performance.now() - started < 1000);
+        const expected = ['PUT', 'GET', 'DELETE'];
+        assert.deepEqual(storage.requests, expected.slice(0, expected.indexOf(method) + 1));
+        assert.equal(input.reads.length, 4);
+        assert.equal(attempts.at(-1)!.destroyed, true);
+      } finally {
+        await listener.close();
+        storage.objects.clear();
+      }
+    }
+    test(`storage ${failure} at ${method} stops later operations`, stopsStorage);
+  }
+}
+
+for (const destination of ['s3://user:private@database-backups/local-check',
+  'https://database-backups/local-check', 's3://database-backups/../foreign',
+  's3://database-backups/local-check?private=value', 's3://database-backups/%2fprivate',
+  's3://database-backups/' + 'x'.repeat(1000)]) {
+  async function refusesDestination() {
+    const input = fixture();
+    input.backup.destinationPath = destination;
+    const before = matching.storage.requests.length;
+    await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+    assert.equal(matching.storage.requests.length, before);
+  }
+  test(`storage refuses an invalid destination of length ${destination.length}`, refusesDestination);
+}
+
+for (const name of ['backup-store', 'backup-trust', 'backup-identity']) {
+  for (const field of ['uid', 'resourceVersion']) {
+    async function replacesAfterProbe() {
+      const input = fixture();
+      const listener = await peer(directory);
+      atPeer(input, listener.port);
+      function replace(method: string) {
+        if (method === 'DELETE') {
+          input.objects[name].metadata[field] = 'replaced';
+        }
+      }
+      listener.storage.state.onRequest = replace;
+      try {
+        await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+        assert.deepEqual(listener.storage.requests, ['PUT', 'GET', 'DELETE']);
+        assert.equal(listener.storage.objects.size, 0);
+        assert(input.reads.length > 4);
+      } finally {
+        await listener.close();
+      }
+    }
+    test(`storage rechecks ${name} ${field} after removing its marker`, replacesAfterProbe);
+  }
+}
+
+for (const field of ['endpointURL', 'destinationPath']) {
+  async function usesCheckedDestination() {
+    const input = fixture();
+    const listener = await peer(directory);
+    const alternate = await peer(directory);
+    atPeer(input, listener.port);
+    async function change(args: string[]) {
+      const output = await input.kubectl(args);
+      if (input.reads.length === 4) {
+        if (field === 'endpointURL') {
+          input.backup.endpointURL = `https://${backupHostname}:${alternate.port}`;
+        } else {
+          input.backup.destinationPath = 's3://database-backups/foreign';
+        }
+      }
+      return output;
+    }
+    try {
+      await checkCnpgBackupReferences(input.backup, namespace, change);
+      assert.deepEqual(listener.storage.requests, ['PUT', 'GET', 'DELETE']);
+      assert.deepEqual(alternate.storage.requests, []);
+      assert.equal(listener.storage.objects.size, 0);
+    } finally {
+      await listener.close();
+      await alternate.close();
+    }
+  }
+  test(`storage keeps the checked ${field} when caller input changes`, usesCheckedDestination);
+}
+
+async function removesStoredVersion() {
+  const input = fixture();
+  const listener = await peer(directory);
+  atPeer(input, listener.port);
+  listener.storage.state.fault = 'versioned';
+  try {
+    await checkCnpgBackupReferences(input.backup, namespace, input.kubectl);
+    assert.deepEqual(listener.storage.requests, ['PUT', 'GET', 'DELETE']);
+    assert.equal(listener.storage.objects.size, 0);
+  } finally {
+    listener.storage.objects.clear();
+    await listener.close();
+  }
+}
+test('storage removes its exact stored version without leaving its bytes', removesStoredVersion);

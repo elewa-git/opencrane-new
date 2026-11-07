@@ -1,0 +1,1 @@
+- Check backup storage access by creating, reading and conditionally removing one temporary marker with the referenced identity. Backup and recovery installation remain blocked pending live qualification.

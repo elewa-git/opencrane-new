@@ -2168,7 +2168,7 @@ so the private kubeconfig filename remains outside child command arguments.
 
 ## Backup reference checks behind the install gate
 
-Part of #15, P5-3 PR 3c/3d. `cnpg-backup.ts` extends the existing CNPG checker.
+Part of #15, P5-3 PR 3c/3d/3e. `cnpg-backup.ts` extends the existing CNPG checker.
 `preflight.mjs` still refuses every backup and recovery property before Helm,
 including disabled and null settings. The helper does not enable installation.
 Suspending ScheduledBackup does not stop WAL archiving.
@@ -2182,8 +2182,9 @@ one owner reference to that Service, including its UID. Labels alone do not pass
 These are required fixture ownership links; this change creates no fixture resources.
 
 The returned kind, API version, name, namespace, UID and resource version must match
-or be present as appropriate. Each object is read again after the TLS handshake;
-changed UIDs or versions refuse. Reads and TLS share one 30-second deadline and cancellation.
+or be present as appropriate. Each object is read again after the storage check;
+changed UIDs or versions refuse. Reads, TLS and storage share one 30-second deadline
+and cancellation.
 Reads have a 1 MiB output limit. The package passes the same cancellation signal and remaining
 time through namespace ownership and target checks, including Docker inspection and
 target-node reads. Each child command stops on cancellation or its remaining deadline.
@@ -2193,11 +2194,27 @@ without spaces.
 The CA entry must contain one current, self-signed CA certificate with no extra data.
 Node TLS connects to the exact checked Service hostname and port. It sends that
 hostname as SNI and uses normal CA, hostname and certificate date verification.
-Only the referenced CA is trusted. The helper sends no application data or credentials.
+Only the referenced CA is trusted. The initial handshake sends no application data.
 It destroys the socket on success, failure, cancellation or timeout. It checks the
 absolute deadline before and after waits, even if the timeout callback has not run.
 Caller options accept only cancellation and a shorter timeout; supplied success,
 alternate endpoints and disabled verification refuse.
+The storage check uses the installed MinIO client and the same CA and checked Service
+address. It snapshots the bucket and prefix from `destinationPath` before waiting.
+It accepts the chart's plain S3 path syntax, bounded to 900 characters. It sends
+signed requests with the referenced identity, using the local fixture's `us-east-1`
+region. It makes no bucket listing, location lookup, redirect or retry.
+A random UUID names one marker containing 64 random hexadecimal characters.
+`If-None-Match: *` prevents overwriting an existing object. GET and DELETE use
+`If-Match` with the marker's expected ETag, the quoted MD5 of those random bytes.
+The returned bytes must match exactly. If PUT returns a version id, GET and DELETE
+name that exact version; GET must confirm it. Cleanup uses only that object name,
+ETag and optional version. It never hides stored bytes behind a deletion marker.
+Denied or uncertain cleanup refuses. Cancellation and deadline expiry stop all later
+requests, including cleanup. An interrupted PUT or refused DELETE can leave a marker;
+this is a refused check, never a permission success or a backup.
+Responses allow at most 128 body bytes and 8 KiB of headers. Error bodies are not
+parsed. The HTTPS agent closes all its connections when the check ends.
 All Secret data stays in memory. The helper writes no private files. Errors discard
 parser details, cancellation reasons and nested dependency or cleanup failures.
 
@@ -2214,11 +2231,14 @@ The backup callback also carries the original absolute deadline. A delayed callb
 must not turn an earlier remaining duration into extra time for ownership checks.
 The chart tests delay dispatch and apply the same remaining-time assertion to every child.
 `cnpg-install.test.mjs` still checks refusal before Helm with synthetic image approval.
-Live checks are NOT RUN. Storage permissions and identity, image/helper approval,
-standby, real base backup/WAL and recovery of `projections`, `handlers` and `openfga`
-remain required before enablement. Local TLS proof does not show that storage accepts
-the credentials or that a backup can be restored.
-See the [TLS check receipt](../../docs/process/p5-3-pr3d/receipt.md).
+`cnpg-backup-s3-fixture.ts` checks signed requests over local HTTPS. It covers scoped
+access, altered markers, denied operations, bounded replies, cancellation, late
+results and replacement of references after the probe. Each test closes its local
+listener and removes its remaining synthetic objects.
+Live checks are NOT RUN. Image/helper approval, real scheduled base backup/WAL,
+three-database restore and standby promotion remain required before enablement.
+P5-3 remains PARTIAL. Local permission tests cannot qualify a backup or recovery.
+See the [storage check receipt](../../docs/process/p5-3-pr3e/receipt.md).
 
 ## Checked local memory collection
 
