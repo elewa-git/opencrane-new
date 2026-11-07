@@ -72,7 +72,7 @@ function removeIndent(line) {
 function buildStep() {
   const workflow = readFileSync(join(repositoryRoot, '.github/workflows/ci.yml'), 'utf8');
   const match = workflow.match(
-    /- name: Build the upload test computer\n\s+run: \|\n([\s\S]*?)(?=\n\s+- name:)/u,
+    /- name: Build the upload test computer\n\s+timeout-minutes: 30\n\s+run: \|\n([\s\S]*?)(?=\n\s+- name:)/u,
   );
   assert.ok(match, 'CI build step is present');
   const lines = match[1].split('\n');
