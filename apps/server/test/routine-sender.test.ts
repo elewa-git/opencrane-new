@@ -19,6 +19,7 @@ import { pauseRoutineAsAdmin } from '../src/routine-admin-pause.ts';
 import { pauseRoutine } from '../src/routine-pause.ts';
 import { retireRoutine } from '../src/routine-retire.ts';
 import { finishRoutine } from '../src/routine-finish.ts';
+import { applyRoutineStop } from '../src/routine-stop-budget.ts';
 import { requestRoutineStop } from '../src/routine-stop.ts';
 import { createRoutineSender } from '../src/routine-sender.ts';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
@@ -1475,3 +1476,36 @@ async function refusesAfterCredentialPreparation(kind: string) {
 it.each(['ownership', 'deadline'])(
   'checks %s after preparing credentials even without a cancellation notification',
   refusesAfterCredentialPreparation);
+
+async function savedStopFinishes(kind: 'Stop' | 'Admin' | 'Denied') {
+  const link = await startRunning();
+  await runningNeighbour(link);
+  const source = await saveProhibition(kind);
+  const reference = { routineId: 'orders', eventId: source.eventId, position: source.position };
+  await applyRoutineStop(nats.store, 'test', reference, actor, { enabled: true });
+  await pollRoutine();
+  await vi.waitFor(interruptedOnce);
+  expect(actor.state.roots[0]!.stop?.sourceEventId).toBe(source.eventId);
+  const before = await history(nats.store, 'routine-orders', 'test');
+  expect(before.at(-1)!.event.type).not.toBe('routine.run_finished');
+  expect(preparedComputer.runningProcesses.has('native-thread-2')).toBe(true);
+  preparedComputer.finish(selection.threadId);
+  async function closed() {
+    const rows = await history(nats.store, 'computer-sales-assistant', 'test');
+    function terminal(row: typeof rows[number]) {
+      return row.event.type === 'computer.turn_closed';
+    }
+    expect(rows.some(terminal)).toBe(true);
+  }
+  await vi.waitFor(closed);
+  await link.settled();
+  await applyRoutineStop(nats.store, 'test', reference, actor, { enabled: true });
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  expect(rows.at(-1)!.event.data).toMatchObject({ occurrenceId: 'occurrence',
+    outcome: 'interrupted' });
+  expect(preparedComputer.runningProcesses.has('native-thread-2')).toBe(true);
+  interruptedOnce();
+}
+it.each(['Stop', 'Admin', 'Denied'] as const)(
+  'saved %s reaction finishes only its terminated turn and leaves its neighbour running',
+  savedStopFinishes);
