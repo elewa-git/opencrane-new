@@ -179,8 +179,9 @@ New event-store commands require a non-empty `commandId` and `principal`.
 The envelope keeps `commandId` optional so older stored events still parse;
 its scope is the principal and entity subject, as [principle 7](../../docs/architecture/events.md#principles) specifies.
 
-Private-turn reports add `agent.output_lost` to the conversation stream. Message
-commands may request `executionMode: "memory_free"`; agent and computer start
+Private-turn reports add `agent.output_lost` and `agent.private_exited` to the
+conversation stream. The exit report carries only the conversation and turn ids.
+Message commands may request `executionMode: "memory_free"`; agent and computer start
 events record the optional restricted/memory-free mode. Child start reports and
 computer start events also record `sharingClass: "shared_only"`; the server derives
 it from saved child creation and checks the computer's report. It is separate from

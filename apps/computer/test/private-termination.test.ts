@@ -114,7 +114,11 @@ async function clearsFailedReply(cause: Termination) {
       .not.toMatch(/private-before-ending|private-after-ending/u);
     let reason = 'model_error';
     if (cause === 'restricted tool') reason = 'restricted_tool_refused';
-    expect(replay.at(-1)).toMatchObject({ type: 'agent.turn_failed', reason });
+    function isTerminal(report: (typeof replay)[number]) {
+      return report.type === 'agent.turn_failed';
+    }
+    expect(replay.filter(isTerminal)).toMatchObject([{ type: 'agent.turn_failed', reason }]);
+    expect(replay.at(-1)?.type).toBe('agent.private_exited');
     expect(test.grants.has('thread-1')).toBe(false);
   } finally {
     removal.resolve();

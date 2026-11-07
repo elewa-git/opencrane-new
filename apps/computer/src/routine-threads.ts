@@ -8,6 +8,7 @@ export interface PrivateSession {
   rpc(this: void, method: string, params: Record<string, unknown>): Promise<unknown>;
   close(this: void): void;
   closed: Promise<void>;
+  exited?: Promise<void>;
 }
 
 export async function startPrivateThread(session: PrivateSession, taskKind: string) {

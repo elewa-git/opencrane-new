@@ -2,6 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { agentTurnStopRequestedDataSchema } from '@opencrane/events';
 import { connectEventStore } from '@opencrane/event-store';
 import { budgetStopStatusSchema } from '@opencrane/protocol';
+import { z } from 'zod';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { testAuthConfig } from '@opencrane/auth/testing';
@@ -523,6 +524,40 @@ async function reportsCall(scenario: CallCase) {
   expect(budgetStopStatusSchema.safeParse(extra).success).toBe(false);
 }
 it.each(callCases)('reports $name', reportsCall);
+
+async function keepsClosedChatReservation() {
+  await start();
+  const expected = await saveCall({ name: 'uncertain call', status: 'possibly_sent',
+    dispatch: true });
+  await stopSavedCalls();
+  const before = await read();
+  expect(before.statusCode).toBe(200);
+  expect(before.json<{ calls: unknown[] }>().calls).toEqual([expected]);
+  await setup.append('conversation-conversation', 'conversation.closed', {
+    conversationId: 'conversation', closedBy: 'alice',
+  });
+
+  const response = await read();
+  expect(response.statusCode).toBe(200);
+  expect(response.json<{ calls: unknown[] }>().calls).toEqual([expected]);
+  const budgetRows = await history(setup.nats.store, 'budget-test', 'test');
+  function matchesReservation(row: (typeof budgetRows)[number]) {
+    if (row.event.type !== 'budget.reserved' && row.event.type !== 'budget.settled') return false;
+    const data = z.object({ reservationId: z.string() }).parse(row.event.data);
+    return data.reservationId === expected.reference;
+  }
+  expect(budgetRows.filter(matchesReservation)).toHaveLength(1);
+  await setup.append('budget-test', 'budget.settled', {
+    reservationId: expected.reference, permitId: expected.reference,
+    settledCents: 3,
+  });
+  const settled = await read();
+  expect(settled.statusCode).toBe(200);
+  expect(settled.json<{ calls: unknown[] }>().calls).toEqual([
+    { reference: expected.reference, status: 'charged', chargedCents: 3 },
+  ]);
+}
+it('keeps an uncertain call held when its conversation closes', keepsClosedChatReservation);
 
 async function isolatesCalls() {
   await participant('bob', 'member');

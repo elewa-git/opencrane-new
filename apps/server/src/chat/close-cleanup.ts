@@ -11,13 +11,16 @@ type Link = { socket: WebSocket; connectionId: number; sentStops: Map<string, nu
 type Assistant = {
   current: StoredEvent['event'] | undefined;
   started: Set<string>;
+  privateStarted: Set<string>;
   closed: Set<string>;
   lostTurns: Set<string>;
   turnComputers: Map<string, string>;
   closedStatuses: Map<string, 'completed' | 'failed'>;
 };
 type Options = { silo: string; store: EventStore };
-type SavedTurns = { ended: Set<string>; cancelled: Set<string>; starts: Set<string> };
+type SavedTurns = { ended: Set<string>; cancelled: Set<string>; starts: Set<string>;
+  exited: Set<string> };
+type CleanupDecision = { pending: boolean; stop: boolean };
 const turnData = z.object({ turnId: z.string() });
 const computerData = z.object({ computerId: z.string() });
 const postedAuthor = z.object({ authorKind: z.enum(['human', 'agent', 'system']) });
@@ -50,6 +53,19 @@ function reportedStarts(rows: ChatRows) {
     }
   }
   return started;
+}
+
+function privateExits(rows: ChatRows, turnComputers?: Map<string, string>) {
+  const exited = new Set<string>();
+  for (const row of rows) {
+    if (row.event.type !== 'agent.private_exited' || row.event.source !== 'computer-bridge') {
+      continue;
+    }
+    const turnId = turnData.parse(row.event.data).turnId;
+    const originalComputer = turnComputers?.get(turnId);
+    if (originalComputer && row.event.report?.computerId === originalComputer) exited.add(turnId);
+  }
+  return exited;
 }
 
 function postedInputs(rows: ChatRows) {
@@ -105,13 +121,18 @@ async function appendTerminal(options: Options, conversationId: string, turnId: 
 }
 
 function recoverableTerminal(row: ChatRows[number], started: Set<string> | undefined,
-  lostTurns: Set<string> | undefined) {
+  lostTurns: Set<string> | undefined, privateStarted: Set<string> | undefined,
+  exited: Set<string>) {
   if (row.event.type !== 'agent.turn_completed' && row.event.type !== 'agent.turn_failed') {
     return false;
   }
   const turnId = turnData.parse(row.event.data).turnId;
   if (started && !started.has(turnId)) return false;
-  if (row.event.principal?.id === 'close-cleanup' && !lostTurns?.has(turnId)) return false;
+  if (privateStarted?.has(turnId) && !exited.has(turnId) && !lostTurns?.has(turnId)) {
+    return false;
+  }
+  if (row.event.principal?.id === 'close-cleanup'
+    && !lostTurns?.has(turnId) && !exited.has(turnId)) return false;
   return true;
 }
 
@@ -126,11 +147,13 @@ async function refreshClosedTurns(options: Options, assistantId: string, closed:
 
 export async function recoverTerminalTurns(options: Options, computerId: string,
   assistantId: string, conversationId: string, rows: ChatRows, closed: Set<string>,
-  started?: Set<string>, turnComputers?: Map<string, string>, lostTurns?: Set<string>) {
+  started?: Set<string>, turnComputers?: Map<string, string>, lostTurns?: Set<string>,
+  privateStarted?: Set<string>) {
   // Recover a server crash between the agent report and the separate computer event.
   let refreshed = false;
+  const exited = privateExits(rows, turnComputers);
   for (const row of rows) {
-    if (!recoverableTerminal(row, started, lostTurns)) continue;
+    if (!recoverableTerminal(row, started, lostTurns, privateStarted, exited)) continue;
     const terminal = turnData.parse(row.event.data);
     if (closed.has(terminal.turnId)) continue;
     if (!refreshed) {
@@ -147,25 +170,33 @@ export async function recoverTerminalTurns(options: Options, computerId: string,
 }
 
 async function settleClosedInput(options: Options, conversationId: string, assistantId: string,
-  turnId: string, assistant: Assistant, saved: SavedTurns) {
+  turnId: string, assistant: Assistant, saved: SavedTurns): Promise<CleanupDecision> {
   const admitted = saved.starts.has(turnId) || assistant.started.has(turnId);
-  if (!admitted && !saved.ended.has(turnId)) {
-    await appendTerminal(options, conversationId, turnId, assistantId, 'failed', false);
-    return false;
+  if (!admitted) {
+    if (!saved.ended.has(turnId)) {
+      await appendTerminal(options, conversationId, turnId, assistantId, 'failed', false);
+    }
+    return { pending: false, stop: false };
   }
+  // Keep cleanup open until the supervisor confirms exit or this computer is known lost.
+  const waitingForPrivateExit = assistant.privateStarted.has(turnId)
+    && !saved.exited.has(turnId) && !assistant.lostTurns.has(turnId);
+  if (waitingForPrivateExit) return { pending: true, stop: true };
   const unsettledCancellation = saved.cancelled.has(turnId) &&
     assistant.started.has(turnId) && !assistant.closed.has(turnId);
-  if (saved.ended.has(turnId) && !unsettledCancellation) return false;
+  if (saved.ended.has(turnId) && !unsettledCancellation) {
+    return { pending: !assistant.closed.has(turnId), stop: false };
+  }
   const savedStatus = assistant.closedStatuses.get(turnId);
   if (savedStatus) {
     await appendTerminal(options, conversationId, turnId, assistantId, savedStatus, true);
-    return false;
+    return { pending: !assistant.closed.has(turnId), stop: false };
   }
-  if (assistant.lostTurns.has(turnId)) {
+  if (assistant.lostTurns.has(turnId) || saved.exited.has(turnId)) {
     await appendTerminal(options, conversationId, turnId, assistantId, 'failed', true);
-    return false;
+    return { pending: !assistant.closed.has(turnId), stop: false };
   }
-  return true;
+  return { pending: true, stop: true };
 }
 
 async function sendCloseStop(conversationId: string, assistantId: string, turnId: string,
@@ -191,7 +222,7 @@ export async function cleanClosedConversation(options: Options, conversationId: 
   assistantId: string, rows: ChatRows, assistant: Assistant, refused: Set<string>,
   connection: (computerId: string, assistantId: string) => Promise<Link>) {
   const saved = { ended: terminalTurns(rows), cancelled: cleanupFailures(rows),
-    starts: reportedStarts(rows) };
+    starts: reportedStarts(rows), exited: privateExits(rows, assistant.turnComputers) };
   const currentComputer = assistant.current
     ? computerData.parse(assistant.current.data).computerId : undefined;
   const inputs = postedInputs(rows);
@@ -199,15 +230,16 @@ export async function cleanClosedConversation(options: Options, conversationId: 
   let link: Link | undefined;
   for (const input of inputs) {
     const turnId = input.event.id;
-    const needsStop = await settleClosedInput(options, conversationId, assistantId,
+    const decision = await settleClosedInput(options, conversationId, assistantId,
       turnId, assistant, saved);
-    if (!needsStop) continue;
-    pending = true;
+    if (decision.pending) pending = true;
+    if (!decision.stop) continue;
     link = await sendCloseStop(conversationId, assistantId, turnId, assistant,
       refused, link, connection);
   }
   await recoverTerminalTurns(options, currentComputer ?? '', assistantId, conversationId,
-    rows, assistant.closed, assistant.started, assistant.turnComputers, assistant.lostTurns);
+    rows, assistant.closed, assistant.started, assistant.turnComputers, assistant.lostTurns,
+    assistant.privateStarted);
   if (link) return { pending, retry: pending, connectionId: link.connectionId };
   return { pending, retry: pending };
 }

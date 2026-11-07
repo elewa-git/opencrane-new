@@ -542,6 +542,17 @@ class TurnRunner {
     this.state.sessions.set(input.id, session);
     const sessionClosed = this.privateSessionClosed.bind(this, input);
     void session.closed.then(sessionClosed, sessionClosed);
+    if (session.exited) {
+      const processExited = this.privateProcessExited.bind(this, input);
+      void session.exited.then(processExited);
+    }
+  }
+
+  private privateProcessExited(input: Turn) {
+    const started = this.lastStartedReport(input.id);
+    if (started?.executionMode === 'restricted') {
+      this.appendReport(input, 'agent.private_exited');
+    }
   }
 
   async prepareRoutine(value: Record<string, unknown>) {
@@ -718,6 +729,8 @@ class TurnRunner {
       this.confirmPrivateClearance(turnId, cleared);
       return;
     }
+    const privateSession = input.executionMode === 'restricted'
+      ? this.state.sessions.get(input.id) : undefined;
 
     if (!this.gate.closed) {
       this.stoppedTurns.add(turnId);
@@ -726,10 +739,16 @@ class TurnRunner {
     this.boundRoutineStop(input);
     this.confirmPrivateClearance(turnId, cleared);
     const heldThread = this.findRunningThread(turnId);
+    await this.stopRunningTurn(input, heldThread, privateSession);
+  }
+
+  private async stopRunningTurn(input: Turn, heldThread: string | undefined,
+    privateSession: PrivateSession | undefined) {
     if (!this.gate.closed) {
       try {
         await this.removeStoppedAccess(input, heldThread);
       } catch (error) {
+        privateSession?.close();
         // Retry this private turn on the next Stop without disconnecting its neighbours.
         if (input.senderAttemptId && input.executionMode === 'restricted') {
           return;
@@ -737,15 +756,21 @@ class TurnRunner {
         throw error;
       }
     } else this.endTurnHolds(heldThread);
-    const codexTurnId = this.state.codexTurns.get(turnId);
+    const codexTurnId = this.state.codexTurns.get(input.id);
     if (!codexTurnId) {
+      privateSession?.close();
       return;
     }
-    const threadId = this.findRunningThread(turnId);
+    const threadId = this.findRunningThread(input.id);
     if (!threadId) {
+      privateSession?.close();
       return;
     }
-    await this.interruptOnce(input, threadId, codexTurnId);
+    try {
+      await this.interruptOnce(input, threadId, codexTurnId);
+    } finally {
+      privateSession?.close();
+    }
   }
 
   private boundRoutineStop(input: Turn) {

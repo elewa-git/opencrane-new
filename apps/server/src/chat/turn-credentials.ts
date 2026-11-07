@@ -21,8 +21,14 @@ type BridgeOptions = { recall?: ReturnType<typeof recallBridge> } &
   Partial<Pick<ChatOptions, 'binding' | 'db' | 'feed'>> & { keyDirectory?: string };
 type Tokens = Awaited<ReturnType<typeof tokenIssuer>>;
 type Report = { conversationId: string; turnId: string; threadId?: string | undefined;
-  replay?: boolean; sequence?: number };
+  replay?: boolean; sequence?: number;
+  executionMode?: 'restricted' | 'memory_free' | undefined;
+  senderAttemptId?: string | undefined };
 type ChatRows = Awaited<ReturnType<typeof chatHistory>>;
+
+function closeUnavailableTurn(report: Report) {
+  return report.executionMode !== 'restricted' || report.senderAttemptId !== undefined;
+}
 
 export async function releaseTurnCredentials(options: BridgeOptions,
   context: Parameters<typeof turnCommand>[1],
@@ -73,7 +79,10 @@ export async function releaseTurnCredentials(options: BridgeOptions,
       return;
     }
     if (!(error instanceof TurnContextUnavailable)) throw error;
-    await turnCommand(options.store, context, { ...report, status: 'failed' });
+    // Keep the computer occupied until a private process exit is confirmed.
+    if (closeUnavailableTurn(report)) {
+      await turnCommand(options.store, context, { ...report, status: 'failed' });
+    }
     acknowledgement.refused = error.message;
   }
 }
