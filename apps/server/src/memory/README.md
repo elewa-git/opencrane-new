@@ -31,12 +31,13 @@ checks access again after taking the locks and before saving the forget request.
 
 **Assistant access.** A turn is one message and the assistant's reply. The memory tool server checks the AI gateway's signed [access token](../../../../GLOSSARY.md#access-token), a short-lived pass, alongside saved grants, current permissions, the bound assistant and recorded turn mode. It can return personal facts and permitted group facts or assistant notes. Every call checks the previously loaded references. The memory tool server checks each signed description of the turn once. It also checks whose memory the call may use and the proof required for a write.
 
-The fixed recall, remember and Correct definitions also check the internal private chat tool lists.
+The private chat tool lists accept only the fixed Recall, Remember, Correct and Forget definitions.
 Changed definitions and Ask or Block choices cannot enter those lists. Public discovery
-still lists recall alone. Preparing a remember or Correct definition reads no facts and saves
+still lists recall alone. Preparing a tool definition reads no facts and saves
 nothing. Live private tool delivery remains disabled.
 
-Recall, Correct and Forget load history before the gateway signs the short pass. The server keeps that data for one use and checks current access again. Correct saves one replacement with every other loaded fact as a dependency and preserves the original sources. Its receipt contains no text. A separate read checks the original agent receipt after a lost reply, without saving again. The next dispatch refuses the old loaded revision. Forget through the assistant remains disabled.
+Recall, Correct and Forget load history before the gateway signs the short pass. The server keeps that data for one use and checks current access again. Correct saves one replacement with every other loaded fact as a dependency and preserves the original sources. Its receipt contains no text. A separate read checks the original agent receipt after a lost reply, without saving again. The next dispatch refuses the old loaded revision. Forget hides the exact loaded personal revision and returns its saved status. Native admission
+remains disabled until deployment checks pass.
 
 Recall saves its references before returning fact text or signed proof of what was read. Failed or uncertain saves return neither. A lost reply keeps the references and cannot send the same recall again. If the conversation closes during saving, the references remain readable but the ended context returns no text or proof. References keep personal and shared facts separate and cannot restart a turn or grant access. Chat summaries rebuild them using the models library's shared memory reader without loading fact text.
 
@@ -88,7 +89,7 @@ is never sent again automatically.
 flowchart LR
   server["Server"] -->|handles memory requests| memory["Memory"]
   chat["Chat"] -->|supplies saved turn facts| memory
-  gateway["AI gateway"] -->|passes checked recall and write calls| memory
+  gateway["AI gateway"] -->|passes checked recall, remember, correct and forget calls| memory
   memory -->|clears withdrawn or stopped private replies| chat
   memory -->|checks access and facts before saving and replying| models["Models library"]
   memory -->|supplies initial input once| computer["Computer input renderer"]
@@ -111,10 +112,14 @@ consumer reply never permits another delivery. Qualified private starts use this
 before receiving credentials. Admission remains disabled pending live qualification.
 
 The [memory contracts](README.robot.md) describe personal
-write receipts and status reads after a lost reply. Remember and Correct check the current turn,
+write receipts and status reads after a lost reply. Remember, Correct and Forget check the current turn,
 Stop requests, computer generation and access again before saving. A Stop or computer
 replacement saved while the call waits for its database lock prevents the write,
 even if the computer has not yet removed the caller. Correct keeps every other loaded
-reference and excludes the replaced fact from its dependencies. After saving, Correct checks
+reference and excludes the replaced fact from its dependencies. After saving, Correct and Forget check
 access, the current turn and the original time limit again before returning the receipt.
 Native admission remains disabled.
+
+A Forget receipt confirms that the fact is hidden. Cleanup stays pending until a saved
+cleanup result confirms completion. Checking the original receipt creates no keys and
+never decrypts the forgotten value.

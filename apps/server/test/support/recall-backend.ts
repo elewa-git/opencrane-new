@@ -193,7 +193,8 @@ async function prepareChat(setup: Setup, memory: MemoryOptions,
       expect(link.rejection).toBeUndefined();
       expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts);
     }
-    const wait = { timeout: 10_000 };
+    // Give the scripted native peer time to receive the turn on a busy shared host.
+    const wait = { timeout: 30_000 };
     await vi.waitFor(dispatched, wait);
     await link.settled();
   }

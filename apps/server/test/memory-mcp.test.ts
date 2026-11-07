@@ -26,7 +26,9 @@ import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 import * as memoryPreparation from '../../../libs/models/src/memory-prepare-request.ts';
 import * as correctionCommands from '../src/memory/correct.ts';
+import * as commandHistory from '../src/memory/command-history.ts';
 import * as forgetCommands from '../src/memory/forget.ts';
+import { memoryClock } from './support/memory-clock.ts';
 import { timeMemoryPath } from './support/memory-path-timing.ts';
 import { initialQualificationFixture } from './support/initial-qualification.ts';
 
@@ -2500,10 +2502,8 @@ async function loadChangeFacts(revision: number, recordLoaded = true) {
 }
 async function changeRequest(operation: 'correct' | 'forget', checkControl = true, revision = 1,
   recordLoaded = true) {
-  if (operation === 'correct') {
-    // Match the saved initial load with the deployment evidence now required for native writes.
-    await initialQualificationFixture();
-  }
+  // Match the saved initial load with the deployment evidence required for native writes.
+  await initialQualificationFixture();
   const catalogue = memoryCatalogue;
   for (const tool of [recallTool, forgetTool, correctTool]) {
     await setup.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',
@@ -2958,8 +2958,9 @@ async function delayedBackend(operation: 'recall' | 'correct' | 'forget',
     requestHeaders = request.requestHeaders;
     change = request;
   }
+  const clock = memoryClock();
   async function delay() {
-    await pause(2200);
+    clock.advance(2200);
     if (revoke) {
       const revokedGrant = { resourceType: 'memory_read', resourceId: scopeId,
         granteeKind: 'member', granteeId: 'alice', revokedBy: 'alice' };
@@ -2998,6 +2999,7 @@ async function delayedBackend(operation: 'recall' | 'correct' | 'forget',
       expect(response.json()).toEqual({ status: 'refused' });
     } else {
       expect(response.statusCode, response.body).toBe(200);
+      expect(timing.preparedBeforeAccess()).toBe(true);
     }
   } finally {
     timing.restore();
@@ -3018,6 +3020,31 @@ async function revokedRecallPreparation(step: 'history' | 'IAM') {
 }
 it.each(['history', 'IAM'] as const)(
   'refuses recall preparation revoked during a slow backend %s read', revokedRecallPreparation);
+
+async function expiresAfterPreparation(operation: 'correct' | 'forget') {
+  const request = await changeRequest(operation, false);
+  const clock = memoryClock();
+  const token = await changeToken(request);
+  const before = await setup.nats.store.head(`scope-${scopeId}`);
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  let attempted = false;
+  async function expire(command: Parameters<typeof append>[0]) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'memory.corrected' || event.type === 'memory.forgotten') {
+      attempted = true;
+      clock.advance(2001);
+    }
+    return append(command);
+  }
+  vi.spyOn(setup.nats.store, 'append').mockImplementation(expire);
+  const response = await sendChange(request, token);
+  expect(attempted).toBe(true);
+  expect(response.statusCode, response.body).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+  expect(await setup.nats.store.head(`scope-${scopeId}`)).toBe(before);
+}
+it.each(['correct', 'forget'] as const)(
+  'refuses %s when its original access deadline expires after preparation', expiresAfterPreparation);
 
 async function refusesPreparation(change: 'missing' | 'reused' | 'expired' | 'mismatched') {
   const original = await signedRecall(setup);
@@ -3046,8 +3073,10 @@ async function gatewayPreparation(operation: 'recall' | 'correct' | 'forget',
     body = request.body;
     requestHeaders = request.requestHeaders;
   }
+  const clock = memoryClock();
   function delay() {
-    return pause(2200);
+    clock.advance(2200);
+    return Promise.resolve();
   }
   const timing = timeMemoryPath(setup, step, delay);
   try {
@@ -3055,6 +3084,7 @@ async function gatewayPreparation(operation: 'recall' | 'correct' | 'forget',
     expect(timing.delayed()).toBe(true);
     expect(response.status, response.text).toBe(200);
     expect(decodeJwt(capability)['preparationId']).toEqual(expect.any(String));
+    expect(timing.preparedBeforeAccess()).toBe(true);
   } finally {
     timing.restore();
   }
@@ -3149,6 +3179,7 @@ it.each(invalidChangePreparations)('refuses %s with a %s preparation',
   invalidChangePreparation, 40_000);
 
 async function usesPreparedChangeReads(operation: 'correct' | 'forget') {
+  memoryClock();
   const request = await changeRequest(operation, false);
   const signed = await changeToken(request);
   const receipts = vi.spyOn(setup.auth, 'applied');
@@ -3172,6 +3203,7 @@ it.each(['correct', 'forget'] as const)(
 
 async function gatewayLoadedReceipts(operation: 'recall' | 'correct' | 'forget',
   otherScope: boolean) {
+  const clock = memoryClock();
   let body: Record<string, unknown> = call;
   let requestHeaders = headers;
   if (operation === 'recall' && !otherScope) {
@@ -3208,7 +3240,7 @@ async function gatewayLoadedReceipts(operation: 'recall' | 'correct' | 'forget',
   async function applied(eventId: string) {
     if (accessStarted) {
       lateReceipts += 1;
-      await pause(2200);
+      clock.advance(2200);
     } else {
       preparedReceipts.add(eventId);
     }
@@ -3283,6 +3315,7 @@ function correctionStatus(namespace = 'agent-changes', commandId = 'change') {
   return app.inject({ method: 'GET', url, headers: { cookie } });
 }
 async function savedAgentCorrection(lostReply: boolean) {
+  memoryClock();
   const scope = { scopeId, scopeKind: 'person' as const, ownerId: 'alice' };
   const { remember } = await import('../src/memory/commands.ts');
   await remember(correctionOptions(), 'alice', scope, { commandId: 'change', text: 'Human fact',
@@ -3386,6 +3419,7 @@ async function revokeCorrectionAtAppend() {
 it('refuses an agent correction revoked inside the append boundary', revokeCorrectionAtAppend);
 
 async function racedCorrection(changed: boolean) {
+  memoryClock();
   const first = await changeRequest('correct', false);
   const second = structuredClone(first);
   if (changed) {
@@ -3396,7 +3430,57 @@ async function racedCorrection(changed: boolean) {
   const before = await setup.nats.store.head(`scope-${scopeId}`);
   const firstToken = await setup.tokens.memoryContext(firstClaims, Date.now() + 2000);
   const secondToken = await setup.tokens.memoryContext(secondClaims, Date.now() + 2000);
-  const results = await Promise.all([sendChange(first, firstToken), sendChange(second, secondToken)]);
+  const entered = Promise.withResolvers<void>();
+  const saved = Promise.withResolvers<void>();
+  const originalHistory = commandHistory.commandHistory;
+  let initialReads = 0;
+  async function readCommand(...args: Parameters<typeof originalHistory>) {
+    const state = await originalHistory(...args);
+    if (args[6] !== 'agent' || initialReads >= 2) {
+      return state;
+    }
+    initialReads += 1;
+    expect(state.original).toBeUndefined();
+    // Give both commands the same unsaved state. Let the second reach its lock after
+    // the first releases it, so it must discover the saved event through the locked read.
+    if (initialReads === 1) {
+      await entered.promise;
+    } else {
+      entered.resolve();
+      await saved.promise;
+    }
+    return state;
+  }
+  vi.spyOn(commandHistory, 'commandHistory').mockImplementation(readCommand);
+  const originalCorrect = correctionCommands.correct;
+  let calls = 0;
+  async function correct(...args: Parameters<typeof originalCorrect>) {
+    calls += 1;
+    try {
+      return await originalCorrect(...args);
+    } finally {
+      saved.resolve();
+    }
+  }
+  vi.spyOn(correctionCommands, 'correct').mockImplementation(correct);
+  const firstResult = sendChange(first, firstToken);
+  const secondResult = sendChange(second, secondToken);
+  function endedBeforeBothEntered(): never {
+    throw new Error('A correction finished before both requests entered the command');
+  }
+  const firstFinished = firstResult.then(endedBeforeBothEntered);
+  const secondFinished = secondResult.then(endedBeforeBothEntered);
+  let results;
+  try {
+    await Promise.race([entered.promise, firstFinished, secondFinished]);
+    results = await Promise.all([firstResult, secondResult]);
+  } finally {
+    entered.resolve();
+    saved.resolve();
+    await Promise.all([firstResult, secondResult]);
+  }
+  expect(calls).toBe(2);
+  expect(initialReads).toBe(2);
   const statuses = results.map(responseStatus);
   expect(statuses).toContain(200);
   if (changed) {

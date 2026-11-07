@@ -107,12 +107,12 @@ type NativeMemoryCall = (name: string, args: object, headers: Record<string, str
   identity?: CallIdentity)
   => Promise<Record<string, unknown>>;
 
-type MemoryNames = readonly ('recall' | 'remember' | 'correct')[];
+type MemoryNames = readonly ('recall' | 'remember' | 'correct' | 'forget')[];
 
 function createDiscoveryControls(remember: boolean | MemoryNames) {
   let names: MemoryNames = ['recall'];
   if (remember === true) {
-    names = ['recall', 'remember', 'correct'];
+    names = ['recall', 'remember', 'correct', 'forget'];
   } else if (remember !== false) {
     names = remember;
   }

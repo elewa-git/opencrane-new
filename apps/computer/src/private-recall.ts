@@ -19,11 +19,11 @@ function recallTools(input: Turn) {
 }
 
 function requireRecallDefinitions(server: ReturnType<typeof parseTools>[number]) {
-  if (server.definitions.length < 1 || server.definitions.length > 3
+  if (server.definitions.length < 1 || server.definitions.length > 4
     || Object.keys(server.modes).length !== server.definitions.length) {
     throw new Error('Private recall refused');
   }
-  const names = ['recall', 'remember', 'correct'];
+  const names = ['recall', 'remember', 'correct', 'forget'];
   let previousPosition = -1;
   for (const encoded of server.definitions) {
     const definition = record(JSON.parse(encoded));
