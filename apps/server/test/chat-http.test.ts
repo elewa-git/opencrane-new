@@ -162,6 +162,10 @@ it('serves private chat commands and reads to joined members, refusing other org
     lifecycleRead.mockClear();
     await chatRows({ silo: 'test', store: nats.store, db, keys, binding, feed },
       conversationId, 'agent_session');
+    for (const mode of ['direct', 'group'] as const) {
+      const nonAssistantFeed = await chatRows(chat, conversationId, mode);
+      expect(nonAssistantFeed.dispatcherReady).toBe(true);
+    }
     expect(lifecycleRead).not.toHaveBeenCalled();
     lifecycleRead.mockRestore();
     const messages = await app.inject({ url: `/api/conversations/${conversationId}/messages`, headers: headers() });
