@@ -6989,5 +6989,5 @@ recorded identifiers, safe status, event time when recorded, revision and a link
 the owning read. The provider's secret reference and private work are omitted.
 
 `test/org-overview.test.ts` checks ordering, cursor and partial states.
-`test/spending.test.ts` checks access, privacy and absence of GET side effects against
-disposable services. A fresh-install journey is still NOT RUN.
+`test/spending.test.ts` checks access, privacy, absence of GET side effects and
+the same safe rows after an index rebuild against disposable services. A fresh-install journey is still NOT RUN.

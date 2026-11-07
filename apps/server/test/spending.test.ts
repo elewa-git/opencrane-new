@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { z } from 'zod';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
@@ -494,3 +495,22 @@ async function overviewSourceStates() {
   expect(timedOut.status).toBe('unavailable');
 }
 it('keeps source failure, lag, missing progress and deadline expiry explicit', overviewSourceStates);
+
+async function overviewReplay() {
+  const session = { sub: 'owner', orgId: 'org-acme', roles: [],
+    authTime: 1790856000, exp: 2000000000 };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const before = await app.inject({ method: 'GET', url: '/api/org/overview', headers });
+  expect(before.statusCode).toBe(200);
+  const safeRows = z.object({ rows: z.array(z.object({ source: z.string(), id: z.string(),
+    priority: z.string(), eventAt: z.string().nullable() })) }).parse(before.json()).rows;
+  const position = await nats.store.head();
+  await rebuildBudgetProjection(pgDb(dbs.queue), nats.reader, logger, { verify: true });
+  const after = await app.inject({ method: 'GET', url: '/api/org/overview', headers });
+  expect(after.statusCode).toBe(200);
+  const replayedRows = z.object({ rows: z.array(z.object({ source: z.string(), id: z.string(),
+    priority: z.string(), eventAt: z.string().nullable() })) }).parse(after.json()).rows;
+  expect(replayedRows).toEqual(safeRows);
+  expect(await nats.store.head()).toBe(position);
+}
+it('returns the same safe overview rows after an index rebuild', overviewReplay);
