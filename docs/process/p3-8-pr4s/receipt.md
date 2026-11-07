@@ -27,7 +27,10 @@ even when a personal profile has the same id. No browser UI or sender is added.
 - PASS: full lint, including knip, documentation, links, fixtures and licences.
   It used CI's 8 GB Node heap after restarting the first run. Initial typing and
   personal retry errors were corrected before the final passing checks.
-- NOT RUN: root suite and fresh-install live qualification. No dev stack or paid call.
+- FAIL: first CI at `532e6b3c2`; two receipt tests expected raw dependency text.
+  Their corrected assertions use a private marker and require the sanitised error.
+- PASS: corrected receipt file twice, 36 tests per run; its ESLint and server typecheck.
+- NOT RUN: root suite locally and fresh-install live qualification. No dev stack or paid call.
 
 The focused tests use disposable event-store, OpenFGA and PostgreSQL fixtures.
 Tests run with the requested PG_TEST_URL and under `nice -n 10`.

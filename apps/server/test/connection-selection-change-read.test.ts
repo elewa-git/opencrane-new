@@ -155,11 +155,11 @@ async function recoverOriginal(later: string) {
   const append = nats.store.append.bind(nats.store);
   async function loseReply(command: Parameters<typeof append>[0]): Promise<never> {
     await append(command);
-    throw new Error('Lost reply');
+    throw new Error(privateCanary);
   }
   vi.spyOn(nats.store, 'append').mockImplementationOnce(loseReply);
   await expect(changeConnectionSelection(nats.store, binding, 'alice', input))
-    .rejects.toThrow('Lost reply');
+    .rejects.toThrow(/^Selection unavailable$/u);
   vi.restoreAllMocks();
   const rows = await history(nats.store, subject, 'test');
   const original = rows[0]!;
