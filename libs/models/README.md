@@ -38,6 +38,9 @@ by the turn. Current permissions are still checked before use. Correct and Forge
 
 Approval reads report whether the tool replied to the last consumed permit.
 A reply does not change retry permission or prove that an outside business change succeeded.
+Original call status combines saved approval and dispatch dates with the current
+computer turn. It reports retry eligibility only while a matching short-lived
+bridge signal says the original call is still waiting.
 
 A remote tool start is saved before its budget check. If the call is refused before
 connecting, matching saved proof can let the requester choose one retry. Missing
@@ -123,7 +126,7 @@ built-in functions.
 ```mermaid
 flowchart LR
   models -.->|replay tests use the database helper| store
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks release audit bindings, public tool addresses, reads, hosted image status and check requests, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, fixed positions before private replies, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal bearer and verified OAuth choices with current access and owner revocation from HTTP, admin company opt-in, explicit company choices, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks release audit bindings, public tool addresses, reads, hosted image status and check requests, original call status, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, fixed positions before private replies, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal bearer and verified OAuth choices with current access and owner revocation from HTTP, admin company opt-in, explicit company choices, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature and licence checks, control, provider choice and spending"]
   models -->|tests private sign-in, refresh and revocation requests, revokes refresh and access tokens; checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains reply withdrawal after expiry or access loss; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models and checks private callers; native child calls refused| models
   models -.->|checks receipts, checks each initial memory permission once, and preserves confirmed refusals during permission outages or invalid company saves| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]

@@ -105,6 +105,9 @@ Removal progress covers permissions and the member list. It does not report depa
 
 Approval reads distinguish a tool reply from an uncertain transport result. This does not
 change the saved approval state or allow another use.
+Participants can read an original Ask call's saved attempts and retry status.
+The read keeps uncertain calls unknown and sends no work. People who have lost
+access get the same refusal for saved and missing calls.
 
 A requester can choose one retry when trusted saved evidence proves a remote tool
 was refused before connecting. Current permissions and the reviewed request must
@@ -182,7 +185,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|sign-out, requests, Office uploads, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|sign-out, requests, Office uploads, Memory setup reads, own and admin routine lists, approval replies and original call status, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks saved membership before personal memory tools and history errors; prepares allowances; checks routine admission; applies Stop, Pause and Retire; verifies termination and admin authority; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
   server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, routine sessions, inputs, cancellations, checked finishes and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]

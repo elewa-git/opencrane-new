@@ -19,6 +19,7 @@ export { payingGroupAuthority, groupMembership, PayingGroupRefused, AuthorityApp
 export { initialiseBudgetProjection, rebuildBudgetProjection } from './rebuild.ts';
 
 export { approvalCards, readApproval, decideApproval } from './approvals.ts';
+export { readOriginalCallStatus, type RetainedCall } from './original-call-status.ts';
 export {
   authorityFence, decisionAuthorityFence, ownershipWriteAccess,
   conversationAccessFence,
