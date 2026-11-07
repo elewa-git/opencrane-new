@@ -1,0 +1,1 @@
+- Record an explicit requester choice of an eligible company account without granting tool access or falling back to another account. Live company selection remains closed until account verification is available.

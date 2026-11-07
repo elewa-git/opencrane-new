@@ -2,8 +2,10 @@ import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
+import { companyConnectionCreatedDataSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { pgDb } from '@opencrane/projections';
+import { data } from '../src/state.ts';
 import { envelope, history } from '../src/actor.ts';
 import { connectionOperationId } from '../src/bearer-connections.ts';
 import { changeConnectionSelection, foldConnectionSelection, readConnectionSelection }
@@ -93,12 +95,16 @@ async function fixture() {
   async function rows() {
     return history(nats.store, selectionSubject, 'test');
   }
-  return { userId, serverId, personal, subject, optInSubject, evidence, command, select, rows };
+  return { userId, serverId, personal, subject, optInSubject, evidence, command, select, rows, verifiedProfile };
 }
 
 async function explicitChoice() {
   const test = await fixture();
   expect(foldConnectionSelection(await test.rows()).selected).toBeNull();
+  const absent = await readConnectionSelection(nats.store, binding, test.userId, test.serverId,
+    test.personal.loadConfiguration, 'read');
+  expect(absent).toEqual({ status: 'unavailable', sequence: 0 });
+  test.evidence.scopes = ['openid', 'read'];
   const append = vi.spyOn(nats.store, 'append');
   const selected = await test.select();
   expect(append).toHaveBeenCalledTimes(1);
@@ -111,6 +117,9 @@ async function explicitChoice() {
   const network = vi.spyOn(globalThis, 'fetch');
   expect(foldConnectionSelection(rows).selected).toEqual(rows[0]!.event.data);
   expect(network).not.toHaveBeenCalled();
+  const foreign = structuredClone(rows);
+  foreign[0]!.event.data = { ...data(foreign[0]!.event), siloId: 'foreign' };
+  expect(foldConnectionSelection(foreign).selected).toBeNull();
   // Keep the existing personal dispatch reader closed to company choices.
   const read = await readConnectionSelection(nats.store, binding, test.userId, test.serverId,
     test.personal.loadConfiguration, 'read');
@@ -162,13 +171,36 @@ async function changedHistory(kind: string, duringAppend: boolean) {
     subject = test.optInSubject;
     type = 'connection.company_opt_in_set';
     const old = await history(nats.store, subject, 'test');
-    fields = { ...old[0]!.event.data as object, enabled: false };
+    fields = { ...data(old[0]!.event), enabled: false };
   } else if (kind === 'publication') {
     subject = `mcp-${test.serverId}`;
-    type = 'mcp.server_withdrawn';
-    fields = { serverId: test.serverId, withdrawnBy: 'admin' };
+    type = 'mcp.server_unpublished';
+    fields = { serverId: test.serverId, unpublishedBy: 'admin' };
+  }
+  if (kind === 'disabled') {
+    type = 'connection.disabled';
+    fields = { userId: 'admin', serverId: test.serverId, profile: 'shared',
+      disabledBy: 'admin', expectedSequence: test.command.profileRevision, reason: 'admin_disabled' };
+  } else if (kind === 'rotated') {
+    const old = await history(nats.store, subject, 'test');
+    const previous = companyConnectionCreatedDataSchema.parse(old[0]!.event.data);
+    const operationId = connectionOperationId('test', subject, 'rotate');
+    type = 'connection.refreshed';
+    fields = { ...previous, secretRef: 'secret:replacement',
+      activation: { ...previous.activation, reason: 'bearer_rotation', generation: 2,
+        expectedSequence: test.command.profileRevision, operationId } };
+  } else if (kind === 'member') {
+    subject = `member-${test.userId}`;
+    type = 'member.removed';
+    fields = { memberId: test.userId, removedBy: 'admin' };
   }
   const changed = envelope('test', subject, type, fields);
+  if (kind === 'rotated') {
+    changed.id = connectionOperationId('test', subject, 'rotate');
+    changed.commandId = 'rotate';
+    changed.source = 'opencrane-server';
+    changed.principal = { kind: 'human', id: 'admin' };
+  }
   if (duringAppend) {
     const append = nats.store.append.bind(nats.store);
     async function change(command: Parameters<typeof append>[0]) {
@@ -184,6 +216,7 @@ async function changedHistory(kind: string, duringAppend: boolean) {
 }
 it.each([
   ['profile', false], ['opt-in', false], ['publication', false],
+  ['disabled', false], ['rotated', false], ['member', false],
   ['profile', true], ['opt-in', true], ['publication', true],
 ])('refuses changed %s history, inside append=%s', changedHistory);
 
@@ -193,12 +226,12 @@ async function rejectedIdentity(patch: object) {
   expect(await test.rows()).toHaveLength(0);
 }
 it.each([{ userId: 'admin' }, { ownerKind: 'validation' }, { siloId: 'foreign' },
-  { accountDigest: 'b'.repeat(64) }, { profileId: 'missing' }])(
+  { accountDigest: 'b'.repeat(64) }, { profileId: 'missing' }, { ownerKind: 'personal' }])(
   'refuses requester or profile overrides %j', rejectedIdentity);
 
 async function concurrentChoices() {
   const test = await fixture();
-  const other = { ...test.command, changeRef: 'other' };
+  const other = { ...test.personal.command, ownerKind: 'personal', changeRef: 'other' };
   const results = await Promise.allSettled([test.select(), test.select(other)]);
   function fulfilled(result: PromiseSettledResult<unknown>) {
     return result.status === 'fulfilled';
@@ -232,7 +265,7 @@ async function iamFailure() {
   const test = await fixture();
   const unavailable = { ...binding, apiUrl: 'http://127.0.0.1:1' };
   await expect(changeConnectionSelection(nats.store, unavailable, test.userId,
-    test.command, test.personal.loadConfiguration)).rejects.toThrow();
+    test.command, test.personal.loadConfiguration, test.verifiedProfile)).rejects.toThrow();
   expect(await test.rows()).toHaveLength(0);
 }
 it('refuses unavailable IAM before append', iamFailure);

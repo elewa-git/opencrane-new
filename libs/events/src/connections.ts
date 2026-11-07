@@ -109,9 +109,13 @@ export const connectionOperationClosedDataSchema = z.strictObject({
 
 const selectionFields = { userId: connectionId, serverId: connectionId, connectionId,
   expectedSequence: z.int().nonnegative() };
-export const connectionSelectedDataSchema = z.discriminatedUnion('action', [
+export const connectionSelectedDataSchema = z.union([
   z.strictObject({ ...selectionFields, action: z.literal('select'),
-    profileId: connectionId, profileRevision: z.int().positive() }),
+    profileId: connectionId, profileRevision: z.int().positive(),
+    ownerKind: z.literal('personal').optional() }),
+  z.strictObject({ ...selectionFields, action: z.literal('select'),
+    profileId: connectionId, profileRevision: z.int().positive(), ownerKind: z.literal('company'),
+    siloId: connectionId, generation: z.int().positive(), accountDigest: digestSchema }),
   z.strictObject({ ...selectionFields, action: z.literal('clear') }),
 ]);
 

@@ -14,7 +14,7 @@ const emptyQuery = z.strictObject({});
 const fields = { connectionId: id, changeRef: id, expectedSequence: z.int().nonnegative() };
 const bodySchema = z.discriminatedUnion('action', [
   z.strictObject({ ...fields, action: z.literal('select'), profileId: id,
-    profileRevision: z.int().positive() }),
+    profileRevision: z.int().positive(), ownerKind: z.enum(['personal', 'company']).optional() }),
   z.strictObject({ ...fields, action: z.literal('clear') }),
 ]);
 

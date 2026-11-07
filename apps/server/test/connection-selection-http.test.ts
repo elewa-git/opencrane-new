@@ -194,7 +194,7 @@ async function rejectsInput(patch: object) {
   expect(response.json()).toEqual({ status: 'refused' });
   expect(await nats.store.head()).toBe(position);
 }
-it.each([{ extra: privateCanary }, { label: material }, { userId: 'alice' }, { ownerId: 'alice' }, { ownerKind: 'personal' },
+it.each([{ extra: privateCanary }, { label: material }, { userId: 'alice' }, { ownerId: 'alice' }, { ownerKind: 'validation' },
   { silo: 'test' }, { serverId: 'other' }, { action: 'automatic' }, { action: 'clear' },
   { profileId: '' }, { changeRef: 'bad ref' }, { connectionId: 'x'.repeat(201) },
   { expectedSequence: -1 }, { expectedSequence: 0.5 }, { profileRevision: 0 }])(

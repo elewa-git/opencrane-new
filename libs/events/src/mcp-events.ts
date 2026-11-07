@@ -116,7 +116,7 @@ export const mcpEvents = [
   ),
   event(
     'connection.selected', 'connection',
-    'A person explicitly selected a personal account revision or cleared their choice.',
+    'A person explicitly selected a personal or company account revision or cleared their choice.',
     connections.connectionSelectedDataSchema,
     { userId: 'mem_1', serverId: 'mcp_1', connectionId: 'installed_1',
       action: 'select', profileId: 'personal_1', profileRevision: 1, expectedSequence: 0 },
