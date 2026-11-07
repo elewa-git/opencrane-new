@@ -650,6 +650,7 @@ async function refusesBackupWithOrdinaryImageApproval() {
     s3Credentials: {
       accessKeyId: { name: 'backup-identity', key: 'ACCESS_KEY_ID' },
       secretAccessKey: { name: 'backup-identity', key: 'ACCESS_SECRET_KEY' },
+      sessionToken: { name: 'backup-identity', key: 'SESSION_TOKEN' },
     },
   };
   await runFixture(fixture, 'Package command failed');
@@ -669,6 +670,7 @@ async function refusesRecoveryWithOrdinaryImageApproval() {
     s3Credentials: {
       accessKeyId: { name: 'backup-identity', key: 'ACCESS_KEY_ID' },
       secretAccessKey: { name: 'backup-identity', key: 'ACCESS_SECRET_KEY' },
+      sessionToken: { name: 'backup-identity', key: 'SESSION_TOKEN' },
     },
   };
   await runFixture(fixture, 'Package command failed');

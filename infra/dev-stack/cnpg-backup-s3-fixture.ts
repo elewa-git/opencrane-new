@@ -52,6 +52,7 @@ export function storageFixture() {
     return `"${hash.digest('hex')}"`;
   }
   async function handle(request: IncomingMessage, response: ServerResponse) {
+    assert.equal(request.headers['x-amz-security-token'], 'fixture-session-token');
     const method = request.method!;
     const url = new URL(request.url!, 'https://fixture.invalid');
     const path = url.pathname;

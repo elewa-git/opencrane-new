@@ -70,10 +70,11 @@
 {{- fail "CNPG backup requires S3 credential references" -}}
 {{- end -}}
 {{- range $field, $value := $credentials -}}
-{{- if not (has $field (list "accessKeyId" "secretAccessKey")) -}}
+{{- if not (has $field (list "accessKeyId" "secretAccessKey" "sessionToken")) -}}
 {{- fail "Unsupported CNPG backup credential setting" -}}
 {{- end -}}
 {{- end -}}
 {{- include "opencrane.backupReference" $credentials.accessKeyId -}}
 {{- include "opencrane.backupReference" $credentials.secretAccessKey -}}
+{{- include "opencrane.backupReference" $credentials.sessionToken -}}
 {{- end -}}

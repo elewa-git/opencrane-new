@@ -1,0 +1,1 @@
+Database backup and recovery previews now require a Secret reference for the short-lived storage token. Backup marker and cleanup requests send that token with the access key. Installation remains blocked until the checker uses the verified credential record and live backup checks pass.

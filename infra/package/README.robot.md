@@ -597,6 +597,7 @@ postgres:
     s3Credentials:
       accessKeyId: { name: backup-identity, key: ACCESS_KEY_ID }
       secretAccessKey: { name: backup-identity, key: ACCESS_SECRET_KEY }
+      sessionToken: { name: backup-identity, key: SESSION_TOKEN }
 ```
 
 The endpoint must name an HTTPS Service in that namespace, ending in `.svc` or
@@ -604,7 +605,7 @@ The endpoint must name an HTTPS Service in that namespace, ending in `.svc` or
 URL credentials, query strings, fragments and other paths refuse. The S3 bucket
 name has 3–63 lower-case letters, digits or hyphens, starting and ending with a
 letter or digit. Optional path segments use letters, digits, underscores or hyphens.
-The CA certificate and both credentials refer to existing Secret names and keys.
+The CA certificate and all three credential parts refer to existing Secret names and keys.
 No Secret or credential value is rendered. Rendering checks their shape only;
 it cannot establish trust, read the references or verify the endpoint's owner.
 
@@ -674,6 +675,7 @@ recovery:
   s3Credentials:
     accessKeyId: { name: backup-identity, key: ACCESS_KEY_ID }
     secretAccessKey: { name: backup-identity, key: ACCESS_SECRET_KEY }
+    sessionToken: { name: backup-identity, key: SESSION_TOKEN }
   recoveryTarget:
     backupID: "20261026T120000"
     targetLSN: "0/7000028"

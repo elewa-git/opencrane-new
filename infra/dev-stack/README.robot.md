@@ -2182,11 +2182,12 @@ Namespace and Service UIDs. `inspectCnpgBackupIdentity` rejects changed values,
 missing records and expired leases. Root credentials stay in the local provisioning
 process. Unit tests use a signed fake STS reply and make no real MinIO request.
 
-This helper is not connected to the CNPG reference checker or Helm preview yet.
-The checker still refuses every backup after its marker and probe checks. The next
-split must carry session-token references through the preview and checker, check
-the process-local record before marker writes, then remove the invented probes and
-the unconditional inventory refusal. Real MinIO issuance, policy enforcement and
+The CNPG preview now requires a Secret reference for the session token. The checker
+reads that token from the owned Secret and includes it in marker and cleanup requests.
+The local TLS fixture checks the token on every storage request.
+It still refuses every backup after its marker and probe checks. The next split must
+check the process-local record before marker writes, then remove the invented probes
+and the unconditional inventory refusal. Real MinIO issuance, policy enforcement and
 renewal must pass on an owned local store before installation is enabled.
 
 Part of #15, P5-3 PR 3c/3d/3e. `cnpg-backup.ts` extends the existing CNPG checker.

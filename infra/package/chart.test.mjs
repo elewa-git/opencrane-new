@@ -737,6 +737,7 @@ async function stopsOwnershipChild(kind, cancellation, dispatchDelayMs = 0) {
     endpointCA: { name: 'trust', key: 'ca.crt' }, s3Credentials: {
       accessKeyId: { name: 'identity', key: 'access' },
       secretAccessKey: { name: 'identity', key: 'secret' },
+      sessionToken: { name: 'identity', key: 'token' },
     } };
   const controller = new AbortController();
   const options = { timeoutMs: 500, signal: controller.signal };

@@ -11,7 +11,7 @@ type Backup = {
   destinationPath: string;
   endpointURL: string;
   endpointCA: Reference;
-  s3Credentials: { accessKeyId: Reference; secretAccessKey: Reference };
+  s3Credentials: { accessKeyId: Reference; secretAccessKey: Reference; sessionToken: Reference };
 };
 type Kubectl = (args: string[], timeoutMs?: number, signal?: AbortSignal,
   deadline?: number) => Promise<string>;
@@ -255,12 +255,13 @@ async function markerResponse(response: IncomingMessage,
 }
 
 function storageSession(address: ReturnType<typeof serviceAddress>, ca: string,
-  accessKey: string, secretKey: string, signal: AbortSignal, deadline: number) {
+  accessKey: string, secretKey: string, sessionToken: string,
+  signal: AbortSignal, deadline: number) {
   const limits = { signal, deadline };
   const agentOptions = { ca, rejectUnauthorized: true, keepAlive: false, maxCachedSessions: 0 };
   const agent = new https.Agent(agentOptions);
   const clientOptions = { endPoint: address.hostname, port: address.port,
-    useSSL: true, accessKey, secretKey, region: 'us-east-1', pathStyle: true,
+    useSSL: true, accessKey, secretKey, sessionToken, region: 'us-east-1', pathStyle: true,
     transportAgent: agent, transport: storageTransport(signal, deadline),
     retryOptions: { disableRetry: true } };
   const client = new Client(clientOptions);
@@ -292,11 +293,12 @@ function versionQuery(versionId: unknown) {
 
 async function removeMarker(target: { bucketName: string; objectName: string },
   match: Record<string, string>, query: string | undefined,
-  address: ReturnType<typeof serviceAddress>, ca: string, accessKey: string, secretKey: string) {
+  address: ReturnType<typeof serviceAddress>, ca: string, accessKey: string,
+  secretKey: string, sessionToken: string) {
   // Allow cleanup to finish after the check is cancelled or its deadline expires.
   const cleanupSignal = AbortSignal.timeout(1000);
   const cleanupDeadline = Date.now() + 1000;
-  const cleanup = storageSession(address, ca, accessKey, secretKey,
+  const cleanup = storageSession(address, ca, accessKey, secretKey, sessionToken,
     cleanupSignal, cleanupDeadline);
   try {
     if (query === undefined) {
@@ -316,9 +318,10 @@ async function removeMarker(target: { bucketName: string; objectName: string },
 }
 
 async function checkStorage(target: ReturnType<typeof destination>,
-  address: ReturnType<typeof serviceAddress>, ca: string, accessKey: string, secretKey: string,
+  address: ReturnType<typeof serviceAddress>, ca: string, accessKey: string,
+  secretKey: string, sessionToken: string,
   signal: AbortSignal, deadline: number) {
-  const session = storageSession(address, ca, accessKey, secretKey, signal, deadline);
+  const session = storageSession(address, ca, accessKey, secretKey, sessionToken, signal, deadline);
   const random = randomBytes(32);
   const marker = random.toString('hex');
   const hash = createHash('md5');
@@ -349,15 +352,16 @@ async function checkStorage(target: ReturnType<typeof destination>,
   } finally {
     session.close();
     if (markerMayExist) {
-      await removeMarker(target, match, query, address, ca, accessKey, secretKey);
+      await removeMarker(target, match, query, address, ca, accessKey, secretKey, sessionToken);
     }
   }
 }
 
 async function checkConfinement(target: ReturnType<typeof destination>,
-  address: ReturnType<typeof serviceAddress>, ca: string, accessKey: string, secretKey: string,
+  address: ReturnType<typeof serviceAddress>, ca: string, accessKey: string,
+  secretKey: string, sessionToken: string,
   signal: AbortSignal, deadline: number) {
-  const session = storageSession(address, ca, accessKey, secretKey, signal, deadline);
+  const session = storageSession(address, ca, accessKey, secretKey, sessionToken, signal, deadline);
   const prefixEnd = target.objectName.lastIndexOf('/');
   const prefix = target.objectName.slice(0, prefixEnd);
   const outsidePrefix = `${prefix}-ocn-check-${randomUUID()}`;
@@ -391,7 +395,7 @@ async function checkConfinement(target: ReturnType<typeof destination>,
       throw new ScopeError();
     } finally {
       if (mayExist) {
-        await removeMarker(location, match, query, address, ca, accessKey, secretKey);
+        await removeMarker(location, match, query, address, ca, accessKey, secretKey, sessionToken);
       }
     }
   }
@@ -428,7 +432,10 @@ async function check(backup: Backup, namespace: string, kubectl: Kubectl,
   const ca = reference(backup.endpointCA);
   const access = reference(backup.s3Credentials.accessKeyId);
   const secret = reference(backup.s3Credentials.secretAccessKey);
+  const token = reference(backup.s3Credentials.sessionToken);
   requireValid(access.name !== secret.name || access.key !== secret.key);
+  requireValid(token.name !== access.name || token.key !== access.key);
+  requireValid(token.name !== secret.name || token.key !== secret.key);
   const found: StoredObject[] = [];
   async function remember(kind: string, name: string) {
     const object = await read(kubectl, namespace, kind, name, signal, deadline);
@@ -440,7 +447,7 @@ async function check(backup: Backup, namespace: string, kubectl: Kubectl,
   ownedBy(service, owner);
   localService(service, address.port);
   const secrets = new Map<string, StoredObject>();
-  for (const ref of [ca, access, secret]) {
+  for (const ref of [ca, access, secret, token]) {
     if (secrets.has(ref.name)) continue;
     const object = await remember('Secret', ref.name);
     ownedBy(object, service);
@@ -448,7 +455,7 @@ async function check(backup: Backup, namespace: string, kubectl: Kubectl,
   }
   const caCertificate = entry(secrets.get(ca.name)!, ca.key);
   certificate(caCertificate);
-  for (const ref of [access, secret]) {
+  for (const ref of [access, secret, token]) {
     const credential = secrets.get(ref.name)!;
     requireValid(/^[\x21-\x7e]+$/u.test(entry(credential, ref.key)));
     if (credential.metadata.annotations?.['opencrane.dev/backup-destination'] !== destinationPath) {
@@ -456,10 +463,13 @@ async function check(backup: Backup, namespace: string, kubectl: Kubectl,
     }
   }
   await checkEndpoint(address.hostname, address.port, caCertificate, signal, deadline);
-  await checkStorage(target, address, caCertificate, entry(secrets.get(access.name)!, access.key),
-    entry(secrets.get(secret.name)!, secret.key), signal, deadline);
-  await checkConfinement(target, address, caCertificate, entry(secrets.get(access.name)!, access.key),
-    entry(secrets.get(secret.name)!, secret.key), signal, deadline);
+  const accessKey = entry(secrets.get(access.name)!, access.key);
+  const secretKey = entry(secrets.get(secret.name)!, secret.key);
+  const sessionToken = entry(secrets.get(token.name)!, token.key);
+  await checkStorage(target, address, caCertificate, accessKey, secretKey, sessionToken,
+    signal, deadline);
+  await checkConfinement(target, address, caCertificate, accessKey, secretKey, sessionToken,
+    signal, deadline);
   // Recheck ownership and all reference identities after the storage requests finish.
   for (const original of found) {
     const current = await read(kubectl, namespace, original.kind, original.metadata.name,
