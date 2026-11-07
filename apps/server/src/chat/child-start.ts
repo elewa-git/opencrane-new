@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { computerTurnStartedDataSchema } from '@opencrane/events';
-import { currentAuthority, providerTurnAdmission, reservationCents,
+import { currentAuthority, providerTurnAdmission, reservationCents, requireRootStartCapacity,
   type BudgetActor } from '@opencrane/models';
 import { checkedChildActivation } from './child-activation.ts';
 import { ChildRequestChanged } from './child-requests.ts';
@@ -71,8 +71,9 @@ export async function startActivatedChild(options: Options, actor: BudgetActor, 
       await checkComputerChanges(options, root, prepared.computer.sequence, fresh.deadline);
       await currentAuthority(options.store, options.binding, root.requesterId,
         root.assistantId, root.conversationId, 'model', model, fresh, checked.rows);
-      await actor.checkRootStartCapacity(root.rootId, firstCallBoundCents,
-        checked.confirmAccess, fresh.deadline);
+      await checked.confirmAccess();
+      await actor.requireCurrent(fresh.deadline);
+      requireRootStartCapacity(actor.state, root.rootId, firstCallBoundCents, actor.now());
     }
     await confirm();
     return { rootId: root.rootId, requesterId: root.requesterId,
