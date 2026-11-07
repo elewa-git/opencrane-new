@@ -63,7 +63,12 @@ function isHostRefusal() {
       return true;
     }
     // Use the collector's fixed allowlist, passed with the command.
-    return keys.length === 3 && protectionFailures.includes(result.protectionFailure);
+    if (keys.length === 3) {
+      return result.protectionFailure !== 'private_process_missing' &&
+        protectionFailures.includes(result.protectionFailure);
+    }
+    return keys.length === 4 && result.complete === false &&
+      protectionFailures.includes(result.protectionFailure);
   } catch {
     return false;
   }

@@ -23,7 +23,7 @@ flowchart LR
   server["apps/server<br/>memory preparation"] -->|reads and rechecks results| collector
   collector -.->|checks memory, Stop and reply loss| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
-  collector -->|measures, starts checks and reads failure reasons| docker["Docker<br/>running image and host"]
+  collector -->|measures, starts checks and checks refusal format| docker["Docker<br/>running image and host"]
   docker -->|checks protection and pinned Codex| deployment["deployment<br/>event store and journey runner"]
 ```
 
@@ -34,7 +34,9 @@ flowchart LR
 - Measure the source revision, image, host, silo and installation before collecting results.
 - Refuse an old or used event store, changed deployment, or missing check.
 - Refuse swap, crash dumps, unsafe process limits and unreadable host settings.
-- Allow only prerequisite results when the container protects its runner but other processes remain unchecked.
+- Refuse container journeys while any process that can hold private text lacks protection proof.
+- Mark missing process proof as incomplete in the runner and saved collector result.
+- Reject a missing-process refusal unless it says `complete: false`.
 - Save protection refusals with a fixed message naming the failed check.
 - Accept results only from processes it starts in the measured image.
 - Check two private Codex processes from the deployment image without a model call.
@@ -98,8 +100,10 @@ memory and swap. An image-owned helper disables dumps in that Node process and
 measures its dumpability and core limits. The runner also reads `kernel.core_pattern`
 and `fs.suid_dumpable`. It refuses a crash dump helper unless `fs.suid_dumpable` is 0.
 Unreadable settings refuse too. It never changes host settings.
-This path returns only NOT RUN until
-the server, bridge, supervisor, proxy and native processes have equivalent proof.
+It reads the runner's process identity before and after the helper check. The
+collector refuses the container path before starting a journey because the server
+delivery, bridge, supervisor, proxy, native wrapper, native child and canary helpers
+still have no live proof. The safe-host path keeps its existing checks.
 
 ## How to run or test it
 

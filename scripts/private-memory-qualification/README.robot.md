@@ -172,13 +172,42 @@ An empty pattern is valid only when the proc file contains its terminating newli
 an empty read refuses. Only the fixed category and message reach logs and saved
 results; the pattern, helper path and read errors stay out. No host setting changes.
 
-This bounded first part permits only NOT RUN receipts through the container path.
-It runs no native or server journey there. Equivalent measurements for every other
-plaintext-bearing process, guest kernels and both complete qualifications remain
-NOT RUN. Existing safe-host journeys retain their PARTIAL/NOT RUN results. The
+This bounded first part ran no native or server journey through the container path.
+The later process inventory below now refuses that path before a journey starts.
+Equivalent measurements for every other plaintext-bearing process, guest kernels
+and both complete qualifications remain NOT RUN. Existing safe-host journeys retain
+their PARTIAL/NOT RUN results. The
 collector still binds challenges and installations, withdraws failed evidence and
 forwards only the fixed host refusal. Injected test observations cannot qualify.
 See [own checks](../../docs/process/p4-15-pr5r/receipt.md).
+
+## Private process inventory
+
+The current container inventory names the runner, server delivery, bridge,
+supervisor, proxy, native Codex wrapper, native child and any helper that receives
+a private test value. `private-processes.ts` is the first bounded part. It reads
+the runner's PID and start time from `/proc/<pid>/stat`, executable from `exe`, UID
+from `status`, cgroup membership and PID namespace. The namespace and the
+collector's existing container and installation checks bind the observation to
+the measured deployment. A second read around the runner's actual dumpability
+check refuses PID reuse, exec, UID, cgroup and namespace changes. The cgroup's
+effective finite memory and zero swap controls, and the actual runner's zero
+core limits and non-dumpable state, are still measured by the existing probes.
+
+No other process has a trusted PID or a way to report its own dumpability yet.
+The container path therefore returns `host_refused / private_process_missing`
+with `complete: false` before any journey begins, even when the runner passes.
+The supervisor forwards that exact refusal after cleanup. Both the supervisor
+and collector reject `private_process_missing` without `complete: false`. The
+collector saves an accepted refusal with the fixed message. An unreadable runner
+identity and an identity change have separate fixed categories. Caller-supplied
+observations are ignored. The failure carries no PID, path, setting or test value.
+The safe-host path is unchanged. The other seven process groups, replacements
+after awaited delivery and both complete qualifications are NOT RUN. This part
+does not enable memory or make a container journey pass. The disposable image
+test checks the real runner identity and refusal inside a restricted container;
+unit tests check the identity comparison and refusal boundary. See the
+[own receipt](../../docs/process/p4-15-pr5w/receipt.md).
 
 The Linux [cgroup contract](https://docs.kernel.org/admin-guide/cgroup-v2.html)
 defines the controls. The [exec contract](https://www.man7.org/linux/man-pages/man2/execve.2.html)

@@ -1,0 +1,1 @@
+Container memory qualification now refuses before a journey when private-text processes beyond the measured runner lack live protection proof. The collector records a fixed protection reason without exposing process details.

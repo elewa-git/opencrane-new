@@ -2,10 +2,12 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { probeContainer } from './container-probe.ts';
 import { runnerProtected } from './runner-protection.ts';
+import { probePrivateProcessInventory } from './private-processes.ts';
 import { runJourney } from './journey.ts';
 
 vi.mock('node:fs', { spy: true });
 vi.mock('./runner-protection.ts', { spy: true });
+vi.mock('./private-processes.ts', { spy: true });
 let files: Map<string, string>;
 const mount = '29 23 0:26 / /sys/fs/cgroup ro - cgroup2 cgroup rw\n';
 const requestData = {
@@ -41,12 +43,16 @@ function prepare(): void {
   vi.mocked(readFileSync).mockImplementation(read);
   vi.mocked(realpathSync).mockImplementation(unchangedPath);
   vi.mocked(runnerProtected).mockReturnValue(true);
+  vi.mocked(probePrivateProcessInventory).mockReturnValue('private_process_missing');
 }
 beforeEach(prepare);
 async function acceptsOwnGroup(): Promise<void> {
   expect(probeContainer()).toBe(true);
   expect(runnerProtected).toHaveBeenCalled();
-  expect(await runJourney(request)).toMatchObject({ result: 'NOT RUN', complete: false });
+  expect(await runJourney(request)).toEqual({
+    result: 'FAIL', reason: 'host_refused', protectionFailure: 'private_process_missing',
+    complete: false,
+  });
 }
 it('measures the current runner and its own finite no-swap cgroup', acceptsOwnGroup);
 
@@ -166,7 +172,10 @@ it.each(coreSettings)(
 async function allowsCoreSetting(pattern: string, privileged: string): Promise<void> {
   files.set('/proc/sys/kernel/core_pattern', pattern);
   files.set('/proc/sys/fs/suid_dumpable', privileged);
-  expect(await runJourney(request)).toMatchObject({ result: 'NOT RUN', complete: false });
+  expect(await runJourney(request)).toEqual({
+    result: 'FAIL', reason: 'host_refused', protectionFailure: 'private_process_missing',
+    complete: false,
+  });
   vi.mocked(runnerProtected).mockReturnValue('core_limit_not_zero');
   expect(await runJourney(request)).toEqual({
     result: 'FAIL', reason: 'host_refused', protectionFailure: 'core_limit_not_zero',

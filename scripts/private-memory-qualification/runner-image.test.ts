@@ -38,6 +38,19 @@ function run(source: string, memorySwap = '256m', core = '0:0', identityChange =
 }
 const probe = `import { probeContainer } from '${directory}/container-probe.ts';
   process.stdout.write(String(probeContainer()));`;
+function refusesUnmeasuredProcessGroups(): void {
+  const source = `import assert from 'node:assert/strict';
+    import { probePrivateProcessInventory, readProcessIdentity } from
+      '${directory}/private-processes.ts';
+    const identity = readProcessIdentity(process.pid);
+    assert.equal(identity.pid, process.pid);
+    assert.equal(identity.executable, process.execPath);
+    assert.equal(probePrivateProcessInventory(), 'private_process_missing');
+    process.stdout.write('refused');`;
+  expect(run(source)).toBe('refused');
+}
+it('refuses unmeasured private processes in a restricted container',
+  refusesUnmeasuredProcessGroups, 30_000);
 function checksRestricted(): void {
   const pattern = readFileSync('/proc/sys/kernel/core_pattern', 'utf8');
   const privileged = readFileSync('/proc/sys/fs/suid_dumpable', 'utf8');

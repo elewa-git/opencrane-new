@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { probeHost } from './host-probe.ts';
 import { probeContainer } from './container-probe.ts';
+import { probePrivateProcessInventory } from './private-processes.ts';
 import type { ProtectionFailure } from './protection-failure.ts';
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
@@ -14,11 +15,22 @@ const requestSchema = z.strictObject({
     'P4-14', 'P4-15']),
 });
 
-type Refusal = { result: 'FAIL'; reason: 'input_invalid' | 'host_refused' | 'journey_failed';
-  protectionFailure?: ProtectionFailure };
+type Refusal =
+  { result: 'FAIL'; reason: 'input_invalid' | 'host_refused' | 'journey_failed' } |
+  { result: 'FAIL'; reason: 'host_refused';
+    protectionFailure: Exclude<ProtectionFailure, 'private_process_missing'> } |
+  { result: 'FAIL'; reason: 'host_refused';
+    protectionFailure: ProtectionFailure; complete: false };
 
 type Request = z.infer<typeof requestSchema>;
 type Receipt = Request & { observedAt: number; result: 'NOT RUN' | 'PARTIAL'; complete: false };
+
+function containerRefusal(protectionFailure: ProtectionFailure): Refusal {
+  if (protectionFailure === 'private_process_missing') {
+    return { result: 'FAIL', reason: 'host_refused', protectionFailure, complete: false };
+  }
+  return { result: 'FAIL', reason: 'host_refused', protectionFailure };
+}
 
 export async function runJourney(input: string): Promise<Refusal | Receipt> {
   let request: Request;
@@ -34,7 +46,12 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
   if (!safeHost) {
     const protection = probeContainer();
     if (protection !== true) {
-      return { result: 'FAIL', reason: 'host_refused', protectionFailure: protection };
+      return containerRefusal(protection);
+    }
+    const inventory = probePrivateProcessInventory();
+    if (inventory !== true) {
+      return { result: 'FAIL', reason: 'host_refused', protectionFailure: inventory,
+        complete: false };
     }
   }
   let result: Receipt['result'] = 'NOT RUN';
@@ -78,7 +95,12 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
   } else {
     const protection = probeContainer();
     if (protection !== true) {
-      return { result: 'FAIL', reason: 'host_refused', protectionFailure: protection };
+      return containerRefusal(protection);
+    }
+    const inventory = probePrivateProcessInventory();
+    if (inventory !== true) {
+      return { result: 'FAIL', reason: 'host_refused', protectionFailure: inventory,
+        complete: false };
     }
   }
   // These assertions cannot qualify isolation, persistence or private output delivery.

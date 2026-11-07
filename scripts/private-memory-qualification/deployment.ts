@@ -28,10 +28,22 @@ const receiptSchema = bindingSchema.extend({
   name: z.string(), challengeId: z.uuid(), observedAt: z.number().int(),
   result: z.enum(['PASS', 'PARTIAL', 'NOT RUN']), complete: z.boolean(),
 });
-const hostRefusalSchema = z.strictObject({
+type LegacyProtectionFailure = Exclude<ProtectionFailure, 'private_process_missing'>;
+
+function isLegacyProtectionFailure(value: unknown): value is LegacyProtectionFailure {
+  return isProtectionFailure(value) && value !== 'private_process_missing';
+}
+
+const legacyHostRefusalSchema = z.strictObject({
   result: z.literal('FAIL'), reason: z.literal('host_refused'),
-  protectionFailure: z.custom<ProtectionFailure>(isProtectionFailure).optional(),
+  protectionFailure: z.custom<LegacyProtectionFailure>(isLegacyProtectionFailure).optional(),
 });
+const incompleteHostRefusalSchema = z.strictObject({
+  result: z.literal('FAIL'), reason: z.literal('host_refused'),
+  protectionFailure: z.custom<ProtectionFailure>(isProtectionFailure),
+  complete: z.literal(false),
+});
+const hostRefusalSchema = z.union([legacyHostRefusalSchema, incompleteHostRefusalSchema]);
 const freshSchema = z.strictObject({
   created: z.iso.datetime(), lastSequence: z.number().int().nonnegative(),
   eventCount: z.number().int().nonnegative(),
@@ -54,8 +66,7 @@ try {
 type Binding = z.infer<typeof bindingSchema>;
 type Status = 'PASS' | 'PARTIAL' | 'NOT RUN';
 type Result = { result: 'FAIL'; reason: 'collection_failed' } |
-  { result: 'FAIL'; reason: 'host_refused';
-    protectionFailure?: ProtectionFailure | undefined; message: string } | Binding & {
+  (z.infer<typeof hostRefusalSchema> & { message: string }) | Binding & {
   result: 'PASS' | 'PARTIAL'; checks: Record<string, Status>; qualifications: Record<string, Status>;
   receiptDigests: string[];
 };

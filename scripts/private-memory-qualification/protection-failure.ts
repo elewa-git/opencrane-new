@@ -15,6 +15,9 @@ export const protectionMessages = {
   process_dumpable: 'The runner is still dumpable.',
   process_identity_changed: 'The runner identity changed after dump protection was set.',
   helper_unavailable: 'The native runner protection helper is unavailable.',
+  private_process_missing: 'A required private-text process has no live protection proof.',
+  private_process_unreadable: 'A private-text process identity could not be read.',
+  private_process_identity_changed: 'A private-text process identity changed during measurement.',
 };
 export type ProtectionFailure = keyof typeof protectionMessages;
 export function isProtectionFailure(value: unknown): value is ProtectionFailure {
