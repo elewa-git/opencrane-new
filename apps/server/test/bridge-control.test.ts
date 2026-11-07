@@ -611,6 +611,40 @@ it('bounds queued close cancellations and reads each history once per pass', asy
   expect(finalRows.filter(isClosedFailure)).toHaveLength(97);
 });
 
+it('rechecks a queued input when a computer start arrives during the cleanup pass', async () => {
+  fixture = await bridgeFixture(true);
+  const test = fixture;
+  const second = await test.append('conversation-chat', 'message.posted', {
+    conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text',
+    ...test.keys.encrypt('test', 'chat', 'Second request'),
+  });
+  await test.append('conversation-chat', 'conversation.closed', {
+    conversationId: 'chat', closedBy: 'alice',
+  });
+  const append = test.store.append.bind(test.store);
+  let started = false;
+  async function appendWithStart(input: Parameters<typeof append>[0]) {
+    const result = await append(input);
+    if (!started && input.event.principal?.id === 'close-cleanup') {
+      started = true;
+      await test.append('computer-assistant', 'computer.turn_started', {
+        conversationId: 'chat', assistantId: 'assistant', turnId: second.id,
+        threadId: 'second-thread', requesterId: 'alice', computerId: 'desktop',
+        task: 'chat_turn', payingGroupId: 'personal',
+      });
+    }
+    return result;
+  }
+  vi.spyOn(test.store, 'append').mockImplementation(appendWithStart);
+
+  await test.process();
+  const rows = await chatHistory(test.store, 'test', 'chat');
+  expect(rows.filter(isClosedFailure).map(turnIdOf)).not.toContain(second.id);
+  expect(await test.process()).toBe(true);
+  await test.flushFrames();
+  expect(test.frames.filter(isStop)).toContainEqual(expect.objectContaining({ turnId: second.id }));
+});
+
 function isComputerTurnClosed(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
   return row.event.type === 'computer.turn_closed';
 }
