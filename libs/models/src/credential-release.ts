@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { decisionRecordedDataSchema, toolCredentialReleaseSchema,
+import { credentialReleaseSchema, decisionRecordedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import { envelope, history } from './actor.ts';
 import { foldConnection } from './bearer-connections.ts';
@@ -10,8 +10,10 @@ import { foldConnectionSelection } from './connection-selection.ts';
 import { connectionServer } from './connection-server.ts';
 import { MemberAccessRefused } from './member-authority.ts';
 import { selectedOAuth, type OAuthConfigurationLoader } from './oauth-selection.ts';
+import { routineCompanyReleaseFacts } from './routine-company-release.ts';
+import type { CompanyProfileReader } from './company-selection.ts';
 
-type Release = z.infer<typeof toolCredentialReleaseSchema>;
+type Release = z.infer<typeof credentialReleaseSchema>;
 type Access = { deadline: number; checkAccess: () => Promise<void> };
 type Activation = NonNullable<ReturnType<typeof foldConnection>['data']>['activation'];
 
@@ -51,7 +53,8 @@ function requireDecision(rows: StoredEvent[], decisionId: string, release: Relea
   return event;
 }
 export async function credentialReleaseEvidence(store: EventStore, silo: string,
-  decisionId: string, release: Release, loadConfiguration?: OAuthConfigurationLoader) {
+  decisionId: string, release: Release, loadConfiguration?: OAuthConfigurationLoader,
+  readCompanyProfile?: CompanyProfileReader) {
   requireLifetime(release);
   const deadline = performance.now() + 10_000;
   const positions = new Map<string, number>();
@@ -62,6 +65,21 @@ export async function credentialReleaseEvidence(store: EventStore, silo: string,
   }
   const decisions = await read(`decision-${release.requestId}`);
   const decision = requireDecision(decisions, decisionId, release);
+  if (release.ownerKind === 'company') {
+    if (!loadConfiguration || !readCompanyProfile) {
+      refuse();
+    }
+    const company = await routineCompanyReleaseFacts(store, silo, release,
+      loadConfiguration, readCompanyProfile);
+    for (const [subject, position] of company.positions) {
+      positions.set(subject, position);
+    }
+    const receipts = await read(`credential-${release.requestId}`);
+    const oauth = { expiresAt: company.expiresAt,
+      configurationCurrent: company.configurationCurrent };
+    return { decision, positions, receipts, company, oauth,
+      expiresAt: company.expiresAt };
+  }
   const selectedRows = await read(`connection-selection-${release.userId}-${release.serverId}`);
   const selection = foldConnectionSelection(selectedRows);
   const profileRows = await read(
@@ -143,7 +161,7 @@ function confirmed(rows: StoredEvent[], expected: EventEnvelope) {
 export async function confirmCredentialRelease(store: EventStore, silo: string,
   requesterId: string, decisionId: string, raw: unknown,
   prepareAccess: () => Promise<Access>, action: 'append' | 'recover' | 'claim' = 'append',
-  loadConfiguration?: OAuthConfigurationLoader) {
+  loadConfiguration?: OAuthConfigurationLoader, readCompanyProfile?: CompanyProfileReader) {
   let refusal: MemberAccessRefused | undefined;
   async function prepare() {
     const access = await prepareAccess();
@@ -162,7 +180,7 @@ export async function confirmCredentialRelease(store: EventStore, silo: string,
   }
   try {
     const receipt = await confirm(store, silo, requesterId, decisionId, raw, prepare, action,
-      loadConfiguration);
+      loadConfiguration, readCompanyProfile);
     if (refusal) {
       throw refusal;
     }
@@ -179,14 +197,15 @@ export async function confirmCredentialRelease(store: EventStore, silo: string,
   }
 }
 async function prepareEvidence(store: EventStore, silo: string, requesterId: string,
-  decisionId: string, raw: unknown, loadConfiguration?: OAuthConfigurationLoader) {
+  decisionId: string, raw: unknown, loadConfiguration?: OAuthConfigurationLoader,
+  readCompanyProfile?: CompanyProfileReader) {
   try {
-    const release = toolCredentialReleaseSchema.parse(raw);
+    const release = credentialReleaseSchema.parse(raw);
     if (release.userId !== requesterId || release.ownerId !== requesterId) {
       refuse();
     }
     const evidence = await credentialReleaseEvidence(store, silo, decisionId, release,
-      loadConfiguration);
+      loadConfiguration, readCompanyProfile);
     return { release, evidence };
   } catch {
     return null;
@@ -194,9 +213,11 @@ async function prepareEvidence(store: EventStore, silo: string, requesterId: str
 }
 async function confirm(store: EventStore, silo: string, requesterId: string,
   decisionId: string, raw: unknown, prepareAccess: () => Promise<Access>,
-  action: 'append' | 'recover' | 'claim', loadConfiguration?: OAuthConfigurationLoader) {
+  action: 'append' | 'recover' | 'claim', loadConfiguration?: OAuthConfigurationLoader,
+  readCompanyProfile?: CompanyProfileReader) {
   // Finish validation and history before the caller starts its two-second access check.
-  const prepared = await prepareEvidence(store, silo, requesterId, decisionId, raw, loadConfiguration);
+  const prepared = await prepareEvidence(store, silo, requesterId, decisionId, raw,
+    loadConfiguration, readCompanyProfile);
   const access = await prepareAccess();
   // Report the caller's permission refusal before any validation or saved-evidence failure.
   if (!prepared) {
@@ -210,6 +231,9 @@ async function confirm(store: EventStore, silo: string, requesterId: string,
   }
   async function checkAccess() {
     await access.checkAccess();
+    if ('company' in evidence) {
+      await evidence.company.executionCurrent();
+    }
     if (evidence.oauth && !await evidence.oauth.configurationCurrent()) {
       refuse();
     }

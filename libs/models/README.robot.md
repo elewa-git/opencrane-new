@@ -4843,9 +4843,11 @@ Fresh-install and production Kubernetes qualification: NOT RUN.
 
 `credential-broker.ts` has no public export or route. It takes authenticated request
 context and reads the exact saved allowed decision. Ownership, selected profile,
-verified OAuth account, generation and scopes come from saved records. The existing
-selection check validates current configuration and tool scopes. Bearer and company
-bindings cannot send. The trusted caller still supplies current computer, turn,
+verified account, generation and scopes come from saved records. The existing
+selection check validates current configuration and tool scopes. The personal broker
+still refuses company releases. The separate company audit check verifies its frozen
+routine run, explicit company choice, synthetic verified account identity, current
+published free Allow rule and exact tool revision. Its trusted caller supplies current computer, turn,
 requester/assistant permissions, approval and budget checks through `prepareAccess`.
 No production caller supplies this contract yet.
 
@@ -4862,11 +4864,19 @@ The callback is invoked once; failures never grant another invocation. A fresh a
 append is required. Duplicate or unknown append outcomes cannot send. `recover` reads
 the original receipt only; restart never rebuilds a lease from that receipt.
 
-Release records prove authorisation, not upstream success. No event or public API field
-was added; request context uses existing audited names and digests. Security rules and
+Release records prove authorisation, not upstream success. The personal broker added no
+public API field; the separate company audit has its own strict release variant. Request
+context uses existing audited names and digests. Security rules and
 both authority test files remain unchanged. Tests use real NATS/PostgreSQL and the real
 custody adapter against a synthetic HTTP transport. Gateway/header integration and
 fresh-install provider qualification remain NOT RUN.
+
+The company path uses `routine-company-release.ts` to check a frozen run, current
+choice, verified account and free published tool before `confirmCredentialRelease`
+claims one audit. The personal broker still refuses company decisions. The profile
+reader is injected; no production company verification reader or caller is registered.
+No company material is read. Company activation and routine execution remain unavailable.
+Tests use disposable NATS, PostgreSQL and OpenFGA with synthetic verification.
 
 ## Initial memory permission decisions
 

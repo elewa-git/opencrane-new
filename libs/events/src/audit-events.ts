@@ -1,13 +1,13 @@
 import { z } from 'zod';
 import { egressObservationSchema, legacyEgressObservationSchema } from './egress-observation.ts';
-import { legacyCredentialReleaseSchema, toolCredentialReleaseSchema } from './credential-release.ts';
+import { credentialReleaseSchema, legacyCredentialReleaseSchema } from './credential-release.ts';
 import { event } from './definition.ts';
 
 export const auditEvents = [
   // Keep these events beside the audit events they describe. The registry examples provide
   // valid fixture data for each event.
   event('credential.released', 'credential', 'Release authorisation was audited; legacy records remain non-authorising evidence.',
-    z.union([legacyCredentialReleaseSchema, toolCredentialReleaseSchema]),
+    z.union([legacyCredentialReleaseSchema, credentialReleaseSchema]),
     { requestId: 'request', permitId: 'permit', connectionId: 'connection',
       profileId: 'default', leaseId: 'lease', generation: 1 }),
   event('egress.observed', 'egress', 'A relay reported closure; earlier destination observations remain readable.',
