@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildOverview, type OverviewRow, type OverviewSource } from '../src/overview/rows.ts';
+import { providerRow } from '../src/overview/routes.ts';
 
 function row(source: OverviewRow['source'], id: string, priority: OverviewRow['priority'],
   time: string): OverviewRow {
@@ -14,7 +15,53 @@ function source(name: OverviewSource['name'], rows: OverviewRow[]): OverviewSour
   return { name, status: 'current', checkpoint: 12, checkedAt: recent, rows };
 }
 
+function providerFact(outcome: string, time: string, revision = 2) {
+  return { outcome, time, revision, changeId: `check-${outcome}-${time}` };
+}
+
+function providerWithChecks(reachable?: ReturnType<typeof providerFact>,
+  modelAnswer?: ReturnType<typeof providerFact>) {
+  return providerRow({ state: { providerId: 'provider-one', revision: 2, position: 5,
+    reachable, modelAnswer } });
+}
+
 describe('organisation overview rows', () => {
+  it('requires current passing reachability and model checks before Ready', () => {
+    const pass = providerFact('pass', old);
+    const laterPass = providerFact('pass', recent);
+    expect(providerWithChecks(pass).priority).toBe('needs_input');
+    expect(providerWithChecks(pass, providerFact('skipped', recent)).priority)
+      .toBe('needs_input');
+    expect(providerWithChecks(pass, laterPass).priority).toBe('ready');
+    expect(providerWithChecks(providerFact('fail', old), laterPass).priority)
+      .toBe('failure');
+    expect(providerWithChecks(laterPass, providerFact('fail', old)).priority)
+      .toBe('failure');
+    expect(providerWithChecks(laterPass, providerFact('outcome_unknown', old)).priority)
+      .toBe('unknown');
+    expect(providerWithChecks(providerFact('unknown', old), laterPass).priority)
+      .toBe('unknown');
+    expect(providerWithChecks(pass, providerFact('pass', recent, 1)).priority)
+      .toBe('needs_input');
+    expect(providerWithChecks(providerFact('pass', old, 1), laterPass).priority)
+      .toBe('needs_input');
+  });
+
+  it('rejects a page cursor after an integration expires without a new checkpoint', () => {
+    const older = row('integrations', 'older', 'ready', old);
+    const newer = row('integrations', 'newer', 'ready', recent);
+    const beforeExpiry = source('integrations', [older, newer]);
+    const first = buildOverview([beforeExpiry], 1);
+    expect(first.rows.map(item => item.id)).toEqual(['older']);
+    expect(first.next).not.toBeNull();
+
+    const expired = { ...newer, priority: 'needs_input' as const };
+    const afterExpiry = source('integrations', [older, expired]);
+    expect(afterExpiry.checkpoint).toBe(beforeExpiry.checkpoint);
+    expect(() => buildOverview([afterExpiry], 1, first.next)).toThrow(
+      'Invalid overview cursor');
+  });
+
   it('defaults to 20 rows, caps at 50 and keeps a stable cursor', () => {
     const rows = Array.from({ length: 60 }, (_, index) =>
       row('providers', `provider-${index.toString().padStart(2, '0')}`, 'failure', old));

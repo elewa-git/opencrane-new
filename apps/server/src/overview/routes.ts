@@ -55,7 +55,7 @@ function providerPriority(provider: SavedProvider,
   return 'needs_input';
 }
 
-function providerRow(record: { state: SavedProvider }): OverviewRow {
+export function providerRow(record: { state: SavedProvider }): OverviewRow {
   const provider = record.state;
   const latest = latestProviderFact(provider);
   const priority = providerPriority(provider, latest);
