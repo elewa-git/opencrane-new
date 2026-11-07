@@ -23,3 +23,9 @@ export type ProtectionFailure = keyof typeof protectionMessages;
 export function isProtectionFailure(value: unknown): value is ProtectionFailure {
   return typeof value === 'string' && Object.hasOwn(protectionMessages, value);
 }
+
+export function isPrivateProcessFailure(value: unknown): boolean {
+  return value === 'private_process_missing' ||
+    value === 'private_process_unreadable' ||
+    value === 'private_process_identity_changed';
+}

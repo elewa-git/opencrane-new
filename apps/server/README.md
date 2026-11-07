@@ -5,6 +5,9 @@
 The back end for OpenCrane sign-in, conversations and organisation settings.
 It runs as a Node.js service. The website sends it requests to sign in, chat, upload
 files and manage the organisation.
+In the packaged image, the service disables its own process dumps before it starts
+handling private work. It answers a local live protection check for the qualification
+runner. This check does not enable private memory.
 Internal personal memory tool preparation checks saved membership before reading
 the catalogue or permissions. It keeps each person in their own scope and refuses
 a delayed list if access changed. The same checks apply when preparing all four

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { checks, qualifications } from './collect.ts';
 import { runInContainer } from './container-process.ts';
 import {
-  isProtectionFailure, protectionMessages, type ProtectionFailure,
+  isPrivateProcessFailure, isProtectionFailure, protectionMessages, type ProtectionFailure,
 } from './protection-failure.ts';
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
@@ -28,10 +28,11 @@ const receiptSchema = bindingSchema.extend({
   name: z.string(), challengeId: z.uuid(), observedAt: z.number().int(),
   result: z.enum(['PASS', 'PARTIAL', 'NOT RUN']), complete: z.boolean(),
 });
-type LegacyProtectionFailure = Exclude<ProtectionFailure, 'private_process_missing'>;
+type LegacyProtectionFailure = Exclude<ProtectionFailure,
+  'private_process_missing' | 'private_process_unreadable' | 'private_process_identity_changed'>;
 
 function isLegacyProtectionFailure(value: unknown): value is LegacyProtectionFailure {
-  return isProtectionFailure(value) && value !== 'private_process_missing';
+  return isProtectionFailure(value) && !isPrivateProcessFailure(value);
 }
 
 const legacyHostRefusalSchema = z.strictObject({

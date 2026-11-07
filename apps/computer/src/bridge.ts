@@ -15,6 +15,7 @@ import { proxy } from './proxy.ts';
 import { proxyControl, proxyGrants } from './proxy-control.ts';
 import { json, record } from './http.ts';
 import type { GateIdentity } from './bridge-gate-authority.ts';
+import { startServiceProtection } from '../../../scripts/private-memory-qualification/service-protection.ts';
 function stopped(error: unknown) {
   const name = error instanceof Error ? error.name : 'Error';
   const safeName = /^[A-Za-z][A-Za-z0-9]{0,60}$/u.test(name) ? name : 'Error';
@@ -24,6 +25,7 @@ function stopped(error: unknown) {
 process.on('uncaughtException', stopped);
 process.on('unhandledRejection', stopped);
 process.umask(0o077);
+await startServiceProtection('bridge');
 const gateway = new URL(process.env['GATEWAY'] ?? 'http://127.0.0.1:3000');
 if (gateway.protocol !== 'http:' || gateway.username || gateway.password || gateway.pathname !== '/') throw new Error('Invalid gateway');
 function waiting(thread: string, approvalId: string) {

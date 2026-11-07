@@ -4,6 +4,7 @@ import { PassThrough } from 'node:stream';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { collectDeployment } from './deployment.ts';
+import { protectionMessages, type ProtectionFailure } from './protection-failure.ts';
 
 vi.mock('node:child_process', { spy: true });
 vi.mock('node:fs', { spy: true });
@@ -504,35 +505,38 @@ async function savesProtectionFailure(protectionFailure: string, message: string
 }
 it.each(protectionCases)('saves and reports the fixed message for %s', savesProtectionFailure);
 
-async function savesIncompleteProcessRefusal(): Promise<void> {
+async function savesIncompleteProcessRefusal(protectionFailure: ProtectionFailure): Promise<void> {
   function refuse(receipt: Record<string, unknown>): void {
     for (const key of Object.keys(receipt)) {
       delete receipt[key];
     }
     Object.assign(receipt, {
       result: 'FAIL', reason: 'host_refused',
-      protectionFailure: 'private_process_missing', complete: false,
+      protectionFailure, complete: false,
     });
   }
   alter = refuse;
   const result = await collectDeployment();
   expect(result).toEqual({
     result: 'FAIL', reason: 'host_refused',
-    protectionFailure: 'private_process_missing', complete: false,
-    message: 'A required private-text process has no live protection proof.',
+    protectionFailure, complete: false,
+    message: protectionMessages[protectionFailure],
   });
   expect(writeFileSync).toHaveBeenLastCalledWith(expect.any(String), JSON.stringify(result),
     { flag: 'wx', mode: 0o600 });
 }
-it('saves incomplete private process proof as a named refusal', savesIncompleteProcessRefusal);
+it.each(['private_process_missing', 'private_process_unreadable',
+  'private_process_identity_changed'] as const)(
+  'saves incomplete private process proof for %s', savesIncompleteProcessRefusal);
 
-async function rejectsProcessRefusalWithoutIncompleteStatus(): Promise<void> {
+async function rejectsProcessRefusalWithoutIncompleteStatus(
+  protectionFailure: ProtectionFailure): Promise<void> {
   function refuse(receipt: Record<string, unknown>): void {
     for (const key of Object.keys(receipt)) {
       delete receipt[key];
     }
     Object.assign(receipt, {
-      result: 'FAIL', reason: 'host_refused', protectionFailure: 'private_process_missing',
+      result: 'FAIL', reason: 'host_refused', protectionFailure,
     });
   }
   alter = refuse;
@@ -541,8 +545,9 @@ async function rejectsProcessRefusalWithoutIncompleteStatus(): Promise<void> {
   expect(writeFileSync).toHaveBeenLastCalledWith(expect.any(String), JSON.stringify(expected),
     { flag: 'wx', mode: 0o600 });
 }
-it('rejects missing incomplete status from a private process refusal',
-  rejectsProcessRefusalWithoutIncompleteStatus);
+it.each(['private_process_missing', 'private_process_unreadable',
+  'private_process_identity_changed'] as const)(
+  'rejects missing incomplete status for %s', rejectsProcessRefusalWithoutIncompleteStatus);
 
 async function rejectsUnknownProtection(protectionFailure: unknown): Promise<void> {
   function refuse(receipt: Record<string, unknown>): void {

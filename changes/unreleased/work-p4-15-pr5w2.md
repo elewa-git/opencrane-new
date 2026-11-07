@@ -1,0 +1,1 @@
+Private memory checks now require live server delivery and bridge process identity and dump protection evidence. Full container qualification remains blocked while the other process groups are unproved.

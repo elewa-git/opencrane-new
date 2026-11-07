@@ -15,7 +15,7 @@ workers, starts and pauses computers in [Kubernetes](../../GLOSSARY.md#kubernete
 
 ```mermaid
 flowchart LR
-  apps["apps<br/>applications"] --> computer["apps/computer<br/>assistant computer and worker preparation"]
+  apps["apps<br/>applications"] --> computer["apps/computer<br/>protected bridge and worker preparation"]
   apps --> ops["apps/ops<br/>background workers"]
   apps --> server["apps/server<br/>back end"]
   ops -->|starts and pauses| computer
@@ -43,6 +43,8 @@ The computer saves that confirmation without private reply text.
 - Builds the computer image with [Codex](../../GLOSSARY.md#codex), the AI agent,
   a browser, a remote desktop and document tools.
 - Runs the [bridge](../../GLOSSARY.md#bridge) that receives messages and reports progress.
+- Disables bridge process dumps before it receives private work. The bridge answers
+  a local protection check inside its computer container.
 - Keeps the assistant's files when its computer pauses and starts again.
 - Runs the assistant, file tools and desktop as separate Linux users to limit their access.
 - Sends AI model calls and reviewed [tool server](../../GLOSSARY.md#mcp-server-tool-server)

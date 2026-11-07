@@ -17,11 +17,15 @@ function cleanup(): void {
 beforeAll(build, 310_000);
 afterAll(cleanup);
 
-function run(source: string, memorySwap = '256m', core = '0:0', identityChange = false): string {
+function run(source: string, memorySwap = '256m', core = '0:0', identityChange = false,
+  ptrace = false): string {
   const name = `runner-protection-test-${randomUUID()}`;
   const options = { encoding: 'utf8' as const, timeout: 15_000 };
   try {
     const capabilities = identityChange ? ['--cap-add=SETUID'] : [];
+    if (ptrace) {
+      capabilities.push('--cap-add=SYS_PTRACE');
+    }
     const args = ['run', '--name', name, '--network=none', '--read-only',
       '--cap-drop=ALL', '--security-opt=no-new-privileges', '--pids-limit=32',
       ...capabilities,
@@ -112,7 +116,7 @@ function checksLiveServices(): void {
       for (const child of services) child.kill('SIGKILL');
     }
   `;
-  expect(run(source)).toBe('services refused when missing');
+  expect(run(source, '256m', '0:0', true, true)).toBe('services refused when missing');
 }
 it('checks two live protected processes and refuses each missing process',
   checksLiveServices, 30_000);

@@ -20,6 +20,14 @@ store fixtures. The public close route remains disabled.
 
 For people, read [README.md](README.md) first.
 
+## Server process protection
+
+`src/main.ts` starts the image-owned native protection helper before opening
+connections or delivery buffers. The local socket returns only a fresh challenge
+and the helper's current fixed result. The qualification runner checks Linux peer
+credentials and process identity around the reply. Development runs without the
+native helper expose no protection socket. Memory admission remains disabled.
+
 ## Assistant service wait signal
 
 `DEV_DISPATCHER_READY_FILE` is set only by the development stack. The server reads

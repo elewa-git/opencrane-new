@@ -24,7 +24,7 @@ flowchart LR
   collector -.->|checks memory, Stop and reply loss| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
   collector -->|measures, starts checks and checks refusal format| docker["Docker<br/>running image and host"]
-  docker -->|checks protection and pinned Codex| deployment["deployment<br/>event store and journey runner"]
+  docker -->|checks protection and pinned Codex| deployment["deployment<br/>service processes and journey runner"]
 ```
 
 ## What it is responsible for
@@ -101,9 +101,12 @@ measures its dumpability and core limits. The runner also reads `kernel.core_pat
 and `fs.suid_dumpable`. It refuses a crash dump helper unless `fs.suid_dumpable` is 0.
 Unreadable settings refuse too. It never changes host settings.
 It reads the runner's process identity before and after the helper check. The
-collector refuses the container path before starting a journey because the server
-delivery, bridge, supervisor, proxy, native wrapper, native child and canary helpers
-still have no live proof. The safe-host path keeps its existing checks.
+server and computer bridge each protect their own process and answer a local live
+check. The runner checks the process identity before and after that answer. The
+computer bridge lives in another container, so the current server-container runner
+cannot see it. The collector still refuses the container path before a journey:
+the bridge, supervisor, proxy, native wrapper, native child and canary helpers lack
+complete proof there. The safe-host path keeps its existing checks.
 
 ## How to run or test it
 

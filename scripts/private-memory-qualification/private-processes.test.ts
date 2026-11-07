@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, it, vi } from 'vitest';
 import {
-  privateProcessNames, probePrivateProcessInventory, readProcessIdentity,
+  checkLiveService, privateProcessNames, probePrivateProcessInventory, readProcessIdentity,
   sameProcessIdentity,
 } from './private-processes.ts';
 import { runnerProtected } from './runner-protection.ts';
@@ -42,6 +42,8 @@ function detectsReplacement(): void {
   expect(sameProcessIdentity(original, changedExecutable)).toBe(false);
   const foreignGroup = { ...original, cgroup: '0::/foreign' };
   expect(sameProcessIdentity(original, foreignGroup)).toBe(false);
+  const foreignNamespace = { ...original, containerIdentity: 'pid:[1]' };
+  expect(sameProcessIdentity(original, foreignNamespace)).toBe(false);
 }
 it('detects PID reuse, UID changes, exec and foreign cgroups', detectsReplacement);
 
@@ -64,3 +66,12 @@ function cannotInjectObservations(): void {
 }
 it('does not accept caller observations or a forged saved receipt as process proof',
   cannotInjectObservations);
+
+function refusesDeniedProcRead(): void {
+  const identity = readProcessIdentity(process.pid);
+  vi.mocked(readFileSync).mockImplementationOnce(function denied() {
+    throw new Error('private test denial');
+  });
+  expect(checkLiveService('serverDelivery', identity)).toBe('private_process_unreadable');
+}
+it('refuses a service whose process files cannot be read', refusesDeniedProcRead);

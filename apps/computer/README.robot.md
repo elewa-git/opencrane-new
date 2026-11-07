@@ -27,6 +27,15 @@ a 25-minute limit for each apt command, and an error if any package index
 fails to download. The Dockerfiles keep the pinned Debian snapshots and package
 list. The CI image build step has a 30-minute limit inside the 60-minute fixture job.
 
+## Bridge process protection
+
+The image builds the existing native runner protection helper from source. The
+bridge calls it before reading its launch key, starting the proxy or starting
+Codex. A local socket returns only a fresh challenge and the helper's current
+fixed result. Linux peer credentials bind that reply to the bridge process when
+the check runs inside this container. The server-container runner cannot observe
+this separate PID namespace yet, so full private-process qualification still refuses.
+
 ## Routine start identity
 
 The internal routine frame carries threadId, messageId, rootId and senderAttemptId beside

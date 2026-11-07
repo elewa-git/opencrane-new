@@ -194,20 +194,31 @@ check refuses PID reuse, exec, UID, cgroup and namespace changes. The cgroup's
 effective finite memory and zero swap controls, and the actual runner's zero
 core limits and non-dumpable state, are still measured by the existing probes.
 
-No other process has a trusted PID or a way to report its own dumpability yet.
-The container path therefore returns `host_refused / private_process_missing`
-with `complete: false` before any journey begins, even when the runner passes.
+The server delivery process is PID 1 in the package container. The computer
+entrypoint's kernel child list identifies its bridge child by the fixed command.
+Both processes call the existing native helper before handling private work. A
+local abstract Unix socket answers a fresh challenge with the helper's current
+core-limit and dumpability result. The helper's socket probe obtains the peer PID
+from Linux, rather than trusting a PID in the answer. The inventory rereads PID,
+start time, executable, UID, cgroup and PID namespace around that live check. It
+requires the same cgroup and PID namespace as the runner. Unreadable proc files,
+including an executable hidden by Linux dump protection, refuse. A disposable
+fixture with the required proc access proves the two service checks; it does not
+grant that access to a deployment.
+
+The server-container runner cannot see the bridge in its separate computer
+container. It therefore returns `host_refused / private_process_missing` with
+`complete: false` before any journey begins, even when its server check passes.
 The supervisor forwards that exact refusal after cleanup. Both the supervisor
 and collector reject `private_process_missing` without `complete: false`. The
 collector saves an accepted refusal with the fixed message. An unreadable runner
 identity and an identity change have separate fixed categories. Caller-supplied
 observations are ignored. The failure carries no PID, path, setting or test value.
-The safe-host path is unchanged. The other seven process groups, replacements
-after awaited delivery and both complete qualifications are NOT RUN. This part
-does not enable memory or make a container journey pass. The disposable image
-test checks the real runner identity and refusal inside a restricted container;
-unit tests check the identity comparison and refusal boundary. See the
-[own receipt](../../docs/process/p4-15-pr5w/receipt.md).
+The safe-host path is unchanged. The supervisor, proxy, native wrapper, native
+child and canary helper groups remain unproved. Both complete qualifications are
+NOT RUN. This part does not enable memory or make a container journey pass. The
+disposable image test runs two live protected processes and checks missing and
+changed identities. See the [own receipt](../../docs/process/p4-15-pr5w2/receipt.md).
 
 The Linux [cgroup contract](https://docs.kernel.org/admin-guide/cgroup-v2.html)
 defines the controls. The [exec contract](https://www.man7.org/linux/man-pages/man2/execve.2.html)

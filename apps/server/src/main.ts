@@ -21,6 +21,9 @@ import type { RealtimeOptions } from './realtime.ts';
 import { createLogger, startTelemetry } from '@opencrane/observability';
 import { buildProductionServer } from './server.ts';
 import { attachWebSocketServer, WEBSOCKET_PATH } from './websocket.ts';
+import { startServiceProtection } from '../../../scripts/private-memory-qualification/service-protection.ts';
+
+await startServiceProtection('serverDelivery');
 
 // A no-op unless an exporter is configured. The process owns shutdown.
 startTelemetry({ serviceName: 'opencrane-server' });

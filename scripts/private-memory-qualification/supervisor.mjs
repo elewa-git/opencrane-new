@@ -64,7 +64,8 @@ function isHostRefusal() {
     }
     // Use the collector's fixed allowlist, passed with the command.
     if (keys.length === 3) {
-      return result.protectionFailure !== 'private_process_missing' &&
+      return typeof result.protectionFailure === 'string' &&
+        !result.protectionFailure.startsWith('private_process_') &&
         protectionFailures.includes(result.protectionFailure);
     }
     return keys.length === 4 && result.complete === false &&

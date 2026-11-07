@@ -1,6 +1,11 @@
 import { readFileSync, readlinkSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { runnerProtected } from './runner-protection.ts';
-import type { ProtectionFailure } from './protection-failure.ts';
+import { isProtectionFailure, type ProtectionFailure } from './protection-failure.ts';
+import type { ServiceRole } from './service-protection.ts';
+
+const require = createRequire(import.meta.url);
 
 export const privateProcessNames = [
   'runner', 'serverDelivery', 'bridge', 'supervisor', 'proxy', 'nativeWrapper',
@@ -85,6 +90,153 @@ export function sameProcessIdentity(first: ProcessIdentity, second: ProcessIdent
     first.containerIdentity === second.containerIdentity;
 }
 
+type PeerReply = { pid: number; reply: string };
+type NativeProbe = { probe(role: ServiceRole, challenge: string): unknown };
+
+function isNativeProbe(value: unknown): value is NativeProbe {
+  return value !== null && typeof value === 'object' &&
+    'probe' in value && typeof value.probe === 'function';
+}
+
+function isPeerReply(value: unknown): value is PeerReply {
+  return value !== null && typeof value === 'object' &&
+    'pid' in value && Number.isSafeInteger(value.pid) &&
+    'reply' in value && typeof value.reply === 'string';
+}
+
+function askProtectedProcess(role: ServiceRole): PeerReply | undefined {
+  try {
+    const module: unknown = require('./runner-protection.node');
+    if (!isNativeProbe(module)) {
+      return undefined;
+    }
+    const challenge = randomUUID();
+    const reply: unknown = module.probe(role, challenge);
+    if (!isPeerReply(reply) || !reply.reply.startsWith(`${challenge}|`) ||
+        !reply.reply.endsWith('\n')) {
+      return undefined;
+    }
+    return { pid: reply.pid, reply: reply.reply.slice(challenge.length + 1, -1) };
+  } catch {
+    return undefined;
+  }
+}
+
+export function checkLiveService(role: ServiceRole,
+  expected: ProcessIdentity): true | ProtectionFailure {
+  let first: ProcessIdentity;
+  let runner: ProcessIdentity;
+  try {
+    first = readProcessIdentity(expected.pid);
+    runner = readProcessIdentity(process.pid);
+  } catch {
+    return 'private_process_unreadable';
+  }
+  if (!sameProcessIdentity(first, expected) ||
+      first.cgroup !== runner.cgroup ||
+      first.containerIdentity !== runner.containerIdentity ||
+      first.executable !== runner.executable) {
+    return 'private_process_identity_changed';
+  }
+  const peer = askProtectedProcess(role);
+  if (!peer) {
+    return 'private_process_missing';
+  }
+  if (peer.pid !== expected.pid) {
+    return 'private_process_identity_changed';
+  }
+  let second: ProcessIdentity;
+  try {
+    second = readProcessIdentity(expected.pid);
+  } catch {
+    return 'private_process_unreadable';
+  }
+  if (!sameProcessIdentity(first, second)) {
+    return 'private_process_identity_changed';
+  }
+  if (peer.reply === 'true') {
+    return true;
+  }
+  if (isProtectionFailure(peer.reply)) {
+    return peer.reply;
+  }
+  return 'private_process_unreadable';
+}
+
+function commandLine(pid: number): string[] {
+  const bytes = readFileSync(`/proc/${pid}/cmdline`, 'utf8');
+  if (!bytes.endsWith('\0')) {
+    throw new Error('private_process_unreadable');
+  }
+  const argumentsText = bytes.slice(0, -1);
+  return argumentsText.split('\0');
+}
+
+function serverPid(): number | undefined {
+  const args = commandLine(1);
+  const script = args[2];
+  if (args.length !== 3 || args[1] !== '--experimental-strip-types' ||
+      (script !== 'apps/server/src/main.ts' && script !== '/app/apps/server/src/main.ts')) {
+    return undefined;
+  }
+  return 1;
+}
+
+function bridgePid(): number | undefined {
+  const childList = readFileSync('/proc/1/task/1/children', 'utf8');
+  const children = childList.trim();
+  if (!/^(?:[1-9][0-9]* ?)*$/u.test(children)) {
+    throw new Error('private_process_unreadable');
+  }
+  let found: number | undefined;
+  for (const entry of children.split(' ')) {
+    if (!entry) {
+      continue;
+    }
+    const pid = Number(entry);
+    if (!Number.isSafeInteger(pid)) {
+      throw new Error('private_process_unreadable');
+    }
+    let args: string[];
+    try {
+      args = commandLine(pid);
+    } catch {
+      return undefined;
+    }
+    if (args.length !== 4 || args[1] !== '--disable-sigusr1' ||
+        args[2] !== '--experimental-strip-types' || args[3] !== '/app/src/bridge.ts') {
+      continue;
+    }
+    if (found !== undefined) {
+      return undefined;
+    }
+    found = pid;
+  }
+  return found;
+}
+
+function probeService(role: ServiceRole): true | ProtectionFailure {
+  let pid: number | undefined;
+  try {
+    pid = role === 'serverDelivery' ? serverPid() : bridgePid();
+  } catch {
+    return 'private_process_unreadable';
+  }
+  if (pid === undefined) {
+    return 'private_process_missing';
+  }
+  let identity: ProcessIdentity;
+  try {
+    identity = readProcessIdentity(pid);
+  } catch {
+    return 'private_process_unreadable';
+  }
+  if (identity.uid !== 1000) {
+    return 'private_process_identity_changed';
+  }
+  return checkLiveService(role, identity);
+}
+
 export function probePrivateProcessInventory(..._observations: unknown[]): true | ProtectionFailure {
   let first: ProcessIdentity;
   try {
@@ -108,12 +260,18 @@ export function probePrivateProcessInventory(..._observations: unknown[]): true 
   if (!sameProcessIdentity(first, second)) {
     return 'private_process_identity_changed';
   }
-  const currentInventory: Partial<Record<PrivateProcessName, ProcessIdentity>> = {
-    runner: second,
-  };
+  const serverDelivery = probeService('serverDelivery');
+  if (serverDelivery !== true) {
+    return serverDelivery;
+  }
+  const bridge = probeService('bridge');
+  if (bridge !== true) {
+    return bridge;
+  }
+  const proved = new Set<PrivateProcessName>(['runner', 'serverDelivery', 'bridge']);
   // Refuse before any journey until every named group has live dumpability proof.
   for (const name of privateProcessNames) {
-    if (!currentInventory[name]) {
+    if (!proved.has(name)) {
       return 'private_process_missing';
     }
   }
