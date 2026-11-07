@@ -14,8 +14,8 @@ All test, lint and typecheck commands ran under `nice -n 10`.
 - PASS: `check:events` found 159 matching event types. Knip through
   `lint:unused`, the dependency graph, Markdown and `lint:changelog` passed.
 - PASS: full workspace typecheck passed on the final source.
-- PARTIAL: full `npm run lint` is still running. Focused ESLint on every changed
-  TypeScript file passed; every other lint component passed separately.
+- PASS: full `npm run lint` passed with zero errors and 37 existing warnings.
+  Focused ESLint on every changed TypeScript file also passed.
 - PARTIAL: the upstream is a recording test callback. The company sender,
   decision status receipt and fresh-install live journey are not in this part.
   Routine execution remains disabled.
