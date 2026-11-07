@@ -38,8 +38,8 @@ afterEach(restore);
 async function checksNativeBeforeReceipt() {
   const receipt = await runJourney(JSON.stringify(request));
   expect(checkNative).toHaveBeenCalledExactlyOnceWith(request.challengeId);
-  const expected = { ...request, result: 'NOT RUN', complete: false,
-    observedAt: expect.any(Number) };
+  const observedAt: unknown = expect.any(Number);
+  const expected = { ...request, result: 'NOT RUN', complete: false, observedAt };
   expect(receipt).toEqual(expected);
 }
 it('checks the pinned native runtime before returning an incomplete recall receipt',

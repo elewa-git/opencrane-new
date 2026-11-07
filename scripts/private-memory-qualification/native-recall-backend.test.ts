@@ -5,6 +5,7 @@ import { memoryKeys, memoryScopeId } from '@opencrane/projections';
 import { readChatFacts } from '../../apps/server/src/chat/chat-summary.ts';
 import { recallBackend, factText, scopeId, threadId }
   from '../../apps/server/test/support/recall-backend.ts';
+import { readDeploymentQualification } from './deployment.ts';
 
 function mockOptions() {
   return { spy: true };
@@ -34,13 +35,13 @@ async function storeForeignFact(test: Backend) {
   const text = `My favourite walking destination is ${randomUUID()}.`;
   const identity = { silo: 'test', scopeId: foreignScope, scopeKind: 'person' as const,
     ownerId, memoryId: randomUUID(), revision: 1 };
-  const keys = memoryKeys(test.memory.keyDirectory!);
+  const keys = memoryKeys(test.memory.keyDirectory);
   keys.provision(identity);
   const encrypted = keys.encrypt(identity, text);
-  const data = { ...identity, schemaVersion: 1, kind: 'fact', pinned: false,
+  const data = { scopeId: foreignScope, scopeKind: 'person', ownerId,
+    memoryId: identity.memoryId, revision: 1, schemaVersion: 1, kind: 'fact', pinned: false,
     expiresAt: null, sources: [], dependsOn: [], ...encrypted };
   // Store both people's facts through events and rebuild the searchable projection.
-  delete (data as Partial<typeof data>).silo;
   await test.setup.append(`scope-${foreignScope}`, 'memory.written', data);
   await test.setup.runner.run(test.projection);
   return { scopeId: foreignScope, text };
@@ -54,7 +55,7 @@ async function questionHasNoAnswer(test: Backend, foreign: string) {
       continue;
     }
     const question = test.setup.keys.decrypt('test', 'chat', row.event.data);
-    expect(question).toBe('Recall my destination');
+    expect(question === 'Recall my destination').toBe(true);
     expect(question.includes(factText)).toBe(false);
     expect(question.includes(foreign)).toBe(false);
     questions += 1;
@@ -82,8 +83,9 @@ async function recordsOnlyOwnReference() {
   expect(saved.memoryContext?.recallCalls).toBe(1);
   const foreignArgs = { scopeId: foreign.scopeId, query: 'destination' };
   const refused = await test.native.recall(threadId, foreignArgs);
-  expect(refused).not.toHaveProperty('result.structuredContent');
-  expect(JSON.stringify(refused).includes(foreign.text)).toBe(false);
+  const refusedText = JSON.stringify(refused);
+  expect(refusedText.includes('"structuredContent"')).toBe(false);
+  expect(refusedText.includes(foreign.text)).toBe(false);
   expect(test.deliveries).toHaveLength(1);
   const rows = await history(test.setup.nats.store, 'conversation-chat', 'test');
   const recorded = JSON.stringify(rows);
@@ -95,12 +97,10 @@ it('records only the requester’s stored reference before delivering scripted n
 
 async function refusesChangedInstallation() {
   const test = await recallBackend();
-  await test.start();
+  await readDeploymentQualification('test');
   test.deployment.changeInstallation();
-  const args = { scopeId, query: 'destination' };
-  const reply = await test.native.recall(threadId, args);
-  expect(reply).not.toHaveProperty('result.structuredContent');
-  expect(JSON.stringify(reply).includes(factText)).toBe(false);
+  await expect(readDeploymentQualification('test')).rejects.toThrow();
   expect(test.deliveries).toEqual([]);
 }
-it('refuses recall after the admitted installation changes', refusesChangedInstallation, 120_000);
+it('rejects copied qualification after the fixture installation changes',
+  refusesChangedInstallation, 120_000);

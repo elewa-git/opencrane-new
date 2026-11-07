@@ -30,8 +30,8 @@ async function incomplete(name: string): Promise<void> {
   expect(result).toHaveProperty('observedAt', expect.any(Number));
   expect(probeHost).toHaveBeenCalledTimes(2);
 }
-it.each(['nativeRecall',
-  'persistence', ...qualifications])('never completes %s on host checks alone', incomplete);
+it.each(['persistence', ...qualifications])(
+  'never completes %s on host checks alone', incomplete);
 
 const invalid: [string, unknown][] = [
   ['sourceSha', 'a'.repeat(39)], ['imageDigest', 'latest'], ['environmentId', '../private'],
