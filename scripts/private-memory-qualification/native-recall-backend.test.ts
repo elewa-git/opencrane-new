@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 import { history } from '@opencrane/models';
@@ -5,6 +6,8 @@ import { memoryKeys, memoryScopeId } from '@opencrane/projections';
 import { readChatFacts } from '../../apps/server/src/chat/chat-summary.ts';
 import { recallBackend, factText, scopeId, threadId }
   from '../../apps/server/test/support/recall-backend.ts';
+import { recallAnswerCheck } from './native-recall-checks.ts';
+import { fixture as answerFixture } from './native-recall-answer.fixture.ts';
 import { readDeploymentQualification } from './deployment.ts';
 
 function mockOptions() {
@@ -104,3 +107,59 @@ async function refusesChangedInstallation() {
 }
 it('rejects copied qualification after the fixture installation changes',
   refusesChangedInstallation, 120_000);
+
+const recalledFact = z.object({ text: z.string() });
+const recalledPage = z.object({ result: z.object({
+  structuredContent: z.object({ facts: z.array(recalledFact).min(1) }),
+}) });
+
+async function checksStoredAnswer() {
+  const test = await recallBackend();
+  const local = answerFixture();
+  local.binding.requesterId = 'alice';
+  local.binding.threadId = threadId;
+  local.binding.turnId = test.turnId;
+  local.binding.conversationId = 'chat';
+  local.reference.scopeId = scopeId;
+  local.reference.memoryId = 'garden';
+  local.observed.binding = { ...local.binding };
+  local.observed.current = { ...local.reference };
+  local.state.nativeThread = threadId;
+  local.observed.expiresAt = Date.now() + 60_000;
+  let delivered = false;
+  async function read() {
+    const facts = await readChatFacts(test.setup.nats.store, 'test', 'chat', test.turnId);
+    let references = facts.memoryContext?.references ?? [];
+    if (delivered) {
+      // Use the observation made inside the backend before its reply was sent.
+      references = test.deliveries[0]?.memoryContext?.references ?? [];
+      expect(test.requests[0]?.['requester'] === 'alice').toBe(true);
+      expect(test.requests[0]?.['thread'] === threadId).toBe(true);
+      expect(facts.memoryContext?.references).toEqual(references);
+    }
+    return { ...local.observed, references };
+  }
+  async function dispatch(question: string, loaded: () => Promise<boolean>,
+    receive: (value: unknown) => void) {
+    await test.start();
+    const args = { scopeId, query: 'destination' };
+    const reply = await test.native.recall(threadId, args);
+    const encoded = JSON.stringify(reply);
+    expect(encoded.includes(factText)).toBe(true);
+    const result = recalledPage.safeParse(reply);
+    if (!result.success) throw new Error('fixture_failed');
+    local.state.reply = result.data.result.structuredContent.facts[0]!.text;
+    delivered = true;
+    return local.driver.dispatch(question, loaded, receive);
+  }
+  const driver = { ...local.driver, read, dispatch };
+  const check = recallAnswerCheck(local.binding, local.reference, factText,
+    'Recall my destination', driver);
+  expect(await check()).toEqual({ result: 'PARTIAL', complete: false });
+  expect(await check()).toEqual({ result: 'FAIL', reason: 'journey_failed', complete: false });
+  expect(test.deliveries).toHaveLength(1);
+  const rows = await history(test.setup.nats.store, 'conversation-chat', 'test');
+  expect(JSON.stringify(rows).includes(factText)).toBe(false);
+}
+it('checks scripted native output against the real backend’s saved reference',
+  checksStoredAnswer, 120_000);
