@@ -557,6 +557,60 @@ it('keeps offline private work pending and closes only its original generation',
   expect(test.frames.filter(isStop)).toHaveLength(1);
 });
 
+it('settles an ended private turn when its computer is replaced before an exit report', async () => {
+  fixture = await bridgeFixture(true);
+  const test = fixture;
+  const turn = await startFixtureTurn(test, 'restricted');
+  await test.append('conversation-chat', 'agent.turn_failed', {
+    conversationId: 'chat', turnId: turn.turnId, reason: 'stop_interrupted',
+  });
+  await test.append('computer-assistant', 'computer.turn_closed', {
+    ...turn, requesterId: 'alice', computerId: 'desktop', task: 'chat_turn',
+    payingGroupId: 'personal', executionMode: 'restricted', status: 'failed',
+  });
+  await test.append('conversation-chat', 'conversation.closed', {
+    conversationId: 'chat', closedBy: 'alice',
+  });
+  await test.append('computer-assistant', 'computer.claimed', {
+    assistantId: 'assistant', computerId: 'replacement', generation: 2,
+    tokenId: 'token:replacement',
+  });
+  await test.append('computer-assistant', 'computer.ready', {
+    assistantId: 'assistant', computerId: 'replacement', generation: 2, podUid: 'new-pod',
+  });
+
+  expect(await test.process()).toBe(false);
+  await test.flushFrames();
+  expect(test.frames.filter(isStop)).toEqual([]);
+});
+
+it('bounds queued close cancellations and reads each history once per pass', async () => {
+  fixture = await bridgeFixture(true);
+  const test = fixture;
+  for (let index = 0; index < 96; index++) {
+    await test.append('conversation-chat', 'message.posted', {
+      conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text',
+      ...test.keys.encrypt('test', 'chat', `Queued request ${index}`),
+    });
+  }
+  await test.append('conversation-chat', 'conversation.closed', {
+    conversationId: 'chat', closedBy: 'alice',
+  });
+  const reads = vi.spyOn(test.store, 'readStream');
+  expect(await test.process()).toBe(true);
+  const firstRows = await chatHistory(test.store, 'test', 'chat');
+  const firstCount = firstRows.filter(isClosedFailure).length;
+  expect(firstCount).toBeGreaterThan(0);
+  expect(firstCount).toBeLessThan(97);
+  function isConversationRead(call: typeof reads.mock.calls[number]) {
+    return call[0] === 'conversation-chat';
+  }
+  expect(reads.mock.calls.filter(isConversationRead).length).toBeLessThan(5);
+  for (let pass = 0; pass < 5; pass++) await test.process();
+  const finalRows = await chatHistory(test.store, 'test', 'chat');
+  expect(finalRows.filter(isClosedFailure)).toHaveLength(97);
+});
+
 function isComputerTurnClosed(row: Awaited<ReturnType<typeof chatHistory>>[number]) {
   return row.event.type === 'computer.turn_closed';
 }
