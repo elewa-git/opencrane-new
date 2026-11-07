@@ -26,5 +26,22 @@ Environment: shared development host, disposable NATS/OpenFGA/PostgreSQL and a s
 native bridge. No model calls, owner stack changes or fresh installation.
 All tests, lint and typecheck run under `nice -n 10`. No full root suite is run locally.
 
-The draft PR records the final source commit, checks and GitHub CI result.
-Live qualification: NOT RUN.
+Own checks on 7 November 2026. Final source commit:
+`952576c053f9f1a897cf94409708ceb7abcf23e7`. The receipt-only commit follows it.
+
+- PASS: full lint, workspace typecheck, event catalogue, Knip and changelog checks.
+  Server typecheck and focused lint also passed after extracting closure checking.
+- PASS: the first broad run passed 611 tests during implementation: routine sender,
+  routine finish and all 460 unchanged security-rule tests.
+- PASS: eight focused recovery checks after preserving the original Stop source.
+  These cover held acknowledgement, lost replies, reconnect, late 1,234-cent settlement,
+  native closure, timeout and connection loss. Six access/history checks also passed.
+- PARTIAL at receipt time: the final repeated sender/finish run and the unchanged
+  hand-off suite are running. The draft PR records their final results and pushed-head CI.
+- NOT RUN: local full root suite, development stack and fresh-install live qualification.
+
+The broad runs use a throwaway PostgreSQL database, supplied through `PG_TEST_URL`,
+and one test worker. Logs: `/tmp/p4-24-pr12i-tests-{1,2}.log`,
+`/tmp/p4-24-pr12i-{recovery-green,access,handoff}.log`,
+`/tmp/p4-24-pr12i-{lint,typecheck-final,knip,events,changelog}.log`.
+
