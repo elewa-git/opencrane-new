@@ -685,6 +685,7 @@ class TurnRunner {
       || sequence < 1 || sequence > this.journal.reports.length) {
       throw new Error('Invalid ack');
     }
+    if (value?.['retryable'] === true) return;
     this.journal.forgetText(sequence);
     const resolve = this.state.waiting.get(sequence);
     if (resolve && typeof value?.['refused'] === 'string') {

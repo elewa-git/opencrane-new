@@ -29,10 +29,17 @@ export async function checkedReportStage(options: Options, report: Report): Prom
 export async function admitBridgeTurn(options: Options, computer: Computer,
   context: Context, report: Report, status: Parameters<typeof turnCommand>[2]['status'],
   replay: boolean, stage: Stage, tokens: Tokens | undefined,
-  acknowledgement: { refused?: string }) {
+  acknowledgement: { refused?: string; retryable?: boolean }) {
   if (status === 'started' && stage === 'activated') {
-    if (!tokens) throw new Error('Child start unavailable');
-    return requestChildStart(options, computer, report, tokens);
+    if (!tokens) {
+      acknowledgement.retryable = true;
+      return undefined;
+    }
+    const child = await requestChildStart(options, computer, report, tokens);
+    if (child.status === 'admitted') return child.binding;
+    if (child.status === 'retryable') acknowledgement.retryable = true;
+    else acknowledgement.refused = 'Child start unavailable';
+    return undefined;
   }
   try {
     return await turnCommand(options.store, context, { ...report, status, replay });

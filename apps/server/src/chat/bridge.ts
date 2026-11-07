@@ -88,7 +88,8 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
   await options.output.release(report.sequence, result === 'recorded');
   const acknowledgement: {
     type: string; sequence: number; token?: string; expiresAt?: number;
-    model?: string; refused?: string; context?: unknown; initialInput?: string;
+    model?: string; refused?: string; retryable?: boolean;
+    context?: unknown; initialInput?: string;
   } = { type: 'ack', sequence: report.sequence };
   let initialReleased = false;
   function releaseInitial(reply: object) {

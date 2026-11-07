@@ -4,8 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { afterEach, expect, it, vi } from 'vitest';
 import { until } from '@opencrane/authz/testing';
 import { grantStream } from '@opencrane/authz';
-import { BudgetActor } from '@opencrane/models';
-import { childRequestedDataSchema } from '@opencrane/events';
+import { BudgetActor, history } from '@opencrane/models';
+import { childRequestedDataSchema, computerTurnStartedDataSchema } from '@opencrane/events';
 import { bridgeChannel, type PrivateSession } from '../../computer/test/server.ts';
 import { activateRequestedChild } from '../src/chat/child-activation.ts';
 import { allocateChildRoot } from '../src/chat/child-root.ts';
@@ -79,7 +79,11 @@ async function preservesPreparedChild(failure: Failure) {
       const fetchOriginal = globalThis.fetch.bind(globalThis);
       async function loseFirstReply(input: string | URL | Request, init?: RequestInit) {
         const response = await fetchOriginal(input, init);
-        if (String(input).endsWith('/child-start') && attempts === 1) {
+        let requestUrl: string;
+        if (typeof input === 'string') requestUrl = input;
+        else if (input instanceof URL) requestUrl = input.href;
+        else requestUrl = input.url;
+        if (requestUrl.endsWith('/child-start') && attempts === 1) {
           lostReply = true;
           throw new Error('Lost HTTP reply');
         }
@@ -139,6 +143,13 @@ async function preservesPreparedChild(failure: Failure) {
     expect(link.socket.readyState).toBe(link.socket.OPEN);
     expect(attempts).toBeGreaterThanOrEqual(2);
     expect(await readFile(journal, 'utf8')).not.toContain('agent.turn_failed');
+    const computerEvents = await history(context.nats.store, 'computer-helper', 'test');
+    function startsThisChild(row: typeof computerEvents[number]) {
+      if (row.event.type !== 'computer.turn_started') return false;
+      const parsed = computerTurnStartedDataSchema.safeParse(row.event.data);
+      return parsed.success && parsed.data.turnId === saved.firstInputId;
+    }
+    expect(computerEvents.filter(startsThisChild)).toHaveLength(1);
   } finally {
     link?.socket.terminate();
     closeSession?.();

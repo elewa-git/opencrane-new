@@ -189,8 +189,12 @@ the internal models decision URL is configured. The bridge saves the computer's 
 start report before asking the models process for admission. The request carries only the
 child, input and prepared thread ids. The computer pass supplies its assistant, computer
 and generation. The actor loads the original intent, current attempt and saved report,
- then checks access, remaining root cents and current spending ceilings before the existing
- computer start command. A lower ceiling can refuse an already allocated root.
-It returns the stored root and turn binding. A lost route reply closes the bridge connection
-so its saved report can be checked again. The computer journal controls native retry.
+then checks access, remaining root cents and current spending ceilings before the existing
+computer start command. A lower ceiling can refuse an already allocated root.
+It returns the stored root and turn binding. If capacity is busy, the decision service is
+unavailable or its reply is lost, the bridge asks the computer to retry the same saved
+report after a short wait. The socket stays open and no native turn starts before a pass
+arrives. A saved computer start is returned on retry without saving another start.
+The computer journal marks native execution before it begins. A process restart still
+fails an unfinished private turn because its prepared thread died with the process.
 No public follow-up or child start route is added.
