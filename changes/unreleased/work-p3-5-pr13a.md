@@ -1,0 +1,1 @@
+Participants can check an original Ask call's saved attempts and explicit retry status without exposing tool arguments or sending work. Until the bridge supplies a live retained-call signal, retry status stays unknown or ended.

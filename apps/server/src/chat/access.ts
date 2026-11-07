@@ -10,6 +10,7 @@ import { GroupRefused } from '../members/groups.ts';
 import type { EventStore } from '@opencrane/event-store';
 import type { Query, connectMemberFeed } from '@opencrane/projections';
 import type { conversationKeys } from './keys.ts';
+import type { RetainedCall } from '@opencrane/models';
 
 export interface ChatOptions {
   silo: string;
@@ -19,6 +20,7 @@ export interface ChatOptions {
   binding: Binding;
   feed: Pick<Awaited<ReturnType<typeof connectMemberFeed>>, 'memberId'>;
   dispatcherReady?: () => Promise<boolean>;
+  retainedCall?: (approvalId: string) => Promise<RetainedCall | undefined>;
 }
 
 export class ChatRefused extends Error {}

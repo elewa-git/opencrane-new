@@ -49,6 +49,22 @@ live turn must submit the unchanged call again. Access, tool policy, expiry and
 the bound turn are checked again. Concurrent commands cannot both succeed.
 A changed request, missing observation or uncertain outcome cannot grant a retry.
 
+`GET /api/conversations/:conversationId/tool-requests/:logicalRequestId` returns
+one original Ask call's approval reference, requester, turn, saved dates and
+permit attempts. Each attempt has a use date and, when saved, a dispatch start,
+outcome, evidence and observation date. The reply contains no arguments, results or
+credentials. Current participants can read their own participation period;
+in a shared child conversation, only the requester can read this status.
+
+The `retry` result is `eligible`, `unknown` or `ended`. Eligibility requires a
+matching saved decision and proof of non-dispatch, the original computer turn
+still running, the original approval still live, and a matching bridge signal
+that expires within five seconds. Missing or mismatched proof stays `unknown`.
+An ended turn, lost or replaced computer, or expired approval is `ended`.
+The production bridge does not yet supply this signal, so current production
+reads cannot return `eligible`. This GET only reads; it does not authorise or
+send a replacement call. A failed read returns `unavailable`.
+
 Conversation HTTP and socket rows include `tool.dispatch_recorded`, with
 `requestId`, `logicalRequestId`, `callId`, `serverId`, `toolName`, `startedAt`,
 `durationMs`, `outcome`, `evidence` and an `approvalId` for Ask calls. The row's

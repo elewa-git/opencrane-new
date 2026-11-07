@@ -4465,6 +4465,16 @@ release, dispatch, HTTP, UI and OAuth remain later work. Fresh-company qualifica
 
 ## Approval retry after an unsent refusal
 
+`readOriginalCallStatus` reads the original approval, each used permit's decision
+and dispatch record, and the computer's turn state. It never appends. A matching
+models decision and dispatch record must name the same silo, approval, logical
+request, permit, conversation, turn and server. Only `connection_refused` and
+`adapter_dispatch_refused` prove non-dispatch. A live original turn and a matching
+retained-call signal expiring within five seconds are also required for `eligible`.
+Missing records and mismatched observations return `unknown`. An ended turn,
+computer loss, replacement ready record or expired approval returns `ended`.
+The bridge signal is an optional read input; no production bridge supplies it yet.
+
 HTTPS `mcp-dispatch.ts` saves a confirmed `tool.dispatch_started` before budget
 admission. Both steps share refusal handling. Before opening the upstream connection,
 a refusal can close that exact start with `tool.dispatch_recorded`, `not_dispatched`

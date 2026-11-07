@@ -5,16 +5,75 @@ import { createHash, createHmac } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import type { AuthConfig, SessionData } from '@opencrane/auth';
-import { approvalCards, readApproval, decideApproval, currentAuthority, approvalActivity }
+import { approvalCards, readApproval, decideApproval, currentAuthority, approvalActivity,
+  readOriginalCallStatus }
   from '@opencrane/models';
 import { readEvents } from '@opencrane/projections';
 import { writeChatAccess, isChatRefused, conversationParticipation, ChatAccessApplying } from './access.ts';
 import { requireMember, MemberRefusal, idSchema } from '../members/guard.ts';
+import { sessionFor } from '../members/routes.ts';
 import type { ChatOptions } from './routes.ts';
 
 const conversationParameters = z.object({ conversationId: idSchema.regex(/^[\w-]{1,200}$/u) });
+const statusParameters = conversationParameters.extend({
+  logicalRequestId: z.string().regex(/^[a-f0-9]{64}$/u),
+});
+const unavailableStatus = { status: 'unavailable' };
+const refusedStatus = { status: 'refused' };
+const accessApplyingStatus = { status: 'access_applying' };
+
+function originalCallFailure(reply: FastifyReply, error: unknown) {
+  if (error instanceof MemberRefusal) {
+    const status = { status: error.status };
+    return reply.code(error.statusCode).send(status);
+  }
+  if (error instanceof ChatAccessApplying) {
+    return reply.code(425).send(accessApplyingStatus);
+  }
+  if (isChatRefused(error)) return reply.code(403).send(refusedStatus);
+  return reply.code(503).send(unavailableStatus);
+}
+
+function registerOriginalCallStatusRoute(app: FastifyInstance,
+  config: AuthConfig, options?: ChatOptions) {
+  app.get('/api/conversations/:conversationId/tool-requests/:logicalRequestId',
+    originalCallStatus);
+  async function originalCallStatus(req: FastifyRequest, reply: FastifyReply) {
+    reply.header('cache-control', 'no-store');
+    const parameters = statusParameters.safeParse(req.params);
+    if (!parameters.success) return reply.code(400).send(unavailableStatus);
+    try {
+      const { conversationId, logicalRequestId } = parameters.data;
+      if (!sessionFor(req, config, new Date())) {
+        return reply.code(401).send(refusedStatus);
+      }
+      if (!options) throw new Error('Chat unavailable');
+      const deadline = performance.now() + 10_000;
+      const retained = await options.retainedCall?.(logicalRequestId);
+      const result = await readOriginalCallStatus(options.store, options.silo,
+        logicalRequestId, retained, deadline);
+      const checks = { write: false, conversationId };
+      const access = await requireMember(req, reply, config, options, checks);
+      const outsideParticipation = result.requestPosition < access.access.historyPosition;
+      const otherChildRequester = access.access.contextKind === 'shared_child' &&
+        result.status.requesterId !== access.memberId;
+      if (result.conversationId !== conversationId || outsideParticipation ||
+          otherChildRequester) {
+        return reply.code(403).send(refusedStatus);
+      }
+      if (result.status.retry === 'eligible' &&
+          (!retained || Date.parse(retained.expiresAt) <= Date.now())) {
+        result.status.retry = 'unknown';
+      }
+      return reply.send(result.status);
+    } catch (error) {
+      return originalCallFailure(reply, error);
+    }
+  }
+}
 
 export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
+  registerOriginalCallStatusRoute(app, config, options);
   const route = { method: ['GET', 'POST'] as ('GET' | 'POST')[],
     url: '/api/conversations/:conversationId/approvals', handler };
   app.route(route);
