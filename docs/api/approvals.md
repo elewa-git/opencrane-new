@@ -63,7 +63,9 @@ that expires within five seconds. Missing or mismatched proof stays `unknown`.
 An ended turn, lost or replaced computer, or expired approval is `ended`.
 The production bridge does not yet supply this signal, so current production
 reads cannot return `eligible`. This GET only reads; it does not authorise or
-send a replacement call. A failed read returns `unavailable`.
+send a replacement call. A failed read returns `unavailable` to an authorised
+reader. Removed and foreign callers receive the same refusal for saved and
+missing calls, including when the history read fails.
 
 Conversation HTTP and socket rows include `tool.dispatch_recorded`, with
 `requestId`, `logicalRequestId`, `callId`, `serverId`, `toolName`, `startedAt`,
