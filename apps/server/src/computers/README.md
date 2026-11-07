@@ -21,6 +21,8 @@ When enabled, a control request must name the current requester's message and cu
 
 The chat connection sends a signed request to stop work, including to an idle computer. Slow history reads, uploads and replayed reports do not delay it. The immediate reply applies only to that connection; if a turn finishes during signing, the server checks again before resuming reports. It can then ask the root supervisor, the computer's process manager, to stop executors while reports wait. It records pausing after both replies are checked. It records paused only when the current bridge and supervisor both prove that work is quiet. A separate saved lease can then name one requester and one writer session.
 
+The server checks that requester's access again after reading the computer. A clock change cannot make the saved lease last longer.
+
 ## Main files
 
 | File | What it does |

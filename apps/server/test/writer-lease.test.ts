@@ -235,9 +235,10 @@ async function refusesAccessRemovedDuringComputerRead() {
   vi.spyOn(store, 'readStream').mockImplementation(readStream);
   let removed = false;
   let accessChecks = 0;
-  async function checkAccess() {
+  function checkAccess(): Promise<void> {
     accessChecks += 1;
-    if (removed) throw new Error('Member removed');
+    if (removed) return Promise.reject(new Error('Member removed'));
+    return Promise.resolve();
   }
   const slot = new WriterSlot(store, 'test', input, checkAccess);
   try {
@@ -267,7 +268,10 @@ async function keepsLeaseExpiryAfterClockMovesBack() {
     return monotonicNow;
   });
   let accessChecks = 0;
-  async function checkAccess() { accessChecks += 1; }
+  function checkAccess(): Promise<void> {
+    accessChecks += 1;
+    return Promise.resolve();
+  }
   const slot = new WriterSlot(store, 'test', input, checkAccess);
   try {
     expect(await slot.claim()).toBe(true);

@@ -70,10 +70,13 @@ async function append(store: EventStore, silo: string, subject: string,
   if (!isDeepStrictEqual(saved.event, expected)) throw new Error('Control conflict');
   return current(store, silo, input.assistantId);
 }
-function repeated(control: ComputerControl | undefined, input: Return, phase: string) {
+function repeated(control: ComputerControl | undefined, input: Return | Grant, phase: string) {
   if (!control || control.phase === 'unverified' || control.phase !== phase
     || control.commandId !== input.commandId || !sameOwner(control, input)
     || control.writerSessionId !== input.writerSessionId) return undefined;
+  if ('expiresAt' in input && (control.expiresAt !== input.expiresAt
+    || control.originalExpiresAt !== input.originalExpiresAt
+    || control.proxyInstanceId !== input.proxyInstanceId)) return undefined;
   return control;
 }
 function validReady(facts: Awaited<ReturnType<typeof current>>, input: Return) {
@@ -175,6 +178,7 @@ export class WriterSlot {
   private permissionUntil = 0;
   private leaseUntil = 0;
   private originalUntil = 0;
+  private savedExpiresAt: string | undefined;
   private timer: ReturnType<typeof setInterval> | undefined;
 
   constructor(store: EventStore, silo: string, raw: unknown, checkAccess: AccessCheck) {
@@ -190,22 +194,48 @@ export class WriterSlot {
     await this.checkAccess();
     const second = await current(this.store, this.silo, this.input.assistantId);
     if (first.sequence !== second.sequence) throw new Error('Control changed');
-    validReady(second, this.input);
-    const control = checkedControl(second.control);
+    // Check access again after the computer read. That read can take ten seconds.
+    const permissionUntil = performance.now() + 1500;
+    await this.checkAccess();
+    if (performance.now() >= permissionUntil) throw new Error('Control unavailable');
+    const savedExpiry = this.savedControl(second);
+    this.updateDeadlines(savedExpiry.expiresAt, savedExpiry.originalExpiresAt);
+    this.permissionUntil = permissionUntil;
+  }
+
+  private savedControl(facts: Awaited<ReturnType<typeof current>>) {
+    validReady(facts, this.input);
+    const control = checkedControl(facts.control);
     if (!['started', 'renewed'].includes(control.phase)
       || !sameOwner(control, this.input)
       || control.writerSessionId !== this.input.writerSessionId
       || control.proxyInstanceId !== this.input.proxyInstanceId
       || !control.expiresAt || !control.originalExpiresAt
+      || control.originalExpiresAt !== this.input.originalExpiresAt
       || Date.parse(control.expiresAt) <= Date.now()) {
       throw new Error('Control unavailable');
     }
-    const remaining = Date.parse(control.expiresAt) - Date.now();
-    const originalRemaining = Date.parse(control.originalExpiresAt) - Date.now();
-    this.originalUntil = Math.min(this.originalUntil || Infinity,
-      performance.now() + originalRemaining);
-    this.leaseUntil = Math.min(this.originalUntil, performance.now() + remaining);
-    this.permissionUntil = performance.now() + 1500;
+    return { expiresAt: control.expiresAt, originalExpiresAt: control.originalExpiresAt };
+  }
+
+  private updateDeadlines(expiresAt: string, originalExpiresAt: string) {
+    const monotonicNow = performance.now();
+    if (this.leaseUntil && monotonicNow >= this.leaseUntil) {
+      throw new Error('Control unavailable');
+    }
+    if (!this.originalUntil) {
+      const originalRemaining = Date.parse(originalExpiresAt) - Date.now();
+      this.originalUntil = monotonicNow + originalRemaining;
+    }
+    if (this.savedExpiresAt !== expiresAt) {
+      // Change the monotonic deadline only when a saved renewal changes the expiry.
+      const remaining = Date.parse(expiresAt) - Date.now();
+      this.leaseUntil = Math.min(this.originalUntil, monotonicNow + remaining);
+      this.savedExpiresAt = expiresAt;
+    }
+    if (monotonicNow >= this.leaseUntil || monotonicNow >= this.originalUntil) {
+      throw new Error('Control unavailable');
+    }
   }
 
   async claim() {
