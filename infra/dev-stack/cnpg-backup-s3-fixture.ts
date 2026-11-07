@@ -85,10 +85,32 @@ export function storageFixture() {
       } else {
         objects.set(path, bytes);
         response.setHeader('etag', etag(bytes));
-        if (state.fault === 'versioned') {
+        if (state.fault === 'versioned' || state.fault === 'lost versioned PUT') {
           response.setHeader('x-amz-version-id', 'fixture+/=version');
         }
       }
+      if (state.fault === 'lost PUT' || state.fault === 'lost versioned PUT') {
+        response.destroy();
+        return;
+      }
+      response.end();
+      return;
+    }
+    if (method === 'HEAD') {
+      const stored = objects.get(path);
+      if (!stored) {
+        response.writeHead(404);
+      } else {
+        response.setHeader('etag', etag(stored));
+        if (state.fault === 'lost versioned PUT') {
+          response.setHeader('x-amz-version-id', 'fixture+/=version');
+        }
+      }
+      response.end();
+      return;
+    }
+    if (method === 'DELETE' && !objects.has(path)) {
+      response.writeHead(204);
       response.end();
       return;
     }
@@ -106,7 +128,7 @@ export function storageFixture() {
     }
     if (method === 'GET') {
       response.setHeader('etag', etag(bytes));
-      if (state.fault === 'versioned') {
+      if (state.fault === 'versioned' || state.fault === 'lost versioned PUT') {
         response.setHeader('x-amz-version-id', 'fixture+/=version');
       }
       if (state.fault === 'bad body') {
@@ -119,7 +141,8 @@ export function storageFixture() {
       return;
     }
     assert.equal(method, 'DELETE');
-    if (state.fault !== 'versioned' || url.search === '?versionId=fixture%2B%2F%3Dversion') {
+    const versioned = state.fault === 'versioned' || state.fault === 'lost versioned PUT';
+    if (!versioned || url.search === '?versionId=fixture%2B%2F%3Dversion') {
       objects.delete(path);
     }
     response.writeHead(204);

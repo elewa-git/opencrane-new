@@ -745,3 +745,31 @@ async function removesStoredVersion() {
   }
 }
 test('storage removes its exact stored version without leaving its bytes', removesStoredVersion);
+
+for (const fault of ['lost PUT', 'lost versioned PUT', 'stall GET', 'deny DELETE']) {
+  async function cleansInterruptedMarker() {
+    const input = fixture();
+    const listener = await peer(directory);
+    atPeer(input, listener.port);
+    listener.storage.state.fault = fault;
+    try {
+      const options = { timeoutMs: 200 };
+      const run = checkCnpgBackupReferences(input.backup, namespace, input.kubectl, options);
+      if (fault === 'deny DELETE') {
+        await assert.rejects(run, { message: 'CNPG backup marker cannot be removed' });
+      } else {
+        await refused(run);
+      }
+      assert.equal(listener.storage.objects.size, 0);
+      if (fault === 'deny DELETE') {
+        assert(!listener.storage.requests.includes('PUT'));
+      } else {
+        assert(listener.storage.requests.includes('PUT'));
+        assert.equal(listener.storage.requests.at(-1), 'DELETE');
+      }
+    } finally {
+      await listener.close();
+    }
+  }
+  test(`storage leaves no marker after ${fault}`, cleansInterruptedMarker);
+}
