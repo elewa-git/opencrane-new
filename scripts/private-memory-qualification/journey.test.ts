@@ -89,6 +89,7 @@ async function containerPrerequisite(name: string): Promise<void> {
   const input = JSON.stringify(namedRequest);
   expect(await runJourney(input)).toEqual({
     result: 'FAIL', reason: 'host_refused', protectionFailure: 'private_process_missing',
+    complete: false,
   });
   expect(probeContainer).toHaveBeenCalledTimes(1);
   expect(probePrivateProcessInventory).toHaveBeenCalledTimes(1);
@@ -125,6 +126,7 @@ async function lostProcessProofBeforeReceipt(): Promise<void> {
   const result = await runJourney(JSON.stringify(request));
   expect(result).toEqual({
     result: 'FAIL', reason: 'host_refused', protectionFailure: 'private_process_missing',
+    complete: false,
   });
   expect(probeContainer).toHaveBeenCalledTimes(2);
   expect(probePrivateProcessInventory).toHaveBeenCalledTimes(2);
