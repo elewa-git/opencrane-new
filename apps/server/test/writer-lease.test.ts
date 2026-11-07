@@ -262,32 +262,44 @@ async function keepsLeaseExpiryAfterClockMovesBack() {
   await grantWriter(store, 'test', input, accessAllowed);
   const wallStart = Date.now();
   let wallNow = wallStart;
-  let monotonicNow = 1000;
   vi.spyOn(Date, 'now').mockImplementation(function clockTime() { return wallNow; });
-  vi.spyOn(performance, 'now').mockImplementation(function monotonicTime() {
-    return monotonicNow;
-  });
-  let accessChecks = 0;
-  function checkAccess(): Promise<void> {
-    accessChecks += 1;
-    return Promise.resolve();
-  }
-  const slot = new WriterSlot(store, 'test', input, checkAccess);
+  const slot = new WriterSlot(store, 'test', input, accessAllowed);
   try {
     expect(await slot.claim()).toBe(true);
-    monotonicNow += 61_000;
+    const savedDeadline = slot['leaseUntil'];
     wallNow -= 60_000;
-    await vi.waitFor(function refreshCompleted() {
-      expect(accessChecks).toBeGreaterThan(1);
-      expect(slot['checking']).toBe(false);
-    });
-    expect(slot.allows(input.leaseId, input.writerSessionId)).toBe(false);
+    await slot['refresh']();
+    expect(slot['leaseUntil']).toBe(savedDeadline);
+    expect(slot.allows(input.leaseId, input.writerSessionId)).toBe(true);
   } finally {
     slot.close();
   }
 }
 it('does not extend a saved lease after the wall clock moves backwards',
   keepsLeaseExpiryAfterClockMovesBack);
+
+async function refusesAnExpiredSlotBeforeApplyingANewExpiry() {
+  const { store, input } = await setup();
+  await grantWriter(store, 'test', input, accessAllowed);
+  let monotonicNow = 1000;
+  vi.spyOn(performance, 'now').mockImplementation(function monotonicTime() {
+    return monotonicNow;
+  });
+  const slot = new WriterSlot(store, 'test', input, accessAllowed);
+  try {
+    expect(await slot.claim()).toBe(true);
+    monotonicNow += 61_000;
+    const laterExpiry = new Date(Date.now() + 90_000).toISOString();
+    expect(function applyLaterExpiry() {
+      slot['updateDeadlines'](laterExpiry, input.originalExpiresAt);
+    }).toThrow('Control unavailable');
+    expect(slot.allows(input.leaseId, input.writerSessionId)).toBe(false);
+  } finally {
+    slot.close();
+  }
+}
+it('does not revive an expired slot when a later saved expiry arrives',
+  refusesAnExpiredSlotBeforeApplyingANewExpiry);
 
 async function closesInputWhenReturnCannotBeSaved() {
   const { store, input } = await setup();
