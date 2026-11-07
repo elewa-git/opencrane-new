@@ -171,7 +171,7 @@ The final access read threw `TimeoutError` with about 1,070 ms past the original
 The saved event count was still one. This reproduces the timing failure path; the exact
 cause of the earlier intermittent run cannot be recovered from its retained summary.
 
-The test now uses the existing controlled clock before requesting the correction. The
+At that stage, the test used the existing controlled clock before requesting the correction. The
 same delayed-acknowledgement probe then returned the exact accepted receipt. This keeps
 the receipt-content check independent of host scheduling. Separate tests still advance
 time explicitly and require refusal after expiry, including after the event is saved.
@@ -213,3 +213,72 @@ the remaining runs are in `correct-2.log` through `correct-10.log` and `forget-2
 
 The full root suite, development stacks and fresh-install live qualification were NOT RUN.
 Admission remains disabled. CI must check the pushed commit; these are local results only.
+
+## Real-time correction receipt checks
+
+Rebased on `2659e880a`, 7 November 2026. Checked test source: `8d0203c8a`.
+This follow-up replaces the frozen clock in the loaded-target Correct test.
+The earlier controlled-clock results above do not establish real-time deadline behaviour.
+
+The test now starts the native call and waits for the real `memory.corrected` append to
+finish. It reads the saved event before releasing the held acknowledgement, then waits
+for that acknowledgement and the native reply. The original exact accepted receipt
+assertion remains unchanged. No production code or deadline changes.
+
+The new refusal case uses the same path. It holds the acknowledgement until 50 ms past
+the command's original deadline, using real elapsed time. It checks that the deadline
+has passed, then requires the exact error reply and one saved correction. Neither case
+freezes or advances the clock.
+
+The failing test was committed first as `9ad3f006a`. With the frozen clock still present,
+the late acknowledgement incorrectly satisfied acceptance instead of the expected
+refusal: FAIL as expected. Log: `/tmp/p4-15-pr4p-fix3/red.log`.
+Removing the freeze made both focused cases pass: PASS, 2/2, with 38 unrelated cases
+unselected. Log: `/tmp/p4-15-pr4p-fix3/green.log`.
+
+The checks use Linux, Node 22.23.3 and the supplied
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+Fixtures create disposable databases and isolated NATS, OpenFGA, gateway, backend,
+bridge and proxy services, with a scripted native peer. This is not a fresh installation
+or live qualification. Every suite and static check uses `nice -n 10`.
+
+The full-file command is:
+
+```sh
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres nice -n 10 \
+  node node_modules/vitest/vitest.mjs run apps/server/test/correct-backend-delivery.test.ts \
+  --maxWorkers=1 --no-file-parallelism --reporter=verbose
+```
+
+| Own static check | Result | Log under `/tmp/p4-15-pr4p-fix3/` |
+| --- | --- | --- |
+| Full lint, including Knip | PASS | `lint.log` |
+| Full typecheck | PASS | `typecheck.log` |
+| Event catalogue, 158 types | PASS | `events.log` |
+| Changelog | PASS | `changelog.log` |
+
+ESLint reported zero errors and 37 warnings. Knip reported two configuration hints.
+
+Full-file run 5 failed the existing test `checks replacement before releasing a saved
+Correct receipt`: the native call ended before the test observed a successful append. The other
+39 cases passed, including both real-time receipt cases. Runs 1 through 4 each passed
+all 40 cases. Log: `/tmp/p4-15-pr4p-fix3/correct-05.log`.
+
+A focused diagnostic of the replacement case passed, with 39 unrelated cases unselected.
+The temporary diagnostic recorded only the error class and source stack frames, without
+arguments or error messages. It observed the expected refusal after replacement, so it
+does not establish the earlier failure's cause. The production file was restored
+byte-for-byte. Log: `/tmp/p4-15-pr4p-fix3/replacement-diagnostic.log`.
+
+All ten full-file runs completed sequentially, without skipped cases. Nine runs passed
+40/40 cases; run 5 passed 39/40. Total: 399 passed and one failed. The required 10/10
+full-file passes were not achieved: FAIL. The exact accepted receipt and the real-time
+late-acknowledgement refusal each passed in all ten runs: PASS, 20/20 changed cases.
+Runs 6 through 10 passed the unchanged replacement case. No failed run is omitted.
+
+Logs are `correct-01.log` through `correct-10.log` under `/tmp/p4-15-pr4p-fix3/`.
+`results.json` records every command, exit code, duration and case count. The earlier
+failure remains unresolved; passing later runs does not establish its cause.
+
+The full root suite, development stacks and fresh-install live qualification are NOT RUN.
+No development stack was started or claimed. Admission remains disabled.
