@@ -138,13 +138,13 @@ flowchart LR
   server --> memory[Memory]
   chat -->|selects and checks input| memory
   chat -->|memory definitions and one-use private input| computer[Assistant computer]
-  chat -->|asks to start an activated child| models[Models process]
+  chat -->|asks to start an activated child| models
   models -->|checks the saved root and turn| chat
   computer -->|reports routine start and requests checked pass renewal| chat
   chat -->|checks lease, deadline and cancellation before routine credentials| computer
   computer -->|completed private reply| chat
   chat -->|private reply, clearance and service readiness| reader[Authenticated reader]
-  chat -->|checks access, spending and loaded references| models[Models]
+  chat -->|checks access, spending and loaded references| models[Models process]
   collector["private-memory-qualification<br/>checks deployment results"]
   chat -->|checks deployment results| collector
 ```
