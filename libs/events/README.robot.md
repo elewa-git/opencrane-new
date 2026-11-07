@@ -907,6 +907,11 @@ The fold keeps the schedule and occupied run, sets stopRequested, and performs n
 
 ## Normal tool-call release audit
 
+The company variant now requires the Ask id, root id, destination digest and
+distinct tool revision. A saved company Ask may carry a strict routine binding
+with ids, revisions and digests. The review remains encrypted. These fields
+add no event type or reaction; replay cannot use them to release an account.
+
 `credential.released` accepts the old strict six-field shape for replay, or the strict
 `purpose: tool_call` shape. The new shape names the personal owner/requester, selected
 profile and generation, profile/selection/policy revisions, computer generation,

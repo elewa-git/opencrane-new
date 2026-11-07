@@ -21,7 +21,8 @@ export const toolCredentialReleaseSchema = legacyCredentialReleaseSchema.extend(
 export const companyCredentialReleaseSchema = toolCredentialReleaseSchema.extend({
   ownerKind: z.literal('company'), routineId: id, occurrenceId: id,
   companyAccountId: id, payingGroupId: id, connectionRevision: z.int().positive(),
-  schemaDigest: digest,
+  schemaDigest: digest, toolRevision: digest, approvalId: digest,
+  rootId: id, destinationDigest: digest,
 });
 export const credentialReleaseSchema = z.union([
   toolCredentialReleaseSchema, companyCredentialReleaseSchema,

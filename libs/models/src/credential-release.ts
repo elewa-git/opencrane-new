@@ -10,7 +10,8 @@ import { foldConnectionSelection } from './connection-selection.ts';
 import { connectionServer } from './connection-server.ts';
 import { MemberAccessRefused } from './member-authority.ts';
 import { selectedOAuth, type OAuthConfigurationLoader } from './oauth-selection.ts';
-import { routineCompanyReleaseFacts } from './routine-company-release.ts';
+import { routineCompanyAskFacts, routineCompanyReleaseFacts }
+  from './routine-company-release.ts';
 import type { CompanyProfileReader } from './company-selection.ts';
 
 type Release = z.infer<typeof credentialReleaseSchema>;
@@ -50,7 +51,16 @@ function requireDecision(rows: StoredEvent[], decisionId: string, release: Relea
   if (!isDeepStrictEqual(decision, expected)) {
     refuse();
   }
+  if (release.ownerKind === 'company' && !companyDecisionMatches(event, decision, release)) {
+    refuse();
+  }
   return event;
+}
+function companyDecisionMatches(event: EventEnvelope,
+  decision: ReturnType<typeof decisionRecordedDataSchema.parse>,
+  release: Extract<Release, { ownerKind: 'company' }>) {
+  return decision.reason === 'approval_used' &&
+    event.correlation.approval === release.approvalId;
 }
 export async function credentialReleaseEvidence(store: EventStore, silo: string,
   decisionId: string, release: Release, loadConfiguration?: OAuthConfigurationLoader,
@@ -69,6 +79,8 @@ export async function credentialReleaseEvidence(store: EventStore, silo: string,
     if (!loadConfiguration || !readCompanyProfile) {
       refuse();
     }
+    const ask = await routineCompanyAskFacts(store, silo, release, deadline);
+    positions.set(ask.subject, ask.position);
     const company = await routineCompanyReleaseFacts(store, silo, release,
       loadConfiguration, readCompanyProfile);
     for (const [subject, position] of company.positions) {
@@ -78,7 +90,7 @@ export async function credentialReleaseEvidence(store: EventStore, silo: string,
     const oauth = { expiresAt: company.expiresAt,
       configurationCurrent: company.configurationCurrent };
     return { decision, positions, receipts, company, oauth,
-      expiresAt: company.expiresAt };
+      expiresAt: Math.min(company.expiresAt, ask.expiresAt) };
   }
   const selectedRows = await read(`connection-selection-${release.userId}-${release.serverId}`);
   const selection = foldConnectionSelection(selectedRows);

@@ -4930,6 +4930,17 @@ reader or caller is registered.
 No company material is read. Company activation and routine execution remain unavailable.
 Tests use disposable NATS, PostgreSQL and OpenFGA with synthetic verification.
 
+The company audit now requires one exact owner Ask before claiming a release.
+The request, human approval and models use must be the only three saved Ask
+events. The request expires within 15 minutes. Its strict routine binding must
+match the release and frozen active run. The caller's current access check and
+the exact Ask stream position are checked again before the audit append. The
+current registered destination, tool revision, catalogue schema and account
+profile must still match. An unchanged catalogue check keeps the saved policy
+revision valid even though the server stream position advances. A failed read,
+extra use or changed field refuses.
+No production company sender or custody hand-off is enabled by this check.
+
 ## Initial memory permission decisions
 
 The internal initial-load workflow can pass command-owned `AuthorityPermissions` through
