@@ -186,5 +186,6 @@ the computer completed before receiving cancellation. The first closure remains 
 
 `child-start.ts` checks a saved activation and its prepared computer thread before the
 first restricted turn. It obtains or reuses the saved budget root, checks current access
-and available cents, and saves the existing computer turn start once. Replays do not send
+and available cents and current spending ceilings, and saves the existing computer turn
+start once. A lower ceiling can refuse an already allocated root. Replays do not send
 to the computer. The bridge does not call this command yet.

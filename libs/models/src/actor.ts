@@ -15,7 +15,7 @@ import { costCents, data, emptyBudget, models, budgetStopId,
 import { history } from './event-history.ts';
 import { hasCallEvidence, retryReservation, type CallRetry, wasAdmitted, checkDispatchBinding,
   checkRootDispatch, checkRootGrant, checkRootReservation, setRootAllowance,
-  stopRootAtCeiling, stopRootOnOverrun } from './root-budget.ts';
+  stopRootAtCeiling, stopRootOnOverrun, requireRootStartCapacity } from './root-budget.ts';
 import { readRootStopEvidence, saveRootStop, type RootStopReason } from './root-stop-evidence.ts';
 import { checkBudget as checkBudgetRefusal, recordRefusedWork, requireBudget } from './budget-refusal.ts';
 import { envelope, migrateBudgetDefault } from './budget-migration.ts';
@@ -128,6 +128,14 @@ export class BudgetActor {
       return setRootAllowance(this.state, this.silo, this.now(), raw, firstCallBoundCents, append);
     };
     return this.serial(save, accessDeadline(fresh, deadline));
+  }
+  checkRootStartCapacity(rootId: string, firstCallBoundCents: number,
+    fresh: () => Promise<void>, deadline: number) {
+    const check = async () => {
+      await fresh();
+      requireRootStartCapacity(this.state, rootId, firstCallBoundCents, this.now());
+    };
+    return this.serial(check, deadline);
   }
   async stopRoot(rootId: string, reason: RootStopReason, subject: string, position: number) {
     const source = await readRootStopEvidence(this.store, subject, position);

@@ -4785,7 +4785,8 @@ fresh-install qualification remain unfinished.
 
 `chat/child-start.ts` takes a saved activation, its exact first input and the computer's
 prepared thread. It rechecks access, provider choice, computer generation and current
-root cents before calling the existing turn command. A new start records one computer
+root cents and current global, payer and assistant ceilings before calling the existing
+turn command. A new start records one computer
 turn; retries return the same root and turn. A lost reply does not send again. Parent and
 child histories load before the final two-second access check. Only small access streams
 are watched there. The command is internal; the bridge still holds child delivery.

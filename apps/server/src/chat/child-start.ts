@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { computerTurnStartedDataSchema } from '@opencrane/events';
-import { currentAuthority, providerTurnAdmission, reservationCents, rootTotals,
+import { currentAuthority, providerTurnAdmission, reservationCents,
   type BudgetActor } from '@opencrane/models';
 import { checkedChildActivation } from './child-activation.ts';
 import { ChildRequestChanged } from './child-requests.ts';
@@ -12,16 +12,6 @@ import { turnCommand } from './turns.ts';
 type Options = Parameters<typeof allocateChildRoot>[0];
 type Selection = Parameters<typeof allocateChildRoot>[5];
 type Send = (binding: { rootId: string; turnId: string }) => Promise<void>;
-
-function requireAvailableRoot(actor: BudgetActor, rootId: string, firstCallBoundCents: number) {
-  function matches(root: BudgetActor['state']['roots'][number]) {
-    return root.rootId === rootId;
-  }
-  const root = actor.state.roots.find(matches);
-  if (!root || root.stop || rootTotals(actor.state, rootId).availableCents < firstCallBoundCents) {
-    throw new ChildRequestChanged('Child start unavailable');
-  }
-}
 
 function matchesRootStart(start: z.infer<typeof computerTurnStartedDataSchema>,
   root: Awaited<ReturnType<typeof allocateChildRoot>>) {
@@ -81,8 +71,8 @@ export async function startActivatedChild(options: Options, actor: BudgetActor, 
       await checkComputerChanges(options, root, prepared.computer.sequence, fresh.deadline);
       await currentAuthority(options.store, options.binding, root.requesterId,
         root.assistantId, root.conversationId, 'model', model, fresh, checked.rows);
-      requireAvailableRoot(actor, root.rootId, firstCallBoundCents);
-      await checked.confirmAccess();
+      await actor.checkRootStartCapacity(root.rootId, firstCallBoundCents,
+        checked.confirmAccess, fresh.deadline);
     }
     await confirm();
     return { rootId: root.rootId, requesterId: root.requesterId,
