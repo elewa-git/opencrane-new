@@ -253,6 +253,7 @@ Root `npm test` fetches the pinned test server automatically after `npm ci`.
 OpenSSL must be on PATH to generate a fresh test CA and one-day certificates.
 The issuer lives in `src/certificates.ts` so image setup can use it. Only the
 test helper in `test/certificates.ts` caches credentials between fixtures.
+The issuer gives OpenSSL absolute paths inside the supplied private directory.
 `natsFixture()` shares one pending certificate generation in its loaded test module.
 It keeps the generated files in memory and copies them into each fixture's private
 directory with mode `0600`. Changing or removing those copies cannot change later

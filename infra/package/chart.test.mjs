@@ -238,7 +238,7 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
   const replacements = {
     'node:child_process': { execFile: executeFixture },
     'node:crypto': { ...crypto, randomBytes: () => key },
-    '../../libs/event-store/test/certificates.ts': { issueCertificate: async () => {} },
+    '../../libs/event-store/src/certificates.ts': { issueCertificate: async () => {} },
     '@opencrane/auth': { tokenIssuer: async () => ({ jwks: { keys: [] } }) },
     '../dev-stack/config.ts': {
       authEnv: async () => ({ OIDC_CLIENT_SECRET_ENV_VAR: 'OIDC_CLIENT_SECRET' }),
