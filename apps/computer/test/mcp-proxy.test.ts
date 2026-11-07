@@ -30,6 +30,7 @@ async function fixture(approvalSupport = false) {
   let deferred = false;
   let deliver: (() => void) | undefined;
   let reply = '{"jsonrpc":"2.0","id":7,"result":{"content":[]}}';
+  let requestId: string | undefined;
   async function receive(incoming: IncomingMessage, response: ServerResponse) {
     const chunks: Buffer[] = [];
     for await (const data of incoming) {
@@ -54,6 +55,7 @@ async function fixture(approvalSupport = false) {
     }
     response.statusCode = status;
     if (marked) response.setHeader('x-opencrane-decision', 'refused');
+    if (requestId) response.setHeader('x-request-id', requestId);
     function finishReply() { response.end(reply); }
     if (deferred) deliver = finishReply;
     else finishReply();
@@ -119,6 +121,7 @@ async function fixture(approvalSupport = false) {
   function answer(code: number, marker = false, text = '{"reason":"policy_block"}') {
     status = code; marked = marker; reply = text;
   }
+  function attempted(id: string) { requestId = id; }
   function deferReply() { deferred = true; }
   function deliverReply() { deliver?.(); }
   function disconnect() { drop = true; }
@@ -131,7 +134,8 @@ async function fixture(approvalSupport = false) {
     gateway.close();
     rmSync(directory, { recursive: true, force: true });
   }
-  return { catalogue, grant, send, sendRaw, control, answer, disconnect, partialReply,
+  return { catalogue, grant, send, sendRaw, control, answer, attempted,
+    retainedCall: local.retainedCall, disconnect, partialReply,
     oversizedReply, deferReply, deliverReply, close, received, approvals: local.approvals, waiting };
 }
 
@@ -340,6 +344,40 @@ it('keeps the first list discovery when binding the thread and refuses changed d
   remembersFirstList);
 
 const approvalId = 'a'.repeat(64);
+const permitId = '11111111-1111-4111-8111-111111111111';
+
+async function retainsOnlyOriginalLiveAttempt() {
+  const test = await fixture(true);
+  const controller = new AbortController();
+  try {
+    await test.catalogue();
+    await test.grant();
+    test.answer(403, true, JSON.stringify({ reason: 'approval_requested', approvalId }));
+    const pending = test.send(call, {}, loadA, 'POST', controller.signal);
+    void pending.catch(ignoreAbortedCall);
+    function waiting() { expect(test.waiting).toHaveBeenCalledOnce(); }
+    await vi.waitFor(waiting);
+    expect(test.retainedCall(approvalId)).toBeUndefined();
+    test.answer(503, false, '{"reason":"dispatch_refused"}');
+    test.attempted(permitId);
+    await test.approvals.settle(approvalId, 'approved');
+    const signal = test.retainedCall(approvalId);
+    expect(signal).toMatchObject({ approvalId, turnId: 'thread-A', permitId });
+    expect(JSON.stringify(signal)).not.toContain('arguments');
+    expect(JSON.stringify(signal)).not.toContain('number');
+    expect(test.retainedCall('b'.repeat(64))).toBeUndefined();
+    expect(test.received[1]?.raw).toContain('1.0');
+    test.approvals.endThread('thread-A');
+    expect(test.retainedCall(approvalId)).toBeUndefined();
+    expect((await pending).text).not.toContain('1.0');
+  } finally {
+    controller.abort();
+    await test.close();
+  }
+}
+function ignoreAbortedCall() { return undefined; }
+it('retains the original bytes privately while its first failed send is still live',
+  retainsOnlyOriginalLiveAttempt);
 async function heldCall(state: string) {
   const test = await fixture(true);
   try {
