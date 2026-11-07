@@ -462,8 +462,19 @@ class TurnRunner {
       settle(new Error('Turn ended'));
     }
     if (threadId && turn) {
-      void this.gate.track(this.dropAccess(threadId, turn));
+      this.releaseTurnAccess(threadId, turn);
     }
+  }
+
+  private releaseTurnAccess(threadId: string, turn: Turn) {
+    const stoppedRemoval = this.stopRemovals.get(turn);
+    if (!stoppedRemoval) {
+      void this.gate.track(this.dropAccess(threadId, turn));
+      return;
+    }
+    // Reuse completed Stop cleanup. Retry a failed removal before releasing this turn.
+    const retry = this.dropAccess.bind(this, threadId, turn);
+    void this.gate.track(stoppedRemoval.catch(retry));
   }
 
   private keepInstallingTurn(turnId: string) {
@@ -551,7 +562,11 @@ class TurnRunner {
   private privateProcessExited(input: Turn) {
     const started = this.lastStartedReport(input.id);
     if (started?.executionMode === 'restricted') {
-      this.appendReport(input, 'agent.private_exited');
+      try {
+        this.appendReport(input, 'agent.private_exited');
+      } catch {
+        // Leave closure pending if the exit proof cannot be saved.
+      }
     }
   }
 
@@ -740,16 +755,19 @@ class TurnRunner {
     this.boundRoutineStop(input);
     this.confirmPrivateClearance(turnId, cleared);
     const heldThread = this.findRunningThread(turnId);
-    await this.stopRunningTurn(input, heldThread, privateSession);
+    await this.stopRunningTurn(input, heldThread, privateSession, value['reason']);
   }
 
   private async stopRunningTurn(input: Turn, heldThread: string | undefined,
-    privateSession: PrivateSession | undefined) {
+    privateSession: PrivateSession | undefined, reason: unknown) {
+    // Close this process only for a closed chat. Other Stops keep their terminal ordering.
+    const sessionToClose = !this.gate.closed && reason === 'conversation_closed'
+      ? privateSession : undefined;
     if (!this.gate.closed) {
       try {
         await this.removeStoppedAccess(input, heldThread);
       } catch (error) {
-        privateSession?.close();
+        sessionToClose?.close();
         // Retry this private turn on the next Stop without disconnecting its neighbours.
         if (input.senderAttemptId && input.executionMode === 'restricted') {
           return;
@@ -759,18 +777,18 @@ class TurnRunner {
     } else this.endTurnHolds(heldThread);
     const codexTurnId = this.state.codexTurns.get(input.id);
     if (!codexTurnId) {
-      privateSession?.close();
+      sessionToClose?.close();
       return;
     }
     const threadId = this.findRunningThread(input.id);
     if (!threadId) {
-      privateSession?.close();
+      sessionToClose?.close();
       return;
     }
     try {
       await this.interruptOnce(input, threadId, codexTurnId);
     } finally {
-      privateSession?.close();
+      sessionToClose?.close();
     }
   }
 

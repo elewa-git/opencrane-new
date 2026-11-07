@@ -214,7 +214,8 @@ async function sendCloseStop(conversationId: string, assistantId: string, turnId
   const lastStop = readyLink.sentStops.get(stopKey) ?? -Infinity;
   if (now - lastStop < 1000) return readyLink;
   readyLink.sentStops.set(stopKey, now);
-  readyLink.socket.send(JSON.stringify({ type: 'stop', turnId, conversationId }));
+  readyLink.socket.send(JSON.stringify({ type: 'stop', turnId, conversationId,
+    reason: 'conversation_closed' }));
   return readyLink;
 }
 

@@ -230,8 +230,10 @@ async function startNativeSocket(
 async function redirectPrivateSocket(socketPath: string) {
   const original = await vi.importActual<typeof net>('node:net');
   function connect(...args: Parameters<typeof net.connect>) {
-    if (args[0] === '/run/executor/private.sock') {
-      return original.connect(socketPath);
+    const destination: unknown = args[0];
+    if (typeof destination === 'object' && destination !== null
+      && 'path' in destination && destination.path === '/run/executor/private.sock') {
+      return original.connect({ path: socketPath, allowHalfOpen: true });
     }
     return original.connect(...args);
   }

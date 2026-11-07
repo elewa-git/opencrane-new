@@ -217,7 +217,9 @@ async function waitsForSupervisorExit() {
       expect(computer.frames.some(isStart)).toBe(true);
     }
     await vi.waitFor(started);
-    stop(computer.socket, 'first', 'first');
+    const closeStop = { type: 'stop', turnId: 'first', conversationId: 'first',
+      reason: 'conversation_closed' };
+    computer.socket.send(JSON.stringify(closeStop));
     function inputEnded() {
       expect(test.nativeSockets[0]?.readableEnded).toBe(true);
     }

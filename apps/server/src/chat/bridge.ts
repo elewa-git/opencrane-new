@@ -88,7 +88,7 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
   const result = await recordBridgeReports(options.store, options.keys, context, batch.values);
   await options.output.release(report.sequence, result === 'recorded');
   // Keep computer suspend protection until the private process is confirmed gone.
-  const waitForPrivateExit = needsPrivateExit(report);
+  const waitForPrivateExit = await needsPrivateExit(options.store, options.silo, report);
   const acknowledgement: {
     type: string; sequence: number; token?: string; expiresAt?: number;
     model?: string; refused?: string; retryable?: boolean;

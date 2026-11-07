@@ -10,6 +10,7 @@ start save, but cleanup requires the later restricted start before using that ex
 Cleanup also checks the report's computer id against the original turn start.
 The report has no reply text or credential. Loss or replacement of the original
 computer generation is separate evidence that the old process cannot keep running.
+Routine preparations keep their separate ending rules.
 The event stays out of the public conversation feed. A fresh watcher reads these
 saved records and repairs missing turn endings through the existing commands.
 
