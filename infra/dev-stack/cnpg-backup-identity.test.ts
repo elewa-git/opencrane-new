@@ -23,6 +23,7 @@ let returnedPolicy: unknown;
 let writtenPolicy: string;
 let madeBuckets: string[];
 let existingBuckets: Set<string>;
+let reorderActions = false;
 
 function signedToken(policy: unknown, accessKey: string, expiry: number) {
   const header = Buffer.from(JSON.stringify({ alg: 'HS512', typ: 'JWT' })).toString('base64url');
@@ -37,6 +38,9 @@ function signedToken(policy: unknown, accessKey: string, expiry: number) {
 async function credentials(this: AssumeRoleProvider) {
   writtenPolicy = this.policy!;
   const policy = returnedPolicy ?? JSON.parse(writtenPolicy);
+  if (reorderActions) {
+    policy.Statement[0].Action.reverse();
+  }
   const expiry = Math.floor(Date.now() / 1000) + 900;
   return {
     accessKey: 'leased-access',
@@ -160,3 +164,18 @@ async function existingPrivateBucketPasses() {
     result.credentials), result.destinationPath);
 }
 test('renewal reuses the owned private bucket', existingPrivateBucketPasses);
+
+async function reorderedPolicyPasses() {
+  returnedPolicy = undefined;
+  madeBuckets = [];
+  existingBuckets = new Set();
+  reorderActions = true;
+  try {
+    const result = await identity.provisionCnpgBackupIdentity(binding);
+    assert.equal(identity.inspectCnpgBackupIdentity(result.evidence, binding,
+      result.credentials), result.destinationPath);
+  } finally {
+    reorderActions = false;
+  }
+}
+test('MinIO may reorder actions without changing the signed policy', reorderedPolicyPasses);
