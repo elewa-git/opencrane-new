@@ -13,7 +13,7 @@ import { routineEvents, modernRoutineExamples } from './routine-events.ts';
 import * as routines from './routines.ts';
 import { egressEvents } from './egress.ts';
 
-import { takeoverEvents } from './takeover.ts';
+import { takeoverEvents, takeoverStartedLeaseDataSchema } from './takeover.ts';
 import { conversationArchiveSetDataSchema, conversationReadAdvancedDataSchema }
   from './conversation.ts';
 import {
@@ -157,7 +157,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     'takeover.started',
     'computer',
     'A person started a live-view takeover of a computer.',
-    data.takeoverStartedDataSchema,
+    data.takeoverStartedDataSchema.or(takeoverStartedLeaseDataSchema),
     { assistantId: 'asst_1', computerId: 'computer_1', requestedBy: 'mem_1' },
   ),
   event(

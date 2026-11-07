@@ -1,6 +1,23 @@
 // Let the read-only viewer send only display messages. WebSocket messages can
 // split or combine RFB messages, so this code checks the byte stream instead.
 export function viewerStream(forward: (bytes: Buffer) => void, refuse: () => void) {
+  return clientStream(forward, refuse, false);
+}
+export function writerStream(slot: { allows(leaseId: string, writerSessionId: string): boolean;
+  close(): void }, leaseId: string, writerSessionId: string,
+forward: (bytes: Buffer) => void, refuse: () => void = noAction) {
+  function allowed() {
+    return slot.allows(leaseId, writerSessionId);
+  }
+  function closeWriter() {
+    slot.close();
+    refuse();
+  }
+  return clientStream(forward, closeWriter, true, allowed);
+}
+function noAction() {}
+function clientStream(forward: (bytes: Buffer) => void, refuse: () => void,
+  writer: boolean, allowed: () => boolean = alwaysAllowed) {
   let pending: Buffer = Buffer.alloc(0), stage = 0, refused = false;
   return (bytes: Buffer) => {
     if (refused) return;
@@ -8,13 +25,13 @@ export function viewerStream(forward: (bytes: Buffer) => void, refuse: () => voi
     if (pending.length + bytes.length > 8192) return reject();
     pending = Buffer.concat([pending, bytes]);
     while (pending.length) {
-      const size = messageSize(pending, stage);
+      const size = messageSize(pending, stage, writer);
       if (size < 0) return reject();
       if (!size) return;
       if (pending.length < size) return;
       const message = pending.subarray(0, size);
-      if (stage < 3 && !message.equals(stage === 0 ? Buffer.from('RFB 003.008\n') : Buffer.from([1]))) return reject();
-      if (!validDisplayMessage(stage, message)) return reject();
+      if (!allowed()) return reject();
+      if (!validClientMessage(stage, message, writer)) return reject();
       // Raw display only: do not negotiate clipboard, continuous updates or Kasm extensions.
       forward(stage === 3 && message[0] === 2 ? Buffer.from([2, 0, 0, 1, 0, 0, 0, 0]) : message);
       pending = pending.subarray(size);
@@ -22,11 +39,25 @@ export function viewerStream(forward: (bytes: Buffer) => void, refuse: () => voi
     }
   };
 }
+function alwaysAllowed() { return true; }
+function validClientMessage(stage: number, message: Buffer, writer: boolean) {
+  if (stage < 3) {
+    const expected = stage === 0 ? Buffer.from('RFB 003.008\n') : Buffer.from([1]);
+    return message.equals(expected);
+  }
+  if (!validDisplayMessage(stage, message)) return false;
+  if (!writer && (message[0] === 4 || message[0] === 5)) return false;
+  if (message[0] === 5 &&
+    (message.readUInt16BE(2) > 4096 || message.readUInt16BE(4) > 4096)) return false;
+  return true;
+}
 
-function messageSize(bytes: Buffer, stage: number): number {
+function messageSize(bytes: Buffer, stage: number, writer: boolean): number {
   if (stage < 3) return stage === 0 ? 12 : 1;
   if (bytes[0] === 0) return 20;
   if (bytes[0] === 3) return 10;
+  if (writer && bytes[0] === 4) return 8;
+  if (writer && bytes[0] === 5) return 6;
   if (bytes[0] !== 2) return -1;
   if (bytes.length < 4) return 0;
   const count = bytes.readUInt16BE(2);

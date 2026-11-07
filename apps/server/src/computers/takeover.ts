@@ -12,6 +12,7 @@ import { privateSessionCreation, writePrivateSession } from '../chat/private-ses
 import { desktopAccess, viewAccess } from './view-access.ts';
 import { RequesterOnly, ControlConflict, savedControlRefusal, recordControlRefusal,
   throwControlRefusal, type ControlWriteCheck } from './takeover-refusals.ts';
+import { grantWriter, renewWriter, returnWriter, WriterSlot } from './writer-lease.ts';
 
 export { RequesterOnly, ControlConflict } from './takeover-refusals.ts';
 class ControlUnavailable extends Error {}
@@ -21,6 +22,9 @@ const id = z.string().regex(/^[\w-]{1,200}$/u);
 const requestSchema = z.object({
   commandId: id, conversationId: id, requesterEventId: id, generation: z.int().positive(),
 }).strict();
+const writerIdentitySchema = z.object({ requesterId: id, conversationId: id,
+  requesterEventId: id, generation: z.int().positive(), assistantId: id,
+  computerId: id, podUid: id });
 type ControlRequest = z.infer<typeof requestSchema>;
 
 const turnOwnerSchema = z.object({ conversationId: id, requesterId: id });
@@ -255,6 +259,60 @@ async function loadControl(options: ChatOptions, conversationId: string, turnId:
   }
   const accessOptions = await creationAccess(options, conversationId, deadline);
   return { chat, computer, accessOptions, deadline };
+}
+
+async function writerAccess(options: ChatOptions, memberId: string, raw: unknown) {
+  const input = writerIdentitySchema.parse(raw);
+  if (input.requesterId !== memberId) throw new RequesterOnly('Requester only');
+  const loaded = await loadControl(options, input.conversationId, input.requesterEventId);
+  const { chat, computer, accessOptions } = loaded;
+  await chatAccess(accessOptions, { memberId, conversationId: input.conversationId });
+  if (chat.conversationClosed || chat.latestHuman?.id !== input.requesterEventId
+    || chat.latestHuman.authorId !== memberId) throw new RequesterOnly('Requester only');
+  const ready = writerReady(computer, input);
+  const request = { commandId: 'writer-access', conversationId: input.conversationId,
+    requesterEventId: input.requesterEventId, generation: input.generation };
+  const authority = await refusalAccess(accessOptions, memberId, request, chat, computer);
+  await controlAccess(accessOptions, memberId, request, ready, chat,
+    options.store, authority);
+  async function checkBeforeAppend() {
+    await authority();
+    await confirmRequest(options.store, options.silo, input.conversationId,
+      chat.sequence, authority.deadline);
+    await authority();
+  }
+  return checkBeforeAppend;
+}
+function writerReady(computer: ReturnType<typeof takeComputer> | undefined,
+  input: z.infer<typeof writerIdentitySchema>) {
+  const ready = readySchema.safeParse(computer?.lifecycle?.event.data);
+  if (computer?.lifecycle?.event.type !== 'computer.ready' || !ready.success
+    || ready.data.assistantId !== input.assistantId
+    || ready.data.computerId !== input.computerId
+    || ready.data.generation !== input.generation || ready.data.podUid !== input.podUid) {
+    throw new ControlConflict('Control conflict');
+  }
+  return ready.data;
+}
+
+export async function startRequesterWriter(options: ChatOptions, memberId: string, raw: unknown) {
+  const checkAccess = await writerAccess(options, memberId, raw);
+  return grantWriter(options.store, options.silo, raw, checkAccess);
+}
+export async function renewRequesterWriter(options: ChatOptions, memberId: string, raw: unknown) {
+  const checkAccess = await writerAccess(options, memberId, raw);
+  return renewWriter(options.store, options.silo, raw, checkAccess);
+}
+export async function returnRequesterWriter(options: ChatOptions, memberId: string, raw: unknown) {
+  const checkAccess = await writerAccess(options, memberId, raw);
+  return returnWriter(options.store, options.silo, raw, checkAccess);
+}
+export function requesterWriterSlot(options: ChatOptions, memberId: string, raw: unknown) {
+  async function checkAccess() {
+    const currentCheck = await writerAccess(options, memberId, raw);
+    await currentCheck();
+  }
+  return new WriterSlot(options.store, options.silo, raw, checkAccess);
 }
 
 export async function controlStatus(options: ChatOptions, memberId: string,

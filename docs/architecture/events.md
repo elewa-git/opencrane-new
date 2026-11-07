@@ -258,7 +258,10 @@ The dev stack retains its explicit invitation/join bootstrap for the privately c
 | `takeover.pausing` | server bridge reaction | computer control summary, audit | Save matching bridge acceptance and root executor exit on the computer stream with one conditional append. Keep work denied while waiting for complete quiet proof. |
 | `takeover.paused` | server bridge reaction | computer control summary, audit | After saved pausing, save a current bridge quiet reply and complete root receipt with the saved supervisor epoch. One conditional append; work and writer access stay closed. |
 | `takeover.failed` | server failure command; deadline caller deferred to PR 2h | computer control summary, audit | From requested or pausing, save the bound `pause_timeout` reason with one conditional append. Work and writer access stay closed. |
-| `takeover.started` / `takeover.ended` | historical live-view records | computer control summary, audit | Read old shapes as unverified and paused. They cannot grant a writer or resume work. |
+| `takeover.started` | internal requester lease command; old live-view records | computer control summary, audit | A new record requires saved quiet proof, the same requester and computer generation, one writer session, and an expiry no later than the original two-minute deadline. Old shapes remain unverified and cannot grant a writer. |
+| `takeover.renewed` | internal requester lease command | computer control summary, audit | Extend only the current writer session after fresh access checks, never beyond its original deadline. A returned or expired lease cannot renew. |
+| `takeover.return_requested` | internal requester command | computer control summary, audit | Close local writer input before the conditional append. Keep AI work paused; a lost reply is resolved by reading status. |
+| `takeover.ended` | historical live-view record | computer control summary, audit | Read old shapes as unverified and paused. They cannot resume work. |
 | `toolset.changed` | admin command (publishes a computer profile) | toolsets | notify admins for review; computers adopt it at their next claim or resume |
 
 Computer credentials are short-lived signed tokens. `computer.claimed` and

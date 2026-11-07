@@ -318,3 +318,10 @@ Fastify is pinned to 5.12.6 (MIT). The shared lockfile also updates fast-uri
 to 3.1.9 and 4.2.3 (BSD-3-Clause). Registry metadata and installed licence
 files were checked. The [audit notes](../../docs/process/npm-audit.md#29-october-2026-update)
 record the affected paths and the decoder override.
+
+## Saved writer lease
+
+`ComputerSummary.control` accepts a new `takeover.started` shape only after a matching
+`takeover.paused` quiet receipt. It retains the writer session, proxy instance and
+original deadline through renewal. Return changes the phase to `returning` and keeps
+turn admission closed. Historical start and end shapes remain unverified.

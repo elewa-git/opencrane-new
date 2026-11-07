@@ -34,6 +34,8 @@ does not prove a business change succeeded. Reading history never sends a tool c
 
 Refused control attempts in enabled test setups save a small audit record. They do not
 change the current controller or interrupt work. Production control stays disabled.
+Internal commands can now save a short writer lease after quiet proof, renew it within
+its original deadline, and save Return. The desktop writer is not live yet.
 
 An internal helper can save one encrypted routine input in its prepared private session.
 It uses the recorded owner's instructions as user data. The bridge leaves these sessions
