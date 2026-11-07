@@ -22,7 +22,9 @@ function startTime(stat: string): string {
   if (commandEnd < 0) {
     throw new Error('private_process_unreadable');
   }
-  const fields = stat.slice(commandEnd + 2).trimEnd().split(' ');
+  const fieldsText = stat.slice(commandEnd + 2);
+  const trimmedFieldsText = fieldsText.trimEnd();
+  const fields = trimmedFieldsText.split(' ');
   const value = fields[19];
   if (!value || !/^[1-9][0-9]*$/u.test(value)) {
     throw new Error('private_process_unreadable');
