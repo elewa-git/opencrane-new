@@ -7,7 +7,7 @@ It reads the deployment identity itself and starts each check inside that image.
 It also checks older evidence files, which cannot qualify a deployment.
 Admission remains off. The runner checks host settings, saved memory invalidation,
 separation between sessions and saved Stop delivery after reconnect. It also checks
-two native processes and their cleanup when Codex is present.
+two native processes and their cleanup before private-turn or recall checks can proceed.
 It reports unfinished journeys without qualifying them.
 
 ## Where it fits
@@ -23,7 +23,7 @@ flowchart LR
   collector -.->|checks memory, Stop and reply loss| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
   collector -->|measures, starts checks and reads failure reasons| docker["Docker<br/>running image and host"]
-  docker -->|checks host or runner protection| deployment["deployment<br/>event store and journey runner"]
+  docker -->|checks protection and native prerequisites| deployment["deployment<br/>event store and journey runner"]
 ```
 
 ## What it is responsible for
@@ -64,11 +64,18 @@ journeys as NOT RUN. For private turns, it requires the pinned Codex executable,
 two fresh empty threads, disabled tools, separate homes in RAM and safe process limits.
 It closes the first process and checks that its home is gone while the second still
 answers with its original identity. It then closes and checks the second before returning
-PARTIAL. Cleanup checks process start times before signalling and keeps its first
+PARTIAL for private turns. Recall checks require the same native observations and
+the matching silo before and after the work. They still return NOT RUN: empty
+threads cannot prove that an answer used a stored fact. Missing native files refuse
+both checks. Cleanup checks process start times before signalling and keeps its first
 result, so another cleanup call leaves reused process IDs alone. Memory tool calls, full process isolation and storage checks are still pending. The package image does not
 contain Codex or its launch helpers, so its native check refuses. Tests add those
 files to a separate disposable image; they do not change the deployment image.
 Tests build the package image and run all six memory checks against a disposable event store.
+Another test stores facts for two people, then uses a scripted native peer and the
+real server, bridge and gateway to recall only the requester's fact. It checks the
+saved reference before delivery and refuses the other person's scope. This test
+does not generate a model answer or qualify the deployment.
 Other tests use simulated observations and disposable containers to check refusal and cleanup.
 They do not qualify a deployment or enable memory.
 

@@ -38,14 +38,19 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
     }
   }
   let result: Receipt['result'] = 'NOT RUN';
-  if (safeHost && request.name === 'privateTurns') {
+  if (safeHost && (request.name === 'privateTurns' || request.name === 'nativeRecall')) {
     try {
       const { checkNative } = await import('./native-checks.ts');
+      const { checkRecallPrerequisites } = await import('./native-recall-checks.ts');
       if (!probeHost()) {
         return { result: 'FAIL', reason: 'host_refused' };
       }
-      await checkNative(request.challengeId);
-      result = 'PARTIAL';
+      if (request.name === 'privateTurns') {
+        await checkNative(request.challengeId);
+        result = 'PARTIAL';
+      } else {
+        await checkRecallPrerequisites(request.siloId, request.challengeId);
+      }
     } catch {
       const reason = probeHost() ? 'journey_failed' : 'host_refused';
       return { result: 'FAIL', reason };

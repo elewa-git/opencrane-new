@@ -319,6 +319,41 @@ All check and qualification statuses above stay unchanged. Delivery, persistence
 gVisor and fresh-install qualification remain unproved. Own checks are recorded in
 [the receipt](../../docs/process/p4-15-pr5m/receipt.md).
 
+## Native recall prerequisites
+
+P4-15 PR 5t, Part of #97, is the first split of the native recall journey.
+`native-recall-checks.ts` runs the existing pinned native checks for `nativeRecall`.
+It hashes the actual `SILO_ID` and compares it with the collector's measured silo
+before and after native work. The runner rechecks host protection after loading
+the helper and before returning. It never switches to container-only protection
+after starting native work. Missing or replaced Codex, failed process cleanup,
+a foreign silo or changed host protection refuses with a fixed failure code.
+
+The collector still owns source SHA, image digest, environment, installation,
+run and challenge binding. No receipt fields or admission settings change.
+Safe-host success remains `nativeRecall: NOT RUN`, `complete: false`.
+Container-only protection starts no native work and remains NOT RUN. Other rows
+and both qualifications keep their previous incomplete status.
+
+The disposable backend test reuses `recallBackend` and its scripted native peer.
+It starts NATS, PostgreSQL, OpenFGA, the server, bridge and gateway. It saves an
+encrypted fact for another member through an event, rebuilds the projection and
+checks the question contains neither answer. Recall returns only the requester's
+fact. The backend observes the exact loaded reference before delivery; a cold
+event read retains it. A request for the foreign scope refuses. The protected
+qualification reader also rejects a changed fixture installation.
+These observations are test results, not deployment evidence.
+
+The full journey needs more than the agreed approximately 600 changed lines.
+This first split does not admit a deployment session, start a model turn, or
+produce an answer. Connecting those steps to the existing personal-memory path,
+checking the current grant and access after waits, and testing late output,
+lost replies, changed facts and concurrent native callers remain outstanding.
+No fixture result can turn this runner's NOT RUN into PASS. The deployment still
+needs shipped Codex and protection of every process holding private text.
+Fresh-install qualification remains NOT RUN and admission remains disabled.
+Own checks and the split are recorded in the [receipt](../../docs/process/p4-15-pr5t/receipt.md).
+
 ## Recorded Stop and reconnect assertions
 
 P4-15 PR 5n, Part of #97, adds `memoryJourney.stopReconnect`. The runner and a

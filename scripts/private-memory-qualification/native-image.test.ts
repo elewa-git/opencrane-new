@@ -1,5 +1,5 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,9 +12,11 @@ const tag = `private-native-test:${randomUUID()}`;
 const packageTag = `${tag}-package`;
 const missingTag = `${tag}-missing`;
 const receiptSchema = z.record(z.string(), z.unknown());
+const siloHash = createHash('sha256');
+siloHash.update('native-test');
 const request = {
   sourceSha: 'a'.repeat(40), imageDigest: `sha256:${'b'.repeat(64)}`,
-  environmentId: 'c'.repeat(64), siloId: `sha256:${'d'.repeat(64)}`,
+  environmentId: 'c'.repeat(64), siloId: `sha256:${siloHash.digest('hex')}`,
   installationId: `sha256:${'e'.repeat(64)}`, freshInstall: true,
   runId: randomUUID(), challengeId: randomUUID(), name: 'privateTurns',
 };
@@ -190,7 +192,7 @@ function startContainer(caseName: string, image: string): string {
   const args = ['run', '-d', '--name', containerName, '--network=none', '--read-only', '--init', '--user=0',
     '--cap-add=SYS_PTRACE', '--cpus=0.5', '--pids-limit=256', '--ulimit=core=0:0',
     '--ulimit=nproc=256:256', '--tmpfs', '/home/private:mode=711', '--tmpfs', '/run',
-    '-e', `CASE=${caseName}`, image, 'sleep', '120'];
+    '-e', 'SILO_ID=native-test', '-e', `CASE=${caseName}`, image, 'sleep', '120'];
   docker(args);
   return containerName;
 }
@@ -203,12 +205,13 @@ function nativeCommand(image: string): string[] {
   command.push('/app/scripts/private-memory-qualification/journey.mjs');
   return command;
 }
-function run(caseName: string, image = tag): Record<string, unknown> {
+function run(caseName: string, image = tag, name = request.name): Record<string, unknown> {
   const containerName = startContainer(caseName, image);
   const command = ['exec', '-i', containerName, ...nativeCommand(image)];
   try {
+    const namedRequest = { ...request, name };
     const options = {
-      input: JSON.stringify(request), encoding: 'utf8' as const, timeout: 45_000,
+      input: JSON.stringify(namedRequest), encoding: 'utf8' as const, timeout: 45_000,
     };
     const result = spawnSync('/usr/bin/docker', command, options);
     expect(result.error).toBeUndefined();
@@ -275,6 +278,15 @@ function missingNative(): void {
   expect(run('safe', missingTag)).toEqual(expected);
 }
 it('refuses the package without native files even with safe host observations', missingNative);
+
+function recallPrerequisites(): void {
+  const expected = { ...request, name: 'nativeRecall', result: 'NOT RUN', complete: false };
+  expect(run('safe', tag, 'nativeRecall')).toMatchObject(expected);
+  const refused = { result: 'FAIL', reason: 'journey_failed' };
+  expect(run('safe', missingTag, 'nativeRecall')).toEqual(refused);
+}
+it('requires shipped native files for recall without qualifying empty threads',
+  recallPrerequisites, 60_000);
 
 async function collectorEof(): Promise<void> {
   const containerName = startContainer('collector EOF', tag);
