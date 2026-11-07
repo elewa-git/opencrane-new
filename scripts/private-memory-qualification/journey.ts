@@ -16,7 +16,7 @@ const requestSchema = z.strictObject({
 });
 
 type Refusal = { result: 'FAIL'; reason: 'input_invalid' | 'host_refused' | 'journey_failed';
-  protectionFailure?: ProtectionFailure };
+  protectionFailure?: ProtectionFailure; complete?: false };
 
 type Request = z.infer<typeof requestSchema>;
 type Receipt = Request & { observedAt: number; result: 'NOT RUN' | 'PARTIAL'; complete: false };
@@ -39,7 +39,8 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
     }
     const inventory = probePrivateProcessInventory();
     if (inventory !== true) {
-      return { result: 'FAIL', reason: 'host_refused', protectionFailure: inventory };
+      return { result: 'FAIL', reason: 'host_refused', protectionFailure: inventory,
+        complete: false };
     }
   }
   let result: Receipt['result'] = 'NOT RUN';
@@ -87,7 +88,8 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
     }
     const inventory = probePrivateProcessInventory();
     if (inventory !== true) {
-      return { result: 'FAIL', reason: 'host_refused', protectionFailure: inventory };
+      return { result: 'FAIL', reason: 'host_refused', protectionFailure: inventory,
+        complete: false };
     }
   }
   // These assertions cannot qualify isolation, persistence or private output delivery.

@@ -18,6 +18,11 @@ remains disabled.
 | Other private-text process groups | NOT RUN | They lack trusted PID and dumpability proof. |
 | Fresh-install container journeys | NOT RUN | The inventory refuses before starting one. |
 | Complete qualifications | NOT RUN | Neither complete journey was run. |
+| Incomplete process refusal | PASS | The journey, supervisor and collector preserved `complete: false` and the fixed reason. |
+| Failing-first contract tests | PASS | Seven focused assertions failed before the fix in commit `5023a18ce`. |
+| Changed tests, first run | PASS | 205 tests passed across four files, including Docker cleanup. |
+| Changed tests, second run | PASS | The same 205 tests passed again. |
+| Static checks | PASS | Scoped ESLint and Markdown lint, typecheck, check:events, knip and lint:changelog passed. |
 
 The source, image and environment for a fresh installation were not measured in
 this change. Disposable containers supplied only local test evidence. No stack,

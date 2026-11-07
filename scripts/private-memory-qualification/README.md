@@ -35,6 +35,7 @@ flowchart LR
 - Refuse an old or used event store, changed deployment, or missing check.
 - Refuse swap, crash dumps, unsafe process limits and unreadable host settings.
 - Refuse container journeys while any process that can hold private text lacks protection proof.
+- Mark missing process proof as incomplete in the runner and saved collector result.
 - Save protection refusals with a fixed message naming the failed check.
 - Accept results only from processes it starts in the measured image.
 - Check two private Codex processes from the deployment image without a model call.

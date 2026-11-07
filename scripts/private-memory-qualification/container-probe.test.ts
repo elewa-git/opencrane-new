@@ -51,6 +51,7 @@ async function acceptsOwnGroup(): Promise<void> {
   expect(runnerProtected).toHaveBeenCalled();
   expect(await runJourney(request)).toEqual({
     result: 'FAIL', reason: 'host_refused', protectionFailure: 'private_process_missing',
+    complete: false,
   });
 }
 it('measures the current runner and its own finite no-swap cgroup', acceptsOwnGroup);
@@ -173,6 +174,7 @@ async function allowsCoreSetting(pattern: string, privileged: string): Promise<v
   files.set('/proc/sys/fs/suid_dumpable', privileged);
   expect(await runJourney(request)).toEqual({
     result: 'FAIL', reason: 'host_refused', protectionFailure: 'private_process_missing',
+    complete: false,
   });
   vi.mocked(runnerProtected).mockReturnValue('core_limit_not_zero');
   expect(await runJourney(request)).toEqual({

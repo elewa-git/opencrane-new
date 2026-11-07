@@ -28,10 +28,16 @@ const receiptSchema = bindingSchema.extend({
   name: z.string(), challengeId: z.uuid(), observedAt: z.number().int(),
   result: z.enum(['PASS', 'PARTIAL', 'NOT RUN']), complete: z.boolean(),
 });
-const hostRefusalSchema = z.strictObject({
+const legacyHostRefusalSchema = z.strictObject({
   result: z.literal('FAIL'), reason: z.literal('host_refused'),
   protectionFailure: z.custom<ProtectionFailure>(isProtectionFailure).optional(),
 });
+const incompleteHostRefusalSchema = z.strictObject({
+  result: z.literal('FAIL'), reason: z.literal('host_refused'),
+  protectionFailure: z.custom<ProtectionFailure>(isProtectionFailure),
+  complete: z.literal(false),
+});
+const hostRefusalSchema = z.union([legacyHostRefusalSchema, incompleteHostRefusalSchema]);
 const freshSchema = z.strictObject({
   created: z.iso.datetime(), lastSequence: z.number().int().nonnegative(),
   eventCount: z.number().int().nonnegative(),
@@ -55,7 +61,7 @@ type Binding = z.infer<typeof bindingSchema>;
 type Status = 'PASS' | 'PARTIAL' | 'NOT RUN';
 type Result = { result: 'FAIL'; reason: 'collection_failed' } |
   { result: 'FAIL'; reason: 'host_refused';
-    protectionFailure?: ProtectionFailure | undefined; message: string } | Binding & {
+    protectionFailure?: ProtectionFailure | undefined; complete?: false; message: string } | Binding & {
   result: 'PASS' | 'PARTIAL'; checks: Record<string, Status>; qualifications: Record<string, Status>;
   receiptDigests: string[];
 };
