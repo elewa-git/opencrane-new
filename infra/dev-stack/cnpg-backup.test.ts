@@ -791,3 +791,21 @@ for (const fault of ['lost PUT', 'lost versioned PUT', 'stall GET', 'deny DELETE
   }
   test(`storage leaves no marker after ${fault}`, cleansInterruptedMarker);
 }
+
+for (const grant of ['root', 'prefix-read', 'prefix-list', 'prefix-write',
+  'bucket-read', 'bucket-list', 'bucket-write', 'root-list']) {
+  async function refusesExcessAccess() {
+    const input = fixture();
+    input.objects['backup-identity'].data.ACCESS_KEY_ID = encoded(`fixture-${grant}`);
+    const listener = await peer(directory);
+    atPeer(input, listener.port);
+    try {
+      const run = checkCnpgBackupReferences(input.backup, namespace, input.kubectl);
+      await refused(run, 'CNPG backup credential is not confined to its bucket and prefix');
+      assert.equal(listener.storage.objects.size, 0);
+    } finally {
+      await listener.close();
+    }
+  }
+  test(`storage refuses excessive ${grant} access on the supplied identity`, refusesExcessAccess);
+}

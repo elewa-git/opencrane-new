@@ -14,12 +14,12 @@ function hmac(key: string | Buffer, value: string) {
 }
 function authenticated(request: IncomingMessage) {
   const authorization = request.headers.authorization ?? '';
-  const pattern = /^AWS4-HMAC-SHA256 Credential=fixture-access\/([^,]+), SignedHeaders=([^,]+), Signature=(.+)$/u;
+  const pattern = /^AWS4-HMAC-SHA256 Credential=(fixture-[a-z-]+)\/([^,]+), SignedHeaders=([^,]+), Signature=(.+)$/u;
   const match = pattern.exec(authorization);
   if (!match) {
     return false;
   }
-  const [scope, signed, signature] = match.slice(1) as [string, string, string];
+  const [identity, scope, signed, signature] = match.slice(1) as [string, string, string, string];
   const names = signed.split(';');
   let headers = '';
   for (const name of names) {
@@ -35,7 +35,10 @@ function authenticated(request: IncomingMessage) {
     key = hmac(key, part);
   }
   const calculated = hmac(key, message);
-  return calculated.toString('hex') === signature;
+  if (calculated.toString('hex') !== signature) {
+    return false;
+  }
+  return identity;
 }
 
 export function storageFixture() {
@@ -54,11 +57,30 @@ export function storageFixture() {
     const path = url.pathname;
     requests.push(method);
     state.onRequest(method);
-    const allowed = /^\/database-backups\/local-check\/[^/]{1,100}$/u.test(path);
+    const identity = authenticated(request);
+    const listing = url.searchParams.has('list-type');
+    const ownObject = /^\/database-backups\/local-check\/[^/]{1,100}$/u.test(path);
+    const otherBucket = !path.startsWith('/database-backups/');
+    let area = otherBucket ? 'bucket' : 'prefix';
+    if (listing && !url.searchParams.get('prefix') && !otherBucket) {
+      area = 'root';
+    }
+    let operation = 'read';
+    if (listing) {
+      operation = 'list';
+    } else if (method === 'PUT') {
+      operation = 'write';
+    }
+    const extraGrant = identity === 'fixture-root' || identity === `fixture-${area}-${operation}`;
+    const allowed = ownObject || extraGrant;
     const denied = state.fault === `deny ${method}` || state.fault === 'server error';
-    if (!allowed || !authenticated(request) || denied) {
+    if (!allowed || !identity || denied) {
       response.writeHead(state.fault === 'server error' ? 500 : 403);
       response.end('<Error><Message>private-value-/private/path</Message></Error>');
+      return;
+    }
+    if (listing) {
+      response.end('<ListBucketResult><Contents><Key>other-silo/file</Key></Contents></ListBucketResult>');
       return;
     }
     if (state.fault === `body stall ${method}`) {
@@ -76,6 +98,13 @@ export function storageFixture() {
       }
       const bytes = Buffer.concat(chunks);
       assert(bytes.length > 0 && bytes.length <= 128);
+      if (!ownObject) {
+        // Honour conditional writes even for identities allowed outside the silo.
+        assert.equal(typeof request.headers['if-match'], 'string');
+        response.writeHead(412);
+        response.end();
+        return;
+      }
       assert.equal(request.headers['if-none-match'], '*');
       if (state.fault === 'collision') {
         objects.set(path, Buffer.from('foreign'));
@@ -121,6 +150,11 @@ export function storageFixture() {
       objects.set(path, Buffer.from('foreign'));
     }
     const bytes = objects.get(path);
+    if (!bytes && !ownObject) {
+      response.writeHead(404);
+      response.end();
+      return;
+    }
     if (!bytes || request.headers['if-match'] !== etag(bytes)) {
       response.writeHead(412);
       response.end();
