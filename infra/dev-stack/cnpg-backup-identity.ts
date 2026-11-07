@@ -20,14 +20,14 @@ type Credentials = {
   sessionToken: string;
 };
 
-type Record = {
+type IdentityRecord = {
   binding: Binding;
   credentials: Credentials;
   destinationPath: string;
   expiresAt: number;
 };
 
-const records = new WeakMap<object, Record>();
+const records = new WeakMap<object, IdentityRecord>();
 const refusal = 'CNPG backup identity provisioning refused';
 const inspectionRefusal = 'CNPG backup identity is not confined to its destination';
 

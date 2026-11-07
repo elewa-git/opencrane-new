@@ -24,11 +24,16 @@ TLS checks and plain refusals remain as they were.
 | Check | Observed result | Status |
 | --- | --- | --- |
 | Failing-first tests | Missing provisioner, changed credential record, repeat bucket and reordered MinIO actions failed before their fixes | PASS |
-| Changed helper and chart tests | 216 selected tests passed twice | PASS |
+| Existing helper and chart tests | 210 tests passed twice | PASS |
+| New identity tests | Six tests passed twice, then all seven passed twice after adding expiry coverage | PASS |
 | Installer gate | 22 selected backup and recovery tests passed twice | PASS |
 | Disposable pinned MinIO | Issuance, signed policy, own read/write/delete, foreign read/write and root-list denial, and renewal passed | PASS |
 | Development-stack typecheck | Passed after fixing optional session-token typing | PASS |
-| Full typecheck, lint, event catalogue, knip and changelog | Running after this receipt update | NOT RUN |
+| Full typecheck | Passed after the final source change | PASS |
+| Event catalogue | 158 event types agree | PASS |
+| Knip | Passed with two configuration hints | PASS |
+| Changelog lint | Passed | PASS |
+| Full lint | Passed with zero errors and 37 existing warnings | PASS |
 | Root suite | Excluded from this task | NOT RUN |
 | Fresh-install backup, WAL, restore and promotion | No stack or live journey ran | NOT RUN |
 
