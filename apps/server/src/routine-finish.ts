@@ -245,7 +245,8 @@ function provenUnsaved(result: AppendResult) {
 
 /** Release only an ended, stopped run. Leave scheduling and money to their own commands. */
 export async function finishRoutine(store: EventStore, silo: string, raw: unknown,
-  options: { enabled?: boolean; replay?: boolean } = {}) {
+  options: { enabled?: boolean; replay?: boolean;
+    requireCurrent?: () => Promise<void> } = {}) {
   if (options.enabled !== true || options.replay === true) {
     return { status: 'disabled' as const };
   }
@@ -281,8 +282,12 @@ export async function finishRoutine(store: EventStore, silo: string, raw: unknow
     const writeDeadline = performance.now() + 2000;
     const checkExecution = executionCheck(store, silo, allocation.root,
       budgetRows, computerRows, writeDeadline);
+    async function checkCurrentExecution() {
+      await checkExecution();
+      await options.requireCurrent?.();
+    }
     const command = { event, expectedSequence: rows.at(-1)!.sequence,
-      deadline: writeDeadline, historyChecked: true as const, checkAccess: checkExecution };
+      deadline: writeDeadline, historyChecked: true as const, checkAccess: checkCurrentExecution };
     let result = await store.append(command);
     // Retry only a proven unsaved publication, keeping the original deadline and event identity.
     while (provenUnsaved(result) && performance.now() < writeDeadline) {

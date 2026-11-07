@@ -1136,3 +1136,10 @@ bridge path. Dispatch still awaits the callback and rechecks leadership before p
 Tests no longer supply a separate execution wait. The fourteen-second wake and
 nine-second next-candidate cutoff retain their separate purposes.
 See [the completion contract](../../docs/process/p4-24-pr10h/README.robot.md).
+
+## Routine Stop ownership
+
+The server's models process now reconciles saved routine prohibition with its existing
+budget actor and checked finish command. This package still owns only routine read-table
+replay and the disabled delivery helpers. Replay never calls Stop or finish.
+See the [server contract](../server/README.robot.md#saved-routine-stop-recovery).

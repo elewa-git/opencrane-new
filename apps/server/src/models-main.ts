@@ -1,3 +1,4 @@
+import { routineLifecycle } from './routine-lifecycle.ts';
 import type { ChildProcess } from 'node:child_process';
 import { remoteCatalogueWatch } from './integrations/remote-catalogue-watch.ts';
 import { conversationKeys } from './chat/keys.ts';
@@ -108,6 +109,8 @@ try {
       if (stop.signal.aborted) throw new Error('Models process stopped');
       await locked.query('SELECT 1');
     }
+    const routineOptions = { enabled: true };
+    const routines = routineLifecycle(actor, requireDispatchLeader, routineOptions);
     const watch = remoteCatalogueWatch(db.db, events.store, silo, requireDispatchLeader);
     function watchFailed() {
       logger.error('MCP catalogue watch unavailable; calls remain held');
@@ -169,6 +172,7 @@ try {
           await ingestUsage(actor, `${directory}/usage.jsonl`, usageCursor);
           await actor.period();
           await actor.expire();
+          await routines.poll();
           budgetTickSucceeded = true;
         } catch (error) {
           const outage = trackEventStoreOutage(error, eventStoreUnavailableSince,

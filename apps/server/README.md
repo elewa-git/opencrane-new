@@ -55,9 +55,10 @@ or after a saved expiry. It checks the original request and keeps cleanup retrya
 An internal completion command can release a stopped run after its exact native turn
 has returned a matching terminal reply and closed as failed. A connection failure alone
 does not release the run. It refuses runs with descendants or incomplete evidence. It leaves
-the schedule, stopped spending allowance and held money unchanged. It stays disabled
-by default and during replay. Activity in other chats or spending roots does not
-prevent completion.
+the schedule, stopped spending allowance and held money unchanged. The models process
+rechecks saved routine Stops and calls this command after saving the budget Stop.
+Restart repeats those checks from saved evidence. Replay never invokes cleanup.
+Activity in other chats or spending roots does not prevent completion.
 
 A current silo owner or admin can also save an internal safety pause. It keeps the
 routine owner, payer and active run unchanged and grants no private chat access.
@@ -79,6 +80,8 @@ Pause and Retire records and cancels only the accepted private routine turn.
 After seeing a matching saved record, it still stops that turn within two seconds
 if further evidence reads time out or fail.
 It retries failed delivery and cleanup while other chats keep running.
+A recovered bridge can stop the same saved turn without sending its input again.
+Stop also cancels a waiting start acknowledgement before credentials are released.
 Completion does not prove that buffered private replies are gone. The bridge keeps
 checking until the computer confirms removal for that exact turn and private thread.
 If removal finishes first, failed interruption cleanup still retries until the turn ends.
@@ -180,7 +183,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|sign-out, requests, Office uploads, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks saved membership before personal memory tools and history errors; prepares allowances; checks routine admission; applies Stop, Pause and Retire; verifies termination and admin authority; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
-  server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, routine sessions, inputs, cancellations and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, routine sessions, inputs, cancellations, checked finishes and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres

@@ -77,13 +77,16 @@ export function pendingRoutineStarts(socket: WebSocket) {
     const pending = starts.get(turnId);
     return acknowledgeRoutineStart.bind(undefined, socket, pending);
   }
+  function cancelTurn(turnId: string) {
+    starts.get(turnId)?.cancel();
+  }
   function close() {
     for (const pending of starts.values()) {
       pending.cancel();
     }
   }
   socket.once('close', close);
-  return { bind, check, delivery };
+  return { bind, check, delivery, cancelTurn };
 }
 
 async function acknowledgeRoutineStart(socket: WebSocket, pending: Pending | undefined,

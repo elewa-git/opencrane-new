@@ -6734,7 +6734,8 @@ An uncertain publication is never retried. One existing routine.run_finished rec
 interrupted and the exact closure reference. Concurrent calls, lost replies and retries
 after duplicate expiry or restart retain the first outcome. Schedule state, the stopped
 root, uncertain holds and late settlement remain unchanged. Old closure evidence cannot
-finish a newer occurrence. No route, subscription, wake, call or cleanup is added.
+finish a newer occurrence. No route, subscription, wake or dispatch is added.
+The models process now invokes this command through the saved Stop reaction described below.
 
 `test/routine-finish.test.ts` uses real NATS and disposable PostgreSQL. It checks recovery,
 identity refusals, withheld process exit after timeout or disconnect, neighbouring
@@ -6926,3 +6927,25 @@ file counts towards the same 20 MiB allowance on each retry, including saved car
 A new report with files for an ended turn is refused; the original report sequence remains
 replayable. Completion is recorded only after all cards and refusals are saved, so bridge
 reconnects cannot skip unfinished publication. The binding event has no reaction.
+
+## Saved routine Stop recovery
+
+Part of #106. `routineLifecycle` runs beside the existing budget actor in `models-main`.
+It inspects allocated roots with a routine preparation digest when the event position
+changes. It loads chat and routine history before invoking `applyRoutineStop` with
+the first matching prohibition. Completed occurrences need no further cleanup.
+A failed root is retried without preventing checks for other roots. Startup rebuilds
+from saved evidence; a missing reply never authorises another delivery.
+
+`applyRoutineStop` remains disabled by default and during replay. In live cleanup it
+uses the actor's checked Stop command, then supplies the saved computer closure to
+`finishRoutine`. That command still verifies every binding and native termination.
+The budget leader is checked before cleanup and immediately before finish publication.
+An unresolved native process keeps the occurrence occupied and its holds intact.
+The bridge independently recovers saved open starts for exact-turn interruption and
+cancels that turn's pending start acknowledgement before sending Stop.
+
+No event/API field, dependency or authority stream was added. Production routine
+delivery and `executionAvailable` remain disabled. Company credentials, owner Ask,
+success completion, process-exit evidence and fresh-install qualification remain later.
+See [the own-check contract](../../docs/process/p4-24-pr12i/README.robot.md).

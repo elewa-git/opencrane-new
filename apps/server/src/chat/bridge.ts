@@ -281,7 +281,8 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   const routineStart = starts.check;
   const output = privateOutput(options, input, socket);
   const memory = memoryBridge(options, input, socket, output.clearBinding);
-  const routines = routineBridge(options, input, socket);
+  const routineOptions = { ...options, cancelRoutineStart: starts.cancelTurn };
+  const routines = routineBridge(routineOptions, input, socket);
   // Keep offered identities on this connection; a reconnect cannot reuse a pending load.
   const sentTurns = new Map<string, TurnDelivery>();
   const recall = recallBridge(options, input, socket, sentTurns);
