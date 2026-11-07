@@ -1,5 +1,14 @@
 # Memory contracts
 
+Nightly preflight reads the saved scope history before any later short access check.
+Only the original scope and date claim can receive a result. A changed binding or
+fact revision, occupied scope, expired window or unavailable managed route records
+a safe refusal. A lost append reply is checked through the original night and result
+id. A still eligible night remains qualification blocked until root admission is
+implemented. This path never starts a turn, model call, tool call or computer and
+never allocates an allowance. The status read returns only saved references and
+safe reasons.
+
 The [server contract](../../README.robot.md) describes the existing memory commands.
 The [initial personal load contract](../../../../docs/process/p4-15-pr5d/README.robot.md)
 records the two evidence commands and their checks. The

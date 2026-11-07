@@ -111,7 +111,8 @@ if (mode.startsWith("upgrade")) {
   const source = { head: store.head.bind(store), subscribe: stopAfterChunk };
   const names = ['update-openfga', 'seed-ownership', 'confirm-ownership', 'seed-model-grants',
     'seed-provider-default', 'create-assistant', 'claim-computer', 'cleanup-departure',
-    'stop-budget-turns', 'prepare-gateway-configuration', 'settle-budget'] as const;
+    'stop-budget-turns', 'prepare-gateway-configuration', 'settle-budget',
+    'dream-memory'] as const;
   async function guardedEffect(...args: Parameters<typeof effect>) {
     const effectUrl = process.env['CRASH_EFFECT_URL'];
     if (effectUrl) {

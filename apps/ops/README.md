@@ -35,6 +35,9 @@ and suspension. Those checks read metadata and change no resources.
 
 ## What it is responsible for
 
+The nightly memory worker sends saved scope and night identifiers to the models process
+for checked preparation. It sends no memory text and cannot dispatch a turn.
+
 - Keeps [read tables](../../GLOSSARY.md#read-table-projection) current for people,
   groups, chats, tools, providers, files, computers, spending and history.
 - Keeps permissions and the list of outside websites each person and assistant may reach up to date.

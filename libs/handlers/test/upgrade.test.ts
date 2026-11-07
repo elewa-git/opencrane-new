@@ -66,7 +66,7 @@ function upgradeTests() {
     const names: HandlerName[] = ["update-openfga", "seed-ownership", "confirm-ownership",
       "seed-model-grants", "seed-provider-default", "create-assistant", "claim-computer",
       "cleanup-departure", "stop-budget-turns", "prepare-gateway-configuration",
-      "settle-budget"];
+      "settle-budget", "dream-memory"];
     function testHandler(name: HandlerName) {
       async function apply(event: Parameters<typeof effect>[0], tx: Parameters<typeof effect>[1]) {
         await effect(event, tx, name);

@@ -37,7 +37,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { once } from 'node:events';
 import type { JSONWebKeySet } from 'jose';
 import { computerCredentials, tokenVerifier, type tokenIssuer } from '@opencrane/auth';
-import { childStartRoute, type ChildStartHandler } from './decision-child-start.ts';
+import type { ChildStartHandler } from './decision-child-start.ts';
+import { maintenanceOrChildRoute, type MaintenancePrepare } from './decision-maintenance.ts';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { StoredEvent } from '@opencrane/event-store';
@@ -135,12 +136,14 @@ export async function startDecision(
   actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string;
     memory?: Pick<Awaited<ReturnType<typeof tokenIssuer>>, 'memoryContext'> },
   binding: Binding, port = 0, keys?: ReviewKeys, providers?: ProviderVerificationOptions,
-  dispatchOptions?: McpDispatchOptions & { childStart?: ChildStartHandler },
+  dispatchOptions?: McpDispatchOptions & { childStart?: ChildStartHandler;
+    maintenancePrepare?: MaintenancePrepare },
   egress?: EgressRelayRegistry,
   logger: Pick<Logger, 'warn'> = createLogger('gateway-decision'),
 ) {
   const mcpSender = mcpDispatch(actor, dispatchOptions);
   const childStart = dispatchOptions?.childStart;
+  const maintenancePrepare = dispatchOptions?.maintenancePrepare;
   const credentials = computerCredentials(actor.store, tokenVerifier(identity.jwks, identity.issuer), actor.silo);
   const server = createServer((req, res) => {
     if (req.url === '/authorize/egress') {
@@ -185,7 +188,7 @@ export async function startDecision(
     void (async () => {
       res.setHeader('content-type', 'application/json');
       if (await internalRoutes(req, res, actor, identity, binding, providers,
-        childStart)) return;
+        childStart, maintenancePrepare)) return;
       const memoryRoute = req.url === '/authorize/mcp/memory/server';
       const managedRoute = req.url === '/authorize/models/managed';
       if (!knownDecisionRoute(req.url) || req.method !== 'POST') {
@@ -420,6 +423,7 @@ async function internalRoutes(
   req: IncomingMessage, res: ServerResponse, actor: BudgetActor,
   identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding,
   providers?: ProviderVerificationOptions, childStart?: ChildStartHandler,
+  maintenancePrepare?: MaintenancePrepare,
 ) {
   if (req.url === '/jwks.json' && req.method === 'GET') { res.end(JSON.stringify(identity.jwks)); return true; }
   if (req.url === '/budgets' && req.method === 'POST') {
@@ -442,7 +446,8 @@ async function internalRoutes(
     const d = z.object({ permitId: id, eventId: z.string().max(300) }).strict().parse(JSON.parse(await readBody(req)));
     await actor.settleRecorded(d.permitId, d.eventId); res.end('{}'); return true;
   }
-  return childStartRoute(req, res, actor.silo, identity, childStart);
+  return maintenanceOrChildRoute(req, res, actor.silo, identity,
+    childStart, maintenancePrepare);
 }
 
 function isProviderPath(path: string | undefined) {

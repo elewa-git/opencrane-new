@@ -78,7 +78,7 @@ export const eventRegistry: readonly EventDefinition[] = [
   ...childRequestEvents,
   childPublicationEvent,
   event('memory.maintenance_recorded', 'scope',
-    'One scope night was claimed or skipped without dispatch.', memoryMaintenanceRecordedDataSchema,
+    'One scope night was claimed or refused without dispatch.', memoryMaintenanceRecordedDataSchema,
     maintenanceRecordedExample),
   event('memory.maintenance_bound', 'scope',
     'A member accepted the nightly cap and chose a memory maintenance binding.',
