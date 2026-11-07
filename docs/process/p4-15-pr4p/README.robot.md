@@ -139,3 +139,77 @@ The protected authority and security test files are unchanged.
 
 Live qualification, complete disk/log leak scanning, development stacks, paid/model calls
 and the full local root suite: NOT RUN. Shared/team native writes remain excluded.
+
+## Isolated recovery checks and correction receipt timing
+
+Rebased on `b5a2a2ba1`, 7 November 2026. Final test source: `3e1334b22`.
+The first paired run used `2ec2d4446`; the later edit only named two existing expected
+objects in the route test. Their values and assertions did not change.
+These changes affect tests only. Production checks, deadlines and disabled admission stay
+unchanged. No development stack was started or claimed.
+
+The recovery helper tests seed a matching agent command for each requested scope.
+One request has a different owner but remains a person scope. The other has a shared
+scope but keeps the requester as owner. Both pass the command id, requester and agent-kind
+checks if the helper's owner/scope restriction is removed. A valid owner control returns
+the exact saved receipt. Removing that restriction made both refusal tests fail.
+
+The route test uses real authentication, saved membership and scope permissions.
+The fixture now applies its team membership to OpenFGA. It proves that the shared scope
+allows reading and writing but not correction. Only the recovery helper is
+replaced with a successful result, so that helper's separate restriction cannot hide
+a missing route check. Removing `canCorrect` returned HTTP 200 instead of 404 and failed
+the test. Both production restrictions were restored. All three controls passed before
+mutation. The tests also check that refused reads append nothing, create no memory key
+and decrypt no memory value.
+
+The loaded-target correction test required acceptance while using real elapsed time.
+One full diagnostic file run and seven focused runs passed without added delays. A
+separate temporary probe held an already saved correction's acknowledgement for 2.1 seconds.
+It logged the actual reply: `isError: true`, with “The tool did not confirm a result.”
+The final access read threw `TimeoutError` with about 1,070 ms past the original deadline.
+The saved event count was still one. This reproduces the timing failure path; the exact
+cause of the earlier intermittent run cannot be recovered from its retained summary.
+
+The test now uses the existing controlled clock before requesting the correction. The
+same delayed-acknowledgement probe then returned the exact accepted receipt. This keeps
+the receipt-content check independent of host scheduling. Separate tests still advance
+time explicitly and require refusal after expiry, including after the event is saved.
+No assertion was loosened. All temporary logging, delays and source probes were removed.
+
+Diagnostic logs are under `/tmp/p4-15-pr4p-fix2/`: `guards-control.log`,
+`mutation-helper.log`, `mutation-route.log`, `correct-diagnostic-1.log`,
+`correct-probe-1.log` through `correct-probe-8.log`, and
+`correct-delayed-clock-control.log`. Probe 8 contains the deliberate delay and expected
+failure; probes 1 through 7 do not add a delay.
+
+The checks use Linux and Node 22.23.3, the supplied
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`, disposable fixture services
+and a scripted native peer. No model calls are made. Every suite and static check runs
+under `nice -n 10`; the inherited shell priority makes the effective priority 19.
+The first full run selects both changed files with `--maxWorkers=2`. Later runs select
+one complete file with `--maxWorkers=1 --no-file-parallelism --reporter=verbose`, with
+at most two test workers across runs. These are full files, without a test-name filter.
+
+| Own static check | Result | Log under `/tmp/p4-15-pr4p-fix2/` |
+| --- | --- | --- |
+| Full lint, including Knip | PASS | `lint.log` |
+| Final changed-file lint | PASS | `final-files-lint.log` |
+| Full typecheck | PASS | `typecheck.log` |
+| Final server typecheck | PASS | `final-server-typecheck.log` |
+| Event catalogue, 158 types | PASS | `events.log` |
+| Changelog | PASS | `changelog.log` |
+
+| Full-file check | Completed runs | Cases per run | Result |
+| --- | --- | --- | --- |
+| `correct-backend-delivery.test.ts` | 10/10 | 39/39 | PASS |
+| `forget-backend-delivery.test.ts` | 2/2 | 46/46 | PASS |
+
+All 482 cases across these twelve file runs passed, with no skips. Correct's ten full-file
+runs passed consecutively after the clock change. The first pair is in `changed-files-1.log`;
+the remaining runs are in `correct-2.log` through `correct-10.log` and `forget-2.log`.
+`repeat-summary.json` records their exit codes and durations. All paths use the same
+`/tmp/p4-15-pr4p-fix2/` prefix. Final documentation checks are in `final-docs.log`.
+
+The full root suite, development stacks and fresh-install live qualification were NOT RUN.
+Admission remains disabled. CI must check the pushed commit; these are local results only.
