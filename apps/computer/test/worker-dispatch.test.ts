@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { afterEach, expect, it, vi } from 'vitest';
 import { workerRegistrations } from '../src/worker-registrations.ts';
 import { dispatchWorker } from '../src/worker-dispatch.ts';
+import { record } from '../src/http.ts';
 
 const npmArgs = ['npm', 'ci', '--ignore-scripts', '--no-audit', '--no-fund'];
 const gitArgs = ['git', 'clone', '--no-checkout', 'https://github.com/example/demo.git'];
@@ -77,8 +78,9 @@ async function refusesForeign(field: string) {
   const test = fixture();
   if (field === 'missing registration') test.store.disconnect(test.binding.executorId);
   if (field === 'forged registration') {
-    const request = JSON.parse(test.frame.toString('utf8'));
-    request.params.registration = { ...test.registration, executorId: 'forged' };
+    const request = record(JSON.parse(test.frame.toString('utf8')));
+    const params = record(request['params']);
+    params['registration'] = { ...test.registration, executorId: 'forged' };
     test.state.frame = Buffer.from(`${JSON.stringify(request)}\n`);
   }
   if (field === 'wrong computer') test.binding.computerId = 'another-computer';
