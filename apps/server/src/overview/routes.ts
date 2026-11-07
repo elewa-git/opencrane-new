@@ -46,19 +46,41 @@ function latestProviderFact(provider: SavedProvider) {
   return latest;
 }
 
-function providerPriority(provider: SavedProvider,
-  fact: ReturnType<typeof latestProviderFact>): OverviewPriority {
-  if (!fact) return 'needs_input';
-  if (fact.outcome === 'unknown' || fact.outcome === 'outcome_unknown') return 'unknown';
-  if (fact.outcome === 'fail' || fact.outcome === 'budget_refused') return 'failure';
-  if (fact.outcome === 'pass' && fact.revision === provider.revision) return 'ready';
+function isUnknownProviderOutcome(outcome: string): boolean {
+  return outcome === 'unknown' || outcome === 'outcome_unknown';
+}
+
+function isFailedProviderOutcome(outcome: string): boolean {
+  return outcome === 'fail' || outcome === 'budget_refused';
+}
+
+function currentProviderIssue(fact: SavedProvider['reachable'],
+  revision: number): 'unknown' | 'failure' | null {
+  if (!fact || fact.revision !== revision) return null;
+  if (isUnknownProviderOutcome(fact.outcome)) return 'unknown';
+  if (isFailedProviderOutcome(fact.outcome)) return 'failure';
+  return null;
+}
+
+function providerPriority(provider: SavedProvider): OverviewPriority {
+  const reachable = provider.reachable;
+  const modelAnswer = provider.modelAnswer;
+  const reachabilityIssue = currentProviderIssue(reachable, provider.revision);
+  const modelIssue = currentProviderIssue(modelAnswer, provider.revision);
+  if (reachabilityIssue === 'unknown' || modelIssue === 'unknown') return 'unknown';
+  if (reachabilityIssue === 'failure' || modelIssue === 'failure') return 'failure';
+  // Require both checks for the current configuration, even if one passed later.
+  if (!reachable || !modelAnswer) return 'needs_input';
+  if (reachable.revision !== provider.revision ||
+      modelAnswer.revision !== provider.revision) return 'needs_input';
+  if (reachable.outcome === 'pass' && modelAnswer.outcome === 'pass') return 'ready';
   return 'needs_input';
 }
 
 export function providerRow(record: { state: SavedProvider }): OverviewRow {
   const provider = record.state;
   const latest = latestProviderFact(provider);
-  const priority = providerPriority(provider, latest);
+  const priority = providerPriority(provider);
   return overviewRow('providers', provider.providerId,
     latest?.changeId ?? `provider:${provider.providerId}`, priority,
     latest?.time ?? null, provider.revision, 'view_evidence',

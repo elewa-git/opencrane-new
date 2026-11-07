@@ -10,9 +10,12 @@ after loading, independently of that deadline. It never calls an external provid
 starts discovery, scans event streams or appends an event.
 
 `rows.ts` orders unknown outcomes, needed input, failures and dated Ready evidence.
-Within a class it uses event time, source and id. A cursor includes the source
-checkpoint states; changed states require a fresh first page. Publication, memory
-and routines remain unavailable until their owning reads are built.
+Within a class it uses event time, source and id. Provider Ready requires current
+passing reachability and model results. A current unknown or failed result keeps
+its own priority even if the other check passed later. A cursor includes source
+checkpoint states and ordered row keys. Changed states or expiry-driven row moves
+require a fresh first page. Publication, memory and routines remain unavailable
+until their owning reads are built.
 
 The [server contract](../../README.robot.md) lists the service tests and the
 remaining fresh-install qualification.

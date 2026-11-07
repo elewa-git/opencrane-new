@@ -9,21 +9,23 @@ stays visible as unavailable.
 ## Where it fits
 
 The server handles the request. The overview reads saved results from the same
-read tables used by people, providers, integrations and spending.
+read tables used by people, providers, integrations and spending. A provider is
+Ready only when both its connection and model checks passed for its current settings.
 
 ```mermaid
 graph LR
   Server --> Overview
-  Server --> People
-  Server --> Providers
-  Server --> Integrations
-  Server --> Spending
+  Overview --> People
+  Overview --> Providers
+  Overview --> Integrations
+  Overview --> Spending
 ```
 
 ## What it is responsible for
 
 - Reads small pages of saved organisation facts.
 - Orders rows by urgency and recorded event time.
+- Asks for a fresh first page if a changed result moves rows between pages.
 - Checks current owner or admin access before sending rows.
 - Shows gaps when a source is late or unavailable.
 

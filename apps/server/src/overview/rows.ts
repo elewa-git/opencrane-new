@@ -48,13 +48,19 @@ function compareRows(left: OverviewRow, right: OverviewRow): number {
   return left.id.localeCompare(right.id);
 }
 
-function sourceFingerprint(sources: OverviewSource[]): string {
+function sourceFingerprint(sources: OverviewSource[], sorted: OverviewRow[]): string {
   const progress = [];
   for (const source of sources) {
     progress.push([source.name, source.status, source.checkpoint]);
   }
+  const orderedKeys = [];
+  for (const row of sorted) {
+    orderedKeys.push([row.priority, row.eventAt, row.source, row.id]);
+  }
   const hash = createHash('sha256');
   hash.update(JSON.stringify(progress));
+  // Detect expiry-driven row moves even when no saved checkpoint changes.
+  hash.update(JSON.stringify(orderedKeys));
   return hash.digest('hex');
 }
 
@@ -116,10 +122,10 @@ export function buildOverview(sources: OverviewSource[], requestedLimit?: number
   if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
     throw new Error('Invalid overview limit');
   }
-  const snapshot = sourceFingerprint(sources);
+  const sorted = deduplicatedRows(sources);
+  const snapshot = sourceFingerprint(sources, sorted);
   const after = decodeCursor(cursor);
   if (after && after.snapshot !== snapshot) throw new Error('Invalid overview cursor');
-  const sorted = deduplicatedRows(sources);
   const remaining = rowsAfterCursor(sorted, after?.row);
   const rows = remaining.slice(0, limit);
   const next = remaining.length > limit ? encodeCursor(rows[rows.length - 1]!, snapshot) : null;

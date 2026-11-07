@@ -21,8 +21,12 @@ function providerFact(outcome: string, time: string, revision = 2) {
 
 function providerWithChecks(reachable?: ReturnType<typeof providerFact>,
   modelAnswer?: ReturnType<typeof providerFact>) {
-  return providerRow({ state: { providerId: 'provider-one', revision: 2, position: 5,
-    reachable, modelAnswer } });
+  const state: Parameters<typeof providerRow>[0]['state'] = {
+    providerId: 'provider-one', revision: 2, position: 5,
+  };
+  if (reachable) state.reachable = reachable;
+  if (modelAnswer) state.modelAnswer = modelAnswer;
+  return providerRow({ state });
 }
 
 describe('organisation overview rows', () => {
