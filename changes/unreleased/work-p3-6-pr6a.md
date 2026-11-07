@@ -1,0 +1,1 @@
+- Private image checks now cover every regular file in every supplied layer, including files deleted by later layers, and refuse incomplete or unsafe walks. Hosted image admission remains closed.
