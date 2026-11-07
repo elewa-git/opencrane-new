@@ -354,6 +354,50 @@ needs shipped Codex and protection of every process holding private text.
 Fresh-install qualification remains NOT RUN and admission remains disabled.
 Own checks and the split are recorded in the [receipt](../../docs/process/p4-15-pr5t/receipt.md).
 
+## Native answer checker, local split
+
+P4-15 PR 5t part 2, Part of #97, adds `recallAnswerCheck` in
+`native-recall-checks.ts`. It returns a one-use function. Success is PARTIAL with
+complete=false; refusals contain only FAIL, journey_failed and complete=false.
+There is no receipt input, public API, new event or private-text digest.
+The expected fact stays in a buffer which is cleared when the attempt finishes.
+JavaScript strings supplied by the caller cannot be overwritten.
+
+The expected binding includes source SHA, image, silo, installation, challenge,
+requester, conversation, turn, thread, computer/input generations and process identity.
+The local driver must supply trusted observations; these are not deployment evidence.
+Its read operation reads saved history and current revisions before checking current
+grants. The driver must bound its awaited work under the existing supervisor.
+The checker checks host protection after each awaited phase and compares the pinned
+Codex executable digest reported by that driver. It does not measure the process itself.
+A fresh active thread, an unexpired grant and the exact current reference are required.
+The dispatch callback must await `loaded()` before releasing recalled bytes, and feed
+`receive()` only from its bound native connection. The checker requires exactly one
+saved reference before allowing that delivery, then reads current state again after
+native completion. No second dispatch is available after success, failure or overlap.
+
+Only completed agent-message notifications followed by successful turn completion can
+match. Question-only output, a returned scripted string without native notifications,
+wrong thread/turn, changed binding, old revision, forgotten fact, lost evidence and
+late output refuse. Answer comparison stays in RAM and produces no diagnostics.
+The caller supplies the other people's known fixture facts. The checker copies these
+facts into buffers and clears them after the attempt. It refuses any completed answer
+or streamed answer text containing one, even if the requester's fact is present too.
+It binds answer messages and streamed text to the ID in the native turn-start
+notification. A foreign-turn message or delta permanently refuses the attempt.
+The tests use the production JSON-RPC decoder and scripted notifications. The backend
+regression starts disposable services and compares the actual recalled fact against
+the backend observation captured before delivery and a cold event read.
+Correct/Forget, concurrent callers and grant/protection changes in checker tests are
+simulated observations, not live mutation or isolation journeys.
+
+The approximately 600-line split leaves the measured deployment driver and its real
+native model turn to subsequent work. `journey.ts` deliberately still invokes only
+the existing prerequisites; nativeRecall stays NOT RUN. A container whose other
+private-text processes are unmeasured also stays NOT RUN. Admission remains disabled.
+The sole 5i4 journey owns fresh-install execution; this change performs none.
+Own checks: [receipt](../../docs/process/p4-15-pr5t2/receipt.md).
+
 ## Recorded Stop and reconnect assertions
 
 P4-15 PR 5n, Part of #97, adds `memoryJourney.stopReconnect`. The runner and a
