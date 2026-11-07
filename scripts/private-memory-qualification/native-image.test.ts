@@ -1,6 +1,6 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -158,22 +158,16 @@ function prepare(): void {
   docker(['build', '-q', '-f', 'infra/package/Dockerfile', '-t', packageTag, '.'], 600_000);
   const directory = mkdtempSync(join(tmpdir(), 'private-native-image-'));
   try {
-    for (const name of ['private-codex.ts', 'codex-config.ts', 'codex-connection.ts', 'http.ts']) {
-      cpSync(`apps/computer/src/${name}`, join(directory, name));
-    }
     writeFileSync(join(directory, 'preload.mjs'), preload);
-    const computerImage = process.env['COMPUTER_TEST_IMAGE'] ?? 'ocn-upload-computer:test';
-    const dockerfile = `FROM ${computerImage} AS native
-FROM ${packageTag} AS without_native
+    const dockerfile = `FROM ${packageTag} AS with_native
 USER root
 COPY preload.mjs /fixture/preload.mjs
-FROM without_native
-COPY --from=native /spike/node_modules/@openai /opt/native/node_modules/@openai
-COPY *.ts /app/apps/computer/src/
-RUN ln -s /opt/native/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex
+FROM with_native AS missing_native
+RUN rm -f /usr/local/bin/codex
+FROM with_native
 `;
     writeFileSync(join(directory, 'Dockerfile'), dockerfile);
-    docker(['build', '--network=none', '-q', '--target', 'without_native',
+    docker(['build', '--network=none', '-q', '--target', 'missing_native',
       '-t', missingTag, directory], 180_000);
     docker(['build', '--network=none', '-q', '-t', tag, directory], 180_000);
   } finally {
