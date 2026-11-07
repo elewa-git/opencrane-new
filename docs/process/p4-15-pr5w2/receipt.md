@@ -27,6 +27,7 @@ complete qualification was run or marked PASS.
 | Changed qualification tests, second run | PASS: 188 tests in five files |
 | Event security rules | PASS: 460 tests |
 | Server startup fixture | PASS: 1 test |
+| Bridge debugger fixture in a disposable local image | PASS: 2 tests twice |
 | Scoped ESLint, TypeScript, event catalogue, Knip | PASS |
 | Changelog and Markdown lint | PASS |
 | Fresh installation and full live journeys | NOT RUN |

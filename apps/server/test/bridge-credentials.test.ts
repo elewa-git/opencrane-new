@@ -229,7 +229,10 @@ os.setgid(${testCase.uid})
 os.setuid(${testCase.uid})
 assert os.getuid() == ${testCase.uid}
 if expected == b'/app/src/bridge.ts':
-    environment = pathlib.Path(f'/proc/{pid}/environ').read_bytes().split(b'\x00')
+    try:
+        environment = pathlib.Path(f'/proc/{pid}/environ').read_bytes().split(b'\x00')
+    except PermissionError:
+        environment = []  # A protected bridge denies this read.
     assert not any(value.startswith(b'NODE_OPTIONS=') for value in environment)
 os.kill(pid, signal.SIGUSR1)
 opened = False
