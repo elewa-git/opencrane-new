@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { test } from 'node:test';
 import { gzipSync } from 'node:zlib';
+import { test, vi } from 'vitest';
 import { scanHostedImage } from '../infra/clamav/image-walk.mjs';
 
 const eicar = Buffer.from('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*');
@@ -53,6 +53,23 @@ function fixture(layerFiles, compressed = false) {
       mediaType: layer.mediaType })) }));
   return { ...binding, imageDigest: hash(manifest), manifest, config, layers };
 }
+function replaceFirstLayer(image, bytes) {
+  const changed = structuredClone(image);
+  changed.layers[0].bytes = bytes;
+  changed.layers[0].digest = `sha256:${hash(bytes)}`;
+  changed.layers[0].diffId = `sha256:${hash(bytes)}`;
+  const config = JSON.parse(Buffer.from(changed.config).toString());
+  config.rootfs.diff_ids[0] = changed.layers[0].diffId;
+  changed.config = Buffer.from(JSON.stringify(config));
+  const manifest = JSON.parse(Buffer.from(changed.manifest).toString());
+  manifest.config.digest = `sha256:${hash(changed.config)}`;
+  manifest.config.size = changed.config.length;
+  manifest.layers[0].digest = changed.layers[0].digest;
+  manifest.layers[0].size = bytes.length;
+  changed.manifest = Buffer.from(JSON.stringify(manifest));
+  changed.imageDigest = hash(changed.manifest);
+  return changed;
+}
 function recordingScanner(seen, outcome = 'clean') {
   return async function scan(_settings, bytes, partBinding) {
     seen.push({ bytes: Buffer.from(bytes), binding: { ...partBinding } });
@@ -103,6 +120,8 @@ const badFiles = [
   ['hardlink', { name: 'link', type: '1', link: 'outside' }],
   ['device', { name: 'device', type: '3' }],
   ['nested archive', { name: 'nested.zip', bytes: Buffer.from('PK\x03\x04encrypted') }],
+  ['EICAR inside tar', { name: 'nested.tar', bytes: tar([{ name: 'eicar', bytes: eicar }]) }],
+  ['unsupported archive', { name: 'nested.rar', bytes: Buffer.from('Rar!\x1a\x07') }],
   ['large file', { name: 'huge', bytes: Buffer.alloc(20 * 1024 * 1024 + 1) }],
 ];
 for (const [label, file] of badFiles) {
@@ -127,5 +146,51 @@ test('truncated layer, changed digest, scanner outage and stale definitions refu
     assert.equal(result.verdict, 'unavailable');
     assert.equal('validate' in result, false);
     assert.equal(JSON.stringify(result).includes('/private'), false);
+  }
+});
+
+test('skipped tar content and entry count limit refuse', async () => {
+  const image = fixture([[{ name: 'safe', bytes: Buffer.from('safe') }]]);
+  const trailing = Buffer.concat([image.layers[0].bytes,
+    tar([{ name: 'hidden', bytes: eicar }])]);
+  const skipped = replaceFirstLayer(image, trailing);
+  const seen = [];
+  const skippedResult = await scanHostedImage(skipped, scanner, recordingScanner(seen));
+  assert.equal(skippedResult.verdict, 'unavailable');
+  assert.equal(seen.length, 0);
+  const many = [];
+  for (let index = 0; index < 50_001; index++) {
+    many.push({ name: `file-${index}` });
+  }
+  const crowded = fixture([many]);
+  const crowdedResult = await scanHostedImage(crowded, scanner, recordingScanner([]));
+  assert.equal(crowdedResult.verdict, 'unavailable');
+}, 120_000);
+
+test('cancelled scan refuses without a result or a private error', async () => {
+  const image = fixture([[{ name: 'safe', bytes: Buffer.from('safe') }]]);
+  const controller = new AbortController();
+  async function cancelDuringScan() {
+    controller.abort();
+    throw new Error('/private/scanner/path');
+  }
+  const result = await scanHostedImage(image, scanner, cancelDuringScan, controller.signal);
+  assert.deepEqual(result, { verdict: 'unavailable', reasonCode: 'image_scan_unavailable' });
+});
+
+test('whole walk deadline refuses without a clean result', async () => {
+  const image = fixture([[{ name: 'safe', bytes: Buffer.from('safe') }]]);
+  const nativeTimeout = globalThis.setTimeout;
+  function shortenedDeadline(callback, delay, ...args) {
+    if (delay === 600_000) return nativeTimeout(callback, 1, ...args);
+    return nativeTimeout(callback, delay, ...args);
+  }
+  const timer = vi.spyOn(globalThis, 'setTimeout');
+  timer.mockImplementation(shortenedDeadline);
+  try {
+    const result = await scanHostedImage(image, scanner, recordingScanner([]));
+    assert.deepEqual(result, { verdict: 'unavailable', reasonCode: 'image_scan_unavailable' });
+  } finally {
+    timer.mockRestore();
   }
 });

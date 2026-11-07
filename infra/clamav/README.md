@@ -4,8 +4,9 @@
 
 This package runs [ClamAV](../../GLOSSARY.md#clamav-virus-scanner), a virus scanner,
 for files uploaded to OpenCrane and bounded parts of container images. The server
-accepts an upload only after an explicit clean result. Scanning an image part does
-not prove that the whole image is safe.
+accepts an upload only after an explicit clean result. A private image walk checks
+every regular file in every supplied layer, including files removed by later layers.
+It does not admit the image for use.
 
 ## Where it fits
 
@@ -20,7 +21,7 @@ flowchart LR
   infra --> nats["infra/nats<br/>event log settings"]
   stack -->|builds and starts the Linux amd64 image| clamav
   server["apps/server<br/>file uploads"] -->|sends file bytes over HTTPS| launcher
-  worker["image part client<br/>worker wiring planned"] -->|checks HTTPS scan replies| launcher
+  worker["private image walk<br/>worker wiring planned"] -->|checks every file through HTTPS| launcher
   packaging["packaging job"] -->|checks image databases| clamav
   launcher["separate HTTPS service"] -->|limits requests and checks caller passes| clamav
 ```
@@ -36,6 +37,7 @@ flowchart LR
 - Offers a separate launcher that keeps those files read-only and stops at database expiry.
 - Scans bounded file bytes through that launcher and returns the loaded database facts.
 - Checks separate service passes before receiving uploads or image parts over HTTPS.
+- Refuses an image if any layer member cannot be read or scanned completely.
 - Limits open connections and active requests, refusing excess work without a waiting list.
 - Keeps the original scanner code from the earlier version of OpenCrane, with its licence, for reference.
 
@@ -58,8 +60,12 @@ flowchart LR
 7. **An image worker requests a part scan.** The separate image route accepts only
    image-worker passes. It returns the part hash and size with the silo, server,
    installation attempt, platform and image digest. A separate client checks these
-   facts, the approved scanner digests and unchanged bytes again when used. Worker
-   wiring and whole-image coverage are not built yet. Image admission stays closed.
+   facts, the approved scanner digests and unchanged bytes again when used.
+8. **A private image walk checks supplied layers.** It checks the image hashes,
+   unpacks each layer into private temporary files and scans every regular file.
+   It refuses links, unsafe paths, nested archives and unfinished work. The result
+   must still match the current image and scanner when used. Worker wiring is not
+   built yet, and image admission stays closed.
 
 ## How to run or test it
 

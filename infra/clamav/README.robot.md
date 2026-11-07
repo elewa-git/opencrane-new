@@ -333,3 +333,30 @@ The scripts test runs in ordinary CI discovery, with real TLS/ES256 and the
 existing service factory; scanner verdicts remain fixtures. Full image membership,
 layer coverage, worker wiring and live clean/EICAR remain later work. The builder's
 [receipt](../../docs/process/p5-6b-pr3/checks.md) records the exact checks.
+
+## Private image layer walk
+
+`image-walk.mjs` accepts an already supplied OCI manifest, config and ordered layer
+bytes with the silo, server, attempt and platform. It checks the manifest digest,
+config digest, each compressed layer digest and each expanded layer digest. The
+manifest must describe one Linux amd64 or arm64 image. A separate publisher check
+remains required; these bytes are not fetched or signed by this function.
+
+`image-walk.py` reads each tar layer with Python's standard archive reader into a
+private temporary directory. It records opaque file names only. Whiteout files are
+scanned as regular files; they never remove earlier scan work. Absolute and escaping
+paths, links, devices, duplicate names, truncated content and data after the tar end
+refuse. Nested archives, including encrypted and unsupported formats, refuse until
+their complete contents can be proved. No candidate process starts.
+
+The walk allows 64 layers, 128 MiB total compressed bytes, 512 MiB expanded bytes,
+50,000 entries, 20 MiB per regular file and ten minutes for each walk. The shared
+image client has its own 20 MiB part and one-minute request limits. Every file goes
+through that client with purpose `image` and the exact silo, server, attempt,
+platform and image digest. A result includes the exact file count and ordered layer
+digests. Its validation function checks current image bytes and scanner settings,
+then each part's fresh result. Errors expose only `image_scan_unavailable`.
+
+The walk is private and has no worker caller, event writer or admission effect. A
+clean local fixture does not authorise hosted execution. Production scanner release,
+fresh-install journey and live scanner qualification remain NOT RUN.
