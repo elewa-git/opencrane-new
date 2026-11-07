@@ -17,7 +17,7 @@ import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, rebuildMembers, deleteStoreById } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { wireSubject } from '@opencrane/event-store';
+import { wireSubject, type StoredEvent } from '@opencrane/event-store';
 import {
   members, groups, computers, conversations, pgDb, ProjectionRunner, connectMemberFeed,
 } from '@opencrane/projections';
@@ -111,6 +111,228 @@ async function saveState(fixture: Awaited<ReturnType<typeof directFixture>>,
     headers: fixture.headers(memberId), payload };
   return fixture.app.inject(request);
 }
+
+async function closeChat(fixture: Awaited<ReturnType<typeof directFixture>>,
+  commandId: string, memberId = 'alice') {
+  return fixture.app.inject({ method: 'POST', url: '/api/conversations/direct/close',
+    headers: fixture.headers(memberId), payload: { id: commandId } });
+}
+
+function isSavedClose(row: StoredEvent) {
+  return row.event.type === 'conversation.closed';
+}
+
+function isPostedMessage(row: StoredEvent) {
+  return row.event.type === 'message.posted';
+}
+
+async function publicClosePermissions() {
+  for (const mode of ['direct', 'group']) {
+    const fixture = await directFixture();
+    try {
+      await fixture.create(mode);
+      const stranger = await closeChat(fixture, 'stranger-close', 'carol');
+      expect(stranger.statusCode).toBe(403);
+      const nonCreator = await closeChat(fixture, 'member-close', 'bob');
+      if (mode === 'group') {
+        expect(nonCreator.statusCode).toBe(403);
+        expect((await closeChat(fixture, 'creator-close')).statusCode).toBe(200);
+      } else {
+        expect(nonCreator.statusCode).toBe(200);
+      }
+      const rows = await history(fixture.nats.store, 'conversation-direct', 'test');
+      expect(rows.filter(isSavedClose)).toHaveLength(1);
+      for (const memberId of ['alice', 'bob']) {
+        const savedHistory = await fixture.app.inject({
+          url: '/api/conversations/direct/messages', headers: fixture.headers(memberId),
+        });
+        expect(savedHistory.statusCode).toBe(200);
+      }
+      const send = await fixture.app.inject({ method: 'POST',
+        url: '/api/conversations/direct/messages', headers: fixture.headers(),
+        payload: { id: 'late-send', text: 'Must stay out' } });
+      expect(send.statusCode).toBe(409);
+    } finally {
+      await fixture.close();
+    }
+  }
+}
+it('lets direct participants and the group creator close, then refuses later content',
+  publicClosePermissions, 120_000);
+
+async function closeRetryAndStatus() {
+  const fixture = await directFixture();
+  try {
+    await fixture.create();
+    const append = fixture.nats.store.append.bind(fixture.nats.store);
+    async function loseReply(command: Parameters<typeof append>[0]) {
+      await append(command);
+      return { status: 'unavailable' as const, cause: new Error('Lost reply') };
+    }
+    const lost = vi.spyOn(fixture.nats.store, 'append');
+    lost.mockImplementationOnce(loseReply);
+    expect((await closeChat(fixture, 'first-close')).statusCode).toBe(503);
+    lost.mockRestore();
+    const status = await fixture.app.inject({
+      url: '/api/conversations/direct/changes/first-close', headers: fixture.headers(),
+    });
+    expect(status.json()).toMatchObject({ status: 'appended', type: 'conversation.closed' });
+    const retry = await closeChat(fixture, 'first-close');
+    expect(retry.json()).toMatchObject({ status: 'appended',
+      sequence: status.json<{ sequence: number }>().sequence });
+    const second = await closeChat(fixture, 'second-close', 'bob');
+    expect(second.json()).toMatchObject({ status: 'appended',
+      sequence: status.json<{ sequence: number }>().sequence });
+    const rows = await history(fixture.nats.store, 'conversation-direct', 'test');
+    expect(rows.filter(isSavedClose)).toHaveLength(1);
+    const beforeRebuild = await fixture.nats.store.head();
+    await fixture.runner.rebuild(conversations);
+    expect(await fixture.nats.store.head()).toBe(beforeRebuild);
+    const list = await fixture.app.inject({ url: '/api/conversations',
+      headers: fixture.headers() });
+    expect(chatListSchema.parse(list.json()).rows[0]).toMatchObject({ status: 'closed' });
+    const settled = await fixture.app.inject({
+      url: '/api/conversations/direct/changes/first-close', headers: fixture.headers(),
+    });
+    expect(settled.json()).toMatchObject({ status: 'appended',
+      projection: { content: 'current' } });
+    const foreign = await fixture.app.inject({
+      url: '/api/conversations/direct/changes/first-close', headers: fixture.headers('carol'),
+    });
+    expect(foreign.statusCode).toBe(403);
+    await fixture.append('member-bob', 'member.removed', {
+      memberId: 'bob', removedBy: 'carol',
+    }, false);
+    const removed = await fixture.app.inject({
+      url: '/api/conversations/direct/changes/first-close', headers: fixture.headers('bob'),
+    });
+    expect(removed.statusCode).toBe(403);
+  } finally {
+    await fixture.close();
+  }
+}
+it('recovers the saved close after a lost reply and converges on the first close',
+  closeRetryAndStatus, 120_000);
+
+async function personalCloseAndConcurrentCommands() {
+  const fixture = await directFixture();
+  try {
+    await fixture.append('conversation-direct', 'conversation.created', {
+      conversationId: 'direct', mode: 'agent_session', createdBy: 'alice',
+      assistantId: 'assistant',
+    });
+    await fixture.append('conversation-other', 'conversation.created', {
+      conversationId: 'other', mode: 'agent_session', createdBy: 'alice',
+      assistantId: 'assistant',
+    });
+    await fixture.runner.run(conversations);
+    expect((await closeChat(fixture, 'foreign-close', 'bob')).statusCode).toBe(403);
+    const commands = [closeChat(fixture, 'alice-close'), closeChat(fixture, 'other-close')];
+    const replies = await Promise.all(commands);
+    expect(replies[0]?.json()).toMatchObject({ status: 'appended' });
+    expect(replies[1]?.json()).toMatchObject(replies[0]!.json());
+    const rows = await history(fixture.nats.store, 'conversation-direct', 'test');
+    expect(rows.filter(isSavedClose)).toHaveLength(1);
+    const other = await fixture.app.inject({ url: '/api/conversations/other/messages',
+      headers: fixture.headers() });
+    expect(other.statusCode).toBe(200);
+  } finally {
+    await fixture.close();
+  }
+}
+it('lets only the requester close a personal session and keeps another session open',
+  personalCloseAndConcurrentCommands, 120_000);
+
+async function sharedSessionRequesterOnly() {
+  const fixture = await directFixture();
+  try {
+    await fixture.append('team-sales', 'team.created', {
+      teamId: 'sales', name: 'Sales', createdBy: 'carol',
+    });
+    for (const memberId of ['alice', 'bob']) {
+      await fixture.append('team-sales', 'team.member_added', {
+        teamId: 'sales', memberId, addedBy: 'carol',
+      });
+    }
+    await fixture.append('assistant-shared', 'assistant.created', {
+      assistantId: 'shared', ownerId: 'sales', kind: 'team', payingGroupId: 'sales',
+    });
+    await fixture.append('conversation-direct', 'conversation.created', {
+      conversationId: 'direct', mode: 'agent_session', createdBy: 'alice',
+      assistantId: 'shared', payingGroupId: 'sales',
+    });
+    await fixture.runner.run(conversations);
+    expect((await closeChat(fixture, 'other-member', 'bob')).statusCode).toBe(403);
+    expect((await closeChat(fixture, 'requester')).statusCode).toBe(200);
+  } finally {
+    await fixture.close();
+  }
+}
+it('keeps a shared assistant session private to its requester',
+  sharedSessionRequesterOnly, 120_000);
+
+async function closeRaceKeepsLaterTextOut() {
+  const fixture = await directFixture();
+  try {
+    await fixture.create();
+    const send = fixture.app.inject({ method: 'POST',
+      url: '/api/conversations/direct/messages', headers: fixture.headers(),
+      payload: { id: 'racing-send', text: 'Race message' } });
+    const close = closeChat(fixture, 'racing-close', 'bob');
+    await Promise.all([send, close]);
+    const rows = await history(fixture.nats.store, 'conversation-direct', 'test');
+    const closeIndex = rows.findIndex(isSavedClose);
+    expect(closeIndex).toBeGreaterThan(0);
+    const afterClose = rows.slice(closeIndex + 1);
+    expect(afterClose.some(isPostedMessage)).toBe(false);
+  } finally {
+    await fixture.close();
+  }
+}
+it('orders a racing send before close or refuses it', closeRaceKeepsLaterTextOut, 120_000);
+
+async function refusesForgedAndRemovedClosers() {
+  const fixture = await directFixture();
+  try {
+    await fixture.create();
+    const forged = await fixture.app.inject({ method: 'POST',
+      url: '/api/conversations/direct/close', headers: fixture.headers('bob'),
+      payload: { id: 'forged-close', closedBy: 'alice' } });
+    expect(forged.statusCode).toBe(400);
+    await fixture.append('member-bob', 'member.removed', {
+      memberId: 'bob', removedBy: 'carol',
+    }, false);
+    expect((await closeChat(fixture, 'removed-close', 'bob')).statusCode).toBe(403);
+    const rows = await history(fixture.nats.store, 'conversation-direct', 'test');
+    expect(rows).toHaveLength(1);
+  } finally {
+    await fixture.close();
+  }
+}
+it('refuses forged close data and a removed member', refusesForgedAndRemovedClosers, 120_000);
+
+async function closedGroupCannotReadd() {
+  const fixture = await directFixture();
+  try {
+    await fixture.create('group');
+    expect((await closeChat(fixture, 'group-close')).statusCode).toBe(200);
+    const participants = await fixture.app.inject({
+      url: '/api/conversations/direct/participants', headers: fixture.headers(),
+    });
+    expect(participants.statusCode).toBe(200);
+    const accessPosition = participants.json<{ accessPosition: number }>().accessPosition;
+    const add = await fixture.app.inject({ method: 'POST',
+      url: '/api/conversations/direct/participants', headers: fixture.headers(),
+      payload: { id: 'late-add', action: 'add', participantId: 'carol',
+        expectedAccessPosition: accessPosition } });
+    expect(add.statusCode).toBe(409);
+    expect(await fixture.nats.store.head('participation-direct')).toBe(0);
+  } finally {
+    await fixture.close();
+  }
+}
+it('does not re-add a group member after close while projection is behind',
+  closedGroupCannotReadd, 120_000);
 
 async function archiveAfterLostReply() {
   const fixture = await directFixture();
