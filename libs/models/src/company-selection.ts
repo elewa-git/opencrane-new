@@ -66,7 +66,8 @@ export async function companySelectionFacts(store: EventStore, silo: string, cho
   }
   const oauth = { profileRevision: sequence, configurationCurrent };
   return { binding, positions, expiresAt, connectionId: choice.connectionId, available: true,
-    accountId: account.accountId, scopes: account.scopes, oauth };
+    accountId: account.accountId, scopes: account.scopes, toolScopes: configuration.toolScopes,
+    oauth };
 }
 
 function matchesConfiguration(configuration: z.infer<typeof oauthConfigurationSchema>,

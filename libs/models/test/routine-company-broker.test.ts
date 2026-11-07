@@ -51,7 +51,7 @@ async function readyHistory(userId: string, serverId: string, profileId: string,
   routineId: string, occurrenceId: string, options: FixtureOptions) {
   const personal = await oauthSelectionFixture(nats, userId, serverId, 'personal');
   if (options.missingToolMapping) {
-    delete personal.configuration.toolScopes.write;
+    Reflect.deleteProperty(personal.configuration.toolScopes, 'write');
   }
   const serverSubject = `mcp-${serverId}`;
   const serverRows = await history(nats.store, serverSubject, 'test');
@@ -221,6 +221,15 @@ it('audits one bound company request without releasing material', async function
   expect(rows[0]!.event.data).toMatchObject({ userId: test.userId,
     companyAccountId: 'company-bot', ownerKind: 'company' });
 });
+
+it('audits a requested tool covered by verified and frozen scopes',
+  async function coveredWriteTool() {
+    const test = await fixture({ toolName: 'write',
+      accountScopes: ['openid', 'read', 'write'] });
+    await expect(test.confirm()).resolves.toMatchObject({ status: 'confirmed' });
+    const rows = await history(nats.store, `credential-${test.requestId}`, 'test');
+    expect(rows).toHaveLength(1);
+  });
 
 it('refuses when no company profile was selected', async function absentProfile() {
   const test = await fixture({ ready: false });

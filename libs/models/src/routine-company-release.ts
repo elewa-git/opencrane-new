@@ -45,6 +45,7 @@ function requireRun(state: RoutineState | undefined, release: Release) {
       !matchesDefinition(run, release)) {
     refuse();
   }
+  return run;
 }
 
 async function activeRun(store: EventStore, silo: string, release: Release, deadline: number) {
@@ -55,7 +56,7 @@ async function activeRun(store: EventStore, silo: string, release: Release, dead
   for (const row of rows) {
     state = foldRoutineHistory(state, row.event, completed);
   }
-  requireRun(state, release);
+  const run = requireRun(state, release);
   const position = rows.at(-1)?.sequence ?? 0;
   async function executionCurrent() {
     // Check the saved run separately from the short access watch.
@@ -64,7 +65,7 @@ async function activeRun(store: EventStore, silo: string, release: Release, dead
       refuse();
     }
   }
-  return executionCurrent;
+  return { executionCurrent, frozenScopes: run.definition.scopes };
 }
 
 async function selectedChoice(store: EventStore, silo: string, release: Release,
@@ -95,6 +96,20 @@ async function checkedCompany(store: EventStore, silo: string, release: Release,
     refuse();
   }
   return facts;
+}
+
+function requireRequestedToolScopes(toolName: string, toolScopes: Record<string, string[]>,
+  verifiedScopes: string[], frozenScopes: string[]) {
+  const requiredScopes = toolScopes[toolName];
+  if (!requiredScopes) {
+    refuse();
+  }
+  // Keep the saved routine within the scopes accepted when its run began.
+  for (const scope of requiredScopes) {
+    if (!verifiedScopes.includes(scope) || !frozenScopes.includes(scope)) {
+      refuse();
+    }
+  }
 }
 
 async function requireCurrentProfileAndTool(store: EventStore, silo: string,
@@ -128,13 +143,15 @@ export async function routineCompanyReleaseFacts(store: EventStore, silo: string
   release: Release, loadConfiguration: OAuthConfigurationLoader,
   readProfile: CompanyProfileReader) {
   const deadline = performance.now() + 10_000;
-  const executionCurrent = await activeRun(store, silo, release, deadline);
+  const run = await activeRun(store, silo, release, deadline);
   const selection = await selectedChoice(store, silo, release, deadline);
   const facts = await checkedCompany(store, silo, release, selection.choice,
     loadConfiguration, readProfile);
+  requireRequestedToolScopes(release.toolName, facts.toolScopes, facts.scopes, run.frozenScopes);
   await requireCurrentProfileAndTool(store, silo, release, deadline);
   const positions = new Map(facts.positions);
   positions.set(selection.subject, selection.sequence);
   return { positions, expiresAt: facts.expiresAt,
-    configurationCurrent: facts.oauth.configurationCurrent, executionCurrent };
+    configurationCurrent: facts.oauth.configurationCurrent,
+    executionCurrent: run.executionCurrent };
 }

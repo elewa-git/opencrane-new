@@ -4872,9 +4872,13 @@ custody adapter against a synthetic HTTP transport. Gateway/header integration a
 fresh-install provider qualification remain NOT RUN.
 
 The company path uses `routine-company-release.ts` to check a frozen run, current
-choice, verified account and free published tool before `confirmCredentialRelease`
-claims one audit. The personal broker still refuses company decisions. The profile
-reader is injected; no production company verification reader or caller is registered.
+choice, verified account and free published tool before `confirmCredentialRelease`.
+The requested tool needs a configured scope mapping. Every required scope must be
+present in both the verified account and the run's saved scope limit. Another usable
+tool cannot make the requested tool eligible.
+The audit helper then claims one audit. The personal broker still refuses company
+decisions. The profile reader is injected; no production company verification
+reader or caller is registered.
 No company material is read. Company activation and routine execution remain unavailable.
 Tests use disposable NATS, PostgreSQL and OpenFGA with synthetic verification.
 

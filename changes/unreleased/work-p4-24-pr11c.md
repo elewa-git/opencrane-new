@@ -1,1 +1,1 @@
-- A routine call can check one explicitly selected, verified company account and record a one-use audit after checking its saved run, current tool rule and access. Company material and production calls remain disabled.
+- A routine call can check one explicitly selected, verified company account and record a one-use audit after checking its saved run, requested tool scopes, current tool rule and access. Company material and production calls remain disabled.
