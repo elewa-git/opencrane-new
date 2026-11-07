@@ -6,6 +6,7 @@ credentials can leave the server. Other work on the same computer can continue.
 
 The models process checks saved native closure and budget Stop before releasing the
 routine's occupied slot. A timeout or lost connection cannot prove completion.
+If a native turn completes before Stop reaches it, the run still finishes as interrupted.
 Restart repeats the checks from saved records without sending the input again.
 Automatic routine execution remains unavailable.
 
