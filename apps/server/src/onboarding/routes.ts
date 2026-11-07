@@ -34,10 +34,13 @@ export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, o
         return await surveyCommand(configured, memberId, request.body, route);
       }
       const history = await surveyHistory(configured, memberId);
+      if (request.routeOptions.url === '/api/onboarding/persona/revisions/:revisionId') {
+        return await readRevision(request, reply, configured, memberId, history);
+      }
       // Check membership again after slow content reads, before returning private text.
       const accessRequest = { memberId };
       await chatAccess(configured, accessRequest);
-      const special = await readSpecial(request, reply, configured, memberId, history);
+      const special = await readSpecial(request, configured, memberId, history);
       if (special !== undefined) return special;
       function readStep(row: typeof history.steps[number]) {
         const answers = surveyAnswersSchema.parse(decryptAnswers(configured, memberId, row.event));
@@ -66,8 +69,8 @@ export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, o
 }
 
 type History = Awaited<ReturnType<typeof surveyHistory>>;
-async function readSpecial(request: FastifyRequest, reply: FastifyReply,
-  options: ChatOptions, memberId: string, history: History) {
+async function readSpecial(request: FastifyRequest, options: ChatOptions,
+  memberId: string, history: History) {
   const path = request.routeOptions.url;
   if (path === '/api/personal/changes/:commandId') {
     const { commandId } = parameters.parse(request.params);
@@ -80,9 +83,6 @@ async function readSpecial(request: FastifyRequest, reply: FastifyReply,
   }
   if (path === '/api/onboarding/persona/revisions') {
     return listRevisions(request, history);
-  }
-  if (path === '/api/onboarding/persona/revisions/:revisionId') {
-    return readRevision(request, reply, options, memberId, history);
   }
   return undefined;
 }
@@ -111,8 +111,11 @@ async function readRevision(request: FastifyRequest, reply: FastifyReply,
     return reference.eventId === revisionId || String(reference.revision) === revisionId;
   }
   const reference = history.revisions.find(matchesId);
-  if (!reference) return reply.code(404).send({ status: 'not_found' });
-  const row = await personaEvent(options, memberId, reference);
+  const row = reference ? await personaEvent(options, memberId, reference) : undefined;
+  // Check membership after the selected record loads, before opening its private text.
+  const accessRequest = { memberId };
+  await chatAccess(options, accessRequest);
+  if (!reference || !row) return reply.code(404).send({ status: 'not_found' });
   const replacement = decryptPersona(options, memberId, row.event);
   return { ...personaReceipt(row), generation: reference.generation,
     current: reference.revision === history.currentRevision, replacement };

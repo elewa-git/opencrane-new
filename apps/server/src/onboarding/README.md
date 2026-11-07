@@ -13,7 +13,12 @@ This folder saves a member's welcome survey and persona revisions. Reloading res
 - Builds the same first persona from the same saved answers and keeps every edited version.
 - Lists revision dates and opens one version for its member after an access check.
 
-Reads check current membership after loading, before opening private answers. Writes finish history loading before the short access check. Each accepted request saves one record. Changed retries and competing edits are refused; an uncertain save stays unknown until its original result can be read. These requests use the member's personal encryption keys rather than conversation keys.
+Reads check current membership after loading, before opening private answers.
+Opening a persona revision loads that version before checking membership. Writes
+finish history loading before the short access check. Each accepted request saves
+one record. Changed retries and competing edits are refused; an uncertain save
+stays unknown until its original result can be read. These requests use the
+member's personal encryption keys rather than conversation keys.
 
 ## Main files
 

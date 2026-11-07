@@ -631,7 +631,8 @@ model, prepares a key, wakes a computer or changes assistant settings.
 `GET /api/onboarding/persona/revisions` returns metadata newest first, 20 by
 default and at most 50. `limit` and `before` page by revision number. Detail
 `GET /api/onboarding/persona/revisions/:revisionId` accepts the returned event id
-or revision number and opens only one own version.
+or revision number and opens only one own version. It loads that version's encrypted
+record before checking current membership, then decrypts only when access still holds.
 The shared member guard runs before every read. Content history loads before the
 short write authority check; the personal stream is the content CAS, not an
 authority stream. Changed retries return 409. The original receipt comes from

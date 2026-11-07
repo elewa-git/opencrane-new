@@ -416,7 +416,7 @@ async function removalDuringPersonaPointRead() {
   expect(saved.statusCode).toBe(200);
   const revision = saved.json<RevisionReceipt>();
   const read = nats.store.readStream.bind(nats.store);
-  const decrypt = keys.decrypt;
+  const decrypt = keys.decrypt.bind(keys);
   let removed = false;
   let decryptedAfterRemoval = false;
 
