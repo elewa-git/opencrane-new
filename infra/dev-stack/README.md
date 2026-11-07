@@ -17,10 +17,10 @@ assistant computers run.
 flowchart LR
   infra["infra<br/>infrastructure"] --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
-  stack -->|starts services; checks listeners; sets up sign-in| services["Local services<br/>jobs, content and access"]
+  stack -->|starts services; checks listeners; sets up sign-in; can issue short backup credentials| services["Local services<br/>jobs, content and access"]
   stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
   stack -->|checks subscriptions and shares dispatcher readiness with chat| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
-  stack -->|checks ownership, backup certificates and nodes; stops cancelled checks| package["infra/package<br/>Helm install"]
+  stack -->|checks ownership and nodes; refuses unproved backup access| package["infra/package<br/>Helm install"]
   stack -->|checks collection and reports host refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
 ```
@@ -66,9 +66,19 @@ available for diagnosis.
 - Refuses incomplete controller or credential settings for an optional PostgreSQL standby.
   Checks password format and conflicting database connections before installation.
   Checks backup Service ownership, named Secret entries and the endpoint certificate internally.
-  Verifies the Service hostname against the named CA without sending credentials or storage requests.
-  Stops ownership commands and secure connections when a backup check is cancelled or runs out of time.
+  Verifies the Service hostname against the named CA. Uses the referenced identity to
+  create, read and remove one temporary marker in the named backup folder.
+  Refuses backup approval because the installer cannot list other silos’ storage locations.
+  A denied request to an invented location cannot prove that other silos are protected.
+  Checks the allowed destination recorded on the credential Secret and refuses bucket-root listing.
+  Refuses the check if the marker changes or cannot be removed.
+  Stops the check on cancellation or timeout, then gives marker cleanup its own short deadline.
+  Checks deletion permission before writing.
   Backup and recovery installation remain blocked.
+  A separate local helper can issue a short-lived backup credential for the silo
+  recorded by this installation. It checks the policy signed into the credential
+  before returning it.
+  The installer does not use that helper yet.
   Requires runtime and setup replica settings to match the chart before Helm runs.
   Checks mounted event-log certificates and keys, connection settings and account rules.
   Checks three-node eligibility, prepared certificates and image compatibility for

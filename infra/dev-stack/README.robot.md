@@ -2168,9 +2168,30 @@ so the private kubeconfig filename remains outside child command arguments.
 
 ## Backup reference checks behind the install gate
 
-Part of #15, P5-3 PR 3c/3d. `cnpg-backup.ts` extends the existing CNPG checker.
+`cnpg-backup-identity.ts` is the first part of the replacement for backup storage
+probes. It reads the local MinIO root identity only after the saved stack owner
+matches this worktree. It requires the supplied silo to match `SILO_ID` in that
+owned stack's `settings.env`. It then derives `ocn-backup-<silo>/cnpg` and asks
+MinIO STS for a 15-minute lease. Its fixed policy
+allows object reads, writes, deletion and version operations only under `cnpg/`.
+Bucket listing and version listing require a prefix under `cnpg/`. The provisioner
+checks the HS512 signature with the local root secret, the access key, root parent,
+expiry and exact session policy before it creates or reuses the private bucket.
+It keeps a process-local record of the credential, destination, endpoint, CA and
+Namespace and Service UIDs. `inspectCnpgBackupIdentity` rejects changed values,
+missing records and expired leases. Root credentials stay in the local provisioning
+process. Unit tests use a signed fake STS reply and make no real MinIO request.
+
+This helper is not connected to the CNPG reference checker or Helm preview yet.
+The checker still refuses every backup after its marker and probe checks. The next
+split must carry session-token references through the preview and checker, check
+the process-local record before marker writes, then remove the invented probes and
+the unconditional inventory refusal. Real MinIO issuance, policy enforcement and
+renewal must pass on an owned local store before installation is enabled.
+
+Part of #15, P5-3 PR 3c/3d/3e. `cnpg-backup.ts` extends the existing CNPG checker.
 `preflight.mjs` still refuses every backup and recovery property before Helm,
-including disabled and null settings. The helper does not enable installation.
+including disabled and null settings. The helper cannot return success or enable installation.
 Suspending ScheduledBackup does not stop WAL archiving.
 
 The helper uses the callback from `packaged.ts`, which checks the captured context,
@@ -2182,8 +2203,9 @@ one owner reference to that Service, including its UID. Labels alone do not pass
 These are required fixture ownership links; this change creates no fixture resources.
 
 The returned kind, API version, name, namespace, UID and resource version must match
-or be present as appropriate. Each object is read again after the TLS handshake;
-changed UIDs or versions refuse. Reads and TLS share one 30-second deadline and cancellation.
+or be present as appropriate. Each object is read again after the storage check;
+changed UIDs or versions refuse. Reads, TLS and storage probes share one 30-second
+deadline and cancellation. Marker cleanup has a separate one-second deadline.
 Reads have a 1 MiB output limit. The package passes the same cancellation signal and remaining
 time through namespace ownership and target checks, including Docker inspection and
 target-node reads. Each child command stops on cancellation or its remaining deadline.
@@ -2193,11 +2215,70 @@ without spaces.
 The CA entry must contain one current, self-signed CA certificate with no extra data.
 Node TLS connects to the exact checked Service hostname and port. It sends that
 hostname as SNI and uses normal CA, hostname and certificate date verification.
-Only the referenced CA is trusted. The helper sends no application data or credentials.
+Only the referenced CA is trusted. The initial handshake sends no application data.
 It destroys the socket on success, failure, cancellation or timeout. It checks the
 absolute deadline before and after waits, even if the timeout callback has not run.
 Caller options accept only cancellation and a shorter timeout; supplied success,
 alternate endpoints and disabled verification refuse.
+The storage check uses the installed MinIO client and the same CA and checked Service
+address. It snapshots the bucket and prefix from `destinationPath` before waiting.
+It accepts the chart's plain S3 path syntax, bounded to 900 characters. It sends
+signed requests with the referenced identity, using the local fixture's `us-east-1`
+region. It makes no location lookup, redirect or retry. Each credential Secret must
+carry the annotation `opencrane.dev/backup-destination`, set to the approved
+`destinationPath` by the owner of the fixture. Both the path and the Secret's
+ownership are checked before storage requests. Caller changes after the check
+starts cannot replace this captured destination.
+A random UUID names one marker containing 64 random hexadecimal characters.
+`If-None-Match: *` prevents overwriting an existing object. GET and DELETE use
+`If-Match` with the marker's expected ETag, the quoted MD5 of those random bytes.
+The returned bytes must match exactly. If PUT returns a version id, GET and DELETE
+name that exact version; GET must confirm it. Cleanup uses only that object name,
+ETag and optional version. It never hides stored bytes behind a deletion marker.
+Before PUT, a conditional DELETE names an absent random version to check deletion
+permission without creating a delete marker. A denied DELETE therefore refuses
+before any marker is written. Cleanup starts whenever PUT may have reached storage,
+including a lost reply. It uses a new connection and a separate one-second deadline,
+without the cancelled check's signal. If the PUT reply was lost, HEAD finds the
+matching marker's version before deleting it. Foreign or changed bytes are never
+removed. A failed cleanup returns `CNPG backup marker cannot be removed`.
+An outage or permission change after creation can still prevent removal; the check
+refuses and makes no claim that it removed bytes it could not reach.
+
+After removing its own marker, the checker requires HTTP 403 for a bucket-root
+listing, and for GET, ListObjectsV2 and conditional PUT outside the approved prefix
+and in a randomly named different bucket. Outside-prefix checks use a sibling
+folder, including a changed suffix to catch grants missing a folder boundary.
+Root listings refuse even if the reply is empty or filtered. Missing objects,
+missing buckets and failed write conditions are not proof of denied access.
+Outside writes use `If-None-Match: *` and a deliberately incorrect `Content-MD5`
+checksum. The checksum prevents storage when writing is allowed; only HTTP 403
+passes. `If-Match` would require read permission too and could hide an excessive
+write-only grant. If a store writes anyway or loses its reply, the checker attempts
+the same bounded, conditional cleanup. See the S3 contracts for
+[conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html)
+and [checksum errors](https://docs.aws.amazon.com/AmazonS3/latest/developerguide/ErrorResponses.html).
+Excessive or unproved permissions return
+`CNPG backup credential is not confined to its bucket and prefix`.
+These random probes can expose some excessive grants, but never establish isolation.
+A credential may allow every configured silo while denying every invented name.
+After the existing checks and reference rechecks finish, the helper therefore refuses
+with `CNPG cannot enumerate other silos' backup locations`, even for an apparently
+scoped identity. Cleanup failures and earlier refusals retain their specific errors.
+
+`packaged.ts` reads one silo's values file in `readReviewedValues`; neither that file
+nor `checkCnpgInstallation` supplies an installation-wide list of backup locations.
+Do not substitute a caller-supplied list or credential annotation for that missing
+source. Before this helper can pass, the installer must supply all other silos' real
+buckets and prefixes from the same trusted configuration it uses for installation.
+Read, list and write must each be refused at every such location. An unavailable or
+incomplete list must refuse. The current S3 adapter has no effective-identity-policy
+operation; its bucket-policy getter does not describe all grants on a credential.
+If a supported service adds a non-admin effective-policy report, compare that too.
+No admin access is requested. These checks do not qualify a live store or open the
+installer gate.
+Responses allow at most 128 body bytes and 8 KiB of headers. Error bodies are not
+parsed. The HTTPS agent closes all its connections when the check ends.
 All Secret data stays in memory. The helper writes no private files. Errors discard
 parser details, cancellation reasons and nested dependency or cleanup failures.
 
@@ -2214,11 +2295,19 @@ The backup callback also carries the original absolute deadline. A delayed callb
 must not turn an earlier remaining duration into extra time for ownership checks.
 The chart tests delay dispatch and apply the same remaining-time assertion to every child.
 `cnpg-install.test.mjs` still checks refusal before Helm with synthetic image approval.
-Live checks are NOT RUN. Storage permissions and identity, image/helper approval,
-standby, real base backup/WAL and recovery of `projections`, `handlers` and `openfga`
-remain required before enablement. Local TLS proof does not show that storage accepts
-the credentials or that a backup can be restored.
-See the [TLS check receipt](../../docs/process/p5-3-pr3d/receipt.md).
+`cnpg-backup-s3-fixture.ts` checks signed requests over local HTTPS. It covers scoped
+access, altered markers, denied operations, bounded replies, cancellation, late
+results and replacement of references after the probe. Each test closes its local
+listener. Interrupted PUT, stalled GET and denied DELETE tests assert no marker
+remains before teardown. Root and individual excessive grants are tested with
+broader identities against the same destination, rather than by changing the path.
+A further identity allows `database-backups/other-silo/` and `other-silo-backups`
+alongside the usual destination, but denies root listings and invented names. It
+must receive the missing-location refusal, as must the ordinary scoped identity.
+Live checks are NOT RUN. Image/helper approval, real scheduled base backup/WAL,
+three-database restore and standby promotion remain required before enablement.
+P5-3 remains PARTIAL. Local permission tests cannot qualify a backup or recovery.
+See the [storage check receipt](../../docs/process/p5-3-pr3e/receipt.md).
 
 ## Checked local memory collection
 

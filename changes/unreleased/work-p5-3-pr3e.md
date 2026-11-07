@@ -1,0 +1,1 @@
+- Prepare a short-lived, silo-specific MinIO backup credential and verify its signed policy before returning it. Backup marker cleanup remains bounded, and backup and recovery installation remain disabled while the credential is connected to the installer.

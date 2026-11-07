@@ -1,0 +1,204 @@
+import assert from 'node:assert/strict';
+import { createHash, createHmac } from 'node:crypto';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+function hash(value: string | Buffer) {
+  const hash = createHash('sha256');
+  hash.update(value);
+  return hash.digest('hex');
+}
+function hmac(key: string | Buffer, value: string) {
+  const hash = createHmac('sha256', key);
+  hash.update(value);
+  return hash.digest();
+}
+function authenticated(request: IncomingMessage) {
+  const authorization = request.headers.authorization ?? '';
+  const pattern = /^AWS4-HMAC-SHA256 Credential=(fixture-[a-z-]+)\/([^,]+), SignedHeaders=([^,]+), Signature=(.+)$/u;
+  const match = pattern.exec(authorization);
+  if (!match) {
+    return false;
+  }
+  const [identity, scope, signed, signature] = match.slice(1) as [string, string, string, string];
+  const names = signed.split(';');
+  let headers = '';
+  for (const name of names) {
+    headers += `${name}:${request.headers[name]}\n`;
+  }
+  const url = new URL(request.url!, 'https://fixture.invalid');
+  const canonical = [request.method, url.pathname, url.search.slice(1), headers, signed,
+    request.headers['x-amz-content-sha256']].join('\n');
+  const message = ['AWS4-HMAC-SHA256', request.headers['x-amz-date'], scope,
+    hash(canonical)].join('\n');
+  let key = Buffer.from('AWS4private-value-/private/path');
+  for (const part of scope.split('/')) {
+    key = hmac(key, part);
+  }
+  const calculated = hmac(key, message);
+  if (calculated.toString('hex') !== signature) {
+    return false;
+  }
+  return identity;
+}
+
+export function storageFixture() {
+  const objects = new Map<string, Buffer>();
+  const requests: string[] = [];
+  function onRequest(_method: string) {}
+  const state = { fault: '', onRequest };
+  function etag(bytes: Buffer) {
+    const hash = createHash('md5');
+    hash.update(bytes);
+    return `"${hash.digest('hex')}"`;
+  }
+  async function handle(request: IncomingMessage, response: ServerResponse) {
+    const method = request.method!;
+    const url = new URL(request.url!, 'https://fixture.invalid');
+    const path = url.pathname;
+    requests.push(method);
+    state.onRequest(method);
+    const identity = authenticated(request);
+    const listing = url.searchParams.has('list-type');
+    const ownObject = /^\/database-backups\/local-check\/[^/]{1,100}$/u.test(path);
+    const otherBucket = path !== '/database-backups' && !path.startsWith('/database-backups/');
+    let area = otherBucket ? 'bucket' : 'prefix';
+    if (listing && !url.searchParams.get('prefix') && !otherBucket) {
+      area = 'root';
+    }
+    let operation = 'read';
+    if (listing) {
+      operation = 'list';
+    } else if (method === 'PUT') {
+      operation = 'write';
+    }
+    const configuredObject = path.startsWith('/database-backups/other-silo/') ||
+      path.startsWith('/other-silo-backups/');
+    const prefix = url.searchParams.get('prefix');
+    const configuredListing = prefix &&
+      ((path === '/database-backups' && prefix.startsWith('other-silo/')) ||
+        path === '/other-silo-backups');
+    const configuredAccess = listing ? configuredListing : configuredObject;
+    const configuredGrant = identity === 'fixture-configured-silos' && configuredAccess;
+    const extraGrant = identity === 'fixture-root' || identity === `fixture-${area}-${operation}` ||
+      configuredGrant;
+    const allowed = ownObject || extraGrant;
+    const needsRead = method === 'PUT' && request.headers['if-match'] !== undefined;
+    const lacksRead = needsRead && !ownObject && identity !== 'fixture-root';
+    const denied = lacksRead || state.fault === `deny ${method}` || state.fault === 'server error';
+    if (!allowed || !identity || denied) {
+      response.writeHead(state.fault === 'server error' ? 500 : 403);
+      response.end('<Error><Message>private-value-/private/path</Message></Error>');
+      return;
+    }
+    if (listing) {
+      response.end('<ListBucketResult><Contents><Key>other-silo/file</Key></Contents></ListBucketResult>');
+      return;
+    }
+    if (state.fault === `body stall ${method}`) {
+      response.writeHead(200);
+      response.write('x');
+      return;
+    }
+    if (state.fault === `stall ${method}`) {
+      return;
+    }
+    if (method === 'PUT') {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) {
+        chunks.push(Buffer.from(chunk));
+      }
+      const bytes = Buffer.concat(chunks);
+      assert(bytes.length > 0 && bytes.length <= 128);
+      const checksum = createHash('md5');
+      checksum.update(bytes);
+      const suppliedChecksum = request.headers['content-md5'];
+      if (suppliedChecksum && suppliedChecksum !== checksum.digest('base64')) {
+        response.writeHead(400);
+        response.end('<Error><Code>BadDigest</Code></Error>');
+        return;
+      }
+      assert.equal(request.headers['if-none-match'], '*');
+      if (state.fault === 'collision') {
+        objects.set(path, Buffer.from('foreign'));
+      }
+      if (objects.has(path)) {
+        response.writeHead(412);
+      } else {
+        objects.set(path, bytes);
+        response.setHeader('etag', etag(bytes));
+        if (state.fault === 'versioned' || state.fault === 'lost versioned PUT') {
+          response.setHeader('x-amz-version-id', 'fixture+/=version');
+        }
+      }
+      if (state.fault === 'lost PUT' || state.fault === 'lost versioned PUT') {
+        response.destroy();
+        return;
+      }
+      response.end();
+      return;
+    }
+    if (method === 'HEAD') {
+      const stored = objects.get(path);
+      if (!stored) {
+        response.writeHead(404);
+      } else {
+        response.setHeader('etag', etag(stored));
+        if (state.fault === 'lost versioned PUT') {
+          response.setHeader('x-amz-version-id', 'fixture+/=version');
+        }
+      }
+      response.end();
+      return;
+    }
+    if (method === 'DELETE' && !objects.has(path)) {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+    if (state.fault === 'missing') {
+      objects.delete(path);
+    }
+    if (state.fault === 'changed' || (state.fault === 'changed before delete' && method === 'DELETE')) {
+      objects.set(path, Buffer.from('foreign'));
+    }
+    const bytes = objects.get(path);
+    if (!bytes && !ownObject) {
+      response.writeHead(404);
+      response.end();
+      return;
+    }
+    if (!bytes || request.headers['if-match'] !== etag(bytes)) {
+      response.writeHead(412);
+      response.end();
+      return;
+    }
+    if (method === 'GET') {
+      response.setHeader('etag', etag(bytes));
+      if (state.fault === 'versioned' || state.fault === 'lost versioned PUT') {
+        response.setHeader('x-amz-version-id', 'fixture+/=version');
+      }
+      if (state.fault === 'bad body') {
+        response.end('private-value-/private/path');
+      } else if (state.fault === 'large body') {
+        response.end('x'.repeat(4096));
+      } else {
+        response.end(bytes);
+      }
+      return;
+    }
+    assert.equal(method, 'DELETE');
+    const versioned = state.fault === 'versioned' || state.fault === 'lost versioned PUT';
+    if (!versioned || url.search === '?versionId=fixture%2B%2F%3Dversion') {
+      objects.delete(path);
+    }
+    response.writeHead(204);
+    response.end();
+  }
+  function serve(request: IncomingMessage, response: ServerResponse) {
+    function failed(error: unknown) {
+      response.destroy(error as Error);
+    }
+    void handle(request, response).catch(failed);
+  }
+  return { serve, state, objects, requests };
+}

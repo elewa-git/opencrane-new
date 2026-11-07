@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import net from 'node:net';
+import https from 'node:https';
+import { storageFixture } from './cnpg-backup-s3-fixture.ts';
 import tls from 'node:tls';
 import { mock } from 'node:test';
 import { issueCertificate } from '../../libs/event-store/test/certificates.ts';
@@ -57,15 +59,9 @@ commonName = supplied
 
 export async function peer(directory: string, name = 'matching', onHello?: () => void) {
   const sockets = new Set<net.Socket>();
-  const received: Buffer[] = [];
-  function data(bytes: Buffer) {
-    received.push(bytes);
-  }
+  const storage = storageFixture();
   function connected(socket: net.Socket) {
     sockets.add(socket);
-  }
-  function secure(socket: tls.TLSSocket) {
-    socket.on('data', data);
   }
   function hello(_name: string, callback: (error: null, context: tls.SecureContext) => void) {
     onHello?.();
@@ -88,7 +84,7 @@ export async function peer(directory: string, name = 'matching', onHello?: () =>
     const key = await readFile(`${directory}/${name}.key`);
     const options = { cert, key, SNICallback: hello };
     context = tls.createSecureContext(options);
-    server = tls.createServer(options, secure);
+    server = https.createServer(options, storage.serve);
   }
   server.on('connection', connected);
   function listen(resolve: () => void) {
@@ -105,5 +101,5 @@ export async function peer(directory: string, name = 'matching', onHello?: () =>
     }
     await new Promise<void>(closed);
   }
-  return { port, close, received };
+  return { port, close, storage };
 }

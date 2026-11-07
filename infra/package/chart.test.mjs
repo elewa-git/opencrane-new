@@ -694,7 +694,8 @@ async function stopsOwnershipChild(kind, cancellation, dispatchDelayMs = 0) {
     }
     return ownedKubectl(owner, args, timeoutMs, signal, deadline);
   }
-  const backup = { endpointURL: 'https://backup-store.opencrane-package-1.svc:9000',
+  const backup = { destinationPath: 's3://database-backups/local-check',
+    endpointURL: 'https://backup-store.opencrane-package-1.svc:9000',
     endpointCA: { name: 'trust', key: 'ca.crt' }, s3Credentials: {
       accessKeyId: { name: 'identity', key: 'access' },
       secretAccessKey: { name: 'identity', key: 'secret' },
