@@ -412,8 +412,10 @@ it('retries a closed turn Stop without sending its input again', async () => {
   await test.flushFrames();
 
   const stops = test.frames.filter(isStop);
-  expect(stops).toEqual([expect.objectContaining({ turnId: turn.turnId }),
-    expect.objectContaining({ turnId: turn.turnId })]);
+  expect(stops).toEqual([
+    expect.objectContaining({ turnId: turn.turnId, reason: 'conversation_closed' }),
+    expect.objectContaining({ turnId: turn.turnId, reason: 'conversation_closed' }),
+  ]);
   expect(stops.every(isChatStop)).toBe(true);
   expect(test.frames.filter(isTurnOrFile)).toEqual([]);
 });

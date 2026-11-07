@@ -285,7 +285,8 @@ async function reportsPrivateExitAfterStop() {
   try {
     await startPrivate(test, 'first', 'thread-1');
     await startPrivate(test, 'second', 'thread-2', 'bob');
-    test.send({ type: 'stop', turnId: 'first', conversationId: 'first' });
+    test.send({ type: 'stop', turnId: 'first', conversationId: 'first',
+      reason: 'conversation_closed' });
     await test.flush();
     function isExit(frame: Record<string, unknown>) {
       return frame['type'] === 'agent.private_exited';
@@ -301,7 +302,8 @@ async function reportsPrivateExitAfterStop() {
     await vi.waitFor(oneExit);
     expect(test.grants.has('thread-2')).toBe(true);
     const before = test.frames.filter(isExit);
-    test.send({ type: 'stop', turnId: 'first', conversationId: 'first' });
+    test.send({ type: 'stop', turnId: 'first', conversationId: 'first',
+      reason: 'conversation_closed' });
     await test.flush();
     expect(test.frames.filter(isExit)).toEqual(before);
   } finally {
