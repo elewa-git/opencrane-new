@@ -106,6 +106,10 @@ async function correctsLoadedTarget(expired = false) {
 }
 async function acknowledgedCorrection(test: Awaited<ReturnType<typeof correctionFixture>>,
   expired: boolean) {
+  if (!expired) {
+    // Keep acceptance tied to the saved acknowledgement, even when the host is busy.
+    memoryClock();
+  }
   const append = test.setup.nats.store.append.bind(test.setup.nats.store);
   const saved = Promise.withResolvers<number>();
   const release = Promise.withResolvers<void>();
@@ -383,6 +387,10 @@ it.each(withdrawals)('checks saved %s inside the final append callback',
 const releaseChanges = [...withdrawals, 'deadline'] as const;
 async function withdrawsAfterSave(change: typeof releaseChanges[number]) {
   const test = await correctionFixture();
+  if (change === 'unrelated') {
+    // Let unrelated activity finish without spending the receipt confirmation deadline.
+    memoryClock();
+  }
   const store = test.setup.nats.store;
   const append = store.append.bind(store);
   const saved = Promise.withResolvers<number>();

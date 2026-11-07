@@ -670,7 +670,33 @@ async function releasesOnlyCurrentOutput(forgotten: boolean) {
     conversationId: 'chat', turnId: test.turnId, threadId, generation: 1,
     inputGeneration: evidence.inputGeneration, text };
   if (forgotten) {
-    const response = await test.native.call(threadId, 'forget', test.args);
+    // Wait for the saved tombstone before allowing its acknowledgement to return.
+    memoryClock();
+    const store = test.setup.nats.store;
+    const append = store.append.bind(store);
+    const saved = Promise.withResolvers<void>();
+    const acknowledge = Promise.withResolvers<void>();
+    async function holdAcknowledgement(command: Parameters<typeof append>[0]) {
+      const result = await append(command);
+      if (memoryForgottenEventSchema.safeParse(command.event).success) {
+        expect(result.status).toBe('appended');
+        saved.resolve();
+        await acknowledge.promise;
+      }
+      return result;
+    }
+    vi.spyOn(store, 'append').mockImplementation(holdAcknowledgement);
+    const pending = test.native.call(threadId, 'forget', test.args);
+    function finishedBeforeSave(): never {
+      throw new Error('Forget finished before saving the tombstone');
+    }
+    try {
+      await Promise.race([saved.promise, pending.then(finishedBeforeSave)]);
+      expect(await tombstones(test)).toHaveLength(1);
+    } finally {
+      acknowledge.resolve();
+    }
+    const response = await pending;
     const expected = { result: { structuredContent: { outcome: 'accepted' } } };
     expect(response).toMatchObject(expected);
   }
