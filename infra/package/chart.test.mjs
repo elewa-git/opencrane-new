@@ -6,6 +6,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, s
   writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
@@ -113,6 +114,43 @@ function secretFromDirectory(source) {
 function isFileSourceArgument(argument) {
   return argument.startsWith('--from-file=');
 }
+
+function certificateIssuerUsesAbsolutePaths() {
+  const directory = mkdtempSync(join(tmpdir(), 'package-certificate-paths-'));
+  const binaryDirectory = join(directory, 'bin');
+  const traceFile = join(directory, 'openssl-arguments');
+  const issuerUrl = pathToFileURL(resolve('libs/event-store/src/certificates.ts')).href;
+  const childSource = `import { issueCertificate } from ${JSON.stringify(issuerUrl)};
+await issueCertificate(process.argv[1], 'server', '/CN=nats');`;
+  try {
+    mkdirSync(binaryDirectory);
+    const openssl = '#!/bin/sh\nprintf "CALL\\n" >> "$OPENSSL_TRACE"\n' +
+      'printf "%s\\n" "$@" >> "$OPENSSL_TRACE"\n';
+    writeFileSync(join(binaryDirectory, 'openssl'), openssl, { mode: 0o755 });
+    const environment = { ...process.env,
+      PATH: `${binaryDirectory}:${process.env.PATH}`, OPENSSL_TRACE: traceFile };
+    execFileSync(process.execPath,
+      ['--experimental-strip-types', '--input-type=module', '-e', childSource, directory],
+      { cwd: tmpdir(), env: environment });
+
+    const trace = readFileSync(traceFile, 'utf8');
+    const calls = trace.split('CALL\n').slice(1);
+    assert.equal(calls.length, 2);
+    const request = calls[0].trim().split('\n');
+    const signing = calls[1].trim().split('\n');
+    assert.equal(request[request.indexOf('-keyout') + 1], join(directory, 'server.key'));
+    assert.equal(request[request.indexOf('-out') + 1], join(directory, 'server.csr'));
+    assert.equal(signing[signing.indexOf('-in') + 1], join(directory, 'server.csr'));
+    assert.equal(signing[signing.indexOf('-CA') + 1], join(directory, 'ca.crt'));
+    assert.equal(signing[signing.indexOf('-CAkey') + 1], join(directory, 'ca.key'));
+    assert.equal(signing[signing.indexOf('-out') + 1], join(directory, 'server.crt'));
+    assert.equal(signing[signing.indexOf('-extfile') + 1], join(directory, 'server.ext'));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+test('certificate issuer passes absolute stack paths to OpenSSL',
+  certificateIssuerUsesAbsolutePaths);
 
 async function preparedSecretsFixture(withOwner = true, isolated = false, loseTarget = false,
   packageValues = {}, refusesBeforeGeneration = false, mainValuesSource = undefined) {
