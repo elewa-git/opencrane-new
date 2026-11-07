@@ -3,8 +3,30 @@ import { readFileSync } from 'node:fs';
 import { dirname, posix } from 'node:path';
 import ts from 'typescript';
 
+function runtimeImports(source) {
+  const options = { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ESNext,
+    verbatimModuleSyntax: true };
+  const compiled = ts.transpileModule(source, { compilerOptions: options });
+  const imports = ts.preProcessFile(compiled.outputText, true, true);
+  return imports.importedFiles;
+}
+
+function checkRuntimeSources(sources) {
+  for (const [file, source] of Object.entries(sources)) {
+    assert.doesNotMatch(file, /(^|\/)tests?\//u);
+    for (const imported of runtimeImports(source)) {
+      if (!imported.fileName.startsWith('.')) {
+        continue;
+      }
+      const target = posix.join(dirname(file), imported.fileName);
+      assert.doesNotMatch(target, /(^|\/)tests?\//u);
+    }
+  }
+}
+
 // Follow emitted imports so type-only dependencies do not become runtime requirements.
 function checkImports(sources) {
+  checkRuntimeSources(sources);
   const pending = ['infra/package/bootstrap.ts', 'infra/dev-stack/owner-bootstrap.ts'];
   const visited = new Set();
   while (pending.length > 0) {
@@ -12,15 +34,12 @@ function checkImports(sources) {
     if (visited.has(file)) {
       continue;
     }
+    assert.doesNotMatch(file, /(^|\/)tests?\//u);
     visited.add(file);
     const source = sources[file];
     assert.equal(typeof source, 'string');
     assert.equal(source, readFileSync(file, 'utf8'));
-    const options = { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ESNext,
-      verbatimModuleSyntax: true };
-    const compiled = ts.transpileModule(source, { compilerOptions: options });
-    const imports = ts.preProcessFile(compiled.outputText, true, true);
-    for (const imported of imports.importedFiles) {
+    for (const imported of runtimeImports(source)) {
       if (imported.fileName.startsWith('.')) {
         pending.push(posix.join(dirname(file), imported.fileName));
       }

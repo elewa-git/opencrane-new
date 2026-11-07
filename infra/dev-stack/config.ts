@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { stackId, secondary, ports, localOrigin } from './identity.ts';
 import { preparePrivateDirectories } from './private-directories.ts';
-import { certificates } from '../../libs/event-store/test/certificates.ts';
+import { certificates } from '../../libs/event-store/src/certificates.ts';
 
 process.umask(0o077);
 export const root = resolve(import.meta.dirname, '../..');
@@ -80,7 +80,7 @@ export async function generate(origin: string) {
     return;
   }
   if (secondary) await preparePrivateDirectories(directory, true, process.env);
-  // Reuse the real NATS test issuer; local certificates expire after 30 days.
+  // Give local certificates 30 days so a short-lived test issuer cannot expire during development.
   await certificates(directory, 30);
   const secret = () => randomBytes(32).toString('hex');
   const passwords = { postgres: secret(), projection: secret(), server: secret(), dispatcher: secret(), openfga: secret() };

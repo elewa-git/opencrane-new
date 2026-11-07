@@ -782,7 +782,7 @@ timer immediately.
 Generated files live in `~/.config/opencrane/dev-stack/` (directory 0700,
 files 0600), or a dedicated `DEV_STACK_DIR` outside the repository. Never print,
 copy into the repository or share these files. Logs and PID records live there too.
-The generator reuses the test fixture's CA/certificate/NKey issuer, with 30-day
+The generator uses the shared CA/certificate/NKey issuer, with 30-day
 certificates. Use `--fresh` to replace expired credentials and disposable data.
 These local files stand in for a secret store; production lease rotation is not
 qualified here. The NATS container mounts only its certificate/key and CA public

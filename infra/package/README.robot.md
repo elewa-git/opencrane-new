@@ -208,8 +208,10 @@ The archive must identify the same image that the container checks exercise.
 The recursive import check compares the packaged TypeScript files with the source
 checkout. It follows runtime imports after removing TypeScript types, starting at
 both bootstrap programs. Removing a required imported file refuses even when
-`bootstrap.ts` remains. The existing bootstrap source suite also checks that every
-imported dev-stack file has an explicit Docker context exception.
+`bootstrap.ts` remains. It also checks every shipped TypeScript module for runtime
+imports from test folders. The existing bootstrap source suite checks that every
+imported dev-stack file has an explicit Docker context exception and refuses test
+folder imports.
 
 The container check runs the real bootstrap entry point and its owner subprocess.
 A read-only test loader first imports the real service packages, then supplies

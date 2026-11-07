@@ -62,6 +62,7 @@ rendering cannot prove that the saved data is readable.
 - Uses fixed, reviewed images and checks their licences before installation.
 - Builds the server image with a fixed Codex executable for private memory checks.
 - Checks that a proposed server and website image matches its source and all shipped layers.
+- Refuses a bootstrap image if its setup code imports a test-only file.
 - Keeps the install in the test space [claimed](../../GLOSSARY.md#claim) by this worktree.
 - Refuses missing private settings and public network access.
 - Renders an optional three-peer event log and prepares its separate private certificates.

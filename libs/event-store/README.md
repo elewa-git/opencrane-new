@@ -15,6 +15,8 @@ This is one of the packages that build everything from the
 The [back end](../../apps/server/README.md),
 [AI access library](../models/README.md) and
 [background workers](../../apps/ops/README.md) save changes through it.
+[infra/dev-stack](../../infra/dev-stack/README.md) uses its certificate issuer
+for local NATS services.
 [libs/projections](../projections/README.md) reads it to rebuild database tables.
 [libs/events](../events/README.md) supplies the rules for checking every stored record.
 
@@ -48,6 +50,7 @@ flowchart LR
   connections with the right credentials for each program.
 - Give the setup job time to create the log on a busy NATS server. Report a
   timeout if the server does not reply within five seconds.
+- Create private NATS certificates and user keys for local setup and test services.
 
 ## Processes it handles
 
@@ -59,6 +62,8 @@ flowchart LR
 3. **A reader uses a summary.** The library adds new events before returning the
    saved facts. A reader that runs out of time refuses the call; catch-up can
    continue so the next call can use its progress.
+4. **Local setup creates credentials.** It makes a private certificate issuer and
+   separate keys for each service that connects to NATS.
 
 ## How to run or test it
 

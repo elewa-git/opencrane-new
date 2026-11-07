@@ -16,6 +16,7 @@ const files = [
   'infra/dev-stack/private-directories.ts',
   'infra/dev-stack/target.ts',
   'infra/package/journey-check.ts',
+  'libs/event-store/src/certificates.ts',
   'libs/event-store/test/certificates.ts',
 ];
 

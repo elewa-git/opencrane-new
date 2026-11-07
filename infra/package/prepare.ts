@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { chmod, copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { issueCertificate } from '../../libs/event-store/test/certificates.ts';
+import { issueCertificate } from '../../libs/event-store/src/certificates.ts';
 import { tokenIssuer } from '@opencrane/auth';
 import {
   authEnv, directory, generate, readEnv, readOwnerEmail, root, writeEnv,

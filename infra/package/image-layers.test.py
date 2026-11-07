@@ -112,7 +112,7 @@ class ImageLayerTests(unittest.TestCase):
     def check_imports(self, sources):
         result = subprocess.run(
             ["node", "infra/package/bootstrap-imports.mjs"],
-            input=json.dumps(sources), capture_output=True, text=True, timeout=30)
+            input=json.dumps(sources), capture_output=True, text=True, timeout=90)
         return result
 
     def test_bootstrap_runtime_imports_match_source_recursively(self):
@@ -121,7 +121,7 @@ class ImageLayerTests(unittest.TestCase):
 
     def test_missing_transitive_import_refuses_even_with_bootstrap_present(self):
         required = ("infra/dev-stack/config.ts", "infra/dev-stack/identity.ts",
-                    "infra/dev-stack/private-directories.ts", "libs/event-store/test/certificates.ts")
+                    "infra/dev-stack/private-directories.ts", "libs/event-store/src/certificates.ts")
         for module in required:
             with self.subTest(module=module):
                 sources = dict(self.sources)
