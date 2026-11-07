@@ -258,7 +258,8 @@ configuration and JSON-RPC connection. It never resumes a thread or sends model 
 It checks the Linux x64 Codex 0.159.2 executable hash before launch and through the
 running process. It checks the actual executable, parent-child relationship, working
 directory, home settings, UID, no-new-privileges setting, core limits and finite positive
-process limits. The home must use tmpfs. Both soft and hard core limits must be zero.
+process limits. The home and `/run` scratch must use tmpfs. Both soft and hard core limits
+must be zero.
 It checks process identity and these observations again before returning. Each process
 must stay in the runner’s Linux process group.
 
@@ -269,14 +270,15 @@ the same empty ephemeral thread. Child output is bounded in RAM and never return
 Failures return only FAIL / journey_failed. Successful assertions return PARTIAL /
 complete=false. They cannot prove gVisor isolation or attempted persistence.
 
-The unmodified package image excludes Codex and computer source. It refuses this
-check, even on a safe host. No production image or computer file changes here.
-`native-image.test.ts` builds that package and a disposable derivative containing
-only the pinned npm runtime and four production computer helpers. No repository
-test or spike module is imported by the runner. A test-only loader built into the
-fixture image substitutes host observations and individual bad native observations.
-It runs the shipped entry without executable mounts. The unmodified entry still
-refuses the real host. These fixtures are not deployment qualification.
+The package image now includes the pinned Codex executable, its JavaScript launcher
+and the four production helpers used here. `native-image.test.ts` builds that image
+and a disposable derivative with only a test loader. The loader substitutes host
+observations and individual bad native observations. It runs the shipped entry
+without executable mounts, network or a model call. Derivative images remove the
+binary or one helper, or replace the launcher link, to check refusal. The unmodified
+entry still refuses the real host when its protection cannot be proved. These
+fixtures are not deployment qualification. The package's saved-layer check confirms
+the exact files, hashes, imports and version in the final image.
 
 Current incomplete checks: `privateTurns` is PARTIAL only when these assertions run;
 `requesterIsolation`, `sessionIsolation`, `invalidation`, `unrelatedActivity` and
@@ -313,7 +315,7 @@ returns no successful receipt. No model input is sent.
 The derivative-image tests observe overlap and independent cleanup, check process
 liveness after failures, and exercise actual supervisor EOF with two native children.
 Only the test loader substitutes bad observations or faults. The ordinary package
-still lacks the native runtime and production computer helpers and must refuse.
+now carries the native runtime and production launch helpers, but remains unqualified.
 Those shipped files and safe host settings remain prerequisites for a deployment run.
 All check and qualification statuses above stay unchanged. Delivery, persistence,
 gVisor and fresh-install qualification remain unproved. Own checks are recorded in

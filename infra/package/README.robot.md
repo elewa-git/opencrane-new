@@ -169,6 +169,16 @@ The computer image uses its existing full licence inventory in
 `apps/computer/licences.json`; this package checks that file's digest and its
 image pin before installation.
 
+The deployment build also carries Codex 0.159.2 for the private-memory native
+check. `native-runtime-inventory.json` records the two Apache-2.0 npm packages,
+their integrity-checked lockfile, the exact executable and launcher hashes, and
+four OpenCrane AGPL helpers. The package source is the existing pinned spike
+lockfile. The Dockerfile checks the executable hash, launcher hash and CLI version
+before copying only those files. It does not copy the computer filesystem or
+download anything when the native check runs. The image's licence inventory and
+immutable promotion pin still need a new scan and review before deployment approval;
+the old reviewed image pin does not claim these new bytes.
+
 ## Package image promotion
 
 `Dockerfile` accepts `SOURCE_REVISION`, the full Git commit hash, and records it as
@@ -182,7 +192,9 @@ are absent from every shipped layer. The final stage restores Node's entry point
 version environment variables, working directory, user and default command.
 `image-layers.test.py` reads each layer from a real Docker save archive. It checks
 removed paths, one layer with filesystem contents, runtime settings and required
-executable files. Docker may also add an empty layer for `WORKDIR`:
+executable files. It also compares the native files with the inventory, checks the
+Codex link and version from the final image without network access, imports all four
+helpers, and refuses test or fixture files. Docker may also add an empty layer for `WORKDIR`:
 
 ```sh
 nice -n 10 docker image save -o /tmp/package-image.tar <local-image>

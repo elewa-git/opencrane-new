@@ -8,13 +8,20 @@ from pathlib import Path, PurePosixPath
 
 
 REMOVED_PATHS = (
-    "app/apps/computer",
     "app/node_modules/@opencrane/computer",
     "app/node_modules/secure-json-parse/benchmarks",
     "app/node_modules/pino/test",
     "usr/local/lib/node_modules/npm",
     "usr/local/bin/npm",
     "usr/local/bin/npx",
+)
+NATIVE_BINARY = (
+    "opt/native/node_modules/@openai/codex-linux-x64/vendor/"
+    "x86_64-unknown-linux-musl/bin/codex"
+)
+NATIVE_LAUNCHER = "opt/native/node_modules/@openai/codex/bin/codex.js"
+NATIVE_HELPERS = (
+    "private-codex.ts", "codex-config.ts", "codex-connection.ts", "http.ts"
 )
 
 
@@ -34,6 +41,11 @@ class ImageLayerTests(unittest.TestCase):
         cls.paths = set()
         cls.sources = {}
         cls.executables = set()
+        cls.symlinks = {}
+        cls.native_hashes = {}
+        cls.native_review = json.loads(
+            Path("infra/package/native-runtime-inventory.json").read_text()
+        )
         cls.nonempty_layers = 0
         result = subprocess.run(["docker", "image", "inspect", os.environ["PACKAGE_IMAGE_NAME"]],
                                 capture_output=True, text=True, check=True)
@@ -64,9 +76,24 @@ class ImageLayerTests(unittest.TestCase):
                             has_files = True
                             path = str(PurePosixPath(member.name)).lstrip("/")
                             cls.paths.add(path)
+                            if member.issym():
+                                cls.symlinks[path] = member.linkname
                             if member.isfile() and path.startswith("app/"):
                                 if path.endswith(".ts") and "/node_modules/" not in path:
-                                    cls.sources[path[4:]] = layer.extractfile(member).read().decode()
+                                    contents = layer.extractfile(member).read()
+                                    cls.sources[path[4:]] = contents.decode()
+                                    if path in cls.native_review["files"]:
+                                        cls.native_hashes[path] = hashlib.sha256(contents).hexdigest()
+                            if member.isfile() and path in cls.native_review["files"]:
+                                if path not in cls.native_hashes:
+                                    source = layer.extractfile(member)
+                                    checksum = hashlib.sha256()
+                                    while True:
+                                        chunk = source.read(1024 * 1024)
+                                        if not chunk:
+                                            break
+                                        checksum.update(chunk)
+                                    cls.native_hashes[path] = checksum.hexdigest()
                             if member.isfile() and member.mode & 0o111:
                                 cls.executables.add(path)
                 if has_files:
@@ -170,6 +197,73 @@ class ImageLayerTests(unittest.TestCase):
                      "app/infra/dev-stack/owner-bootstrap.ts"):
             with self.subTest(path=path):
                 self.assertIn(path, self.paths)
+
+    def test_native_codex_and_only_its_imported_helpers_ship(self):
+        self.assertEqual(self.native_hashes, self.native_review["files"])
+        lock = Path(self.native_review["sourceLock"]).read_bytes()
+        self.assertEqual(hashlib.sha256(lock).hexdigest(), self.native_review["sourceLockSha256"])
+        licence_review = Path(self.native_review["nativeLicenceReview"]).read_bytes()
+        self.assertEqual(
+            hashlib.sha256(licence_review).hexdigest(),
+            self.native_review["nativeLicenceReviewSha256"],
+        )
+        computer_inventory = Path("apps/computer/licences.json").read_bytes()
+        self.assertEqual(
+            hashlib.sha256(computer_inventory).hexdigest(),
+            self.native_review["computerInventorySha256"],
+        )
+        osi_ids = set(json.loads(Path("infra/package/osi-licences.json").read_text()))
+        self.assertIn(self.native_review["nativeLicence"], osi_ids)
+        self.assertIn(self.native_review["helperLicence"], osi_ids)
+        self.assertEqual(
+            self.native_hashes[NATIVE_BINARY],
+            "1748767b230ebfc3d4ab7e4e254920d0c0ad9691fd8c11f190e7d44511a4a92e",
+        )
+        self.assertEqual(
+            self.native_hashes[NATIVE_LAUNCHER],
+            "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70",
+        )
+        self.assertEqual(
+            self.symlinks["usr/local/bin/codex"],
+            "/opt/native/node_modules/@openai/codex/bin/codex.js",
+        )
+        computer_paths = {path for path in self.paths if path.startswith("app/apps/computer/")}
+        expected = {"app/apps/computer/src"}
+        for name in NATIVE_HELPERS:
+            expected.add("app/apps/computer/src/" + name)
+        self.assertEqual(computer_paths, expected)
+        for name in NATIVE_HELPERS:
+            path = "app/apps/computer/src/" + name
+            source = Path("apps/computer/src", name).read_text()
+            self.assertEqual(self.sources[path[4:]], source)
+        private_files = (
+            path for path in self.paths
+            if path.startswith("app/") and "/node_modules/" not in path
+        )
+        self.assertFalse(any("/test/" in path or "/fixtures/" in path for path in private_files))
+
+    def test_native_launcher_and_helpers_load_without_network(self):
+        image = self.inspection["Id"]
+        script = (
+            "Promise.all(["
+            "import('/app/apps/computer/src/private-codex.ts'),"
+            "import('/app/apps/computer/src/codex-config.ts'),"
+            "import('/app/apps/computer/src/codex-connection.ts'),"
+            "import('/app/apps/computer/src/http.ts')"
+            "]).then(() => process.stdout.write('ready'))"
+        )
+        arguments = ["docker", "run", "--rm", "--network", "none", "--read-only",
+                     "--entrypoint", "node", image, "--experimental-strip-types", "-e", script]
+        result = subprocess.run(arguments, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, "Native imports failed")
+        self.assertEqual(result.stdout, "ready")
+        version = subprocess.run(
+            ["docker", "run", "--rm", "--network", "none", "--read-only",
+             "--entrypoint", "/usr/local/bin/codex", image, "--version"],
+            capture_output=True, text=True, timeout=30,
+        )
+        self.assertEqual(version.returncode, 0, "Native version check failed")
+        self.assertEqual(version.stdout.strip(), "codex-cli 0.159.2")
 
 
 if __name__ == "__main__":

@@ -399,6 +399,8 @@ async function cleanup(children: SupervisedChild[], homes: string[]): Promise<vo
 export async function checkNative(challengeId: string): Promise<void> {
   z.uuid().parse(challengeId);
   const binary = pinnedBinary();
+  // Keep the supervisor's lock and scratch files off persistent storage.
+  assert.equal(statfsSync('/run').type, 0x01021994);
   // Load only shipped production helpers, after refusing a missing or replaced executable.
   const { privateCodexLaunch } = await import('../../apps/computer/src/private-codex.ts');
   const configuration = await import('../../apps/computer/src/codex-config.ts');

@@ -24,7 +24,7 @@ flowchart LR
   collector -.->|checks memory, Stop and reply loss| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
   collector -->|measures, starts checks and reads failure reasons| docker["Docker<br/>running image and host"]
-  docker -->|checks protection and native prerequisites| deployment["deployment<br/>event store and journey runner"]
+  docker -->|checks protection and pinned Codex| deployment["deployment<br/>event store and journey runner"]
 ```
 
 ## What it is responsible for
@@ -37,6 +37,7 @@ flowchart LR
 - Allow only prerequisite results when the container protects its runner but other processes remain unchecked.
 - Save protection refusals with a fixed message naming the failed check.
 - Accept results only from processes it starts in the measured image.
+- Check two private Codex processes from the deployment image without a model call.
 - Save its own result in a protected file and recheck the deployment whenever it is used.
 - Refuse copied, edited, stale or foreign receipts.
 - Keep failures free of private paths and child process output.

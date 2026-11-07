@@ -1,0 +1,1 @@
+The qualification image now carries pinned Codex 0.159.2 and the small launch helpers needed for private native memory checks. Image checks verify the executable, launcher, version and shipped files; memory admission remains disabled.
