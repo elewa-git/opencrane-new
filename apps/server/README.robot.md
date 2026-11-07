@@ -7067,6 +7067,7 @@ the owning read. The provider's secret reference and private work are omitted.
 `test/org-overview.test.ts` checks ordering, cursor and partial states.
 `test/spending.test.ts` checks access, privacy, absence of GET side effects and
 the same safe rows after an index rebuild against disposable services. A fresh-install journey is still NOT RUN.
+
 ## Saved requester writer lease (Part of #58)
 
 `src/computers/takeover.ts` checks the latest human request, saved membership,
