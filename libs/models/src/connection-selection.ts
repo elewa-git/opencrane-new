@@ -9,6 +9,7 @@ import { foldConnection } from './bearer-connections.ts';
 import { activeMember, readActiveMember, MemberAccessRefused } from './member-authority.ts';
 import { connectionServer } from './connection-server.ts';
 import { toolPolicyFromRows } from './tool-policy.ts';
+import { companySelectionFacts, type CompanyProfileReader } from './company-selection.ts';
 import { data } from './state.ts';
 import { selectedOAuth, type OAuthConfigurationLoader } from './oauth-selection.ts';
 
@@ -20,7 +21,7 @@ const fields = { serverId: id, connectionId: id, changeRef: id,
   expectedSequence: z.int().nonnegative() };
 const inputSchema = z.discriminatedUnion('action', [
   z.strictObject({ ...fields, action: z.literal('select'), profileId: id,
-    profileRevision: z.int().positive() }),
+    profileRevision: z.int().positive(), ownerKind: z.enum(['personal', 'company']).optional() }),
   z.strictObject({ ...fields, action: z.literal('clear') }),
 ]);
 type Selection = z.infer<typeof connectionSelectedDataSchema>;
@@ -38,7 +39,9 @@ export function validSelectionIdentity(row: StoredEvent, selected: Selection) {
   return event.type === 'connection.selected' && event.subject === subject &&
     event.source === 'opencrane-server' &&
     event.principal?.kind === 'human' && event.principal.id === selected.userId &&
-    event.id === digest([event.silo, subject, event.commandId]);
+    event.id === digest([event.silo, subject, event.commandId]) &&
+    (selected.action !== 'select' || selected.ownerKind !== 'company' ||
+      selected.siloId === event.silo);
 }
 
 /** Rebuild only the explicit choice. Current profile and access checks happen separately. */
@@ -80,7 +83,7 @@ async function facts(store: EventStore, silo: string, selection: Selection,
   let available = false;
   let oauth: Awaited<ReturnType<typeof selectedOAuth>> = null;
   let expiresAt = server.expiresAt;
-  if (selection.action === 'select') {
+  if (selection.action === 'select' && selection.ownerKind !== 'company') {
     const subject = `connection-${selection.userId}-${selection.serverId}-${selection.profileId}`;
     const profileRows = await history(store, subject, silo, deadline);
     const profile = foldConnection(profileRows);
@@ -246,7 +249,8 @@ function sameReceipt(row: StoredEvent, attempted: EventEnvelope) {
 }
 
 function requireCurrentSelection(selection: Selection, rows: StoredEvent[],
-  checked: Awaited<ReturnType<typeof facts>>) {
+  checked: { connectionId: string | null; available: boolean;
+    oauth: { profileRevision: number } | null }) {
   let connectionId = checked.connectionId;
   if (selection.action === 'clear') {
     // Clear the saved binding even while a replacement installation has no discovery result.
@@ -263,39 +267,40 @@ function requireCurrentSelection(selection: Selection, rows: StoredEvent[],
 
 /** Save one choice for the authenticated caller; never accept an owner from the request. */
 export async function changeConnectionSelection(store: EventStore, binding: Binding,
-  userId: string, raw: unknown, loadConfiguration?: OAuthConfigurationLoader) {
+  userId: string, raw: unknown, loadConfiguration?: OAuthConfigurationLoader,
+  readCompanyProfile?: CompanyProfileReader) {
+  try {
+    return await saveSelection(store, binding, userId, raw, loadConfiguration, readCompanyProfile);
+  } catch (error) {
+    if (error instanceof SelectionInputInvalid || error instanceof SelectionConflict ||
+        error instanceof MemberAccessRefused) {
+      throw error;
+    }
+    // Keep private dependency failures out of ordinary errors and replies.
+    const safeMessages = ['Selection append unconfirmed', 'Selection access unavailable',
+      'Wrong silo', 'Authority changed'];
+    if (error instanceof Error && safeMessages.includes(error.message)) {
+      // eslint-disable-next-line preserve-caught-error -- Keep only the fixed public message.
+      throw new Error(error.message);
+    }
+    // eslint-disable-next-line preserve-caught-error -- Dependency causes may contain credentials.
+    throw new Error('Selection unavailable');
+  }
+}
+async function saveSelection(store: EventStore, binding: Binding, userId: string, raw: unknown,
+  loadConfiguration?: OAuthConfigurationLoader, readCompanyProfile?: CompanyProfileReader) {
   const parsed = inputSchema.safeParse(raw);
   if (!parsed.success || !id.safeParse(userId).success) {
     throw new SelectionInputInvalid('Selection input invalid');
   }
   const { changeRef, ...input } = parsed.data;
-  const payload = { ...input, userId };
-  const selected = connectionSelectedDataSchema.parse(payload);
   const subject = selectionSubject(userId, input.serverId);
   const operationId = digest([binding.silo, subject, changeRef]);
-  const event = { ...envelope(binding.silo, subject, 'connection.selected', selected, operationId),
-    commandId: changeRef, source: 'opencrane-server', principal: { kind: 'human' as const, id: userId } };
   function matches(row: StoredEvent) {
     return row.event.id === operationId || row.event.commandId === changeRef;
   }
-  async function loadSelectionHistory() {
-    try {
-      const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
-      const original = rows.find(matches);
-      if (original) {
-        sameReceipt(original, event);
-      }
-      const checked = await facts(store, binding.silo, selected, loadConfiguration);
-      return { status: 'loaded' as const, rows, original, checked };
-    } catch (error) {
-      let failure = new Error('Selection history unavailable', { cause: error });
-      if (error instanceof Error) {
-        failure = error;
-      }
-      return { status: 'failed' as const, failure };
-    }
-  }
-  const loaded = await loadSelectionHistory();
+  const loaded = await prepareSelection(store, binding.silo, userId, parsed.data,
+    loadConfiguration, readCompanyProfile);
   // Check current access before exposing history errors, even when a saved retry conflicts.
   const fresh = await access(store, binding, userId, input.serverId, true);
   if (!fresh) {
@@ -305,19 +310,23 @@ export async function changeConnectionSelection(store: EventStore, binding: Bind
   if (loaded.status === 'failed') {
     throw loaded.failure;
   }
-  const { rows, original, checked } = loaded;
+  const { rows, original, checked, selected, event } = loaded;
   if (original) {
     return sameReceipt(original, event);
   }
+  if (!checked) {
+    throw new Error('Selection unavailable');
+  }
   requireCurrentSelection(selected, rows, checked);
   const confirmAuthority = fresh;
+  const current = checked;
   async function checkAccess() {
     await confirmAuthority();
-    if (checked.oauth && !await checked.oauth.configurationCurrent()) {
+    if (current.oauth && !await current.oauth.configurationCurrent()) {
       throw new SelectionConflict('Selection conflict');
     }
-    await confirmPositions(store, checked.positions, confirmAuthority.deadline);
-    if (input.action === 'select' && Date.now() >= checked.expiresAt) {
+    await confirmPositions(store, current.positions, confirmAuthority.deadline);
+    if (input.action === 'select' && Date.now() >= current.expiresAt) {
       throw new Error('Selection unavailable');
     }
   }
@@ -339,6 +348,58 @@ export async function changeConnectionSelection(store: EventStore, binding: Bind
     throw new SelectionConflict('Selection conflict');
   }
   return sameReceipt(saved, event);
+}
+
+async function prepareSelection(store: EventStore, silo: string, userId: string,
+  command: z.infer<typeof inputSchema>, loadConfiguration?: OAuthConfigurationLoader,
+  readCompanyProfile?: CompanyProfileReader) {
+  const { changeRef, ...input } = command;
+  const payload = { ...input, userId };
+  const subject = selectionSubject(userId, input.serverId);
+  const operationId = digest([silo, subject, changeRef]);
+  function matches(row: StoredEvent) {
+    return row.event.id === operationId || row.event.commandId === changeRef;
+  }
+  try {
+    const rows = await history(store, subject, silo, performance.now() + 10_000);
+    const original = rows.find(matches);
+    let company;
+    let companyBinding;
+    if (input.action === 'select' && input.ownerKind === 'company') {
+      if (original) {
+        const saved = connectionSelectedDataSchema.parse(original.event.data);
+        if (saved.action !== 'select' || saved.ownerKind !== 'company') {
+          throw new SelectionConflict('Selection conflict');
+        }
+        companyBinding = { siloId: saved.siloId, generation: saved.generation,
+          accountDigest: saved.accountDigest };
+      } else {
+        company = await companySelectionFacts(store, silo, input,
+          loadConfiguration, readCompanyProfile);
+        companyBinding = company.binding;
+      }
+    }
+    const selected = connectionSelectedDataSchema.parse({ ...payload, ...companyBinding });
+    const event = { ...envelope(silo, subject, 'connection.selected', selected, operationId),
+      commandId: changeRef, source: 'opencrane-server',
+      principal: { kind: 'human' as const, id: userId } };
+    let checked;
+    if (original) {
+      sameReceipt(original, event);
+      if (input.action !== 'select' || input.ownerKind !== 'company') {
+        checked = await facts(store, silo, selected, loadConfiguration);
+      }
+    } else {
+      checked = company ?? await facts(store, silo, selected, loadConfiguration);
+    }
+    return { status: 'loaded' as const, rows, original, checked, selected, event };
+  } catch (error) {
+    let failure = new Error('Selection history unavailable', { cause: error });
+    if (error instanceof Error) {
+      failure = error;
+    }
+    return { status: 'failed' as const, failure };
+  }
 }
 
 export async function readConnectionSelection(store: EventStore, binding: Binding,

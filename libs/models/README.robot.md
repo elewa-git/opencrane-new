@@ -4880,3 +4880,23 @@ The saved sender attempt must match the current activation. The existing fold ch
 all run identifiers and revisions. Budget and bridge cleanup share this reader.
 No current lease or owner permission is needed to remove the cancelled attempt's
 permission to run. No allowance or uncertain hold is released by this check.
+
+## Explicit company selection (P3-8 PR 4s; Part of #49)
+
+`changeConnectionSelection` accepts optional `ownerKind: personal | company`. Omission
+keeps personal behaviour. Company selection requires current requester membership and
+tool rights, current opt-in and a reviewed personal-mode installation. The pure trusted
+`CompanyProfileReader` receives saved company history before the short access check.
+Its verified result binds silo, server, installation, profile revision, generation,
+accountDigest, configurationDigest, actual scopes and expiry. The command needs at least
+one enabled reviewed tool with its required scopes, plus the protocol scopes.
+The append rechecks profile, opt-in and publication positions and configuration.
+Only accountDigest, siloId, generation and ownerKind extend the saved choice.
+
+No production verification reader is installed. The default company fold returns
+`saved_unverified`, which refuses selection. The synthetic reader in
+`test/company-selection.test.ts` is test evidence only, not live company activation.
+The existing personal dispatch reader refuses company choices, including when a personal
+profile has the same id. No broker, custody, sender or routine behaviour changes.
+Exact retries recover the original choice after clear or loss of profile eligibility.
+Replay uses only saved selection events and grants no tool access.

@@ -6962,3 +6962,11 @@ No event/API field, dependency or authority stream was added. Production routine
 delivery and `executionAvailable` remain disabled. Company credentials, owner Ask,
 success completion, process-exit evidence and fresh-install qualification remain later.
 See [the own-check contract](../../docs/process/p4-24-pr12i/README.robot.md).
+
+## Explicit requester account kind (P3-8 PR 4s; Part of #49)
+
+The existing selection POST accepts optional `ownerKind: personal | company` on select.
+Omission preserves the personal contract; clear remains unchanged. The session supplies
+the requester. No company verification reader is wired into this route, so company
+choices return unavailable. Successful receipts still contain only status, sequence and
+changeRef. No browser UI, credential release or live company activation is added.

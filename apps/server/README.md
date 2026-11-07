@@ -195,7 +195,7 @@ flowchart LR
   computer -->|AI and tool calls| runtime["Private services<br/>AI gateway, tools and virus scanner"]
   server -->|files, service readiness, image types and refusal codes| web
   server -->|checks upload bytes over HTTPS| runtime
-  runtime -->|checks memory reads and personal changes| server
+  runtime -->|checks memory reads and requester account choices| server
 ```
 
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) handles sign-in.
@@ -239,6 +239,10 @@ It checks the saved deactivation and keeps the original run and schedule. Switch
 assistant back on does not undo that pause or prevent cleanup of the stopped run.
 
 ## What it is responsible for
+
+Account choices belong to the signed-in requester. The selection route accepts an
+explicit personal or company owner kind, but company choices remain unavailable until
+verified company profiles have a live reader. An admin cannot choose for another member.
 
 - Signs people in and keeps their browser session.
 - Checks current membership and permissions before returning private information or saving a change.

@@ -953,3 +953,11 @@ actor and a strict `cause: { eventId, position }`. The writer uses reason
 checks that earlier admission against the occupied occurrence and sender attempt.
 This adds no event type or effect subscription. The existing fold keeps the run
 occupied and sets stopRequested; it does not invent a finished outcome.
+
+## Company selection records (P3-8 PR 4s; Part of #49)
+
+`connection.selected` keeps old personal select and clear records readable. Personal
+select optionally names `ownerKind: personal`. Company select requires `ownerKind: company`,
+siloId, generation and accountDigest in addition to the existing exact profile revision.
+The digest represents verified account identity, never credential material. The fold
+checks the owning silo against the event envelope. There is no new event or reaction.
