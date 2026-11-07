@@ -4,6 +4,7 @@ import * as context from '../../../../libs/models/src/memory-context.ts';
 // Control elapsed time without delaying service replies on the shared test host.
 export function memoryClock() {
   let monotonic = performance.now();
+  const realPerformanceNow = performance.now.bind(performance);
   const realDateNow = Date.now.bind(Date);
   function now() {
     return monotonic;
@@ -21,11 +22,14 @@ export function memoryClock() {
   function advance(milliseconds: number) {
     monotonic += milliseconds;
   }
+  function resume() {
+    times.mockImplementation(realPerformanceNow);
+  }
   function restore() {
     contexts.mockRestore();
     times.mockRestore();
     dates.mockRestore();
   }
   onTestFinished(restore);
-  return { advance };
+  return { advance, resume };
 }

@@ -106,10 +106,8 @@ async function correctsLoadedTarget(expired = false) {
 }
 async function acknowledgedCorrection(test: Awaited<ReturnType<typeof correctionFixture>>,
   expired: boolean) {
-  if (!expired) {
-    // Keep acceptance tied to the saved acknowledgement, even when the host is busy.
-    memoryClock();
-  }
+  // Keep preparation tied to the saved event, even when the host is busy.
+  const clock = memoryClock();
   const append = test.setup.nats.store.append.bind(test.setup.nats.store);
   const saved = Promise.withResolvers<number>();
   const release = Promise.withResolvers<void>();
@@ -133,7 +131,8 @@ async function acknowledgedCorrection(test: Awaited<ReturnType<typeof correction
     const deadline = await Promise.race([saved.promise, pending.then(finishedBeforeSave)]);
     expect(await corrections(test)).toHaveLength(1);
     if (expired) {
-      // Hold the saved reply past the original deadline using real elapsed time.
+      // Use real elapsed time to hold the saved reply past the original deadline.
+      clock.resume();
       await delay(Math.max(0, deadline - performance.now()) + 50);
       expect(performance.now()).toBeGreaterThan(deadline);
     }
