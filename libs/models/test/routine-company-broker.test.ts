@@ -28,6 +28,8 @@ type FixtureOptions = {
   accountScopes?: string[];
   frozenScopes?: string[];
   missingToolMapping?: boolean;
+  missingApproval?: boolean;
+  changedApproval?: 'owner' | 'thread' | 'schema' | 'account' | 'destination';
 };
 beforeAll(async function start() {
   nats = await natsFixture();
@@ -155,6 +157,7 @@ async function fixture(options: FixtureOptions = {}) {
   const prepared = options.ready === false ? undefined : await readyHistory(userId, serverId,
     profileId, routineId, occurrenceId, options);
   const issuedAt = Date.now();
+  const approvalId = digest(['approval', requestId]);
   const release = {
     requestId, permitId: requestId, leaseId: requestId, purpose: 'tool_call' as const,
     userId, ownerId: userId, ownerKind: 'company' as const,
@@ -171,11 +174,47 @@ async function fixture(options: FixtureOptions = {}) {
     routineId, occurrenceId, companyAccountId: 'company-bot',
     schemaDigest: prepared?.schemaDigest ?? 'd'.repeat(64),
     payingGroupId: 'payer', issuedAt, expiresAt: issuedAt + 30_000,
+    approvalId, rootId: 'root', destinationDigest: digest('https://company.example'),
   };
+  if (!options.missingApproval) {
+    const changed = options.changedApproval;
+    const routine = { routineId, occurrenceId, rootId: release.rootId,
+      threadId: changed === 'thread' ? 'replacement' : release.threadId,
+      payingGroupId: release.payingGroupId, profileId: release.profileId,
+      profileRevision: release.profileRevision,
+      connectionRevision: release.connectionRevision,
+      selectionRevision: release.selectionRevision,
+      companyAccountId: changed === 'account' ? 'replacement' : release.companyAccountId,
+      accountDigest: release.accountDigest, scopeDigest: release.scopeDigest,
+      destinationDigest: changed === 'destination' ? digest('https://other.example') :
+        release.destinationDigest };
+    const request = envelope('test', `approval-${approvalId}`, 'tool.approval_requested', {
+      approvalId, conversationId: release.conversationId, turnId: release.turnId,
+      assistantId: release.assistantId,
+      requesterId: changed === 'owner' ? 'successor' : userId,
+      tool: release.toolName, serverId, toolRevision: release.schemaDigest,
+      schemaDigest: changed === 'schema' ? digest('replacement') : release.schemaDigest,
+      connectionId: release.connectionId, profile: release.profileId,
+      policySequence: release.policyRevision, digestVersion: 'lossless-json-v1',
+      argumentsDigest: release.argumentsDigest,
+      expiresAt: new Date(issuedAt + 900_000).toISOString(), stepUp: false,
+      ciphertext: 'ZmFrZS1lbmNyeXB0ZWQ=', keyId: 'key:1', reviewDigest: digest('review'),
+      routine,
+    });
+    const approved = envelope('test', `approval-${approvalId}`, 'approval.decided', {
+      approvalId, decidedBy: userId, decision: 'approved',
+    });
+    approved.source = 'opencrane-server';
+    approved.principal = { kind: 'human', id: userId };
+    const used = envelope('test', `approval-${approvalId}`, 'approval.used', {
+      approvalId, permitId: requestId,
+    });
+    await nats.seed([request, approved, used]);
+  }
   const decision = envelope('test', `decision-${requestId}`, 'decision.recorded', {
     requestId, requesterId: userId, assistantId: 'assistant', conversationId: 'conversation',
     turnId: 'turn', permitId: requestId, serverId, toolName: options.toolName ?? 'read', route: 'mcp',
-    outcome: 'allow', reason: 'policy_allow', contextDigest: 'e'.repeat(64), release,
+    outcome: 'allow', reason: 'approval_used', contextDigest: 'e'.repeat(64), release,
   }, decisionId);
   await nats.seed([decision]);
   const loadConfiguration = prepared?.personal.loadConfiguration ?? function emptyConfiguration() {
@@ -206,8 +245,21 @@ async function fixture(options: FixtureOptions = {}) {
     return confirmCredentialRelease(nats.store, 'test', userId, decisionId,
       release, prepareAccess, action, loadConfiguration, readProfile);
   }
-  return { userId, serverId, requestId, release, prepared, rights, auth, confirm };
+  return { userId, serverId, requestId, approvalId, release, prepared, rights, auth, confirm };
 }
+
+it('refuses a company release without a used owner Ask', async function missingAsk() {
+  const test = await fixture({ missingApproval: true });
+  await expect(test.confirm()).rejects.toThrow('Release unavailable');
+  expect(await nats.store.head(`credential-${test.requestId}`)).toBe(0);
+});
+
+it.each(['owner', 'thread', 'schema', 'account', 'destination'] as const)(
+  'refuses a changed %s in the saved owner Ask', async function changedAsk(field) {
+    const test = await fixture({ changedApproval: field });
+    await expect(test.confirm()).rejects.toThrow('Release unavailable');
+    expect(await nats.store.head(`credential-${test.requestId}`)).toBe(0);
+  });
 
 it('audits one bound company request without releasing material', async function boundAccount() {
   const test = await fixture();
