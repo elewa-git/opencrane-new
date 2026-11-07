@@ -195,6 +195,35 @@ async function queuedForCapacity() {
 }
 it('keeps the original ids queued while capacity is busy', queuedForCapacity);
 
+const ceilingScopes = [
+  { scope: 'global' },
+  { scope: 'paying_group', scopeId: 'payer' },
+  { scope: 'assistant', scopeId: 'helper' },
+] as const;
+
+async function refusesCeilingLoweredAfterAllocation(scope: typeof ceilingScopes[number]) {
+  const saved = await savedChild();
+  const bridge = recordingBridge();
+  await allocateChildRoot(context.options, actor, 'alice', saved.input, 1, saved.selected);
+  await actor.configure({ ...scope, ceilingCents: 0, setBy: 'alice' });
+  try {
+    await expect(startActivatedChild(context.options, actor, 'alice', saved.input,
+      1, saved.selected, bridge.send)).rejects.toThrow();
+    expect(bridge.sent).toEqual([]);
+    const computer = await history(context.nats.store, 'computer-helper', 'test');
+    function startsThisChild(row: typeof computer[number]) {
+      if (row.event.type !== 'computer.turn_started') return false;
+      const data = z.object({ turnId: z.string() }).safeParse(row.event.data);
+      return data.success && data.data.turnId === saved.data.firstInputId;
+    }
+    expect(computer.some(startsThisChild)).toBe(false);
+  } finally {
+    await actor.configure({ ...scope, ceilingCents: 10_000, setBy: 'alice' });
+  }
+}
+it.each(ceilingScopes)('refuses a saved root after the $scope ceiling falls to zero',
+  refusesCeilingLoweredAfterAllocation);
+
 async function unavailableFirstCall() {
   const saved = await savedChild(501);
   const bridge = recordingBridge();
