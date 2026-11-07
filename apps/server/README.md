@@ -68,6 +68,10 @@ the schedule, stopped spending allowance and held money unchanged. The models pr
 rechecks saved routine Stops and calls this command after saving the budget Stop.
 Restart repeats those checks from saved evidence. Replay never invokes cleanup.
 Activity in other chats or spending roots does not prevent completion.
+The same internal command can record one completed company call. It checks the saved
+company account, requester, upstream response and final spending amount before it
+releases the run. A missing response or charge keeps the run occupied. This path
+does not start the company call or make automatic routines available.
 
 A current silo owner or admin can also save an internal safety pause. It keeps the
 routine owner, payer and active run unchanged and grants no private chat access.
@@ -197,7 +201,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|sign-out, requests, Office uploads, survey and persona reads, Memory setup reads, own and admin routine lists, approval replies and original call status, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks saved membership before personal memory tools and history errors; prepares allowances; checks routine admission and retirement replacements; applies Stop, Pause and Retire; verifies termination and admin authority; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
-  server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, routine sessions, inputs, cancellations, checked finishes and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, routine sessions, inputs, cancellations, confirmed results and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres

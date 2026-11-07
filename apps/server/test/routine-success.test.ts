@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it } from 'vitest';
+import { z } from 'zod';
 import { event, lostReplyStore } from '@opencrane/event-store/testing';
 import { foldRoutineHistory } from '@opencrane/authz';
 import { getEventDefinition, foldRoutine, type EventEnvelope,
@@ -7,7 +8,8 @@ import { history } from '@opencrane/models';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow } from './support/duplicate-window.ts';
 import { finishRoutine } from '../src/routine-finish.ts';
 
-const createdExample = getEventDefinition('routine.created')!.example as Record<string, unknown>;
+const objectSchema = z.record(z.string(), z.unknown());
+const createdExample = objectSchema.parse(getEventDefinition('routine.created')!.example);
 const created = { ...event('created', 'routine-orders', 'routine.created'),
   commandId: 'created', source: 'opencrane-server',
   principal: { kind: 'human' as const, id: 'alice' },
@@ -46,9 +48,19 @@ let terminalEvidence: { eventId: string; position: number };
 let resultReference: { eventId: string; position: number };
 function record(subject: string, type: string, data: unknown): EventEnvelope {
   const id = `success-${++serial}`;
-  const principalId = type.startsWith('computer.') ? 'turn-lifecycle' : 'opencrane-server';
-  return { ...event(id, subject, type), commandId: id, source: 'opencrane-server',
-    principal: { kind: 'system', id: principalId }, data };
+  let source = 'opencrane-server';
+  let principal: EventEnvelope['principal'] = { kind: 'system', id: 'opencrane-server' };
+  if (type.startsWith('computer.')) principal = { kind: 'system', id: 'turn-lifecycle' };
+  if (type.startsWith('budget.') || type.startsWith('decision.') ||
+      type === 'tool.dispatch_recorded') {
+    source = 'models';
+    principal = { kind: 'system', id: 'models' };
+  }
+  if (type === 'agent.tool_call_finished') {
+    source = 'computer-bridge';
+    principal = { kind: 'agent', id: root.assistantId };
+  }
+  return { ...event(id, subject, type), commandId: id, source, principal, data };
 }
 async function save(subject: string, type: string, data: unknown) {
   const saved = record(subject, type, data);
@@ -62,11 +74,13 @@ async function setup() {
   terminalEvidence = { eventId: 'missing', position: 1 };
   resultReference = { eventId: 'missing', position: 1 };
 }
-async function cleanup() { await nats?.close(); }
+async function cleanup() {
+  await nats?.close();
+}
 beforeEach(setup);
 afterEach(cleanup);
 async function evidence(changes: { release?: Record<string, unknown>; outcome?: string;
-  settled?: boolean; stop?: boolean; closed?: boolean } = {}) {
+  settled?: boolean; stop?: boolean; closed?: boolean; reason?: string } = {}) {
   await save('budget-test', 'budget.root_allowance_set', root);
   await save(computerSubject, 'computer.ready', { assistantId: root.assistantId,
     computerId: root.computerId, generation: 1 });
@@ -77,7 +91,8 @@ async function evidence(changes: { release?: Record<string, unknown>; outcome?: 
   const boundRelease = { ...release, ...changes.release };
   await save(`decision-${requestId}`, 'decision.recorded', {
     ...call, requestId, requesterId: root.requesterId, assistantId: root.assistantId,
-    permitId: release.permitId, route: 'mcp', outcome: 'allow', reason: 'policy_allow',
+    permitId: release.permitId, route: 'mcp', outcome: 'allow',
+    reason: changes.reason ?? 'policy_allow',
     contextDigest: '1'.repeat(64), release: boundRelease });
   await save(`decision-${requestId}`, 'tool.dispatch_recorded', {
     ...call, requestId, logicalRequestId: '2'.repeat(64),
@@ -101,10 +116,16 @@ async function evidence(changes: { release?: Record<string, unknown>; outcome?: 
     const { executionMode: _mode, ...identity } = start;
     terminalEvidence = await save(computerSubject, 'computer.turn_closed', {
       ...identity, status: 'completed', nativeTermination: 'turn_completed' });
+    if (!changes.stop) {
+      await save('budget-test', 'budget.root_stopped', { rootId: root.rootId,
+        reason: 'turn_ended', sourceSubject: computerSubject,
+        sourcePosition: terminalEvidence.position, sourceEventId: terminalEvidence.eventId });
+    }
   }
 }
 function finish(store = nats.store) {
-  const input = { routineId: 'orders', occurrenceId: run.occurrenceId, terminalEvidence };
+  const input = { routineId: 'orders', occurrenceId: run.occurrenceId, terminalEvidence,
+    successEvidence: { requestId, resultReference, reservationId: 'hold-1' } };
   return finishRoutine(store, 'test', input, { enabled: true });
 }
 async function folded() {
@@ -126,7 +147,8 @@ async function successfulFinish() {
   await nats.restart();
   expect(await finish()).toEqual(first);
   const rows = await history(nats.store, 'routine-orders', 'test');
-  expect(rows.filter(row => row.event.type === 'routine.run_finished')).toHaveLength(1);
+  function isFinish(row: typeof rows[number]) { return row.event.type === 'routine.run_finished'; }
+  expect(rows.filter(isFinish)).toHaveLength(1);
   expect((await folded()).lastRun).toMatchObject({ outcome: 'succeeded',
     resultReference, terminalEvidence });
   expect((await folded()).activeRun).toBeNull();
@@ -141,6 +163,18 @@ async function refusesUnproven(changes: Parameters<typeof evidence>[0]) {
   expect((await folded()).activeRun).not.toBeNull();
 }
 it.each([{ settled: false }, { closed: false }, { outcome: 'outcome_unknown' },
+  { stop: true }, { reason: 'approval_used' },
   { release: { companyAccountId: 'foreign' } },
-  { release: { ownerId: 'foreign' } }, { release: { profileRevision: 2 } }])(
+  { release: { ownerId: 'foreign' } }, { release: { rootId: 'foreign' } },
+  { release: { turnId: 'foreign' } }, { release: { profileRevision: 2 } }])(
   'keeps the slot when success proof is incomplete: %j', refusesUnproven);
+async function lateSettlement() {
+  await evidence({ settled: false });
+  await expect(finish()).rejects.toThrow(/^Routine finish refused$/u);
+  await save('budget-test', 'budget.settled', {
+    reservationId: 'hold-1', permitId: release.permitId, settledCents: 1234 });
+  await finish();
+  expect((await folded()).lastRun).toMatchObject({ outcome: 'succeeded',
+    heldCents: 0, settledCents: 1234 });
+}
+it('waits for late settlement and records the full actual overrun', lateSettlement);

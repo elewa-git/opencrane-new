@@ -6829,6 +6829,22 @@ activity, publication conflicts, execution races and two projection rebuilds wit
 late settlement. Execution stays disabled. Tree and success completion remain later work.
 Fresh-install live qualification: NOT RUN.
 
+## Finish one confirmed company call
+
+`finishRoutine` accepts `successEvidence`: the upstream request id, private tool
+result reference and reservation id. It needs the exact native closure and one
+`turn_ended` root Stop naming that closure, with no routine Stop or pause.
+
+The command reads exact decision and private conversation histories before the
+two-second write check. A models Allow decision binds the frozen owner, company
+account, profile, root, turn and payer. A received upstream response and completed
+private tool record must name that call. One rooted hold needs a later settlement
+for the same permit. The finish saves only a result reference, zero held cents and
+full settled cents. Uncertain work or money keeps the slot occupied.
+
+There is no production success caller or company sender. The public run list stays
+metadata-only. Replay never calls this command.
+
 ## Personal memory preparation membership (P4-15 PR 4i; Part of #97)
 
 `chat/personal-memory-tools.ts` supplies `preparePersonalMemoryTools`. Trusted server

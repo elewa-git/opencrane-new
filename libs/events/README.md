@@ -55,7 +55,7 @@ Allow, Ask or Block choice for a tool.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions, including private persona revisions"]
-  server["apps/server<br/>back end"] -.->|checks assistant file lists and records, private exit, native termination, routine turn identities, allowance fingerprints, owner, approval and unconfirmed delivery Stop intent, owner-removal pauses and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
+  server["apps/server<br/>back end"] -.->|checks assistant file lists and records, private exit, native termination, routine turn identities, result references and settled cents, allowance fingerprints, owner, approval and unconfirmed delivery Stop intent, owner-removal pauses and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
@@ -146,6 +146,8 @@ configurations. Withdrawal has no preparation subscription.
 A routine Stop has its own fixed budget reason and keeps the saved source reference.
 The server reuses its schema to save owner intent and check an exact retry.
 It does not describe an admin intervention as a requester Stop or start routine work.
+A finished routine can keep a private result reference and the final held and settled
+amounts in euro cents. The record never contains the result itself.
 
 Budget turn stops carry only their reason kind and a reference to the saved spending
 stop. Participants can read them without seeing amounts or payer ids. Member stops

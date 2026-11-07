@@ -959,6 +959,13 @@ no reaction. Later publication records remain `file.uploaded` and `agent.file_ch
 
 ## Unconfirmed routine delivery
 
+`routine.run_finished` may include `resultReference`, `heldCents` and `settledCents`
+for a confirmed company call. The two amounts are non-negative integer euro cents.
+The result reference identifies a private agent tool record; it contains no result
+bytes. The server verifies the exact call and settlement before appending the finish.
+The existing interrupted form remains valid without these fields. Replay only folds
+the saved record and starts no call or budget charge.
+
 `routine.run_stop_requested` accepts source `delivery` only with the server system
 actor and a strict `cause: { eventId, position }`. The writer uses reason
 `start_unconfirmed` and the exact activation admission as cause. The Stop reader
