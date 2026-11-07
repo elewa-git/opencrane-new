@@ -10,7 +10,8 @@ This folder lets owners and admins connect OpenCrane to AI model providers. It h
 - Reports connection and model-test results without returning keys.
 - Saves provider choices, counts affected assistants and returns original saved results.
 - Shows saved assistant bindings, safe replacement choices and unresolved routines
-  before a provider can retire. A proposed choice changes nothing.
+  before a provider can retire. It checks the payer and spending limits. A
+  proposed choice changes nothing.
 - Pauses new model turns before a provider change and records when managed provider calls are switched on.
 
 A turn is one message and the assistant's reply. New managed turns use the assistant's chosen provider or the installation default. Renewing, repeating or closing a saved turn keeps its original model and provider. Running turns keep their original path during a pause. Provider lists also report that the model-access requests are available. Starting or cancelling the pause saves a change.
@@ -43,6 +44,6 @@ The [server](../../README.md) registers these requests for the [website](../../.
 flowchart LR
   web["apps/web<br/>provider pages"] -->|requests| routes["providers<br/>server routes"]
   routes -.-> models["libs/models<br/>provider rules"]
-  models -->|reads events| store["event log<br/>saved changes"]
+  models -->|reads provider, payer and spending changes| store["event log<br/>saved changes"]
   routes -->|reads progress| tables["read tables<br/>routine view"]
 ```

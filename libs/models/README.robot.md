@@ -7,10 +7,14 @@ For people, read [README.md](README.md) first.
 `providerRetirementPreview` reuses provider event inventory, checked assistant
 history and indexed routine presence. It appends nothing. Old routine records
 have no model binding, so they keep the review incomplete. Replacements need
-current connection readiness, price and the personal owner's and assistant's
-saved and live model grants. Shared audiences are unproved and offer pause only.
-Pages carry provider and routine positions. Current admin access is checked
-again before the reply. The retirement command remains later work.
+current connection readiness, price, a configured personal payer, positive
+daily and monthly limits, and the personal owner's and assistant's saved and
+live model grants. Shared audiences are unproved and offer pause only. Each
+preview checks at most 200 candidate or owner steps within ten seconds. It
+marks assistant dependencies unavailable if that work is incomplete. Pages
+carry provider and routine positions. Routine absence is checked again after
+candidate work. Current admin access is checked again before the reply. The
+retirement command remains later work.
 
 ## Private company OAuth preparation (Part of #50)
 

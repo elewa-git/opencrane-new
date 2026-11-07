@@ -316,8 +316,12 @@ source status. Supply `after`, `expectedProviderSequence` and
 `expectedRoutinePosition` for later pages. Changed positions refuse.
 
 `POST /api/org/providers/:providerId/dependencies/preview` checks an exact
-choice for each binding against its saved position and current grants, price
-and target connection. Omitted, duplicate, stale or unsafe choices refuse.
+choice for each binding against its saved position and current grants, price,
+configured payer, spending limits and target connection. Omitted, duplicate,
+stale or unsafe choices refuse. A routine created during preparation also
+refuses the request. If the preview cannot check every possible replacement
+within its work limit, it reports assistant dependencies as unavailable and
+cannot validate the choices.
 The request saves no event and cannot retire a connection. Old routine records
 block a complete review until they have model bindings.
 

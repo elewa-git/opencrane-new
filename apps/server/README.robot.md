@@ -4663,7 +4663,9 @@ requests report when saved membership or ownership is still being applied. A
 caller can wait briefly and repeat the same command id after that reply.
 Provider dependency previews page safe binding metadata and validate explicit
 choices without an append. Existing routines block completeness because they
-have no saved model binding.
+have no saved model binding. A routine created during preparation also blocks
+the proposal. Replacements require a configured payer and positive spending
+limits. Candidate checks stop at 200 steps or ten seconds.
 
 The chat connection notifies authorised readers when a spending stop is saved
 for an original request they can see. A status read supplies the saved reason

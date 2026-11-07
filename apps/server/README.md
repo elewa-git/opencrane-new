@@ -196,7 +196,7 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|sign-out, requests, Office uploads, survey and persona reads, Memory setup reads, own and admin routine lists, approval replies and original call status, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks saved membership before personal memory tools and history errors; prepares allowances; checks routine admission; applies Stop, Pause and Retire; verifies termination and admin authority; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
+  server -.->|checks saved membership before personal memory tools and history errors; prepares allowances; checks routine admission and retirement replacements; applies Stop, Pause and Retire; verifies termination and admin authority; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
   server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, routine sessions, inputs, cancellations, checked finishes and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
@@ -248,7 +248,9 @@ Provider dependency requests use the database to check for saved routines before
 current administrator and provider permissions. Missing or changing data returns unavailable.
 Older and retired routines still mean that complete dependency information is unsupported.
 The retirement preview also shows saved assistant choices and safe routine names.
-It checks proposed pauses and replacements, but cannot retire a connection.
+It checks proposed pauses and replacements against the current routine list,
+model grants, payer and spending limits. It reports incomplete checks and
+cannot retire a connection.
 
 An internal command can pause an occupied routine after its assistant is deactivated.
 It checks the saved deactivation and keeps the original run and schedule. Switching the

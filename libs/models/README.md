@@ -140,7 +140,7 @@ flowchart LR
   models -->|prepares separate company sign-in attempts; stages credentials, callback codes and replies, confirms first accounts, starts, joins, claims and sends refresh attempts, saves replacements, retains old access tokens until expiry and removes revoked tokens even after member removal, recovers replies and checks signed accounts, reads one exact personal access token for a private callback, shares a database lock for personal and company saves and rotations, and personal cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|usage and tool dispatch records| models
-  models -->|saves events, local account revocations, remote starts and unsent proof; recovers budgets in order and applies saved routine Stops, pauses with saved admin authority, verified owner removal or assistant deactivation, Ask denial or expiry, unconfirmed delivery and retirements; reads spending and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
+  models -->|saves events, local account revocations, remote starts and unsent proof; recovers budgets in order and applies saved routine Stops, pauses with saved admin authority, verified owner removal or assistant deactivation, Ask denial or expiry, unconfirmed delivery and retirements; reads payer, spending limits and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -415,8 +415,10 @@ Retrying an unchanged model call can recover its original unsent hold and saved 
   was saved. Reusing a request id for another change is refused.
   Ordinary calls still use the existing gateway setup.
 - Reads a provider's saved assistant bindings for a retirement preview. It checks
-  explicit pause or replacement choices against current grants and connection
-  readiness without saving a change. Existing routines block a complete review
+  explicit pause or replacement choices against current grants, connection
+  readiness, a payer and spending limits without saving a change. A large set
+  of possible replacements stays incomplete until it can be reviewed safely.
+  Existing routines block a complete review
   because they have no saved model binding yet.
 - Signs short passes for memory calls through the gateway.
   A thread can read the person's own facts, its assistant's notes and that assistant's group facts.

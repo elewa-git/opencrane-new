@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { providerIdSchema, providerModelIdSchema,
-  assistantCreatedDataSchema } from '@opencrane/events';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import type { Query } from '@opencrane/projections';
+  assistantCreatedDataSchema, budgetCeilingSetDataSchema } from '@opencrane/events';
+import { readStreamSummary, type EventStore, type StoredEvent,
+  type SummaryKind } from '@opencrane/event-store';
+import type { ProviderState, Query } from '@opencrane/projections';
 import { readActiveMember } from './member-authority.ts';
 import { MemberAccessRefused } from './member-authority.ts';
 import { history } from './actor.ts';
@@ -15,6 +16,31 @@ import { choiceKey, checkedHistory, inventory, providerCreation, type Choice } f
 
 const sequence = z.int().nonnegative();
 type Inventory = Awaited<ReturnType<typeof inventory>>;
+type WorkLimit = { remaining: number; deadline: number; incomplete: boolean };
+type BudgetStatus = { configured: boolean; defaultPayer: string | undefined;
+  dailyCents: number; monthlyCents: number };
+type BudgetConfiguration = { defaultPayer?: string; dailyCents: number; monthlyCents: number };
+
+function emptyBudgetConfiguration(): BudgetConfiguration {
+  return { dailyCents: 0, monthlyCents: 0 };
+}
+
+function addBudgetConfiguration(summary: BudgetConfiguration, row: StoredEvent) {
+  // Keep spending activity out of the review; only changed settings can alter eligibility.
+  if (row.event.type !== 'budget.ceiling_set') return;
+  const ceiling = budgetCeilingSetDataSchema.parse(row.event.data);
+  if (ceiling.scope !== 'global') return;
+  summary.monthlyCents = ceiling.ceilingCents;
+  if (ceiling.dailyCeilingCents !== undefined) summary.dailyCents = ceiling.dailyCeilingCents;
+  if (ceiling.defaultPayingGroupId !== undefined) {
+    summary.defaultPayer = ceiling.defaultPayingGroupId;
+  }
+}
+
+const previewBudget: SummaryKind<BudgetConfiguration> = {
+  name: 'provider-retirement-budget', keep: 4,
+  empty: emptyBudgetConfiguration, add: addBudgetConfiguration,
+};
 function isAssistantCreation(row: StoredEvent) {
   return row.event.type === 'assistant.created';
 }
@@ -59,12 +85,18 @@ function retirementRows(current: Inventory, assistants: StoredEvent[], providerI
       ? owners.get(choice.dependantId)?.name ?? choice.dependantId : 'Installation default';
     rows.push({ ...choice, assistantCount, name });
   }
-  rows.sort((left, right) => choiceKey(left).localeCompare(choiceKey(right)));
+  function compareChoices(left: (typeof rows)[number], right: (typeof rows)[number]) {
+    return choiceKey(left).localeCompare(choiceKey(right));
+  }
+  rows.sort(compareChoices);
   return { rows, owners };
 }
 
 function pricedModel(modelId: string) {
-  const model = models.find(candidate => candidate.id === modelId && !candidate.retired);
+  function matches(candidate: (typeof models)[number]) {
+    return candidate.id === modelId && !candidate.retired;
+  }
+  const model = models.find(matches);
   if (!model) return false;
   try {
     reservationCents(modelId, 1);
@@ -74,29 +106,58 @@ function pricedModel(modelId: string) {
   }
 }
 
+function takeWork(limit: WorkLimit) {
+  if (limit.remaining === 0 || performance.now() >= limit.deadline) {
+    limit.incomplete = true;
+    return false;
+  }
+  limit.remaining--;
+  return true;
+}
+
+async function readBudgetStatus(store: EventStore, silo: string): Promise<BudgetStatus> {
+  const subject = `budget-${silo}`;
+  const deadline = performance.now() + 10_000;
+  function take(summary: BudgetConfiguration) {
+    const configured = Boolean(summary.defaultPayer) &&
+      summary.dailyCents > 0 && summary.monthlyCents > 0;
+    return { configured, defaultPayer: summary.defaultPayer,
+      dailyCents: summary.dailyCents, monthlyCents: summary.monthlyCents };
+  }
+  return readStreamSummary(store, silo, subject, previewBudget, deadline, take);
+}
+
+function sameBudget(left: BudgetStatus, right: BudgetStatus) {
+  return left.defaultPayer === right.defaultPayer &&
+    left.dailyCents === right.dailyCents && left.monthlyCents === right.monthlyCents;
+}
+
 async function usableForOwners(binding: Binding, modelId: string,
   choice: Choice, owners: Map<string, { ownerId: string; kind: string }>,
-  allBindings: Map<string, Choice>, store: EventStore) {
-  const affected: string[] = [];
+  allBindings: Map<string, Choice>, store: EventStore, limit: WorkLimit) {
   if (choice.kind === 'assistant') {
-    affected.push(choice.dependantId);
-  } else {
-    for (const assistantId of owners.keys()) {
-      const own = { kind: 'assistant' as const, dependantId: assistantId, task: choice.task };
-      if (!allBindings.has(choiceKey(own))) affected.push(assistantId);
-    }
+    return usableOwner(store, binding, owners, choice.dependantId, modelId, limit);
   }
-  for (const assistantId of affected) {
-    const owner = owners.get(assistantId);
-    // A shared assistant's audience is wider than its owner. Do not guess its grants.
-    if (!owner || owner.kind !== 'personal') return false;
-    if (!await ownerCanUse(store, binding, owner.ownerId, assistantId, modelId)) return false;
+  for (const assistantId of owners.keys()) {
+    const own = { kind: 'assistant' as const, dependantId: assistantId, task: choice.task };
+    if (allBindings.has(choiceKey(own))) continue;
+    if (!await usableOwner(store, binding, owners, assistantId, modelId, limit)) return false;
   }
   return true;
 }
 
+async function usableOwner(store: EventStore, binding: Binding,
+  owners: Map<string, { ownerId: string; kind: string }>, assistantId: string,
+  modelId: string, limit: WorkLimit) {
+  if (!takeWork(limit)) return false;
+  const owner = owners.get(assistantId);
+  // A shared assistant's audience is wider than its owner. Do not guess its grants.
+  if (!owner || owner.kind !== 'personal') return false;
+  return ownerCanUse(store, binding, owner.ownerId, assistantId, modelId, limit.deadline);
+}
+
 async function ownerCanUse(store: EventStore, binding: Binding, ownerId: string,
-  assistantId: string, modelId: string) {
+  assistantId: string, modelId: string, deadline: number) {
   try {
     await readActiveMember(store, binding, ownerId);
   } catch (error) {
@@ -104,8 +165,8 @@ async function ownerCanUse(store: EventStore, binding: Binding, ownerId: string,
     throw error;
   }
   const subject = grantStream('model', modelId);
-  const grantPosition = await store.head(subject);
-  const grants = await history(store, subject, binding.silo, performance.now() + 10_000);
+  const grantPosition = await store.head(subject, deadline);
+  const grants = await history(store, subject, binding.silo, deadline);
   if (!directGrant(grants, 'member', ownerId) ||
     !directGrant(grants, 'assistant', assistantId)) return false;
   const auth = memberAuthorisation(binding);
@@ -115,7 +176,7 @@ async function ownerCanUse(store: EventStore, binding: Binding, ownerId: string,
     throw new Error('Model grants unavailable');
   }
   if (!requester.allowed || !assistant.allowed) return false;
-  if (await store.head(subject) !== grantPosition) throw new ProviderConflict();
+  if (await store.head(subject, deadline) !== grantPosition) throw new ProviderConflict();
   return true;
 }
 
@@ -134,28 +195,42 @@ function directGrant(rows: StoredEvent[], kind: string, id: string) {
 }
 
 async function replacements(store: EventStore, current: Inventory, binding: Binding, memberId: string,
-  providerId: string, choice: Choice, owners: Map<string, { ownerId: string; kind: string }>) {
+  providerId: string, choice: Choice, owners: Map<string, { ownerId: string; kind: string }>,
+  limit: WorkLimit) {
   const available = [];
   for (const [targetProviderId, state] of current.providers) {
-    if (targetProviderId === providerId || !state.secretRef ||
-      state.provider !== 'openai' || !state.reachable || !state.saved ||
-      state.reachable.outcome !== 'pass' || state.reachable.revision !== state.saved.revision) {
-      continue;
-    }
+    if (limit.incomplete) break;
+    if (targetProviderId === providerId || !readyTarget(state)) continue;
+    if (!takeWork(limit)) break;
     if (!await eligibleTarget(current, binding, memberId, targetProviderId)) continue;
     for (const modelId of state.enabledModels) {
+      if (!takeWork(limit)) break;
       if (!pricedModel(modelId)) continue;
-      if (!await usableForOwners(binding, modelId, choice, owners, current.bindings, store)) continue;
+      const usable = await usableForOwners(binding, modelId, choice, owners,
+        current.bindings, store, limit);
+      if (limit.incomplete) break;
+      if (!usable) continue;
       available.push({ providerId: targetProviderId, revision: state.revision, model: modelId });
     }
   }
   return available;
 }
 
+function readyTarget(state: ProviderState) {
+  return Boolean(state.secretRef && state.saved && state.provider === 'openai' &&
+    state.reachable?.outcome === 'pass' && state.reachable.revision === state.revision);
+}
+
 async function eligibleTarget(current: Inventory, binding: Binding,
   memberId: string, providerId: string) {
-  const rows = current.rows.filter(row => row.event.subject === `provider-${providerId}`);
-  const savedKey = rows.findLast(row => row.event.type === 'provider.key_saved');
+  function belongs(row: StoredEvent) {
+    return row.event.subject === `provider-${providerId}`;
+  }
+  function isSavedKey(row: StoredEvent) {
+    return row.event.type === 'provider.key_saved';
+  }
+  const rows = current.rows.filter(belongs);
+  const savedKey = rows.findLast(isSavedKey);
   const state = current.providers.get(providerId);
   if (!savedKey?.event.commandId || state?.secretRef !==
     providerSecretRef(binding.silo, providerId, savedKey.event.commandId)) return false;
@@ -170,8 +245,12 @@ async function eligibleTarget(current: Inventory, binding: Binding,
 
 function matchesReplacement(input: PreviewChoice, pairs: Awaited<ReturnType<typeof replacements>>) {
   if (input.action === 'pause') return true;
-  return pairs.some(pair => pair.providerId === input.targetProviderId &&
-    pair.revision === input.targetRevision && pair.model === input.model);
+  const target = input;
+  function matches(pair: (typeof pairs)[number]) {
+    return pair.providerId === target.targetProviderId &&
+      pair.revision === target.targetRevision && pair.model === target.model;
+  }
+  return pairs.some(matches);
 }
 
 function validateChoices(choices: PreviewChoice[], rows: ReturnType<typeof retirementRows>['rows'],
@@ -182,7 +261,10 @@ function validateChoices(choices: PreviewChoice[], rows: ReturnType<typeof retir
     const key = choiceKey(choice);
     if (seen.has(key)) throw new ProviderConflict();
     seen.add(key);
-    const saved = rows.find(row => choiceKey(row) === key);
+    function matches(row: (typeof rows)[number]) {
+      return choiceKey(row) === key;
+    }
+    const saved = rows.find(matches);
     if (!saved || saved.position !== choice.expectedBindingSequence ||
       !matchesReplacement(choice, pairs.get(key) ?? [])) throw new ProviderConflict();
   }
@@ -227,8 +309,8 @@ async function loadSources(store: EventStore, binding: Binding, memberId: string
   const routineRead = prepared[2];
   const current = providerRead?.status === 'fulfilled' ? providerRead.value : undefined;
   const assistants = assistantRead?.status === 'fulfilled' ? assistantRead.value : [];
-  const routine = routineRead?.status === 'fulfilled'
-    ? routineRead.value : undefined;
+  let routine: RoutinePresence | undefined;
+  if (routineRead?.status === 'fulfilled') routine = routineRead.value;
   const { source, blockers } = sourceStatus(Boolean(current),
     assistantRead?.status === 'fulfilled', routine);
   if (!current) throw new Error('Provider dependencies unavailable');
@@ -244,8 +326,11 @@ async function readUnresolvedRoutines(db: Query, silo: string, after: number,
       WHERE silo = $1 ORDER BY routine_id LIMIT 51 OFFSET $2`,
   [silo, after], { deadline: performance.now() + 10_000 });
   const page = result.rows.slice(0, 50);
-  const rows = page.map(row => ({ routineId: row.routine_id,
-    name: row.name, position: Number(row.position) }));
+  function routineRow(row: (typeof page)[number]) {
+    return { routineId: row.routine_id, name: row.name,
+      position: Number(row.position) };
+  }
+  const rows = page.map(routineRow);
   if (!await routine.checkCurrent(performance.now() + 10_000)) {
     throw new Error('Routine projection changed');
   }
@@ -256,11 +341,29 @@ async function readUnresolvedRoutines(db: Query, silo: string, after: number,
 async function collectPairs(store: EventStore, current: Inventory, binding: Binding,
   memberId: string, providerId: string,
   rows: ReturnType<typeof retirementRows>['rows'],
-  owners: ReturnType<typeof assistantOwners>) {
+  owners: ReturnType<typeof assistantOwners>, limit: WorkLimit) {
   const pairs = new Map<string, Awaited<ReturnType<typeof replacements>>>();
   for (const row of rows) {
     pairs.set(choiceKey(row), await replacements(store, current, binding,
-      memberId, providerId, row, owners));
+      memberId, providerId, row, owners, limit));
+  }
+  return pairs;
+}
+
+async function preparePairs(store: EventStore, current: Inventory, binding: Binding,
+  memberId: string, providerId: string, rows: ReturnType<typeof retirementRows>['rows'],
+  owners: ReturnType<typeof assistantOwners>, budget: BudgetStatus,
+  source: PreviewSource, blockers: string[]) {
+  if (!budget.configured || source.assistants !== 'complete') {
+    return new Map<string, Awaited<ReturnType<typeof replacements>>>();
+  }
+  const limit: WorkLimit = { remaining: 200, deadline: performance.now() + 10_000,
+    incomplete: false };
+  const pairs = await collectPairs(store, current, binding, memberId,
+    providerId, rows, owners, limit);
+  if (limit.incomplete) {
+    source.assistants = 'unavailable';
+    blockers.push('Could not check every replacement');
   }
   return pairs;
 }
@@ -303,21 +406,34 @@ export async function providerRetirementPreview(store: EventStore, binding: Bind
   providerIdSchema.parse(providerId);
   const prepared = await loadSources(store, binding, memberId, providerId, db);
   const { current, assistants, routine, source, blockers } = prepared;
+  const budget = await readBudgetStatus(store, binding.silo);
   const routinePosition = routine?.position ?? null;
   checkPage(after, current, routinePosition, expectedPositions);
   const { rows, owners } = retirementRows(current, assistants, providerId);
   if (proposal !== undefined && rows.length > 200) throw new ProviderConflict();
   const page = rows.slice(after, after + 50);
   const candidates = proposal === undefined ? page : rows;
-  const pairs = await collectPairs(store, current, binding, memberId,
-    providerId, candidates, owners);
+  const pairs = await preparePairs(store, current, binding, memberId,
+    providerId, candidates, owners, budget, source, blockers);
   if (rows.length > 200) blockers.push('Too many dependencies to review at once');
   blockers.push('Retirement is not available yet');
   const unresolvedRoutines = await unresolvedRoutinePage(db, binding.silo, after,
     source, blockers, routine);
+  const latestBudget = await readBudgetStatus(store, binding.silo);
+  if (!sameBudget(budget, latestBudget)) {
+    source.assistants = 'unavailable';
+    blockers.push('Spending settings changed during the review');
+  }
+  if (routine && !await routine.checkCurrent(performance.now() + 10_000)) {
+    source.routines = 'unavailable';
+    blockers.push('Could not load routine dependencies');
+  }
   if (proposal !== undefined) checkProposal(proposal, current, source, rows, pairs);
-  const dependencies = page.map(row => ({ ...row,
-    replacements: pairs.get(choiceKey(row)) ?? [], pauseAvailable: true }));
+  function dependency(row: (typeof page)[number]) {
+    return { ...row, replacements: pairs.get(choiceKey(row)) ?? [],
+      pauseAvailable: true };
+  }
+  const dependencies = page.map(dependency);
   const nextCursor = after + page.length < rows.length ? after + page.length : null;
   await readActiveMember(store, binding, memberId, 'admin');
   if (await store.head('provider-*') !== current.position) throw new ProviderConflict();

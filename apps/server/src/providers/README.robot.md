@@ -13,11 +13,14 @@ positions; changed positions refuse.
 `POST /api/org/providers/:providerId/dependencies/preview` checks a strict
 `{ expectedProviderSequence, choices }` body. Each binding needs one saved
 position and an explicit pause or replacement. A replacement needs another
-provider, its current revision, a supported priced model and live grants.
+provider, its current revision, a supported priced model, a configured payer
+and spending limits, and live grants. Candidate work is limited to 200 checks
+and ten seconds; an incomplete check cannot validate a proposal.
 Origin and current admin rights are checked. Neither route saves an event,
 calls a provider or reserves money. `canRetire` stays false.
 
-A routine checkpoint must cover its event position to prove absence. Existing
+A routine checkpoint must cover its event position to prove absence. The route
+checks that position again after preparing replacements. Existing
 routines have no model binding; safe names, ids and positions appear as
 unresolved records. Failed or lagging reads report `unavailable`. Private
 instructions, arguments and results never appear.

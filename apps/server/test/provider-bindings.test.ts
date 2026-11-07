@@ -231,7 +231,10 @@ it('refuses a departed admin even before IAM catches up', hidesAfterRemoval);
 
 async function previewsRetirementWithoutChangingHistory() {
   const saved = (await request('GET')).json<{ rows: { kind: string }[] }>();
-  if (!saved.rows.some(row => row.kind === 'silo_default')) {
+  function isDefault(row: (typeof saved.rows)[number]) {
+    return row.kind === 'silo_default';
+  }
+  if (!saved.rows.some(isDefault)) {
     const defaultChoice = await input({ kind: 'silo_default', dependantId: 'acme' });
     expect((await request('POST', 'primary', defaultChoice)).statusCode).toBe(200);
   }
@@ -254,9 +257,11 @@ async function previewsRetirementWithoutChangingHistory() {
   ]));
   expect((await request('GET', 'primary', undefined, 'bob', undefined, undefined,
     'dependencies')).statusCode).toBe(403);
-  const choices = preview.dependencies.map(row => ({ kind: row.kind,
-    dependantId: row.dependantId, task: row.task,
-    expectedBindingSequence: row.position, action: 'pause' }));
+  function pauseChoice(row: (typeof preview.dependencies)[number]) {
+    return { kind: row.kind, dependantId: row.dependantId, task: row.task,
+      expectedBindingSequence: row.position, action: 'pause' };
+  }
+  const choices = preview.dependencies.map(pauseChoice);
   const position = await nats.store.head('provider-*');
   const proposed = { expectedProviderSequence: position, choices };
   const valid = await request('POST', 'primary', proposed, 'owner', undefined, undefined,
@@ -278,8 +283,11 @@ it('shows exact saved dependencies only to a current admin without saving an eve
   previewsRetirementWithoutChangingHistory);
 
 async function checksLiveReplacementGrants() {
+  function isPreviewDependency(row: { dependantId: string }) {
+    return row.dependantId === 'preview';
+  }
   const saved = (await request('GET')).json<{ rows: { dependantId: string }[] }>();
-  if (!saved.rows.some(row => row.dependantId === 'preview')) {
+  if (!saved.rows.some(isPreviewDependency)) {
     await append('assistant-preview', 'assistant.created',
       { assistantId: 'preview', ownerId: 'bob', kind: 'personal' });
     const choice = await input({ dependantId: 'preview' });
@@ -292,10 +300,35 @@ async function checksLiveReplacementGrants() {
   }
   const withoutPayer = await request('GET', 'primary', undefined, 'owner', undefined, undefined,
     'dependencies');
-  const missingPayerRows = withoutPayer.json<{ dependencies: { dependantId: string;
-    replacements: { providerId: string }[] }[] }>().dependencies;
-  const missingPayerChoice = missingPayerRows.find(row => row.dependantId === 'preview');
+  const missingPayer = withoutPayer.json<{ expectedProviderSequence: number;
+    dependencies: { kind: string; dependantId: string; task: string; position: number;
+      replacements: { providerId: string }[] }[] }>();
+  const missingPayerRows = missingPayer.dependencies;
+  const missingPayerChoice = missingPayerRows.find(isPreviewDependency);
   expect(missingPayerChoice?.replacements).toEqual([]);
+  function proposedChoice(row: (typeof missingPayerRows)[number]) {
+    const common = { kind: row.kind, dependantId: row.dependantId, task: row.task,
+      expectedBindingSequence: row.position };
+    if (row.dependantId === 'preview') {
+      return { ...common, action: 'replace', targetProviderId: 'secondary',
+        targetRevision: 3, model: 'gpt-6.1-sol' };
+    }
+    return { ...common, action: 'pause' };
+  }
+  const missingPayerProposal = { expectedProviderSequence: missingPayer.expectedProviderSequence,
+    choices: missingPayerRows.map(proposedChoice) };
+  expect((await request('POST', 'primary', missingPayerProposal, 'owner', undefined,
+    undefined, 'dependencies/preview')).statusCode).toBe(409);
+  await append('budget-acme', 'budget.ceiling_set', {
+    scope: 'global', dailyCeilingCents: 0, ceilingCents: 0,
+    setBy: 'owner', defaultPayingGroupId: 'personal',
+  });
+  const withoutBudget = await request('GET', 'primary', undefined, 'owner', undefined,
+    undefined, 'dependencies');
+  const unbudgetedRows = withoutBudget.json<{ dependencies: { dependantId: string;
+    replacements: { providerId: string }[] }[] }>().dependencies;
+  const unbudgetedChoice = unbudgetedRows.find(isPreviewDependency);
+  expect(unbudgetedChoice?.replacements).toEqual([]);
   await append('budget-acme', 'budget.ceiling_set', {
     scope: 'global', dailyCeilingCents: 2000, ceilingCents: 20000,
     setBy: 'owner', defaultPayingGroupId: 'personal',
@@ -310,15 +343,19 @@ async function checksLiveReplacementGrants() {
   const preview = response.json<{ expectedProviderSequence: number; dependencies: {
     kind: string; dependantId: string; task: string; position: number;
     replacements: { providerId: string; revision: number; model: string }[] }[] }>();
-  const own = preview.dependencies.find(row => row.dependantId === 'preview');
+  const own = preview.dependencies.find(isPreviewDependency);
   expect(own?.replacements).toContainEqual({ providerId: 'secondary', revision: 3,
     model: 'gpt-6.1-sol' });
-  const choices = preview.dependencies.map(row => row.dependantId === 'preview'
-    ? { kind: row.kind, dependantId: row.dependantId, task: row.task,
-      expectedBindingSequence: row.position, action: 'replace',
-      targetProviderId: 'secondary', targetRevision: 3, model: 'gpt-6.1-sol' }
-    : { kind: row.kind, dependantId: row.dependantId, task: row.task,
-      expectedBindingSequence: row.position, action: 'pause' });
+  function replacementChoice(row: (typeof preview.dependencies)[number]) {
+    const common = { kind: row.kind, dependantId: row.dependantId, task: row.task,
+      expectedBindingSequence: row.position };
+    if (row.dependantId === 'preview') {
+      return { ...common, action: 'replace', targetProviderId: 'secondary',
+        targetRevision: 3, model: 'gpt-6.1-sol' };
+    }
+    return { ...common, action: 'pause' };
+  }
+  const choices = preview.dependencies.map(replacementChoice);
   const proposed = { expectedProviderSequence: preview.expectedProviderSequence, choices };
   expect((await request('POST', 'primary', proposed, 'owner', undefined, undefined,
     'dependencies/preview')).json()).toMatchObject({ choicesValid: true, canRetire: false });
@@ -424,7 +461,8 @@ async function routineGaps() {
   const old = await request('GET', 'primary', undefined, 'owner', undefined, undefined,
     'dependencies');
   expect(old.json()).toMatchObject({ sources: { routines: 'not_available' },
-    unresolvedRoutines: [{ routineId: 'old' }], canRetire: false });
+    unresolvedRoutines: [{ routineId: 'during-preview' }, { routineId: 'old' }],
+    canRetire: false });
 }
 it('reports projection failure and legacy routine history without invented counts', routineGaps);
 
@@ -450,3 +488,32 @@ async function replaysRecordedSwitchOn() {
 }
 it('rebuilds the recorded switch-on without changing keys, models or verification',
   replaysRecordedSwitchOn);
+
+async function boundsReplacementPreparation() {
+  for (let index = 0; index < 20; index++) {
+    const providerId = `extra-${index}`;
+    const subject = `provider-${providerId}`;
+    const common = { providerId, changedBy: 'owner' };
+    await append(subject, 'provider.created',
+      { ...common, revision: 1, provider: 'openai', name: providerId });
+    await append(subject, 'provider.key_saved', { ...common, revision: 2,
+      secretRef: providerSecretRef('acme', providerId, `binding-${counter + 1}`) });
+    const repeatedModels = Array<string>(11).fill('gpt-6.1-sol');
+    await append(subject, 'provider.models_selected',
+      { ...common, revision: 3, models: repeatedModels });
+    await append(subject, 'provider.verification_recorded', {
+      ...common, revision: 3, kind: 'reachability', attemptId: 'check', outcome: 'pass',
+    });
+  }
+  const response = await request('GET', 'primary', undefined, 'owner', undefined,
+    undefined, 'dependencies');
+  expect(response.statusCode).toBe(200);
+  const preview = response.json<{ sources: { assistants: string }; dependencies: {
+    replacements: { providerId: string }[] }[] }>();
+  expect(preview.sources.assistants).toBe('unavailable');
+  let candidates = 0;
+  for (const row of preview.dependencies) candidates += row.replacements.length;
+  expect(candidates).toBeLessThanOrEqual(200);
+}
+it('bounds replacement work and reports incomplete candidate checks',
+  boundsReplacementPreparation, 120_000);
