@@ -6,7 +6,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import type { AuthConfig, SessionData } from '@opencrane/auth';
 import { approvalCards, readApproval, decideApproval, currentAuthority, approvalActivity,
-  readOriginalCallStatus }
+  readOriginalCallStatus, type RetainedCall }
   from '@opencrane/models';
 import { readEvents } from '@opencrane/projections';
 import { writeChatAccess, isChatRefused, conversationParticipation, ChatAccessApplying } from './access.ts';
@@ -49,11 +49,20 @@ function registerOriginalCallStatusRoute(app: FastifyInstance,
       }
       if (!options) throw new Error('Chat unavailable');
       const deadline = performance.now() + 10_000;
-      const retained = await options.retainedCall?.(logicalRequestId);
-      const result = await readOriginalCallStatus(options.store, options.silo,
-        logicalRequestId, retained, deadline);
+      let retained: RetainedCall | undefined;
+      let result: Awaited<ReturnType<typeof readOriginalCallStatus>> | undefined;
+      let readFailure: unknown;
+      try {
+        retained = await options.retainedCall?.(logicalRequestId);
+        result = await readOriginalCallStatus(options.store, options.silo,
+          logicalRequestId, retained, deadline);
+      } catch (error) {
+        readFailure = error;
+      }
+      // Check access even when history is missing, so callers cannot probe for saved calls.
       const checks = { write: false, conversationId };
       const access = await requireMember(req, reply, config, options, checks);
+      if (!result) throw readFailure;
       const outsideParticipation = result.requestPosition < access.access.historyPosition;
       const otherChildRequester = access.access.contextKind === 'shared_child' &&
         result.status.requesterId !== access.memberId;

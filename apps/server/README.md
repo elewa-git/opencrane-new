@@ -109,7 +109,8 @@ Removal progress covers permissions and the member list. It does not report depa
 Approval reads distinguish a tool reply from an uncertain transport result. This does not
 change the saved approval state or allow another use.
 Participants can read an original Ask call's saved attempts and retry status.
-The read keeps uncertain calls unknown and sends no work.
+The read keeps uncertain calls unknown and sends no work. People who have lost
+access get the same refusal for saved and missing calls.
 
 A requester can choose one retry when trusted saved evidence proves a remote tool
 was refused before connecting. Current permissions and the reviewed request must
