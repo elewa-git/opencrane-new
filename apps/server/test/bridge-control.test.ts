@@ -201,10 +201,10 @@ it('keeps a closed agent session in the watcher list after projection catches up
   expect(candidates.map(candidateId)).toContain('chat');
 });
 
-async function startFixtureTurn(test: Fixture) {
+async function startFixtureTurn(test: Fixture, executionMode?: 'restricted') {
   const turn = {
     conversationId: 'chat', assistantId: 'assistant', turnId: test.message.id,
-    threadId: 'thread',
+    threadId: 'thread', ...(executionMode ? { executionMode } : {}),
   };
   await test.append('conversation-chat', 'agent.turn_started', turn);
   await test.append('computer-assistant', 'computer.turn_started', {
@@ -252,6 +252,36 @@ it('recovers a missing agent terminal from a saved computer close once', async (
   const rows = await chatHistory(test.store, 'test', 'chat');
   expect(rows.filter(isAgentCompleted).map(turnIdOf)).toEqual([turn.turnId]);
   expect(test.frames.filter(isStop)).toEqual([]);
+});
+
+it('keeps a restricted turn pending until its private process exit is saved', async () => {
+  fixture = await bridgeFixture(true);
+  const test = fixture;
+  const turn = await startFixtureTurn(test, 'restricted');
+  await test.append('conversation-chat', 'agent.turn_failed', {
+    conversationId: 'chat', turnId: turn.turnId, reason: 'stop_interrupted',
+  });
+  await test.append('computer-assistant', 'computer.turn_closed', {
+    ...turn, requesterId: 'alice', computerId: 'desktop', task: 'chat_turn',
+    payingGroupId: 'personal', executionMode: 'restricted', status: 'failed',
+  });
+  await test.append('conversation-chat', 'conversation.closed', {
+    conversationId: 'chat', closedBy: 'alice',
+  });
+
+  expect(await test.process()).toBe(true);
+  const before = await chatHistory(test.store, 'test', 'chat');
+  expect(before.filter(isAgentCompleted)).toEqual([]);
+  await test.append('conversation-chat', 'agent.private_exited', {
+    conversationId: 'chat', turnId: turn.turnId,
+  });
+
+  expect(await test.process()).toBe(false);
+  await test.process();
+  const after = await chatHistory(test.store, 'test', 'chat');
+  expect(after.filter(isClosedFailure)).toEqual([]);
+  expect(after.filter(isAgentCompleted)).toEqual([]);
+  expect(test.frames.filter(isTurnOrFile)).toEqual([]);
 });
 
 it('retries a closed turn Stop without sending its input again', async () => {

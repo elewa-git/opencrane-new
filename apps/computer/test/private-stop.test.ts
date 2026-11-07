@@ -259,3 +259,36 @@ async function preservesLaterReplyInSameChat() {
 }
 it('keeps a later private reply in the same conversation when only the earlier turn is stopped',
   preservesLaterReplyInSameChat);
+
+async function reportsPrivateExitAfterStop() {
+  const exited = Promise.withResolvers<void>();
+  const test = await fixture(true, exited.promise);
+  try {
+    await startPrivate(test, 'first', 'thread-1');
+    await startPrivate(test, 'second', 'thread-2', 'bob');
+    test.send({ type: 'stop', turnId: 'first', conversationId: 'first' });
+    await test.flush();
+    function isExit(frame: Record<string, unknown>) {
+      return frame['type'] === 'agent.private_exited';
+    }
+    expect(test.frames.filter(isExit)).toEqual([]);
+
+    exited.resolve();
+    function oneExit() {
+      expect(test.frames.filter(isExit)).toMatchObject([
+        { conversationId: 'first', turnId: 'first' },
+      ]);
+    }
+    await vi.waitFor(oneExit);
+    expect(test.grants.has('thread-2')).toBe(true);
+    const before = test.frames.filter(isExit);
+    test.send({ type: 'stop', turnId: 'first', conversationId: 'first' });
+    await test.flush();
+    expect(test.frames.filter(isExit)).toEqual(before);
+  } finally {
+    exited.resolve();
+    await test.close();
+  }
+}
+it('reports one private process exit after Stop without ending another session',
+  reportsPrivateExitAfterStop);
