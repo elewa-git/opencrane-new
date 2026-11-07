@@ -351,6 +351,11 @@ function createFetchFixture() {
       savedMessages.set('group-chat', [eventRow(1, 'bob', 'Hello everyone'),
         eventRow(2, 'carol', '@agent is just text')]);
     },
+    addReviewableGroupMessage() {
+      this.addGroupConversation();
+      savedMessages.get('group-chat')?.push(eventRow(3, 'alice',
+        'Compare the two delivery proposals'));
+    },
     addGroupConversationForParticipant() {
       participantCreator = 'bob';
       participantCanManage = false;
@@ -459,6 +464,7 @@ async function settle(fixture: ComponentFixture<DirectChat>): Promise<void> {
 
 function cleanUpDirectChatTest(): void {
   vi.useRealTimers();
+  sessionStorage.clear();
   TestBed.resetTestingModule();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -2662,3 +2668,273 @@ async function revokedDuringReconnect(viewportWidth: number): Promise<void> {
 it.each([390, 1280])(
   'never restores a chat revoked during the rate-limit reconnect wait at %ipx',
   revokedDuringReconnect);
+
+const reviewAssistant = { assistantId: 'team-sales', ownerId: 'sales', kind: 'team',
+  computerId: 'computer-sales', generation: 1, status: 'ready',
+  changedAt: '2026-10-06T09:00:00Z', name: 'Sales assistant',
+  payingGroupId: 'sales', canStartSession: true, busy: false };
+
+function reviewFixture() {
+  const api = createFetchFixture();
+  api.addReviewableGroupMessage();
+  function childReplies(request: RequestRecord): Response | undefined {
+    if (request.url === '/api/assistants') return reply({ rows: [reviewAssistant] });
+    if (request.url.endsWith('/child-review')) return reply({
+      requestId: request.body?.['requestId'], sourceMessageId: 'event-3',
+      assistantId: 'team-sales', participantIds: ['alice', 'bob'],
+      allowanceBoundCents: 740, payingGroupId: 'paying-team',
+      review: 'signed-review', expiresAt: Date.now() + 600_000,
+    });
+    if (request.url.endsWith('/children') && request.method === 'POST') {
+      return reply({ requestId: request.body?.['requestId'], state: 'queued' }, 202);
+    }
+    return undefined;
+  }
+  api.override(childReplies);
+  return api;
+}
+
+async function openReviewGroup(api: ReturnType<typeof reviewFixture>) {
+  const fixture = await mountWithoutReady(api, 'group-chat');
+  await waitForText(fixture, 'Compare the two delivery proposals');
+  return fixture;
+}
+
+function childPosts(api: ReturnType<typeof reviewFixture>, suffix: string): RequestRecord[] {
+  return api.requests.filter(request => request.method === 'POST' && request.url.endsWith(suffix));
+}
+
+it('keeps a typed mention ordinary and offers review only on an own group message', async () => {
+  const api = reviewFixture();
+  const fixture = await openReviewGroup(api);
+  enterMessage(fixture, '@agent please compare these');
+  await settle(fixture);
+  expect(childPosts(api, '/children')).toHaveLength(0);
+  expect(childPosts(api, '/child-review')).toHaveLength(0);
+  expect(root(fixture).querySelectorAll('.child-review-action')).toHaveLength(2);
+  fixture.destroy();
+  TestBed.resetTestingModule();
+
+  const directApi = createFetchFixture();
+  const directFixture = await mountWithoutReady(directApi, 'existing');
+  await waitForText(directFixture, 'Yes, I will confirm by noon.');
+  expect(root(directFixture).querySelector('.child-review-action')).toBeNull();
+  directFixture.destroy();
+});
+
+it('shows reviewed payer, audience and allowance; Cancel and Escape save no child', async () => {
+  const api = reviewFixture();
+  const fixture = await openReviewGroup(api);
+  root(fixture).querySelector<HTMLButtonElement>('.child-review-action')?.click();
+  await waitForText(fixture, '€7.40');
+  expect(root(fixture).textContent).toContain('paying-team');
+  expect(root(fixture).textContent).toContain('Alex Kim, Grace Achieng');
+  expect(root(fixture).textContent).not.toContain('€10.00');
+  buttonNamed(fixture, 'Cancel').click();
+  await settle(fixture);
+  expect(childPosts(api, '/children')).toHaveLength(0);
+  root(fixture).querySelector<HTMLButtonElement>('.child-review-action')?.click();
+  await waitForText(fixture, '€7.40');
+  root(fixture).querySelector('oc-modal-sheet dialog[open]')?.dispatchEvent(
+    new Event('cancel', { bubbles: true, cancelable: true }));
+  await settle(fixture);
+  expect(childPosts(api, '/children')).toHaveLength(0);
+  expect(root(fixture).querySelector('oc-modal-sheet dialog[open]')).toBeNull();
+  fixture.destroy();
+});
+
+it('starts once with the original review and checks the original id after an uncertain reply',
+  async () => {
+    const api = reviewFixture();
+    let startCount = 0;
+    function lostStart(request: RequestRecord): Response | undefined {
+      if (request.url === '/api/assistants') return reply({ rows: [reviewAssistant] });
+      if (request.url.endsWith('/child-review')) return reply({
+        requestId: request.body?.['requestId'], sourceMessageId: 'event-3',
+        assistantId: 'team-sales', participantIds: ['alice', 'bob'],
+        allowanceBoundCents: 740, payingGroupId: 'paying-team',
+        review: 'signed-review', expiresAt: Date.now() + 600_000,
+      });
+      if (request.url.endsWith('/children') && request.method === 'POST') {
+        startCount += 1;
+        return reply({ status: 'unavailable' }, 503);
+      }
+      if (request.url.includes('/children/') && request.method === 'GET') {
+        return reply({ state: 'unknown' });
+      }
+      return undefined;
+    }
+    api.override(lostStart);
+    const fixture = await openReviewGroup(api);
+    root(fixture).querySelector<HTMLButtonElement>('.child-review-action')?.click();
+    await waitForText(fixture, '€7.40');
+    buttonNamed(fixture, 'Start child thread').click();
+    buttonNamed(fixture, 'Start child thread').click();
+    await waitForText(fixture, 'Check status');
+    expect(root(fixture).querySelector('oc-modal-sheet dialog[open]')).toBeNull();
+    await vi.waitFor(() => expect(buttonNamed(fixture, 'Check status').disabled).toBe(false));
+    buttonNamed(fixture, 'Check status').click();
+    await settle(fixture);
+    const start = childPosts(api, '/children')[0];
+    expect(startCount).toBe(1);
+    expect(start?.body).toMatchObject({ sourceMessageId: 'event-3', review: 'signed-review' });
+    expect(api.requests.some(request => request.url.endsWith(
+      `/children/${String(start?.body?.['requestId'])}`))).toBe(true);
+    const checksBeforeRefresh = api.requests.filter(request =>
+      request.method === 'GET' && request.url.includes('/children/')).length;
+    fixture.destroy();
+    TestBed.resetTestingModule();
+    const refreshed = await openReviewGroup(api);
+    await vi.waitFor(() => expect(api.requests.filter(request =>
+      request.method === 'GET' && request.url.includes('/children/')).length)
+      .toBeGreaterThan(checksBeforeRefresh));
+    expect(childPosts(api, '/children')).toHaveLength(1);
+    expect(root(refreshed).querySelector('.child-review-action')).toBeNull();
+    refreshed.destroy();
+  });
+
+it('hides the action when the shared assistant is revoked and clears text on review denial',
+  async () => {
+    const api = reviewFixture();
+    function revoked(request: RequestRecord): Response | undefined {
+      if (request.url === '/api/assistants') {
+        return reply({ rows: [{ ...reviewAssistant, canStartSession: false }] });
+      }
+      return undefined;
+    }
+    api.override(revoked);
+    const fixture = await openReviewGroup(api);
+    expect(root(fixture).querySelector('.child-review-action')).toBeNull();
+    fixture.destroy();
+    TestBed.resetTestingModule();
+
+    const deniedApi = reviewFixture();
+    function denied(request: RequestRecord): Response | undefined {
+      if (request.url === '/api/assistants') return reply({ rows: [reviewAssistant] });
+      if (request.url.endsWith('/child-review')) return reply({ status: 'refused' }, 403);
+      return undefined;
+    }
+    deniedApi.override(denied);
+    const deniedFixture = await openReviewGroup(deniedApi);
+    root(deniedFixture).querySelector<HTMLButtonElement>('.child-review-action')?.click();
+    await waitForText(deniedFixture, 'You no longer have access');
+    expect(root(deniedFixture).textContent).not.toContain('Compare the two delivery proposals');
+    expect(root(deniedFixture).querySelector('oc-modal-sheet dialog[open]')).toBeNull();
+    deniedFixture.destroy();
+  });
+
+it('requires a fresh review after expiry and keeps the start request out of the log', async () => {
+  const api = reviewFixture();
+  let reviews = 0;
+  function expired(request: RequestRecord): Response | undefined {
+    if (request.url === '/api/assistants') return reply({ rows: [reviewAssistant] });
+    if (request.url.endsWith('/child-review')) {
+      reviews += 1;
+      return reply({ requestId: request.body?.['requestId'], sourceMessageId: 'event-3',
+        assistantId: 'team-sales', participantIds: ['alice', 'bob'],
+        allowanceBoundCents: 740, payingGroupId: 'paying-team',
+        review: 'expired-review', expiresAt: Date.now() - 1 });
+    }
+    return undefined;
+  }
+  api.override(expired);
+  const fixture = await openReviewGroup(api);
+  root(fixture).querySelector<HTMLButtonElement>('.child-review-action')?.click();
+  await waitForText(fixture, '€7.40');
+  buttonNamed(fixture, 'Start child thread').click();
+  await waitForText(fixture, 'This review expired');
+  expect(childPosts(api, '/children')).toHaveLength(0);
+  buttonNamed(fixture, 'Review again').click();
+  await vi.waitFor(() => expect(reviews).toBe(2));
+  fixture.destroy();
+});
+
+it('resets the audience and requests a new signed review after review_stale', async () => {
+  const api = reviewFixture();
+  const reviews: RequestRecord[] = [];
+  function stale(request: RequestRecord): Response | undefined {
+    if (request.url === '/api/assistants') return reply({ rows: [reviewAssistant] });
+    if (request.url.endsWith('/child-review')) {
+      reviews.push(request);
+      return reply({ requestId: request.body?.['requestId'], sourceMessageId: 'event-3',
+        assistantId: 'team-sales', participantIds: request.body?.['participantIds'],
+        allowanceBoundCents: 740, payingGroupId: 'paying-team',
+        review: `signed-${reviews.length}`, expiresAt: Date.now() + 600_000 });
+    }
+    if (request.url.endsWith('/children') && request.method === 'POST') {
+      return reply({ status: 'review_stale' }, 409);
+    }
+    return undefined;
+  }
+  api.override(stale);
+  const fixture = await openReviewGroup(api);
+  root(fixture).querySelector<HTMLButtonElement>('.child-review-action')?.click();
+  await waitForText(fixture, '€7.40');
+  root(fixture).querySelector<HTMLInputElement>('input[value="only-me"]')?.click();
+  await settle(fixture);
+  buttonNamed(fixture, 'Start child thread').click();
+  await waitForText(fixture, 'Access changed. Review the request again.');
+  buttonNamed(fixture, 'Review again').click();
+  await vi.waitFor(() => expect(reviews).toHaveLength(3));
+  expect(reviews[1]?.body?.['participantIds']).toEqual(['alice']);
+  expect(reviews[2]?.body?.['participantIds']).toEqual(['alice', 'bob', 'carol']);
+  expect(reviews[2]?.body?.['requestId']).not.toBe(reviews[1]?.body?.['requestId']);
+  fixture.destroy();
+});
+
+it('offers another review after a temporary failure without claiming a child exists', async () => {
+  const api = reviewFixture();
+  let reviewCount = 0;
+  function unavailableOnce(request: RequestRecord): Response | undefined {
+    if (request.url === '/api/assistants') return reply({ rows: [reviewAssistant] });
+    if (request.url.endsWith('/child-review')) {
+      reviewCount += 1;
+      if (reviewCount === 1) return reply({ status: 'unavailable' }, 503);
+      return reply({ requestId: request.body?.['requestId'], sourceMessageId: 'event-3',
+        assistantId: 'team-sales', participantIds: ['alice', 'bob'],
+        allowanceBoundCents: 740, payingGroupId: 'paying-team',
+        review: 'signed-review', expiresAt: Date.now() + 600_000 });
+    }
+    return undefined;
+  }
+  api.override(unavailableOnce);
+  const fixture = await openReviewGroup(api);
+  root(fixture).querySelector<HTMLButtonElement>('.child-review-action')?.click();
+  await waitForText(fixture, 'Review unavailable. Try again.');
+  expect(root(fixture).textContent).not.toContain('Child thread queued');
+  expect(childPosts(api, '/children')).toHaveLength(0);
+  buttonNamed(fixture, 'Review again').click();
+  await waitForText(fixture, '€7.40');
+  expect(reviewCount).toBe(2);
+  fixture.destroy();
+});
+
+it('discards a late review after the group chat loses access', async () => {
+  const api = reviewFixture();
+  let releaseReview: ((response: Response) => void) | undefined;
+  function holdReview(resolve: (response: Response) => void): void {
+    releaseReview = resolve;
+  }
+  function delayed(request: RequestRecord): Response | Promise<Response> | undefined {
+    if (request.url === '/api/assistants') return reply({ rows: [reviewAssistant] });
+    if (request.url.endsWith('/child-review')) {
+      return new Promise<Response>(holdReview);
+    }
+    return undefined;
+  }
+  api.override(delayed);
+  const fixture = await openReviewGroup(api);
+  root(fixture).querySelector<HTMLButtonElement>('.child-review-action')?.click();
+  await waitForText(fixture, 'Checking this request');
+  api.sockets.at(-1)?.onclose?.(new CloseEvent('close', { code: 1008 }));
+  await waitForText(fixture, 'You no longer have access');
+  releaseReview?.(reply({ requestId: 'late', sourceMessageId: 'event-3',
+    assistantId: 'team-sales', participantIds: ['alice'],
+    allowanceBoundCents: 740, payingGroupId: 'private-payer',
+    review: 'late-review', expiresAt: Date.now() + 600_000 }));
+  await settle(fixture);
+  expect(root(fixture).textContent).not.toContain('Compare the two delivery proposals');
+  expect(root(fixture).textContent).not.toContain('private-payer');
+  expect(root(fixture).querySelector('oc-modal-sheet dialog[open]')).toBeNull();
+  fixture.destroy();
+});
