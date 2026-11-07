@@ -109,6 +109,7 @@ class TurnRunner {
   private readonly turnModels = new Map<string, string>();
   private readonly renewals = new Map<string, Promise<void>>();
   private readonly stopRemovals = new WeakMap<Turn, Promise<void>>();
+  private readonly stoppedAccessRemoved = new WeakSet<Turn>();
   private readonly interrupts = new WeakMap<Turn, Promise<void>>();
   private readonly grantInstalls = new Map<string, { pending: number; terminal: boolean }>();
   private readonly driver: TurnDriver;
@@ -467,14 +468,10 @@ class TurnRunner {
   }
 
   private releaseTurnAccess(threadId: string, turn: Turn) {
-    const stoppedRemoval = this.stopRemovals.get(turn);
-    if (!stoppedRemoval) {
-      void this.gate.track(this.dropAccess(threadId, turn));
-      return;
-    }
-    // Reuse completed Stop cleanup. Retry a failed removal before releasing this turn.
-    const retry = this.dropAccess.bind(this, threadId, turn);
-    void this.gate.track(stoppedRemoval.catch(retry));
+    // Keep a separate removal while Stop is pending, as the thread may be reused.
+    // A completed private Stop has already removed that private grant.
+    if (turn.executionMode === 'restricted' && this.stoppedAccessRemoved.has(turn)) return;
+    void this.gate.track(this.dropAccess(threadId, turn));
   }
 
   private keepInstallingTurn(turnId: string) {
@@ -820,11 +817,13 @@ class TurnRunner {
     const pending = revokeTurnAccess(input.id, this.state.waiting,
       this.journal.reports, revoke, endHolds);
     const removals = this.stopRemovals;
+    const removed = this.stoppedAccessRemoved;
+    function finished() { removed.add(input); }
     function failed(error: unknown): never {
       removals.delete(input);
       throw error;
     }
-    const removal = pending.catch(failed);
+    const removal = pending.then(finished, failed);
     removals.set(input, removal);
     return removal;
   }
