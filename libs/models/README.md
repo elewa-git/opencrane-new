@@ -97,6 +97,10 @@ one release audit. The requested tool must have a scope mapping. Both the verifi
 account and the saved routine run must cover those scopes. A missing or changed account
 stops the audit. No account material is read or sent by this path yet.
 
+The check also requires one Ask approved by the original routine owner and used for
+this exact call. It matches the saved run, tool, account and destination, and refuses
+an expired or changed Ask. Reading the Ask does not decide it or call the company tool.
+
 The shared access check can use positions already checked by the caller. Private reply
 delivery uses this to refuse later access or memory changes before sending text.
 Ordinary conversation messages do not affect this check.
@@ -132,7 +136,7 @@ built-in functions.
 ```mermaid
 flowchart LR
   models -.->|replay tests use the database helper| store
-  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks release audit bindings and company tool scopes, public tool addresses, reads, hosted image status and check requests, original call status, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, fixed positions before private replies, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal bearer and verified OAuth choices with current access and owner revocation from HTTP, admin company opt-in, explicit company choices, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature, licence and bound vulnerability checks, control, provider choice and spending"]
+  server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks owner Ask and release bindings and company tool scopes, public tool addresses, reads, hosted image status and check requests, original call status, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, fixed positions before private replies, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal bearer and verified OAuth choices with current access and owner revocation from HTTP, admin company opt-in, explicit company choices, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature, licence and bound vulnerability checks, control, provider choice and spending"]
   server -->|asks for the saved first child start| models
   models -->|tests private sign-in, refresh and revocation requests, revokes refresh and access tokens; checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains reply withdrawal after expiry or access loss; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models and checks private callers; native child calls refused| models

@@ -8,6 +8,8 @@ Private persona revisions carry encrypted bytes and a checked digest, never plai
 A routine Stop can name the exact saved denial or expiry of its held tool approval.
 A system routine pause names the exact saved removal of its recorded owner.
 The reference carries only the event id and position; readers verify the history.
+An Ask for a company routine can name its run, account and tool details with digests
+where private values would be unsafe. The later account release must name that Ask.
 
 An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened, such as a member joining or a message being sent. This package says which event types exist and what information each one carries. It checks event data, including new memory text, and still accepts older encrypted events for replay. It does not save events or decide whether a person may act. It also defines private turn records that contain memory reference ids, counts and fixed reasons, without saved fact text. Native spending holds can keep their original access expiry after a restart. The package can preview routine dates without starting work.
 
@@ -57,7 +59,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
-  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks release audit bindings, consent starts, callback and refresh claims, refresh starts, account confirmations and replacement generations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal, company and saved tool choices, company opt-in, company credential replacements, and blocks| events
+  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks Ask and release bindings, consent starts, callback and refresh claims, refresh starts, account confirmations and replacement generations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal, company and saved tool choices, company opt-in, company credential replacements, and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
 ```
 

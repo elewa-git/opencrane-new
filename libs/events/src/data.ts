@@ -10,6 +10,7 @@ import { isToolCallText } from './tool-call.ts';
 import { toolCallFields } from './tool-dispatch.ts';
 export { toolDispatchRecordedDataSchema } from './tool-dispatch.ts';
 import { nativeDelegationBindingSchema, hasDistinctDelegationChild } from './delegation.ts';
+import { routineApprovalBindingSchema } from './routine-approval.ts';
 // Data schemas for every event type in the registry except the four
 // examples in examples.ts. Each is built from what docs/architecture/events.md
 // and plan.md say the event means: which ids it needs, who did it, and what a
@@ -402,6 +403,7 @@ export const toolApprovalRequestedDataSchema = z.object({
   expiresAt: z.iso.datetime(), stepUp: z.boolean(),
   missingFields: z.array(z.string().regex(/^[a-zA-Z][\w-]{0,63}$/u)).max(20).optional(),
   ciphertext: ciphertextSchema.max(32768), keyId: keyIdSchema, reviewDigest: digestSchema,
+  routine: routineApprovalBindingSchema.optional(),
 }).strict();
 
 // Reviewed, credential-free tools declare every safe argument; unknown fields cannot be hidden.

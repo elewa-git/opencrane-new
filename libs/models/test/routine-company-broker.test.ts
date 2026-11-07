@@ -16,6 +16,7 @@ import { envelope, history } from '../src/actor.ts';
 import { oauthSelectionFixture } from './support/oauth-selection.ts';
 import { event } from '@opencrane/event-store/testing';
 import { authorityFence } from '../src/authority.ts';
+import { routineCompanyAskFacts } from '../src/routine-company-release.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let storage: Awaited<ReturnType<typeof databases>>;
@@ -29,7 +30,12 @@ type FixtureOptions = {
   frozenScopes?: string[];
   missingToolMapping?: boolean;
   missingApproval?: boolean;
-  changedApproval?: 'owner' | 'thread' | 'schema' | 'account' | 'destination';
+  changedApproval?: 'owner' | 'thread' | 'schema' | 'account' | 'destination' |
+    'arguments' | 'profile' | 'connection' | 'payer' | 'root' | 'occurrence';
+  approvalState?: 'requested' | 'denied' | 'approved' | 'used_twice';
+  missingFields?: boolean;
+  wrongDecision?: boolean;
+  decisionActor?: 'other-member' | 'admin' | 'successor';
 };
 beforeAll(async function start() {
   nats = await natsFixture();
@@ -132,6 +138,7 @@ async function readyHistory(userId: string, serverId: string, profileId: string,
   });
   return { personal, evidence, profileRevision, selectionRevision: await nats.store.head(selectionSubject),
     policyRevision: await nats.store.head(serverSubject), schemaDigest: requestedTool!.revision,
+    catalogueDigest: policy.catalogue!.schemaDigest,
     profileSubject, selectionSubject, routineSubject };
 }
 
@@ -172,17 +179,23 @@ async function fixture(options: FixtureOptions = {}) {
     accountDigest: prepared?.evidence.accountDigest ?? 'b'.repeat(64),
     scopeDigest: digest(prepared?.evidence.scopes ?? []),
     routineId, occurrenceId, companyAccountId: 'company-bot',
-    schemaDigest: prepared?.schemaDigest ?? 'd'.repeat(64),
+    schemaDigest: prepared?.catalogueDigest ?? 'd'.repeat(64),
+    toolRevision: prepared?.schemaDigest ?? 'd'.repeat(64),
     payingGroupId: 'payer', issuedAt, expiresAt: issuedAt + 30_000,
-    approvalId, rootId: 'root', destinationDigest: digest('https://company.example'),
+    approvalId, rootId: 'root', destinationDigest: digest('https://example.test'),
   };
   if (!options.missingApproval) {
     const changed = options.changedApproval;
-    const routine = { routineId, occurrenceId, rootId: release.rootId,
+    const routine = { routineId,
+      occurrenceId: changed === 'occurrence' ? 'replacement' : occurrenceId,
+      rootId: changed === 'root' ? 'replacement' : release.rootId,
       threadId: changed === 'thread' ? 'replacement' : release.threadId,
-      payingGroupId: release.payingGroupId, profileId: release.profileId,
-      profileRevision: release.profileRevision,
-      connectionRevision: release.connectionRevision,
+      payingGroupId: changed === 'payer' ? 'replacement' : release.payingGroupId,
+      profileId: release.profileId,
+      profileRevision: changed === 'profile' ? release.profileRevision + 1 :
+        release.profileRevision,
+      connectionRevision: changed === 'connection' ? release.connectionRevision + 1 :
+        release.connectionRevision,
       selectionRevision: release.selectionRevision,
       companyAccountId: changed === 'account' ? 'replacement' : release.companyAccountId,
       accountDigest: release.accountDigest, scopeDigest: release.scopeDigest,
@@ -192,30 +205,46 @@ async function fixture(options: FixtureOptions = {}) {
       approvalId, conversationId: release.conversationId, turnId: release.turnId,
       assistantId: release.assistantId,
       requesterId: changed === 'owner' ? 'successor' : userId,
-      tool: release.toolName, serverId, toolRevision: release.schemaDigest,
+      tool: release.toolName, serverId, toolRevision: release.toolRevision,
       schemaDigest: changed === 'schema' ? digest('replacement') : release.schemaDigest,
       connectionId: release.connectionId, profile: release.profileId,
       policySequence: release.policyRevision, digestVersion: 'lossless-json-v1',
-      argumentsDigest: release.argumentsDigest,
+      argumentsDigest: changed === 'arguments' ? digest('replacement') :
+        release.argumentsDigest,
       expiresAt: new Date(issuedAt + 900_000).toISOString(), stepUp: false,
+      ...(options.missingFields ? { missingFields: ['target'] } : {}),
       ciphertext: 'ZmFrZS1lbmNyeXB0ZWQ=', keyId: 'key:1', reviewDigest: digest('review'),
       routine,
     });
+    const decidedBy = options.decisionActor ?? userId;
     const approved = envelope('test', `approval-${approvalId}`, 'approval.decided', {
-      approvalId, decidedBy: userId, decision: 'approved',
+      approvalId, decidedBy,
+      decision: options.approvalState === 'denied' ? 'rejected' : 'approved',
     });
     approved.source = 'opencrane-server';
-    approved.principal = { kind: 'human', id: userId };
+    approved.principal = { kind: 'human', id: decidedBy };
     const used = envelope('test', `approval-${approvalId}`, 'approval.used', {
       approvalId, permitId: requestId,
     });
-    await nats.seed([request, approved, used]);
+    const approvalRows = [request];
+    if (options.approvalState !== 'requested') approvalRows.push(approved);
+    if (!options.approvalState || options.approvalState === 'used_twice') {
+      approvalRows.push(used);
+    }
+    if (options.approvalState === 'used_twice') {
+      approvalRows.push(envelope('test', `approval-${approvalId}`, 'approval.used', {
+        approvalId, permitId: 'another-request',
+      }));
+    }
+    await nats.seed(approvalRows);
   }
   const decision = envelope('test', `decision-${requestId}`, 'decision.recorded', {
     requestId, requesterId: userId, assistantId: 'assistant', conversationId: 'conversation',
     turnId: 'turn', permitId: requestId, serverId, toolName: options.toolName ?? 'read', route: 'mcp',
-    outcome: 'allow', reason: 'approval_used', contextDigest: 'e'.repeat(64), release,
+    outcome: 'allow', reason: options.wrongDecision ? 'policy_allow' : 'approval_used',
+    contextDigest: 'e'.repeat(64), release,
   }, decisionId);
+  decision.correlation.approval = approvalId;
   await nats.seed([decision]);
   const loadConfiguration = prepared?.personal.loadConfiguration ?? function emptyConfiguration() {
     return Promise.resolve({});
@@ -223,7 +252,8 @@ async function fixture(options: FixtureOptions = {}) {
   function readProfile() {
     return prepared?.evidence;
   }
-  const rights = { owner: true, assistant: true, payer: true, computer: true, root: true };
+  const rights = { owner: true, assistant: true, payer: true, computer: true,
+    root: true, thread: true };
   async function prepareAccess() {
     const fresh = await authorityFence(nats.store, performance.now(), [
       `member-${userId}`, grantStream('mcp_server', serverId),
@@ -254,10 +284,89 @@ it('refuses a company release without a used owner Ask', async function missingA
   expect(await nats.store.head(`credential-${test.requestId}`)).toBe(0);
 });
 
-it.each(['owner', 'thread', 'schema', 'account', 'destination'] as const)(
+it.each(['owner', 'thread', 'schema', 'account', 'destination', 'arguments',
+  'profile', 'connection', 'payer', 'root', 'occurrence'] as const)(
   'refuses a changed %s in the saved owner Ask', async function changedAsk(field) {
     const test = await fixture({ changedApproval: field });
     await expect(test.confirm()).rejects.toThrow('Release unavailable');
+    expect(await nats.store.head(`credential-${test.requestId}`)).toBe(0);
+  });
+
+it('lets the matching owner request reach a recording upstream once',
+  async function oneCompanyCall() {
+    const test = await fixture();
+    const calls: string[] = [];
+    async function dispatch() {
+      await test.confirm();
+      calls.push(test.requestId);
+    }
+    const outcomes = await Promise.allSettled([dispatch(), dispatch()]);
+    const successful = outcomes.filter(function succeeded(item) {
+      return item.status === 'fulfilled';
+    });
+    expect(successful).toHaveLength(1);
+    expect(calls).toEqual([test.requestId]);
+  });
+
+it.each(['requested', 'denied', 'approved', 'used_twice'] as const)(
+  'refuses a %s Ask without one valid use', async function unusableAsk(state) {
+    const test = await fixture({ approvalState: state });
+    await expect(test.confirm()).rejects.toThrow('Release unavailable');
+  });
+
+it('refuses approval when consequence fields are missing', async function incompleteAsk() {
+  const test = await fixture({ missingFields: true });
+  await expect(test.confirm()).rejects.toThrow('Release unavailable');
+});
+
+it.each(['other-member', 'admin', 'successor'] as const)(
+  'refuses a decision by %s in place of the original owner', async function foreignActor(actor) {
+    const test = await fixture({ decisionActor: actor });
+    await expect(test.confirm()).rejects.toThrow('Release unavailable');
+  });
+
+it('refuses an allowed decision that did not consume the saved Ask',
+  async function unlinkedDecision() {
+    const test = await fixture({ wrongDecision: true });
+    await expect(test.confirm()).rejects.toThrow('Release unavailable');
+  });
+
+it('refuses a Block saved after the owner approved', async function blockedTool() {
+  const test = await fixture();
+  const blocked = envelope('test', `mcp-${test.serverId}`, 'mcp.tool_mode_set', {
+    serverId: test.serverId, connectionId: 'installed', toolName: 'read',
+    toolRevision: test.release.toolRevision, mode: 'block', setBy: 'admin',
+  });
+  await nats.seed([blocked]);
+  await expect(test.confirm()).rejects.toThrow('Release unavailable');
+});
+
+it('refuses an expired owner Ask without calling the recorded upstream',
+  async function expiredAsk() {
+    const test = await fixture();
+    const calls: string[] = [];
+    async function dispatch() {
+      await routineCompanyAskFacts(nats.store, 'test', test.release,
+        performance.now() + 10_000);
+      calls.push(test.requestId);
+    }
+    const clock = vi.spyOn(Date, 'now');
+    clock.mockReturnValue(test.release.issuedAt + 900_001);
+    try {
+      await expect(dispatch()).rejects.toThrow('Release unavailable');
+      expect(calls).toHaveLength(0);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+it('reads a waiting Ask without saving a decision or calling upstream',
+  async function waitingRead() {
+    const test = await fixture({ approvalState: 'requested' });
+    const before = await nats.store.head(`approval-${test.approvalId}`);
+    await expect(routineCompanyAskFacts(nats.store, 'test', test.release,
+      performance.now() + 10_000)).rejects.toThrow('Release unavailable');
+    expect(await nats.store.head(`approval-${test.approvalId}`)).toBe(before);
     expect(await nats.store.head(`credential-${test.requestId}`)).toBe(0);
   });
 
