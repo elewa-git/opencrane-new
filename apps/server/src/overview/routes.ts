@@ -38,20 +38,27 @@ function peopleRow(record: { member_id: string; status: string }): OverviewRow |
     'needs_input', null, 0, 'view_invitation_links', '/org/people');
 }
 
-function providerRow(record: { state: SavedProvider }): OverviewRow {
-  const provider = record.state;
+function latestProviderFact(provider: SavedProvider) {
   let latest = provider.reachable;
   if (provider.modelAnswer && (!latest || provider.modelAnswer.time >= latest.time)) {
     latest = provider.modelAnswer;
   }
-  let priority: OverviewPriority = 'needs_input';
-  if (latest?.outcome === 'pass' && latest.revision === provider.revision) priority = 'ready';
-  if (latest?.outcome === 'fail' || latest?.outcome === 'budget_refused') {
-    priority = 'failure';
-  }
-  if (latest?.outcome === 'unknown' || latest?.outcome === 'outcome_unknown') {
-    priority = 'unknown';
-  }
+  return latest;
+}
+
+function providerPriority(provider: SavedProvider,
+  fact: ReturnType<typeof latestProviderFact>): OverviewPriority {
+  if (!fact) return 'needs_input';
+  if (fact.outcome === 'unknown' || fact.outcome === 'outcome_unknown') return 'unknown';
+  if (fact.outcome === 'fail' || fact.outcome === 'budget_refused') return 'failure';
+  if (fact.outcome === 'pass' && fact.revision === provider.revision) return 'ready';
+  return 'needs_input';
+}
+
+function providerRow(record: { state: SavedProvider }): OverviewRow {
+  const provider = record.state;
+  const latest = latestProviderFact(provider);
+  const priority = providerPriority(provider, latest);
   return overviewRow('providers', provider.providerId,
     latest?.changeId ?? `provider:${provider.providerId}`, priority,
     latest?.time ?? null, provider.revision, 'view_evidence',

@@ -78,15 +78,7 @@ function encodeCursor(row: OverviewRow, snapshot: string): string {
   return Buffer.from(JSON.stringify(key)).toString('base64url');
 }
 
-export function buildOverview(sources: OverviewSource[], requestedLimit?: number,
-  cursor?: string | null) {
-  const limit = requestedLimit ?? 20;
-  if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
-    throw new Error('Invalid overview limit');
-  }
-  const snapshot = sourceFingerprint(sources);
-  const after = decodeCursor(cursor);
-  if (after && after.snapshot !== snapshot) throw new Error('Invalid overview cursor');
+function deduplicatedRows(sources: OverviewSource[]): OverviewRow[] {
   const byRecord = new Map<string, OverviewRow>();
   for (const source of sources) {
     for (const row of source.rows) {
@@ -96,19 +88,42 @@ export function buildOverview(sources: OverviewSource[], requestedLimit?: number
   }
   const sorted = [...byRecord.values()];
   sorted.sort(compareRows);
+  return sorted;
+}
+
+function rowsAfterCursor(sorted: OverviewRow[], after: OverviewRow | undefined) {
   const remaining: OverviewRow[] = [];
   for (const row of sorted) {
-    if (!after || compareRows(row, after.row) > 0) remaining.push(row);
+    if (!after || compareRows(row, after) > 0) remaining.push(row);
   }
-  const rows = remaining.slice(0, limit);
-  const next = remaining.length > limit ? encodeCursor(rows[rows.length - 1]!, snapshot) : null;
+  return remaining;
+}
+
+function sourceProgress(sources: OverviewSource[]) {
   let allCurrent = true;
-  const sourceStatus = [];
+  const statuses = [];
   for (const source of sources) {
     if (source.status !== 'current') allCurrent = false;
-    sourceStatus.push({ name: source.name, status: source.status,
+    statuses.push({ name: source.name, status: source.status,
       checkpoint: source.checkpoint, checkedAt: source.checkedAt });
   }
-  const allClear = allCurrent && sorted.length === 0;
-  return { rows, next, allClear, sources: sourceStatus };
+  return { allCurrent, statuses };
+}
+
+export function buildOverview(sources: OverviewSource[], requestedLimit?: number,
+  cursor?: string | null) {
+  const limit = requestedLimit ?? 20;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+    throw new Error('Invalid overview limit');
+  }
+  const snapshot = sourceFingerprint(sources);
+  const after = decodeCursor(cursor);
+  if (after && after.snapshot !== snapshot) throw new Error('Invalid overview cursor');
+  const sorted = deduplicatedRows(sources);
+  const remaining = rowsAfterCursor(sorted, after?.row);
+  const rows = remaining.slice(0, limit);
+  const next = remaining.length > limit ? encodeCursor(rows[rows.length - 1]!, snapshot) : null;
+  const progress = sourceProgress(sources);
+  const allClear = progress.allCurrent && sorted.length === 0;
+  return { rows, next, allClear, sources: progress.statuses };
 }
