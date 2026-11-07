@@ -1,6 +1,6 @@
 # Onboarding
 
-This folder saves a member's welcome survey and lets them continue it after reloading the website. Answers stay private and encrypted, and completing a step does not start an assistant or spend money.
+This folder saves a member's welcome survey and persona revisions. Reloading restores both. Private answers and persona text are encrypted. Saving does not start an assistant or spend money.
 
 ## What it is responsible for
 
@@ -10,16 +10,24 @@ This folder saves a member's welcome survey and lets them continue it after relo
 - Restarts the survey without deleting its encrypted history.
 - Checks membership of groups selected in the survey.
 - Returns the original saved confirmation when a reply is lost.
+- Builds the same first persona from the same saved answers and keeps every edited version.
+- Lists revision dates and opens one version for its member after an access check.
 
-Reads check current membership after loading, before opening private answers. Writes finish history loading before the short access check. Each accepted request saves one record. Changed retries and competing edits are refused; an uncertain save stays unknown until its original result can be read. These requests use the member's personal encryption keys rather than conversation keys.
+Reads check current membership after loading, before opening private answers.
+Opening a persona revision loads that version before checking membership. Writes
+finish history loading before the short access check. Each accepted request saves
+one record. Changed retries and competing edits are refused; an uncertain save
+stays unknown until its original result can be read. These requests use the
+member's personal encryption keys rather than conversation keys.
 
 ## Main files
 
 | File | What it does |
 | --- | --- |
-| [routes.ts](routes.ts) | Serves progress, step saves, restarts and original change results. |
-| [commands.ts](commands.ts) | Checks step order, selected groups and repeated requests before saving. |
-| [history.ts](history.ts) | Reads survey history and opens authorised encrypted answers. |
+| [routes.ts](routes.ts) | Serves progress, saves, revision reads and original change results. |
+| [commands.ts](commands.ts) | Checks step order, revision versions and repeated requests before saving. |
+| [history.ts](history.ts) | Reads saved history and opens authorised encrypted answers. |
+| [persona.ts](persona.ts) | Builds the first persona from saved survey answers. |
 
 ## How it connects
 

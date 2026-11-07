@@ -38,7 +38,7 @@ PostgreSQL, the database for the read tables.
 ```mermaid
 flowchart LR
   models["libs/models<br/>model and replay tests"] -.->|uses database locks and the test helper| projections
-  ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and checks saved changes| projections["libs/projections<br/>read tables, change history, routines, memory and surveys"]
+  ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and checks saved changes| projections["libs/projections<br/>read tables, change history, routines, memory, surveys and personas"]
   server["apps/server<br/>back end"] -->|reads tables, own and admin routine lists, run pages and spending choices| pg["PostgreSQL<br/>database"]
   projections -->|saves admission, removal, role, ownership, control and spending history; keeps private audits outside feeds; saves routines and receipts| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections
@@ -246,7 +246,10 @@ The HTTP forget command is not built yet.
 A saved survey event arrives. The worker checks the hash of its encrypted bytes, then keeps the answers, hash
 and saved date.
 Editing an earlier step clears later current answers; replay restores the same progress
-without reading or creating a key. Survey routes and saves are not exposed yet.
+without reading or creating a key. The server serves authorised survey progress.
+
+A saved persona revision adds an encrypted, immutable version and updates the
+current revision number. Rebuilding restores both without opening text or creating keys.
 
 A Member or Admin role change that reaches an Owner keeps the owner role. The worker
 records its position and continues with later events.

@@ -459,7 +459,8 @@ caller clock and fixed expected hashes. Changing the process clock changes no re
 
 ## Private survey contracts
 
-`onboarding.survey_step_saved` and `onboarding.survey_restarted` use `personal-<memberId>`
+`onboarding.survey_step_saved`, `onboarding.survey_restarted` and
+`onboarding.persona_revised` use `personal-<memberId>`
 (wire `ev.personal.<memberId>`). Strict version-1 schemas require the matching human
 principal, command id and `opencrane-server` source. The full event limit is 16,384 bytes.
 Saved steps require `ciphertextDigest`: lower-case 64-hex SHA-256 of the base64-decoded
@@ -468,7 +469,11 @@ without keys and refuses missing, malformed or mismatched values. `keyId` is unc
 `surveyAnswersSchema` checks four typed steps, UTF-8 text up to 4,096 bytes,
 name/pronouns up to 200/100 characters, 16 distinct groups/tasks and the fixed style/task ids.
 It refuses controls and lone surrogates through the existing memory text check.
-Survey text stays data; no command or route is enabled. See the
+Persona revisions carry the next positive revision number, survey generation,
+`persona-v1` renderer version, generate/replace mode, `encrypted` bytes,
+`encryptedDigest` and `keyRef`. Their digest check hashes the encrypted bytes.
+The whole replacement must fit 4,096 UTF-8 bytes.
+Survey and persona text stay data. See the
 [accepted design](../../docs/specs/phase-4/p4-18-account-persona-welcome.md).
 
 ## Exact tool review

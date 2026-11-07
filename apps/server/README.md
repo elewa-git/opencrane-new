@@ -182,7 +182,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|sign-out, requests, Office uploads, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|sign-out, requests, Office uploads, survey and persona reads, Memory setup reads, own and admin routine lists, approval replies, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks saved membership before personal memory tools and history errors; prepares allowances; checks routine admission; applies Stop, Pause and Retire; verifies termination and admin authority; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
   server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, routine sessions, inputs, cancellations, checked finishes and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
@@ -313,7 +313,7 @@ can be used now is checked separately. Missing evidence never means it is safe t
 | [members](src/members/README.md) | Manages invitations, membership, groups, roles and ownership. |
 | [memory](src/memory/README.md) | Reads, saves, corrects and forgets permitted remembered facts. |
 | [models](src/models/README.md) | Manages access to AI models for people, groups and assistants. |
-| [onboarding](src/onboarding/README.md) | Saves and resumes a member's private welcome survey. |
+| [onboarding](src/onboarding/README.md) | Saves the private welcome survey and persona revisions. |
 | [providers](src/providers/README.md) | Connects model providers and manages keys, checks and provider choices. |
 
 The server checks files the assistant creates through the same type checks, virus
@@ -588,6 +588,8 @@ night. It shows the next 02:00 UTC boundary for waiting facts.
 11. **A member continues the welcome survey.** The server checks their current
     membership and saves one step. Reloading returns confirmed answers. Editing
     an earlier answer clears later current steps. Restarting keeps encrypted history.
+    The member can save a persona from complete answers, edit it and read older versions.
+    Each version stays encrypted until an authorised detail read.
 12. **A person opens their conversation list.** The server returns a small page ordered
     by activity they can see. Recent and Archived follow the person's saved choice.
     Search checks only visible titles. Continuations refer only to visible chats.

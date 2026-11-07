@@ -618,6 +618,13 @@ Edits invalidate later current answers; restart requires the next generation.
 `ProjectionRunner.rebuild(personalSettings)` restores the same progress offline with
 readers/workers stopped. It needs no keys and performs no outside actions.
 
+`onboarding.persona_revised` requires four current steps, the current survey
+generation and the next revision number. `personal_settings.survey` holds the
+current candidate's number and event id. `persona_revisions` keeps encrypted records by
+`(silo, member_id, revision)` and never updates an earlier row. Editing survey
+answers or restarting clears the candidate but preserves the count and history.
+Rebuild reads event bytes only; it cannot prepare a key, call a model or wake a computer.
+
 ## Exact tool review
 
 Discovery always sets `reviewed: false`. Only `mcp.server_reviewed` can mark review.

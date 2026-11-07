@@ -85,7 +85,8 @@ export { budgetExhaustedDataSchema, budgetStopReasonSchema } from './data.ts';
 export { budgetCallDispatchAdmittedDataSchema } from './data.ts';
 export { takeoverRefusedDataSchema, takeoverRequestedDataSchema, takeoverPausingDataSchema,
   takeoverPausedDataSchema, takeoverFailedDataSchema } from './takeover.ts';
-export { surveyAnswersSchema, surveyStepSavedDataSchema, surveyRestartedDataSchema }
+export { surveyAnswersSchema, surveyStepSavedDataSchema, surveyRestartedDataSchema,
+  personaRevisedDataSchema }
   from './survey.ts';
 export { routineDefinitionSchema, routineRecordIdentitySchema, routineMissedSchema,
   routineControlSchema, routineStopSchema, routineActivationSchema }
