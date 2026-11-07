@@ -1,5 +1,21 @@
 # Server
 
+## Closed chat private process recovery
+
+`src/chat/close-cleanup.ts` keeps an admitted restricted turn pending while its
+original computer is ready and no `agent.private_exited` record exists. A saved
+terminal or Stop send alone cannot complete this check. The bridge checks a saved
+computer binding when one exists. It also accepts an exit that overtakes the separate
+start save, but cleanup requires the later restricted start before using that exit.
+Cleanup also checks the report's computer id against the original turn start.
+The report has no reply text or credential. Loss or replacement of the original
+computer generation is separate evidence that the old process cannot keep running.
+The event stays out of the public conversation feed. A fresh watcher reads these
+saved records and repairs missing turn endings through the existing commands.
+
+`test/bridge-control.test.ts` covers the pending and saved-exit states with event
+store fixtures. The public close route remains disabled.
+
 For people, read [README.md](README.md) first.
 
 ## Assistant service wait signal

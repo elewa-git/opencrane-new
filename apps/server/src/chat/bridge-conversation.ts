@@ -145,6 +145,7 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
   let current: ChatRows[number]['event'] | undefined;
   const closed = new Set<string>();
   const started = new Set<string>();
+  const privateStarted = new Set<string>();
   const lostTurns = new Set<string>();
   const turnComputers = new Map<string, string>();
   const closedStatuses = new Map<string, 'completed' | 'failed'>();
@@ -172,6 +173,8 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
       const turnId = turnIdData.parse(row.event.data).turnId;
       computerStartHead = row.sequence;
       started.add(turnId);
+      const mode = z.object({ executionMode: z.string().optional() }).parse(row.event.data);
+      if (mode.executionMode === 'restricted') privateStarted.add(turnId);
       running.add(turnId);
       turnComputers.set(turnId, computerData.parse(row.event.data).computerId);
     }
@@ -180,7 +183,8 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
       running.clear();
     }
   }
-  return { current, kind, closed, started, lostTurns, turnComputers, closedStatuses,
+  return { current, kind, closed, started, privateStarted, lostTurns,
+    turnComputers, closedStatuses,
     computerStartHead, controlPending };
 }
 
@@ -238,7 +242,8 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   if (!assistant.kind) return { pending: waitingWork, retry: waitingWork };
   const computer = computerData.parse(current.data);
   await recoverTerminalTurns(options, computer.computerId, conversation.assistantId,
-    conversation.conversationId, rows, assistant.closed);
+    conversation.conversationId, rows, assistant.closed, assistant.started,
+    assistant.turnComputers, assistant.lostTurns, assistant.privateStarted);
   const allUploads = conversationUploads(rows, assistant.kind);
   const uploads = pendingUploads(rows, allUploads, computer.computerId);
   const pendingDeliveries = uploads.length + stops.length;

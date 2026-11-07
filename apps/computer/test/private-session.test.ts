@@ -17,10 +17,12 @@ type Computer = Awaited<ReturnType<typeof fixture>>;
 type Cancellation = 'Stop' | 'disconnect' | 'socket close';
 const launchKey = 'a'.repeat(64);
 
-async function pendingConnections() {
+async function pendingConnections(holdExit = false, pauseAcknowledgements = true,
+  heldConnections = 2) {
   const directory = mkdtempSync(`${tmpdir()}/private-connect-`);
   const socketPath = `${directory}/native.sock`;
   const sockets: net.Socket[] = [];
+  const nativeSockets: net.Socket[] = [];
   let nextThread = 0;
   async function nativeSession(socket: net.Socket) {
     await acceptPrivateLaunch(socket, launchKey);
@@ -33,6 +35,9 @@ async function pendingConnections() {
         const id = `native-${++nextThread}`;
         result = { thread: { id, ephemeral: true, path: null, environments: [] } };
       }
+      if (message['method'] === 'turn/start') {
+        result = { turn: { id: 'native-turn' } };
+      }
       const response = { id: message['id'], result };
       socket.write(JSON.stringify(response) + '\n');
     }
@@ -40,10 +45,15 @@ async function pendingConnections() {
     socket.resume();
   }
   function connected(socket: net.Socket) {
+    nativeSockets.push(socket);
+    function inputEnded() {
+      if (!holdExit) socket.end();
+    }
+    socket.on('end', inputEnded);
     function failed() { socket.destroy(); }
     void nativeSession(socket).catch(failed);
   }
-  const server = net.createServer(connected);
+  const server = net.createServer({ allowHalfOpen: true }, connected);
   server.listen(socketPath);
   await once(server, 'listening');
   const options = { callerPath: `${directory}/caller`,
@@ -52,9 +62,13 @@ async function pendingConnections() {
   const nativeNet = await vi.importActual<typeof net>('node:net');
   const connect = nativeNet.connect;
   function connectPrivate(...args: Parameters<typeof net.connect>) {
-    if (args[0] !== '/run/executor/private.sock') return connect(...args);
+    const options: unknown = args[0];
+    if (typeof options !== 'object' || options === null || !('path' in options)
+      || options.path !== '/run/executor/private.sock') return connect(...args);
     // Hold only the first two connections before the operating system can connect them.
-    const socket = sockets.length < 2 ? new net.Socket() : connect(socketPath);
+    const socket = sockets.length < heldConnections
+      ? new net.Socket({ allowHalfOpen: true })
+      : connect({ path: socketPath, allowHalfOpen: true });
     sockets.push(socket);
     return socket;
   }
@@ -77,18 +91,19 @@ async function pendingConnections() {
     rmSync(directory, { recursive: true, force: true });
     throw error;
   }
-  computer.pauseAcks();
+  if (pauseAcknowledgements) computer.pauseAcks();
   async function close() {
     connection.mockRestore();
     await computer.close();
     for (const socket of sockets) socket.destroy();
+    for (const socket of nativeSockets) socket.destroy();
     await runtimeProxy.close();
     const closed = once(server, 'close');
     server.close();
     await closed;
     rmSync(directory, { recursive: true, force: true });
   }
-  return { computer, sockets, close };
+  return { computer, sockets, nativeSockets, close };
 }
 
 function stop(socket: WebSocket, turnId: string, conversationId: string) {
@@ -191,3 +206,36 @@ async function releasesCancelledConnections(cause: Cancellation) {
 it.each(['Stop', 'disconnect', 'socket close'] as const)(
   'restores both private slots and bridge quiet after %s before connect',
   releasesCancelledConnections);
+
+async function waitsForSupervisorExit() {
+  const test = await pendingConnections(true, false, 0);
+  try {
+    const computer = test.computer;
+    computer.start('first', 'restricted');
+    function started() {
+      expect(test.nativeSockets).toHaveLength(1);
+      expect(computer.frames.some(isStart)).toBe(true);
+    }
+    await vi.waitFor(started);
+    stop(computer.socket, 'first', 'first');
+    function inputEnded() {
+      expect(test.nativeSockets[0]?.readableEnded).toBe(true);
+    }
+    await vi.waitFor(inputEnded);
+    function isExit(frame: Record<string, unknown>) {
+      return frame['type'] === 'agent.private_exited';
+    }
+    expect(computer.frames.filter(isExit)).toEqual([]);
+
+    test.nativeSockets[0]!.end();
+    function exited() {
+      expect(computer.frames.filter(isExit)).toMatchObject([
+        { conversationId: 'first', turnId: 'first' },
+      ]);
+    }
+    await vi.waitFor(exited);
+  } finally {
+    await test.close();
+  }
+}
+it('waits for the supervisor side to end before reporting private exit', waitsForSupervisorExit);

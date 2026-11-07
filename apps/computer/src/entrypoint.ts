@@ -59,11 +59,13 @@ function supervisePrivateChild(child: ChildProcess, socket: Socket, privateHome:
   let timer: NodeJS.Timeout | undefined;
   let killAttempts = 0;
   function childExited() {
+    if (exited) return;
     exited = true;
     if (timer) clearTimeout(timer);
     children.delete(child);
-    socket.destroy();
     rmSync(privateHome, { recursive: true, force: true });
+    // End the supervisor side only after the child and its private home are gone.
+    socket.end();
   }
   function killFailed() {
     if (exited) return;
@@ -103,6 +105,7 @@ function supervisePrivateChild(child: ChildProcess, socket: Socket, privateHome:
   child.on('exit', childExited);
   child.stdin?.on('error', socketFailed);
   socket.on('error', socketFailed);
+  socket.on('end', socketClosed);
   socket.on('close', socketClosed);
 }
 
@@ -227,7 +230,7 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
     function refused() { socket.destroy(); }
     void acceptPrivateLaunch(socket, launchKey).then(launch, refused);
   }
-  createServer(privateConnection).listen('/run/executor/private.sock');
+  createServer({ allowHalfOpen: true }, privateConnection).listen('/run/executor/private.sock');
   executor(['host']).listen('/run/executor/host.sock', () => {
     executor([]).listen('/run/executor/exec.sock', () => {
       process.umask(0o077);

@@ -27,9 +27,11 @@ function matchesPrivateThread(method: string, params: Record<string, unknown>, t
 }
 
 function privateSocket(signal: AbortSignal, expires: number, revoke: () => void) {
-  const socket = connect('/run/executor/private.sock');
+  const socket = connect({ path: '/run/executor/private.sock', allowHalfOpen: true });
   const connecting = new AbortController();
   let ended = false;
+  // Only the supervisor ends its writing side after the child exits and its home is removed.
+  const exited = Promise.withResolvers<void>();
   const expiry = setTimeout(close, expires - Date.now());
   function close() {
     if (ended) return;
@@ -37,19 +39,23 @@ function privateSocket(signal: AbortSignal, expires: number, revoke: () => void)
     revoke();
     clearTimeout(expiry);
     signal.removeEventListener('abort', close);
-    socket.off('close', close);
     // Settle startup even when Stop closes the socket without an error.
     connecting.abort();
-    socket.destroy();
+    socket.end();
+  }
+  function supervisorExited() {
+    exited.resolve();
+    close();
   }
   signal.addEventListener('abort', close, { once: true });
+  socket.once('end', supervisorExited);
   socket.once('close', close);
   function closedPromise(resolve: () => void) { socket.once('close', resolve); }
   const closed = new Promise<void>(closedPromise);
   const connectOptions = { signal: connecting.signal };
   const connected = once(socket, 'connect', connectOptions);
   socket.on('error', close);
-  return { socket, close, closed, connected };
+  return { socket, close, closed, exited: exited.promise, connected };
 }
 
 export async function openPrivateSession(options: SessionOptions) {
@@ -61,7 +67,7 @@ export async function openPrivateSession(options: SessionOptions) {
     generation, inputGeneration: 1, expires: launch.expires };
   const registration = runtimeProxy.privateCaller(binding);
   const pending = privateSocket(launch.abort.signal, binding.expires, registration.close);
-  const { socket, close, closed } = pending;
+  const { socket, close, closed, exited } = pending;
   let threadId: string | undefined;
   function dispatchPrivateMessage(message: Record<string, unknown>) {
     if (answerPrivateRequest(message)) return;
@@ -120,5 +126,5 @@ export async function openPrivateSession(options: SessionOptions) {
   const authority = runtimeProxy.privateAuthority;
   const recallOwner = authority ? { ...binding, registration, caller: registration.caller,
     authority } : undefined;
-  return { rpc, close, closed, recallOwner };
+  return { rpc, close, closed, exited, recallOwner };
 }

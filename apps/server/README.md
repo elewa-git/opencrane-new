@@ -21,6 +21,9 @@ Live private tool delivery remains disabled.
 The server checks who is asking and what they may do, saves each change in the
 [event log](../../GLOSSARY.md#event-log-event-store), and passes chat work to each
 assistant's [computer](../../GLOSSARY.md#computer).
+For a closed chat, it retries Stop for admitted work. A private turn stays pending
+until its process exit is saved or its computer is known lost. Other chats on the
+same computer can continue.
 A second program here, the [models process](../../GLOSSARY.md#models-process), checks
 AI calls against spending limits and tool rules.
 For an activated side conversation, the computer prepares the first restricted turn.
@@ -195,7 +198,7 @@ flowchart LR
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, history, current accounting and exact membership receipts| postgres
   server -->|waits briefly for Forget locks| postgres
-  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, routine Stops after deactivation or failed evidence reads, memory Stops after confirmed loss, reply removal receipts after completion, checked reports and publication files| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, routine Stops after deactivation or failed evidence reads, memory Stops after confirmed loss, private exit reports, reply removal receipts after completion, checked reports and publication files| computer["apps/computer<br/>assistant computers"]
   server -->|checks an activated child start and its root allowance| runtime
   computer -.->|records private thread for memory discovery| server
   server -.->|prepares up to four private memory tools| computer

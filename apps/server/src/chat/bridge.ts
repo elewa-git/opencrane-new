@@ -28,6 +28,7 @@ import { turnCommand } from './turns.ts';
 import { chatHistory } from './commands.ts';
 import { recordBridgeReports, canCombineReports, ReportRejected, turnStatus } from './reports.ts';
 import { bridgeApprovals } from './bridge-approvals.ts';
+import { isRoutineStartReport, needsPrivateExit } from './bridge-report-kind.ts';
 import { resumeBridgeReports } from './bridge-resume.ts';
 import type { ChatOptions } from './routes.ts';
 
@@ -86,6 +87,8 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
   const childStage = await checkedReportStage(options, report);
   const result = await recordBridgeReports(options.store, options.keys, context, batch.values);
   await options.output.release(report.sequence, result === 'recorded');
+  // Keep computer suspend protection until the private process is confirmed gone.
+  const waitForPrivateExit = needsPrivateExit(report);
   const acknowledgement: {
     type: string; sequence: number; token?: string; expiresAt?: number;
     model?: string; refused?: string; retryable?: boolean;
@@ -96,7 +99,7 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
     initialReleased = true;
     sendAcknowledgement(socket, batch.sequences, reply);
   }
-  if (report.type.startsWith('agent.turn_')) {
+  if (report.type.startsWith('agent.turn_') && !waitForPrivateExit) {
     const status = turnStatus(report.type);
     const binding = await admitBridgeTurn(options, input, context, report, status,
       result === 'duplicate', childStage, tokens, acknowledgement);
@@ -112,7 +115,8 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
       options.routines.ended(report.turnId);
     }
   }
-  if (report.type === 'agent.turn_started' && report.senderAttemptId !== undefined) {
+  if (waitForPrivateExit) options.routines.ended(report.turnId);
+  if (isRoutineStartReport(report)) {
     await routineDelivery(acknowledgement, result === 'duplicate', batch.sequences);
   } else if (!initialReleased) {
     sendAcknowledgement(socket, batch.sequences, acknowledgement);
