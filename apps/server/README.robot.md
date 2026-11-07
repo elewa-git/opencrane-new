@@ -4778,8 +4778,17 @@ actor restart, projection replay and held delivery after allocation.
 `test/child-root-preparation.test.ts` covers two saved model prices, ignored caller
 model overrides, invalid computers and threads, paused or missing choices, preparation
 changes while queued and during real transport retries, and slow history loading.
-This is the server preparation part of #90, P4-8 PR 7h. First-start hand-off, native
-wiring and fresh-install qualification remain unfinished.
+The checked first-start command below uses this preparation. Native delivery and
+fresh-install qualification remain unfinished.
+
+### Checked first child start
+
+`chat/child-start.ts` takes a saved activation, its exact first input and the computer's
+prepared thread. It rechecks access, provider choice, computer generation and current
+root cents before calling the existing turn command. A new start records one computer
+turn; retries return the same root and turn. A lost reply does not send again. Parent and
+child histories load before the final two-second access check. Only small access streams
+are watched there. The command is internal; the bridge still holds child delivery.
 
 ## Bounded call spending
 

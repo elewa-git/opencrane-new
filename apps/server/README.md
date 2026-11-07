@@ -420,6 +420,8 @@ A worker cannot save a start failure after another worker has activated the chil
 These children stay queued;
 they cannot start assistant work yet. Retry replies check current access before reporting
 that the parent chat is closed.
+The server has a checked start command for an activated child's saved first input.
+It keeps one root and one computer turn across retries. Delivery is still queued.
 
 Owners and admins can read whether a saved publication is Applying, Ready, Disabled
 or Unknown. Ready requires matching saved gateway and server receipts. Checking a
