@@ -82,6 +82,7 @@ async function tombstones(test: Backend) {
 
 async function forgetsLoadedTarget() {
   const test = await forgetFixture();
+  memoryClock();
   const response = await test.native.call(threadId, 'forget', test.args);
   const rows = await tombstones(test);
   expect(rows).toHaveLength(1);
@@ -118,6 +119,7 @@ it('forgets the loaded target and refuses old input while a fresh turn sees no f
 
 async function recoversForgetReceipt(lost: boolean) {
   const test = await forgetFixture();
+  memoryClock();
   const append = test.setup.nats.store.append.bind(test.setup.nats.store);
   let attempts = 0;
   async function loseReply(command: Parameters<typeof append>[0]) {

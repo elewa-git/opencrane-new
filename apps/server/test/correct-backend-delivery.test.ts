@@ -471,7 +471,7 @@ async function releasesOnlyCurrentOutput(correct: boolean) {
     conversationId: 'chat', turnId: test.turnId, threadId, generation: 1,
     inputGeneration: evidence.inputGeneration, text };
   if (correct) {
-    const response = await test.native.call(threadId, 'correct', test.args);
+    const response = await acknowledgedCorrection(test, false);
     const expected = { result: { structuredContent: { outcome: 'accepted' } } };
     expect(response).toMatchObject(expected);
   }
