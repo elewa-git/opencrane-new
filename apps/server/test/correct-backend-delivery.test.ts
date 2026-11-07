@@ -67,8 +67,6 @@ async function correctsLoadedTarget(expired = false) {
   const test = await correctionFixture();
   const other = await test.admit('other-chat', 'returned-native-2');
   await other.start();
-  // Test receipt contents without host delays; separate cases advance time to require expiry.
-  memoryClock();
   const response = await acknowledgedCorrection(test, expired);
   const rows = await corrections(test);
   expect(rows).toHaveLength(1);
@@ -133,6 +131,7 @@ async function acknowledgedCorrection(test: Awaited<ReturnType<typeof correction
     if (expired) {
       // Hold the saved reply past the original deadline using real elapsed time.
       await delay(Math.max(0, deadline - performance.now()) + 50);
+      expect(performance.now()).toBeGreaterThan(deadline);
     }
   } finally {
     release.resolve();
