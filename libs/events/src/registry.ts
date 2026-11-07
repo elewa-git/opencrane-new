@@ -8,6 +8,7 @@ import {
   mcpConfigurationObservationEvent,
 } from './gateway-configuration.ts';
 import { memoryContextEvent } from './memory-context.ts';
+import { privateReportEvents } from './private-reports.ts';
 import { surveyEvents } from './survey.ts';
 import { routineEvents, modernRoutineExamples } from './routine-events.ts';
 import * as routines from './routines.ts';
@@ -251,13 +252,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     data.agentTurnFailedDataSchema,
     { conversationId: 'conv_1', turnId: 'turn_1', reason: 'model_error' },
   ),
-  event(
-    'agent.output_lost',
-    'conversation',
-    'Part of a private reply was lost when the computer restarted before the server stored it',
-    data.agentOutputLostDataSchema,
-    { conversationId: 'conv_1', turnId: 'turn_1' },
-  ),
+  ...privateReportEvents,
   event(
     'agent.reasoning_summarised',
     'conversation',

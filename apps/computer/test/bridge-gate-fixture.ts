@@ -69,7 +69,8 @@ export async function fixture(savedKey = true, privateLifetime?: Promise<void>,
     const lifetime = Promise.withResolvers<void>();
     privateExit = lifetime.resolve;
     return Promise.resolve({ rpc, close: lifetime.resolve,
-      closed: privateLifetime ?? lifetime.promise });
+      closed: privateLifetime ?? lifetime.promise,
+      exited: privateLifetime ?? lifetime.promise });
   }
   const driver: TurnDriver = { rpc, grant, catalogue, dropCatalogue, credential,
     privateSession: openPrivateSession ?? privateSession,

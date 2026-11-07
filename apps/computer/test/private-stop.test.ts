@@ -107,11 +107,16 @@ async function clearsQueuedReplies() {
       test.send({ type: 'ack', sequence: report['sequence'] });
     }
     await test.flush();
-    expect(test.frames).toHaveLength(28);
-    for (const report of test.frames) {
+    function isLost(frame: Record<string, unknown>) {
+      return frame['type'] === 'agent.output_lost';
+    }
+    const lost = test.frames.filter(isLost);
+    expect(lost).toHaveLength(28);
+    for (const report of lost) {
       expect(report).toMatchObject({ type: 'agent.output_lost', turnId: 'first' });
       expect(report).not.toHaveProperty('text');
     }
+    expect(JSON.stringify(test.frames)).not.toContain('queued-private-reply');
   } finally {
     await test.close();
   }
@@ -143,7 +148,11 @@ async function clearsFinishedReply() {
     restored.load();
     const coldReports = restored.reports.map(wireReport);
     expect(JSON.stringify(coldReports)).not.toContain('finished-private-reply');
-    expect(coldReports.at(-1)?.type).toBe('agent.turn_completed');
+    function isCompletedReport(report: (typeof coldReports)[number]) {
+      return report.type === 'agent.turn_completed';
+    }
+    expect(coldReports.filter(isCompletedReport)).toHaveLength(1);
+    expect(coldReports.at(-1)?.type).toBe('agent.private_exited');
   } finally {
     await test.close();
   }
@@ -259,3 +268,49 @@ async function preservesLaterReplyInSameChat() {
 }
 it('keeps a later private reply in the same conversation when only the earlier turn is stopped',
   preservesLaterReplyInSameChat);
+
+async function reportsPrivateExitAfterStop() {
+  const exited = Promise.withResolvers<void>();
+  const otherExited = Promise.withResolvers<void>();
+  const test = await fixture();
+  const create = test.driver.privateSession!.bind(test.driver);
+  let sessions = 0;
+  async function privateSession() {
+    const session = await create();
+    sessions++;
+    const processExit = sessions === 1 ? exited.promise : otherExited.promise;
+    return { ...session, exited: processExit };
+  }
+  test.driver.privateSession = privateSession;
+  try {
+    await startPrivate(test, 'first', 'thread-1');
+    await startPrivate(test, 'second', 'thread-2', 'bob');
+    test.send({ type: 'stop', turnId: 'first', conversationId: 'first',
+      reason: 'conversation_closed' });
+    await test.flush();
+    function isExit(frame: Record<string, unknown>) {
+      return frame['type'] === 'agent.private_exited';
+    }
+    expect(test.frames.filter(isExit)).toEqual([]);
+
+    exited.resolve();
+    function oneExit() {
+      expect(test.frames.filter(isExit)).toMatchObject([
+        { conversationId: 'first', turnId: 'first' },
+      ]);
+    }
+    await vi.waitFor(oneExit);
+    expect(test.grants.has('thread-2')).toBe(true);
+    const before = test.frames.filter(isExit);
+    test.send({ type: 'stop', turnId: 'first', conversationId: 'first',
+      reason: 'conversation_closed' });
+    await test.flush();
+    expect(test.frames.filter(isExit)).toEqual(before);
+  } finally {
+    exited.resolve();
+    otherExited.resolve();
+    await test.close();
+  }
+}
+it('reports one private process exit after Stop without ending another session',
+  reportsPrivateExitAfterStop);

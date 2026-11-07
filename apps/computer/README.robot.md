@@ -1,5 +1,18 @@
 # Computer image — P2-1
 
+## Private process exit after Stop
+
+The private supervisor keeps the socket half open after the bridge closes its writing
+side. It closes its own writing side only after the child exits and its temporary home
+is removed. The bridge treats that end of stream as exit evidence. A socket error or
+local close gives no such evidence. The report journal saves one text-free
+`agent.private_exited` report for a started restricted turn, including across bridge
+reconnect. The report contains the original conversation and turn ids.
+
+`test/private-stop.test.ts` checks that a delayed exit produces one report and that
+another private session keeps running. `test/private-session.test.ts` exercises the
+local socket path. These are fixture checks, not a live process qualification.
+
 For people, read [README.md](README.md) first.
 
 Repository CI builds the upload test image in one fixture job. A public registry
