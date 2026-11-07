@@ -2,12 +2,12 @@ import { pendingRoutineStarts } from './routine-start.ts';
 import { recallBridge } from './recall-bridge.ts';
 import { privateOutput } from './private-output.ts';
 import { pullArtifact, type ArtifactPublication } from '../files/artifacts.ts';
-import { routineBridge, routineStartRefusal } from '../routine-bridge.ts';
+import { routineBridge } from '../routine-bridge.ts';
 import { memoryBridge } from '../memory/bridge.ts';
 import { releaseTurnCredentials, sendAcknowledgement } from './turn-credentials.ts';
 import { prepareRoutineThread } from './routine-thread.ts';
 import { executorStop } from '../computers/stop-executor.ts';
-import { childRequestHeld } from './child-hold.ts';
+import { admitBridgeTurn, checkedReportStage } from './bridge-turn-admission.ts';
 import { createHash } from 'node:crypto';
 import { fileDeliveredDataSchema, fileUploadedDataSchema } from '@opencrane/events';
 import { sendFile } from '../files/delivery.ts';
@@ -15,7 +15,7 @@ import { ownConversation, fileCommand } from '../files/commands.ts';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket, type RawData } from 'ws';
-import { readComputerControl, type tokenIssuer } from '@opencrane/auth';
+import { computerTokenAudience, readComputerControl, type tokenIssuer } from '@opencrane/auth';
 import type { WatchOptions, AgentSession } from './bridge-conversation.ts';
 import type { TurnDelivery } from './turn-tools.ts';
 import { assistantProcessor, groupSessions } from './bridge-poll.ts';
@@ -24,10 +24,7 @@ import { createLogger, type Logger } from '@opencrane/observability';
 import { z } from 'zod';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
 import { bridgeControl, readyBridgePass } from './bridge-control.ts';
-import { turnCommand, TurnAdmissionRejected,
-  BudgetAdmissionRejected } from './turns.ts';
-import { recordBudgetRefusal } from './budget-refusal.ts';
-import { readChatFacts } from './chat-summary.ts';
+import { turnCommand } from './turns.ts';
 import { chatHistory } from './commands.ts';
 import { recordBridgeReports, canCombineReports, ReportRejected, turnStatus } from './reports.ts';
 import { bridgeApprovals } from './bridge-approvals.ts';
@@ -36,6 +33,7 @@ import type { ChatOptions } from './routes.ts';
 
 type BridgeOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
   Partial<Pick<ChatOptions, 'binding' | 'db' | 'feed'>> & { keyDirectory?: string } &
+  { childStartUrl?: string } &
   Pick<Parameters<typeof bridgeControl>[0], 'stopExecution'>;
 type RoutineStart = NonNullable<Parameters<typeof turnCommand>[1]['routineStart']>;
 type ReportOptions = BridgeOptions & { routineStart: RoutineStart;
@@ -43,7 +41,8 @@ type ReportOptions = BridgeOptions & { routineStart: RoutineStart;
   recall: ReturnType<typeof recallBridge>;
   output: ReturnType<typeof privateOutput>; memory: ReturnType<typeof memoryBridge>;
   routines: ReturnType<typeof routineBridge> };
-type BridgeInput = { url: string; computerId: string; assistantId: string; bearer: string };
+type BridgeInput = { url: string; computerId: string; assistantId: string;
+  bearer: string; generation?: number };
 type ReportBatch = { values: unknown[]; sequences: number[]; textLength: number;
   bytes: number; started: boolean };
 type ReportQueue = { pending: Promise<void>; count: number; bytes: number;
@@ -84,11 +83,7 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
   // Otherwise a replay can fill the queue again before its saved position advances.
   const context = { ...input, ...options,
     readArtifact: pullArtifact.bind(undefined, socket), routineStart: options.routineStart };
-  if (report.type === 'agent.turn_started') {
-    const facts = await readChatFacts(options.store, options.silo,
-      report.conversationId, report.turnId);
-    if (await childRequestHeld(options, facts.created)) throw new ReportRejected('Child request queued');
-  }
+  const childStage = await checkedReportStage(options, report);
   const result = await recordBridgeReports(options.store, options.keys, context, batch.values);
   await options.output.release(report.sequence, result === 'recorded');
   const acknowledgement: {
@@ -102,22 +97,8 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
   }
   if (report.type.startsWith('agent.turn_')) {
     const status = turnStatus(report.type);
-    let binding;
-    try {
-      binding = await turnCommand(options.store, context,
-        { ...report, status, replay: result === 'duplicate' });
-    } catch (error) {
-      if (error instanceof BudgetAdmissionRejected) {
-        const refused = { silo: options.silo, assistantId: input.assistantId,
-          conversationId: report.conversationId, turnId: report.turnId, stopId: error.stopId };
-        await recordBudgetRefusal(options.store, refused);
-      }
-      if (error instanceof TurnAdmissionRejected) {
-        acknowledgement.refused = error.message;
-      } else {
-        acknowledgement.refused = routineStartRefusal(report, error);
-      }
-    }
+    const binding = await admitBridgeTurn(options, input, context, report, status,
+      result === 'duplicate', childStage, tokens, acknowledgement);
     if (status === 'started' && binding) {
       if (result !== 'duplicate') {
         await options.routines.accept(binding);
@@ -477,10 +458,12 @@ async function openBridge(options: WatchOptions, tokens: Tokens, kube: SandboxCl
   proxyUrl: string, computer: Pick<BridgeInput, 'computerId' | 'assistantId'>,
   refused: Set<string>, logger: Logger) {
   const token = await readyBridgePass(options, computer, tokens);
+  const claims = await tokens.verify(token.value, computerTokenAudience);
+  const generation = z.int().positive().parse(claims['generation']);
   await kube.credentials(computer.computerId, token, tokens.jwks.keys[0], true);
   const proxy = proxyUrl.replace('http:', 'ws:');
   const pod = `${proxy}/api/v1/namespaces/${kube.namespace}/pods/${computer.computerId}:8081`;
-  const input = { ...computer, bearer: token.value, url: `${pod}/proxy/bridge` };
+  const input = { ...computer, generation, bearer: token.value, url: `${pod}/proxy/bridge` };
   const stopExecution = executorStop(kube.kubeconfig, kube.namespace);
   const bridgeOptions = { ...options, stopExecution };
   const connected = await connectBridge(bridgeOptions, input, tokens);

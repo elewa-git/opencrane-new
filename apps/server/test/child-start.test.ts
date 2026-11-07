@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
-import { BudgetActor, budgets, rootTotals } from '@opencrane/models';
+import { BudgetActor, budgets, envelope, rootTotals, startDecision } from '@opencrane/models';
 import { conversations } from '@opencrane/projections';
 import { childRequestedDataSchema } from '@opencrane/events';
 import { history } from '@opencrane/models';
@@ -9,7 +9,7 @@ import { activateRequestedChild } from '../src/chat/child-activation.ts';
 import { allocateChildRoot } from '../src/chat/child-root.ts';
 import { addChildFirstInput, createRequestedChild, requestChild }
   from '../src/chat/child-requests.ts';
-import { startActivatedChild } from '../src/chat/child-start.ts';
+import { startActivatedChild, startRecordedChild } from '../src/chat/child-start.ts';
 import { summonFixture } from './support/child-summon.ts';
 
 let context: Awaited<ReturnType<typeof summonFixture>>;
@@ -167,6 +167,57 @@ async function stoppedBeforeStart() {
   expect(bridge.sent).toEqual([]);
 }
 it('does not send from a stopped root', stoppedBeforeStart);
+
+async function savedReportStart() {
+  const saved = await savedChild();
+  const subject = `conversation-${saved.data.childConversationId}`;
+  const report = envelope('test', subject, 'agent.turn_started', {
+    conversationId: saved.data.childConversationId, turnId: saved.data.firstInputId,
+    threadId: saved.selected.threadId, assistantId: 'helper',
+    executionMode: 'restricted', sharingClass: 'shared_only',
+  });
+  report.source = 'computer-bridge';
+  report.principal = { kind: 'agent', id: 'helper' };
+  report.report = { computerId: saved.selected.computerId,
+    sequence: 1, digest: 'a'.repeat(64) };
+  await context.nats.seed([report]);
+  const request = { conversationId: saved.data.childConversationId,
+    turnId: saved.data.firstInputId, assistantId: 'helper', ...saved.selected };
+  const admitted = await startRecordedChild(context.options, actor, request);
+  expect(admitted.rootId).toBeDefined();
+  const repeated = await startRecordedChild(context.options, actor, request);
+  expect(repeated.rootId).toBe(admitted.rootId);
+}
+it('recovers the start from a saved computer report', savedReportStart);
+
+async function signedDecisionRoute() {
+  const seen: unknown[] = [];
+  function requireLeader() { return Promise.resolve(); }
+  function childStart(value: unknown) {
+    seen.push(value);
+    return Promise.resolve({ accepted: true });
+  }
+  const dispatch = { routes: [], requireLeader, childStart };
+  const identity = { issuer: 'https://child.test/', jwks: context.tokens.jwks };
+  const decision = await startDecision(actor, identity, context.options.binding,
+    0, undefined, undefined, dispatch);
+  try {
+    const pass = await context.tokens.computer({ silo: 'test', computerId: selected.computerId,
+      assistantId: 'helper', generation: 1 });
+    const body = JSON.stringify({ conversationId: 'child', turnId: 'input', threadId: 'thread' });
+    const response = await fetch(`${decision.url}/child-start`, { method: 'POST',
+      headers: { authorization: `Bearer ${pass.value}` }, body });
+    expect(response.status).toBe(200);
+    expect(seen).toEqual([{ conversationId: 'child', turnId: 'input', threadId: 'thread',
+      assistantId: 'helper', computerId: selected.computerId, generation: 1 }]);
+    const refused = await fetch(`${decision.url}/child-start`, { method: 'POST', body });
+    expect(refused.status).toBe(503);
+    expect(seen).toHaveLength(1);
+  } finally {
+    await decision.close();
+  }
+}
+it('takes the computer identity from a signed pass', signedDecisionRoute);
 
 async function queuedForCapacity() {
   const saved = await savedChild();

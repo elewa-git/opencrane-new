@@ -18,7 +18,7 @@ import { groupMembership } from './paying-group.ts';
 import { configureBudget } from './budget-config.ts';
 import { respondBudgetRefusal } from './budget-scope.ts';
 import { approvalDecision, type ReviewKeys } from './approvals.ts';
-import { losslessJson } from '@opencrane/events/lossless-json';
+import { readBody } from './decision-request-body.ts';
 import { AuthorityRefused, authorityFence, decisionAuthorityFence, currentAuthority, authorityHistoryReader }
   from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
@@ -37,6 +37,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { once } from 'node:events';
 import type { JSONWebKeySet } from 'jose';
 import { computerCredentials, tokenVerifier, type tokenIssuer } from '@opencrane/auth';
+import { childStartRoute, type ChildStartHandler } from './decision-child-start.ts';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { StoredEvent } from '@opencrane/event-store';
@@ -46,19 +47,6 @@ import { requestReservationCents, ModelRequestRefused as RequestRefused, data, m
 const id = z.string().regex(/^[\w-]+$/u).max(200);
 const common = { silo: id, assistant: id, exp: z.int(), iat: z.int() };
 const computerSchema = z.object({ ...common, typ: z.literal('computer'), computer: id, generation: z.int().nonnegative() });
-async function readBody(req: IncomingMessage, allowEmpty = false) {
-  const chunks: Buffer[] = []; let length = 0;
-  for await (const chunk of req) {
-    const bytes: unknown = chunk;
-    if (!Buffer.isBuffer(bytes)) throw new Error('Invalid request');
-    length += bytes.length;
-    if (length > 1_048_576) throw new Error('Request too large');
-    chunks.push(bytes);
-  }
-  const text = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks));
-  if (text || !allowEmpty) losslessJson(text);
-  return text;
-}
 async function context(actor: BudgetActor, binding: Binding,
   computer: z.infer<typeof computerSchema>, turnToken: z.infer<typeof legacyTurnSchema>,
   liveSequence: number, resourceType: string, resourceId: string,
@@ -147,10 +135,12 @@ export async function startDecision(
   actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string;
     memory?: Pick<Awaited<ReturnType<typeof tokenIssuer>>, 'memoryContext'> },
   binding: Binding, port = 0, keys?: ReviewKeys, providers?: ProviderVerificationOptions,
-  dispatchOptions?: McpDispatchOptions, egress?: EgressRelayRegistry,
+  dispatchOptions?: McpDispatchOptions & { childStart?: ChildStartHandler },
+  egress?: EgressRelayRegistry,
   logger: Pick<Logger, 'warn'> = createLogger('gateway-decision'),
 ) {
   const mcpSender = mcpDispatch(actor, dispatchOptions);
+  const childStart = dispatchOptions?.childStart;
   const credentials = computerCredentials(actor.store, tokenVerifier(identity.jwks, identity.issuer), actor.silo);
   const server = createServer((req, res) => {
     if (req.url === '/authorize/egress') {
@@ -194,7 +184,8 @@ export async function startDecision(
     }
     void (async () => {
       res.setHeader('content-type', 'application/json');
-      if (await internalRoutes(req, res, actor, identity, binding, providers)) return;
+      if (await internalRoutes(req, res, actor, identity, binding, providers,
+        childStart)) return;
       const memoryRoute = req.url === '/authorize/mcp/memory/server';
       const managedRoute = req.url === '/authorize/models/managed';
       if (!knownDecisionRoute(req.url) || req.method !== 'POST') {
@@ -428,7 +419,7 @@ async function modelGrantHistory(actor: BudgetActor, model: string, route: strin
 async function internalRoutes(
   req: IncomingMessage, res: ServerResponse, actor: BudgetActor,
   identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding,
-  providers?: ProviderVerificationOptions,
+  providers?: ProviderVerificationOptions, childStart?: ChildStartHandler,
 ) {
   if (req.url === '/jwks.json' && req.method === 'GET') { res.end(JSON.stringify(identity.jwks)); return true; }
   if (req.url === '/budgets' && req.method === 'POST') {
@@ -451,7 +442,7 @@ async function internalRoutes(
     const d = z.object({ permitId: id, eventId: z.string().max(300) }).strict().parse(JSON.parse(await readBody(req)));
     await actor.settleRecorded(d.permitId, d.eventId); res.end('{}'); return true;
   }
-  return false;
+  return childStartRoute(req, res, actor.silo, identity, childStart);
 }
 
 function isProviderPath(path: string | undefined) {

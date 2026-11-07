@@ -28,6 +28,7 @@ type Tokens = Parameters<typeof resumeComputer>[1];
 export type WatchOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'> &
   Partial<Pick<ChatOptions, 'binding' | 'feed'>> & {
     keyDirectory?: string;
+    childStartUrl?: string;
     objects?: Client;
     catalogue?: Pick<ReturnType<typeof connectMcpCatalogue>, 'rows'>;
   };

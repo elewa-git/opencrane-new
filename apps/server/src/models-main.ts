@@ -2,6 +2,7 @@ import { routineLifecycle } from './routine-lifecycle.ts';
 import type { ChildProcess } from 'node:child_process';
 import { remoteCatalogueWatch } from './integrations/remote-catalogue-watch.ts';
 import { conversationKeys } from './chat/keys.ts';
+import { startRecordedChild } from './chat/child-start.ts';
 // The lease chooses which process runs this worker. Budget decisions still only
 // append events to NATS.
 import { readFile, mkdir } from 'node:fs/promises';
@@ -119,8 +120,14 @@ try {
     function acknowledged() {
       return configurationWorker?.acknowledged() ?? null;
     }
+    async function childStart(value: unknown) {
+      await requireDispatchLeader();
+      if (!keys) throw new Error('Child start unavailable');
+      const options = { store: events.store, silo, db: db.db, binding, keys };
+      return startRecordedChild(options, actor, value);
+    }
     const dispatchOptions = { acknowledged, routes: mcpRoutes, requireLeader: requireDispatchLeader,
-      requireCatalogue: watch.requireCurrent };
+      requireCatalogue: watch.requireCurrent, childStart };
     function egressReceiptRefused() {
       logger.error('egress_receipt_refused');
     }
