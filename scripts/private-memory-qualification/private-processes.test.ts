@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, it, vi } from 'vitest';
 import {
   privateProcessNames, probePrivateProcessInventory, readProcessIdentity,
@@ -6,6 +7,7 @@ import {
 import { runnerProtected } from './runner-protection.ts';
 
 vi.mock('./runner-protection.ts', { spy: true });
+vi.mock('node:fs', { spy: true });
 
 function readsCurrentProcess(): void {
   const identity = readProcessIdentity(process.pid);
@@ -23,6 +25,12 @@ function refusesMissingProcess(): void {
   expect(() => readProcessIdentity(999_999_999)).toThrow('private_process_unreadable');
 }
 it('refuses a missing process', refusesMissingProcess);
+
+function refusesMalformedStat(): void {
+  vi.mocked(readFileSync).mockReturnValueOnce('123 (node) S 1 2\n');
+  expect(() => readProcessIdentity(process.pid)).toThrow('private_process_unreadable');
+}
+it('refuses a stat record without a start time', refusesMalformedStat);
 
 function detectsReplacement(): void {
   const original = readProcessIdentity(process.pid);

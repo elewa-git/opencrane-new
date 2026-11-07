@@ -5,10 +5,12 @@ import { probeHost } from './host-probe.ts';
 import { runJourney } from './journey.ts';
 import { probeContainer } from './container-probe.ts';
 import { checkNative } from './native-checks.ts';
+import { probePrivateProcessInventory } from './private-processes.ts';
 
 vi.mock('./host-probe.ts', { spy: true });
 vi.mock('./container-probe.ts', { spy: true });
 vi.mock('./native-checks.ts', { spy: true });
+vi.mock('./private-processes.ts', { spy: true });
 const request = {
   sourceSha: 'a'.repeat(40), imageDigest: `sha256:${'b'.repeat(64)}`,
   environmentId: 'c'.repeat(64), siloId: `sha256:${'d'.repeat(64)}`,
@@ -20,6 +22,8 @@ function prepare(): void {
   vi.mocked(probeHost).mockReset();
   vi.mocked(probeHost).mockReturnValue(true);
   vi.mocked(probeContainer).mockReturnValue('swap_measurement_failed');
+  vi.mocked(probePrivateProcessInventory).mockReset();
+  vi.mocked(probePrivateProcessInventory).mockReturnValue('private_process_missing');
 }
 beforeEach(prepare);
 
@@ -83,11 +87,14 @@ async function containerPrerequisite(name: string): Promise<void> {
   vi.mocked(probeContainer).mockReturnValue(true);
   const namedRequest = { ...request, name };
   const input = JSON.stringify(namedRequest);
-  expect(await runJourney(input)).toMatchObject({ result: 'NOT RUN', complete: false });
-  expect(probeContainer).toHaveBeenCalledTimes(2);
+  expect(await runJourney(input)).toEqual({
+    result: 'FAIL', reason: 'host_refused', protectionFailure: 'private_process_missing',
+  });
+  expect(probeContainer).toHaveBeenCalledTimes(1);
+  expect(probePrivateProcessInventory).toHaveBeenCalledTimes(1);
 }
 it.each(['privateTurns', 'invalidation', 'P4-14', 'P4-15'])(
-  'keeps %s unrun when only the container runner is protected', containerPrerequisite);
+  'refuses %s when other private processes lack protection proof', containerPrerequisite);
 
 async function changedDuringWork(): Promise<void> {
   function changeHost(): Promise<void> {
@@ -104,11 +111,25 @@ it('refuses changed protection after awaited work without switching paths', chan
 async function changedBeforeReceipt(): Promise<void> {
   vi.mocked(probeHost).mockReturnValue(false);
   vi.mocked(probeContainer).mockReturnValueOnce(true).mockReturnValue('helper_unavailable');
+  vi.mocked(probePrivateProcessInventory).mockReturnValue(true);
   expect(await runJourney(JSON.stringify(request))).toEqual({
     result: 'FAIL', reason: 'host_refused', protectionFailure: 'helper_unavailable',
   });
 }
 it('remeasures container protection before returning the prerequisite receipt', changedBeforeReceipt);
+
+async function lostProcessProofBeforeReceipt(): Promise<void> {
+  vi.mocked(probeHost).mockReturnValue(false);
+  vi.mocked(probeContainer).mockReturnValue(true);
+  vi.mocked(probePrivateProcessInventory).mockReturnValueOnce(true);
+  const result = await runJourney(JSON.stringify(request));
+  expect(result).toEqual({
+    result: 'FAIL', reason: 'host_refused', protectionFailure: 'private_process_missing',
+  });
+  expect(probeContainer).toHaveBeenCalledTimes(2);
+  expect(probePrivateProcessInventory).toHaveBeenCalledTimes(2);
+}
+it('refuses when private process proof is lost before the receipt', lostProcessProofBeforeReceipt);
 
 function entryRefuses(input: string, args: string[] = []): void {
   const options = { input, encoding: 'utf8' as const, timeout: 5000 };
