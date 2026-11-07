@@ -53,6 +53,9 @@ function fixture(argv = gitArgs, input = '') {
 }
 
 function now() { return 1000; }
+function openDescriptorCount() {
+  return fs.readdirSync('/proc/self/fd').length;
+}
 function cleanup() {
   vi.useRealTimers();
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
@@ -61,8 +64,11 @@ afterEach(cleanup);
 
 async function startsOneFixedOperation(argv: string[], input: string) {
   const test = fixture(argv, input);
+  const descriptorsBefore = openDescriptorCount();
   const result = await test.dispatch();
   expect(result).toBe('awaiting_scan');
+  expect(openDescriptorCount()).toBe(descriptorsBefore);
+  expect(fs.existsSync(`${test.root}/operation-1/operation`)).toBe(true);
   expect(test.starts).toEqual([`${test.root}/operation-1`]);
   await expect(test.dispatch()).resolves.toBe('refused');
   expect(test.starts).toHaveLength(1);
@@ -123,11 +129,14 @@ it('refuses caller arguments, scripts, filters and workspace traversal', async (
 
 async function unknownAfterCrash() {
   const test = fixture();
+  const descriptorsBefore = openDescriptorCount();
   test.state.launch = (_plan, path) => {
     test.starts.push(path);
     return { exit: Promise.reject(new Error('private canary')), kill() {} };
   };
   await expect(test.dispatch()).resolves.toBe('unknown');
+  expect(openDescriptorCount()).toBe(descriptorsBefore);
+  expect(fs.existsSync(`${test.root}/operation-1/operation`)).toBe(true);
   await expect(test.dispatch()).resolves.toBe('refused');
   expect(test.starts).toHaveLength(1);
 }
@@ -136,6 +145,7 @@ it('leaves a crashed worker unknown and never resends the command', unknownAfter
 async function unknownAfterLostExit() {
   vi.useFakeTimers();
   const test = fixture();
+  const descriptorsBefore = openDescriptorCount();
   let killed = false;
   test.state.launch = (_plan, path) => {
     test.starts.push(path);
@@ -144,11 +154,40 @@ async function unknownAfterLostExit() {
   const result = test.dispatch();
   await vi.advanceTimersByTimeAsync(300_000);
   await expect(result).resolves.toBe('unknown');
+  expect(openDescriptorCount()).toBe(descriptorsBefore);
+  expect(fs.existsSync(`${test.root}/operation-1/operation`)).toBe(true);
   expect(killed).toBe(true);
   await expect(test.dispatch()).resolves.toBe('refused');
   expect(test.starts).toHaveLength(1);
 }
 it('leaves a missing exit unknown and never resends after its wall limit', unknownAfterLostExit);
+
+async function unknownAfterLaunchFailure() {
+  const test = fixture();
+  const descriptorsBefore = openDescriptorCount();
+  function failLaunch() {
+    throw new Error('private canary');
+  }
+  test.state.launch = failLaunch;
+  await expect(test.dispatch()).resolves.toBe('unknown');
+  expect(openDescriptorCount()).toBe(descriptorsBefore);
+  expect(fs.existsSync(`${test.root}/operation-1/operation`)).toBe(true);
+  await expect(test.dispatch()).resolves.toBe('refused');
+}
+it('closes preparation descriptors when the launcher throws', unknownAfterLaunchFailure);
+
+async function unknownAfterNonZeroExit() {
+  const test = fixture();
+  const descriptorsBefore = openDescriptorCount();
+  function failedProcess() {
+    return { exit: Promise.resolve(1), kill() {} };
+  }
+  test.state.launch = failedProcess;
+  await expect(test.dispatch()).resolves.toBe('unknown');
+  expect(openDescriptorCount()).toBe(descriptorsBefore);
+  expect(fs.existsSync(`${test.root}/operation-1/operation`)).toBe(true);
+}
+it('closes preparation descriptors after a non-zero exit', unknownAfterNonZeroExit);
 
 async function recordingProcess() {
   const test = fixture();
