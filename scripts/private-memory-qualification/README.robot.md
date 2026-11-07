@@ -404,6 +404,48 @@ The package-image fixture runs the shipped helper with only disposable credentia
 Errors remain fixed, and the collector reader refuses a falsely complete result.
 Own checks: [build receipt](../../docs/process/p4-15-pr5o/receipt.md).
 
+## Storage scanner first split
+
+P4-15 PR 5u, Part of #97, adds `persistence.ts`. Its caller supplies an in-memory
+inventory, a fresh random hexadecimal canary and the measured installation digest.
+Each inventory entry names one owned directory and one fixed category: `pvc`,
+`rollout`, `cache`, `outbox`, `logs` or `dumps`. All six categories are required.
+Several directories may share a category. Only those directories are read.
+The scanner opens every path component without following symlinks, reads its actual
+Linux mount id and keeps directory device/inode identities between scans.
+Nested mounts, hard links, special files, missing or unreadable entries and changed
+directories refuse. Hidden files are included. A skipped category cannot pass.
+
+`scan('live', installationId)` must precede `scan('stopped', installationId)`.
+A changed installation, repeated phase or earlier failure refuses. The caller must
+measure the installation; this argument is not evidence of an actual replacement.
+The scan reads synchronously and contains no awaited work. Its buffers compare raw,
+UTF-16LE, hexadecimal and base64 representations, including chunk boundaries.
+It clears read buffers after each file and retained patterns after completion,
+failure or `close()`. It never hashes private bytes or returns paths, contents or
+system errors. Results contain only PARTIAL/FAIL, complete=false, counts and a
+fixed failure category. A category identifies where inspection failed or bytes
+were found; it does not distinguish those causes.
+
+Limits are 128 named directories, 10,000 entries and 256 MiB per scan, 64 MiB per
+file, and 64 nested levels. Exceeding a limit refuses. Metadata changes during a
+read refuse, but this is not an atomic filesystem snapshot. Encoded or fragmented
+forms outside the listed comparisons remain unproved.
+
+This independently tested first part stays within the approximately 600-line
+budget. It has no deployment caller and cannot produce a collector receipt.
+The runner's persistence row remains NOT RUN; all other rows and both complete
+qualifications retain their holds. No runner, admission, image or enablement
+behaviour changes. The next part must derive the complete inventory from the
+measured computer's mounts and actual processes, including logs and dumps outside
+its namespace. It must run the scanner during a real native personal turn and
+after Stop/crash/reconnect, attempt all eight forbidden tool classes, and recheck
+host protection after every awaited phase. Disposable writable folders and a
+simulated Stop do not prove these native or host conditions. The sole journey
+owner must still execute the fresh-install path. The existing collector refuses
+copied or incomplete evidence; caller observations cannot make this helper complete.
+Own checks: [receipt](../../docs/process/p4-15-pr5u/receipt.md).
+
 ## File parser scope and invocation
 
 Part of #97, P4-15 PR 5c, first part. Import `collectEvidence` from `collect.ts`:

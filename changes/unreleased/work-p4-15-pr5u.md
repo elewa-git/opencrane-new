@@ -1,0 +1,1 @@
+- Add a private-memory storage scanner that refuses missing, unreadable or redirected folders and detects delayed writes in disposable tests. Live native persistence qualification remains unfinished; memory admission stays disabled.
