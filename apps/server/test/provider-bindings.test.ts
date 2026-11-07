@@ -290,6 +290,20 @@ async function checksLiveReplacementGrants() {
     await append(subject, 'grant.given', { resourceType: 'model', resourceId: 'gpt-6.1-sol',
       granteeKind, granteeId, grantedBy: 'owner' });
   }
+  const withoutPayer = await request('GET', 'primary', undefined, 'owner', undefined, undefined,
+    'dependencies');
+  const missingPayerRows = withoutPayer.json<{ dependencies: { dependantId: string;
+    replacements: { providerId: string }[] }[] }>().dependencies;
+  const missingPayerChoice = missingPayerRows.find(row => row.dependantId === 'preview');
+  expect(missingPayerChoice?.replacements).toEqual([]);
+  await append('budget-acme', 'budget.ceiling_set', {
+    scope: 'global', dailyCeilingCents: 2000, ceilingCents: 20000,
+    setBy: 'owner', defaultPayingGroupId: 'personal',
+  });
+  await append('provider-secondary', 'provider.verification_recorded', {
+    providerId: 'secondary', changedBy: 'owner', revision: 3,
+    kind: 'reachability', attemptId: 'retest', outcome: 'pass',
+  });
   const response = await request('GET', 'primary', undefined, 'owner', undefined, undefined,
     'dependencies');
   expect(response.statusCode).toBe(200);
@@ -315,6 +329,53 @@ async function checksLiveReplacementGrants() {
 }
 it('checks saved model grants before offering and accepting a replacement',
   checksLiveReplacementGrants);
+
+async function refusesRoutineCreatedDuringPreparation() {
+  const before = await request('GET', 'primary', undefined, 'owner', undefined, undefined,
+    'dependencies');
+  const preview = before.json<{ expectedProviderSequence: number; dependencies: {
+    kind: string; dependantId: string; task: string; position: number }[] }>();
+  function pauseChoice(row: (typeof preview.dependencies)[number]) {
+    return { kind: row.kind, dependantId: row.dependantId, task: row.task,
+      expectedBindingSequence: row.position, action: 'pause' };
+  }
+  const choices = preview.dependencies.map(pauseChoice);
+  const proposal = { expectedProviderSequence: preview.expectedProviderSequence, choices };
+  const originalRead = nats.store.readStream.bind(nats.store);
+  const originalHead = nats.store.head.bind(nats.store);
+  let releaseRead: (() => void) | undefined;
+  let routineChecked: (() => void) | undefined;
+  const release = new Promise<void>(resolve => { releaseRead = resolve; });
+  const checked = new Promise<void>(resolve => { routineChecked = resolve; });
+  let routineHeads = 0;
+  async function* delayedRead(subject: string, from?: number, deadline?: number) {
+    if (subject === 'assistant-*') await release;
+    yield* originalRead(subject, from, deadline);
+  }
+  async function observedHead(subject?: string, deadline?: number) {
+    const position = await originalHead(subject, deadline);
+    if (subject === 'routine-*' && ++routineHeads === 2) routineChecked?.();
+    return position;
+  }
+  const readSpy = vi.spyOn(nats.store, 'readStream').mockImplementation(delayedRead);
+  const headSpy = vi.spyOn(nats.store, 'head').mockImplementation(observedHead);
+  try {
+    const pending = request('POST', 'primary', proposal, 'owner', undefined, undefined,
+      'dependencies/preview');
+    await checked;
+    await append('routine-during-preview', 'routine.paused',
+      { routineId: 'during-preview', pausedBy: 'owner' });
+    await runner.run(routines);
+    releaseRead?.();
+    expect((await pending).statusCode).toBe(409);
+  } finally {
+    releaseRead?.();
+    readSpy.mockRestore();
+    headSpy.mockRestore();
+  }
+}
+it('rejects a proposal when a routine appears during preparation',
+  refusesRoutineCreatedDuringPreparation);
 
 async function pagesStableDependencies() {
   for (let index = 0; index < 51; index++) {
