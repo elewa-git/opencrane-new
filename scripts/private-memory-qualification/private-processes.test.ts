@@ -58,7 +58,9 @@ it('refuses the container before a journey when another private process is unpro
 
 function cannotInjectObservations(): void {
   vi.mocked(runnerProtected).mockReturnValue(true);
-  const injected = { runner: readProcessIdentity(process.pid), serverDelivery: true };
+  const injected = { runner: readProcessIdentity(process.pid), serverDelivery: true,
+    bridge: true, complete: true, result: 'PASS' };
   expect(probePrivateProcessInventory(injected)).toBe('private_process_missing');
 }
-it('does not accept caller observations as process proof', cannotInjectObservations);
+it('does not accept caller observations or a forged saved receipt as process proof',
+  cannotInjectObservations);
