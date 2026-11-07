@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { z } from 'zod';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
@@ -11,6 +12,8 @@ import { createLogger } from '@opencrane/observability';
 import * as protocol from '@opencrane/protocol';
 import { pgDb, ProjectionRunner } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
+import { loadSource } from '../src/overview/routes.ts';
+import type { OverviewRow } from '../src/overview/rows.ts';
 import type { IntegrationOptions } from '../src/integrations/routes.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -88,7 +91,9 @@ async function initialise() {
   await reserve(0, foreign);
   await initialiseBudgetProjection(database, nats.reader, logger);
   runner = new ProjectionRunner(database, nats.reader, logger);
-  app = buildServer(config, { integrations: options });
+  app = buildServer(config, { integrations: options, memberReads: {
+    silo: 'acme', binding, store: nats.store, db: database, feed: { memberId },
+  } });
 }
 async function close() {
   await app?.close();
@@ -421,3 +426,91 @@ async function boundedReadOnly() {
   }
 }
 it('reads limit plus one with one deadline, no private history, totals or writes', boundedReadOnly);
+
+async function overviewAccess() {
+  const before = await nats.store.head();
+  const owner = await app.inject({ method: 'GET', url: '/api/org/overview',
+    headers: { cookie: `${config.cookieName}=${encodeSession(config, { sub: 'owner',
+      orgId: 'org-acme', roles: [], authTime: 1790856000, exp: 2000000000 })}` } });
+  expect(owner.statusCode).toBe(200);
+  expect(owner.headers['cache-control']).toBe('no-store');
+  const body = JSON.stringify(owner.json());
+  expect(body).not.toContain('private-chat');
+  expect(body).not.toContain('heldCents');
+  expect(body).not.toContain('settledCents');
+  expect(owner.json()).toMatchObject({ allClear: false });
+  expect(body).toContain('"source":"spending"');
+  expect(owner.json()).toMatchObject({ capabilities: { ownership: { manage: true },
+    changeHistory: { read: false } } });
+  const adminSession = { sub: 'admin', orgId: 'org-acme', roles: [],
+    authTime: 1790856000, exp: 2000000000 };
+  const admin = await app.inject({ method: 'GET', url: '/api/org/overview',
+    headers: { cookie: `${config.cookieName}=${encodeSession(config, adminSession)}` } });
+  expect(admin.statusCode).toBe(200);
+  expect(admin.json()).toMatchObject({ capabilities: { ownership: { manage: false } } });
+  const foreignSession = { sub: 'owner', orgId: 'other-org', roles: [],
+    authTime: 1790856000, exp: 2000000000 };
+  const foreign = await app.inject({ method: 'GET', url: '/api/org/overview',
+    headers: { cookie: `${config.cookieName}=${encodeSession(config, foreignSession)}` } });
+  expect(foreign.statusCode).toBe(403);
+  expect(body).toContain('"name":"people","status":"unavailable"');
+  for (const sub of ['member', 'removed', 'denied']) {
+    const session = { sub, orgId: 'org-acme', roles: [],
+      authTime: 1790856000, exp: 2000000000 };
+    const cookie = `${config.cookieName}=${encodeSession(config, session)}`;
+    const response = await app.inject({ method: 'GET', url: '/api/org/overview',
+      headers: { cookie } });
+    expect(response.statusCode).toBe(403);
+    expect(JSON.stringify(response.json())).not.toContain('permitId');
+  }
+  expect(await nats.store.head()).toBe(before);
+  expect(upstreamCalls).toBe(0);
+}
+it('keeps the overview private and read only', overviewAccess);
+
+function overviewFixtureRow(record: { id: string }): OverviewRow {
+  return { source: 'spending', id: record.id, sourceId: record.id,
+    priority: 'unknown', eventAt: null, revision: 1, action: 'view_evidence',
+    href: '/api/org/effects' };
+}
+
+async function overviewSourceStates() {
+  const database = options.modelDb!;
+  const head = await nats.store.head();
+  const deadline = performance.now() + 2000;
+  const sql = 'SELECT permit_id AS id FROM model_current_effects WHERE silo = $1 LIMIT 2';
+  const lagging = await loadSource('spending', database, 'acme', head + 1,
+    deadline, sql, overviewFixtureRow);
+  expect(lagging.status).toBe('applying');
+  expect(lagging.rows).toHaveLength(2);
+  const failed = await loadSource('spending', database, 'acme', head,
+    deadline, 'SELECT id FROM absent_overview_source', overviewFixtureRow);
+  expect(failed.status).toBe('unavailable');
+  expect(failed.checkpoint).not.toBeNull();
+  const missing = await loadSource('people', database, 'acme', head,
+    deadline, sql, overviewFixtureRow);
+  expect(missing.status).toBe('unavailable');
+  const timedOut = await loadSource('spending', database, 'acme', head,
+    performance.now() - 1, sql, overviewFixtureRow);
+  expect(timedOut.status).toBe('unavailable');
+}
+it('keeps source failure, lag, missing progress and deadline expiry explicit', overviewSourceStates);
+
+async function overviewReplay() {
+  const session = { sub: 'owner', orgId: 'org-acme', roles: [],
+    authTime: 1790856000, exp: 2000000000 };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const before = await app.inject({ method: 'GET', url: '/api/org/overview', headers });
+  expect(before.statusCode).toBe(200);
+  const safeRows = z.object({ rows: z.array(z.object({ source: z.string(), id: z.string(),
+    priority: z.string(), eventAt: z.string().nullable() })) }).parse(before.json()).rows;
+  const position = await nats.store.head();
+  await rebuildBudgetProjection(pgDb(dbs.queue), nats.reader, logger, { verify: true });
+  const after = await app.inject({ method: 'GET', url: '/api/org/overview', headers });
+  expect(after.statusCode).toBe(200);
+  const replayedRows = z.object({ rows: z.array(z.object({ source: z.string(), id: z.string(),
+    priority: z.string(), eventAt: z.string().nullable() })) }).parse(after.json()).rows;
+  expect(replayedRows).toEqual(safeRows);
+  expect(await nats.store.head()).toBe(position);
+}
+it('returns the same safe overview rows after an index rebuild', overviewReplay);

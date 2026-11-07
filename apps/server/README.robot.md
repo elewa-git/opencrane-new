@@ -6970,3 +6970,24 @@ Omission preserves the personal contract; clear remains unchanged. The session s
 the requester. No company verification reader is wired into this route, so company
 choices return unavailable. Successful receipts still contain only status, sequence and
 changeRef. No browser UI, credential release or live company activation is added.
+
+## Organisation overview read
+
+`GET /api/org/overview` accepts optional `limit` (1–50, default 20) and `cursor`.
+It requires a current Owner or Admin membership and matching organisation session.
+It loads projection data first and checks access once before sending any rows.
+The data deadline is two seconds; access validation has its own deadline.
+Each source reports its projection checkpoint, read time and current, applying or
+unavailable state. The response also returns role-based navigation capabilities. Publication, memory and routines are unavailable until their
+owning summaries exist. An incomplete source never yields an all-clear response.
+
+The read caps each existing source at 50 records plus one overflow record. Overflow
+marks that source unavailable and leaves the other sources visible. It reads the
+member directory, provider state, tool catalogue and current spending-effect index
+without scanning streams or calling the unbounded effect list. Rows contain only
+recorded identifiers, safe status, event time when recorded, revision and a link to
+the owning read. The provider's secret reference and private work are omitted.
+
+`test/org-overview.test.ts` checks ordering, cursor and partial states.
+`test/spending.test.ts` checks access, privacy, absence of GET side effects and
+the same safe rows after an index rebuild against disposable services. A fresh-install journey is still NOT RUN.
