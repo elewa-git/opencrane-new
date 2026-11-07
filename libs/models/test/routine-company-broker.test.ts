@@ -22,6 +22,13 @@ let storage: Awaited<ReturnType<typeof databases>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
 let binding: Awaited<ReturnType<typeof createStore>>;
 let serial = 0;
+type FixtureOptions = {
+  ready?: boolean;
+  toolName?: 'read' | 'write';
+  accountScopes?: string[];
+  frozenScopes?: string[];
+  missingToolMapping?: boolean;
+};
 beforeAll(async function start() {
   nats = await natsFixture();
   storage = await databases();
@@ -41,8 +48,11 @@ function digest(value: unknown) {
 }
 
 async function readyHistory(userId: string, serverId: string, profileId: string,
-  routineId: string, occurrenceId: string) {
+  routineId: string, occurrenceId: string, options: FixtureOptions) {
   const personal = await oauthSelectionFixture(nats, userId, serverId, 'personal');
+  if (options.missingToolMapping) {
+    delete personal.configuration.toolScopes.write;
+  }
   const serverSubject = `mcp-${serverId}`;
   const serverRows = await history(nats.store, serverSubject, 'test');
   const registrationRevision = serverRows[0]!.sequence;
@@ -77,7 +87,7 @@ async function readyHistory(userId: string, serverId: string, profileId: string,
     ownerKind: 'company', connectionId: 'installed', profileRevision,
     generation: 1, accountId: 'company-bot', accountDigest: digest('company-bot'),
     configurationDigest: oauthConfigurationDigest(personal.configuration),
-    scopes: ['openid', 'read'], expiresAt: Date.now() + 120_000 };
+    scopes: options.accountScopes ?? ['openid', 'read'], expiresAt: Date.now() + 120_000 };
   const selectionSubject = `connection-selection-${userId}-${serverId}`;
   const selection = envelope('test', selectionSubject, 'connection.selected', {
     action: 'select', userId, serverId, connectionId: 'installed', profileId,
@@ -95,7 +105,7 @@ async function readyHistory(userId: string, serverId: string, profileId: string,
   const definition = { ...originalDefinition, ownerId: userId, assistantId: 'assistant',
     payingGroupId: 'payer', assistantPayingGroupId: 'payer', connectionId: 'installed',
     profileId, profileRevision, connectionRevision: profileRevision,
-    companyAccountId: evidence.accountId, scopes: evidence.scopes };
+    companyAccountId: evidence.accountId, scopes: options.frozenScopes ?? evidence.scopes };
   const created = { ...event(`created-${routineId}`, routineSubject, 'routine.created'),
     source: 'opencrane-server', commandId: `created-${routineId}`,
     principal: { kind: 'human' as const, id: userId },
@@ -115,12 +125,15 @@ async function readyHistory(userId: string, serverId: string, profileId: string,
     data: { ...originalActivation, routineId, occurrenceId,
       conversationId: 'conversation', turnId: 'turn' } };
   await nats.seed([created, due, activationEvent]);
+  const requestedTool = policy.tools.find(function matchesRequestedTool(tool) {
+    return tool.name === (options.toolName ?? 'read');
+  });
   return { personal, evidence, profileRevision, selectionRevision: await nats.store.head(selectionSubject),
-    policyRevision: await nats.store.head(serverSubject), schemaDigest: policy.tools[0]!.revision,
+    policyRevision: await nats.store.head(serverSubject), schemaDigest: requestedTool!.revision,
     profileSubject, selectionSubject, routineSubject };
 }
 
-async function fixture(ready = true) {
+async function fixture(options: FixtureOptions = {}) {
   serial += 1;
   const userId = `owner${serial}`;
   const serverId = `server${serial}`;
@@ -139,15 +152,15 @@ async function fixture(ready = true) {
   const db = pgDb(storage.queue);
   await auth.handler.handle(joined, db);
   await auth.handler.handle(grant, db);
-  const prepared = ready ? await readyHistory(userId, serverId, profileId,
-    routineId, occurrenceId) : undefined;
+  const prepared = options.ready === false ? undefined : await readyHistory(userId, serverId,
+    profileId, routineId, occurrenceId, options);
   const issuedAt = Date.now();
   const release = {
     requestId, permitId: requestId, leaseId: requestId, purpose: 'tool_call' as const,
     userId, ownerId: userId, ownerKind: 'company' as const,
     assistantId: 'assistant', computerId: 'computer', computerGeneration: 1,
     conversationId: 'conversation', turnId: 'turn', threadId: 'thread',
-    serverId, toolName: 'read', argumentsDigest: 'a'.repeat(64),
+    serverId, toolName: options.toolName ?? 'read', argumentsDigest: 'a'.repeat(64),
     connectionId: 'installed', profileId, generation: 1,
     profileRevision: prepared?.profileRevision ?? 1,
     connectionRevision: prepared?.profileRevision ?? 1,
@@ -161,7 +174,7 @@ async function fixture(ready = true) {
   };
   const decision = envelope('test', `decision-${requestId}`, 'decision.recorded', {
     requestId, requesterId: userId, assistantId: 'assistant', conversationId: 'conversation',
-    turnId: 'turn', permitId: requestId, serverId, toolName: 'read', route: 'mcp',
+    turnId: 'turn', permitId: requestId, serverId, toolName: options.toolName ?? 'read', route: 'mcp',
     outcome: 'allow', reason: 'policy_allow', contextDigest: 'e'.repeat(64), release,
   }, decisionId);
   await nats.seed([decision]);
@@ -210,7 +223,7 @@ it('audits one bound company request without releasing material', async function
 });
 
 it('refuses when no company profile was selected', async function absentProfile() {
-  const test = await fixture(false);
+  const test = await fixture({ ready: false });
   await expect(test.confirm()).rejects.toThrow('Release unavailable');
   expect(await nats.store.head(`credential-${test.requestId}`)).toBe(0);
 });
@@ -249,6 +262,20 @@ it('refuses a changed published tool before audit', async function changedTool()
   await nats.seed([changed]);
   await expect(test.confirm()).rejects.toThrow('Release unavailable');
 });
+
+it.each([
+  { name: 'missing tool mapping', options: { toolName: 'write', missingToolMapping: true,
+    accountScopes: ['openid', 'read', 'write'] } },
+  { name: 'missing verified scope', options: { toolName: 'write',
+    frozenScopes: ['openid', 'read', 'write'] } },
+  { name: 'missing frozen scope', options: { toolName: 'write',
+    accountScopes: ['openid', 'read', 'write'], frozenScopes: ['openid', 'read'] } },
+] satisfies { name: string; options: FixtureOptions }[])(
+  'refuses a requested tool with a $name', async function missingScope(testCase) {
+    const test = await fixture(testCase.options);
+    await expect(test.confirm()).rejects.toThrow('Release unavailable');
+    expect(await nats.store.head(`credential-${test.requestId}`)).toBe(0);
+  });
 
 it('refuses when the owner loses their saved tool grant', async function lostGrant() {
   const test = await fixture();
