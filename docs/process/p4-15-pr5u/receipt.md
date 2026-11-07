@@ -42,3 +42,45 @@ All lint, typecheck and test commands ran under nice -n 10.
 No root suite, dev stack or paid model call ran. No authority or security test,
 Dockerfile, dev-stack, memory tool or enablement file changed. No dependency,
 event or public API field was added. Receipts contain no canary or private hash.
+
+## Storage result correction — 7 November 2026
+
+Source: `b14adc2a5` plus the implementation and documentation recorded with this
+section. Base remains `2659e880a`; fetch and rebase reported the branch up to date.
+The environment is this worktree with disposable local folders, not a fresh install.
+No runtime image applies. The added regression tests take the full scanner change
+above its original approximately 600-line split, while keeping it below 1,500 lines.
+
+An unavailable or unreadable required folder now returns NOT RUN, with
+"Storage inspection could not be completed." Detected private text returns FAIL,
+including text in file names. Both retain complete=false. Reading earlier clean
+files cannot make an unfinished inspection complete. Retrying keeps the first
+status and category. No access, spending or memory check was removed.
+
+The redirect cases put private text in real target files and require zero bytes
+read through a final or intermediate symlink. Exact result assertions reject extra
+fields. Output checks require no stdout or stderr writes for detected private text
+and missing paths. Additional cases cover base64 offsets 1 and 2, directory execute
+permission, stored names, and closure after two clean scans. These are filesystem
+fixtures; they do not establish deployment coverage or native tool refusal.
+
+| Own check | Result | Observation |
+| --- | --- | --- |
+| Failing-first test commit | PASS | `b14adc2a5` contains tests only; the old implementation failed 31 of 49 tests before the fix. |
+| Final changed tests twice | PASS | All 49 scanner tests passed twice after the final assertion change. |
+| Collector, runner and evidence refusals | PASS | Focused runs passed 198 tests across four files and 83 across two files; 49 scanner tests appear in both. |
+| Full lint, including Knip | PASS | All stages exited zero; ESLint reported zero errors and 37 warnings in unchanged files. |
+| Workspace and scanner typecheck | PASS | Workspace, package, dev-stack and scanner TypeScript checks exited zero. |
+| Event catalogue and changelog | PASS | All 158 event types agree; changelog check exited zero. |
+| Pushed-head CI | NOT RUN | Not observed for this correction. |
+| Native attempts and fresh-install qualification | NOT RUN | No journey or dev stack ran; admission remains disabled. |
+
+Commands used the explicit qualification Vitest config and named test files only,
+with `--maxWorkers=1` and
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+Lint, typecheck and tests ran under `nice -n 10`. Full lint includes `lint:unused`
+(Knip). The first lint attempt was stopped without a result after sustained
+high memory use. Its retry passed with CI's `NODE_OPTIONS=--max-old-space-size=8192`;
+repository and host settings are unchanged. Scanner types also use `scripts/private-memory-qualification/tsconfig.json`.
+Local command logs are `/tmp/p4-15-pr5u-fix-*.log` on this builder host.
+No root suite, owner-stack action, host-setting change or admission change ran.

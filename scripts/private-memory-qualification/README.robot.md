@@ -423,17 +423,21 @@ The scan reads synchronously and contains no awaited work. Its buffers compare r
 UTF-16LE, hexadecimal and base64 representations, including chunk boundaries.
 It clears read buffers after each file and retained patterns after completion,
 failure or `close()`. It never hashes private bytes or returns paths, contents or
-system errors. Results contain only PARTIAL/FAIL, complete=false, counts and a
-fixed failure category. A category identifies where inspection failed or bytes
-were found; it does not distinguish those causes.
+system errors. Results contain PARTIAL, FAIL or NOT RUN, complete=false and counts.
+FAIL means private text was found in file contents or a stored name. NOT RUN means
+inspection could not finish, including missing or unreadable storage, redirected
+paths, changed identities and invalid input. It includes the fixed plain reason
+"Storage inspection could not be completed." Both refusals name only the fixed
+category and close the scanner. A retry keeps the original status and category;
+reading some clean files before a refusal cannot make the inspection complete.
 
 Limits are 128 named directories, 10,000 entries and 256 MiB per scan, 64 MiB per
 file, and 64 nested levels. Exceeding a limit refuses. Metadata changes during a
 read refuse, but this is not an atomic filesystem snapshot. Encoded or fragmented
 forms outside the listed comparisons remain unproved.
 
-This independently tested first part stays within the approximately 600-line
-budget. It has no deployment caller and cannot produce a collector receipt.
+This first part has no deployment caller and cannot produce a collector receipt.
+Its regression tests also cover intermediate redirects and private output.
 The runner's persistence row remains NOT RUN; all other rows and both complete
 qualifications retain their holds. No runner, admission, image or enablement
 behaviour changes. The next part must derive the complete inventory from the

@@ -1,1 +1,1 @@
-- Add a private-memory storage scanner that refuses missing, unreadable or redirected folders and detects delayed writes in disposable tests. Live native persistence qualification remains unfinished; memory admission stays disabled.
+- Add a private-memory storage scanner that reports missing, unreadable or redirected folders as NOT RUN and detected private text as FAIL, including delayed writes in disposable tests. Live native persistence qualification remains unfinished; memory admission stays disabled.

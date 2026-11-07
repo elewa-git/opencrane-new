@@ -7,10 +7,18 @@ const categories = ['pvc', 'rollout', 'cache', 'outbox', 'logs', 'dumps'] as con
 type Category = typeof categories[number];
 type Location = { category: Category; path: string };
 type Result = {
-  result: 'PARTIAL' | 'FAIL'; complete: false; files: number; bytes: number;
+  result: 'PARTIAL' | 'FAIL' | 'NOT RUN'; complete: false; files: number; bytes: number;
   category?: Category | 'inventory';
+  reason?: 'Storage inspection could not be completed.';
+};
+type Failure = {
+  result: 'FAIL' | 'NOT RUN';
+  category: Category | 'inventory';
+  reason?: 'Storage inspection could not be completed.';
 };
 type InventoryEntry = Location & { identity?: string };
+const persistenceDetected = new Error('persistence');
+const inspectionIncomplete = 'Storage inspection could not be completed.';
 const statOptions = { bigint: true } as const;
 const flags = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
 
@@ -95,7 +103,7 @@ function readContents(descriptor: number, patterns: Buffer[], counts: Result): v
       }
       const available = buffer.subarray(0, retained + read);
       if (matches(available, patterns)) {
-        throw new Error('persistence');
+        throw persistenceDetected;
       }
       retained = Math.min(256, available.length);
       buffer.copy(buffer, 0, available.length - retained, available.length);
@@ -125,8 +133,11 @@ function scanDirectory(
   before.sort();
   for (const name of before) {
     budget.entries++;
-    if (budget.entries > 10_000 || matches(Buffer.from(name), patterns)) {
+    if (budget.entries > 10_000) {
       throw new Error('inventory');
+    }
+    if (matches(Buffer.from(name), patterns)) {
+      throw persistenceDetected;
     }
     const child = openSync(`${path}/${name}`, flags);
     try {
@@ -186,7 +197,7 @@ export function persistenceScan(
   let entries: InventoryEntry[] = [];
   let patterns: Buffer[] = [];
   let phase: 'live' | 'stopped' | 'closed' = 'live';
-  let failed: Category | 'inventory' | undefined;
+  let failed: Failure | undefined;
   try {
     if (!/^sha256:[a-f0-9]{64}$/u.test(installationId)) {
       throw new Error('inventory');
@@ -194,7 +205,7 @@ export function persistenceScan(
     entries = inventoryEntries(locations);
     patterns = patternsFor(canary);
   } catch {
-    failed = 'inventory';
+    failed = { result: 'NOT RUN', category: 'inventory', reason: inspectionIncomplete };
   }
 
   function close(): void {
@@ -243,10 +254,17 @@ export function persistenceScan(
       }
       // Keep scans incomplete: caller-supplied paths and phase names cannot prove a native journey.
       return counts;
-    } catch {
-      failed ??= category;
+    } catch (error) {
+      // Reserve FAIL for private text actually found, including in stored file names.
+      if (failed === undefined) {
+        if (error === persistenceDetected) {
+          failed = { result: 'FAIL', category };
+        } else {
+          failed = { result: 'NOT RUN', category, reason: inspectionIncomplete };
+        }
+      }
       close();
-      return { ...counts, result: 'FAIL', category: failed };
+      return { ...counts, ...failed };
     }
   }
   return { scan, close };

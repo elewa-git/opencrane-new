@@ -143,7 +143,9 @@ function encoded(encoding: BufferEncoding) {
   const prefix = Buffer.alloc(65_530, 32);
   const bytes = Buffer.concat([prefix, stored]);
   writeFileSync(join(directory, 'cache', 'data'), bytes);
-  expect(scan.scan('live', installation)).toMatchObject({ result: 'FAIL', category: 'cache' });
+  expect(scan.scan('live', installation)).toEqual({
+    result: 'FAIL', complete: false, category: 'cache', files: 0, bytes: bytes.length,
+  });
   bytes.fill(0);
   stored.fill(0);
 }

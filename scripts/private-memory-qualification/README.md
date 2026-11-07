@@ -18,7 +18,7 @@ It uses Docker on the deployment host and reads the deployment's event store.
 ```mermaid
 flowchart LR
   scripts["scripts<br/>developer tools"] -.-> collector["private-memory-qualification<br/>collects observed results"]
-  fixtures["disposable folders<br/>storage scan tests"] -.->|tests scanner only| collector
+  fixtures["disposable folders<br/>detection and refusal tests"] -.->|tests scanner only| collector
   scripts -.-> sibling["check-local-qualification<br/>checks local results"]
   server["apps/server<br/>memory preparation"] -->|reads and rechecks results| collector
   collector -.->|checks memory, Stop and reply loss| server
@@ -78,8 +78,10 @@ real server, bridge and gateway to recall only the requester's fact. It checks t
 saved reference before delivery and refuses the other person's scope. This test
 does not generate a model answer or qualify the deployment.
 A storage scanner now checks named folders for private test bytes, including hidden files.
-It refuses missing folders, unreadable files and redirected paths. It checks once during
-simulated work and again after it stops, without printing file names or private text.
+It reports private text found in storage separately from an inspection that could not finish.
+Missing folders, unreadable files and redirected paths keep the inspection unfinished.
+It checks once during simulated work and again after it stops, without printing file names
+or private text.
 These folder tests do not establish which storage a deployment uses or prove native tool refusal.
 The runner still leaves the persistence journey unfinished.
 Other tests use simulated observations and disposable containers to check refusal and cleanup.
