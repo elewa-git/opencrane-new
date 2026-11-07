@@ -961,3 +961,12 @@ select optionally names `ownerKind: personal`. Company select requires `ownerKin
 siloId, generation and accountDigest in addition to the existing exact profile revision.
 The digest represents verified account identity, never credential material. The fold
 checks the owning silo against the event envelope. There is no new event or reaction.
+
+## Writer lease records
+
+New `takeover.started` records carry the same requester, conversation, computer,
+generation and affected turns as the saved quiet proof, plus a writer session,
+proxy instance, quiet receipt id and two bounded expiry times. The old start shape
+remains readable but cannot grant control. `takeover.renewed` keeps the owner and
+original expiry. `takeover.return_requested` names the same owner and writer session.
+All three use the computer stream. They carry no input, clipboard or screen bytes.

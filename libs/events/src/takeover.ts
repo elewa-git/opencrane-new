@@ -58,4 +58,30 @@ const timeoutExample = { ...failedExample, reason: 'pause_timeout' as const };
 const failed = event('takeover.failed', 'computer',
   'The pause deadline expired. Work and control stay closed.',
   takeoverFailedDataSchema, timeoutExample);
-export const takeoverEvents = [refused, requested, pausing, paused, failed];
+export const takeoverStartedLeaseDataSchema = takeoverRequestedDataSchema.omit({ reason: true })
+  .extend({ writerSessionId: id, proxyInstanceId: id, expiresAt: z.iso.datetime(),
+    originalExpiresAt: z.iso.datetime(), quietReceiptId: id }).strict();
+const startedExample = { ...example, writerSessionId: 'socket_1', proxyInstanceId: 'proxy_1',
+  expiresAt: '2026-10-01T12:01:00.000Z', originalExpiresAt: '2026-10-01T12:02:00.000Z',
+  quietReceiptId: 'supervisor_1' };
+export const takeoverRenewedDataSchema = takeoverStartedLeaseDataSchema.pick({
+  assistantId: true, computerId: true, generation: true, podUid: true,
+  conversationId: true, requesterId: true, requesterEventId: true, takeoverId: true,
+  leaseId: true, writerSessionId: true, proxyInstanceId: true, expiresAt: true,
+  originalExpiresAt: true,
+}).strict();
+const { reason: _reason, affectedTurnIds: _turns, quietReceiptId: _receipt,
+  ...renewedExample } = startedExample;
+const renewed = event('takeover.renewed', 'computer',
+  'The current requester renewed the same writer lease.',
+  takeoverRenewedDataSchema, renewedExample);
+export const takeoverReturnRequestedDataSchema = takeoverRenewedDataSchema.omit({
+  expiresAt: true, originalExpiresAt: true, proxyInstanceId: true,
+}).strict();
+const { expiresAt: _expiry, originalExpiresAt: _original,
+  proxyInstanceId: _proxy, ...returnExample } = renewedExample;
+const returned = event('takeover.return_requested', 'computer',
+  'The requester asked to close writer input. Agent work remains paused.',
+  takeoverReturnRequestedDataSchema, returnExample);
+export const takeoverEvents = [refused, requested, pausing, paused, failed,
+  renewed, returned];

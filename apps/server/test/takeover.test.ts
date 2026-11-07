@@ -3,7 +3,9 @@ import { grantStream } from '@opencrane/authz';
 import { computerSummary, readComputerControl } from '@opencrane/auth';
 import { auditTrail, readAudit } from '@opencrane/projections';
 import type { AppendCommand } from '@opencrane/event-store';
-import { requestControl } from '../src/computers/takeover.ts';
+import { requestControl, startRequesterWriter, requesterWriterSlot }
+  from '../src/computers/takeover.ts';
+import { writerProxyInstanceId } from '../src/computers/writer-lease.ts';
 import { turnCommand } from '../src/chat/turns.ts';
 import { viewAccess } from '../src/computers/view-access.ts';
 import { viewFixture } from './support/view-fixture.ts';
@@ -143,3 +145,37 @@ async function refusesRemovedMember(reinvite: boolean) {
 }
 it.each([false, true])('refuses saved removal while IAM still allows access, reinvite=%s',
   refusesRemovedMember, 30_000);
+
+async function writerAfterQuietProof(changed: 'member' | 'request') {
+  const { options, input } = await setup();
+  await requestControl(options, 'alice', input);
+  const proof = { assistantId: 'assistant', computerId: 'desktop', generation: 1,
+    podUid: 'fixture', takeoverId: input.commandId, affectedTurnIds: [],
+    bridgeEpoch: 'bridge', supervisorEpoch: 'supervisor' };
+  await fixture.append('computer-assistant', 'takeover.pausing', { ...proof,
+    executionProof: 'exited', quietProof: 'unavailable' });
+  await fixture.append('computer-assistant', 'takeover.paused', { ...proof,
+    quietProof: 'complete' });
+  const lease = { ...proof, commandId: 'lease-start', conversationId: 'chat',
+    requesterId: 'alice', requesterEventId: input.requesterEventId,
+    leaseId: input.commandId, writerSessionId: 'socket',
+    proxyInstanceId: writerProxyInstanceId,
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    originalExpiresAt: new Date(Date.now() + 120_000).toISOString() };
+  const { affectedTurnIds: _affected, bridgeEpoch: _bridge,
+    supervisorEpoch: _supervisor, ...command } = lease;
+  expect((await startRequesterWriter(options, 'alice', command)).phase).toBe('started');
+  if (changed === 'member') {
+    await fixture.append('member-alice', 'member.removed', {
+      memberId: 'alice', removedBy: 'owner' });
+  } else {
+    await fixture.append('conversation-chat', 'message.posted', {
+      conversationId: 'chat', authorId: 'alice', authorKind: 'human',
+      ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:test', contentType: 'text',
+    });
+  }
+  const slot = requesterWriterSlot(options, 'alice', command);
+  expect(await slot.claim()).toBe(false);
+}
+it.each(['member', 'request'] as const)(
+  'refuses a writer after a newer %s change', writerAfterQuietProof, 30_000);

@@ -1,7 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { takeoverRequestedDataSchema, takeoverPausingDataSchema,
-  takeoverPausedDataSchema, takeoverFailedDataSchema,
+  takeoverPausedDataSchema, takeoverFailedDataSchema, takeoverStartedLeaseDataSchema,
+  takeoverRenewedDataSchema, takeoverReturnRequestedDataSchema,
   computerTurnStartedDataSchema as startDetails,
   computerTurnClosedDataSchema as closeDetails } from '@opencrane/events';
 import { readStreamSummary, type EventStore, type StoredEvent, type SummaryKind }
@@ -15,9 +16,11 @@ export function isComputerLifecycle(type: string) {
   return lifecycleTypes.has(type);
 }
 export type ComputerControl = (Omit<z.infer<typeof takeoverRequestedDataSchema>, 'reason'> & {
-  phase: 'requested' | 'pausing' | 'paused' | 'failed';
+  phase: 'requested' | 'pausing' | 'paused' | 'failed' | 'started' | 'renewed' | 'returning';
   reason: 'requester_requested' | 'pause_timeout';
   supervisorEpoch?: string; bridgeEpoch?: string;
+  quietReceiptId?: string; writerSessionId?: string; proxyInstanceId?: string;
+  expiresAt?: string; originalExpiresAt?: string;
   position: number; commandId: string; requestedAt: string;
 }) | { phase: 'unverified'; position: number };
 export async function readComputerControl(store: Pick<EventStore, 'readStream'>,
@@ -78,8 +81,12 @@ function addComputer(summary: ComputerSummary, row: StoredEvent) {
   if (type === 'takeover.pausing' || type === 'takeover.paused' || type === 'takeover.failed') {
     addControl(summary, row);
   }
-  // Keep old records paused. They contain no checked proof of writer closure.
-  if (type === 'takeover.started' || type === 'takeover.ended') {
+  if (type === 'takeover.started' || type === 'takeover.renewed'
+    || type === 'takeover.return_requested') {
+    addWriterControl(summary, row);
+  }
+  // Keep old end records paused. They contain no checked proof of writer closure.
+  if (type === 'takeover.ended') {
     summary.control = { phase: 'unverified', position: row.sequence };
   }
   if (isComputerLifecycle(type)) summary.lifecycle = row;
@@ -111,7 +118,64 @@ function addControl(summary: ComputerSummary, row: StoredEvent) {
       summary.control.supervisorEpoch = details.supervisorEpoch;
       summary.control.bridgeEpoch = details.bridgeEpoch;
     }
+    if (phase === 'paused') summary.control.quietReceiptId = row.event.id;
   }
+}
+function sameWriterBinding(details: { assistantId: string; computerId: string;
+  generation: number; podUid: string; conversationId: string; requesterId: string;
+  requesterEventId: string; takeoverId: string; leaseId: string },
+  control: Exclude<ComputerControl, { phase: 'unverified' }>) {
+  return details.assistantId === control.assistantId && details.computerId === control.computerId
+    && details.generation === control.generation && details.podUid === control.podUid
+    && details.conversationId === control.conversationId
+    && details.requesterId === control.requesterId
+    && details.requesterEventId === control.requesterEventId
+    && details.takeoverId === control.takeoverId && details.leaseId === control.leaseId;
+}
+function addWriterControl(summary: ComputerSummary, row: StoredEvent) {
+  const type = row.event.type;
+  const control = summary.control;
+  if (!control || control.phase === 'unverified') {
+    summary.control = { phase: 'unverified', position: row.sequence };
+    return;
+  }
+  if (type === 'takeover.started') {
+    const parsed = takeoverStartedLeaseDataSchema.safeParse(row.event.data);
+    const details = parsed.data;
+    if (!details || control.phase !== 'paused' || !sameWriterBinding(details, control)
+      || details.quietReceiptId !== control.quietReceiptId
+      || !sameAffectedTurns(details.affectedTurnIds, control.affectedTurnIds)) {
+      summary.control = { phase: 'unverified', position: row.sequence };
+      return;
+    }
+    summary.control = { ...control, ...details, phase: 'started', position: row.sequence,
+      commandId: row.event.commandId ?? '' };
+    return;
+  }
+  const active = control.phase === 'started' || control.phase === 'renewed';
+  if (type === 'takeover.renewed') {
+    const parsed = takeoverRenewedDataSchema.safeParse(row.event.data);
+    const details = parsed.data;
+    if (active && details && sameWriterBinding(details, control)
+      && details.writerSessionId === control.writerSessionId
+      && details.originalExpiresAt === control.originalExpiresAt
+      && details.proxyInstanceId === control.proxyInstanceId) {
+      summary.control = { ...control, expiresAt: details.expiresAt,
+        phase: 'renewed', position: row.sequence, commandId: row.event.commandId ?? '' };
+      return;
+    }
+  }
+  if (type === 'takeover.return_requested') {
+    const parsed = takeoverReturnRequestedDataSchema.safeParse(row.event.data);
+    const details = parsed.data;
+    if (active && details && sameWriterBinding(details, control)
+      && details.writerSessionId === control.writerSessionId) {
+      summary.control = { ...control, phase: 'returning', position: row.sequence,
+        commandId: row.event.commandId ?? '' };
+      return;
+    }
+  }
+  summary.control = { phase: 'unverified', position: row.sequence };
 }
 function validControlPhase(control: Exclude<ComputerControl, { phase: 'unverified' }>,
   phase: 'pausing' | 'paused' | 'failed', details: { generation: number; supervisorEpoch?: string }) {

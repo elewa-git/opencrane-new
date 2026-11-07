@@ -6970,3 +6970,19 @@ Omission preserves the personal contract; clear remains unchanged. The session s
 the requester. No company verification reader is wired into this route, so company
 choices return unavailable. Successful receipts still contain only status, sequence and
 changeRef. No browser UI, credential release or live company activation is added.
+
+## Saved requester writer lease (Part of #58)
+
+`src/computers/takeover.ts` checks the latest human request, saved membership,
+participation, posting and desktop rights before the internal start, renew and Return
+commands. History loads before the short write check. `writer-lease.ts` requires a
+matching quiet receipt and current computer generation. Each command makes one
+conditional append on the computer stream. A lost append reply is checked by reading
+saved status; it never repeats input. Return closes a local writer slot before append.
+The slot compares saved lease state before and after access checking. It admits one
+writer session per computer in the server process and stops input on expiry, Return,
+access failure or event-store failure. A new process has a different proxy instance id
+and cannot reopen its predecessor's lease. RFB client input permits only standard key and
+pointer messages alongside display setup; clipboard and extensions are refused.
+The production HTTP switch and desktop writer relay remain disabled. Live keyboard,
+hardening and fresh-install qualification are NOT RUN.
