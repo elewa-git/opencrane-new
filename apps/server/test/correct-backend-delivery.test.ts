@@ -66,6 +66,8 @@ async function correctsLoadedTarget() {
   const test = await correctionFixture();
   const other = await test.admit('other-chat', 'returned-native-2');
   await other.start();
+  // Test receipt contents without host delays; separate cases advance time to require expiry.
+  memoryClock();
   const response = await test.native.call(threadId, 'correct', test.args);
   const rows = await corrections(test);
   expect(rows).toHaveLength(1);
