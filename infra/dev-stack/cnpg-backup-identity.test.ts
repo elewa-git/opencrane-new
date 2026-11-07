@@ -22,6 +22,7 @@ let identity: typeof import('./cnpg-backup-identity.ts');
 let returnedPolicy: unknown;
 let writtenPolicy: string;
 let madeBuckets: string[];
+let existingBuckets: Set<string>;
 
 function signedToken(policy: unknown, accessKey: string, expiry: number) {
   const header = Buffer.from(JSON.stringify({ alg: 'HS512', typ: 'JWT' })).toString('base64url');
@@ -46,6 +47,11 @@ async function credentials(this: AssumeRoleProvider) {
 
 async function makeBucket(this: Client, name: string) {
   madeBuckets.push(name);
+  existingBuckets.add(name);
+}
+
+async function bucketExists(this: Client, name: string) {
+  return existingBuckets.has(name);
 }
 
 async function prepare() {
@@ -58,6 +64,7 @@ async function prepare() {
   identity = await import('./cnpg-backup-identity.ts');
   mock.method(AssumeRoleProvider.prototype, 'getCredentials', credentials);
   mock.method(Client.prototype, 'makeBucket', makeBucket);
+  mock.method(Client.prototype, 'bucketExists', bucketExists);
 }
 
 async function cleanup() {
@@ -72,6 +79,7 @@ after(cleanup);
 async function confinedCredentialPasses() {
   returnedPolicy = undefined;
   madeBuckets = [];
+  existingBuckets = new Set();
   const result = await identity.provisionCnpgBackupIdentity(binding);
   assert.deepEqual(madeBuckets, ['ocn-backup-silo-one']);
   assert.equal(result.destinationPath, 's3://ocn-backup-silo-one/cnpg');
@@ -97,6 +105,7 @@ test('a correctly confined provisioned credential passes', confinedCredentialPas
 
 async function overGrantedPolicyRefuses() {
   madeBuckets = [];
+  existingBuckets = new Set();
   returnedPolicy = {
     Version: '2012-10-17',
     Statement: [{ Effect: 'Allow', Action: ['s3:*'], Resource: ['arn:aws:s3:::*'] }],
@@ -109,6 +118,7 @@ test('an over-granted returned policy is refused before bucket creation', overGr
 
 async function changedSessionPolicyRefuses() {
   madeBuckets = [];
+  existingBuckets = new Set();
   returnedPolicy = {
     Version: '2012-10-17',
     Statement: [{ Effect: 'Allow', Action: ['s3:GetObject'],
@@ -120,3 +130,33 @@ async function changedSessionPolicyRefuses() {
 }
 test('a credential with a different signed session policy is refused',
   changedSessionPolicyRefuses);
+
+async function substitutedCredentialRefuses() {
+  returnedPolicy = undefined;
+  madeBuckets = [];
+  existingBuckets = new Set();
+  const result = await identity.provisionCnpgBackupIdentity(binding);
+  result.credentials.secretKey = 'substituted';
+  assert.throws(() => identity.inspectCnpgBackupIdentity(result.evidence, binding,
+    result.credentials), { message: 'CNPG backup identity is not confined to its destination' });
+  const originalCredentials = { ...result.credentials, secretKey: 'leased-secret' };
+  const changedBinding = { ...binding, serviceUid: 'other-service' };
+  assert.throws(() => identity.inspectCnpgBackupIdentity(result.evidence,
+    changedBinding, originalCredentials),
+  { message: 'CNPG backup identity is not confined to its destination' });
+  assert.throws(() => identity.inspectCnpgBackupIdentity({}, binding,
+    originalCredentials),
+  { message: 'CNPG backup identity is not confined to its destination' });
+}
+test('a substituted credential, binding or evidence is refused', substitutedCredentialRefuses);
+
+async function existingPrivateBucketPasses() {
+  returnedPolicy = undefined;
+  madeBuckets = [];
+  existingBuckets = new Set(['ocn-backup-silo-one']);
+  const result = await identity.provisionCnpgBackupIdentity(binding);
+  assert.deepEqual(madeBuckets, []);
+  assert.equal(identity.inspectCnpgBackupIdentity(result.evidence, binding,
+    result.credentials), result.destinationPath);
+}
+test('renewal reuses the owned private bucket', existingPrivateBucketPasses);
