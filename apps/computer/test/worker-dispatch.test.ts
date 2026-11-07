@@ -113,6 +113,24 @@ async function refusesUnready(field: keyof ReturnType<typeof fixture>['ready']) 
 it.each(['isolated', 'scanner', 'egress'] as const)(
   'starts no process without %s readiness', refusesUnready);
 
+async function removesInputAfterFinalRefusal() {
+  const test = fixture();
+  const descriptorsBefore = openDescriptorCount();
+  let activeChecks = 0;
+  function activeOnlyBeforePreparation() {
+    activeChecks += 1;
+    return activeChecks === 1;
+  }
+  test.state.active = activeOnlyBeforePreparation;
+  await expect(test.dispatch()).resolves.toBe('refused');
+  expect(activeChecks).toBe(2);
+  expect(test.starts).toEqual([]);
+  expect(openDescriptorCount()).toBe(descriptorsBefore);
+  expect(fs.existsSync(`${test.root}/operation-1`)).toBe(false);
+}
+it('removes prepared input when the final turn check refuses launch',
+  removesInputAfterFinalRefusal);
+
 async function refusesUnsafe(argv: string[], input: string) {
   const test = fixture(argv, input);
   await expect(test.dispatch()).resolves.toBe('refused');
@@ -165,7 +183,7 @@ it('leaves a missing exit unknown and never resends after its wall limit', unkno
 async function unknownAfterLaunchFailure() {
   const test = fixture();
   const descriptorsBefore = openDescriptorCount();
-  function failLaunch() {
+  function failLaunch(): never {
     throw new Error('private canary');
   }
   test.state.launch = failLaunch;

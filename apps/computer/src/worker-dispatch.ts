@@ -66,19 +66,21 @@ export async function dispatchWorker(options: Dispatch): Promise<'refused' | 'un
   // This path is supervisor-owned. The supplied launcher must prove UID and filesystem
   // isolation before readiness can be true. Production does not supply such a launcher.
   const root = `${options.parent}/${plan.identity.operationId}`;
-  let worker: WorkerProcess;
+  let launchAttempted = false;
   try {
     if (!options.active(plan.identity) || !ready(options.ready)) {
-      prepared.cleanup();
       return 'refused';
     }
-    worker = options.launch(plan, root);
+    // Keep the files for scanning after any attempted launch, including a thrown launch.
+    launchAttempted = true;
+    const worker = options.launch(plan, root);
+    const exit = await exitResult(worker, plan.limits.wallMs);
+    if (exit !== 0) return 'unknown';
+    return 'awaiting_scan';
   } catch {
     // An exception from a launcher cannot prove that it started no process.
     return 'unknown';
+  } finally {
+    prepared.cleanup(launchAttempted);
   }
-
-  const exit = await exitResult(worker, plan.limits.wallMs);
-  if (exit !== 0) return 'unknown';
-  return 'awaiting_scan';
 }

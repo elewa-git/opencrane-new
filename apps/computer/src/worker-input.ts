@@ -146,13 +146,15 @@ export function prepareWorkerInput(plan: ReturnType<typeof workerRequest>, paren
   const parents: Entry[] = [];
   const owned: OwnedEntry[] = [];
   let closed = false;
-  function cleanup() {
+  function cleanup(keepFiles = false) {
     if (closed) {
       return;
     }
     closed = true;
     try {
-      removeOwned(owned);
+      if (!keepFiles) {
+        removeOwned(owned);
+      }
     } finally {
       closeEntries(owned);
       closeEntries(parents);

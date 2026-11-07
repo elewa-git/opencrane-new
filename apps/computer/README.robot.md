@@ -1565,6 +1565,8 @@ It can empty an owned directory that was renamed but cannot remove its new name.
 Unowned additions remain; a directory that cannot be removed reports a fixed cleanup
 error. All preparation errors use fixed text and retain no filesystem error details.
 The caller must call the returned `cleanup()` when finished; repeated cleanup is harmless.
+After a launch attempt, `cleanup(true)` closes the descriptors but keeps the private
+files for scanning or recovery. A refusal before launch uses `cleanup()` to remove them.
 
 `worker-input.test.ts` covers checked npm bytes, empty Git locations, copied/reused plans,
 unsafe parents, traversal, existing roots, replacement links, partial writes and two
@@ -1590,13 +1592,17 @@ The checked input remains in the private files, not in a log, reply or plan. The
 dispatch code enforces the plan's five-minute wall limit. A zero exit means only
 `awaiting_scan`; a non-zero exit, lost exit or launcher exception means `unknown`.
 Neither result publishes files. The registration was consumed before launch, so
-reconnect or duplicate delivery cannot start another process. The private root stays
-available for a later scanner or recovery check; this part does not remove it after
-launch. Validation and preparation errors return only `refused`.
+reconnect or duplicate delivery cannot start another process. Dispatch calls cleanup
+once after every preparation. A refusal before launch removes the files. Every launch
+attempt closes the preparation's descriptors after exit, timeout or launch failure.
+The private root stays available for a later scanner or recovery check. Validation
+and preparation errors return only `refused`.
 
 `worker-dispatch.test.ts` uses the private registration store and a recording process.
-It checks both fixed operations, pre-launch refusals, duplicate delivery, crash and
-missing exit. This is a local dispatch check. Production still supplies no trusted
+It checks both fixed operations, pre-launch refusals, duplicate delivery, crash,
+non-zero and missing exits, and launcher failure. Descriptor counts check that each
+outcome releases the preparation's open handles. This is a local dispatch check.
+Production still supplies no trusted
 native registration delivery, confined UID 1004 launcher, scanner readiness or egress
 readiness. The root connector therefore keeps `worker_execution_disabled`. Runtime
 confinement, remaining quotas, scan/publication and a fresh gVisor journey are NOT RUN.
