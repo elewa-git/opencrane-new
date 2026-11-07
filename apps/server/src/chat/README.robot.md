@@ -154,9 +154,13 @@ See [the contract and own checks](../../../../docs/process/p4-24-pr10h/README.ro
 The saved prohibition poll cancels the exact turn's pending start wait before sending
 Stop. A handler held after credential preparation therefore returns only refusal when
 resumed. Unconfirmed-delivery recovery reuses that verified prohibition instead of
-saving another Stop source. Recovery reads accepted open starts from the computer summary; it grants no
-execution permission. Allocation, occurrence, private thread and generation checks
-still apply. Ordinary conversation history remains outside short access checks.
+saving another Stop source. Recovery reads accepted open starts once per connection from
+the computer summary; it grants no execution permission. Allocation, occurrence,
+private thread and generation checks
+still apply. Concurrent chat polls share the startup read, and later starts enter through
+normal admission. Startup recovery runs while the existing computer Stop timer is active.
+Finished chats do not trigger another computer-history read. Ordinary conversation history
+remains outside short access checks.
 
 The models process uses its existing budget actor to apply saved Stop and then call
 checked finish. The [server contract](../../README.robot.md#saved-routine-stop-recovery)

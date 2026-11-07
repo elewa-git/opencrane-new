@@ -291,7 +291,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   const reports = reportReceiver(reportOptions, input, tokens, socket, refuse, approvals, control);
   socket.on('message', reports.receiveReport);
   try {
-    await resumeBridgeReports(options, input, socket, control);
+    await resumeBridgeReports(options, input, socket, control, routines.recover);
   } catch (error) {
     socket.terminate();
     throw error;

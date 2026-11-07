@@ -117,6 +117,7 @@ export function routineStartRefusal(report: { type: string; senderAttemptId?: st
 export function routineBridge(options: Options, computer: Computer, socket: WebSocket) {
   const turns = new Map<string, TrackedTurn>();
   const checking = new Map<string, Promise<void>>();
+  let recovery: Promise<void> | undefined;
   function clear() {
     turns.clear();
   }
@@ -236,7 +237,7 @@ export function routineBridge(options: Options, computer: Computer, socket: WebS
       return;
     }
   }
-  async function recover(conversationId: string) {
+  async function restoreStarts() {
     function take(summary: ComputerSummary) {
       const recovered: TrackedTurn[] = [];
       for (const saved of summary.turns.values()) {
@@ -246,8 +247,7 @@ export function routineBridge(options: Options, computer: Computer, socket: WebS
           continue;
         }
         const started = computerTurnStartedDataSchema.parse(row.event.data);
-        if (started.task !== 'chat_turn' || started.conversationId !== conversationId ||
-            !started.rootId || started.executionMode !== 'restricted' ||
+        if (started.task !== 'chat_turn' || !started.rootId || started.executionMode !== 'restricted' ||
             turns.has(started.turnId)) {
           continue;
         }
@@ -268,9 +268,20 @@ export function routineBridge(options: Options, computer: Computer, socket: WebS
       }
     }
   }
+  function recover() {
+    if (!recovery) {
+      function retry(error: unknown): never {
+        recovery = undefined;
+        throw error;
+      }
+      // Share startup recovery across chats. Later starts enter through accept.
+      recovery = restoreStarts().catch(retry);
+    }
+    return recovery;
+  }
   async function check(conversationId: string) {
     try {
-      await recover(conversationId);
+      await recover();
       for (const tracked of turns.values()) {
         if (tracked.turn.conversationId === conversationId) {
           await deliver(tracked);
@@ -292,5 +303,5 @@ export function routineBridge(options: Options, computer: Computer, socket: WebS
     checking.set(conversationId, work);
     return work;
   }
-  return { accept, ended, receive, poll };
+  return { accept, ended, receive, poll, recover };
 }
