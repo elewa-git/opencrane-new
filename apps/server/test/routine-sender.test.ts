@@ -1259,6 +1259,9 @@ async function completedRoutineClearsOutput(kind: 'Stop' | 'Access' | 'Denied' |
   expect(link.rejection).toBeUndefined();
   expect({ stops, privateTextReplayedAfterProhibition: replayed })
     .toEqual({ stops: 1, privateTextReplayedAfterProhibition: false });
+  const reaction = routineLifecycle(actor, requireLifecycleLeader, { enabled: true });
+  await reaction.poll();
+  await expectInterruptedRoutine();
 }
 it.each(['Stop', 'Access', 'Denied', 'Expired', 'Admin'] as const)(
   'clears private routine output when completion precedes %s polling',
@@ -1636,3 +1639,71 @@ async function restartedStopReaction(failure: 'budget.root_stopped' | 'routine.r
 }
 it.each(['budget.root_stopped', 'routine.run_finished'] as const)(
   'recovers Stop and finish after reaction restart and a lost %s reply', restartedStopReaction);
+
+async function expectInterruptedRoutine() {
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  let state;
+  let finishes = 0;
+  for (const row of rows) {
+    state = foldRoutine(state, row.event);
+    if (row.event.type === 'routine.run_finished') {
+      finishes++;
+    }
+  }
+  expect(finishes).toBe(1);
+  expect(state?.activeRun).toBeNull();
+  expect(state?.lastRun).toMatchObject({ occurrenceId: 'occurrence', outcome: 'interrupted' });
+  expect(state?.executionAvailable).toBe(false);
+}
+
+async function completedBeforeStopRecovery() {
+  const link = await startRunning();
+  const source = await saveProhibition('Stop');
+  preparedComputer.finish(selection.threadId);
+  function closed() {
+    expect(preparedComputer.closedSessions).toBe(1);
+  }
+  await vi.waitFor(closed);
+  await link.settled();
+  expect(preparedComputer.interruptedThreads).toEqual([]);
+  await preparedComputer.restart();
+  actor = new BudgetActor(nats.store, 'test');
+  await actor.start();
+  const reaction = routineLifecycle(actor, requireLifecycleLeader, { enabled: true });
+  const append = nats.store.append.bind(nats.store);
+  let lost = false;
+  async function loseFinishReply(...args: Parameters<typeof append>) {
+    const result = await append(...args);
+    if (proposedEvent.parse(args[0].event).type === 'routine.run_finished' && !lost) {
+      lost = true;
+      throw new Error('Lost reply');
+    }
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(loseFinishReply);
+  await reaction.poll();
+  await reaction.poll();
+  await expectInterruptedRoutine();
+  expect(lost).toBe(true);
+  vi.restoreAllMocks();
+  await nats.stop();
+  await nats.restart();
+  actor = new BudgetActor(nats.store, 'test');
+  await actor.start();
+  const recovered = routineLifecycle(actor, requireLifecycleLeader, { enabled: true });
+  await recovered.poll();
+  const reference = { routineId: 'orders', eventId: source.eventId, position: source.position };
+  const before = await nats.store.head();
+  await applyRoutineStop(nats.store, 'test', reference, actor, { enabled: true });
+  await applyRoutineStop(nats.store, 'test', reference, actor, { enabled: true });
+  expect(await nats.store.head()).toBe(before);
+  await expectInterruptedRoutine();
+  expect(actor.state.roots[0]!.stop).toMatchObject({ sourceEventId: source.eventId });
+  const budget = await history(nats.store, 'budget-test', 'test');
+  function isStop(row: typeof budget[number]) {
+    return row.event.type === 'budget.root_stopped';
+  }
+  expect(budget.filter(isStop)).toHaveLength(1);
+}
+it('finishes a turn completed before Stop polling across restart, lost reply and retries',
+  completedBeforeStopRecovery);

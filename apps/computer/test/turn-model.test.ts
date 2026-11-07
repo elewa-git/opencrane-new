@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { reportJournal, wireReport, type BridgeReport } from '../src/report-journal.ts';
 import { turnRunner, type TurnDriver } from '../src/turn-runner.ts';
 
@@ -297,3 +297,42 @@ async function retriesFailedInterrupt() {
 }
 it('retries a failed interrupt and shares the successful retry with later Stops',
   retriesFailedInterrupt);
+
+async function nativeCompletionEvidence(nativeTurnId: string, withArtifacts: boolean) {
+  const test = modelFixture('gpt-6-luna');
+  if (withArtifacts) {
+    function snapshot() {
+      return Promise.resolve({});
+    }
+    function artifacts() {
+      return Promise.resolve([]);
+    }
+    test.driver.artifactSnapshot = snapshot;
+    test.driver.artifactList = artifacts;
+  }
+  try {
+    await test.runner.start(test.input);
+    const terminal = { method: 'turn/completed', params: {
+      threadId: 'thread', turn: { id: nativeTurnId, status: 'completed' } } };
+    test.runner.complete(terminal);
+    function completed() {
+      expect(test.reports.at(-1)?.type).toBe('agent.turn_completed');
+    }
+    await vi.waitFor(completed);
+    if (nativeTurnId === 'codex-turn') {
+      expect(test.reports.at(-1)?.nativeTermination).toBe('turn_completed');
+    } else {
+      expect(test.reports.at(-1)?.nativeTermination).toBeUndefined();
+    }
+    const restored = reportJournal(test.driver);
+    restored.load();
+    expect(restored.reports.at(-1)?.nativeTermination)
+      .toBe(test.reports.at(-1)?.nativeTermination);
+  } finally {
+    test.finish();
+  }
+}
+it.each([
+  ['codex-turn', false], ['codex-turn', true], ['other-turn', false], ['other-turn', true],
+] as const)('retains only matched native completion evidence for %s, artifacts=%s',
+  nativeCompletionEvidence);
