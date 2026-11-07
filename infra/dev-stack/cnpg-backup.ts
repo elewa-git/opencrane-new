@@ -227,7 +227,7 @@ async function markerResponse(response: IncomingMessage,
     commandTimeout(30_000, limits);
     const status = response.statusCode!;
     requireValid(expectedStatuses.includes(status));
-    if (status === 403 || status === 404 || status === 412) {
+    if (status === 400 || status === 403 || status === 404 || status === 412) {
       return { status, bytes: Buffer.alloc(0), etag: undefined, versionId: undefined };
     }
     const chunks: Buffer[] = [];
@@ -362,14 +362,18 @@ async function checkConfinement(target: ReturnType<typeof destination>,
   const marker = random.toString('hex');
   const hash = createHash('md5');
   hash.update(marker);
-  const match = { 'if-match': `"${hash.digest('hex')}"` };
+  const digest = hash.digest();
+  const match = { 'if-match': `"${digest.toString('hex')}"` };
+  const badChecksum = Buffer.from(digest);
+  badChecksum[0] = badChecksum[0]! ^ 1;
+  const absent = { 'if-none-match': '*', 'content-md5': badChecksum.toString('base64') };
   async function deniedWrite(location: typeof outside) {
     let mayExist = true;
     let query: string | undefined;
     try {
-      // Require denial even when a conditional write would otherwise find no object.
-      const result = await session.exchange(location, 'PUT', match, '', marker,
-        [200, 403, 404, 412]);
+      // Test write permission alone. Reject the bytes by checksum if writing is allowed.
+      const result = await session.exchange(location, 'PUT', absent, '', marker,
+        [200, 400, 403, 404, 412]);
       mayExist = result.status === 200;
       if (result.status === 403) {
         return;

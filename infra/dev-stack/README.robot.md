@@ -2230,9 +2230,13 @@ and in a randomly named different bucket. Outside-prefix checks use a sibling
 folder, including a changed suffix to catch grants missing a folder boundary.
 Root listings refuse even if the reply is empty or filtered. Missing objects,
 missing buckets and failed write conditions are not proof of denied access.
-Outside writes use `If-Match` with an unpredictable ETag to avoid creating objects
-when the store honours conditional writes. If a store writes anyway or loses its
-reply, the checker attempts the same bounded, conditional cleanup.
+Outside writes use `If-None-Match: *` and a deliberately incorrect `Content-MD5`
+checksum. The checksum prevents storage when writing is allowed; only HTTP 403
+passes. `If-Match` would require read permission too and could hide an excessive
+write-only grant. If a store writes anyway or loses its reply, the checker attempts
+the same bounded, conditional cleanup. See the S3 contracts for
+[conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html)
+and [checksum errors](https://docs.aws.amazon.com/AmazonS3/latest/developerguide/ErrorResponses.html).
 Excessive or unproved permissions return
 `CNPG backup credential is not confined to its bucket and prefix`.
 These probes test the chosen locations; they do not inspect every possible grant
