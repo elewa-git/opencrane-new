@@ -1,5 +1,6 @@
 import * as crypto from 'node:crypto';
 import { readdirSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { memoryForgottenEventSchema, memoryContextRecordedEventSchema,
   memoryCleanupRecordedEventSchema } from '@opencrane/events';
@@ -80,17 +81,60 @@ async function tombstones(test: Backend) {
   return rows.filter(isForget);
 }
 
-async function forgetsLoadedTarget() {
-  const test = await forgetFixture();
-  memoryClock();
-  const response = await test.native.call(threadId, 'forget', test.args);
-  const rows = await tombstones(test);
-  expect(rows).toHaveLength(1);
-  const saved = memoryForgottenEventSchema.parse(rows[0]!.event);
+function expectedForgetResponse(saved: ReturnType<typeof memoryForgottenEventSchema.parse>) {
   const receipt = { operation: 'forget', outcome: 'accepted', changeId: saved.id,
     memoryId: 'garden', revision: 2, scopeId, audience: { kind: 'person', ownerId: 'alice' },
     acceptedAt: saved.time, hidden: true, cleanupStatus: 'pending' };
-  const expected = { jsonrpc: '2.0', id: 1, result: { content: [], structuredContent: receipt } };
+  return { jsonrpc: '2.0', id: 1, result: { content: [], structuredContent: receipt } };
+}
+
+async function acknowledgedForget(test: Awaited<ReturnType<typeof forgetFixture>>, expired: boolean) {
+  const clock = memoryClock();
+  const store = test.setup.nats.store;
+  const append = store.append.bind(store);
+  const saved = Promise.withResolvers<number>();
+  const release = Promise.withResolvers<void>();
+  const acknowledged = Promise.withResolvers<void>();
+  async function holdAcknowledgement(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    if (memoryForgottenEventSchema.safeParse(command.event).success) {
+      expect(result.status).toBe('appended');
+      saved.resolve(command.deadline!);
+      await release.promise;
+      acknowledged.resolve();
+    }
+    return result;
+  }
+  vi.spyOn(store, 'append').mockImplementation(holdAcknowledgement);
+  const pending = test.native.call(threadId, 'forget', test.args);
+  function finishedBeforeSave(): never {
+    throw new Error('Forget finished before saving the tombstone');
+  }
+  try {
+    const deadline = await Promise.race([saved.promise, pending.then(finishedBeforeSave)]);
+    expect(await tombstones(test)).toHaveLength(1);
+    if (expired) {
+      // Let real time pass the original deadline while the saved reply is held.
+      clock.resume();
+      await delay(Math.max(0, deadline - performance.now()) + 50);
+      expect(performance.now()).toBeGreaterThan(deadline);
+    } else {
+      expect(performance.now()).toBeLessThan(deadline);
+    }
+  } finally {
+    release.resolve();
+  }
+  await acknowledged.promise;
+  return pending;
+}
+
+async function forgetsLoadedTarget() {
+  const test = await forgetFixture();
+  const response = await acknowledgedForget(test, false);
+  const rows = await tombstones(test);
+  expect(rows).toHaveLength(1);
+  const saved = memoryForgottenEventSchema.parse(rows[0]!.event);
+  const expected = expectedForgetResponse(saved);
   expect(response).toEqual(expected);
   const expectedData = { expectedRevision: 1, ownerId: 'alice' };
   expect(saved.data).toMatchObject(expectedData);
@@ -116,6 +160,20 @@ async function forgetsLoadedTarget() {
 }
 it('forgets the loaded target and refuses old input while a fresh turn sees no fact',
   forgetsLoadedTarget, 120_000);
+
+async function refusesLateAcknowledgement() {
+  const test = await forgetFixture();
+  const response = await acknowledgedForget(test, true);
+  const message = 'The tool did not confirm a result. It may have received the request. '
+    + 'OpenCrane will not send it again.';
+  const expected = { jsonrpc: '2.0', id: 1,
+    result: { isError: true, content: [{ type: 'text', text: message }] } };
+  expect(response).toEqual(expected);
+  expect(await tombstones(test)).toHaveLength(1);
+  expect(JSON.stringify(response)).not.toContain(text);
+}
+it('refuses a saved Forget acknowledgement after the real deadline',
+  refusesLateAcknowledgement, 120_000);
 
 async function recoversForgetReceipt(lost: boolean) {
   const test = await forgetFixture();
@@ -685,35 +743,10 @@ async function releasesOnlyCurrentOutput(forgotten: boolean) {
     conversationId: 'chat', turnId: test.turnId, threadId, generation: 1,
     inputGeneration: evidence.inputGeneration, text };
   if (forgotten) {
-    // Wait for the saved tombstone before allowing its acknowledgement to return.
-    memoryClock();
-    const store = test.setup.nats.store;
-    const append = store.append.bind(store);
-    const saved = Promise.withResolvers<void>();
-    const acknowledge = Promise.withResolvers<void>();
-    async function holdAcknowledgement(command: Parameters<typeof append>[0]) {
-      const result = await append(command);
-      if (memoryForgottenEventSchema.safeParse(command.event).success) {
-        expect(result.status).toBe('appended');
-        saved.resolve();
-        await acknowledge.promise;
-      }
-      return result;
-    }
-    vi.spyOn(store, 'append').mockImplementation(holdAcknowledgement);
-    const pending = test.native.call(threadId, 'forget', test.args);
-    function finishedBeforeSave(): never {
-      throw new Error('Forget finished before saving the tombstone');
-    }
-    try {
-      await Promise.race([saved.promise, pending.then(finishedBeforeSave)]);
-      expect(await tombstones(test)).toHaveLength(1);
-    } finally {
-      acknowledge.resolve();
-    }
-    const response = await pending;
-    const expected = { result: { structuredContent: { outcome: 'accepted' } } };
-    expect(response).toMatchObject(expected);
+    const response = await acknowledgedForget(test, false);
+    const rows = await tombstones(test);
+    const saved = memoryForgottenEventSchema.parse(rows[0]!.event);
+    expect(response).toEqual(expectedForgetResponse(saved));
   }
   const bytes = Buffer.from(JSON.stringify(output));
   test.link.socket.emit('message', bytes);
