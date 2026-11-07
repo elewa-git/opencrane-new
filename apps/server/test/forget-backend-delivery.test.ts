@@ -16,7 +16,9 @@ import { computers, groups, memoryScopeId, type Db } from '@opencrane/projection
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { subscribePrivateOutput } from '../src/chat/private-output.ts';
 import { forgetTool } from '../src/memory/mcp.ts';
+import * as forgetCommands from '../src/memory/forget.ts';
 import { readAgentChange } from '../src/memory/forget.ts';
+import { MemoryRefused, scopeAccess, scopeFor } from '../src/memory/access.ts';
 import { commandReference } from '../src/memory/command-history.ts';
 import { recallBackend, scopeId, threadId } from './support/recall-backend.ts';
 
@@ -169,9 +171,11 @@ async function recoveryRoute(test: Backend) {
   const joined = await test.setup.append('member-bob', 'member.joined', member);
   await test.setup.auth.handler.handle(joined, test.setup.db);
   const team = { teamId: 'sales', name: 'Sales', createdBy: 'alice' };
-  await test.setup.append('team-sales', 'team.created', team);
+  const created = await test.setup.append('team-sales', 'team.created', team);
+  await test.setup.auth.handler.handle(created, test.setup.db);
   const membership = { teamId: 'sales', memberId: 'alice', addedBy: 'alice' };
-  await test.setup.append('team-sales', 'team.member_added', membership);
+  const added = await test.setup.append('team-sales', 'team.member_added', membership);
+  await test.setup.auth.handler.handle(added, test.setup.db);
   await test.setup.runner.initialise(groups);
   await test.setup.runner.initialise(computers);
   await test.setup.runner.run(groups);
@@ -238,6 +242,86 @@ async function refusesRecovery(reason: typeof recoveryRefusals[number]) {
 }
 it.each(recoveryRefusals)('refuses authenticated Forget recovery for %s access',
   refusesRecovery, 120_000);
+
+const helperRefusals = ['foreign owner', 'shared scope'] as const;
+async function refusesRecoveryHelper(reason: typeof helperRefusals[number]) {
+  const test = await recallBackend(true);
+  const ownScope = scopeFor('test', 'person', 'alice');
+  let refusedScope = scopeFor('test', 'person', 'bob');
+  if (reason === 'shared scope') {
+    // Keep the owner equal to the requester so only the scope-kind check refuses it.
+    refusedScope = scopeFor('test', 'group', 'alice');
+  }
+  const commandId = 'helper-recovery';
+  const base = { commandId, silo: 'test', type: 'memory.forgotten',
+    source: 'opencrane-server', time: new Date().toISOString(),
+    principal: { kind: 'agent', id: 'alice' }, correlation: {} };
+  for (const scope of [ownScope, refusedScope]) {
+    const data = { schemaVersion: 1, ...scope, memoryId: 'garden', revision: 2,
+      expectedRevision: 1 };
+    const proposed = { ...base, id: `forgotten-${scope.scopeId}`,
+      subject: `scope-${scope.scopeId}`, data };
+    const event = memoryForgottenEventSchema.parse(proposed);
+    await test.setup.nats.seed([event]);
+  }
+  const control = await readAgentChange(test.memory, 'alice', ownScope, commandId);
+  const expected = { operation: 'forget', outcome: 'accepted',
+    changeId: `forgotten-${ownScope.scopeId}`, memoryId: 'garden', revision: 2,
+    scopeId: ownScope.scopeId, audience: { kind: 'person', ownerId: 'alice' },
+    acceptedAt: base.time, hidden: true, cleanupStatus: 'pending' };
+  expect(control).toEqual(expected);
+  const before = await test.setup.nats.store.head();
+  const files = readdirSync(test.memory.keyDirectory);
+  const appends = vi.spyOn(test.setup.nats.store, 'append');
+  const decrypts = vi.spyOn(crypto, 'createDecipheriv');
+  const keyBytes = vi.spyOn(crypto, 'randomBytes');
+  const refused = readAgentChange(test.memory, 'alice', refusedScope, commandId);
+  await expect(refused).rejects.toBeInstanceOf(MemoryRefused);
+  expect(appends).not.toHaveBeenCalled();
+  expect(await test.setup.nats.store.head()).toBe(before);
+  expect(readdirSync(test.memory.keyDirectory)).toEqual(files);
+  expect(decrypts).not.toHaveBeenCalled();
+  expect(keyBytes).not.toHaveBeenCalled();
+}
+it.each(helperRefusals)('refuses the recovery helper for %s with a matching saved command',
+  refusesRecoveryHelper, 120_000);
+
+async function checksRecoveryRoutePermission() {
+  const test = await recallBackend(true);
+  const recover = await recoveryRoute(test);
+  const sharedScope = scopeFor('test', 'group', 'sales');
+  const access = await scopeAccess(test.memory, 'alice', sharedScope, true);
+  const expectedAccess = { canRead: true, canWrite: true, canCorrect: false };
+  expect(access).toMatchObject(expectedAccess);
+  // Let the helper succeed so its separate owner check cannot hide a missing route check.
+  const helper = vi.spyOn(forgetCommands, 'readAgentChange');
+  const unknown = { outcome: 'unknown' };
+  helper.mockResolvedValue(unknown);
+  const control = await recover('alice');
+  expect(control.statusCode, control.body).toBe(200);
+  expect(control.json()).toEqual({ outcome: 'unknown' });
+  const expectedOptions = { store: test.memory.store };
+  const ownScope = scopeFor('test', 'person', 'alice');
+  expect(helper).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining(expectedOptions), 'alice', ownScope, 'native-forget');
+  helper.mockClear();
+  const before = await test.setup.nats.store.head();
+  const files = readdirSync(test.memory.keyDirectory);
+  const appends = vi.spyOn(test.setup.nats.store, 'append');
+  const decrypts = vi.spyOn(crypto, 'createDecipheriv');
+  const keyBytes = vi.spyOn(crypto, 'randomBytes');
+  const refused = await recover('alice', sharedScope.scopeId);
+  expect(refused.statusCode, refused.body).toBe(404);
+  expect(refused.json()).toEqual({ status: 'refused' });
+  expect(helper).not.toHaveBeenCalled();
+  expect(appends).not.toHaveBeenCalled();
+  expect(await test.setup.nats.store.head()).toBe(before);
+  expect(readdirSync(test.memory.keyDirectory)).toEqual(files);
+  expect(decrypts).toHaveBeenCalledTimes(1);
+  expect(keyBytes).not.toHaveBeenCalledWith(32);
+}
+it('checks canCorrect at the recovery route before calling the helper',
+  checksRecoveryRoutePermission, 120_000);
 
 async function isolatesRecoveryPrincipals() {
   const test = await forgetFixture();
