@@ -490,6 +490,11 @@ it('rebuilds the recorded switch-on without changing keys, models or verificatio
   replaysRecordedSwitchOn);
 
 async function boundsReplacementPreparation() {
+  const candidateModels = [
+    'gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-luna', 'gpt-6-sol',
+    'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5',
+    'gpt-5.5-pro', 'gpt-5.4', 'gpt-5.4-pro',
+  ];
   for (let index = 0; index < 20; index++) {
     const providerId = `extra-${index}`;
     const subject = `provider-${providerId}`;
@@ -498,9 +503,8 @@ async function boundsReplacementPreparation() {
       { ...common, revision: 1, provider: 'openai', name: providerId });
     await append(subject, 'provider.key_saved', { ...common, revision: 2,
       secretRef: providerSecretRef('acme', providerId, `binding-${counter + 1}`) });
-    const repeatedModels = Array<string>(11).fill('gpt-6.1-sol');
     await append(subject, 'provider.models_selected',
-      { ...common, revision: 3, models: repeatedModels });
+      { ...common, revision: 3, models: candidateModels });
     await append(subject, 'provider.verification_recorded', {
       ...common, revision: 3, kind: 'reachability', attemptId: 'check', outcome: 'pass',
     });
