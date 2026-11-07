@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
-import { createStore, memberAuthorisation } from '@opencrane/authz';
+import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { pgDb, providers, routines, ProjectionRunner, rebuildProviderProjection, readProviders } from '@opencrane/projections';
@@ -205,12 +205,40 @@ async function racesAndExpires() {
 }
 it('orders concurrent choices and refuses an expired authority check', racesAndExpires);
 async function hidesAfterRemoval() {
+  const originalRead = nats.store.readStream.bind(nats.store);
+  let releaseRead: (() => void) | undefined;
+  let readStarted: (() => void) | undefined;
+  const started = new Promise<void>(resolve => { readStarted = resolve; });
+  const release = new Promise<void>(resolve => { releaseRead = resolve; });
+  async function* delayedRead(subject: string, from?: number, deadline?: number) {
+    if (subject === 'assistant-*') {
+      readStarted?.();
+      await release;
+    }
+    yield* originalRead(subject, from, deadline);
+  }
+  const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(delayedRead);
+  const late = request('GET', 'primary', undefined, 'admin', undefined, undefined,
+    'dependencies');
+  await started;
   await append('member-admin', 'member.removed', { memberId: 'admin', removedBy: 'owner' }, false);
+  releaseRead?.();
+  expect((await late).statusCode).toBe(403);
+  spy.mockRestore();
   await deniedRequest('admin', 'https://app.example.test', 'org-acme');
 }
 it('refuses a departed admin even before IAM catches up', hidesAfterRemoval);
 
 async function previewsRetirementWithoutChangingHistory() {
+  const saved = (await request('GET')).json<{ rows: { kind: string }[] }>();
+  if (!saved.rows.some(row => row.kind === 'silo_default')) {
+    const defaultChoice = await input({ kind: 'silo_default', dependantId: 'acme' });
+    expect((await request('POST', 'primary', defaultChoice)).statusCode).toBe(200);
+  }
+  await append('assistant-preview', 'assistant.created',
+    { assistantId: 'preview', ownerId: 'bob', kind: 'personal' });
+  const ownChoice = await input({ dependantId: 'preview' });
+  expect((await request('POST', 'primary', ownChoice)).statusCode).toBe(200);
   const before = await nats.store.head();
   const response = await request('GET', 'primary', undefined, 'owner', undefined, undefined,
     'dependencies');
@@ -222,23 +250,120 @@ async function previewsRetirementWithoutChangingHistory() {
     sources: { assistants: 'complete', routines: 'complete' } });
   expect(preview.dependencies).toEqual(expect.arrayContaining([
     expect.objectContaining({ kind: 'silo_default', dependantId: 'acme', task: 'chat_turn' }),
-    expect.objectContaining({ kind: 'assistant', dependantId: 'one', task: 'chat_turn' }),
+    expect.objectContaining({ kind: 'assistant', dependantId: 'preview', task: 'chat_turn' }),
   ]));
   expect((await request('GET', 'primary', undefined, 'bob', undefined, undefined,
     'dependencies')).statusCode).toBe(403);
+  const choices = preview.dependencies.map(row => ({ kind: row.kind,
+    dependantId: row.dependantId, task: row.task,
+    expectedBindingSequence: row.position, action: 'pause' }));
+  const position = await nats.store.head('provider-*');
+  const proposed = { expectedProviderSequence: position, choices };
+  const valid = await request('POST', 'primary', proposed, 'owner', undefined, undefined,
+    'dependencies/preview');
+  expect(valid.statusCode).toBe(200);
+  expect(valid.json()).toMatchObject({ choicesValid: true, canRetire: false });
+  const incomplete = { ...proposed, choices: choices.slice(1) };
+  expect((await request('POST', 'primary', incomplete, 'owner', undefined, undefined,
+    'dependencies/preview')).statusCode).toBe(409);
+  const duplicate = { ...proposed, choices: [...choices, choices[0]] };
+  expect((await request('POST', 'primary', duplicate, 'owner', undefined, undefined,
+    'dependencies/preview')).statusCode).toBe(409);
+  const stale = { ...proposed, expectedProviderSequence: position - 1 };
+  expect((await request('POST', 'primary', stale, 'owner', undefined, undefined,
+    'dependencies/preview')).statusCode).toBe(409);
   expect(await nats.store.head()).toBe(before);
 }
 it('shows exact saved dependencies only to a current admin without saving an event',
   previewsRetirementWithoutChangingHistory);
 
+async function checksLiveReplacementGrants() {
+  const saved = (await request('GET')).json<{ rows: { dependantId: string }[] }>();
+  if (!saved.rows.some(row => row.dependantId === 'preview')) {
+    await append('assistant-preview', 'assistant.created',
+      { assistantId: 'preview', ownerId: 'bob', kind: 'personal' });
+    const choice = await input({ dependantId: 'preview' });
+    expect((await request('POST', 'primary', choice)).statusCode).toBe(200);
+  }
+  const subject = grantStream('model', 'gpt-6.1-sol');
+  for (const [granteeKind, granteeId] of [['member', 'bob'], ['assistant', 'preview']]) {
+    await append(subject, 'grant.given', { resourceType: 'model', resourceId: 'gpt-6.1-sol',
+      granteeKind, granteeId, grantedBy: 'owner' });
+  }
+  const response = await request('GET', 'primary', undefined, 'owner', undefined, undefined,
+    'dependencies');
+  expect(response.statusCode).toBe(200);
+  const preview = response.json<{ expectedProviderSequence: number; dependencies: {
+    kind: string; dependantId: string; task: string; position: number;
+    replacements: { providerId: string; revision: number; model: string }[] }[] }>();
+  const own = preview.dependencies.find(row => row.dependantId === 'preview');
+  expect(own?.replacements).toContainEqual({ providerId: 'secondary', revision: 3,
+    model: 'gpt-6.1-sol' });
+  const choices = preview.dependencies.map(row => row.dependantId === 'preview'
+    ? { kind: row.kind, dependantId: row.dependantId, task: row.task,
+      expectedBindingSequence: row.position, action: 'replace',
+      targetProviderId: 'secondary', targetRevision: 3, model: 'gpt-6.1-sol' }
+    : { kind: row.kind, dependantId: row.dependantId, task: row.task,
+      expectedBindingSequence: row.position, action: 'pause' });
+  const proposed = { expectedProviderSequence: preview.expectedProviderSequence, choices };
+  expect((await request('POST', 'primary', proposed, 'owner', undefined, undefined,
+    'dependencies/preview')).json()).toMatchObject({ choicesValid: true, canRetire: false });
+  await append(subject, 'grant.revoked', { resourceType: 'model', resourceId: 'gpt-6.1-sol',
+    granteeKind: 'assistant', granteeId: 'preview', revokedBy: 'owner' });
+  expect((await request('POST', 'primary', proposed, 'owner', undefined, undefined,
+    'dependencies/preview')).statusCode).toBe(409);
+}
+it('checks saved model grants before offering and accepting a replacement',
+  checksLiveReplacementGrants);
+
+async function pagesStableDependencies() {
+  for (let index = 0; index < 51; index++) {
+    const assistantId = `page-${index}`;
+    await append(`assistant-${assistantId}`, 'assistant.created',
+      { assistantId, ownerId: 'bob', kind: 'personal' });
+    await append('provider-primary', 'provider.model_binding_set', {
+      providerId: 'primary', revision: 3, changedBy: 'owner',
+      kind: 'assistant', dependantId: assistantId, task: 'chat_turn',
+      expectedProviderSequence: await nats.store.head('provider-*'),
+      previousBindingSequence: 0, state: 'active', model: 'gpt-6.1-sol',
+    });
+  }
+  const first = await request('GET', 'primary', undefined, 'owner', undefined, undefined,
+    'dependencies');
+  const page = first.json<{ dependencies: { dependantId: string }[]; nextCursor: number;
+    expectedProviderSequence: number; routinePosition: number }>();
+  expect(page.dependencies).toHaveLength(50);
+  const query = `dependencies?after=${page.nextCursor}&expectedProviderSequence=` +
+    `${page.expectedProviderSequence}&expectedRoutinePosition=${page.routinePosition}`;
+  const second = await request('GET', 'primary', undefined, 'owner', undefined, undefined, query);
+  expect(second.statusCode).toBe(200);
+  const secondRows = second.json<{ dependencies: { dependantId: string }[] }>().dependencies;
+  expect(secondRows.some(row => page.dependencies.some(firstRow =>
+    firstRow.dependantId === row.dependantId))).toBe(false);
+  const staleQuery = query.replace(`expectedProviderSequence=${page.expectedProviderSequence}`,
+    `expectedProviderSequence=${page.expectedProviderSequence - 1}`);
+  expect((await request('GET', 'primary', undefined, 'owner', undefined, undefined,
+    staleQuery)).statusCode).toBe(409);
+}
+it('returns bounded pages tied to the saved provider and routine positions',
+  pagesStableDependencies, 120_000);
+
 async function routineGaps() {
   await dbs.queue.query("DELETE FROM projection_checkpoints WHERE name = 'routines'");
   expect((await request('GET')).statusCode).toBe(503);
+  const lag = await request('GET', 'primary', undefined, 'owner', undefined, undefined,
+    'dependencies');
+  expect(lag.json()).toMatchObject({ sources: { routines: 'unavailable' },
+    canRetire: false });
   await runner.initialise(routines);
   await append('routine-old', 'routine.paused', { routineId: 'old', pausedBy: 'owner' });
   expect((await request('GET')).statusCode).toBe(503);
   await runner.run(routines);
   expect((await request('GET')).json()).toMatchObject({ routines: { status: 'unsupported' } });
+  const old = await request('GET', 'primary', undefined, 'owner', undefined, undefined,
+    'dependencies');
+  expect(old.json()).toMatchObject({ sources: { routines: 'not_available' },
+    unresolvedRoutines: [{ routineId: 'old' }], canRetire: false });
 }
 it('reports projection failure and legacy routine history without invented counts', routineGaps);
 

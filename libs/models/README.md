@@ -414,6 +414,10 @@ Retrying an unchanged model call can recover its original unsent hold and saved 
   the model selection is missing from its read. Each reply confirms the change that
   was saved. Reusing a request id for another change is refused.
   Ordinary calls still use the existing gateway setup.
+- Reads a provider's saved assistant bindings for a retirement preview. It checks
+  explicit pause or replacement choices against current grants and connection
+  readiness without saving a change. Existing routines block a complete review
+  because they have no saved model binding yet.
 - Signs short passes for memory calls through the gateway.
   A thread can read the person's own facts, its assistant's notes and that assistant's group facts.
   It can save facts only in the requester’s own memory, with a separate write grant.

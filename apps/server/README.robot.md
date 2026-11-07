@@ -4661,6 +4661,9 @@ The provider list reports when model access routes are available. Those routes
 let admins read and change grants for people, groups and assistants. Provider
 requests report when saved membership or ownership is still being applied. A
 caller can wait briefly and repeat the same command id after that reply.
+Provider dependency previews page safe binding metadata and validate explicit
+choices without an append. Existing routines block completeness because they
+have no saved model binding.
 
 The chat connection notifies authorised readers when a spending stop is saved
 for an original request they can see. A status read supplies the saved reason

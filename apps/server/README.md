@@ -247,6 +247,8 @@ for current permissions and memory revisions.
 Provider dependency requests use the database to check for saved routines before checking
 current administrator and provider permissions. Missing or changing data returns unavailable.
 Older and retired routines still mean that complete dependency information is unsupported.
+The retirement preview also shows saved assistant choices and safe routine names.
+It checks proposed pauses and replacements, but cannot retire a connection.
 
 An internal command can pause an occupied routine after its assistant is deactivated.
 It checks the saved deactivation and keeps the original run and schedule. Switching the
