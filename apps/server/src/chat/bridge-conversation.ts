@@ -32,6 +32,7 @@ export type WatchOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'sto
     childStartUrl?: string;
     objects?: Client;
     catalogue?: Pick<ReturnType<typeof connectMcpCatalogue>, 'rows'>;
+    installRetainedCall?: (read: NonNullable<ChatOptions['retainedCall']>) => void;
   };
 type Conversation = Awaited<ReturnType<typeof listConversations>>[number];
 export type AgentSession = Extract<Conversation, { mode: 'agent_session' }>;

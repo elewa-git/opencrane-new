@@ -2,6 +2,16 @@
 
 For people, read [README.md](README.md) first.
 
+## Original Ask call status
+
+`readOriginalCallStatus` reads saved approval, decision, dispatch and computer
+history before the server's final read-access check. The server asks the original
+live computer for a retained-call signal after checking the reader's access.
+Eligibility needs one proved non-dispatched permit, the same approval, conversation,
+turn, tool, connection, computer id and generation, plus the original saved approval
+expiry. A failed live read leaves retry unknown. A lost or replaced computer and an
+ended turn report ended. The signal carries no call bytes and never authorises a send.
+
 ## Provider retirement preview
 
 `providerRetirementPreview` reuses provider event inventory, checked assistant

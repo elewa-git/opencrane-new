@@ -45,6 +45,7 @@ Control refusals recheck access before saving and appear in the requester’s
 conversation history. Each control command can save only one outcome.
 A hand-off without a saved outcome stays unknown, even when other evidence reports success. A response
 does not prove a business change succeeded. Reading history never sends a tool call.
+The original-call read checks a private live signal; a missing signal leaves retry unknown.
 
 Refused control attempts in enabled test setups save a small audit record. They do not
 change the current controller or interrupt work. Production control stays disabled.
@@ -220,7 +221,7 @@ flowchart LR
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, checked publication history, current accounting and exact membership receipts| postgres
   server -->|waits briefly for Forget locks| postgres
-  server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, routine Stops after deactivation or failed evidence reads, memory Stops after confirmed loss, private exit reports, reply removal receipts after completion, checked reports and publication files| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, private routine preparation and delivery, retained call status, Stops, checked reports and publication files| computer["apps/computer<br/>assistant computers"]
   server -->|checks an activated child start and its root allowance| runtime
   computer -.->|records private thread for memory discovery| server
   server -.->|prepares up to four private memory tools| computer

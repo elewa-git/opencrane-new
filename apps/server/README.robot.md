@@ -1,5 +1,14 @@
 # Server
 
+## Retained Ask call read
+
+The server installs a live reader from its bridge watcher. It queries only an
+already connected computer using the authenticated WebSocket. Each request has a
+random read id and a 1.5-second receipt limit. Replies must match that request,
+computer and generation. A missing socket, reply or valid binding returns no signal.
+The public GET still checks saved history and current participation before replying;
+it never sends call bytes or wakes a computer. Replacement sending remains disabled.
+
 ## Closed chat private process recovery
 
 `src/chat/close-cleanup.ts` keeps an admitted restricted turn pending while its

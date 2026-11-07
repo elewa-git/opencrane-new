@@ -17,7 +17,9 @@ import { catalogueEvidence, fixture, reviewCatalogue,
   toolEvidence } from '@opencrane/models/testing';
 async function approvalFixture(stepUp = false,
   retainedCall?: () => Promise<{ approvalId: string; turnId: string;
-    permitId: string; expiresAt: string } | undefined>) {
+    callId: string; conversationId: string; computerId: string; generation: number;
+    serverId: string; connectionId: string; toolName: string;
+    expiresAt: string } | undefined>) {
   const f = await fixture();
   await f.runner.initialise(conversations);
   await f.runner.run(conversations);
@@ -839,9 +841,17 @@ it('permits one unchanged retry only after the gateway proves no dispatch',
   retriesOnlyVerifiedNonDispatch, 40_000);
 
 async function readsOriginalCallWithoutChangingIt() {
-  let signal: { approvalId: string; turnId: string; permitId: string;
+  let readerFails = false;
+  let liveReads = 0;
+  let signal: { approvalId: string; turnId: string; callId: string;
+    conversationId: string; computerId: string; generation: number;
+    serverId: string; connectionId: string; toolName: string;
     expiresAt: string } | undefined;
-  function retainedCall() { return Promise.resolve(signal); }
+  function retainedCall() {
+    liveReads++;
+    if (readerFails) return Promise.reject(new Error('Bridge receipt unavailable'));
+    return Promise.resolve(signal);
+  }
   const setup = await approvalFixture(false, retainedCall);
   try {
     await setup.call();
@@ -866,7 +876,9 @@ async function readsOriginalCallWithoutChangingIt() {
     expect(unknown.attempts[0]).toMatchObject({ requestId: permitId,
       outcome: 'not_dispatched', evidence: 'connection_refused' });
     expect(Date.parse(unknown.attempts[0]!.startedAt!)).not.toBeNaN();
-    signal = { approvalId: card.approvalId, turnId: 'turn', permitId: permitId!,
+    signal = { approvalId: card.approvalId, turnId: 'turn', callId: 'approval-call',
+      conversationId: 'conversation', computerId: 'computer', generation: 1,
+      serverId: 'fixture', connectionId: 'installed', toolName: 'write',
       expiresAt: new Date(Date.now() + 5_000).toISOString() };
     const tabs = await Promise.all([
       setup.app.inject({ url, headers: setup.headers() }),
@@ -874,12 +886,29 @@ async function readsOriginalCallWithoutChangingIt() {
     ]);
     for (const tab of tabs) {
       expect(originalCallStatusSchema.parse(tab.json()).retry).toBe('eligible');
+      expect(tab.body).not.toContain('hello');
+      expect(tab.body).not.toContain('9007199254740993');
     }
     expect(append).not.toHaveBeenCalled();
-    signal = { ...signal, permitId: '22222222-2222-4222-8222-222222222222' };
+    const beforeForeignRead = liveReads;
+    const foreignRead = await setup.app.inject({ url, headers: setup.headers('bob') });
+    expect(foreignRead.statusCode).toBe(403);
+    expect(liveReads).toBe(beforeForeignRead);
+    signal = { ...signal, generation: 2 };
+    const wrongGeneration = await setup.app.inject({ url, headers: setup.headers() });
+    expect(originalCallStatusSchema.parse(wrongGeneration.json()).retry).toBe('unknown');
+    signal = { ...signal, generation: 1, toolName: 'other' };
+    const wrongTool = await setup.app.inject({ url, headers: setup.headers() });
+    expect(originalCallStatusSchema.parse(wrongTool.json()).retry).toBe('unknown');
+    signal = { ...signal, toolName: 'write' };
+    readerFails = true;
+    const missingReceipt = await setup.app.inject({ url, headers: setup.headers() });
+    expect(originalCallStatusSchema.parse(missingReceipt.json()).retry).toBe('unknown');
+    readerFails = false;
+    signal = { ...signal, callId: 'different-call' };
     const wrongCall = await setup.app.inject({ url, headers: setup.headers() });
     expect(originalCallStatusSchema.parse(wrongCall.json()).retry).toBe('unknown');
-    signal = { ...signal, permitId: permitId!, expiresAt: new Date(0).toISOString() };
+    signal = { ...signal, callId: 'approval-call', expiresAt: new Date(0).toISOString() };
     const expired = await setup.app.inject({ url, headers: setup.headers() });
     expect(originalCallStatusSchema.parse(expired.json()).retry).toBe('unknown');
     signal = { ...signal, expiresAt: new Date(Date.now() + 5_000).toISOString() };
@@ -934,7 +963,9 @@ it('gives removed and foreign callers the same refusal for saved and missing cal
   hidesCallPresenceAfterAccessLoss, 40_000);
 
 async function refusesAnotherCallsObservation() {
-  let signal: { approvalId: string; turnId: string; permitId: string;
+  let signal: { approvalId: string; turnId: string; callId: string;
+    conversationId: string; computerId: string; generation: number;
+    serverId: string; connectionId: string; toolName: string;
     expiresAt: string } | undefined;
   function retainedCall() { return Promise.resolve(signal); }
   const setup = await approvalFixture(false, retainedCall);
@@ -965,7 +996,9 @@ async function refusesAnotherCallsObservation() {
     const observed = envelope('test', `decision-${permitId}`,
       'tool.dispatch_recorded', observation);
     await setup.nats.seed([observed]);
-    signal = { approvalId: card.approvalId, turnId: 'turn', permitId,
+    signal = { approvalId: card.approvalId, turnId: 'turn', callId: 'approval-call',
+      conversationId: 'conversation', computerId: 'computer', generation: 1,
+      serverId: 'fixture', connectionId: 'installed', toolName: 'write',
       expiresAt: new Date(Date.now() + 5_000).toISOString() };
     const url = `/api/conversations/conversation/tool-requests/${card.approvalId}`;
     const eligible = await setup.app.inject({ url, headers: setup.headers() });

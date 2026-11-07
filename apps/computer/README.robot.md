@@ -1057,6 +1057,15 @@ receives an answer. Other states renew and return a plain tool error that explai
 A used approval says the tool may have received the action. Stop, release,
 `/drop` and client disconnection end holds before any later wake can send them.
 
+After a first approved send receives HTTP 503, the
+proxy leaves the original native response open. It keeps the exact request bytes
+only in private memory. A read over the authenticated bridge returns the approval,
+native call id, turn, computer generation, tool binding and a five-second signal expiry.
+It never returns the bytes. The saved approval expiry still controls eligibility.
+The bridge reports no signal after Stop, disconnection, hold expiry or process restart.
+The status reader needs matching saved non-dispatch proof; a 503 alone proves nothing.
+Replacement sending is disabled until a separate command can check authority again.
+
 `APPROVAL_WAIT_LIMIT_MS` is 900000. The decision service also expires approvals
 opened with `x-opencrane-tool-mode: ask` after 900000 ms. Its clock starts before
 the hold, so an expired hold cannot leave an approvable card. The retry adds

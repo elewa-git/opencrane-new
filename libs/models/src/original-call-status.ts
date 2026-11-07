@@ -1,4 +1,5 @@
-import { decisionRecordedDataSchema, toolDispatchRecordedDataSchema }
+import { computerTurnStartedDataSchema, decisionRecordedDataSchema,
+  toolDispatchRecordedDataSchema }
   from '@opencrane/events';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -11,7 +12,13 @@ import { utcInstant } from './approval-record.ts';
 export interface RetainedCall {
   approvalId: string;
   turnId: string;
-  permitId: string;
+  callId: string;
+  conversationId: string;
+  computerId: string;
+  generation: number;
+  serverId: string;
+  connectionId: string;
+  toolName: string;
   expiresAt: string;
 }
 const permitIdSchema = z.uuid();
@@ -58,7 +65,7 @@ async function savedAttempt(store: EventStore, silo: string,
   const attempt: OriginalCallStatus['attempts'][number] = {
     requestId: use.permitId, usedAt: use.usedAt,
   };
-  if (!permitIdSchema.safeParse(use.permitId).success) return attempt;
+  if (!permitIdSchema.safeParse(use.permitId).success) return { attempt };
   const rows = await history(store, `decision-${use.permitId}`, silo, deadline);
   const decision = rows[0];
   function isObservation(row: StoredEvent) {
@@ -67,20 +74,35 @@ async function savedAttempt(store: EventStore, silo: string,
   }
   const validDecision = decision && matchingDecision(decision, request, use.permitId);
   const observation = validDecision ? rows.find(isObservation) : undefined;
-  if (observation) {
+  let callId: string | undefined;
+  if (observation && decision) {
     const data = toolDispatchRecordedDataSchema.parse(observation.event.data);
-    attempt.startedAt = utcInstant(data.startedAt);
-    attempt.observedAt = utcInstant(observation.event.time);
-    attempt.outcome = data.outcome;
-    attempt.evidence = data.evidence;
+    const decisionData = decisionRecordedDataSchema.parse(decision.event.data);
+    if (decisionData.callId === data.callId) {
+      callId = data.callId;
+      attempt.startedAt = utcInstant(data.startedAt);
+      attempt.observedAt = utcInstant(observation.event.time);
+      attempt.outcome = data.outcome;
+      attempt.evidence = data.evidence;
+    }
   }
-  return attempt;
+  return { attempt, callId };
 }
 
 function provedUnsent(attempt: OriginalCallStatus['attempts'][number]) {
   return attempt.outcome === 'not_dispatched' &&
     (attempt.evidence === 'connection_refused' ||
       attempt.evidence === 'adapter_dispatch_refused');
+}
+
+function originalComputer(activity: Awaited<ReturnType<typeof approvalActivity>>) {
+  const started = computerTurnStartedDataSchema.safeParse(
+    activity.computer.firstStart?.event.data);
+  const ready = z.object({ computerId: z.string(), generation: z.int().positive() })
+    .safeParse(activity.computer.lifecycle?.event.data);
+  if (!started.success || !ready.success || started.data.task !== 'chat_turn' ||
+      started.data.computerId !== ready.data.computerId) return undefined;
+  return ready.data;
 }
 
 function liveOriginalCall(current: Awaited<ReturnType<typeof readApproval>>,
@@ -100,17 +122,33 @@ function liveOriginalCall(current: Awaited<ReturnType<typeof readApproval>>,
   return true;
 }
 
+function matchingRetainedCall(retained: RetainedCall | undefined,
+  request: Awaited<ReturnType<typeof readApproval>>['request'],
+  callId: string | undefined, computer: { computerId: string; generation: number } | undefined,
+  now: Date) {
+  if (!retained || !computer || !callId) return false;
+  if (retained.approvalId !== request.approvalId || retained.turnId !== request.turnId ||
+      retained.callId !== callId || retained.conversationId !== request.conversationId ||
+      retained.serverId !== request.serverId ||
+      retained.connectionId !== request.connectionId ||
+      retained.toolName !== request.tool || retained.computerId !== computer.computerId ||
+      retained.generation !== computer.generation) return false;
+  const expiresAt = Date.parse(retained.expiresAt);
+  return expiresAt > now.getTime() && expiresAt <= now.getTime() + 5_000;
+}
+
 function retryResult(current: Awaited<ReturnType<typeof readApproval>>,
   attempts: OriginalCallStatus['attempts'], activity: Awaited<ReturnType<typeof approvalActivity>>,
-  retained: RetainedCall | undefined, now: Date): OriginalCallStatus['retry'] {
+  retained: RetainedCall | undefined, callId: string | undefined,
+  now: Date): OriginalCallStatus['retry'] {
   if (!liveOriginalCall(current, activity, now)) return 'ended';
   const last = attempts.at(-1);
   if (current.state !== 'outcome_unknown' || attempts.length !== 1 ||
       !last || !provedUnsent(last)) return 'unknown';
-  if (!retained || retained.approvalId !== current.request.approvalId ||
-      retained.turnId !== current.request.turnId || retained.permitId !== last.requestId ||
-      Date.parse(retained.expiresAt) <= now.getTime() ||
-      Date.parse(retained.expiresAt) > now.getTime() + 5_000) return 'unknown';
+  const computer = originalComputer(activity);
+  if (!matchingRetainedCall(retained, current.request, callId, computer, now)) {
+    return 'unknown';
+  }
   return 'eligible';
 }
 
@@ -125,20 +163,30 @@ export async function readOriginalCallStatus(store: EventStore, silo: string,
   if (request.approvalId !== logicalRequestId) throw new Error('Call unavailable');
   if (!current.requestedAt) throw new Error('Call date unavailable');
   const attempts: OriginalCallStatus['attempts'] = [];
+  let lastCallId: string | undefined;
   for (const use of current.uses) {
-    attempts.push(await savedAttempt(store, silo, request, use, deadline));
+    const saved = await savedAttempt(store, silo, request, use, deadline);
+    attempts.push(saved.attempt);
+    lastCallId = saved.callId;
   }
   const activity = await approvalActivity(store, silo, request.assistantId,
     request.conversationId, request.turnId, deadline);
+  const firstStart = computerTurnStartedDataSchema.safeParse(
+    activity.computer.firstStart?.event.data);
+  const retainedComputerId = firstStart.success ? firstStart.data.computerId : undefined;
   const checkedAt = now ?? new Date();
+  function retryWithRetained(signal: RetainedCall | undefined, checkedAt: Date) {
+    return retryResult(current, attempts, activity, signal, lastCallId, checkedAt);
+  }
   const status: OriginalCallStatus = {
     logicalRequestId, approvalId: request.approvalId, turnId: request.turnId,
     requesterId: request.requesterId, requestedAt: current.requestedAt,
     expiresAt: utcInstant(request.expiresAt), attempts,
-    retry: retryResult(current, attempts, activity, retained, checkedAt),
+    retry: retryWithRetained(retained, checkedAt),
   };
   if (current.decidedAt) status.decidedAt = current.decidedAt;
   if (current.endedAt) status.endedAt = current.endedAt;
   return { status, requestPosition: current.requestPosition,
-    conversationId: request.conversationId };
+    conversationId: request.conversationId, assistantId: request.assistantId,
+    retainedComputerId, retryWithRetained };
 }

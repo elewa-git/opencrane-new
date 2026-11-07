@@ -161,6 +161,29 @@ function settleApproval(input: Record<string, unknown>,
   }
 }
 
+function settleApprovalFrame(input: Record<string, unknown>, resumed: boolean,
+  approvals: ReturnType<typeof approvalHolds> | undefined) {
+  if (input['type'] !== 'approval_settled' || !resumed) return false;
+  settleApproval(input, approvals);
+  return true;
+}
+
+function readRetainedCall(input: Record<string, unknown>, next: WebSocket,
+  resumed: boolean, retainedCall: TurnDriver['retainedCall']) {
+  if (input['type'] !== 'retained_call_read') return false;
+  const approvalId = input['approvalId'];
+  const readId = input['readId'];
+  if (!resumed || typeof approvalId !== 'string' ||
+      !/^[a-f0-9]{64}$/u.test(approvalId) || typeof readId !== 'string' ||
+      !/^[a-f0-9-]{36}$/u.test(readId)) {
+    throw new Error('Invalid retained call read');
+  }
+  const signal = retainedCall?.(approvalId);
+  sendFileReceipt(next, { type: 'retained_call_status', readId,
+    ...(signal ? { signal } : {}) });
+  return true;
+}
+
 function gateDispatch(input: Record<string, unknown>, next: WebSocket, runner: TurnRunnerPort) {
   const type = input['type'];
   if (type === 'bridge_gate') {
@@ -184,6 +207,7 @@ function dispatch(
   receiveFile: ReturnType<typeof filePackets>,
   sendReports: (since: unknown) => void,
   approvals: ReturnType<typeof approvalHolds> | undefined,
+  retainedCall: TurnDriver['retainedCall'],
 ) {
   const type = input['type'];
   if (gateDispatch(input, next, runner)) return;
@@ -192,10 +216,8 @@ function dispatch(
     approvals?.resume(input['approvalWaiting'] === true);
     return;
   }
-  if (type === 'approval_settled' && state.resumed) {
-    settleApproval(input, approvals);
-    return;
-  }
+  if (settleApprovalFrame(input, state.resumed, approvals)) return;
+  if (readRetainedCall(input, next, state.resumed, retainedCall)) return;
   if (type === 'ack') {
     runner.acknowledge(input['sequence'], input);
     return;
@@ -244,7 +266,9 @@ function installHandlers(
   }
   next.once('close', closed);
   next.on('error', terminateSocket(next));
-  next.on('message', receiveMessage(next, state, runner, receiveFile, sendReports, approvals));
+  function retainedCall(approvalId: string) { return driver.retainedCall?.(approvalId); }
+  next.on('message', receiveMessage(next, state, runner, receiveFile, sendReports, approvals,
+    retainedCall));
 }
 
 function closeForCredentialExpiry(next: WebSocket) {
@@ -274,6 +298,7 @@ function receiveMessage(
   receiveFile: ReturnType<typeof filePackets>,
   sendReports: (since: unknown) => void,
   approvals: ReturnType<typeof approvalHolds> | undefined,
+  retainedCall: TurnDriver['retainedCall'],
 ) {
   return function handleMessage(bytes: Buffer | ArrayBuffer | Buffer[]) {
     try {
@@ -285,7 +310,8 @@ function receiveMessage(
         void replyArtifact(runner, next, input);
         return;
       }
-      dispatch(input, next, state, runner, receiveFile, sendReports, approvals);
+      dispatch(input, next, state, runner, receiveFile, sendReports, approvals,
+        retainedCall);
     } catch {
       next.close(1008, 'Invalid bridge message');
     }

@@ -65,7 +65,7 @@ async function expires() {
     test.holds.add(test.input);
     await vi.advanceTimersByTimeAsync(16);
     await test.holds.settle(approvalId, 'approved');
-    expect(test.renew).toHaveBeenCalledOnce();
+    expect(test.renew).not.toHaveBeenCalled();
     expect(test.send).not.toHaveBeenCalled();
     expect(test.answer).toHaveBeenCalledWith(expect.stringContaining('time'));
   } finally { vi.useRealTimers(); }
