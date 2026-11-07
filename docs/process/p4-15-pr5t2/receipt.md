@@ -2,7 +2,7 @@
 
 7 November 2026. Part of #97. Branch `work/p4-15-pr5t2`.
 Base: `cdc0be1a3` after fetching and fast-forwarding main, including merged 5u.
-Tested implementation: `f0a5679ce72fe3907d7b0abd4a122cd9511fa6a2`.
+Tested checker correction: `f3f21b8f8`.
 Environment: disposable local services, not a fresh installation. No image was built.
 
 ## Scope
@@ -21,7 +21,16 @@ Admission, scanner paths, native write loaders and dev-stack files are unchanged
 No new event/API field, dependency or private-text hash is introduced.
 No protected authority or security test is changed.
 
-## Own checks
+## Checker correction
+
+The local checker now refuses an answer containing any supplied fact from another
+person, even when the requester's fact is present. It checks completed answers and
+streamed text, including a fact split across chunks. It binds both to the native
+turn-start ID. An earlier message or delta from another turn leaves the check refused.
+The caller supplies known fixture facts; this does not prove that a live model never
+reveals an unknown fact. Outcomes still contain fixed status fields only.
+
+## Own checks on the original split
 
 - PASS: fetched main, fast-forwarded the worktree, ran npm ci and linked both tools.
 - PASS: failing-first commit `20f48942d`; all 33 cases failed before implementation.
@@ -39,3 +48,16 @@ No protected authority or security test is changed.
 - NOT RUN: fresh-install qualification, live isolation and complete private memory.
 
 No owner stack or host settings were touched. Paid model calls cost 0 euro cents.
+
+## Own checks on the checker correction
+
+- PASS: fetched origin and rebased on origin/main; the branch was already current.
+- PASS: test-first commit `9c627cc24`; four new cases failed against the old checker.
+- PASS: answer and backend tests on the corrected source, 45 checks twice, with
+  `PG_TEST_URL` set to the supplied test database and one worker under `nice -n 10`.
+- PASS: full lint, workspace typecheck, qualification typecheck, Knip,
+  `check:events` and `lint:changelog` under `nice -n 10`.
+- PASS: focused ESLint and diff whitespace check.
+- NOT RUN: root suite, dev stack, live model answer and fresh-install qualification.
+
+Admission remains disabled. The shipped recall journey remains NOT RUN and incomplete.
