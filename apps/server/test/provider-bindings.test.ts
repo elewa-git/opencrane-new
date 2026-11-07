@@ -210,6 +210,27 @@ async function hidesAfterRemoval() {
 }
 it('refuses a departed admin even before IAM catches up', hidesAfterRemoval);
 
+async function previewsRetirementWithoutChangingHistory() {
+  const before = await nats.store.head();
+  const response = await request('GET', 'primary', undefined, 'owner', undefined, undefined,
+    'dependencies');
+  expect(response.statusCode).toBe(200);
+  const preview = response.json<{ dependencies: { kind: string; dependantId: string;
+    task: string; position: number }[]; canRetire: boolean; sources: {
+    assistants: string; routines: string } }>();
+  expect(preview).toMatchObject({ canRetire: false,
+    sources: { assistants: 'complete', routines: 'complete' } });
+  expect(preview.dependencies).toEqual(expect.arrayContaining([
+    expect.objectContaining({ kind: 'silo_default', dependantId: 'acme', task: 'chat_turn' }),
+    expect.objectContaining({ kind: 'assistant', dependantId: 'one', task: 'chat_turn' }),
+  ]));
+  expect((await request('GET', 'primary', undefined, 'bob', undefined, undefined,
+    'dependencies')).statusCode).toBe(403);
+  expect(await nats.store.head()).toBe(before);
+}
+it('shows exact saved dependencies only to a current admin without saving an event',
+  previewsRetirementWithoutChangingHistory);
+
 async function routineGaps() {
   await dbs.queue.query("DELETE FROM projection_checkpoints WHERE name = 'routines'");
   expect((await request('GET')).statusCode).toBe(503);
