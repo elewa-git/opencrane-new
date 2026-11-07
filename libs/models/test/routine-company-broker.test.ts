@@ -26,6 +26,8 @@ let serial = 0;
 type FixtureOptions = {
   ready?: boolean;
   toolName?: 'read' | 'write';
+  toolMode?: 'ask' | 'block';
+  unchangedCatalogue?: boolean;
   accountScopes?: string[];
   frozenScopes?: string[];
   missingToolMapping?: boolean;
@@ -64,7 +66,31 @@ async function readyHistory(userId: string, serverId: string, profileId: string,
   const serverSubject = `mcp-${serverId}`;
   const serverRows = await history(nats.store, serverSubject, 'test');
   const registrationRevision = serverRows[0]!.sequence;
-  const policy = toolPolicyFromRows(serverRows);
+  let policy = toolPolicyFromRows(serverRows);
+  if (options.toolMode) {
+    const requestedTool = policy.tools.find(function matchesRequestedTool(tool) {
+      return tool.name === (options.toolName ?? 'read');
+    });
+    const mode = envelope('test', serverSubject, 'mcp.tool_mode_set', {
+      serverId, connectionId: 'installed', toolName: requestedTool!.name,
+      toolRevision: requestedTool!.revision, mode: options.toolMode, setBy: 'admin',
+    });
+    await nats.seed([mode]);
+    const modeRows = await history(nats.store, serverSubject, 'test');
+    policy = toolPolicyFromRows(modeRows);
+    personal.configuration.policyRevision = policy.policyRevision;
+  }
+  if (options.unchangedCatalogue) {
+    const now = Date.now();
+    const checked = envelope('test', serverSubject, 'mcp.catalogue_checked', {
+      serverId, outcome: 'unchanged', schemaDigest: policy.catalogue!.schemaDigest,
+      checkedAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + 300_000).toISOString(),
+    });
+    await nats.seed([checked]);
+    const checkedRows = await history(nats.store, serverSubject, 'test');
+    policy = toolPolicyFromRows(checkedRows);
+  }
   const optInSubject = `connection-company-${serverId}`;
   const optIn = envelope('test', optInSubject, 'connection.company_opt_in_set', {
     serverId, connectionId: 'installed', registrationRevision, enabled: true,
@@ -137,7 +163,7 @@ async function readyHistory(userId: string, serverId: string, profileId: string,
     return tool.name === (options.toolName ?? 'read');
   });
   return { personal, evidence, profileRevision, selectionRevision: await nats.store.head(selectionSubject),
-    policyRevision: await nats.store.head(serverSubject), schemaDigest: requestedTool!.revision,
+    policyRevision: policy.policyRevision, schemaDigest: requestedTool!.revision,
     catalogueDigest: policy.catalogue!.schemaDigest,
     profileSubject, selectionSubject, routineSubject };
 }
@@ -228,7 +254,8 @@ async function fixture(options: FixtureOptions = {}) {
     });
     const approvalRows = [request];
     if (options.approvalState !== 'requested') approvalRows.push(approved);
-    if (!options.approvalState || options.approvalState === 'used_twice') {
+    if (!options.approvalState || options.approvalState === 'denied' ||
+        options.approvalState === 'used_twice') {
       approvalRows.push(used);
     }
     if (options.approvalState === 'used_twice') {
@@ -308,6 +335,33 @@ it('lets the matching owner request reach a recording upstream once',
     expect(calls).toEqual([test.requestId]);
   });
 
+it('audits one approved owner Ask for an Ask-mode tool', async function approvedAskTool() {
+  const test = await fixture({ toolMode: 'ask' });
+  const rows = await history(nats.store, `mcp-${test.serverId}`, 'test');
+  const policy = toolPolicyFromRows(rows);
+  const requestedTool = policy.tools.find(function matchesRequestedTool(tool) {
+    return tool.name === test.release.toolName;
+  });
+  expect(requestedTool?.mode).toBe('ask');
+  await expect(test.confirm()).resolves.toMatchObject({ status: 'confirmed' });
+  expect(await nats.store.head(`credential-${test.requestId}`)).toBeGreaterThan(0);
+});
+
+it('accepts an owner Ask after an unchanged catalogue refresh',
+  async function refreshedAskTool() {
+    const test = await fixture({ toolMode: 'ask', unchangedCatalogue: true });
+    const rows = await history(nats.store, `mcp-${test.serverId}`, 'test');
+    const policy = toolPolicyFromRows(rows);
+    const requestedTool = policy.tools.find(function matchesRequestedTool(tool) {
+      return tool.name === test.release.toolName;
+    });
+    expect(requestedTool?.mode).toBe('ask');
+    expect(policy.sequence).toBeGreaterThan(test.release.policyRevision);
+    expect(policy.policyRevision).toBe(test.release.policyRevision);
+    await expect(test.confirm()).resolves.toMatchObject({ status: 'confirmed' });
+    expect(await nats.store.head(`credential-${test.requestId}`)).toBeGreaterThan(0);
+  });
+
 it.each(['requested', 'denied', 'approved', 'used_twice'] as const)(
   'refuses a %s Ask without one valid use', async function unusableAsk(state) {
     const test = await fixture({ approvalState: state });
@@ -332,13 +386,13 @@ it('refuses an allowed decision that did not consume the saved Ask',
   });
 
 it('refuses a Block saved after the owner approved', async function blockedTool() {
-  const test = await fixture();
-  const blocked = envelope('test', `mcp-${test.serverId}`, 'mcp.tool_mode_set', {
-    serverId: test.serverId, connectionId: 'installed', toolName: 'read',
-    toolRevision: test.release.toolRevision, mode: 'block', setBy: 'admin',
-  });
-  await nats.seed([blocked]);
+  const test = await fixture({ toolMode: 'block' });
+  const rows = await history(nats.store, `mcp-${test.serverId}`, 'test');
+  const policy = toolPolicyFromRows(rows);
+  expect(policy.policyRevision).toBe(test.release.policyRevision);
+  expect(policy.tools[0]?.mode).toBe('block');
   await expect(test.confirm()).rejects.toThrow('Release unavailable');
+  expect(await nats.store.head(`credential-${test.requestId}`)).toBe(0);
 });
 
 it('refuses an expired owner Ask without calling the recorded upstream',
