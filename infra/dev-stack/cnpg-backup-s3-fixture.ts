@@ -73,7 +73,9 @@ export function storageFixture() {
     }
     const extraGrant = identity === 'fixture-root' || identity === `fixture-${area}-${operation}`;
     const allowed = ownObject || extraGrant;
-    const denied = state.fault === `deny ${method}` || state.fault === 'server error';
+    const needsRead = method === 'PUT' && request.headers['if-match'] !== undefined;
+    const lacksRead = needsRead && !ownObject && identity !== 'fixture-root';
+    const denied = lacksRead || state.fault === `deny ${method}` || state.fault === 'server error';
     if (!allowed || !identity || denied) {
       response.writeHead(state.fault === 'server error' ? 500 : 403);
       response.end('<Error><Message>private-value-/private/path</Message></Error>');
@@ -98,11 +100,12 @@ export function storageFixture() {
       }
       const bytes = Buffer.concat(chunks);
       assert(bytes.length > 0 && bytes.length <= 128);
-      if (!ownObject) {
-        // Honour conditional writes even for identities allowed outside the silo.
-        assert.equal(typeof request.headers['if-match'], 'string');
-        response.writeHead(412);
-        response.end();
+      const checksum = createHash('md5');
+      checksum.update(bytes);
+      const suppliedChecksum = request.headers['content-md5'];
+      if (suppliedChecksum && suppliedChecksum !== checksum.digest('base64')) {
+        response.writeHead(400);
+        response.end('<Error><Code>BadDigest</Code></Error>');
         return;
       }
       assert.equal(request.headers['if-none-match'], '*');
