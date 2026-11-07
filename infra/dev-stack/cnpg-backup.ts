@@ -34,6 +34,13 @@ type StoredObject = {
 const refusal = 'CNPG backup references are incomplete or incompatible';
 const cleanupRefusal = 'CNPG backup marker cannot be removed';
 const scopeRefusal = 'CNPG backup credential is not confined to its bucket and prefix';
+const inventoryRefusal = 'CNPG cannot enumerate other silos\' backup locations';
+
+class InventoryError extends Error {
+  constructor() {
+    super(inventoryRefusal);
+  }
+}
 
 class ScopeError extends Error {
   constructor() {
@@ -477,8 +484,14 @@ export async function checkCnpgBackupReferences(backup: Backup, namespace: strin
     if (options.signal) signals.push(options.signal);
     const signal = AbortSignal.any(signals);
     await check(backup, namespace, kubectl, signal, deadline);
+    // Refuse a pass until the installer can enumerate every other silo's real locations.
+    // Its values file describes only this silo. Random denied probes cannot fill that gap.
+    throw new InventoryError();
   } catch (error) {
     // Discard parser, cancellation and dependency details; keep Secret data only in memory.
+    if (error instanceof InventoryError) {
+      throw new Error(inventoryRefusal);
+    }
     if (error instanceof ScopeError) {
       throw new Error(scopeRefusal);
     }

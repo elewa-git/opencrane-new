@@ -1,2 +1,1 @@
-- Check backup storage access by creating, reading and conditionally removing one temporary marker with the referenced identity. Backup and recovery installation remain blocked pending live qualification.
-- Backup storage checks refuse credentials with access outside the approved bucket and folder, and clean temporary markers after interrupted requests. Installation remains disabled.
+- Check backup storage access with a temporary marker and clean it after interrupted requests. Backup approval now refuses because the installer cannot enumerate other silos’ real storage locations; denied requests to invented names cannot establish isolation. Backup and recovery installation remain disabled.

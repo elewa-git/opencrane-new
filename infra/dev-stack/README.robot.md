@@ -2170,7 +2170,7 @@ so the private kubeconfig filename remains outside child command arguments.
 
 Part of #15, P5-3 PR 3c/3d/3e. `cnpg-backup.ts` extends the existing CNPG checker.
 `preflight.mjs` still refuses every backup and recovery property before Helm,
-including disabled and null settings. The helper does not enable installation.
+including disabled and null settings. The helper cannot return success or enable installation.
 Suspending ScheduledBackup does not stop WAL archiving.
 
 The helper uses the callback from `packaged.ts`, which checks the captured context,
@@ -2239,8 +2239,23 @@ the same bounded, conditional cleanup. See the S3 contracts for
 and [checksum errors](https://docs.aws.amazon.com/AmazonS3/latest/developerguide/ErrorResponses.html).
 Excessive or unproved permissions return
 `CNPG backup credential is not confined to its bucket and prefix`.
-These probes test the chosen locations; they do not inspect every possible grant
-in a storage policy. They do not qualify a live store or open the installer gate.
+These random probes can expose some excessive grants, but never establish isolation.
+A credential may allow every configured silo while denying every invented name.
+After the existing checks and reference rechecks finish, the helper therefore refuses
+with `CNPG cannot enumerate other silos' backup locations`, even for an apparently
+scoped identity. Cleanup failures and earlier refusals retain their specific errors.
+
+`packaged.ts` reads one silo's values file in `readReviewedValues`; neither that file
+nor `checkCnpgInstallation` supplies an installation-wide list of backup locations.
+Do not substitute a caller-supplied list or credential annotation for that missing
+source. Before this helper can pass, the installer must supply all other silos' real
+buckets and prefixes from the same trusted configuration it uses for installation.
+Read, list and write must each be refused at every such location. An unavailable or
+incomplete list must refuse. The current S3 adapter has no effective-identity-policy
+operation; its bucket-policy getter does not describe all grants on a credential.
+If a supported service adds a non-admin effective-policy report, compare that too.
+No admin access is requested. These checks do not qualify a live store or open the
+installer gate.
 Responses allow at most 128 body bytes and 8 KiB of headers. Error bodies are not
 parsed. The HTTPS agent closes all its connections when the check ends.
 All Secret data stays in memory. The helper writes no private files. Errors discard
@@ -2265,6 +2280,9 @@ results and replacement of references after the probe. Each test closes its loca
 listener. Interrupted PUT, stalled GET and denied DELETE tests assert no marker
 remains before teardown. Root and individual excessive grants are tested with
 broader identities against the same destination, rather than by changing the path.
+A further identity allows `database-backups/other-silo/` and `other-silo-backups`
+alongside the usual destination, but denies root listings and invented names. It
+must receive the missing-location refusal, as must the ordinary scoped identity.
 Live checks are NOT RUN. Image/helper approval, real scheduled base backup/WAL,
 three-database restore and standby promotion remain required before enablement.
 P5-3 remains PARTIAL. Local permission tests cannot qualify a backup or recovery.
