@@ -43,6 +43,14 @@ function maintenanceFact(row: FactRow): MaintenanceFact {
 
 type MaintenanceRun = ReturnType<typeof memoryMaintenanceRecordedDataSchema.parse>;
 
+function visibleMaintenanceStatus(run: MaintenanceRun | undefined,
+  calculated: string): string {
+  if (run?.action === 'refused' && run.reason !== 'qualification_blocked') {
+    return 'refused';
+  }
+  return calculated;
+}
+
 async function factChangeStatus(options: MemoryOptions, scope: Scope, position: number,
   runs: MaintenanceRun[], savedAt: string | null) {
   const facts = await options.db.query<FactRow>(`SELECT memory_id, revision, expires_at,
@@ -115,6 +123,7 @@ export async function maintenanceStatus(options: MemoryOptions, scope: Scope, re
     status = state.status;
     nextAt = state.nextAt;
     waitingCount = state.waitingCount;
+    status = visibleMaintenanceStatus(allRuns[0], status);
   }
   const history = [];
   const empty = { status, binding, dispatch: 'disabled', nextAt, waitingCount, history: [] };

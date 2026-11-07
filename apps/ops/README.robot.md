@@ -576,6 +576,12 @@ the saved result visible while the original failed job still exists. It then wai
 for that exact job to disappear and checks there is one missed result for the
 original night. Seeing the event alone does not mean queue cleanup has finished.
 
+## Nightly preparation
+
+With `MODEL_DECISION_URL`, `dream-memory` sends only a saved scope and night
+identifier to the loopback decision process. It ignores server results and
+retries unavailable preparation. It sends no memory text.
+
 ### Nightly recovery test evidence
 
 24–25 October 2026, part of #576. `recoverNightly` in

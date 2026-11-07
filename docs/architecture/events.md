@@ -694,7 +694,7 @@ It never creates or deletes keys or runs reactions. Public access is not impleme
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `memory.maintenance_recorded` | Native nightly scheduler | Payload-free scope night history; `no_changes` reviews exact input revisions and a content position | No dispatch or spending |
+| `memory.maintenance_recorded` | Native nightly scheduler or server preflight | Payload-free scope night history; `no_changes` reviews exact input revisions and a content position; `refused` records a safe reason | `dream-memory` checks only an original nightly intent; no root, dispatch or charge |
 | `memory.maintenance_bound` | Authenticated consenting member | Current memory maintenance binding | Native scheduling records intent only; no dispatch or spending |
 | `memory.written` | OpenCrane memory MCP (remember) | Postgres memory projection for that scope | mark that scope for nightly dreaming |
 | `memory.corrected` | Person-scope HTTP correction; governed personal memory MCP; nightly dreaming job (planned) | Publishes the new revision and hides superseded content and dependent facts | `cleanup-memory` destroys superseded and dependent keys and verifies search removal |
@@ -835,6 +835,7 @@ events. Desktop admission additionally requires an explicit member
 | `cleanup-departure` | `member.removed` |
 | `cleanup-connection` | `connection.revoked`, `connection.refreshed` |
 | `cleanup-memory` | `memory.forgotten`, `memory.corrected` |
+| `dream-memory` | `memory.maintenance_recorded` |
 | `stop-budget-turns` | `budget.ceiling_set`, `budget.exhausted` |
 | `settle-budget` | `effect.observed`, `effect.resolved`, `computer.lost` |
 | `update-members` | `member.invited`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `member.ownership_confirmed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down` |

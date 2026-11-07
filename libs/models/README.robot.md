@@ -1184,6 +1184,9 @@ No stack or paid provider call proves this route yet.
   lines to be processed. Cap refusals append `budget.exhausted` and a separate admission decision, once per
   unchanged configuration and scope per UTC day for exhaustion, including across actor recovery. All decisions use `decision.recorded` with a digest of the
   verified context when available; gateway JWT failures occur before ext_authz.
+  The loopback `/maintenance/prepare` endpoint accepts a saved scope and night
+  identifier. It returns only whether metadata preparation is available and
+  grants no send permission.
 - `budgets` is a PostgreSQL projection using the existing runner. The worker
   upgrades older projections to version 5 by replaying budget, call and effect rows before resuming.
   Rebuild online with `npm run replay -- budgets --verify`; a repair changes

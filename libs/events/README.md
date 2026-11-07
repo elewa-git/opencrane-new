@@ -63,6 +63,9 @@ flowchart LR
 
 ## What it is responsible for
 
+The nightly memory record can hold a safe refusal for one saved scope and date.
+It never contains a memory fact or a provider key.
+
 Company account choices record the requesting person, owning silo, profile revision,
 generation and a digest of the verified account identity. They grant no tool access
 and contain no account label or credential. An explicit clear leaves no chosen account.

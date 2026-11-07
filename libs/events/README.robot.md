@@ -544,11 +544,12 @@ change after operator replay. Correction cleanup remains unimplemented.
 ## Nightly intent records
 
 `memory.maintenance_recorded` belongs to `scope-<scopeId>`. Its strict schema
-accepts due/null, refused/qualification_blocked, missed/window_missed or overlap,
+accepts due/null, refused with a safe reason, missed/window_missed or overlap,
 and no_changes/null with `reviewedPosition`.
 It records nightId, batchKey, inputRevision, UTC date, binding revision, member,
 100-cent accepted cap, intendedAt, selectedAt and at most 32 revision references.
-It carries no plaintext, root allowance or dispatch permission. `due` represents
+It carries no plaintext, root allowance or dispatch permission.
+`dream-memory` reacts only to scheduler intents. `due` represents
 unresolved work; this scheduler emits refused, missed or no_changes records.
 Older records without `reviewedPosition` still parse. Only `no_changes` reviews its
 exact input references; the position also closes a forgotten-only change.

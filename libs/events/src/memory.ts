@@ -203,7 +203,8 @@ const maintenanceRecord = z.strictObject({
   inputRefs: z.array(maintenanceReference).max(32),
   reviewedPosition: z.int().nonnegative().optional(),
   action: z.enum(['due', 'refused', 'missed', 'no_changes']),
-  reason: z.enum(['qualification_blocked', 'window_missed', 'overlap']).nullable(),
+  reason: z.enum(['qualification_blocked', 'window_missed', 'overlap',
+    'binding_changed', 'input_changed', 'provider_unavailable', 'scope_occupied']).nullable(),
 });
 function validRun(data: z.infer<typeof maintenanceRecord>) {
   if (data.intendedAt !== `${data.date}T02:00:00.000Z`) {
@@ -227,7 +228,8 @@ function validRun(data: z.infer<typeof maintenanceRecord>) {
     return true;
   }
   if (data.action === 'refused') {
-    return data.reason === 'qualification_blocked';
+    return data.reason !== null && data.reason !== 'window_missed' &&
+      data.reason !== 'overlap';
   }
   return data.reason === 'window_missed' || data.reason === 'overlap';
 }

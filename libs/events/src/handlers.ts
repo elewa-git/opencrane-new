@@ -6,6 +6,7 @@ export const handlerSubscriptions = {
   "cleanup-departure": ["member.removed"],
   "cleanup-connection": ["connection.revoked", "connection.refreshed"],
   "cleanup-memory": ["memory.forgotten", "memory.corrected"],
+  "dream-memory": ["memory.maintenance_recorded"],
   "stop-budget-turns": ["budget.ceiling_set", "budget.exhausted"],
   "settle-budget": ["effect.observed", "effect.resolved", "computer.lost"],
   "update-members": [

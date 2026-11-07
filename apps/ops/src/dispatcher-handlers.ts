@@ -19,6 +19,7 @@ export function dispatcherHandlerNames(
   }
   if (env["MODEL_DECISION_URL"]) {
     names.push("settle-budget");
+    names.push("dream-memory");
   }
   if (env["MCP_KUBE_NAMESPACE"]?.trim()) {
     names.push("stop-mcp-instance");

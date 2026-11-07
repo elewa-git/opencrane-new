@@ -291,6 +291,9 @@ including retired and older records, still blocks a complete dependency result.
 
 ## What it is responsible for
 
+The local decision service accepts a saved nightly memory identifier for safe
+preflight checks. It cannot start memory work or allocate an allowance from this path.
+
 A requester can record an explicit company account choice when trusted verification
 evidence is available. The choice names one exact profile revision and gives no tool
 access. Current company saves remain unverified, so live company selection stays closed.
