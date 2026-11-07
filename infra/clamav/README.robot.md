@@ -347,15 +347,18 @@ private temporary directory. It records opaque file names only. Whiteout files a
 scanned as regular files; they never remove earlier scan work. Absolute and escaping
 paths, links, devices, duplicate names, truncated content and data after the tar end
 refuse. Nested archives, including encrypted and unsupported formats, refuse until
-their complete contents can be proved. No candidate process starts.
+their complete contents can be proved. Embedded RAR signatures refuse at any byte
+offset because the shipped ClamAV has no RAR unpacker. No candidate process starts.
 
-The walk allows 64 layers, 128 MiB total compressed bytes, 512 MiB expanded bytes,
-50,000 entries, 20 MiB per regular file and ten minutes for each walk. The shared
+The walk allows 64 layers, 128 MiB total compressed bytes, 512 MiB of tar bytes
+and 512 MiB of extracted file bytes, including sparse files. It allows 50,000
+entries, 20 MiB per regular file and ten minutes for each walk. The shared
 image client has its own 20 MiB part and one-minute request limits. Every file goes
 through that client with purpose `image` and the exact silo, server, attempt,
 platform and image digest. A result includes the exact file count and ordered layer
 digests. Its validation function checks current image bytes and scanner settings,
 then each part's fresh result. Errors expose only `image_scan_unavailable`.
+Scratch cleanup errors also return that fixed result, without a private path.
 
 The walk is private and has no worker caller, event writer or admission effect. A
 clean local fixture does not authorise hosted execution. Production scanner release,

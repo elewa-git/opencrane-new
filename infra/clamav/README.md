@@ -21,7 +21,7 @@ flowchart LR
   infra --> nats["infra/nats<br/>event log settings"]
   stack -->|builds and starts the Linux amd64 image| clamav
   server["apps/server<br/>file uploads"] -->|sends file bytes over HTTPS| launcher
-  worker["private image walk<br/>worker wiring planned"] -->|checks every file through HTTPS| launcher
+  worker["private image walk<br/>worker wiring planned"] -->|checks bounded files through HTTPS| launcher
   packaging["packaging job"] -->|checks image databases| clamav
   launcher["separate HTTPS service"] -->|limits requests and checks caller passes| clamav
 ```
@@ -63,7 +63,8 @@ flowchart LR
    facts, the approved scanner digests and unchanged bytes again when used.
 8. **A private image walk checks supplied layers.** It checks the image hashes,
    unpacks each layer into private temporary files and scans every regular file.
-   It refuses links, unsafe paths, nested archives and unfinished work. The result
+   It counts the size of sparse files before writing them. It refuses links, unsafe
+   paths, nested archives including hidden RAR files, and unfinished work. The result
    must still match the current image and scanner when used. Worker wiring is not
    built yet, and image admission stays closed.
 

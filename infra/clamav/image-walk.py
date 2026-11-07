@@ -12,8 +12,9 @@ MAX_FILE = 20 * 1024 * 1024
 MAX_FILES = 50_000
 ARCHIVE_SUFFIXES = ('.tar', '.tar.gz', '.tgz', '.zip', '.gz', '.xz', '.bz2',
                     '.zst', '.7z', '.rar', '.jar', '.war')
+RAR_MAGIC = b'Rar!\x1a\x07'
 ARCHIVE_MAGIC = (b'PK\x03\x04', b'PK\x05\x06', b'\x1f\x8b', b'7z\xbc\xaf\x27\x1c',
-                 b'Rar!\x1a\x07', b'\xfd7zXZ\x00', b'BZh', b'\x28\xb5\x2f\xfd')
+                 RAR_MAGIC, b'\xfd7zXZ\x00', b'BZh', b'\x28\xb5\x2f\xfd')
 
 
 def digest(contents):
@@ -41,12 +42,16 @@ def nested_archive(name, contents):
         return True
     if any(contents.startswith(magic) for magic in ARCHIVE_MAGIC):
         return True
+    # Refuse embedded RAR too: the shipped scanner has no RAR unpacker.
+    if RAR_MAGIC in contents:
+        return True
     return len(contents) > 262 and contents[257:262] == b'ustar'
 
 
 def walk(directory, layers):
     files = []
     expanded_total = 0
+    extracted_total = 0
     entry_count = 0
     for layer_index, layer in enumerate(layers):
         compressed = layer['mediaType'].endswith('+gzip')
@@ -69,6 +74,10 @@ def walk(directory, layers):
                     continue
                 if not entry.isfile() or entry.size > MAX_FILE or entry.size < 0:
                     raise ValueError('type')
+                # Charge the logical size before reading sparse maps or writing a file.
+                extracted_total += entry.size
+                if extracted_total > MAX_EXPANDED:
+                    raise ValueError('limit')
                 stream = archive.extractfile(entry)
                 if stream is None:
                     raise ValueError('missing')

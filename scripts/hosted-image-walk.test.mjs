@@ -10,8 +10,11 @@ import { gzipSync } from 'node:zlib';
 import { test, vi } from 'vitest';
 import { scanHostedImage } from '../infra/clamav/image-walk.mjs';
 
-const cleanupFailure = vi.hoisted(() => ({ active: false }));
-vi.mock('node:fs/promises', async importOriginal => {
+function createCleanupState() {
+  return { active: false };
+}
+const cleanupFailure = vi.hoisted(createCleanupState);
+async function mockFileSystem(importOriginal) {
   const actual = await importOriginal();
   async function removeScratch(path, options) {
     if (cleanupFailure.active && String(path).includes('hosted-image-scan-')) {
@@ -21,7 +24,8 @@ vi.mock('node:fs/promises', async importOriginal => {
     return actual.rm(path, options);
   }
   return { ...actual, rm: removeScratch };
-});
+}
+vi.mock('node:fs/promises', mockFileSystem);
 
 const execute = promisify(execFile);
 const walker = fileURLToPath(new URL('../infra/clamav/image-walk.py', import.meta.url));
@@ -168,7 +172,7 @@ const badFiles = [
   ['unsupported archive', { name: 'nested.rar', bytes: Buffer.from('Rar!\x1a\x07') }],
   ['self-extracting RAR', { name: 'installer.exe',
     bytes: Buffer.concat([Buffer.from('MZ'), Buffer.alloc(4096),
-      Buffer.from('Rar!\x1a\x07\x01\x00'), eicar]) }],
+      Buffer.from('Rar!\x1a\x07\x01\x00'), Buffer.from('payload')]) }],
   ['large file', { name: 'huge', bytes: Buffer.alloc(20 * 1024 * 1024 + 1) }],
 ];
 for (const [label, file] of badFiles) {

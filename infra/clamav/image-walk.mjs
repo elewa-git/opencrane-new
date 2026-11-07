@@ -161,6 +161,13 @@ export async function scanHostedImage(image, settings, scanPart = scanImagePart,
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener('abort', cancel);
-    if (directory) await rm(directory, { recursive: true, force: true });
+    if (directory) {
+      try {
+        await rm(directory, { recursive: true, force: true });
+      } catch {
+        // Keep private scratch paths out of errors returned to the caller.
+        return unavailable;
+      }
+    }
   }
 }
