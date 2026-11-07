@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { parseEventByType, toolDispatchRecordedDataSchema } from '@opencrane/events';
 import { encodeSession } from '@opencrane/auth';
 import { testAuthConfig } from '@opencrane/auth/testing';
-import { approvalCardsSchema, chatFeedSchema } from '@opencrane/protocol';
+import { approvalCardsSchema, chatFeedSchema, originalCallStatusSchema } from '@opencrane/protocol';
 import { auditTrail, readAudit, conversations, readConversation } from '@opencrane/projections';
 import { envelope, history, readApproval, readToolPolicy, decideApproval,
   ingestUsage } from '@opencrane/models';
@@ -15,7 +15,9 @@ import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
 import { catalogueEvidence, fixture, reviewCatalogue,
   toolEvidence } from '@opencrane/models/testing';
-async function approvalFixture(stepUp = false) {
+async function approvalFixture(stepUp = false,
+  retainedCall?: () => Promise<{ approvalId: string; turnId: string;
+    permitId: string; expiresAt: string } | undefined>) {
   const f = await fixture();
   await f.runner.initialise(conversations);
   await f.runner.run(conversations);
@@ -23,7 +25,7 @@ async function approvalFixture(stepUp = false) {
   await f.runner.run(auditTrail);
   const config = testAuthConfig({ expectedOrgId: 'org-test' });
   const chat = { silo: 'test', store: f.nats.store, db: f.db, keys: f.keys,
-    binding: f.binding, feed: { memberId: identity } };
+    binding: f.binding, feed: { memberId: identity }, retainedCall };
   function identity(_silo: string, _issuer: string, sub: string) {
     return Promise.resolve(sub);
   }
@@ -834,6 +836,55 @@ async function retriesOnlyVerifiedNonDispatch() {
 }
 it('permits one unchanged retry only after the gateway proves no dispatch',
   retriesOnlyVerifiedNonDispatch, 40_000);
+
+async function readsOriginalCallWithoutChangingIt() {
+  let signal: { approvalId: string; turnId: string; permitId: string;
+    expiresAt: string } | undefined;
+  async function retainedCall() { return signal; }
+  const setup = await approvalFixture(false, retainedCall);
+  try {
+    await setup.call();
+    expect((await setup.decide()).statusCode).toBe(200);
+    await setup.call();
+    await setup.restart();
+    await ingestUsage(setup.actor, setup.options.usageFile);
+    const card = (await setup.read()).cards[0]!;
+    const permitId = card.uses?.[0]?.permitId;
+    expect(permitId).toBeDefined();
+    const url = `/api/conversations/conversation/tool-requests/${card.approvalId}`;
+    const append = vi.spyOn(setup.nats.store, 'append');
+    const first = await setup.app.inject({ url, headers: setup.headers() });
+    expect(first.statusCode).toBe(200);
+    const unknown = originalCallStatusSchema.parse(first.json());
+    expect(unknown).toMatchObject({ logicalRequestId: card.approvalId,
+      approvalId: card.approvalId, turnId: 'turn', retry: 'unknown' });
+    expect(unknown.attempts).toHaveLength(1);
+    expect(unknown.attempts[0]).toMatchObject({ requestId: permitId,
+      outcome: 'not_dispatched', evidence: 'connection_refused' });
+    signal = { approvalId: card.approvalId, turnId: 'turn', permitId: permitId!,
+      expiresAt: new Date(Date.now() + 30_000).toISOString() };
+    const tabs = await Promise.all([
+      setup.app.inject({ url, headers: setup.headers() }),
+      setup.app.inject({ url, headers: setup.headers() }),
+    ]);
+    for (const tab of tabs) {
+      expect(originalCallStatusSchema.parse(tab.json()).retry).toBe('eligible');
+    }
+    expect(append).not.toHaveBeenCalled();
+    signal = { ...signal, permitId: '22222222-2222-4222-8222-222222222222' };
+    const wrongCall = await setup.app.inject({ url, headers: setup.headers() });
+    expect(originalCallStatusSchema.parse(wrongCall.json()).retry).toBe('unknown');
+    signal = { ...signal, permitId: permitId!, expiresAt: new Date(0).toISOString() };
+    const expired = await setup.app.inject({ url, headers: setup.headers() });
+    expect(originalCallStatusSchema.parse(expired.json()).retry).toBe('unknown');
+    const outsider = await setup.app.inject({ url, headers: setup.headers('bob') });
+    expect(outsider.statusCode).toBe(403);
+  } finally {
+    await setup.close();
+  }
+}
+it('reads a saved call in two tabs only while its original bridge hold is live',
+  readsOriginalCallWithoutChangingIt, 40_000);
 
 const replyEvidence = [
   'adapter_response_received', 'response_received', 'adapter_transport_uncertain',
