@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { X509Certificate } from 'node:crypto';
+import { createHmac, X509Certificate } from 'node:crypto';
 import { parseAllDocuments } from 'yaml';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { test, before, after, mock } from 'node:test';
 import tls from 'node:tls';
+import { Client } from 'minio';
+import { AssumeRoleProvider } from 'minio/dist/esm/AssumeRoleProvider.mjs';
 import { certificates, issueCertificate } from '../../libs/event-store/test/certificates.ts';
-import { checkCnpgBackupReferences } from './cnpg-backup.ts';
 
 import { attempts, backupHostname, datedLeaf, mapServiceDNS, peer }
   from './cnpg-backup-tls-fixture.ts';
@@ -17,27 +18,69 @@ const namespace = 'opencrane-package-1';
 const refusal = 'CNPG backup references are incomplete or incompatible';
 const cleanupRefusal = 'CNPG backup marker cannot be removed';
 const scopeRefusal = 'CNPG backup credential is not confined to its bucket and prefix';
-const inventoryRefusal = 'CNPG cannot enumerate other silos\' backup locations';
-const checkedRequests = ['DELETE', 'PUT', 'GET', 'DELETE',
-  'GET', 'GET', 'GET', 'PUT', 'GET', 'GET', 'PUT'];
+const checkedRequests = ['DELETE', 'PUT', 'GET', 'DELETE'];
 const privateValue = 'private-value-/private/path';
+const rootAccess = 'fixture-root-access';
+const rootSecret = 'fixture-root-secret-long-enough';
+let issuedToken = '';
 let directory: string;
 let ca: string;
 let leaf: string;
+let checkCnpgBackupReferences: typeof import('./cnpg-backup.ts').checkCnpgBackupReferences;
+let provisionCnpgBackupIdentity: typeof import('./cnpg-backup-identity.ts').provisionCnpgBackupIdentity;
+async function credentials(this: AssumeRoleProvider) {
+  const request = this.getRequestConfig();
+  const parameters = new URLSearchParams(request.requestData);
+  const policy = parameters.get('Policy')!;
+  if (!issuedToken) {
+    const header = Buffer.from(JSON.stringify({ alg: 'HS512', typ: 'JWT' }))
+      .toString('base64url');
+    const sessionPolicy = Buffer.from(policy).toString('base64');
+    const claims = { accessKey: 'fixture-access', exp: Math.floor(Date.now() / 1000) + 900,
+      parent: rootAccess, sessionPolicy };
+    const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
+    const signed = `${header}.${payload}`;
+    const signature = createHmac('sha512', rootSecret).update(signed).digest('base64url');
+    issuedToken = `${signed}.${signature}`;
+  }
+  return { accessKey: 'fixture-access', secretKey: privateValue, sessionToken: issuedToken };
+}
+async function bucketExists(this: Client, _name: string) {
+  return true;
+}
 async function prepare() {
   directory = await mkdtemp(`${tmpdir()}/cnpg-backup-`);
   await certificates(directory);
   ca = await readFile(`${directory}/ca.crt`, 'utf8');
   leaf = await readFile(`${directory}/server.crt`, 'utf8');
+  process.env['DEV_STACK_DIR'] = directory;
+  await writeFile(`${directory}/stack-owner`, process.cwd());
+  await writeFile(`${directory}/minio.env`,
+    `MINIO_ROOT_USER=${rootAccess}\nMINIO_ROOT_PASSWORD=${rootSecret}\n`);
+  await writeFile(`${directory}/settings.env`, 'MINIO_PORT=9000\nSILO_ID=silo-one\n');
+  const provisioner = await import('./cnpg-backup-identity.ts');
+  provisionCnpgBackupIdentity = provisioner.provisionCnpgBackupIdentity;
+  const checker = await import('./cnpg-backup.ts');
+  checkCnpgBackupReferences = checker.checkCnpgBackupReferences;
+  mock.method(AssumeRoleProvider.prototype, 'getCredentials', credentials);
+  mock.method(Client.prototype, 'bucketExists', bucketExists);
   const extensions = `subjectAltName=DNS:${backupHostname}\nextendedKeyUsage=serverAuth\n`;
   await issueCertificate(directory, 'matching', '/CN=fixture', extensions);
   await datedLeaf(directory, 'expired', 2000);
   await datedLeaf(directory, 'future', 2100);
   matching = await peer(directory);
   mapServiceDNS();
+  const initialBinding = { silo: 'silo-one', namespace, namespaceUid: 'namespace-uid',
+    serviceUid: 'backup-store-uid',
+    generation: 'backup-identity-uid:1:backup-identity:ACCESS_KEY_ID|'
+      + 'backup-identity-uid:1:backup-identity:ACCESS_SECRET_KEY|'
+      + 'backup-identity-uid:1:backup-identity:SESSION_TOKEN',
+    endpointURL: `https://backup-store.${namespace}.svc:${matching.port}`, ca };
+  await provisionCnpgBackupIdentity(initialBinding);
 }
 async function cleanup() {
   mock.restoreAll();
+  delete process.env['DEV_STACK_DIR'];
   await matching.close();
   await rm(directory, { recursive: true, force: true });
 }
@@ -51,7 +94,7 @@ function encoded(value: string) {
 function fixture() {
   const backup = {
     enabled: true, renderOnly: true, method: 'barmanObjectStore',
-    destinationPath: 's3://database-backups/local-check',
+    destinationPath: 's3://ocn-backup-silo-one/cnpg',
     endpointURL: `https://backup-store.${namespace}.svc:${matching.port}`,
     endpointCA: { name: 'backup-trust', key: 'ca.crt' },
     s3Credentials: {
@@ -80,7 +123,7 @@ function fixture() {
     'backup-trust': { ...trust, type: 'Opaque', data: { 'ca.crt': encoded(ca) } },
     'backup-identity': { ...identity, metadata: identityMetadata, type: 'Opaque', data: {
       ACCESS_KEY_ID: encoded('fixture-access'), ACCESS_SECRET_KEY: encoded(privateValue),
-      SESSION_TOKEN: encoded('fixture-session-token'),
+      SESSION_TOKEN: encoded(issuedToken),
     } },
   };
   const reads: string[] = [];
@@ -94,6 +137,29 @@ function fixture() {
   }
   return { backup, objects, reads, kubectl };
 }
+async function issueFor(input: ReturnType<typeof fixture>) {
+  const candidate = input.backup.endpointURL;
+  const endpointURL = /^https:\/\/backup-store\.opencrane-package-1\.svc:[0-9]{1,5}$/u
+    .test(candidate) ? candidate : `https://backup-store.${namespace}.svc:${matching.port}`;
+  const references = [input.backup.s3Credentials.accessKeyId,
+    input.backup.s3Credentials.secretAccessKey, input.backup.s3Credentials.sessionToken];
+  function identity(reference: { name: string; key: string }) {
+    const object = input.objects[reference.name] ?? input.objects['backup-identity'];
+    const metadata = object.metadata;
+    return `${metadata.uid}:${metadata.resourceVersion}:${reference.name}:${reference.key}`;
+  }
+  const generation = references.map(identity).join('|');
+  const binding = { silo: 'silo-one', namespace, namespaceUid: 'namespace-uid',
+    serviceUid: 'backup-store-uid', generation,
+    endpointURL, ca };
+  return provisionCnpgBackupIdentity(binding);
+}
+async function checkWithIdentity(input: ReturnType<typeof fixture>, kubectl = input.kubectl,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {}) {
+  const issued = await issueFor(input);
+  const checkedOptions = { ...options, evidence: issued.evidence };
+  return checkCnpgBackupReferences(input.backup, namespace, kubectl, checkedOptions);
+}
 async function refused(run: Promise<unknown>, reason = refusal) {
   function safeError(error: Error) {
     assert.equal(error.message, reason);
@@ -104,7 +170,7 @@ async function refused(run: Promise<unknown>, reason = refusal) {
   }
   await assert.rejects(run, safeError);
 }
-async function refusesMissingInventory() {
+async function acceptsVerifiedRecord() {
   const input = fixture();
   const images: Record<string, string> = {};
   const secrets: Record<string, string> = {};
@@ -133,8 +199,8 @@ async function refusesMissingInventory() {
     }
   }
   const before = attempts.length;
-  await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl), inventoryRefusal);
-  assert.equal(attempts.length, before + 12);
+  await checkWithIdentity(input, input.kubectl);
+  assert.equal(attempts.length, before + 5);
   assert.equal(attempts.at(-1)!.destroyed, true);
   assert.deepEqual(matching.storage.requests, checkedRequests);
   assert.equal(matching.storage.objects.size, 0);
@@ -146,8 +212,7 @@ async function refusesMissingInventory() {
     assert.equal(matchingReads.length, 2);
   }
 }
-test('valid backup references are rechecked but cannot pass without silo locations',
-  refusesMissingInventory);
+test('valid backup references pass with a provisioner-verified record', acceptsVerifiedRecord);
 
 const objectFaults = [
   ['metadata.name', 'foreign'], ['metadata.namespace', 'foreign'],
@@ -169,7 +234,7 @@ for (const name of ['backup-store', 'backup-trust', 'backup-identity']) {
     async function refusesObject() {
       const input = fixture();
       replace(input.objects[name], path, value);
-      await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+      await refused(checkWithIdentity(input, input.kubectl));
     }
     test(`${name} refuses ${path} mismatch`, refusesObject);
   }
@@ -180,7 +245,7 @@ for (const name of ['backup-store', 'backup-trust', 'backup-identity']) {
         if (input.reads.includes(name)) input.objects[name].metadata[field] = 'changed';
         return input.kubectl(args);
       }
-      await refused(checkCnpgBackupReferences(input.backup, namespace, changed));
+      await refused(checkWithIdentity(input, changed));
     }
     test(`${name} refuses changed ${field} after a read waits`, refusesReplacement);
   }
@@ -195,7 +260,7 @@ for (const [name, key] of [
     async function refusesEntry() {
       const input = fixture();
       input.objects[name!].data[key!] = value;
-      await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+      await refused(checkWithIdentity(input, input.kubectl));
     }
     test(`${key} refuses missing, empty or invalid entry ${typeof value}:${String(value).length}`,
       refusesEntry);
@@ -210,7 +275,7 @@ for (const value of ['not a certificate', 'leaf', 'trailing', 'two',
     if (value === 'trailing') contents = ca + privateValue;
     if (value === 'two') contents = ca + ca;
     input.objects['backup-trust'].data['ca.crt'] = encoded(contents);
-    await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+    await refused(checkWithIdentity(input, input.kubectl));
   }
   test(`CA refuses ${value}`, refusesCA);
 }
@@ -222,7 +287,7 @@ for (const [path, value] of [
   async function refusesService() {
     const input = fixture();
     replace(input.objects['backup-store'], path as string, value);
-    await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+    await refused(checkWithIdentity(input, input.kubectl));
   }
   test(`Service refuses ${path}`, refusesService);
 }
@@ -235,7 +300,7 @@ for (const name of ['namespace', 'backup-store', 'backup-trust', 'backup-identit
       }
       return input.kubectl(args);
     }
-    await refused(checkCnpgBackupReferences(input.backup, namespace, denied));
+    await refused(checkWithIdentity(input, denied));
   }
   test(`${name} denied read with simultaneous dependency/cleanup errors stays private`, deniesRead);
 }
@@ -245,7 +310,7 @@ for (const output of ['malformed-' + privateValue, ' '.repeat(1_048_577)]) {
     async function unreadable() {
       return output;
     }
-    await refused(checkCnpgBackupReferences(input.backup, namespace, unreadable));
+    await refused(checkWithIdentity(input, unreadable));
   }
   test(`bounded JSON read refuses ${output.length} bytes`, refusesOutput);
 }
@@ -257,7 +322,7 @@ async function cancels() {
     controller.abort(new Error(privateValue));
     return output;
   }
-  await refused(checkCnpgBackupReferences(input.backup, namespace, cancelled,
+  await refused(checkWithIdentity(input, cancelled,
     { signal: controller.signal }));
   assert.equal(input.reads.length, 1);
 }
@@ -272,7 +337,7 @@ async function deadline() {
   function hold() {}
   const keepAlive = setTimeout(hold, 1000);
   try {
-    await refused(checkCnpgBackupReferences(input.backup, namespace, stalled, { timeoutMs: 10 }));
+    await refused(checkWithIdentity(input, stalled, { timeoutMs: 10 }));
   } finally {
     clearTimeout(keepAlive);
   }
@@ -287,7 +352,7 @@ for (const endpoint of [
   async function refusesEndpoint() {
     const input = fixture();
     input.backup.endpointURL = endpoint;
-    await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+    await refused(checkWithIdentity(input, input.kubectl));
   }
   test(`endpoint reference refuses case ${endpoint.length}`, refusesEndpoint);
 }
@@ -299,7 +364,7 @@ for (const name of ['endpointCA', 'accessKeyId', 'secretAccessKey']) {
       if (name === 'accessKeyId') reference = input.backup.s3Credentials.accessKeyId;
       if (name === 'secretAccessKey') reference = input.backup.s3Credentials.secretAccessKey;
       reference[field as 'name' | 'key'] = 'missing';
-      await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+      await refused(checkWithIdentity(input, input.kubectl));
     }
     test(`${name} refuses an absent named ${field}`, refusesReference);
   }
@@ -308,11 +373,13 @@ for (const name of ['endpointCA', 'accessKeyId', 'secretAccessKey']) {
 for (const date of ['2000-01-01', '2100-01-01']) {
   async function refusesValidity(context: import('node:test').TestContext) {
     const input = fixture();
+    const issued = await issueFor(input);
     function fixedTime() {
       return Date.parse(date);
     }
     context.mock.method(Date, 'now', fixedTime);
-    await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+    await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl,
+      { evidence: issued.evidence }));
   }
   test(`CA refuses outside its validity at ${date}`, refusesValidity);
 }
@@ -324,7 +391,7 @@ async function refusesSignature() {
   const pem = `-----BEGIN CERTIFICATE-----\n${bytes.toString('base64')}\n` +
     '-----END CERTIFICATE-----\n';
   input.objects['backup-trust'].data['ca.crt'] = encoded(pem);
-  await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+  await refused(checkWithIdentity(input, input.kubectl));
 }
 test('CA refuses a validly encoded certificate with a wrong signature', refusesSignature);
 
@@ -335,7 +402,7 @@ for (const field of ['uid', 'resourceVersion']) {
       if (input.reads.includes('namespace')) input.objects['namespace'].metadata[field] = 'changed';
       return input.kubectl(args);
     }
-    await refused(checkCnpgBackupReferences(input.backup, namespace, changed));
+    await refused(checkWithIdentity(input, changed));
   }
   test(`Namespace refuses changed ${field}`, refusesNamespaceChange);
 }
@@ -365,7 +432,7 @@ for (const name of ['wrong hostname', 'expired', 'future', 'plaintext', 'stalled
         timeoutMs = 200;
       }
       const options = { timeoutMs };
-      await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl, options));
+      await refused(checkWithIdentity(input, input.kubectl, options));
       assert.equal(input.reads.length, 4);
       const socket = attempts.at(-1)!;
       assert.equal(socket.destroyed, true);
@@ -389,7 +456,7 @@ async function foreignCA() {
     await certificates(foreignDirectory);
     const foreign = await readFile(`${foreignDirectory}/ca.crt`, 'utf8');
     input.objects['backup-trust'].data['ca.crt'] = encoded(foreign);
-    await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+    await refused(checkWithIdentity(input, input.kubectl));
     assert.equal(input.reads.length, 4);
   } finally {
     await rm(foreignDirectory, { recursive: true, force: true });
@@ -409,8 +476,8 @@ for (const name of ['namespace', 'backup-store', 'backup-trust']) {
       const listener = await peer(directory, 'matching', change);
       atPeer(input, listener.port);
       try {
-        await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
-        assert.equal(handshakes, 12);
+        await refused(checkWithIdentity(input, input.kubectl));
+        assert.equal(handshakes, 5);
         assert(input.reads.length > 4);
       } finally {
         await listener.close();
@@ -446,13 +513,13 @@ for (const stage of ['before reads', 'before connection', 'during handshake', 'a
     }
     try {
       const options = { signal: controller.signal };
-      await refused(checkCnpgBackupReferences(input.backup, namespace, read, options));
+      await refused(checkWithIdentity(input, read, options));
       let expected = 0;
       if (stage === 'during handshake') {
         expected = 1;
       }
       if (stage === 'after handshake') {
-        expected = 12;
+        expected = 5;
       }
       assert.equal(attempts.length - before, expected);
       const expectedReads = { 'before reads': 0, 'before connection': 4,
@@ -487,13 +554,13 @@ for (const stage of ['initial read', 'before connection', 'after handshake', 'fi
     const listener = await peer(directory, 'matching', expire);
     if (stage === 'after handshake') atPeer(input, listener.port);
     try {
-      await refused(checkCnpgBackupReferences(input.backup, namespace, read));
+      await refused(checkWithIdentity(input, read));
       let expected = 0;
       if (stage === 'after handshake') {
         expected = 1;
       }
       if (stage === 'final read') {
-        expected = 12;
+        expected = 5;
       }
       assert.equal(attempts.length - before, expected);
       if (expected) assert.equal(attempts.at(-1)!.destroyed, true);
@@ -537,7 +604,7 @@ async function sharedDeadline(context: import('node:test').TestContext) {
   atPeer(input, listener.port);
   try {
     const options = { timeoutMs: 1000, signal: controller.signal };
-    await refused(checkCnpgBackupReferences(input.backup, namespace, read, options));
+    await refused(checkWithIdentity(input, read, options));
     assert.equal(limitsSignal?.aborted, true);
     assert.equal(attempts.at(-1)!.destroyed, true);
   } finally {
@@ -554,7 +621,7 @@ for (const option of [
     const input = fixture();
     const before = attempts.length;
     const options = { timeoutMs: 1000, ...option };
-    await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl, options));
+    await refused(checkWithIdentity(input, input.kubectl, options));
     assert.equal(attempts.length, before);
     assert.equal(input.reads.length, 0);
   }
@@ -566,7 +633,7 @@ async function privateNetworkFailure(context: import('node:test').TestContext) {
     throw new AggregateError([new Error(directory), new Error(ca)], privateValue);
   }
   context.mock.method(tls, 'connect', fails);
-  await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+  await refused(checkWithIdentity(input, input.kubectl));
   assert.equal(input.reads.length, 4);
 }
 test('TLS discards nested network diagnostics and CA data', privateNetworkFailure);
@@ -587,7 +654,7 @@ for (const fault of ['wrong bucket', 'wrong prefix', 'wrong access', 'wrong secr
     atPeer(input, listener.port);
     const storage = listener.storage;
     storage.state.fault = fault;
-    storage.objects.set('/database-backups/local-check/existing', Buffer.from('untouched'));
+    storage.objects.set('/ocn-backup-silo-one/cnpg/existing', Buffer.from('untouched'));
     if (fault === 'wrong bucket') {
       input.backup.destinationPath = 's3://foreign-backups/local-check';
     }
@@ -600,20 +667,21 @@ for (const fault of ['wrong bucket', 'wrong prefix', 'wrong access', 'wrong secr
     }
     try {
       let reason = refusal;
-      const cleanupFaults = ['wrong bucket', 'wrong prefix', 'wrong access', 'wrong secret',
+      const cleanupFaults = [
         'deny DELETE', 'changed', 'changed before delete', 'server error'];
       if (cleanupFaults.includes(fault)) {
         reason = cleanupRefusal;
       }
-      if (fault === 'wrong bucket' || fault === 'wrong prefix') {
+      if (fault === 'wrong bucket' || fault === 'wrong prefix' ||
+        fault === 'wrong access' || fault === 'wrong secret') {
         reason = scopeRefusal;
       }
-      await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl), reason);
+      await refused(checkWithIdentity(input, input.kubectl), reason);
       assert.equal(input.reads.length, 4);
       assert.equal(outputCalls, 0);
-      assert.equal(storage.objects.get('/database-backups/local-check/existing')!.toString(),
+      assert.equal(storage.objects.get('/ocn-backup-silo-one/cnpg/existing')!.toString(),
         'untouched');
-      storage.objects.delete('/database-backups/local-check/existing');
+      storage.objects.delete('/ocn-backup-silo-one/cnpg/existing');
       const retained = ['collision', 'changed', 'changed before delete'];
       assert.equal(storage.objects.size, Number(retained.includes(fault)));
       if (fault === 'collision' || fault.startsWith('changed')) {
@@ -667,7 +735,7 @@ for (const method of ['PUT', 'GET', 'DELETE']) {
       try {
         const options = { signal: controller.signal, timeoutMs: 200 };
         const reason = method === 'DELETE' ? cleanupRefusal : refusal;
-        await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl, options),
+        await refused(checkWithIdentity(input, input.kubectl, options),
           reason);
         assert(performance.now() - started < 1000);
         let expected = ['DELETE'];
@@ -700,7 +768,7 @@ for (const destination of ['s3://user:private@database-backups/local-check',
     const input = fixture();
     input.backup.destinationPath = destination;
     const before = matching.storage.requests.length;
-    await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+    await refused(checkWithIdentity(input, input.kubectl));
     assert.equal(matching.storage.requests.length, before);
   }
   test(`storage refuses an invalid destination of length ${destination.length}`, refusesDestination);
@@ -712,14 +780,18 @@ for (const name of ['backup-store', 'backup-trust', 'backup-identity']) {
       const input = fixture();
       const listener = await peer(directory);
       atPeer(input, listener.port);
+      let deletes = 0;
       function replace(method: string) {
         if (method === 'DELETE') {
-          input.objects[name].metadata[field] = 'replaced';
+          deletes += 1;
+          if (deletes === 2) {
+            input.objects[name].metadata[field] = 'replaced';
+          }
         }
       }
       listener.storage.state.onRequest = replace;
       try {
-        await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+        await refused(checkWithIdentity(input, input.kubectl));
         assert.deepEqual(listener.storage.requests, checkedRequests);
         assert.equal(listener.storage.objects.size, 0);
         assert(input.reads.length > 4);
@@ -749,7 +821,7 @@ for (const field of ['endpointURL', 'destinationPath']) {
       return output;
     }
     try {
-      await refused(checkCnpgBackupReferences(input.backup, namespace, change), inventoryRefusal);
+      await checkWithIdentity(input, change);
       assert.deepEqual(listener.storage.requests, checkedRequests);
       assert.deepEqual(alternate.storage.requests, []);
       assert.equal(listener.storage.objects.size, 0);
@@ -767,7 +839,7 @@ async function removesStoredVersion() {
   atPeer(input, listener.port);
   listener.storage.state.fault = 'versioned';
   try {
-    await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl), inventoryRefusal);
+    await checkWithIdentity(input, input.kubectl);
     assert.deepEqual(listener.storage.requests, checkedRequests);
     assert.equal(listener.storage.objects.size, 0);
   } finally {
@@ -785,7 +857,7 @@ for (const fault of ['lost PUT', 'lost versioned PUT', 'stall GET', 'deny DELETE
     listener.storage.state.fault = fault;
     try {
       const options = { timeoutMs: 200 };
-      const run = checkCnpgBackupReferences(input.backup, namespace, input.kubectl, options);
+      const run = checkWithIdentity(input, input.kubectl, options);
       if (fault === 'deny DELETE') {
         await assert.rejects(run, { message: 'CNPG backup marker cannot be removed' });
       } else {
@@ -813,7 +885,7 @@ for (const grant of ['root', 'prefix-read', 'prefix-list', 'prefix-write',
     const listener = await peer(directory);
     atPeer(input, listener.port);
     try {
-      const run = checkCnpgBackupReferences(input.backup, namespace, input.kubectl);
+      const run = checkWithIdentity(input, input.kubectl);
       await refused(run, 'CNPG backup credential is not confined to its bucket and prefix');
       assert.equal(listener.storage.objects.size, 0);
     } finally {
@@ -828,7 +900,7 @@ for (const binding of [undefined, 's3://database-backups/other-silo']) {
     const input = fixture();
     input.objects['backup-identity'].metadata.annotations['opencrane.dev/backup-destination'] = binding;
     const before = matching.storage.requests.length;
-    const run = checkCnpgBackupReferences(input.backup, namespace, input.kubectl);
+    const run = checkWithIdentity(input, input.kubectl);
     await refused(run, 'CNPG backup credential is not confined to its bucket and prefix');
     assert.equal(matching.storage.requests.length, before);
   }
@@ -841,15 +913,15 @@ async function refusesConfiguredSiloAccess() {
   const listener = await peer(directory);
   atPeer(input, listener.port);
   try {
-    const run = checkCnpgBackupReferences(input.backup, namespace, input.kubectl);
-    await refused(run, inventoryRefusal);
-    assert.deepEqual(listener.storage.requests, checkedRequests);
+    const run = checkWithIdentity(input, input.kubectl);
+    await refused(run, scopeRefusal);
+    assert.deepEqual(listener.storage.requests, []);
     assert.equal(listener.storage.objects.size, 0);
   } finally {
     await listener.close();
   }
 }
-test('storage refuses configured-silo grants when the installer cannot enumerate locations',
+test('storage refuses configured-silo grants before writing a marker',
   refusesConfiguredSiloAccess);
 
 async function callerMadeRecordRefusesBeforeWrite() {
@@ -861,3 +933,105 @@ async function callerMadeRecordRefusesBeforeWrite() {
   assert.equal(matching.storage.requests.length, before);
 }
 test('a caller-made success record refuses before marker writes', callerMadeRecordRefusesBeforeWrite);
+
+function separateToken(input: ReturnType<typeof fixture>) {
+  const token = structuredClone(input.objects['backup-identity']);
+  token.metadata.name = 'backup-session';
+  token.metadata.uid = 'backup-session-uid';
+  token.data = { SESSION_TOKEN: encoded(issuedToken) };
+  input.objects['backup-session'] = token;
+  delete input.objects['backup-identity'].data.SESSION_TOKEN;
+  input.backup.s3Credentials.sessionToken = { name: 'backup-session', key: 'SESSION_TOKEN' };
+}
+
+async function separateTokenPasses() {
+  const input = fixture();
+  separateToken(input);
+  const listener = await peer(directory);
+  atPeer(input, listener.port);
+  try {
+    await checkWithIdentity(input);
+    assert.deepEqual(listener.storage.requests, checkedRequests);
+    assert.equal(listener.storage.objects.size, 0);
+    function isToken(name: string) {
+      return name === 'backup-session';
+    }
+    const tokenReads = input.reads.filter(isToken);
+    assert.equal(tokenReads.length, 2);
+  } finally {
+    await listener.close();
+  }
+}
+test('an independently owned token Secret passes and is rechecked', separateTokenPasses);
+
+async function separateTokenChangeRefuses() {
+  const input = fixture();
+  separateToken(input);
+  const listener = await peer(directory);
+  atPeer(input, listener.port);
+  let deletes = 0;
+  function change(method: string) {
+    if (method !== 'DELETE') return;
+    deletes += 1;
+    if (deletes === 2) {
+      input.objects['backup-session'].metadata.resourceVersion = '2';
+    }
+  }
+  listener.storage.state.onRequest = change;
+  try {
+    await refused(checkWithIdentity(input));
+    assert.deepEqual(listener.storage.requests, checkedRequests);
+  } finally {
+    await listener.close();
+  }
+}
+test('a changed separate token Secret refuses after marker cleanup', separateTokenChangeRefuses);
+
+for (const field of ['annotation', 'owner'] as const) {
+  async function separateTokenBoundaryRefuses() {
+    const input = fixture();
+    separateToken(input);
+    if (field === 'annotation') {
+      input.objects['backup-session'].metadata.annotations['opencrane.dev/backup-destination'] =
+        's3://other-bucket/cnpg';
+    } else {
+      input.objects['backup-session'].metadata.ownerReferences[0].uid = 'foreign-service';
+    }
+    const before = matching.storage.requests.length;
+    await refused(checkWithIdentity(input), field === 'annotation' ? scopeRefusal : refusal);
+    assert.equal(matching.storage.requests.length, before);
+  }
+  test(`a separate token Secret with a changed ${field} refuses`, separateTokenBoundaryRefuses);
+}
+
+for (const field of ['accessKeyId', 'secretAccessKey'] as const) {
+  async function tokenAliasRefuses() {
+    const input = fixture();
+    input.backup.s3Credentials.sessionToken = input.backup.s3Credentials[field];
+    const before = matching.storage.requests.length;
+    await refused(checkWithIdentity(input));
+    assert.equal(matching.storage.requests.length, before);
+  }
+  test(`a token reference cannot reuse the ${field} entry`, tokenAliasRefuses);
+}
+
+async function changedGenerationRefuses() {
+  const input = fixture();
+  const issued = await issueFor(input);
+  input.objects['backup-identity'].metadata.resourceVersion = '2';
+  const before = matching.storage.requests.length;
+  const run = checkCnpgBackupReferences(input.backup, namespace, input.kubectl,
+    { evidence: issued.evidence });
+  await refused(run, scopeRefusal);
+  assert.equal(matching.storage.requests.length, before);
+}
+test('a changed credential generation refuses before marker writes', changedGenerationRefuses);
+
+async function changedTokenRefuses() {
+  const input = fixture();
+  input.objects['backup-identity'].data.SESSION_TOKEN = encoded('changed-token');
+  const before = matching.storage.requests.length;
+  await refused(checkWithIdentity(input), scopeRefusal);
+  assert.equal(matching.storage.requests.length, before);
+}
+test('a changed session token refuses before marker writes', changedTokenRefuses);

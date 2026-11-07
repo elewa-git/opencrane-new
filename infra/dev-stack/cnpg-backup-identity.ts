@@ -10,6 +10,7 @@ type Binding = {
   namespace: string;
   namespaceUid: string;
   serviceUid: string;
+  generation: string;
   endpointURL: string;
   ca: string;
 };
@@ -36,7 +37,7 @@ function valid(condition: unknown): asserts condition {
 }
 
 function checkedBinding(input: Binding): Binding {
-  valid(input && Object.keys(input).length === 6);
+  valid(input && Object.keys(input).length === 7);
   valid(typeof input.silo === 'string' && /^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$/u
     .test(input.silo));
   valid(input.silo.length <= 48);
@@ -45,6 +46,7 @@ function checkedBinding(input: Binding): Binding {
   valid(input.namespace.length <= 63);
   valid(typeof input.namespaceUid === 'string' && input.namespaceUid.length > 0);
   valid(typeof input.serviceUid === 'string' && input.serviceUid.length > 0);
+  valid(typeof input.generation === 'string' && input.generation.length > 0);
   valid(typeof input.ca === 'string' && input.ca.length > 0);
   const endpoint = new URL(input.endpointURL);
   valid(endpoint.protocol === 'https:' && endpoint.username === '' && endpoint.password === '');
@@ -53,6 +55,7 @@ function checkedBinding(input: Binding): Binding {
   valid(endpoint.port !== '' && Number(endpoint.port) > 0 && Number(endpoint.port) <= 65535);
   return { silo: input.silo, namespace: input.namespace,
     namespaceUid: input.namespaceUid, serviceUid: input.serviceUid,
+    generation: input.generation,
     endpointURL: input.endpointURL, ca: input.ca };
 }
 

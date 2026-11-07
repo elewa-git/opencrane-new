@@ -52,7 +52,7 @@ export function storageFixture() {
     return `"${hash.digest('hex')}"`;
   }
   async function handle(request: IncomingMessage, response: ServerResponse) {
-    assert.equal(request.headers['x-amz-security-token'], 'fixture-session-token');
+    assert.match(String(request.headers['x-amz-security-token']), /^[A-Za-z0-9_-]+\./u);
     const method = request.method!;
     const url = new URL(request.url!, 'https://fixture.invalid');
     const path = url.pathname;
@@ -60,8 +60,9 @@ export function storageFixture() {
     state.onRequest(method);
     const identity = authenticated(request);
     const listing = url.searchParams.has('list-type');
-    const ownObject = /^\/database-backups\/local-check\/[^/]{1,100}$/u.test(path);
-    const otherBucket = path !== '/database-backups' && !path.startsWith('/database-backups/');
+    const ownObject = /^\/ocn-backup-silo-one\/cnpg\/[^/]{1,100}$/u.test(path);
+    const otherBucket = path !== '/ocn-backup-silo-one' &&
+      !path.startsWith('/ocn-backup-silo-one/');
     let area = otherBucket ? 'bucket' : 'prefix';
     if (listing && !url.searchParams.get('prefix') && !otherBucket) {
       area = 'root';
