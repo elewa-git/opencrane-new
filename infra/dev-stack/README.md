@@ -20,7 +20,7 @@ flowchart LR
   stack -->|starts services; checks listeners; sets up sign-in; can issue short backup credentials| services["Local services<br/>jobs, content and access"]
   stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
   stack -->|checks subscriptions and shares dispatcher readiness with chat| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
-  stack -->|checks ownership and nodes; refuses unproved backup access| package["infra/package<br/>Helm install"]
+  stack -->|checks ownership, nodes and backup token references| package["infra/package<br/>Helm install"]
   stack -->|checks collection and reports host refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
 ```
@@ -68,6 +68,7 @@ available for diagnosis.
   Checks backup Service ownership, named Secret entries and the endpoint certificate internally.
   Verifies the Service hostname against the named CA. Uses the referenced identity to
   create, read and remove one temporary marker in the named backup folder.
+  Includes the short-lived session token from the owned Secret in those requests.
   Refuses backup approval because the installer cannot list other silos’ storage locations.
   A denied request to an invented location cannot prove that other silos are protected.
   Checks the allowed destination recorded on the credential Secret and refuses bucket-root listing.

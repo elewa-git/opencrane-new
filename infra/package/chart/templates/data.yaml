@@ -30,6 +30,9 @@ spec:
         secretAccessKey:
           name: {{ .s3Credentials.secretAccessKey.name | quote }}
           key: {{ .s3Credentials.secretAccessKey.key | quote }}
+        sessionToken:
+          name: {{ .s3Credentials.sessionToken.name | quote }}
+          key: {{ .s3Credentials.sessionToken.key | quote }}
       data: { encryption: AES256 }
       wal: { encryption: AES256 }
 {{- end }}
@@ -66,6 +69,9 @@ spec:
           secretAccessKey:
             name: {{ .s3Credentials.secretAccessKey.name | quote }}
             key: {{ .s3Credentials.secretAccessKey.key | quote }}
+          sessionToken:
+            name: {{ .s3Credentials.sessionToken.name | quote }}
+            key: {{ .s3Credentials.sessionToken.key | quote }}
 {{- end }}
   storage:
     size: 1Gi

@@ -449,6 +449,7 @@ function backupValues() {
     s3Credentials: {
       accessKeyId: { name: 'backup-identity', key: 'ACCESS_KEY_ID' },
       secretAccessKey: { name: 'backup-identity', key: 'ACCESS_SECRET_KEY' },
+      sessionToken: { name: 'backup-identity', key: 'SESSION_TOKEN' },
     },
   };
   return values;
@@ -465,6 +466,7 @@ function rendersSuspendedBackup() {
       s3Credentials: {
         accessKeyId: { name: 'backup-identity', key: 'ACCESS_KEY_ID' },
         secretAccessKey: { name: 'backup-identity', key: 'ACCESS_SECRET_KEY' },
+        sessionToken: { name: 'backup-identity', key: 'SESSION_TOKEN' },
       },
       data: { encryption: 'AES256' },
       wal: { encryption: 'AES256' },
@@ -544,6 +546,7 @@ const referencePaths = [
   ['backup', 'endpointCA'],
   ['backup', 's3Credentials', 'accessKeyId'],
   ['backup', 's3Credentials', 'secretAccessKey'],
+  ['backup', 's3Credentials', 'sessionToken'],
 ];
 for (const path of referencePaths) {
   const referenceName = path.at(-1);

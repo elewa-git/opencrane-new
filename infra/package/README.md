@@ -21,7 +21,7 @@ flowchart LR
   infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, runner protection and installs"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
-  stack -->|checks ownership, nodes, certificates and private values| package
+  stack -->|checks ownership, nodes, certificates and backup token references| package
   package -->|uses local cluster| devbox
   package -->|starts services and checks capture and restored file and home bytes| apps["apps<br/>product services and replay"]
   package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
@@ -51,6 +51,7 @@ the record PostgreSQL uses to recover changes. It refers to private settings alr
 held by Kubernetes. Its schedule is paused, and the installer refuses this option
 until image, private-setting and storage checks are ready. Rendering the description
 does not save a database backup.
+The backup and recovery previews name a Secret entry for the short-lived storage token.
 A separate preview describes recovery from one named backup to an exact position
 in that log. It keeps the existing database users and refers to saved private
 settings by name. Installation remains blocked until a real restore is checked;

@@ -57,6 +57,7 @@ function fixture() {
     s3Credentials: {
       accessKeyId: { name: 'backup-identity', key: 'ACCESS_KEY_ID' },
       secretAccessKey: { name: 'backup-identity', key: 'ACCESS_SECRET_KEY' },
+      sessionToken: { name: 'backup-identity', key: 'SESSION_TOKEN' },
     },
   };
   function object(kind: string, name: string, ownerKind: string, ownerName: string, uid: string) {
@@ -79,6 +80,7 @@ function fixture() {
     'backup-trust': { ...trust, type: 'Opaque', data: { 'ca.crt': encoded(ca) } },
     'backup-identity': { ...identity, metadata: identityMetadata, type: 'Opaque', data: {
       ACCESS_KEY_ID: encoded('fixture-access'), ACCESS_SECRET_KEY: encoded(privateValue),
+      SESSION_TOKEN: encoded('fixture-session-token'),
     } },
   };
   const reads: string[] = [];
@@ -186,6 +188,7 @@ for (const name of ['backup-store', 'backup-trust', 'backup-identity']) {
 for (const [name, key] of [
   ['backup-trust', 'ca.crt'], ['backup-identity', 'ACCESS_KEY_ID'],
   ['backup-identity', 'ACCESS_SECRET_KEY'],
+  ['backup-identity', 'SESSION_TOKEN'],
 ]) {
   for (const value of [undefined, '', 7, '%%%=', 'Zg', '/w==', encoded('\u0000'),
     encoded('has space'), encoded('x'.repeat(65_537))]) {
