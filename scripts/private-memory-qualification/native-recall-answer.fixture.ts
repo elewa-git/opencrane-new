@@ -21,7 +21,9 @@ export function fixture() {
     nativeDigest: '1748767b230ebfc3d4ab7e4e254920d0c0ad9691fd8c11f190e7d44511a4a92e' };
   const state = { now: 1000, safe: true, dispatches: 0, native: true, save: true,
     reply: answer, nativeThread: binding.threadId, nativeTurn: 'native-turn',
-    completed: true, early: false, reads: 0, failRead: false, beforeRead() {}, afterLoaded() {} };
+    completed: true, early: false, otherTurnMessage: false, otherTurnDelta: false,
+    answerDelta: '',
+    reads: 0, failRead: false, beforeRead() {}, afterLoaded() {} };
   function read() {
     state.reads += 1;
     state.beforeRead();
@@ -62,6 +64,21 @@ export function fixture() {
         return 'native-turn';
       }
       state.afterLoaded();
+      if (state.otherTurnMessage) {
+        const item = { id: 'other-reply', type: 'agentMessage', text: 'another turn' };
+        const params = { threadId: state.nativeThread, turnId: 'other-turn', item };
+        incoming.write(JSON.stringify({ method: 'item/completed', params }) + '\n');
+      }
+      if (state.otherTurnDelta) {
+        const params = { threadId: state.nativeThread, turnId: 'other-turn',
+          itemId: 'other-reply', delta: 'another turn' };
+        incoming.write(JSON.stringify({ method: 'item/agentMessage/delta', params }) + '\n');
+      }
+      if (state.answerDelta) {
+        const params = { threadId: state.nativeThread, turnId: state.nativeTurn,
+          itemId: 'reply', delta: state.answerDelta };
+        incoming.write(JSON.stringify({ method: 'item/agentMessage/delta', params }) + '\n');
+      }
       if (state.native) {
         const item = { id: 'reply', type: 'agentMessage', text: state.reply };
         const params = { threadId: state.nativeThread, turnId: state.nativeTurn, item };

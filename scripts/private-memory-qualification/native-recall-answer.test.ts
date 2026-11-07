@@ -146,6 +146,45 @@ async function separatesCallers() {
 }
 it('refuses swapped answers from concurrent requesters', separatesCallers);
 
+async function refusesMixedPrivateAnswer() {
+  const alice = fixture();
+  const bob = fixture();
+  alice.state.reply = `${alice.answer} ${bob.answer}`;
+  const check = recallAnswerCheck(alice.binding, alice.reference, alice.answer,
+    alice.question, alice.driver, [bob.answer]);
+  expect(await check()).toEqual(refused);
+  expect(alice.state.dispatches).toBe(1);
+}
+it('refuses an own answer that also contains another person’s private fact',
+  refusesMixedPrivateAnswer);
+
+async function refusesEarlierForeignMessage() {
+  const test = fixture();
+  test.state.otherTurnMessage = true;
+  expect(await test.check()).toEqual(refused);
+  expect(test.state.dispatches).toBe(1);
+}
+it('refuses an earlier agent message from another native turn', refusesEarlierForeignMessage);
+
+async function refusesForeignDelta() {
+  const test = fixture();
+  test.state.otherTurnDelta = true;
+  expect(await test.check()).toEqual(refused);
+  expect(test.state.dispatches).toBe(1);
+}
+it('refuses an answer delta from another native turn', refusesForeignDelta);
+
+async function refusesPrivateDelta() {
+  const alice = fixture();
+  const bob = fixture();
+  alice.state.answerDelta = bob.answer;
+  const check = recallAnswerCheck(alice.binding, alice.reference, alice.answer,
+    alice.question, alice.driver, [bob.answer]);
+  expect(await check()).toEqual(refused);
+  expect(alice.state.dispatches).toBe(1);
+}
+it('refuses another person’s fact in a streamed answer delta', refusesPrivateDelta);
+
 async function correctedNewTurn() {
   const test = fixture();
   test.reference.revision = 2;
