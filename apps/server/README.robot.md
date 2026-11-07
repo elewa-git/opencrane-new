@@ -7067,3 +7067,23 @@ the owning read. The provider's secret reference and private work are omitted.
 `test/org-overview.test.ts` checks ordering, cursor and partial states.
 `test/spending.test.ts` checks access, privacy, absence of GET side effects and
 the same safe rows after an index rebuild against disposable services. A fresh-install journey is still NOT RUN.
+
+## Saved requester writer lease (Part of #58)
+
+`src/computers/takeover.ts` checks the latest human request, saved membership,
+participation, posting and desktop rights before the internal start, renew and Return
+commands. History loads before the short write check. `writer-lease.ts` requires a
+matching quiet receipt and current computer generation. Each command makes one
+conditional append on the computer stream. A lost append reply is checked by reading
+saved status; it never repeats input. Return closes a local writer slot before append.
+The slot compares saved lease state before and after access checking, then checks
+access again after the final computer read. Its 1,500 ms permission period starts
+when that final check starts. The saved expiry sets a monotonic deadline that a wall
+clock change cannot extend without a saved renewal. Retries with one command id
+must keep both expiry fields unchanged. It admits one writer session per computer
+in the server process and stops input on expiry, Return,
+access failure or event-store failure. A new process has a different proxy instance id
+and cannot reopen its predecessor's lease. RFB client input permits only standard key and
+pointer messages alongside display setup; clipboard and extensions are refused.
+The production HTTP switch and desktop writer relay remain disabled. Live keyboard,
+hardening and fresh-install qualification are NOT RUN.
