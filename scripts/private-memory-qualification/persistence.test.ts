@@ -4,7 +4,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { persistenceScan } from './persistence.ts';
 
 const categories = ['pvc', 'rollout', 'cache', 'outbox', 'logs', 'dumps'] as const;
@@ -41,6 +41,16 @@ function cleanup() {
 beforeEach(prepare);
 afterEach(cleanup);
 
+function expectNotRun(
+  result: ReturnType<typeof scan.scan>, category: typeof categories[number] | 'inventory',
+  files = 0, bytes = 0,
+) {
+  expect(result).toEqual({
+    result: 'NOT RUN', complete: false, category, files, bytes,
+    reason: 'Storage inspection could not be completed.',
+  });
+}
+
 function cleanPair() {
   writeFileSync(join(directory, 'pvc', 'status'), 'ended');
   expect(scan.scan('live', installation)).toEqual({
@@ -54,8 +64,8 @@ it('reads all required directories twice without claiming qualification', cleanP
 
 function persisted(category: typeof categories[number]) {
   writeFileSync(join(directory, category, '.hidden'), canary);
-  expect(scan.scan('live', installation)).toMatchObject({
-    result: 'FAIL', complete: false, category,
+  expect(scan.scan('live', installation)).toEqual({
+    result: 'FAIL', complete: false, category, files: 0, bytes: 64,
   });
 }
 it.each(categories)('detects bytes in the writable %s fixture without returning them', persisted);
@@ -64,15 +74,15 @@ async function delayedWrite() {
   expect(scan.scan('live', installation).result).toBe('PARTIAL');
   await Promise.resolve();
   writeFileSync(join(directory, 'outbox', 'late'), canary);
-  expect(scan.scan('stopped', installation)).toMatchObject({
-    result: 'FAIL', complete: false, category: 'outbox',
+  expect(scan.scan('stopped', installation)).toEqual({
+    result: 'FAIL', complete: false, category: 'outbox', files: 0, bytes: 64,
   });
 }
 it('finds a delayed write in the second scan after a simulated Stop', delayedWrite);
 
 function missing(category: typeof categories[number]) {
   rmSync(join(directory, category), { recursive: true });
-  expect(scan.scan('live', installation)).toMatchObject({ result: 'FAIL', category });
+  expectNotRun(scan.scan('live', installation), category);
 }
 it.each(categories)('refuses a missing required %s directory', missing);
 
@@ -82,21 +92,23 @@ function omitted(category: typeof categories[number]) {
   }
   const incomplete = inventory.filter(keep);
   const attempt = persistenceScan(incomplete, canary, installation);
-  expect(attempt.scan('live', installation)).toMatchObject({ result: 'FAIL' });
+  expectNotRun(attempt.scan('live', installation), 'inventory');
   attempt.close();
 }
 it.each(categories)('refuses an inventory that skips %s', omitted);
 
 function unreadable(category: typeof categories[number]) {
   chmodSync(join(directory, category), 0);
-  expect(scan.scan('live', installation)).toMatchObject({ result: 'FAIL', category });
+  expectNotRun(scan.scan('live', installation), category);
   chmodSync(join(directory, category), 0o700);
 }
 it.each(categories)('refuses unreadable %s even when run as root', unreadable);
 
 function redirected() {
-  symlinkSync(directory, join(directory, 'logs', 'redirect'));
-  expect(scan.scan('live', installation)).toMatchObject({ result: 'FAIL', category: 'logs' });
+  const target = join(directory, 'target');
+  writeFileSync(target, canary);
+  symlinkSync(target, join(directory, 'logs', 'redirect'));
+  expectNotRun(scan.scan('live', installation), 'logs');
 }
 it('refuses symlinks without reading their targets', redirected);
 
@@ -104,20 +116,20 @@ function replaced() {
   expect(scan.scan('live', installation).result).toBe('PARTIAL');
   renameSync(join(directory, 'pvc'), join(directory, 'old'));
   mkdirSync(join(directory, 'pvc'));
-  expect(scan.scan('stopped', installation)).toMatchObject({ result: 'FAIL', category: 'pvc' });
+  expectNotRun(scan.scan('stopped', installation), 'pvc');
 }
 it('refuses a replaced directory even when its name stays the same', replaced);
 
 function changedInstallation() {
   expect(scan.scan('live', installation).result).toBe('PARTIAL');
   const replacement = `sha256:${'b'.repeat(64)}`;
-  expect(scan.scan('stopped', replacement)).toMatchObject({ result: 'FAIL', category: 'inventory' });
+  expectNotRun(scan.scan('stopped', replacement), 'inventory');
 }
 it('invalidates old scans after installation replacement', changedInstallation);
 
 function wrongOrder() {
-  expect(scan.scan('stopped', installation)).toMatchObject({ result: 'FAIL' });
-  expect(scan.scan('live', installation)).toMatchObject({ result: 'FAIL' });
+  expectNotRun(scan.scan('stopped', installation), 'inventory');
+  expectNotRun(scan.scan('live', installation), 'inventory');
 }
 it('refuses skipped phases and keeps the failure', wrongOrder);
 
@@ -149,7 +161,7 @@ it('does not read unrelated directories', unrelated);
 
 function closed() {
   scan.close();
-  expect(scan.scan('live', installation)).toMatchObject({ result: 'FAIL' });
+  expectNotRun(scan.scan('live', installation), 'inventory');
 }
 it('refuses reuse after clearing its private buffers', closed);
 
@@ -157,7 +169,7 @@ function unreadableFile() {
   const file = join(directory, 'logs', 'private');
   writeFileSync(file, canary);
   chmodSync(file, 0);
-  expect(scan.scan('live', installation)).toMatchObject({ result: 'FAIL', category: 'logs' });
+  expectNotRun(scan.scan('live', installation), 'logs');
   chmodSync(file, 0o600);
 }
 it('refuses an unreadable file rather than treating it as empty', unreadableFile);
@@ -166,14 +178,15 @@ function linkedFile() {
   const outside = join(directory, 'outside');
   writeFileSync(outside, 'unrelated');
   linkSync(outside, join(directory, 'pvc', 'linked'));
-  expect(scan.scan('live', installation)).toMatchObject({ result: 'FAIL', category: 'pvc' });
+  expectNotRun(scan.scan('live', installation), 'pvc');
 }
 it('refuses a hard link that could reach unrelated stored data', linkedFile);
 
 function redirectedParent() {
+  writeFileSync(join(directory, 'pvc', 'private'), canary);
   renameSync(join(directory, 'pvc'), join(directory, 'original'));
   symlinkSync(join(directory, 'original'), join(directory, 'pvc'));
-  expect(scan.scan('live', installation)).toMatchObject({ result: 'FAIL', category: 'pvc' });
+  expectNotRun(scan.scan('live', installation), 'pvc');
 }
 it('refuses a redirected required directory', redirectedParent);
 
@@ -192,3 +205,121 @@ function parallelScans() {
   }
 }
 it('keeps two scan sessions and their private byte comparisons separate', parallelScans);
+
+function redirectedAncestor() {
+  const target = join(directory, 'target');
+  const child = join(target, 'child');
+  mkdirSync(child, { recursive: true });
+  writeFileSync(join(child, 'private'), canary);
+  const redirect = join(directory, 'redirect');
+  symlinkSync(target, redirect);
+  inventory[0] = { category: 'pvc', path: join(redirect, 'child') };
+  const attempt = persistenceScan(inventory, canary, installation);
+  try {
+    expectNotRun(attempt.scan('live', installation), 'pvc');
+  } finally {
+    attempt.close();
+  }
+}
+it('refuses an intermediate symlink without reading the target file', redirectedAncestor);
+
+function unavailableAfterRead() {
+  writeFileSync(join(directory, 'pvc', 'status'), 'ended');
+  rmSync(join(directory, 'logs'), { recursive: true });
+  expectNotRun(scan.scan('live', installation), 'logs', 1, 5);
+  mkdirSync(join(directory, 'logs'));
+  expectNotRun(scan.scan('live', installation), 'logs');
+}
+it('keeps an incomplete inspection after earlier files were read and storage returns',
+  unavailableAfterRead);
+
+function retainedDetection() {
+  const path = join(directory, 'logs', 'private');
+  writeFileSync(path, canary);
+  expect(scan.scan('live', installation)).toEqual({
+    result: 'FAIL', complete: false, category: 'logs', files: 0, bytes: 64,
+  });
+  rmSync(path);
+  expect(scan.scan('live', installation)).toEqual({
+    result: 'FAIL', complete: false, category: 'logs', files: 0, bytes: 0,
+  });
+}
+it('keeps the detected persistence and original category after the file is removed',
+  retainedDetection);
+
+function failureOutput() {
+  const stdout = vi.spyOn(process.stdout, 'write');
+  const stderr = vi.spyOn(process.stderr, 'write');
+  let result: ReturnType<typeof scan.scan>;
+  try {
+    const path = join(directory, 'logs', canary.toString());
+    mkdirSync(path);
+    symlinkSync(join(directory, 'missing-private-target'), join(path, 'redirect'));
+    result = scan.scan('live', installation);
+    expect(stdout).not.toHaveBeenCalled();
+    expect(stderr).not.toHaveBeenCalled();
+  } finally {
+    stdout.mockRestore();
+    stderr.mockRestore();
+  }
+  expect(result).toEqual({
+    result: 'FAIL', complete: false, category: 'logs', files: 0, bytes: 0,
+  });
+}
+it('detects private text in a stored name without returning that name or raw errors',
+  failureOutput);
+
+function unavailableOutput() {
+  const stdout = vi.spyOn(process.stdout, 'write');
+  const stderr = vi.spyOn(process.stderr, 'write');
+  try {
+    const path = join(directory, 'logs', canary.toString());
+    inventory[4] = { category: 'logs', path };
+    const attempt = persistenceScan(inventory, canary, installation);
+    try {
+      expectNotRun(attempt.scan('live', installation), 'logs');
+      expect(stdout).not.toHaveBeenCalled();
+      expect(stderr).not.toHaveBeenCalled();
+    } finally {
+      attempt.close();
+    }
+  } finally {
+    stdout.mockRestore();
+    stderr.mockRestore();
+  }
+}
+it('keeps unreadable storage paths and system errors out of results and output', unavailableOutput);
+
+function unsearchable() {
+  const path = join(directory, 'pvc');
+  chmodSync(path, 0o600);
+  try {
+    expectNotRun(scan.scan('live', installation), 'pvc');
+  } finally {
+    chmodSync(path, 0o700);
+  }
+}
+it('requires directory execute permission even for an empty folder', unsearchable);
+
+function base64Offset(offset: number) {
+  const padding = Buffer.alloc(offset, 32);
+  const padded = Buffer.concat([padding, canary]);
+  const encoded = padded.toString('base64');
+  const stored = Buffer.from(encoded);
+  try {
+    writeFileSync(join(directory, 'cache', 'data'), stored);
+    expect(scan.scan('live', installation)).toEqual({
+      result: 'FAIL', complete: false, category: 'cache', files: 0, bytes: 88,
+    });
+  } finally {
+    padded.fill(0);
+    stored.fill(0);
+  }
+}
+it.each([1, 2])('finds base64 private text with %s preceding bytes', base64Offset);
+
+function completedScan() {
+  cleanPair();
+  expectNotRun(scan.scan('stopped', installation), 'inventory');
+}
+it('closes after two successful scans without allowing another read', completedScan);
