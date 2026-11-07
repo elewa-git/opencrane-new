@@ -19,6 +19,8 @@ the occurrence occupied until termination is proved.
 
 Control refusals record the attempt, the person who made it, its conversation, a
 fingerprint of the checked request and a fixed reason. They contain no computer or private turn details.
+Writer lease records name one requester, computer generation and writer session.
+Return records close that lease without allowing new assistant work.
 
 Approval cancellation can record takeover as its fixed cause. It ends unused
 consent for a matching saved control request and carries no private review details.
