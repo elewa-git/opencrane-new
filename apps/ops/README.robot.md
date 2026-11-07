@@ -266,8 +266,9 @@ has already finished an event).
 
 1. Preview the plan with `npm run ops -- upgrade-handlers --dry-run`.
    Dry-run takes no lock and can run while a changed dispatcher waits. It checks
-   unfinished jobs and lists failed originals. If jobs are unfinished, drain them
-   using the previous release before requesting another preview.
+   unfinished jobs when subscriptions changed and lists failed originals. If a changed
+   list has unfinished jobs, drain them using the previous release before another preview.
+   An unchanged list can restart its workers while jobs are queued or retrying.
 2. Stop `apps/server`, computers, the model gateway and other clients that request
    decisions or append events. Leave NATS, PostgreSQL, OpenFGA and model/budget
    decision services available while the previous release drains jobs and the
@@ -295,12 +296,21 @@ has already finished an event).
    clients stopped while historical jobs run. Reactions may append further events.
    Check failed jobs and permissions before restarting clients and event writers.
 
-The JSON report contains `plan`, with changed handlers, added/removed types and
+The JSON report contains `manifestChanged`, which is true even when only subscription
+order changed. It also contains `plan`, with changed handlers, added/removed types and
 matching event counts, and `failedJobs`, with original job ids, names and streams.
+
+When the local stack sets `DEV_DISPATCHER_READY_FILE`, the dispatcher writes its PID
+there after opening its event consumer. It writes nothing while a changed subscription
+list leaves it waiting for maintenance. The worker removes the marker when dispatch
+fails, before waiting for the PostgreSQL unlock. It also removes the marker on
+shutdown before waiting for a slow cleanup task.
+
 Dry-run changes nothing. The upgrade queues only new pairs through the saved
 dispatcher checkpoint. The durable consumer handles later events after restart.
-It never runs a reaction or publishes an event. Removed subscriptions and changes
-to order alone skip history. Old queues and receipts are retained.
+It never runs a reaction or publishes an event. The preview scans removed types to
+count their saved events; applying a removal queues no work and skips that scan.
+Changes to order alone also skip history. Old queues and receipts are retained.
 
 The scan saves jobs and progress in chunks of at most 256 events. It logs events
 scanned and jobs queued. Transient read timeouts retry with back-off. After a crash,

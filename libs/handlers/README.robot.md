@@ -110,6 +110,10 @@ rebuild projections or reset the consumer. The dispatcher holds the PostgreSQL
 `handler-dispatcher` advisory lock for its whole lifetime, including when a changed
 manifest leaves it waiting for shutdown. It logs changed handlers, added/removed
 event types and `npm run ops -- upgrade-handlers --dry-run` before waiting.
+If dispatch fails, its optional failure callback runs before PostgreSQL starts
+unlocking. The ops worker uses that callback to remove its ready marker at once.
+The preview counts saved events matching added or removed types. Only added types
+produce new jobs when the upgrade is applied.
 An order-only change gets a separate, plain log line. The ops host starts workers
 and the computer watcher only after this check. Computers are not suspended while
 the dispatcher waits. An operator stops them as part of the upgrade procedure.
@@ -150,7 +154,8 @@ skip the history scan. New queues may remain after failure; no reaction runs her
 Events beyond the checkpoint stay with the durable consumer after restart.
 
 Dry-run takes no advisory lock, creates no tables or queues, and writes nothing.
-It works while a changed dispatcher waits. It checks unfinished jobs, lists failed
+It works while a changed dispatcher waits. It checks unfinished jobs only when the
+subscriptions changed and lists failed
 originals and counts each newly subscribed historical event, including receipted
 events. During a partial upgrade, it ignores that upgrade's parked jobs and reports
 the whole plan from sequence 1. It still refuses other unfinished jobs.

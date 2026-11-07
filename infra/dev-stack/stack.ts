@@ -5,7 +5,7 @@ import { Client } from 'minio';
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { chmod, copyFile, mkdir, open, readFile, realpath, rm, stat } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, open, readFile, readdir, realpath, rm, stat } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import { setPriority } from 'node:os';
 import { promisify } from 'node:util';
@@ -28,11 +28,23 @@ import { approvalJourneyTool } from './journey-tool-policy.ts';
 import { installPackage, packagedSlotIsBusy, preparePackage, removePackage,
   requireOwner, verifyPackageOwner } from './packaged.ts';
 import { createTarget, removeTarget, targetConnection, targetRecorded } from './target.ts';
+import { upgradeBeforeApps } from './handler-upgrade.ts';
+import { dispatcherReady } from './dispatcher-ready.ts';
 
 const exec = promisify(execFile);
 // Keep a claim for 15 minutes because claim.sh exits before stack startup can finish.
 const CLAIM_GRACE_PERIOD_MS = 15 * 60 * 1000;
 const memoryKeyDirectory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
+const publicUpgradeMessages = new Set([
+  'Handler upgrade preview failed. Run npm run ops -- upgrade-handlers --dry-run ' +
+    'with data services up.',
+  'Handler subscriptions need maintenance. Run npm run ops -- upgrade-handlers --dry-run, ' +
+    'then npm run ops -- upgrade-handlers --confirm-writers-stopped after checking the plan.',
+  'Handler upgrade failed. Run npm run ops -- upgrade-handlers --dry-run ' +
+    'and check stopped services.',
+  'Dispatcher is not consuming events. Run npm run ops -- upgrade-handlers --dry-run ' +
+    'with data services up, then check the dispatcher log.',
+]);
 
 function includedProcess(name: string) {
   return !secondary || (name !== 'models' && name !== 'model-stub');
@@ -344,7 +356,7 @@ async function stop() {
     if (ownership === 'owned') await run('sudo', ['-n', 'tailscale', 'serve', '--https=443', 'off']);
   }
   await rm(`${directory}/serve-owned`, { force: true });
-  await stopProcesses([...names].reverse());
+  await stopSavedProcesses();
   if (!secondary) await modelFirewall(false);
   if (await exists(`${directory}/settings.env`)) await compose('down', '--remove-orphans');
 }
@@ -357,6 +369,19 @@ async function stopProcesses(processes: string[]) {
     }
     await rm(`${directory}/${name}.pid`, { force: true });
   }
+}
+async function stopSavedProcesses() {
+  const files = await readdir(directory);
+  function isProcessRecord(file: string) {
+    return file.endsWith('.pid');
+  }
+  function processName(file: string) {
+    return file.slice(0, -4);
+  }
+  // Stop processes from this stack's saved records, even when current settings omit a worker.
+  const records = files.filter(isProcessRecord);
+  const processes = records.map(processName);
+  await stopProcesses(processes.reverse());
 }
 async function initialiseDatabase() {
   if (await exists(`${directory}/database-ready`)) return;
@@ -504,15 +529,33 @@ async function up(fresh: boolean) {
   }
   await checkPorts(settings, await Promise.all(names.map(processId)), project);
   if (settings['ORIGIN'] !== origin) throw new Error('Tailnet name changed; use --fresh');
-  await compose('up', '-d', '--wait', 'postgres', 'nats', 'minio', 'clamav');
-  const computer = await provisionComputers(settings);
+  await compose('up', '-d', '--wait', 'postgres', 'nats');
   await initialiseDatabase();
   await compose('up', '-d', 'openfga');
   await wait(() => healthy(`${settings['OPENFGA_API_URL']}/healthz`), 'OpenFGA');
-  await wait(() => healthy(`http://127.0.0.1:${settings['MINIO_PORT']}/minio/health/live`), 'MinIO');
-  // Keep decision services and event writers stopped during migrations, including on repeat starts.
-  await stopProcesses(['server', 'dispatcher', 'models']);
+  // Stop every application database client before the upgrade command checks for other sessions.
+  await stopSavedProcesses();
   if (secondary) await compose('stop', 'models');
+  // Skip the preview until a first or fresh start has registered its dispatcher state.
+  if (!firstStart) {
+    const projectionSettings = await readEnv('projection');
+    const dispatcherSettings = await readEnv('dispatcher');
+    const upgradeEnvironment = {
+      ...base, ...dispatcherSettings, ...projectionSettings,
+      DATABASE_URL: dispatcherSettings['DATABASE_URL']!,
+      SILO_ID: settings['SILO_ID']!,
+      MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`,
+    };
+    async function executeUpgrade(flag: string) {
+      return run(process.execPath,
+        ['--experimental-strip-types', 'apps/ops/src/ops.ts', 'upgrade-handlers', flag],
+        upgradeEnvironment);
+    }
+    await upgradeBeforeApps(executeUpgrade);
+  }
+  await compose('up', '-d', '--wait', 'minio', 'clamav');
+  await wait(() => healthy(`http://127.0.0.1:${settings['MINIO_PORT']}/minio/health/live`), 'MinIO');
+  const computer = await provisionComputers(settings);
   const minio = await readEnv('minio');
   const credentials = { accessKey: minio['MINIO_ROOT_USER']!, secretKey: minio['MINIO_ROOT_PASSWORD']! };
   const objects = new Client({ endPoint: '127.0.0.1', port: Number(settings['MINIO_PORT']), useSSL: false, ...credentials });
@@ -644,14 +687,31 @@ async function up(fresh: boolean) {
     await wait(ready, 'model gateway');
   }
   await startModels();
+  await rm(`${directory}/dispatcher-ready`, { force: true });
   await start('dispatcher', ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'dispatcher'],
     { ...await readEnv('dispatcher'), ...binding,
+      DEV_DISPATCHER_READY_FILE: `${directory}/dispatcher-ready`,
       MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`, ...prefixed(await readEnv('command'), 'COMMAND_'),
       CONTENT_DATABASE_URL: (await readEnv('server'))['DATABASE_URL']!,
       KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
       TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
       ...(secondary ? { COMPUTER_STORAGE: '1Gi' } : {}),
       COMPUTER_IDLE_MS: process.env['COMPUTER_IDLE_MS'] ?? '900000' });
+  async function dispatcherConsuming() {
+    const pid = await processId('dispatcher');
+    return dispatcherReady(`${directory}/dispatcher-ready`, pid);
+  }
+  const dispatcherUnavailable = 'Dispatcher is not consuming events. Run ' +
+    'npm run ops -- upgrade-handlers --dry-run with data services up, then check the dispatcher log.';
+  try {
+    await wait(dispatcherConsuming, 'dispatcher consuming events');
+  } catch (error) {
+    if (error instanceof Error && error.message ===
+        'Timed out waiting for dispatcher consuming events') {
+      throw new Error(dispatcherUnavailable);
+    }
+    throw error;
+  }
   const tokenBootstrap = secondary && process.env['DEV_OWNER_BOOTSTRAP'] === '0';
   if (!tokenBootstrap) {
     const events = await connectEventStore(await readEnv('command'));
@@ -766,6 +826,9 @@ async function up(fresh: boolean) {
   if (!secondary) await modelFirewall(true);
   console.log(secondary ? 'PASS listener check: all secondary host ports on loopback'
     : 'PASS listener check: loopback/Tailscale; model port firewalled to loopback, tailnet and private k3d');
+  if (!await dispatcherConsuming()) {
+    throw new Error(dispatcherUnavailable);
+  }
   console.log(`Stack ready: ${origin}/org/integrations (Zitadel sign-in)`);
 }
 async function journey() {
@@ -960,6 +1023,8 @@ try {
     console.error(message);
   } else if (error instanceof Error &&
       (providerSetupFailure || error.message === ownerRunRefusal)) {
+    console.error(error.message);
+  } else if (error instanceof Error && publicUpgradeMessages.has(error.message)) {
     console.error(error.message);
   } else {
     let message: string;

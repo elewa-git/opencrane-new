@@ -81,11 +81,15 @@ async function queueChunk(runtime: HandlerRuntime, events: EventEnvelope[],
   changes: SubscriptionChange[], tx?: Query, queuedBefore = 0): Promise<number> {
   let queued = 0;
   for (const change of changes) {
-    function matches(event: EventEnvelope) {
+    function matchesAdded(event: EventEnvelope) {
       return change.addedTypes.includes(event.type);
     }
-    const matching = events.filter(matches);
-    change.eventCount += matching.length;
+    function matchesChanged(event: EventEnvelope) {
+      return change.addedTypes.includes(event.type) || change.removedTypes.includes(event.type);
+    }
+    const matching = events.filter(matchesAdded);
+    const changedEvents = events.filter(matchesChanged);
+    change.eventCount += changedEvents.length;
     if (!tx || !matching.length) {
       continue;
     }
@@ -107,10 +111,10 @@ export async function scanUpgrade(runtime: HandlerRuntime, source: EventSource,
   let sequence = Number(progress?.sequence ?? 0);
   let queued = Number(progress?.jobs ?? 0);
   const counts = progress?.counts ?? changes;
-  function hasAdded(change: SubscriptionChange) {
-    return change.addedTypes.length > 0;
+  function needsScan(change: SubscriptionChange) {
+    return change.addedTypes.length > 0 || (dryRun && change.removedTypes.length > 0);
   }
-  const needsHistory = counts.some(hasAdded);
+  const needsHistory = counts.some(needsScan);
   if (!dryRun) {
     await runtime.options.db.query(`CREATE TABLE IF NOT EXISTS handler_upgrade (
       id INTEGER PRIMARY KEY CHECK (id = 1), manifest TEXT NOT NULL, previous TEXT NOT NULL,

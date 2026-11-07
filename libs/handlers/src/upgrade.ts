@@ -87,6 +87,7 @@ interface FailedJob extends Record<string, unknown> {
   stream: string;
 }
 export interface UpgradeReport {
+  manifestChanged: boolean;
   plan: SubscriptionChange[];
   failedJobs: FailedJob[];
 }
@@ -160,7 +161,7 @@ async function upgradeLocked(runtime: HandlerRuntime, source: EventSource, db: D
     await requireOnlySession(db);
     const state = await inspect(local, source);
     if (state.row.manifest === state.manifest) {
-      return { plan: [], failedJobs: await failedJobs(db) };
+      return { manifestChanged: false, plan: [], failedJobs: await failedJobs(db) };
     }
     const failures = await unfinishedJobs(db, Boolean(state.progress));
     await local.start();
@@ -173,7 +174,7 @@ async function upgradeLocked(runtime: HandlerRuntime, source: EventSource, db: D
       await tx.query('DELETE FROM handler_upgrade WHERE id = 1');
     }
     await db.transaction(finish);
-    return { plan, failedJobs: failures };
+    return { manifestChanged: true, plan, failedJobs: failures };
   } finally {
     await local.stop();
     await db.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))',
@@ -190,13 +191,13 @@ export async function upgradeHandlers(
   const { db } = runtime.options;
   if (dryRun) {
     const state = await inspect(runtime, source);
-    const failedJobs = await unfinishedJobs(db, Boolean(state.progress));
     if (state.row.manifest === state.manifest) {
-      return { plan: [], failedJobs };
+      return { manifestChanged: false, plan: [], failedJobs: await failedJobs(db) };
     }
+    const failures = await unfinishedJobs(db, Boolean(state.progress));
     const plan = await scanUpgrade(runtime, source, state.changes, state.sequence,
       state.manifest, state.row.manifest, undefined, true);
-    return { plan, failedJobs };
+    return { manifestChanged: true, plan, failedJobs: failures };
   }
   // Check the old dispatcher lock before reporting its other database connections.
   await db.transaction(requireStoppedDispatcher);

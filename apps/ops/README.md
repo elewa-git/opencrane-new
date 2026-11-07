@@ -16,13 +16,13 @@ under `apps`. [apps/server](../server/README.md) saves changes as
 
 ```mermaid
 flowchart LR
-  apps["apps<br/>applications"] --> ops["apps/ops<br/>workers and recovery checks"]
+  apps["apps<br/>applications"] --> ops["apps/ops<br/>workers, recovery and readiness"]
   apps --> server["apps/server<br/>back end"]
   server -.->|tests supply delivery with start confirmation| ops
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
   ops -->|saves checked results and daily or weekly routine records| nats
-  ops -->|holds routine ownership, reads routine pages and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
+  ops -->|holds worker locks and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
   ops -->|deletes forgotten keys| keys["Memory key store<br/>private storage"]
@@ -45,6 +45,8 @@ and suspension. Those checks read metadata and change no resources.
 - Prepares reviewed tool settings for the gateway and, when configured, removes
   forgotten memory keys and old private connection copies.
 - Provides [replay](../../GLOSSARY.md#replay), failed-job tools and upgrades for recovery.
+- Removes the dispatcher's ready marker as soon as event consumption fails, before
+  database lock cleanup finishes.
 - Provides internal commands that claim, skip or record missed routine slots without starting work.
 - Holds one routine scheduler owner per silo while its callback prepares claims.
 - Inspects small pages of routine references and dispatches checked commands from saved events.
@@ -219,6 +221,8 @@ unavailable report was lost, the dispatcher records it after the event store rec
 
 Workers need the service connections and permissions described in the operator notes.
 These commands run from the repository root; dry-run checks history without changing data.
+Its event counts include both added and removed subscriptions. A repeat local stack start
+uses those counts to apply safe changes before the apps start.
 Server integration tests use `test/server.ts` to exercise computer lifecycle work.
 The nightly recovery test waits for both the saved result and removal of the failed
 job, because saving the result happens first.

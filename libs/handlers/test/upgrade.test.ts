@@ -7,6 +7,7 @@ import { type HandlerName } from "@opencrane/events";
 import { event } from "@opencrane/event-store/testing";
 import { dispatch, HandlerRuntime, registerHandler, upgradeHandlers } from "../src/index.ts";
 import { scanUpgrade } from "../src/upgrade-scan.ts";
+import { checkHandlers } from "../src/registration.ts";
 import { effect, fixture, until } from "./helpers.ts";
 import { sessionDiagnostics } from "./session-diagnostics.ts";
 
@@ -249,6 +250,36 @@ function upgradeTests() {
   it.each(['created', 'retry', 'active'])(
     'refuses unfinished %s jobs in both modes', unfinishedJobs);
 
+  async function unchangedManifestWithQueuedJob() {
+    const runtime = await prepare();
+    const manifest = checkHandlers(runtime.options.handlers);
+    await current.db.query('UPDATE handler_dispatcher SET manifest = $1', [manifest]);
+    await runtime.enqueue(runtime.options.handlers[0]!, event('pending'), current.db);
+    const preview = await command('--dry-run');
+    const report: unknown = JSON.parse(preview.stdout.trim().split('\n').at(-1)!);
+    if (typeof report !== 'object' || report === null ||
+        !('manifestChanged' in report) || !('plan' in report)) {
+      throw new Error('Handler preview report is missing');
+    }
+    expect(report.manifestChanged).toBe(false);
+    expect(report.plan).toEqual([]);
+    const jobs = await current.db.query("SELECT state FROM pgboss.job WHERE state = 'created'");
+    expect(jobs.rows.length).toBeGreaterThan(0);
+    await command('--confirm-writers-stopped');
+    await runtime.start();
+    await runtime.work(1);
+    function isPendingEffect(effect: { event_id: string }) {
+      return effect.event_id === 'pending';
+    }
+    async function queuedJobFinished() {
+      const effects = await current.effects();
+      return effects.some(isPendingEffect);
+    }
+    await until(queuedJobFinished);
+  }
+  it('previews unchanged subscriptions with a queued job so workers can restart',
+    unchangedManifestWithQueuedJob);
+
   async function failedJobs() {
     const runtime = await prepare();
     await runtime.enqueue(runtime.options.handlers[0]!, event('failed'), current.db);
@@ -261,6 +292,17 @@ function upgradeTests() {
     expect(result.rows).toHaveLength(1);
   }
   it('reports failed jobs and lets an upgrade proceed', failedJobs);
+
+  async function countsRemovedHistory() {
+    await prepare();
+    await current.append('removed', 'member-alice', 'member.removed');
+    await current.db.query('UPDATE handler_dispatcher SET sequence = 5');
+    const preview = await command('--dry-run');
+    const removed = '"handler":"update-members","addedTypes":[],"removedTypes":' +
+      '["member.removed"],"eventCount":1';
+    expect(preview.stdout).toContain(removed);
+  }
+  it('counts history for removed subscriptions in the preview', countsRemovedHistory);
 
   async function connectedSession() {
     await prepare();

@@ -67,6 +67,7 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
     commandEnv[`COMMAND_${setting}`] = value;
   }
   const env = { ...process.env, ...nats.env('dispatcher'), ...commandEnv,
+    DEV_DISPATCHER_READY_FILE: `${directory}/dispatcher-ready`,
     DATABASE_URL: connectionString, CONTENT_DATABASE_URL: await storage.postgres(), SILO_ID: 'test', OPENFGA_API_URL: 'http://unused',
     OPENFGA_STORE_ID: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
     OPENFGA_MODEL_ID: '01ARZ3NDEKTSV4RRFFQ69G5FAV', KUBECONFIG: '/unused',
@@ -179,6 +180,19 @@ async function workerWaitsBeforeStartingReactions(scenario: string) {
             return output.includes('Computer watcher failed');
           }
           await until(watcherFailed);
+          async function readinessWithdrawn() {
+            try {
+              await readFile(env.DEV_DISPATCHER_READY_FILE);
+              return false;
+            } catch (error) {
+              if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) {
+                throw error;
+              }
+              return true;
+            }
+          }
+          await until(readinessWithdrawn);
+          expect(child.exitCode).toBeNull();
         }
         child.kill('SIGTERM');
         // Wait for queue shutdown so it cannot hide a missing wait for the scan.

@@ -17,6 +17,12 @@ type StartOptions = {
   scannerMissing?: boolean;
   routinesExit?: boolean;
   stopAfterStart?: boolean;
+  repeat?: boolean;
+  previousMemory?: boolean;
+  upgradeReport?: 'unchanged' | 'safe' | 'unsafe';
+  upgradeFailure?: boolean;
+  applyFailure?: boolean;
+  markerMissing?: boolean;
 };
 
 async function ownerStart(start: StartOptions = {}) {
@@ -40,11 +46,25 @@ async function ownerStart(start: StartOptions = {}) {
       START_LISTENER: start.listener ?? '',
       START_SCANNER_MISSING: start.scannerMissing ? '1' : '',
       START_ROUTINES_EXIT: start.routinesExit ? '1' : '',
+      START_UPGRADE_REPORT: start.upgradeReport ?? 'unchanged',
+      START_UPGRADE_FAILURE: start.upgradeFailure ? '1' : '',
+      START_APPLY_FAILURE: start.applyFailure ? '1' : '',
+      START_MARKER_MISSING: start.markerMissing ? '1' : '',
+      START_RESTORE_PROCESSES: '',
     };
     const args = ['--experimental-strip-types', '--import',
       './infra/dev-stack/test/stack-start-preload.mjs', 'infra/dev-stack/stack.ts',
       'up', '--owner-run', '--fresh'];
     const options = { env: environment, encoding: 'utf8' as const, timeout: 15_000 };
+    if (start.repeat) {
+      const firstEnvironment = { ...environment,
+        MEMORY_KEY_DIRECTORY: start.previousMemory ? `${home}/memory-keys` : '' };
+      const first = spawnSync(process.execPath, args, { ...options, env: firstEnvironment });
+      assert.ifError(first.error);
+      assert.equal(first.status, 0, first.stdout + first.stderr);
+      environment.START_RESTORE_PROCESSES = '1';
+      args.pop();
+    }
     const result = spawnSync(process.execPath, args, options);
     assert.ifError(result.error);
     if (start.stopAfterStart && result.status === 0) {
@@ -87,6 +107,69 @@ async function ownerReadiness() {
   assert.equal(result.operations.includes('infra/dev-stack/journey.ts'), false);
   assert.match(result.operations, /health .*\/healthz\/ready/u);
 }
+
+async function repeatStopsOldMemoryWorker() {
+  const result = await ownerStart({ repeat: true, previousMemory: true });
+  assert.equal(result.status, 0, result.output + result.failure);
+  assert.match(result.operations, /stop memory/u);
+  assert.match(result.operations, /exec .*upgrade-handlers --dry-run/u);
+  const memoryStopped = result.operations.lastIndexOf('stop memory');
+  const previewStarted = result.operations.lastIndexOf('upgrade-handlers --dry-run');
+  assert.ok(memoryStopped < previewStarted);
+}
+
+test('repeat start stops an earlier memory worker before preview when memory is now off',
+  repeatStopsOldMemoryWorker);
+
+async function unchangedPreviewAllowsRestart() {
+  const result = await ownerStart({ repeat: true, upgradeReport: 'unchanged' });
+  assert.equal(result.status, 0, result.output + result.failure);
+  assert.match(result.output, /Stack ready:/u);
+  assert.match(result.operations, /exec .*upgrade-handlers --dry-run/u);
+  assert.doesNotMatch(result.operations, /upgrade-handlers --confirm-writers-stopped/u);
+}
+
+test('repeat start resumes workers after an unchanged subscription preview',
+  unchangedPreviewAllowsRestart);
+
+async function unsafeUpgradeShowsCommand() {
+  const result = await ownerStart({ repeat: true, upgradeReport: 'unsafe' });
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /npm run ops -- upgrade-handlers --dry-run/u);
+  assert.doesNotMatch(result.output, /postgres:|fixture\.invalid|\/tmp\//u);
+}
+
+test('unsafe subscriptions print the fixed operator command', unsafeUpgradeShowsCommand);
+
+async function failedUpgradeShowsCommand() {
+  const result = await ownerStart({ repeat: true, upgradeFailure: true });
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /npm run ops -- upgrade-handlers --dry-run/u);
+  assert.doesNotMatch(result.output, /postgres:|secret|fixture\.invalid|\/tmp\//u);
+}
+
+test('preview errors print fixed instructions without dependency details',
+  failedUpgradeShowsCommand);
+
+async function failedApplyShowsCommand() {
+  const result = await ownerStart({ repeat: true, upgradeReport: 'safe',
+    applyFailure: true });
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /npm run ops -- upgrade-handlers --dry-run/u);
+  assert.doesNotMatch(result.output, /postgres:|secret|fixture\.invalid|\/tmp\//u);
+}
+
+test('apply errors print fixed instructions without dependency details',
+  failedApplyShowsCommand);
+
+async function missingMarkerRefusesReadiness() {
+  const result = await ownerStart({ markerMissing: true, webReadyMs: 1 });
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /npm run ops -- upgrade-handlers --dry-run/u);
+  assert.doesNotMatch(result.output, /Stack ready:/u);
+}
+
+test('a dispatcher without its marker refuses stack readiness', missingMarkerRefusesReadiness);
 
 test('an authorised owner real start reports readiness without an automated journey', ownerReadiness);
 
