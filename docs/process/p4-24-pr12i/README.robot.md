@@ -35,13 +35,13 @@ Own checks on 7 November 2026. Final source commit:
   routine finish and all 460 unchanged security-rule tests.
 - PASS: eight focused recovery checks after preserving the original Stop source.
   These cover held acknowledgement, lost replies, reconnect, late 1,234-cent settlement,
-  native closure, timeout and connection loss. Six access/history checks also passed.
-- PARTIAL at receipt time: the final repeated sender/finish run and the unchanged
-  hand-off suite are running. The draft PR records their final results and pushed-head CI.
+  native closure, timeout and connection loss. Six access/history checks and all 38
+  unchanged hand-off tests also passed.
+- PARTIAL at receipt time: the final repeated sender/finish run is running.
+  The draft PR records its final result and pushed-head CI.
 - NOT RUN: local full root suite, development stack and fresh-install live qualification.
 
 The broad runs use a throwaway PostgreSQL database, supplied through `PG_TEST_URL`,
 and one test worker. Logs: `/tmp/p4-24-pr12i-tests-{1,2}.log`,
 `/tmp/p4-24-pr12i-{recovery-green,access,handoff}.log`,
 `/tmp/p4-24-pr12i-{lint,typecheck-final,knip,events,changelog}.log`.
-
