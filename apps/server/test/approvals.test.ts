@@ -25,7 +25,8 @@ async function approvalFixture(stepUp = false,
   await f.runner.run(auditTrail);
   const config = testAuthConfig({ expectedOrgId: 'org-test' });
   const chat = { silo: 'test', store: f.nats.store, db: f.db, keys: f.keys,
-    binding: f.binding, feed: { memberId: identity }, retainedCall };
+    binding: f.binding, feed: { memberId: identity },
+    ...(retainedCall ? { retainedCall } : {}) };
   function identity(_silo: string, _issuer: string, sub: string) {
     return Promise.resolve(sub);
   }
@@ -845,7 +846,8 @@ async function readsOriginalCallWithoutChangingIt() {
   try {
     await setup.call();
     expect((await setup.decide()).statusCode).toBe(200);
-    await setup.call();
+    await setup.refuseMcpConnection();
+    expect((await setup.call()).status).toBe(503);
     await setup.restart();
     await ingestUsage(setup.actor, setup.options.usageFile);
     const card = (await setup.read()).cards[0]!;
@@ -862,7 +864,7 @@ async function readsOriginalCallWithoutChangingIt() {
     expect(unknown.attempts[0]).toMatchObject({ requestId: permitId,
       outcome: 'not_dispatched', evidence: 'connection_refused' });
     signal = { approvalId: card.approvalId, turnId: 'turn', permitId: permitId!,
-      expiresAt: new Date(Date.now() + 30_000).toISOString() };
+      expiresAt: new Date(Date.now() + 5_000).toISOString() };
     const tabs = await Promise.all([
       setup.app.inject({ url, headers: setup.headers() }),
       setup.app.inject({ url, headers: setup.headers() }),
@@ -877,6 +879,17 @@ async function readsOriginalCallWithoutChangingIt() {
     signal = { ...signal, permitId: permitId!, expiresAt: new Date(0).toISOString() };
     const expired = await setup.app.inject({ url, headers: setup.headers() });
     expect(originalCallStatusSchema.parse(expired.json()).retry).toBe('unknown');
+    signal = { ...signal, expiresAt: new Date(Date.now() + 5_000).toISOString() };
+    await setup.append('computer-assistant', 'computer.lost', {
+      assistantId: 'assistant', computerId: 'computer',
+    });
+    const ended = await setup.app.inject({ url, headers: setup.headers() });
+    expect(originalCallStatusSchema.parse(ended.json()).retry).toBe('ended');
+    await setup.append('computer-assistant', 'computer.ready', {
+      assistantId: 'assistant', computerId: 'computer', generation: 2, podUid: 'new-pod',
+    });
+    const restarted = await setup.app.inject({ url, headers: setup.headers() });
+    expect(originalCallStatusSchema.parse(restarted.json()).retry).toBe('ended');
     const outsider = await setup.app.inject({ url, headers: setup.headers('bob') });
     expect(outsider.statusCode).toBe(403);
   } finally {
@@ -885,6 +898,44 @@ async function readsOriginalCallWithoutChangingIt() {
 }
 it('reads a saved call in two tabs only while its original bridge hold is live',
   readsOriginalCallWithoutChangingIt, 40_000);
+
+async function refusesAnotherCallsObservation() {
+  let signal: { approvalId: string; turnId: string; permitId: string;
+    expiresAt: string } | undefined;
+  async function retainedCall() { return signal; }
+  const setup = await approvalFixture(false, retainedCall);
+  try {
+    await setup.call();
+    expect((await setup.decide()).statusCode).toBe(200);
+    const card = (await setup.read()).cards[0]!;
+    const permitId = '11111111-1111-4111-8111-111111111111';
+    await setup.append(`approval-${card.approvalId}`, 'approval.used', {
+      approvalId: card.approvalId, permitId,
+    });
+    const observation = toolDispatchRecordedDataSchema.parse({
+      conversationId: 'conversation', turnId: 'turn', callId: 'other-call',
+      serverId: 'fixture', toolName: 'write', requestId: permitId,
+      logicalRequestId: 'b'.repeat(64), approvalId: card.approvalId,
+      startedAt: new Date().toISOString(), durationMs: 1,
+      outcome: 'not_dispatched', evidence: 'connection_refused',
+    });
+    await setup.append(`decision-${permitId}`, 'tool.dispatch_recorded', observation);
+    signal = { approvalId: card.approvalId, turnId: 'turn', permitId,
+      expiresAt: new Date(Date.now() + 5_000).toISOString() };
+    const url = `/api/conversations/conversation/tool-requests/${card.approvalId}`;
+    const response = await setup.app.inject({ url, headers: setup.headers() });
+    expect(response.statusCode).toBe(200);
+    const status = originalCallStatusSchema.parse(response.json());
+    expect(status.retry).toBe('unknown');
+    expect(status.attempts).toHaveLength(1);
+    expect(status.attempts[0]).toMatchObject({ requestId: permitId });
+    expect(status.attempts[0]).not.toHaveProperty('outcome');
+  } finally {
+    await setup.close();
+  }
+}
+it('keeps a different call observation out of original call status',
+  refusesAnotherCallsObservation, 40_000);
 
 const replyEvidence = [
   'adapter_response_received', 'response_received', 'adapter_transport_uncertain',
