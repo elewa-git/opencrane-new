@@ -137,7 +137,8 @@ try {
       return prepareNightlyMaintenance(options, scopeId, nightId);
     }
     const dispatchOptions = { acknowledged, routes: mcpRoutes, requireLeader: requireDispatchLeader,
-      requireCatalogue: watch.requireCurrent, childStart, maintenancePrepare };
+      requireCatalogue: watch.requireCurrent, childStart };
+    const maintenanceDispatchOptions = { ...dispatchOptions, maintenancePrepare };
     function egressReceiptRefused() {
       logger.error('egress_receipt_refused');
     }
@@ -148,7 +149,7 @@ try {
     stop.signal.addEventListener('abort', closeRelays, { once: true });
     const decisionPort = Number(required('MODEL_DECISION_PORT'));
     const decision = await startDecision(actor, identity, binding, decisionPort,
-      keys, verification, dispatchOptions, egress.registry);
+      keys, verification, maintenanceDispatchOptions, egress.registry);
     let gateway: Awaited<ReturnType<typeof startGateway>> | undefined;
     function configurationFailed(error: unknown) {
       const errorName = error instanceof Error ? error.name : typeof error;
