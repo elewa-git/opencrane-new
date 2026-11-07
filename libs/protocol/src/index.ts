@@ -84,6 +84,7 @@ export { auditReasons, auditRecordSchema, auditRowSchema, auditResponseSchema,
 
 
 export { approvalReviewSchema, approvalCardsSchema, type ApprovalCard } from './approvals.ts';
+export { originalCallStatusSchema, type OriginalCallStatus } from './original-call.ts';
 export { memberPageQuerySchema, memberHeaderSchema, memberDirectoryRowSchema,
   memberDetailSchema, memberDirectorySchema } from './members.ts';
 export { invitationEmailInputSchema, invitationEmailSchema } from './members.ts';

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { parseEventByType, toolDispatchRecordedDataSchema } from '@opencrane/events';
 import { encodeSession } from '@opencrane/auth';
 import { testAuthConfig } from '@opencrane/auth/testing';
-import { approvalCardsSchema, chatFeedSchema } from '@opencrane/protocol';
+import { approvalCardsSchema, chatFeedSchema, originalCallStatusSchema } from '@opencrane/protocol';
 import { auditTrail, readAudit, conversations, readConversation } from '@opencrane/projections';
 import { envelope, history, readApproval, readToolPolicy, decideApproval,
   ingestUsage } from '@opencrane/models';
@@ -15,7 +15,9 @@ import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
 import { catalogueEvidence, fixture, reviewCatalogue,
   toolEvidence } from '@opencrane/models/testing';
-async function approvalFixture(stepUp = false) {
+async function approvalFixture(stepUp = false,
+  retainedCall?: () => Promise<{ approvalId: string; turnId: string;
+    permitId: string; expiresAt: string } | undefined>) {
   const f = await fixture();
   await f.runner.initialise(conversations);
   await f.runner.run(conversations);
@@ -23,7 +25,8 @@ async function approvalFixture(stepUp = false) {
   await f.runner.run(auditTrail);
   const config = testAuthConfig({ expectedOrgId: 'org-test' });
   const chat = { silo: 'test', store: f.nats.store, db: f.db, keys: f.keys,
-    binding: f.binding, feed: { memberId: identity } };
+    binding: f.binding, feed: { memberId: identity },
+    ...(retainedCall ? { retainedCall } : {}) };
   function identity(_silo: string, _issuer: string, sub: string) {
     return Promise.resolve(sub);
   }
@@ -834,6 +837,231 @@ async function retriesOnlyVerifiedNonDispatch() {
 }
 it('permits one unchanged retry only after the gateway proves no dispatch',
   retriesOnlyVerifiedNonDispatch, 40_000);
+
+async function readsOriginalCallWithoutChangingIt() {
+  let signal: { approvalId: string; turnId: string; permitId: string;
+    expiresAt: string } | undefined;
+  function retainedCall() { return Promise.resolve(signal); }
+  const setup = await approvalFixture(false, retainedCall);
+  try {
+    await setup.call();
+    expect((await setup.decide()).statusCode).toBe(200);
+    await setup.refuseMcpConnection();
+    expect((await setup.call()).status).toBe(503);
+    await setup.restart();
+    await ingestUsage(setup.actor, setup.options.usageFile);
+    const card = (await setup.read()).cards[0]!;
+    const permitId = card.uses?.[0]?.permitId;
+    expect(permitId).toBeDefined();
+    const url = `/api/conversations/conversation/tool-requests/${card.approvalId}`;
+    const anonymous = await setup.app.inject({ url });
+    expect(anonymous.statusCode).toBe(401);
+    const append = vi.spyOn(setup.nats.store, 'append');
+    const first = await setup.app.inject({ url, headers: setup.headers() });
+    expect(first.statusCode).toBe(200);
+    const unknown = originalCallStatusSchema.parse(first.json());
+    expect(unknown).toMatchObject({ logicalRequestId: card.approvalId,
+      approvalId: card.approvalId, turnId: 'turn', retry: 'unknown' });
+    expect(unknown.attempts).toHaveLength(1);
+    expect(unknown.attempts[0]).toMatchObject({ requestId: permitId,
+      outcome: 'not_dispatched', evidence: 'connection_refused' });
+    expect(Date.parse(unknown.attempts[0]!.startedAt!)).not.toBeNaN();
+    signal = { approvalId: card.approvalId, turnId: 'turn', permitId: permitId!,
+      expiresAt: new Date(Date.now() + 5_000).toISOString() };
+    const tabs = await Promise.all([
+      setup.app.inject({ url, headers: setup.headers() }),
+      setup.app.inject({ url, headers: setup.headers() }),
+    ]);
+    for (const tab of tabs) {
+      expect(originalCallStatusSchema.parse(tab.json()).retry).toBe('eligible');
+    }
+    expect(append).not.toHaveBeenCalled();
+    signal = { ...signal, permitId: '22222222-2222-4222-8222-222222222222' };
+    const wrongCall = await setup.app.inject({ url, headers: setup.headers() });
+    expect(originalCallStatusSchema.parse(wrongCall.json()).retry).toBe('unknown');
+    signal = { ...signal, permitId: permitId!, expiresAt: new Date(0).toISOString() };
+    const expired = await setup.app.inject({ url, headers: setup.headers() });
+    expect(originalCallStatusSchema.parse(expired.json()).retry).toBe('unknown');
+    signal = { ...signal, expiresAt: new Date(Date.now() + 5_000).toISOString() };
+    await setup.append('computer-assistant', 'computer.lost', {
+      assistantId: 'assistant', computerId: 'computer',
+    });
+    const ended = await setup.app.inject({ url, headers: setup.headers() });
+    expect(originalCallStatusSchema.parse(ended.json()).retry).toBe('ended');
+    await setup.append('computer-assistant', 'computer.ready', {
+      assistantId: 'assistant', computerId: 'computer', generation: 2, podUid: 'new-pod',
+    });
+    const restarted = await setup.app.inject({ url, headers: setup.headers() });
+    expect(originalCallStatusSchema.parse(restarted.json()).retry).toBe('ended');
+    const outsider = await setup.app.inject({ url, headers: setup.headers('bob') });
+    expect(outsider.statusCode).toBe(403);
+  } finally {
+    await setup.close();
+  }
+}
+it('reads a saved call in two tabs only while its original bridge hold is live',
+  readsOriginalCallWithoutChangingIt, 40_000);
+
+async function hidesCallPresenceAfterAccessLoss() {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    const approvalId = (await setup.read()).cards[0]!.approvalId;
+    const existingUrl = `/api/conversations/conversation/tool-requests/${approvalId}`;
+    const missingUrl = `/api/conversations/conversation/tool-requests/${'c'.repeat(64)}`;
+    const missingForMember = await setup.app.inject({
+      url: missingUrl, headers: setup.headers(),
+    });
+    expect(missingForMember.statusCode).toBe(503);
+    expect(missingForMember.json()).toEqual({ status: 'unavailable' });
+    const removed = await setup.append('participation-conversation', 'participant.removed', {
+      conversationId: 'conversation', participantId: 'alice', removedBy: 'owner',
+    });
+    await setup.auth.handler.handle(removed, setup.db);
+    for (const headers of [setup.headers(), setup.headers('bob')]) {
+      const existing = await setup.app.inject({ url: existingUrl, headers });
+      const missing = await setup.app.inject({ url: missingUrl, headers });
+      expect(existing.statusCode).toBe(403);
+      expect(existing.json()).toEqual({ status: 'refused' });
+      expect(missing.statusCode).toBe(existing.statusCode);
+      expect(missing.json()).toEqual(existing.json());
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it('gives removed and foreign callers the same refusal for saved and missing calls',
+  hidesCallPresenceAfterAccessLoss, 40_000);
+
+async function refusesAnotherCallsObservation() {
+  let signal: { approvalId: string; turnId: string; permitId: string;
+    expiresAt: string } | undefined;
+  function retainedCall() { return Promise.resolve(signal); }
+  const setup = await approvalFixture(false, retainedCall);
+  try {
+    await setup.call();
+    expect((await setup.decide()).statusCode).toBe(200);
+    const card = (await setup.read()).cards[0]!;
+    const permitId = '11111111-1111-4111-8111-111111111111';
+    await setup.append(`approval-${card.approvalId}`, 'approval.used', {
+      approvalId: card.approvalId, permitId,
+    });
+    const decision = envelope('test', `decision-${permitId}`, 'decision.recorded', {
+      requestId: permitId, permitId, route: 'mcp', outcome: 'allow',
+      reason: 'approval_used', contextDigest: 'a'.repeat(64),
+      callId: 'approval-call', logicalRequestId: card.approvalId,
+      serverId: 'fixture', toolName: 'write', requesterId: 'alice',
+      assistantId: 'assistant', conversationId: 'conversation', turnId: 'turn',
+    });
+    decision.correlation.approval = card.approvalId;
+    await setup.nats.seed([decision]);
+    const observation = toolDispatchRecordedDataSchema.parse({
+      conversationId: 'conversation', turnId: 'turn', callId: 'approval-call',
+      serverId: 'fixture', toolName: 'write', requestId: permitId,
+      logicalRequestId: card.approvalId, approvalId: card.approvalId,
+      startedAt: new Date().toISOString(), durationMs: 1,
+      outcome: 'not_dispatched', evidence: 'connection_refused',
+    });
+    const observed = envelope('test', `decision-${permitId}`,
+      'tool.dispatch_recorded', observation);
+    await setup.nats.seed([observed]);
+    signal = { approvalId: card.approvalId, turnId: 'turn', permitId,
+      expiresAt: new Date(Date.now() + 5_000).toISOString() };
+    const url = `/api/conversations/conversation/tool-requests/${card.approvalId}`;
+    const eligible = await setup.app.inject({ url, headers: setup.headers() });
+    expect(eligible.statusCode).toBe(200);
+    expect(originalCallStatusSchema.parse(eligible.json())).toMatchObject({
+      retry: 'eligible', attempts: [{ requestId: permitId,
+        outcome: 'not_dispatched', evidence: 'connection_refused' }],
+    });
+    const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
+    async function* readWithOtherCall(...args: Parameters<typeof originalRead>) {
+      for await (const row of originalRead(...args)) {
+        if (row.event.id === observed.id) {
+          const otherCall = { ...observation, logicalRequestId: 'b'.repeat(64) };
+          yield { ...row, event: { ...row.event, data: otherCall } };
+        } else {
+          yield row;
+        }
+      }
+    }
+    const otherCallReader = vi.spyOn(setup.nats.store, 'readStream');
+    otherCallReader.mockImplementation(readWithOtherCall);
+    try {
+      const response = await setup.app.inject({ url, headers: setup.headers() });
+      expect(response.statusCode).toBe(200);
+      const status = originalCallStatusSchema.parse(response.json());
+      expect(status.retry).toBe('unknown');
+      expect(status.attempts).toHaveLength(1);
+      expect(status.attempts[0]).toMatchObject({ requestId: permitId });
+      expect(status.attempts[0]).not.toHaveProperty('outcome');
+    } finally {
+      otherCallReader.mockRestore();
+    }
+    await setup.append('conversation-conversation', 'agent.turn_failed', {
+      conversationId: 'conversation', turnId: 'turn', reason: 'computer_lost',
+    });
+    const ended = await setup.app.inject({ url, headers: setup.headers() });
+    expect(originalCallStatusSchema.parse(ended.json()).retry).toBe('ended');
+    const foreignObservation = { ...observation };
+    const foreign = envelope('foreign', `decision-${permitId}`,
+      'tool.dispatch_recorded', foreignObservation);
+    async function* readWithForeignObservation(subject: string, fromSequence = 1,
+      deadline = Infinity, includeConversationCloses = false) {
+      yield* originalRead(subject, fromSequence, deadline, includeConversationCloses);
+      if (subject === `decision-${permitId}`) {
+        yield { sequence: Number.MAX_SAFE_INTEGER, event: foreign };
+      }
+    }
+    const reader = vi.spyOn(setup.nats.store, 'readStream')
+      .mockImplementation(readWithForeignObservation);
+    try {
+      const unavailable = await setup.app.inject({ url, headers: setup.headers() });
+      expect(unavailable.statusCode).toBe(503);
+      expect(unavailable.json()).toEqual({ status: 'unavailable' });
+    } finally {
+      reader.mockRestore();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it('keeps a different call observation out of original call status',
+  refusesAnotherCallsObservation, 40_000);
+
+async function leavesUnprovedAttemptWithoutDecision() {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    expect((await setup.decide()).statusCode).toBe(200);
+    const approvalId = (await setup.read()).cards[0]!.approvalId;
+    const permitId = '11111111-1111-4111-8111-111111111111';
+    await setup.append(`approval-${approvalId}`, 'approval.used', {
+      approvalId, permitId,
+    });
+    const observation = toolDispatchRecordedDataSchema.parse({
+      conversationId: 'conversation', turnId: 'turn', callId: 'approval-call',
+      serverId: 'fixture', toolName: 'write', requestId: permitId,
+      logicalRequestId: approvalId, approvalId,
+      startedAt: new Date().toISOString(), durationMs: 1,
+      outcome: 'not_dispatched', evidence: 'connection_refused',
+    });
+    const observed = envelope('test', `decision-${permitId}`,
+      'tool.dispatch_recorded', observation);
+    await setup.nats.seed([observed]);
+    const url = `/api/conversations/conversation/tool-requests/${approvalId}`;
+    const response = await setup.app.inject({ url, headers: setup.headers() });
+    expect(response.statusCode).toBe(200);
+    const status = originalCallStatusSchema.parse(response.json());
+    expect(status.attempts).toHaveLength(1);
+    expect(status.attempts[0]).toMatchObject({ requestId: permitId });
+    expect(status.attempts[0]).not.toHaveProperty('outcome');
+  } finally {
+    await setup.close();
+  }
+}
+it('does not trust an observation without its saved decision',
+  leavesUnprovedAttemptWithoutDecision, 40_000);
 
 const replyEvidence = [
   'adapter_response_received', 'response_received', 'adapter_transport_uncertain',

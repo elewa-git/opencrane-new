@@ -330,6 +330,13 @@ and its delayed-callback tests remain with the screen work.
 
 ## Saved approval dates and cancellation reasons
 
+`originalCallStatusSchema` checks the participant status reply for one original Ask
+call. It requires the approval and logical request ids, turn and requester ids,
+saved request and expiry dates, dated permit attempts and a retry result of
+`eligible`, `unknown` or `ended`. Decision, end and dispatch observation dates
+appear only when saved. The strict shape has no tool arguments, results or credentials.
+The status read has its own route; the approval card shape is unchanged.
+
 The [approval API](../../docs/api/approvals.md) defines the optional UTC fields,
 first-use retention and dated permit list. Dates come from approval event envelopes,
 not read tables or the read clock. `approval.cancelled` has its own strict schema

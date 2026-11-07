@@ -97,6 +97,10 @@ approval still receives one settlement reply, after the first stop.
 Authorised readers receive live notices for spending stops on requests they can see. The notice contains no amounts. Saved status survives reconnect and shows the reason and work state. Only the requester sees limits and call amounts, distinguishing money held, charged or released and calls that might have been sent. Reads start no work and still check access after a failed load. If a live update takes more than ten seconds to load, the connection closes so the website can reconnect and read saved status.
 
 **Approvals and tool reports.** Tool starts and finishes are saved and appear in the feed. Approval cards name their turn so the website can hide choices after work stops. Replies preserve saved dates and cancellation reasons. A saved takeover cancels unused approvals for the same computer generation and turn. The bridge sends its local work gate before an approval reply, including after reconnect. An approval belonging to another person or installation gets the same refusal as a missing one. Changed tool rules or a failed tool-list check end a pending approval, even if a later check succeeds first. Approval reads run separately so one slow chat does not block others. Failed reads are spaced out, and the computer is told when another wait cannot be accepted. Missing details can be fetched; requester retries require proof that the call was not sent.
+The original call status read shows saved attempts to current participants. It says
+unknown unless the original turn, saved non-dispatch proof and live bridge signal
+all agree. Removed and foreign callers receive the same refusal for a saved or
+missing call, even when reading saved history fails. Reading it sends no work.
 
 **Side conversations.** A child chat is a side conversation started from another chat. A member can review their own group message, select people and an assistant, then save the request. Separate commands create the child and wait for permissions before copying only the reviewed source message under the child's own encryption key. Repeats return the same saved records. The recovery worker reads unfinished requests from a table, checks the saved request and current access, and repairs missing creation, first input or activation after restart. Proven refusals are saved; temporary access outages remain queued. Only the requester can read status. The requester can retry a proven refusal with the original choices. An activated child can start its saved first input after the computer prepares a separate restricted thread. The models process checks the original request, access and remaining allowance before the computer receives a pass. The public child request still reports its saved stage; later messages do not start here.
 
@@ -143,7 +147,7 @@ flowchart LR
   computer -->|reports routine start and requests checked pass renewal| chat
   chat -->|checks lease, deadline and cancellation before routine credentials| computer
   computer -->|completed private reply| chat
-  chat -->|private reply, clearance and service readiness| reader[Authenticated reader]
+  chat -->|private reply, clearance, call status and service readiness| reader[Authenticated reader]
   chat -->|checks access, spending and loaded references| models[Models process]
   collector["private-memory-qualification<br/>checks deployment results"]
   chat -->|checks deployment results| collector

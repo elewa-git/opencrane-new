@@ -14,6 +14,8 @@ These receipts do not say whether departure cleanup has finished.
 Approval replies can name takeover as their cancellation cause and show the saved
 end time. Used approvals retain their earlier use and dispatch evidence. A separate
 reply flag says whether the tool replied; it grants no permission to repeat the action.
+The original call status gives a dated list of attempts and says whether a live retry
+is eligible, unknown or ended. It contains no tool arguments or replies.
 
  Effect and history detail replies keep the saved resolver, date and amount separate
  from current spending. History detail can include the current charge and hold, with
@@ -34,7 +36,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.->|chat replies, service readiness and private clearances| protocol["libs/protocol<br/>shared reply shapes"]
-  server["apps/server<br/>back end"] -.->|chat replies, readiness and clearances| protocol
+  server["apps/server<br/>back end"] -.->|chat replies, call status, readiness and clearances| protocol
   projections["libs/projections<br/>read tables"] -.->|saved resolution history| protocol
   models["libs/models<br/>AI rules and spending"] -.-> protocol
   protocol -.-> zod["Zod<br/>data checks"]

@@ -1,5 +1,19 @@
 # Chat contracts
 
+## Original call status
+
+`GET /api/conversations/:conversationId/tool-requests/:logicalRequestId` reads
+saved Ask approval and permit histories before one final participant access check.
+It compares the request position with the person's current participation interval.
+Shared child status belongs only to the requester. Missing or bad saved evidence
+never proves non-dispatch. The route checks current access after every history read,
+including a failed read. A removed or foreign caller receives the same refusal for
+saved and missing calls. The reply excludes tool arguments and results, and the
+route never saves an event, wakes a bridge or releases a credential. An authorised
+reader receives 503 after a failed read. The optional retained-call reader is for the
+later authenticated bridge connection. Until it is connected, production status
+cannot be `eligible`.
+
 ## Dispatcher readiness in chat
 
 Assistant session history and the existing WebSocket `ready` frame carry
