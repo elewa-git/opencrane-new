@@ -111,6 +111,7 @@ Saved routine Stop cancels the exact turn's waiting start acknowledgement. A res
 bridge recovers accepted starts once when it connects, only to stop them. It never
 repeats their input or rereads the computer history for each finished chat.
 The models process releases the routine only after checked native closure and budget Stop.
+If the native turn completes before Stop reaches it, the routine still finishes as interrupted.
 
 ## Main files
 

@@ -165,3 +165,7 @@ remains outside short access checks.
 The models process uses its existing budget actor to apply saved Stop and then call
 checked finish. The [server contract](../../README.robot.md#saved-routine-stop-recovery)
 describes recovery. This does not register production routine delivery.
+
+Normal completion retains the computer's checked native termination marker on the
+server closure. A saved routine Stop can therefore finish as interrupted even when
+the computer completed before receiving cancellation. The first closure remains final.

@@ -53,8 +53,9 @@ An internal command stops the exact routine run after its owner denies a held As
 or after a saved expiry. It checks the original request and keeps cleanup retryable.
 
 An internal completion command can release a stopped run after its exact native turn
-has returned a matching terminal reply and closed as failed. A connection failure alone
-does not release the run. It refuses runs with descendants or incomplete evidence. It leaves
+has returned a matching terminal reply. If Stop was saved before the turn completed,
+the run finishes once as interrupted, even if Stop had not reached the computer.
+A connection failure alone does not release the run. It refuses runs with descendants or incomplete evidence. It leaves
 the schedule, stopped spending allowance and held money unchanged. The models process
 rechecks saved routine Stops and calls this command after saving the budget Stop.
 Restart repeats those checks from saved evidence. Replay never invokes cleanup.

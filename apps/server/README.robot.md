@@ -6714,13 +6714,15 @@ Part of #107. `finishRoutine(store, silo, input, options)` is internal. It requi
 `enabled: true` and refuses replay. Input names routineId, occurrenceId and the exact
 terminalEvidence eventId and position. Saved routine history supplies the frozen run;
 budget history supplies its separate allocation and permanent Stop. Allocation must
-follow the claim. The server-recorded start and failed closure must match that allocation,
+follow the claim. The server-recorded start and closure must match that allocation,
 the frozen people, message, private thread and computer generation at both records.
 Any descendant admission for that root refuses, including an admission whose delegation
 agreement has not yet been saved. Stop, timeout, socket loss, output clearance and an
-agent completion report cannot replace the native closure. The failed closure must
+agent completion report cannot replace the native closure. The closure must
 carry `nativeTermination: turn_completed`, copied from a matching native terminal
-reply. A transport failure, cancellation request or admission refusal has no such
+reply, including normal completion before the bridge polls a saved Stop. Both failed
+and completed closures finish the stopped occurrence as interrupted. A transport failure,
+cancellation request or admission refusal has no such
 evidence. Older closures without it remain insufficient. Process-exit reporting is
 not added; an unconfirmed disconnect keeps the occurrence occupied.
 
@@ -6942,6 +6944,9 @@ uses the actor's checked Stop command, then supplies the saved computer closure 
 `finishRoutine`. That command still verifies every binding and native termination.
 The budget leader is checked before cleanup and immediately before finish publication.
 An unresolved native process keeps the occurrence occupied and its holds intact.
+A native completion before Stop polling retains its checked termination marker on the
+computer closure. Cleanup records one interrupted finish and frees the occupied slot.
+Restart and repeated cleanup retain that finish and the original Stop source.
 The bridge independently recovers saved open starts for exact-turn interruption and
 cancels that turn's pending start acknowledgement before sending Stop.
 

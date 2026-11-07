@@ -144,7 +144,7 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
 
 function addNativeTermination(data: { nativeTermination?: 'turn_completed' },
   input: TurnInput, facts: ComputerFacts) {
-  if (input.status === 'failed' && input.nativeTermination && facts.turn?.hasStart) {
+  if (input.status !== 'started' && input.nativeTermination && facts.turn?.hasStart) {
     data.nativeTermination = input.nativeTermination;
   }
 }

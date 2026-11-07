@@ -20,7 +20,7 @@ flowchart LR
   apps --> server["apps/server<br/>back end"]
   ops -->|starts and pauses| computer
   server -->|messages, routine preparation and retry, turns, files and Stops| computer
-  computer -->|preparation replies, reply removal receipts, native termination, progress, results and changed publication files| server
+  computer -->|preparation replies, reply removal receipts, matched native endings, progress, results and changed publication files| server
   server -->|qualified private input and permitted memory tools| computer
   computer -->|reports private thread and memory discovery| server
   computer -->|checks command ownership| executor["socket-denied executor"]
@@ -99,7 +99,8 @@ The journal returns the input id, turn id and spending root when asking the serv
 A saved routine Stop cancels its private turn. Failed cleanup can retry without closing
 other chats. If interruption has not ended the turn after ten seconds, the computer
 closes that turn's private connection so its existing supervisor can remove the process.
-A matched native terminal reply is recorded separately from a connection failure.
+A matched native terminal reply is recorded separately from a connection failure,
+including when the turn completes before a saved routine Stop reaches it.
 Closing the private connection does not confirm that the process has exited.
 Automatic routine execution remains disabled.
 

@@ -51,6 +51,10 @@ repeated Stop and delayed native-start replies keep the first deadline. The exis
 private supervisor then handles process exit and bounded kill retries. The timer itself
 saves no terminal report. Routine Stop accepts only the matching native terminal id and
 terminal status, or the existing private-session closure evidence. Clearance is not exit.
+Successful native completion also retains `nativeTermination: turn_completed` when
+the native turn id matches. Both direct replies and replies with files retain this
+evidence in the journal. The server can finish an already stopped routine as interrupted
+when completion reaches it before Stop polling. Unmatched replies carry no such evidence.
 `apps/server/test/routine-sender.test.ts` exercises these paths through the recording bridge.
 
 ## Test dependencies
