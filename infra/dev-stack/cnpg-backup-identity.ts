@@ -151,7 +151,7 @@ async function ownedRootCredentials() {
   const secretKey = source['MINIO_ROOT_PASSWORD'];
   valid(typeof accessKey === 'string' && accessKey.length > 0);
   valid(typeof secretKey === 'string' && secretKey.length > 0);
-  return { port, accessKey, secretKey };
+  return { port, accessKey, secretKey, silo: settings['SILO_ID'] };
 }
 
 /** Issue one local backup lease from the owned store and check the policy signed into its token. */
@@ -159,6 +159,8 @@ export async function provisionCnpgBackupIdentity(input: Binding) {
   try {
     const binding = checkedBinding(input);
     const source = await ownedRootCredentials();
+    // Use the owned stack's saved silo before asking MinIO for any credential.
+    valid(binding.silo === source.silo);
     const bucket = `ocn-backup-${binding.silo}`;
     const prefix = 'cnpg';
     const destinationPath = `s3://${bucket}/${prefix}`;

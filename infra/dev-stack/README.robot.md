@@ -2170,8 +2170,9 @@ so the private kubeconfig filename remains outside child command arguments.
 
 `cnpg-backup-identity.ts` is the first part of the replacement for backup storage
 probes. It reads the local MinIO root identity only after the saved stack owner
-matches this worktree. It derives `ocn-backup-<silo>/cnpg` from the supplied owned
-installation identity and asks MinIO STS for a 15-minute lease. Its fixed policy
+matches this worktree. It requires the supplied silo to match `SILO_ID` in that
+owned stack's `settings.env`. It then derives `ocn-backup-<silo>/cnpg` and asks
+MinIO STS for a 15-minute lease. Its fixed policy
 allows object reads, writes, deletion and version operations only under `cnpg/`.
 Bucket listing and version listing require a prefix under `cnpg/`. The provisioner
 checks the HS512 signature with the local root secret, the access key, root parent,

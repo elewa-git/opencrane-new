@@ -12,6 +12,9 @@ The policy allows object and version work only beneath `cnpg/`. Listing requires
 that prefix. A process-local record binds the credential to the Namespace and
 Service UIDs, endpoint, CA and destination. A changed credential or record refuses.
 Renewal reuses the private bucket.
+The helper also checks that the requested silo matches `SILO_ID` in the owned
+stack's saved settings before asking MinIO for a credential. A valid name for
+another silo now refuses.
 
 The checker and Helm preview do not use the new record yet. The checker still
 probes invented locations and refuses every result because it has no complete
@@ -23,9 +26,10 @@ TLS checks and plain refusals remain as they were.
 
 | Check | Observed result | Status |
 | --- | --- | --- |
-| Failing-first tests | Missing provisioner, changed credential record, repeat bucket and reordered MinIO actions failed before their fixes | PASS |
+| Failing-first tests | Earlier identity cases and the new foreign-silo test failed before their fixes | PASS |
 | Existing helper and chart tests | 210 tests passed twice | PASS |
-| New identity tests | Six tests passed twice, then all seven passed twice after adding expiry coverage | PASS |
+| New identity tests | Eight tests, including foreign-silo refusal, passed twice | PASS |
+| CI test grouping | The new identity test is in the CI Node test command; grouping check passed | PASS |
 | Installer gate | 22 selected backup and recovery tests passed twice | PASS |
 | Disposable pinned MinIO | Issuance, signed policy, own read/write/delete, foreign read/write and root-list denial, and renewal passed | PASS |
 | Development-stack typecheck | Passed after fixing optional session-token typing | PASS |
