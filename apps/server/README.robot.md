@@ -616,11 +616,28 @@ No model call, computer wake or spending path is used.
 replay, edited progress, strict fields, lost replies, same-id races, two-device
 restart, slow history, unrelated activity, missing keys and removal during reads.
 Run it with the supplied `PG_TEST_URL`, `nice -n 10` and one Vitest worker.
-Persona approval events are not on main yet: active-approval preservation remains
-NOT RUN until row 6. The survey append retains all earlier personal events.
-Survey steps 1 and 2 use intercepted replies in `apps/web`. Screens for steps 3
-and 4, and fresh-install qualification are NOT RUN. The server survey journeys
-have not been run as part of this screen change.
+Persona approval is not yet implemented. The survey append retains all earlier
+personal events. Fresh-install qualification has not run for these routes.
+
+### Persona revisions
+
+`POST /api/onboarding/persona` takes `operation: revise`, `mode: generate|replace`,
+the survey generation, expected personal position and a scoped command id. Replace
+also takes the full `replacement`; it must have 1–4,096 UTF-8 bytes. Generate uses
+the saved four steps and renderer `persona-v1`. It stores a new encrypted revision
+on the same personal stream with one conditional append. The server never calls a
+model, prepares a key, wakes a computer or changes assistant settings.
+
+`GET /api/onboarding/persona/revisions` returns metadata newest first, 20 by
+default and at most 50. `limit` and `before` page by revision number. Detail
+`GET /api/onboarding/persona/revisions/:revisionId` accepts the returned event id
+or revision number and opens only one own version.
+The shared member guard runs before every read. Content history loads before the
+short write authority check; the personal stream is the content CAS, not an
+authority stream. Changed retries return 409. The original receipt comes from
+`GET /api/personal/changes/:commandId` and includes the revision number/id.
+Earlier versions remain after edits or survey restart. A restart clears the
+current candidate, not history. Approval and turn use are separate later work.
 
 ## Shared member guard
 

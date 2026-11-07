@@ -59,9 +59,22 @@ export const surveyStepSavedDataSchema = z.strictObject({
   path: ['ciphertextDigest'], message: 'Ciphertext digest does not match encrypted bytes',
 });
 export const surveyRestartedDataSchema = z.strictObject(identity);
+function hasMatchingPersonaDigest(data: { encrypted: string; encryptedDigest: string }) {
+  const ciphertext = data.encrypted;
+  const ciphertextDigest = data.encryptedDigest;
+  return hasMatchingCiphertextDigest({ ciphertext, ciphertextDigest });
+}
+export const personaRevisedDataSchema = z.strictObject({
+  ...identity, revision: z.int().positive(), rendererVersion: z.literal('persona-v1'),
+  mode: z.enum(['generate', 'replace']), encrypted: surveyCiphertext,
+  encryptedDigest: ciphertextDigest, keyRef: z.string().regex(/^key:[a-f0-9]{64}$/u),
+}).refine(hasMatchingPersonaDigest, {
+  path: ['encryptedDigest'], message: 'Digest does not match encrypted bytes',
+});
 const personalIdentitySchema = z.object({ memberId: chatIdSchema });
 export function validSurveyEvent(record: EventEnvelope): boolean {
-  if (!record.type.startsWith('onboarding.survey_')) {
+  if (!record.type.startsWith('onboarding.survey_') &&
+      record.type !== 'onboarding.persona_revised') {
     return true;
   }
   const parsed = personalIdentitySchema.safeParse(record.data);
@@ -85,4 +98,9 @@ export const surveyEvents: readonly EventDefinition[] = [
     'A member saved one encrypted survey step.', surveyStepSavedDataSchema, savedExample),
   event('onboarding.survey_restarted', 'personal',
     'A member started a new survey generation.', surveyRestartedDataSchema, exampleIdentity),
+  event('onboarding.persona_revised', 'personal',
+    'A member saved one encrypted, immutable persona revision.', personaRevisedDataSchema,
+    { ...exampleIdentity, revision: 1, rendererVersion: 'persona-v1', mode: 'generate',
+      encrypted: savedExample.ciphertext, encryptedDigest: savedExample.ciphertextDigest,
+      keyRef: savedExample.keyId }),
 ];
