@@ -299,7 +299,7 @@ async function checksRecoveryRoutePermission() {
   helper.mockResolvedValue(unknown);
   const control = await recover('alice');
   expect(control.statusCode, control.body).toBe(200);
-  expect(control.json()).toEqual({ outcome: 'unknown' });
+  expect(control.json()).toEqual(unknown);
   const expectedOptions = { store: test.memory.store };
   const ownScope = scopeFor('test', 'person', 'alice');
   expect(helper).toHaveBeenCalledExactlyOnceWith(
@@ -312,7 +312,8 @@ async function checksRecoveryRoutePermission() {
   const keyBytes = vi.spyOn(crypto, 'randomBytes');
   const refused = await recover('alice', sharedScope.scopeId);
   expect(refused.statusCode, refused.body).toBe(404);
-  expect(refused.json()).toEqual({ status: 'refused' });
+  const expectedRefusal = { status: 'refused' };
+  expect(refused.json()).toEqual(expectedRefusal);
   expect(helper).not.toHaveBeenCalled();
   expect(appends).not.toHaveBeenCalled();
   expect(await test.setup.nats.store.head()).toBe(before);
