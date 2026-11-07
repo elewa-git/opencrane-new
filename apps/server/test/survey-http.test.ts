@@ -410,6 +410,48 @@ async function personaRace() {
 }
 it('lets only one device revise a checked survey position', personaRace);
 
+async function removalDuringPersonaPointRead() {
+  const position = await completeSurvey();
+  const saved = await revise('persona-before-removal', position, 'Private persona text');
+  expect(saved.statusCode).toBe(200);
+  const revision = saved.json<RevisionReceipt>();
+  const read = nats.store.readStream.bind(nats.store);
+  const decrypt = keys.decrypt;
+  let removed = false;
+  let decryptedAfterRemoval = false;
+
+  nats.store.readStream = async function* removeDuringPointRead(subject, from, deadline, closes) {
+    for await (const row of read(subject, from, deadline, closes)) {
+      if (subject === 'personal-alice' && from === revision.position && !removed) {
+        const removal = { ...event('removed-during-persona-read', 'member-alice',
+          'member.removed'), data: { memberId: 'alice', removedBy: 'owner' } };
+        const command = { event: removal, expectedSequence: 1 };
+        expect((await nats.store.append(command)).status).toBe('appended');
+        removed = true;
+      }
+      yield row;
+    }
+  };
+  keys.decrypt = function detectDecryption(silo, conversation, value) {
+    if (removed) decryptedAfterRemoval = true;
+    return decrypt(silo, conversation, value);
+  };
+
+  const response = await app.inject({
+    url: `/api/onboarding/persona/revisions/${revision.revisionId}`, headers,
+  });
+  nats.store.readStream = read;
+  keys.decrypt = decrypt;
+
+  expect(removed).toBe(true);
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+  expect(JSON.stringify(response.json())).not.toContain('Private persona text');
+  expect(decryptedAfterRemoval).toBe(false);
+}
+it('refuses and does not decrypt a persona removed during its point read',
+  removalDuringPersonaPointRead);
+
 async function personaRefusals() {
   const position = await completeSurvey();
   expect((await revise('too-long', position, 'é'.repeat(2049))).statusCode).toBe(422);
