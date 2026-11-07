@@ -33,6 +33,7 @@ connected yet.
 - Keeps private sessions separate when people share an assistant's computer.
 - Prepares side conversations and lets members review text before sharing it back to the parent chat.
 - Refuses new work in closed chats and repairs unfinished work without disrupting other chats.
+- Lets current direct participants, group creators and session requesters close their chats.
 
 Internal routine delivery waits for one matching saved start and its acknowledgement.
 A timeout, refusal or lost connection ends that wait and prevents a delayed acknowledgement
@@ -108,7 +109,7 @@ The context builder for an existing usable shared child includes completed excha
 
 Members can review a completed child answer, a saved reply from a running turn or their own interim update before sharing text to the parent. The entry credits the publisher. Files are unavailable. Failure or lost output before saving the parent entry invalidates the review; unrelated child messages do not. Sharing text here is separate from publishing tool-server settings in [integrations](../integrations/README.md).
 
-**Closed chats.** Saved closure refuses new passes and rebuilt context. Displayed assistant output stays as it was at closure: later reports, decisions, tool sends, child publications and agent or system posts remain saved but hidden. Human posts remain visible, and the list keeps showing Closed. Waiting inputs receive saved failures; admitted work receives a stop request while its original computer is ready. Cleanup survives restarts and older close records, repairs missing computer-turn endings and never wakes a suspended computer or resends input. A delayed shared start after cleanup is refused, but its matching failure report can finish saving. Output still needs an admitted start. Acknowledging delayed reports keeps other chats on the same connection working. Public closing requests are not available yet.
+**Closed chats.** An authorised person can close a chat for everyone in it. The first saved close wins, and a lost reply can be checked using the same request id. Saved closure refuses new passes and rebuilt context. Displayed assistant output stays as it was at closure: later reports, decisions, tool sends, child publications and agent or system posts remain saved but hidden. Human posts remain visible, and the list keeps showing Closed. Waiting inputs receive saved failures; admitted work receives a stop request while its original computer is ready. Cleanup survives restarts and older close records, repairs missing computer-turn endings and never wakes a suspended computer or resends input. A delayed shared start after cleanup is refused, but its matching failure report can finish saving. Output still needs an admitted start. Acknowledging delayed reports keeps other chats on the same connection working.
 
 The server renews computer passes through authenticated Kubernetes management access as root. It sends the signing public key so the computer can verify the pass and save its identity. Desktop and Codex processes cannot replace passes through HTTP. [Computers](../computers/README.md) explains control intent, which blocks new work without granting control.
 
@@ -130,7 +131,7 @@ If the native turn completes before Stop reaches it, the routine still finishes 
 | [turn-tools.ts](turn-tools.ts), [turn-credentials.ts](turn-credentials.ts), [private-context.ts](private-context.ts), [shared-context.ts](shared-context.ts), [memory-admission.ts](memory-admission.ts), [keys.ts](keys.ts) | Prepare tools, passes, permitted earlier messages and encryption. |
 | [approvals.ts](approvals.ts), [bridge-approvals.ts](bridge-approvals.ts), [budget-stops.ts](budget-stops.ts), [budget-refusal.ts](budget-refusal.ts), [bridge-budget-stops.ts](bridge-budget-stops.ts) | Handle approval waits, spending notices and stop delivery. |
 | [child-routes.ts](child-routes.ts), [child-requests.ts](child-requests.ts), [child-recovery.ts](child-recovery.ts), [child-failure.ts](child-failure.ts), [child-hold.ts](child-hold.ts), [child-access.ts](child-access.ts), [origin.ts](origin.ts), [publications.ts](publications.ts) | Prepare side conversations, recover their requests and share reviewed text. |
-| [close-cleanup.ts](close-cleanup.ts), [bridge-control.ts](bridge-control.ts), [bridge-pausing.ts](bridge-pausing.ts), [bridge-resume.ts](bridge-resume.ts) | End work in closed chats and coordinate computer pausing and report recovery. |
+| [close.ts](close.ts), [close-cleanup.ts](close-cleanup.ts), [bridge-control.ts](bridge-control.ts), [bridge-pausing.ts](bridge-pausing.ts), [bridge-resume.ts](bridge-resume.ts) | Save closure, end work in closed chats and coordinate computer pausing and report recovery. |
 
 ## How it connects
 
@@ -139,16 +140,10 @@ The [server](../../README.md) registers chat requests and live connections for t
 ```mermaid
 flowchart LR
   server[Server] --> chat[Chat]
-  server --> memory[Memory]
-  chat -->|selects and checks input| memory
-  chat -->|four memory definitions and one-use private input| computer[Assistant computer]
-  chat -->|asks to start an activated child| models
-  models -->|checks the saved root and turn| chat
-  computer -->|reports routine start and requests checked pass renewal| chat
-  chat -->|checks lease, deadline and cancellation before routine credentials| computer
-  computer -->|completed private reply| chat
-  chat -->|private reply, clearance, call status and service readiness| reader[Authenticated reader]
-  chat -->|checks access, spending and loaded references| models[Models process]
-  collector["private-memory-qualification<br/>checks deployment results"]
-  chat -->|checks deployment results| collector
+  reader[Signed-in member] -->|closes and reads| chat
+  chat -->|saved events| store[Event store]
+  chat -->|ends work in closed chats| computer[Assistant computer]
+  chat -->|checks access and spending| models[Models process]
+  chat -->|checks remembered facts| memory[Memory]
+  files[Files] -->|checks chat access| chat
 ```

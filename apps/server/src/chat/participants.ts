@@ -8,6 +8,7 @@ import { activeChatMember, conversationParticipation, ChatRefused,
 import { inheritedChildSubjects } from './child-access.ts';
 import { conversationClosed } from './participation.ts';
 import { ChatConflict } from './commands.ts';
+import { readChatCommandFacts } from './chat-summary.ts';
 import { chatParticipantCommandSchema } from '@opencrane/protocol';
 
 type Input = z.infer<typeof chatParticipantCommandSchema>;
@@ -189,7 +190,9 @@ export async function participantCommand(options: ChatOptions, memberId: string,
     'contextKind' in access.created);
   if (previous) verifyRetry(previous, event);
   await requireParticipantAction(options, memberId, conversationId, input, access);
-  // Load cold close and target histories before starting the short write check.
+  // Load chat history before the short check. Only later content needs checking inside it.
+  const closeFacts = await readChatCommandFacts(options.store, options.silo,
+    conversationId, input.id);
   await conversationClosed(options.store, options.db, options.silo, conversationId, deadline);
   if (!previous) validateEdit(access, input, memberId);
   if (!previous && input.action === 'add') {
@@ -207,8 +210,13 @@ export async function participantCommand(options: ChatOptions, memberId: string,
     return { status: 'appended' as const, sequence: previous.sequence };
   }
   validateEdit(current, input, memberId);
-  if (await conversationClosed(options.store, options.db, options.silo,
-    conversationId, fresh.deadline)) throw new ChatConflict('Conversation is closed');
+  const oldClose = await conversationClosed(options.store, options.db, options.silo,
+    conversationId, fresh.deadline);
+  const newClose = await contentClosedAfter(options, conversationId, closeFacts.sequence,
+    fresh.deadline);
+  if (closeFacts.closed || oldClose || newClose) {
+    throw new ChatConflict('Conversation is closed');
+  }
   if (input.action === 'add') await activeChatMember(options, input.participantId, fresh);
   await confirmParticipantAccess(fresh);
   const command = { event, expectedSequence: facts.sequence, historyChecked: true as const,
@@ -219,4 +227,16 @@ export async function participantCommand(options: ChatOptions, memberId: string,
     verifyRetry(saved, event);
   }
   return result;
+}
+
+async function contentClosedAfter(options: ChatOptions, conversationId: string,
+  position: number, deadline: number) {
+  const subject = `conversation-${conversationId}`;
+  for await (const row of options.store.readStream(subject, position + 1, deadline)) {
+    if (row.event.silo !== options.silo || row.event.subject !== subject) {
+      throw new Error('Conversation history changed');
+    }
+    if (row.event.type === 'conversation.closed') return true;
+  }
+  return false;
 }

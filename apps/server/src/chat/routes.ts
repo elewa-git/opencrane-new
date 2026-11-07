@@ -32,6 +32,7 @@ import { chatCommand, chatInput, ChatConflict } from './commands.ts';
 import { chatGroups, chatGroupSnapshot, reviewedGroup, GroupSnapshotTooLarge } from './groups.ts';
 import { memoryAdmission } from './memory-admission.ts';
 import { stateCommand, stateChange, listPreference } from './state.ts';
+import { closeCommand, closeChange } from './close.ts';
 
 export type { ChatOptions } from './access.ts';
 type Fresh = Awaited<ReturnType<typeof writeChatAccess>>;
@@ -83,6 +84,9 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
   const stateRoute = { method: 'POST' as const, url: '/api/conversations/:conversationId/state',
     bodyLimit: 4096, handler };
   app.route(stateRoute);
+  const closeRoute = { method: 'POST' as const,
+    url: '/api/conversations/:conversationId/close', bodyLimit: 4096, handler };
+  app.route(closeRoute);
   async function historyHandler(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
     try {
@@ -110,9 +114,10 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
         return reply.send(result);
       }
       const preferences = request.routeOptions.url === stateRoute.url;
+      const closing = request.routeOptions.url === closeRoute.url;
       let accessConversationId = conversationId;
       // Keep participant access in its existing read and command functions.
-      if (participants || preferences) accessConversationId = undefined;
+      if (participants || preferences || closing) accessConversationId = undefined;
       const checks = { write: request.method === 'POST', conversationId: accessConversationId,
         allowApplying: commandId !== undefined };
       const context = await requireMember(request, reply, config, options, checks);
@@ -131,18 +136,15 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
         return reply.code(appendStatusCode(result)).send(result.status === 'appended'
           ? result : { status: result.status });
       }
+      if (closing) {
+        const result = await closeCommand(configured, memberId,
+          idSchema.parse(conversationId), request.body);
+        return reply.code(appendStatusCode(result)).send(result.status === 'appended'
+          ? result : { status: result.status });
+      }
       if (request.method === 'GET') {
-        let result;
-        if (conversationId && commandId) {
-          const preference = await stateChange(configured, memberId, conversationId,
-            commandId, idSchema.parse(access.joinEventId));
-          result = preference ?? await chatChange(configured, conversationId,
-            commandId, access.historyPosition);
-        } else {
-          result = await read(request, configured, memberId, config.cookieSecret);
-        }
-        if ('status' in result && result.status === 'not_found') reply.code(404);
-        return reply.send(result);
+        return await readChatRoute(request, reply, configured, memberId, config.cookieSecret,
+          conversationId, commandId, access);
       }
       const result = await write(request, configured, memberId, conversationId);
       const code = appendStatusCode(result);
@@ -153,6 +155,24 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
       return chatRefusal(request, reply, error);
     }
   }
+}
+
+async function readChatRoute(request: FastifyRequest, reply: FastifyReply,
+  options: ChatOptions, memberId: string, secret: string,
+  conversationId: string | undefined, commandId: string | undefined,
+  access: { historyPosition: number; joinEventId: string | undefined }) {
+  if (!conversationId || !commandId) {
+    const result = await read(request, options, memberId, secret);
+    return reply.send(result);
+  }
+  const preference = await stateChange(options, memberId, conversationId,
+    commandId, idSchema.parse(access.joinEventId));
+  const close = preference ? undefined : await closeChange(options, memberId,
+    conversationId, commandId, access.historyPosition);
+  const result = preference ?? close ?? await chatChange(options, conversationId,
+    commandId, access.historyPosition);
+  if (result.status === 'not_found') reply.code(404);
+  return reply.send(result);
 }
 
 async function participantReply(request: FastifyRequest, reply: FastifyReply,

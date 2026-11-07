@@ -240,9 +240,11 @@ export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo:
 export function readChatCommandFacts(store: Pick<EventStore, 'readStream'>, silo: string,
   conversationId: string, commandId: string, turnId?: string) {
   function isCreation(row: StoredEvent) { return row.event.type === 'conversation.created'; }
+  function isClose(row: StoredEvent) { return row.event.type === 'conversation.closed'; }
   function take(summary: ChatSummary) {
     return {
       created: summary.stopRows.find(isCreation), closed: summary.conversationClosed,
+      firstClose: summary.stopRows.find(isClose),
       position: summary.eventPositions.get(commandId), sequence: summary.contentSequence,
       turnPosition: turnId === undefined ? undefined : summary.eventPositions.get(turnId),
     };
