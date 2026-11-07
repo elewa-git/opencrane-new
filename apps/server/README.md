@@ -256,6 +256,7 @@ verified company profiles have a live reader. An admin cannot choose for another
   the problem using fixed reason codes, without including document details in logs.
 - Serves assistant desktops to people who may view them.
 - Handles members, groups, ownership, model providers, tool servers and spending settings.
+- Shows owners and admins a short organisation overview with clear gaps when a source is unavailable.
 - Returns permitted change history, saved results and memory facts.
 - Returns a person’s own saved tool profile without reading its credentials.
 - Returns saved routine metadata and small run pages to its owner and silo owners and admins.
@@ -330,6 +331,11 @@ size allowance, so a repeated completion cannot add more cards.
 People need current conversation access to preview or download them.
 
 ## Processes it handles
+
+An owner or admin opens the organisation overview. The server reads short lists of
+people, providers, tool servers and unresolved spending effects, then checks current
+access before replying. Missing or delayed information stays visible as unavailable.
+The read does not start work or spend money.
 
 The server checks corrections, forgets, expiry and access while polling connected private turns.
 It checks the saved revision and all its supporting facts, even without a new memory event.
