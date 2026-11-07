@@ -487,10 +487,8 @@ async function checkWithdrawal(test: Backend, change: Withdrawal, response: unkn
 const withdrawals = ['stop', 'closure', 'replacement', 'removal', 'qualification', 'unrelated'] as const;
 async function withdrawsDuringLock(change: Withdrawal) {
   const test = await forgetFixture();
-  if (change === 'unrelated') {
-    // Keep a slow database lock from spending the acceptance deadline.
-    memoryClock();
-  }
+  // Keep lock waiting from spending the deadline before the saved change is checked.
+  memoryClock();
   const reference = commandReference('test', scopeId, 'alice', test.args.commandId, 'agent');
   const lockName = `memory-command:${reference}`;
   const databaseLockName = `opencrane:projection:${lockName}`;
@@ -532,10 +530,8 @@ it.each(withdrawals)('checks saved %s after waiting for the real database lock',
 
 async function withdrawsAtAppend(change: Withdrawal) {
   const test = await forgetFixture();
-  if (change === 'unrelated') {
-    // Let the unrelated event save without spending the acceptance deadline.
-    memoryClock();
-  }
+  // Reach the final append callback before the test clock can spend the deadline.
+  memoryClock();
   const store = test.setup.nats.store;
   const append = store.append.bind(store);
   let changed = false;
