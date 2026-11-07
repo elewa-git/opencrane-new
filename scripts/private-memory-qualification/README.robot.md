@@ -197,8 +197,9 @@ core limits and non-dumpable state, are still measured by the existing probes.
 No other process has a trusted PID or a way to report its own dumpability yet.
 The container path therefore returns `host_refused / private_process_missing`
 with `complete: false` before any journey begins, even when the runner passes.
-The supervisor forwards that exact refusal after cleanup. The collector accepts
-and saves it with the fixed message. An unreadable runner
+The supervisor forwards that exact refusal after cleanup. Both the supervisor
+and collector reject `private_process_missing` without `complete: false`. The
+collector saves an accepted refusal with the fixed message. An unreadable runner
 identity and an identity change have separate fixed categories. Caller-supplied
 observations are ignored. The failure carries no PID, path, setting or test value.
 The safe-host path is unchanged. The other seven process groups, replacements

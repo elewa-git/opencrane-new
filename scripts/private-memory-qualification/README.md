@@ -23,7 +23,7 @@ flowchart LR
   server["apps/server<br/>memory preparation"] -->|reads and rechecks results| collector
   collector -.->|checks memory, Stop and reply loss| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
-  collector -->|measures, starts checks and reads failure reasons| docker["Docker<br/>running image and host"]
+  collector -->|measures, starts checks and checks refusal format| docker["Docker<br/>running image and host"]
   docker -->|checks protection and pinned Codex| deployment["deployment<br/>event store and journey runner"]
 ```
 
@@ -36,6 +36,7 @@ flowchart LR
 - Refuse swap, crash dumps, unsafe process limits and unreadable host settings.
 - Refuse container journeys while any process that can hold private text lacks protection proof.
 - Mark missing process proof as incomplete in the runner and saved collector result.
+- Reject a missing-process refusal unless it says `complete: false`.
 - Save protection refusals with a fixed message naming the failed check.
 - Accept results only from processes it starts in the measured image.
 - Check two private Codex processes from the deployment image without a model call.

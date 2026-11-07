@@ -23,6 +23,9 @@ remains disabled.
 | Changed tests, first run | PASS | 205 tests passed across four files, including Docker cleanup. |
 | Changed tests, second run | PASS | The same 205 tests passed again. |
 | Static checks | PASS | Scoped ESLint and Markdown lint, typecheck, check:events, knip and lint:changelog passed. |
+| Missing incomplete status, before fix | FAIL | The collector and Docker supervisor each accepted the three-field `private_process_missing` refusal. The failing tests were committed first in `b5e8bb019`. |
+| Changed tests after the fix, first run | PASS | 165 collector, journey and Docker supervisor tests passed. |
+| Changed tests after the fix, second run | PASS | The same 165 tests passed again. |
 
 The source, image and environment for a fresh installation were not measured in
 this change. Disposable containers supplied only local test evidence. No stack,
