@@ -1,0 +1,1 @@
+- Add a one-use native recall answer checker that compares private output in memory against saved references. Scripted checks remain incomplete and cannot enable personal memory.

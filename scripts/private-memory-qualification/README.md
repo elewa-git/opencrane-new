@@ -18,7 +18,7 @@ It uses Docker on the deployment host and reads the deployment's event store.
 ```mermaid
 flowchart LR
   scripts["scripts<br/>developer tools"] -.-> collector["private-memory-qualification<br/>collects observed results"]
-  fixtures["disposable folders<br/>detection and refusal tests"] -.->|tests scanner only| collector
+  fixtures["disposable fixtures<br/>recall and storage tests"] -.->|tests local checks| collector
   scripts -.-> sibling["check-local-qualification<br/>checks local results"]
   server["apps/server<br/>memory preparation"] -->|reads and rechecks results| collector
   collector -.->|checks memory, Stop and reply loss| server
@@ -66,7 +66,7 @@ two fresh empty threads, disabled tools, separate homes in RAM and safe process 
 It closes the first process and checks that its home is gone while the second still
 answers with its original identity. It then closes and checks the second before returning
 PARTIAL for private turns. Recall checks require the same native observations and
-the matching silo before and after the work. They still return NOT RUN: empty
+the matching silo before and after the work. The shipped recall journey still returns NOT RUN: empty
 threads cannot prove that an answer used a stored fact. Missing native files refuse
 both checks. Cleanup checks process start times before signalling and keeps its first
 result, so another cleanup call leaves reused process IDs alone. Memory tool calls, full process isolation and live storage checks are still pending. The package image does not
@@ -76,7 +76,10 @@ Tests build the package image and run all six memory checks against a disposable
 Another test stores facts for two people, then uses a scripted native peer and the
 real server, bridge and gateway to recall only the requester's fact. It checks the
 saved reference before delivery and refuses the other person's scope. This test
-does not generate a model answer or qualify the deployment.
+does not generate a model answer or qualify the deployment. A separate one-use checker
+compares native answer notifications with the saved fact and its reference in memory.
+It refuses changed identities, revisions, expired grants and missing output. Tests feed
+it scripted native notifications; connecting it to measured native execution is still pending.
 A storage scanner now checks named folders for private test bytes, including hidden files.
 It reports private text found in storage separately from an inspection that could not finish.
 Missing folders, unreadable files and redirected paths keep the inspection unfinished.
