@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { probeHost } from './host-probe.ts';
 import { probeContainer } from './container-probe.ts';
+import { probePrivateProcessInventory } from './private-processes.ts';
 import type { ProtectionFailure } from './protection-failure.ts';
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
@@ -35,6 +36,10 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
     const protection = probeContainer();
     if (protection !== true) {
       return { result: 'FAIL', reason: 'host_refused', protectionFailure: protection };
+    }
+    const inventory = probePrivateProcessInventory();
+    if (inventory !== true) {
+      return { result: 'FAIL', reason: 'host_refused', protectionFailure: inventory };
     }
   }
   let result: Receipt['result'] = 'NOT RUN';
@@ -79,6 +84,10 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
     const protection = probeContainer();
     if (protection !== true) {
       return { result: 'FAIL', reason: 'host_refused', protectionFailure: protection };
+    }
+    const inventory = probePrivateProcessInventory();
+    if (inventory !== true) {
+      return { result: 'FAIL', reason: 'host_refused', protectionFailure: inventory };
     }
   }
   // These assertions cannot qualify isolation, persistence or private output delivery.

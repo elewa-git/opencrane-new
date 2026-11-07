@@ -12,7 +12,7 @@ function readsCurrentProcess(): void {
   expect(identity.pid).toBe(process.pid);
   expect(identity.startTime).toMatch(/^[1-9][0-9]*$/u);
   expect(identity.executable).toBe(process.execPath);
-  expect(identity.uid).toBe(process.getuid());
+  expect(identity.uid).toBe(process.getuid?.());
   expect(identity.cgroup).toMatch(/^0::\//u);
   expect(identity.containerIdentity).toMatch(/^pid:\[[0-9]+\]$/u);
   expect(sameProcessIdentity(identity, readProcessIdentity(process.pid))).toBe(true);
