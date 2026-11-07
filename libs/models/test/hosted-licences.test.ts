@@ -1,11 +1,13 @@
 import { execFileSync } from 'node:child_process';
-import { generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { beforeAll, expect, it } from 'vitest';
 import { z } from 'zod';
 import { inspectHostedLicences } from '../src/hosted-licences.ts';
+import { scanPinnedHostedSbom } from '../src/hosted-vulnerabilities.ts';
 
 const keys = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 const encodedKey = keys.publicKey.export({ type: 'spki', format: 'pem' });
@@ -18,10 +20,13 @@ const fixtureSchema = z.object({ imageDigest: z.string(),
 function prepareTools() {
   execFileSync('sh', ['scripts/fetch-cosign.sh']);
   execFileSync('sh', ['scripts/fetch-hosted-syft.sh']);
+  execFileSync('sh', ['scripts/fetch-hosted-grype.sh']);
 }
 beforeAll(prepareTools, 120_000);
 
-async function inspect(mode = 'allowed', fault = '') {
+async function inspect<Extra = never>(mode = 'allowed', fault = '',
+  onSbom?: (sbom: Buffer, evidence: { imageDigest: string; platform: string;
+    sbomDigest: string; packageCount: number }) => Promise<Extra>) {
   const fixtureArguments = ['libs/models/test/support/hosted-licence-fixture.py', mode];
   const output = execFileSync('python3', fixtureArguments);
   const fixture = fixtureSchema.parse(JSON.parse(output.toString()));
@@ -77,7 +82,7 @@ async function inspect(mode = 'allowed', fault = '') {
   const options = { cosign: resolve('.tools/cosign'), syft,
     osiPath: resolve('.tools/osi.json'), reviewPath };
   try {
-    const result = await inspectHostedLicences(request, trust, read, options);
+    const result = await inspectHostedLicences(request, trust, read, options, onSbom);
     expect(JSON.stringify(result)).not.toMatch(/private-fixture|registry.example|MIT|BEGIN PUBLIC/u);
     // Each resource is fetched once; inspection cannot replace verified bytes from the registry.
     expect(new Set(reads).size).toBe(reads.length);
@@ -90,6 +95,66 @@ async function inspect(mode = 'allowed', fault = '') {
     await rm(directory, { recursive: true, force: true });
   }
 }
+
+it('scans the SBOM from the signed and licence-clean image', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'hosted-vulnerability-signed-'));
+  const database = Buffer.from('reviewed database fixture');
+  const databasePath = join(directory, 'database.tar.gz');
+  await writeFile(databasePath, database);
+  const databaseDigest = createHash('sha256').update(database).digest('hex');
+  const settings = { binaryPath: resolve('.tools/grype'), databasePath, databaseDigest };
+  const built = '2026-11-07T10:00:00Z';
+  function run(_binary: string, args: string[]) {
+    if (args[1] === 'import') return Promise.resolve({ stdout: '' });
+    if (args[1] === 'status') return Promise.resolve({ stdout: JSON.stringify({
+      valid: true, schemaVersion: '6.0.0', built }) });
+    const sbomPath = args[0]!.slice(5);
+    const sbomBytes = readFileSync(sbomPath);
+    const sbomDocument = z.object({ source: z.object({ metadata: z.unknown() }) })
+      .parse(JSON.parse(sbomBytes.toString()));
+    const report = { matches: [],
+      source: { type: 'image', target: sbomDocument.source.metadata },
+      descriptor: { name: 'grype', version: '0.121.0',
+        db: { built, schemaVersion: '6.0.0' } } };
+    return Promise.resolve({ stdout: JSON.stringify(report) });
+  }
+  function checkSbom(sbom: Buffer, evidence: { imageDigest: string;
+    platform: string; sbomDigest: string; packageCount: number }) {
+    const platform = evidence.platform;
+    if (platform !== 'linux/amd64' && platform !== 'linux/arm64') {
+      throw new Error('Wrong platform');
+    }
+    const input: Parameters<typeof scanPinnedHostedSbom>[0] = {
+      sbom, sbomDigest: evidence.sbomDigest,
+      imageDigest: evidence.imageDigest, platform,
+      packageCount: evidence.packageCount };
+    return scanPinnedHostedSbom(input, settings, run,
+      () => Date.parse('2026-11-07T12:00:00Z'));
+  }
+  try {
+    const result = await inspect('allowed', '', checkSbom);
+    expect(result.verdict).toBe('pass');
+    if (result.verdict !== 'pass') return;
+    expect(result.evidence?.['imageDigest']).toMatch(/^[a-f0-9]{64}$/u);
+    expect(result).toMatchObject({ evidence: { databaseDigest } });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it('refuses a reviewed package that Syft omitted before calling the vulnerability scanner',
+  async () => {
+    const licenceOnly = await inspect('supplementary');
+    expect(licenceOnly.verdict).toBe('pass');
+    let scans = 0;
+    function checkSbom() {
+      scans += 1;
+      return Promise.resolve({ verdict: 'pass' });
+    }
+    const combined = await inspect('supplementary', '', checkSbom);
+    expect(combined).toEqual({ verdict: 'fail', reasonCode: 'licence_refused' });
+    expect(scans).toBe(0);
+  });
 async function acceptsReviewedImage(mode: string) {
   const result = await inspect(mode);
   expect(result.verdict).toBe('pass');

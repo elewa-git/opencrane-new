@@ -1,0 +1,1 @@
+Hosted image vulnerability checks now refuse changed scan inputs and packages missing from Syft's scan, while recognising Grype's image-shaped report source. The private check records a dated verdict from a pinned Grype database; hosted admission remains unavailable.

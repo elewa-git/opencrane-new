@@ -3638,6 +3638,49 @@ the admission schema still refuses signature/licence passes with the other check
 Fresh-install qualification, production scanning, malware/vulnerability checks and startup:
 NOT RUN. No browser, authority, event or API contract is changed.
 
+## Hosted image vulnerability checks
+
+`hosted-vulnerabilities.ts` remains private. `inspectHostedVulnerabilities` reuses the
+signature verifier and licence check. It receives the exact Syft SBOM made from the
+verified OCI bytes before that check removes its scratch directory. The SBOM's source
+must name the same manifest, Linux platform and layer digests. Every package must have
+a unique id and a location in those layers. The licence checker has already compared
+the SBOM with the operator's complete file and package review. The combined check
+refuses a review with extra `evidence.artifacts`, because those packages are absent
+from the SBOM Grype scans. The licence-only check can still review them. Neither the
+installer nor the publisher supplies vulnerability policy.
+
+The adapter requires Grype 0.121.0 Linux amd64 binary SHA-256
+`bd511334178bc3002eb9eb58880f89e01e35f7fed7cfbe671171127a8afa3596`.
+`scripts/fetch-hosted-grype.sh` verifies the upstream archive SHA-256
+`64e07133d3486115de647a66581461dccf5c732748a0a3119077395565f15519`
+and the extracted binary. The archive's top-level `LICENSE` is Apache-2.0.
+The binary is test tooling only. Its bundled notices and any real database archive
+must receive a separate licence review before either enters a runtime image.
+
+The operator supplies an independently approved SHA-256 for one database archive.
+The adapter verifies its bytes before a private `grype db import`, then reads
+`grype db status -o json`. It uses the database's actual `built` date, never the
+archive's packaging or file time. The database must be valid and less than 24 hours
+old. The scan runs with automatic database and application updates disabled, a private
+config and cache, no inherited credentials, and `sbom:<private path> -o json`.
+The exact SBOM is at most 16 MiB; the database archive is at most 512 MiB. Each
+subprocess has a 60-second limit and 16 MiB output cap; the full attempt allows
+three minutes. Grype 0.121.0 [keeps the Syft image source](https://github.com/anchore/grype/blob/v0.121.0/grype/pkg/syft_sbom_provider.go)
+and [reports an image object as its target](https://github.com/anchore/grype/blob/v0.121.0/grype/presenter/models/source.go).
+The report must name the checked image manifest, platform, layer digests, binary version
+and database build. The adapter copies input and settings before scanning and refuses
+changes to the caller's values before returning. Missing, duplicated or malformed
+output, ignored findings,
+package alerts, unknown severity and High/Critical all refuse. The result carries
+only digests, counts, dates and a receipt matching the existing vulnerability check
+shape. Raw SBOM and report bytes stay in private scratch and are removed.
+
+The tests use a controlled clock, a pinned real Grype binary and local database and
+process fixtures. They do not scan against a real database or qualify a deployed
+scanner. No event writer, production caller, admission or start path uses this
+adapter. Replay continues to fold saved metadata only; it never invokes Grype.
+
 ## Published remote HTTPS calls (Part of #45)
 
 `remote-https.ts` owns DNS checks and the pinned HTTPS exchange shared with discovery.
