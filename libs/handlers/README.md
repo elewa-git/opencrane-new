@@ -21,6 +21,7 @@ The list is stored in PostgreSQL using pg-boss, a job queue library.
 flowchart LR
   parent["libs/<br/>shared libraries"] --> handlers["libs/handlers<br/>background job queue"]
   ops["apps/ops and dev startup<br/>background workers"] -->|checks changes; runs queued jobs| handlers
+  handlers -->|reports dispatch failure before lock cleanup| ops
   nats["NATS JetStream<br/>event log"] -->|new events| handlers
   handlers -->|runs work with cancellation and a deadline| reactions["libs/models and libs/authz<br/>registered reactions"]
   handlers -.-> store["libs/event-store<br/>connection and record checks"]
@@ -41,6 +42,8 @@ flowchart LR
 - Let operators retry or deliberately cancel a failed job after checking its cause.
 - Add jobs for older events when a release introduces a new subscription.
 - Let workers restart with queued jobs when their subscriptions have not changed.
+- Report dispatch failures to the worker before the database unlock completes, so
+  the local stack stops saying the worker is ready.
 
 ## Processes it handles
 

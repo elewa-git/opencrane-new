@@ -277,7 +277,10 @@ try {
         }
       }
     }
-    await dispatch(connection, runtime, stop.signal, startWorkers);
+    function dispatchFailed() {
+      stop.abort();
+    }
+    await dispatch(connection, runtime, stop.signal, startWorkers, dispatchFailed);
   } else {
     const projection = workerProjection();
     if (projection) {

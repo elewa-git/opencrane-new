@@ -302,8 +302,9 @@ matching event counts, and `failedJobs`, with original job ids, names and stream
 
 When the local stack sets `DEV_DISPATCHER_READY_FILE`, the dispatcher writes its PID
 there after opening its event consumer. It writes nothing while a changed subscription
-list leaves it waiting for maintenance. The worker removes the marker as soon as
-dispatch stops, including while a slow cleanup task is still finishing.
+list leaves it waiting for maintenance. The worker removes the marker when dispatch
+fails, before waiting for the PostgreSQL unlock. It also removes the marker on
+shutdown before waiting for a slow cleanup task.
 
 Dry-run changes nothing. The upgrade queues only new pairs through the saved
 dispatcher checkpoint. The durable consumer handles later events after restart.

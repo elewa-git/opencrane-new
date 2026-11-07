@@ -50,13 +50,20 @@ export async function dispatch(
   runtime: HandlerRuntime,
   signal: AbortSignal,
   ready?: () => Promise<void>,
+  failed?: () => void,
 ): Promise<void> {
   const db = runtime.options.db;
   if (!db.lock) {
     throw new Error("Dispatcher requires a database lock");
   }
   async function run() {
-    await dispatchLocked(connection, runtime, signal, ready);
+    try {
+      await dispatchLocked(connection, runtime, signal, ready);
+    } catch (error) {
+      // Tell the worker before the database starts its lock cleanup.
+      failed?.();
+      throw error;
+    }
   }
   await db.lock("handler-dispatcher", run);
 }
