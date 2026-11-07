@@ -21,6 +21,8 @@ export async function chatRows(options: ChatOptions, conversationId: string,
 async function displayHistory(options: ChatOptions, conversationId: string,
   mode: 'agent_session' | 'direct' | 'group', result: History) {
   const computer = await conversationComputerState(options, conversationId, mode);
+  const dispatcherReady = mode === 'agent_session'
+    ? await options.dispatcherReady?.() ?? true : true;
   function decryptRow(row: (typeof result.rows)[number]) {
     const data = chatDisplayData(row.type, row.data);
     const saved = z.record(z.string(), z.unknown()).parse(row.data);
@@ -29,7 +31,7 @@ async function displayHistory(options: ChatOptions, conversationId: string,
     return { ...row, data: { ...data, text } };
   }
   const rows = result.rows.map(decryptRow);
-  return { ...result, ...computer, rows };
+  return { ...result, ...computer, dispatcherReady, rows };
 }
 
 export async function requirePublicHistory(options: ChatOptions, conversationId: string) {

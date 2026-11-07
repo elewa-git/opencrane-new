@@ -18,6 +18,7 @@ export interface ChatOptions {
   keys: ReturnType<typeof conversationKeys>;
   binding: Binding;
   feed: Pick<Awaited<ReturnType<typeof connectMemberFeed>>, 'memberId'>;
+  dispatcherReady?: () => Promise<boolean>;
 }
 
 export class ChatRefused extends Error {}

@@ -2,6 +2,29 @@ import { conversationStatus, type Turn } from './chat-state';
 import { computed, signal } from '@angular/core';
 import { chatListSchema, sessionSlug, type ChatConversation, type ChatRow } from '@opencrane/protocol';
 
+export interface PendingChatMessage {
+  id: string;
+  conversationId: string;
+  text: string;
+  executionMode?: 'memory_free';
+}
+
+export function createPendingMessage(
+  text: string, selectedId: string, creationId: string, memoryFree: boolean,
+): { pending: PendingChatMessage; creationId: string } {
+  let nextCreationId = creationId;
+  if (!selectedId && !nextCreationId) {
+    nextCreationId = crypto.randomUUID();
+  }
+  const conversationId = selectedId || nextCreationId;
+  const pending: PendingChatMessage = { id: crypto.randomUUID(), conversationId,
+    text: text.trim() };
+  if (memoryFree) {
+    pending.executionMode = 'memory_free';
+  }
+  return { pending, creationId: nextCreationId };
+}
+
 export function workspaceTitle(
   denied: boolean, selected: string,
   turns: { author: string; text: string }[], conversations: ChatConversation[],

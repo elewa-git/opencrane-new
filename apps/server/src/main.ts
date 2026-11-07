@@ -12,6 +12,7 @@ import { conversationKeys } from './chat/keys.ts';
 import { startChildRecovery } from './chat/child-recovery.ts';
 import { startBridges } from './chat/start.ts';
 import type { ChatOptions } from './chat/routes.ts';
+import { dispatcherReady } from './chat/dispatcher-status.ts';
 import { loadAuthConfig } from '@opencrane/auth';
 import { connectEventStore } from '@opencrane/event-store';
 import { connectComputers, connectMcpCatalogue, connectMemberFeed, connectProjectionDb } from '@opencrane/projections';
@@ -64,8 +65,13 @@ if (realtime && events && modelDb && personalKeyDirectory) {
     feed: realtime.feed, binding: realtime.binding, keys: conversationKeys(personalKeyDirectory) };
 }
 const keyDirectory = process.env['CONVERSATION_KEYS_DIR'];
+const readinessFile = process.env['DEV_DISPATCHER_READY_FILE'];
+function readDispatcherReady() {
+  return dispatcherReady(readinessFile);
+}
 const chat: ChatOptions | undefined = realtime && events && modelDb && keyDirectory ? { silo: realtime.binding.silo, store: events.store,
   db: modelDb.db, feed: realtime.feed, binding: realtime.binding,
+  dispatcherReady: readDispatcherReady,
   keys: conversationKeys(keyDirectory, process.env['CONVERSATION_WRAP_KEY_FILE']) } : undefined;
 if (chat) await requireLegacyClosesProjected(chat.store, chat.db);
 if (realtime && chat) realtime.chat = chat;

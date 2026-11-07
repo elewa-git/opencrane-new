@@ -21,6 +21,15 @@ under `docs/process/uploads-reasons/`. This does not qualify a fresh installatio
 
 ## Browser behaviour
 
+The chat start strip waits 15 seconds before using `dispatcherReady: false` to
+explain assistant service maintenance. This allows the accepted 10–14 second
+cold resume. The strip hides its rising timer during maintenance. A later live
+`ready` frame restores the normal start wording; a ready computer removes the
+strip. Both personal and team sessions use the same words. The browser fixture
+`npm run visual:chat-maintenance` checks the strip at 1280 and 390 pixels after
+a web build, with the dispatcher unavailable. It uses intercepted replies,
+not a live stack.
+
 Angular's disk cache is enabled locally and in CI. The fixture test runner builds
 the development app once before tests start their own Angular servers.
 This keeps cold compilation outside their existing startup deadlines.

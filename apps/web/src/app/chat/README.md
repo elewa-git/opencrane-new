@@ -5,6 +5,7 @@ This folder contains the workspace where people talk to their assistant, exchang
 ## What it is responsible for
 
 - Runs assistant sessions at `/workspace`, with replies shown as they arrive, uploads, file previews and tool activity. Stop asks the assistant to end its reply; it waits for confirmation, keeps partial text and preserves real failure messages. A budget stop means a spending limit ended work and has its own explanation and reset time.
+- Explains when a saved message waits for assistant service maintenance beyond a normal computer start. The notice returns to computer startup when the service is ready.
 - Runs colleague chats at `/workspace/direct`. One colleague makes a direct chat; several make a group chat. The first message creates the chat after recipient review. These chats send human text only and start no assistant work. Saved means recorded by the server, rather than delivered to a person.
 - Shows Recent and Archived at `/workspace/conversations`, with title search, more results and saved links. A missing chat leaves the authorised list available. Archiving a colleague chat changes only that person's list; the chat stays readable and can receive messages.
 - Keeps drafts with their conversations, resumes live updates from the last saved position and records the read place in colleague chats once new messages are visible. Lost access clears messages, drafts, names and files, including late replies.
