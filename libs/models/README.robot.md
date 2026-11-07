@@ -4903,3 +4903,16 @@ The existing personal dispatch reader refuses company choices, including when a 
 profile has the same id. No broker, custody, sender or routine behaviour changes.
 Exact retries recover the original choice after clear or loss of profile eligibility.
 Replay uses only saved selection events and grants no tool access.
+
+## Saved child start admission
+
+The internal `POST /child-start` route accepts a signed computer pass and three ids:
+conversation, turn and thread. It takes the assistant, computer and generation from the
+pass. The models process runs `startRecordedChild` with its single budget actor. That
+command verifies the saved computer report and original child intent before allocating or
+recovering the root. It checks current model and access records, the exact prepared thread,
+remaining root cents and any saved root Stop before saving the computer turn start. The
+route returns only the admitted binding. Failures return a fixed unavailable response;
+they expose no private input or token. Duplicate commands cannot create a second root or
+computer start. The caller may repeat an acknowledgement after a lost reply, while the
+computer journal prevents another native start.

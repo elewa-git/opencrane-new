@@ -11,6 +11,7 @@ import type { ChatOptions } from './routes.ts';
 /** The dev host reaches private Pods through its scoped Kubernetes identity. No public listener. */
 export async function startBridges(options: ChatOptions & {
   objects?: Client;
+  childStartUrl?: string;
   catalogue?: Pick<ReturnType<typeof connectMcpCatalogue>, 'rows'>;
 }, kubeconfig: string, namespace: string, privateKeyPath: string, issuer: string) {
   const tokens = await tokenIssuer({ privateKeyPath, issuer });

@@ -66,8 +66,12 @@ async function suppliesDispatchNetwork() {
   function requireCurrent() {
     return;
   }
+  function childStart() {
+    return Promise.resolve(null);
+  }
   const watch = { requireCurrent };
-  const context = { stageBNetwork, acknowledged, mcpRoutes: [], requireDispatchLeader, watch };
+  const context = { stageBNetwork, acknowledged, mcpRoutes: [], requireDispatchLeader,
+    watch, childStart };
   const options = runInNewContext(`(${declaration[1]})`, context) as
     NonNullable<Parameters<typeof startDecision>[6]>;
   assert.equal(options.remoteNetwork, stageBNetwork);

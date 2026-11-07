@@ -4796,18 +4796,29 @@ actor restart, projection replay and held delivery after allocation.
 `test/child-root-preparation.test.ts` covers two saved model prices, ignored caller
 model overrides, invalid computers and threads, paused or missing choices, preparation
 changes while queued and during real transport retries, and slow history loading.
-The checked first-start command below uses this preparation. Native delivery and
-fresh-install qualification remain unfinished.
+This preparation supplies the first-start hand-off below. Fresh-install qualification
+remains unfinished.
 
-### Checked first child start
+### Saved first child start
 
-`chat/child-start.ts` takes a saved activation, its exact first input and the computer's
-prepared thread. It rechecks access, provider choice, computer generation and current
-root cents and current global, payer and assistant ceilings before calling the existing
-turn command. A new start records one computer
-turn; retries return the same root and turn. A lost reply does not send again. Parent and
-child histories load before the final two-second access check. Only small access streams
-are watched there. The command is internal; the bridge still holds child delivery.
+An activated child's first input may reach the computer only when the models decision
+service is configured. The computer prepares a restricted thread and saves its start report
+through the ordinary bridge. The bridge sends that report's child, turn and thread ids to
+the internal `/child-start` route with a fresh computer pass. The models process takes the
+computer and generation from the signed pass, then checks the saved report, request,
+activation, computer, model grant, payer and root. The original input, audience and payer
+come from events, never from the route body. The actor checks current available cents
+and global, payer and assistant ceilings, including changes after root allocation.
+It records one `computer.turn_started` through the existing turn command. The bridge uses
+that binding for the ordinary credential and context reply. The first shared input is
+decrypted only after admission. A changed generation sends no credential. Capacity
+exhaustion, an unavailable decision service and a lost reply leave the prepared child
+waiting on the same socket. The bridge requests the original report again. A duplicate
+start report may recover its acknowledgement; the computer's saved journal still prevents
+a second native start. Parent and child history loads finish
+before the final two-second access check; only small access streams are watched.
+The public request stage and follow-up path are unchanged. Fresh-install qualification:
+NOT RUN.
 
 ## Bounded call spending
 

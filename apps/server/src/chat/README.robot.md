@@ -182,10 +182,19 @@ Normal completion retains the computer's checked native termination marker on th
 server closure. A saved routine Stop can therefore finish as interrupted even when
 the computer completed before receiving cancellation. The first closure remains final.
 
-## Checked first child turn
+## Saved first child turn
 
-`child-start.ts` checks a saved activation and its prepared computer thread before the
-first restricted turn. It obtains or reuses the saved budget root, checks current access
-and available cents and current spending ceilings, and saves the existing computer turn
-start once. A lower ceiling can refuse an already allocated root. Replays do not send
-to the computer. The bridge does not call this command yet.
+`child-hold.ts` keeps a saved child input queued until the matching activation exists and
+the internal models decision URL is configured. The bridge saves the computer's restricted
+start report before asking the models process for admission. The request carries only the
+child, input and prepared thread ids. The computer pass supplies its assistant, computer
+and generation. The actor loads the original intent, current attempt and saved report,
+then checks access, remaining root cents and current spending ceilings before the existing
+computer start command. A lower ceiling can refuse an already allocated root.
+It returns the stored root and turn binding. If capacity is busy, the decision service is
+unavailable or its reply is lost, the bridge asks the computer to retry the same saved
+report after a short wait. The socket stays open and no native turn starts before a pass
+arrives. A saved computer start is returned on retry without saving another start.
+The computer journal marks native execution before it begins. A process restart still
+fails an unfinished private turn because its prepared thread died with the process.
+No public follow-up or child start route is added.

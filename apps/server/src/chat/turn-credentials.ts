@@ -150,7 +150,7 @@ async function turnContextFor(options: BridgeOptions,
     const rows = await chatHistory(options.store, options.silo, report.conversationId);
     const message = rows.find(isMessage);
     if (!message) throw new Error('Requested message unavailable');
-    const text = binding.rootId === undefined ? decrypt(message.event.data) : '';
+    const text = shared || binding.rootId === undefined ? decrypt(message.event.data) : '';
     const history = shared ? sharedContext(rows, message, decrypt)
       : privateContext(rows, message, binding.requesterId, decrypt);
     const renewal = canRenewTurnStart(rows, report, facts.memoryContext?.initialLoaded === true);

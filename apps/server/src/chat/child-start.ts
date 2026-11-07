@@ -1,17 +1,29 @@
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
-import { computerTurnStartedDataSchema } from '@opencrane/events';
+import { chatIdSchema, childRequestedEventSchema, computerTurnStartedDataSchema,
+  conversationCreatedDataSchema } from '@opencrane/events';
+import { readEventAt } from '@opencrane/event-store';
 import { currentAuthority, providerTurnAdmission, reservationCents, requireRootStartCapacity,
   type BudgetActor } from '@opencrane/models';
 import { checkedChildActivation } from './child-activation.ts';
+import { childStartState } from './child-failure.ts';
 import { ChildRequestChanged } from './child-requests.ts';
 import { allocateChildRoot, loadRootPreparation, rootPreparationModel }
   from './child-root.ts';
 import { turnCommand } from './turns.ts';
+import { chatHistory } from './commands.ts';
+import { creationEvent } from './private-session.ts';
 
 type Options = Parameters<typeof allocateChildRoot>[0];
 type Selection = Parameters<typeof allocateChildRoot>[5];
 type Send = (binding: { rootId: string; turnId: string }) => Promise<void>;
+const recordedStart = z.strictObject({
+  conversationId: chatIdSchema, turnId: chatIdSchema, threadId: chatIdSchema,
+  assistantId: chatIdSchema, computerId: chatIdSchema, generation: z.int().positive(),
+});
+const startReportData = z.object({ conversationId: chatIdSchema, turnId: chatIdSchema,
+  threadId: chatIdSchema, assistantId: chatIdSchema,
+  executionMode: z.literal('restricted'), sharingClass: z.literal('shared_only') });
 
 function matchesRootStart(start: z.infer<typeof computerTurnStartedDataSchema>,
   root: Awaited<ReturnType<typeof allocateChildRoot>>) {
@@ -98,4 +110,58 @@ export async function startActivatedChild(options: Options, actor: BudgetActor, 
     throw new ChildRequestChanged('Child start unavailable');
   }
   return admitted;
+}
+
+function participantId(join: { participantId: string }) {
+  return join.participantId;
+}
+
+// Recover the request from event records; the computer cannot select a parent, payer or audience.
+export async function startRecordedChild(options: Options, actor: BudgetActor, raw: unknown) {
+  const report = recordedStart.parse(raw);
+  const subject = `conversation-${report.conversationId}`;
+  const creation = await creationEvent(options.store, options.silo, subject,
+    'conversation.created');
+  const created = conversationCreatedDataSchema.parse(creation.data);
+  if (!('contextKind' in created) || created.assistantId !== report.assistantId) {
+    throw new ChildRequestChanged('Child start unavailable');
+  }
+  const origin = created.origin;
+  if (origin.firstInputId !== report.turnId) {
+    throw new ChildRequestChanged('Child start unavailable');
+  }
+  const parentSubject = `conversation-${origin.parentConversationId}`;
+  const intentRow = await readEventAt(options.store, parentSubject,
+    origin.intentPosition, performance.now() + 10_000);
+  const intent = childRequestedEventSchema.safeParse(intentRow?.event);
+  if (!intent.success || intent.data.silo !== options.silo ||
+      intent.data.id !== origin.intentEventId ||
+      intent.data.data.childConversationId !== report.conversationId ||
+      intent.data.data.firstInputId !== report.turnId) {
+    throw new ChildRequestChanged('Child start unavailable');
+  }
+  const saved = intent.data.data;
+  const child = await chatHistory(options.store, options.silo, report.conversationId);
+  function matchesStart(row: typeof child[number]) {
+    if (row.event.type !== 'agent.turn_started' ||
+        row.event.source !== 'computer-bridge' ||
+        row.event.report?.computerId !== report.computerId) return false;
+    const data = startReportData.safeParse(row.event.data);
+    return data.success && data.data.conversationId === report.conversationId &&
+      data.data.turnId === report.turnId && data.data.threadId === report.threadId &&
+      data.data.assistantId === report.assistantId;
+  }
+  if (!child.some(matchesStart)) throw new ChildRequestChanged('Child start unavailable');
+  const parent = await chatHistory(options.store, options.silo, origin.parentConversationId);
+  const current = childStartState(parent, intent.data.id);
+  if (current.failure) throw new ChildRequestChanged('Child start unavailable');
+  const input = { conversationId: saved.conversationId, sourceMessageId: saved.sourceMessageId,
+    requestId: saved.requestId, assistantId: saved.assistantId,
+    payingGroupId: saved.payingGroupId, allowanceBoundCents: saved.allowanceBoundCents,
+    participantIds: saved.initialJoins.map(participantId) };
+  const selection = { threadId: report.threadId, computerId: report.computerId,
+    generation: report.generation };
+  function acknowledgeSavedStart() { return Promise.resolve(); }
+  return startActivatedChild(options, actor, saved.createdBy, input, current.attempt,
+    selection, acknowledgeSavedStart);
 }
