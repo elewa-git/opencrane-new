@@ -25,14 +25,20 @@ it never starts cleanup after cancellation or the deadline.
 | Input race | Two tests failed before capturing the checked destination; both pass after the fix | PASS |
 | Exact version cleanup | Failed first; now removes the stored version rather than hiding its bytes | PASS |
 | Focused tests | 169 passed twice on the final code | PASS |
+| Ownership and chart fixture | 26 tests passed twice after adding the required destination | PASS |
 | Installer gate | 22 backup/recovery refusal cases passed | PASS |
 | Event security | 460 tests passed; protected test files are unchanged | PASS |
 | Types and catalogue | Root typecheck and check:events passed | PASS |
 | Lint, knip and changelog | Full lint completed, including knip and changelog validation | PASS |
 | Fresh-install backup, WAL, three-database restore and promotion | No live journey ran | NOT RUN |
 
+The first CI head failed in the older ownership fixture: its missing destination
+made the checker refuse before the stalled child started. All five affected cases
+reproduced locally. Adding the destination fixed the fixture without changing the
+installer or weakening input checks.
+
 Local commands use `nice -n 10`. Focused checks use Node's test runner for
-`infra/dev-stack/cnpg-backup.test.ts`, plus the backup/recovery cases from
+`infra/dev-stack/cnpg-backup.test.ts` and `infra/package/chart.test.mjs`, plus the backup/recovery cases from
 `infra/package/preflight.test.mjs` and `infra/package/cnpg-install.test.mjs`.
 Security uses `npx vitest run libs/events/test/security-rules.test.ts --maxWorkers=2`
 with the requested local `PG_TEST_URL`. No root suite ran locally.
