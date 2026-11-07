@@ -4,7 +4,7 @@ import { z } from 'zod';
 export type OverviewName = 'people' | 'providers' | 'integrations' | 'spending' |
   'publication' | 'memory' | 'routines';
 export type OverviewPriority = 'unknown' | 'needs_input' | 'failure' | 'ready';
-export type OverviewStatus = 'current' | 'applying' | 'unavailable';
+type OverviewStatus = 'current' | 'applying' | 'unavailable';
 
 export interface OverviewRow {
   source: OverviewName;
