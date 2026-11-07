@@ -19,6 +19,8 @@ import { pauseRoutineAsAdmin } from '../src/routine-admin-pause.ts';
 import { pauseRoutine } from '../src/routine-pause.ts';
 import { retireRoutine } from '../src/routine-retire.ts';
 import { finishRoutine } from '../src/routine-finish.ts';
+import { routineLifecycle } from '../src/routine-lifecycle.ts';
+import { routineBridge } from '../src/routine-bridge.ts';
 import { applyRoutineStop } from '../src/routine-stop-budget.ts';
 import { requestRoutineStop } from '../src/routine-stop.ts';
 import { createRoutineSender } from '../src/routine-sender.ts';
@@ -1485,7 +1487,7 @@ async function savedStopFinishes(kind: 'Stop' | 'Admin' | 'Denied') {
   await applyRoutineStop(nats.store, 'test', reference, actor, { enabled: true });
   await pollRoutine();
   await vi.waitFor(interruptedOnce);
-  expect(actor.state.roots[0]!.stop?.sourceEventId).toBe(source.eventId);
+  expect(actor.state.roots[0]!.stop).toMatchObject({ sourceEventId: source.eventId });
   const before = await history(nats.store, 'routine-orders', 'test');
   expect(before.at(-1)!.event.type).not.toBe('routine.run_finished');
   expect(preparedComputer.runningProcesses.has('native-thread-2')).toBe(true);
@@ -1509,3 +1511,121 @@ async function savedStopFinishes(kind: 'Stop' | 'Admin' | 'Denied') {
 it.each(['Stop', 'Admin', 'Denied'] as const)(
   'saved %s reaction finishes only its terminated turn and leaves its neighbour running',
   savedStopFinishes);
+
+async function stopHeldAcknowledgement() {
+  const held = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const acknowledge = credentials.releaseTurnCredentials;
+  async function hold(...args: Parameters<typeof acknowledge>) {
+    await acknowledge(...args);
+    held.resolve();
+    await release.promise;
+  }
+  vi.spyOn(credentials, 'releaseTurnCredentials').mockImplementationOnce(hold);
+  const link = await preparedComputer.wake();
+  let grants = 0;
+  const send = WebSocket.prototype.send.bind(link.socket);
+  function recordFrame(bytes: Parameters<typeof send>[0]) {
+    if (typeof bytes === 'string') {
+      const frame = frameSchema.parse(JSON.parse(bytes));
+      if (frame['type'] === 'ack' && frame['token'] !== undefined) grants++;
+    }
+    send(bytes);
+  }
+  vi.spyOn(link.socket, 'send').mockImplementation(recordFrame);
+  const sending = sender().send(preparedComputer.wake);
+  try {
+    await held.promise;
+    await saveProhibition('Stop');
+    await pollRoutine();
+  } finally {
+    release.resolve();
+  }
+  expect(await sending).toEqual({ status: 'unknown' });
+  await link.settled();
+  expect(grants).toBe(0);
+  expect(preparedComputer.starts).toBe(0);
+}
+it('saved Stop cancels a held start acknowledgement before credentials escape',
+  stopHeldAcknowledgement);
+
+function requireLifecycleLeader() {
+  if (!owned) throw new Error('Worker unavailable');
+  return Promise.resolve();
+}
+async function restartedStopReaction(failure: 'budget.root_stopped' | 'routine.run_finished') {
+  const link = await startRunning();
+  const root = actor.state.roots[0]!;
+  const call = { requesterId: 'alice', conversationId, turnId,
+    assistantId: 'sales-assistant', payingGroupId: 'sales', ...selection,
+    model: 'gpt-6.1-sol', priceTableId, contextDigest: '0'.repeat(64) };
+  const hold = await actor.reserve(call, 100, undefined, undefined, root.rootId);
+  await actor.uncertain(hold, 'settle_timeout');
+  const source = await saveProhibition('Stop');
+  const reference = { routineId: 'orders', eventId: source.eventId, position: source.position };
+  const options = { silo: 'test', store: nats.store };
+  const computer = { computerId: 'computer', assistantId: 'sales-assistant' };
+  link.routines = routineBridge(options, computer, link.socket);
+  const append = nats.store.append.bind(nats.store);
+  let lost = false;
+  async function loseFinish(...args: Parameters<typeof append>) {
+    const result = await append(...args);
+    if (proposedEvent.parse(args[0].event).type === failure && !lost) {
+      lost = true;
+      throw new Error('Lost reply');
+    }
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(loseFinish);
+  const reaction = routineLifecycle(actor, requireLifecycleLeader, { enabled: true });
+  await reaction.poll();
+  await pollRoutine();
+  await vi.waitFor(interruptedOnce);
+  expect(rootTotals(actor.state, root.rootId).heldCents).toBe(100);
+  preparedComputer.finish(selection.threadId);
+  function closed() {
+    expect(preparedComputer.closedSessions).toBe(1);
+  }
+  await vi.waitFor(closed);
+  await link.settled();
+  await reaction.poll();
+  expect(lost).toBe(true);
+  vi.restoreAllMocks();
+  actor = new BudgetActor(nats.store, 'test');
+  await actor.start();
+  const recovered = routineLifecycle(actor, requireLifecycleLeader, { enabled: true });
+  await recovered.poll();
+  await applyRoutineStop(nats.store, 'test', reference, actor, { enabled: true });
+  const before = await nats.store.head();
+  await recovered.poll();
+  const replay = routineLifecycle(actor, forbidden, { enabled: true, replay: true });
+  await replay.poll();
+  expect(await nats.store.head()).toBe(before);
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  function isFinish(row: typeof rows[number]) {
+    return row.event.type === 'routine.run_finished';
+  }
+  expect(rows.filter(isFinish)).toHaveLength(1);
+  expect(actor.state.roots[0]!.stop).toMatchObject({ sourceEventId: source.eventId });
+  expect(rootTotals(actor.state, root.rootId).heldCents).toBe(100);
+  const budget = await history(nats.store, 'budget-test', 'test');
+  function isStop(row: typeof budget[number]) {
+    return row.event.type === 'budget.root_stopped';
+  }
+  expect(budget.filter(isStop)).toHaveLength(1);
+  const resolution = record('late-cost', `effect-${hold}`, 'effect.resolved', {
+    reservationId: hold, permitId: hold, settledCents: 1234, outcome: 'settled',
+    resolvedBy: 'alice', evidence: [{ kind: 'provider_receipt', reference: 'receipt',
+      digest: '0'.repeat(64), amountCents: 1234 }] });
+  resolution.principal = { kind: 'human', id: 'alice' };
+  await nats.seed([resolution]);
+  await actor.settle(resolution);
+  await recovered.poll();
+  expect(rootTotals(actor.state, root.rootId).settledCents).toBe(1234);
+  expect(actor.state.roots[0]!.stop).toMatchObject({ sourceEventId: source.eventId });
+  await expect(actor.reserve(call, 1, undefined, undefined, root.rootId))
+    .rejects.toMatchObject({ reason: 'routine_stop' });
+  interruptedOnce();
+}
+it.each(['budget.root_stopped', 'routine.run_finished'] as const)(
+  'recovers Stop and finish after reaction restart and a lost %s reply', restartedStopReaction);

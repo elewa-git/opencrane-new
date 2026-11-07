@@ -468,3 +468,23 @@ async function relevantChangeDuringRetry(kind: 'thread reuse' | 'allocation' | '
 }
 it.each(['thread reuse', 'allocation', 'generation'] as const)(
   'rechecks relevant %s changes on a publication retry', relevantChangeDuringRetry);
+
+async function staleFinishWorker() {
+  await evidence();
+  let current = true;
+  function requireCurrent() {
+    if (!current) throw new Error('Worker unavailable');
+    return Promise.resolve();
+  }
+  const append = nats.store.append.bind(nats.store);
+  async function loseOwnership(command: AppendCommand) {
+    current = false;
+    return append(command);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementationOnce(loseOwnership);
+  const options = { enabled: true, requireCurrent };
+  await expect(finishRoutine(nats.store, 'test', input, options))
+    .rejects.toThrow(/^Routine finish refused$/u);
+  expect((await folded()).activeRun).toEqual(run);
+}
+it('refuses a worker that loses ownership immediately before finish publication', staleFinishWorker);
