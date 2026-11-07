@@ -34,13 +34,6 @@ type StoredObject = {
 const refusal = 'CNPG backup references are incomplete or incompatible';
 const cleanupRefusal = 'CNPG backup marker cannot be removed';
 const scopeRefusal = 'CNPG backup credential is not confined to its bucket and prefix';
-const inventoryRefusal = 'CNPG cannot enumerate other silos\' backup locations';
-
-class InventoryError extends Error {
-  constructor() {
-    super(inventoryRefusal);
-  }
-}
 
 class ScopeError extends Error {
   constructor() {
@@ -320,7 +313,7 @@ async function removeMarker(target: { bucketName: string; objectName: string },
 async function checkStorage(target: ReturnType<typeof destination>,
   address: ReturnType<typeof serviceAddress>, ca: string, accessKey: string,
   secretKey: string, sessionToken: string,
-  signal: AbortSignal, deadline: number) {
+  signal: AbortSignal, deadline: number, verifyRecord: () => void) {
   const session = storageSession(address, ca, accessKey, secretKey, sessionToken, signal, deadline);
   const random = randomBytes(32);
   const marker = random.toString('hex');
@@ -340,6 +333,8 @@ async function checkStorage(target: ReturnType<typeof destination>,
     } catch {
       throw new CleanupError();
     }
+    // Check the issued lease after the deletion check and just before PUT.
+    verifyRecord();
     // Mark the attempt before sending PUT: a lost reply does not mean nothing was stored.
     const absent = { 'if-none-match': '*' };
     markerMayExist = true;
@@ -357,76 +352,10 @@ async function checkStorage(target: ReturnType<typeof destination>,
   }
 }
 
-async function checkConfinement(target: ReturnType<typeof destination>,
-  address: ReturnType<typeof serviceAddress>, ca: string, accessKey: string,
-  secretKey: string, sessionToken: string,
-  signal: AbortSignal, deadline: number) {
-  const session = storageSession(address, ca, accessKey, secretKey, sessionToken, signal, deadline);
-  const prefixEnd = target.objectName.lastIndexOf('/');
-  const prefix = target.objectName.slice(0, prefixEnd);
-  const outsidePrefix = `${prefix}-ocn-check-${randomUUID()}`;
-  const outside = { bucketName: target.bucketName, objectName: `${outsidePrefix}/marker` };
-  const otherBucket = { bucketName: `ocn-check-${randomUUID()}`, objectName: target.objectName };
-  const root = { bucketName: target.bucketName, objectName: '' };
-  const emptyHeaders = {};
-  const random = randomBytes(32);
-  const marker = random.toString('hex');
-  const hash = createHash('md5');
-  hash.update(marker);
-  const digest = hash.digest();
-  const match = { 'if-match': `"${digest.toString('hex')}"` };
-  const badChecksum = Buffer.from(digest);
-  badChecksum[0] = badChecksum[0]! ^ 1;
-  const absent = { 'if-none-match': '*', 'content-md5': badChecksum.toString('base64') };
-  async function deniedWrite(location: typeof outside) {
-    let mayExist = true;
-    let query: string | undefined;
-    try {
-      // Test write permission alone. Reject the bytes by checksum if writing is allowed.
-      const result = await session.exchange(location, 'PUT', absent, '', marker,
-        [200, 400, 403, 404, 412]);
-      mayExist = result.status === 200;
-      if (result.status === 403) {
-        return;
-      }
-      if (mayExist) {
-        query = versionQuery(result.versionId);
-      }
-      throw new ScopeError();
-    } finally {
-      if (mayExist) {
-        await removeMarker(location, match, query, address, ca, accessKey, secretKey, sessionToken);
-      }
-    }
-  }
-  try {
-    if (prefixEnd < 1) {
-      throw new ScopeError();
-    }
-    // Refuse all root listings, including apparently empty or filtered replies.
-    await session.exchange(root, 'GET', emptyHeaders, 'list-type=2&max-keys=1', '', [403]);
-    for (const location of [outside, otherBucket]) {
-      await session.exchange(location, 'GET', emptyHeaders, '', '', [403]);
-      const listTarget = { bucketName: location.bucketName, objectName: '' };
-      const folderEnd = location.objectName.lastIndexOf('/');
-      const folder = location.objectName.slice(0, folderEnd + 1);
-      const query = `list-type=2&max-keys=1&prefix=${encodeURIComponent(folder)}`;
-      await session.exchange(listTarget, 'GET', emptyHeaders, query, '', [403]);
-      await deniedWrite(location);
-    }
-  } catch (error) {
-    if (error instanceof CleanupError) {
-      throw error;
-    }
-    throw new ScopeError();
-  } finally {
-    session.close();
-  }
-}
-
 async function check(backup: Backup, namespace: string, kubectl: Kubectl,
-  signal: AbortSignal, deadline: number) {
-  const address = serviceAddress(backup.endpointURL, namespace);
+  signal: AbortSignal, deadline: number, evidence: object | undefined) {
+  const endpointURL = backup.endpointURL;
+  const address = serviceAddress(endpointURL, namespace);
   const destinationPath = backup.destinationPath;
   const target = destination(destinationPath);
   const ca = reference(backup.endpointCA);
@@ -466,10 +395,30 @@ async function check(backup: Backup, namespace: string, kubectl: Kubectl,
   const accessKey = entry(secrets.get(access.name)!, access.key);
   const secretKey = entry(secrets.get(secret.name)!, secret.key);
   const sessionToken = entry(secrets.get(token.name)!, token.key);
+  // Load the local provisioner only when a backup check is requested.
+  const { inspectCnpgBackupIdentity } = await import('./cnpg-backup-identity.ts');
+  function identify(reference: Reference) {
+    const metadata = secrets.get(reference.name)!.metadata;
+    return `${metadata.uid}:${metadata.resourceVersion}:${reference.name}:${reference.key}`;
+  }
+  const identities = [access, secret, token].map(identify);
+  const generation = identities.join('|');
+  const binding = { silo: target.bucketName.slice('ocn-backup-'.length), namespace,
+    namespaceUid: owner.metadata.uid, serviceUid: service.metadata.uid,
+    generation, endpointURL, ca: caCertificate };
+  function verifyRecord() {
+    try {
+      requireValid(evidence !== undefined);
+      const approvedPath = inspectCnpgBackupIdentity(evidence, binding,
+        { accessKey, secretKey, sessionToken });
+      requireValid(approvedPath === destinationPath);
+    } catch {
+      throw new ScopeError();
+    }
+  }
+  verifyRecord();
   await checkStorage(target, address, caCertificate, accessKey, secretKey, sessionToken,
-    signal, deadline);
-  await checkConfinement(target, address, caCertificate, accessKey, secretKey, sessionToken,
-    signal, deadline);
+    signal, deadline, verifyRecord);
   // Recheck ownership and all reference identities after the storage requests finish.
   for (const original of found) {
     const current = await read(kubectl, namespace, original.kind, original.metadata.name,
@@ -482,10 +431,11 @@ async function check(backup: Backup, namespace: string, kubectl: Kubectl,
 }
 
 export async function checkCnpgBackupReferences(backup: Backup, namespace: string,
-  kubectl: Kubectl, options: { signal?: AbortSignal; timeoutMs?: number } = {}) {
+  kubectl: Kubectl,
+  options: { signal?: AbortSignal; timeoutMs?: number; evidence?: object } = {}) {
   try {
     for (const key of Object.keys(options)) {
-      requireValid(key === 'signal' || key === 'timeoutMs');
+      requireValid(key === 'signal' || key === 'timeoutMs' || key === 'evidence');
     }
     const timeoutMs = options.timeoutMs ?? 30_000;
     requireValid(Number.isInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 30_000);
@@ -493,15 +443,9 @@ export async function checkCnpgBackupReferences(backup: Backup, namespace: strin
     const signals = [AbortSignal.timeout(timeoutMs)];
     if (options.signal) signals.push(options.signal);
     const signal = AbortSignal.any(signals);
-    await check(backup, namespace, kubectl, signal, deadline);
-    // Refuse a pass until the installer can enumerate every other silo's real locations.
-    // Its values file describes only this silo. Random denied probes cannot fill that gap.
-    throw new InventoryError();
+    await check(backup, namespace, kubectl, signal, deadline, options.evidence);
   } catch (error) {
     // Discard parser, cancellation and dependency details; keep Secret data only in memory.
-    if (error instanceof InventoryError) {
-      throw new Error(inventoryRefusal);
-    }
     if (error instanceof ScopeError) {
       throw new Error(scopeRefusal);
     }

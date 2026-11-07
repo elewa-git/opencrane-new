@@ -20,7 +20,7 @@ flowchart LR
   stack -->|starts services; checks listeners; sets up sign-in; can issue short backup credentials| services["Local services<br/>jobs, content and access"]
   stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
   stack -->|checks subscriptions and shares dispatcher readiness with chat| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
-  stack -->|checks ownership, nodes and backup token references| package["infra/package<br/>Helm install"]
+  stack -->|checks ownership, nodes and backup credentials| package["infra/package<br/>Helm install"]
   stack -->|checks collection and reports host refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
 ```
@@ -70,17 +70,15 @@ available for diagnosis.
   Verifies the Service hostname against the named CA. Uses the referenced identity to
   create, read and remove one temporary marker in the named backup folder.
   Includes the short-lived session token from the owned Secret in those requests.
-  Refuses backup approval because the installer cannot list other silos’ storage locations.
-  A denied request to an invented location cannot prove that other silos are protected.
-  Checks the allowed destination recorded on the credential Secret and refuses bucket-root listing.
+  Accepts the local marker check only with the short-lived credential record issued
+  by this installation. Checks the destination and the Secret used for the credential.
   Refuses the check if the marker changes or cannot be removed.
   Stops the check on cancellation or timeout, then gives marker cleanup its own short deadline.
   Checks deletion permission before writing.
   Backup and recovery installation remain blocked.
-  A separate local helper can issue a short-lived backup credential for the silo
-  recorded by this installation. It checks the policy signed into the credential
-  before returning it.
-  The installer does not use that helper yet.
+  The local helper issues that credential for the silo recorded by this installation
+  and checks the policy signed into it.
+  The installer still blocks backup and recovery settings.
   Requires runtime and setup replica settings to match the chart before Helm runs.
   Checks mounted event-log certificates and keys, connection settings and account rules.
   Checks three-node eligibility, prepared certificates and image compatibility for

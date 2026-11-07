@@ -14,6 +14,7 @@ const binding = {
   namespace,
   namespaceUid: 'namespace-uid',
   serviceUid: 'service-uid',
+  generation: 'credential-uid:1:backup-identity:access',
   endpointURL: `https://backup-store.${namespace}.svc:9000`,
   ca: 'fixture-ca-certificate',
 };
@@ -24,6 +25,9 @@ let writtenPolicy: string;
 let madeBuckets: string[];
 let existingBuckets: Set<string>;
 let reorderActions = false;
+let returnedAccessKey = 'leased-access';
+let expirySeconds = 900;
+let alterSignature = false;
 
 function signedToken(policy: unknown, accessKey: string, expiry: number) {
   const header = Buffer.from(JSON.stringify({ alg: 'HS512', typ: 'JWT' })).toString('base64url');
@@ -43,11 +47,19 @@ async function credentials(this: AssumeRoleProvider) {
   if (reorderActions) {
     policy.Statement[0].Action.reverse();
   }
-  const expiry = Math.floor(Date.now() / 1000) + 900;
+  const expiry = Math.floor(Date.now() / 1000) + expirySeconds;
+  const sessionToken = signedToken(policy, returnedAccessKey, expiry);
+  let returnedToken = sessionToken;
+  if (alterSignature) {
+    const parts = sessionToken.split('.');
+    const signature = Buffer.from(parts[2]!, 'base64url');
+    signature[0] = signature[0]! ^ 1;
+    returnedToken = `${parts[0]}.${parts[1]}.${signature.toString('base64url')}`;
+  }
   return {
-    accessKey: 'leased-access',
+    accessKey: returnedAccessKey,
     secretKey: 'leased-secret',
-    sessionToken: signedToken(policy, 'leased-access', expiry),
+    sessionToken: returnedToken,
   };
 }
 
@@ -160,12 +172,15 @@ async function substitutedCredentialRefuses() {
   assert.throws(inspectSubstitutedCredential,
     { message: 'CNPG backup identity is not confined to its destination' });
   const originalCredentials = { ...result.credentials, secretKey: 'leased-secret' };
-  const changedBinding = { ...binding, serviceUid: 'other-service' };
-  function inspectChangedBinding() {
-    identity.inspectCnpgBackupIdentity(result.evidence, changedBinding, originalCredentials);
+  for (const field of ['silo', 'namespace', 'namespaceUid', 'serviceUid',
+    'generation', 'endpointURL', 'ca'] as const) {
+    const changedBinding = { ...binding, [field]: `changed-${field}` };
+    function inspectChangedBinding() {
+      identity.inspectCnpgBackupIdentity(result.evidence, changedBinding, originalCredentials);
+    }
+    assert.throws(inspectChangedBinding,
+      { message: 'CNPG backup identity is not confined to its destination' });
   }
-  assert.throws(inspectChangedBinding,
-    { message: 'CNPG backup identity is not confined to its destination' });
   function inspectMissingEvidence() {
     identity.inspectCnpgBackupIdentity({}, binding, originalCredentials);
   }
@@ -217,3 +232,35 @@ async function expiredRecordRefuses(context: import('node:test').TestContext) {
     { message: 'CNPG backup identity is not confined to its destination' });
 }
 test('an expired process-local record is refused', expiredRecordRefuses);
+
+for (const fault of ['extra statement', 'missing list condition', 'root access',
+  'changed signature', 'short expiry']) {
+  async function refusesUnsafeLease() {
+    returnedPolicy = undefined;
+    madeBuckets = [];
+    existingBuckets = new Set();
+    const policy = JSON.parse(writtenPolicy);
+    if (fault === 'extra statement') {
+      policy.Statement.push({ Effect: 'Allow', Action: ['s3:*'], Resource: ['*'] });
+      returnedPolicy = policy;
+    }
+    if (fault === 'missing list condition') {
+      delete policy.Statement[1].Condition;
+      returnedPolicy = policy;
+    }
+    if (fault === 'root access') returnedAccessKey = rootAccess;
+    if (fault === 'changed signature') alterSignature = true;
+    if (fault === 'short expiry') expirySeconds = 20;
+    try {
+      await assert.rejects(identity.provisionCnpgBackupIdentity(binding),
+        { message: 'CNPG backup identity provisioning refused' });
+      assert.deepEqual(madeBuckets, []);
+    } finally {
+      returnedPolicy = undefined;
+      returnedAccessKey = 'leased-access';
+      alterSignature = false;
+      expirySeconds = 900;
+    }
+  }
+  test(`a ${fault} is refused before bucket creation`, refusesUnsafeLease);
+}

@@ -1,0 +1,1 @@
+The local CNPG backup checker now accepts a marker check only when its short-lived storage credential matches a provisioner-verified record. It refuses changed credentials, resource identities and destinations before writing a marker. Backup and recovery installation remain blocked pending live qualification.
