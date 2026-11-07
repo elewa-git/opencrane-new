@@ -123,10 +123,13 @@ it('refuses caller arguments, scripts, filters and workspace traversal', async (
 
 async function unknownAfterCrash() {
   const test = fixture();
-  test.state.launch = () => ({ exit: Promise.reject(new Error('private canary')), kill() {} });
+  test.state.launch = (_plan, path) => {
+    test.starts.push(path);
+    return { exit: Promise.reject(new Error('private canary')), kill() {} };
+  };
   await expect(test.dispatch()).resolves.toBe('unknown');
   await expect(test.dispatch()).resolves.toBe('refused');
-  expect(test.starts).toEqual([]);
+  expect(test.starts).toHaveLength(1);
 }
 it('leaves a crashed worker unknown and never resends the command', unknownAfterCrash);
 
