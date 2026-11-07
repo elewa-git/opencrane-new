@@ -15,6 +15,7 @@ import { attempts, backupHostname, datedLeaf, mapServiceDNS, peer }
 let matching: Awaited<ReturnType<typeof peer>>;
 const namespace = 'opencrane-package-1';
 const refusal = 'CNPG backup references are incomplete or incompatible';
+const cleanupRefusal = 'CNPG backup marker cannot be removed';
 const privateValue = 'private-value-/private/path';
 let directory: string;
 let ca: string;
@@ -85,9 +86,9 @@ function fixture() {
   }
   return { backup, objects, reads, kubectl };
 }
-async function refused(run: Promise<unknown>) {
+async function refused(run: Promise<unknown>, reason = refusal) {
   function safeError(error: Error) {
-    assert.equal(error.message, refusal);
+    assert.equal(error.message, reason);
     assert.equal(error.cause, undefined);
     assert(!String(error.stack).includes(privateValue));
     assert(!String(error.stack).includes(directory));
@@ -125,9 +126,9 @@ async function accepts() {
   }
   const before = attempts.length;
   await checkCnpgBackupReferences(input.backup, namespace, input.kubectl);
-  assert.equal(attempts.length, before + 4);
+  assert.equal(attempts.length, before + 5);
   assert.equal(attempts.at(-1)!.destroyed, true);
-  assert.deepEqual(matching.storage.requests, ['PUT', 'GET', 'DELETE']);
+  assert.deepEqual(matching.storage.requests, ['DELETE', 'PUT', 'GET', 'DELETE']);
   assert.equal(matching.storage.objects.size, 0);
   for (const name of Object.keys(input.objects)) {
     function matches(value: string) {
@@ -399,7 +400,7 @@ for (const name of ['namespace', 'backup-store', 'backup-trust']) {
       atPeer(input, listener.port);
       try {
         await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
-        assert.equal(handshakes, 4);
+        assert.equal(handshakes, 5);
         assert(input.reads.length > 4);
       } finally {
         await listener.close();
@@ -441,7 +442,7 @@ for (const stage of ['before reads', 'before connection', 'during handshake', 'a
         expected = 1;
       }
       if (stage === 'after handshake') {
-        expected = 4;
+        expected = 5;
       }
       assert.equal(attempts.length - before, expected);
       const expectedReads = { 'before reads': 0, 'before connection': 4,
@@ -482,7 +483,7 @@ for (const stage of ['initial read', 'before connection', 'after handshake', 'fi
         expected = 1;
       }
       if (stage === 'final read') {
-        expected = 4;
+        expected = 5;
       }
       assert.equal(attempts.length - before, expected);
       if (expected) assert.equal(attempts.at(-1)!.destroyed, true);
@@ -588,19 +589,25 @@ for (const fault of ['wrong bucket', 'wrong prefix', 'wrong access', 'wrong secr
       input.objects['backup-identity'].data[key] = encoded('foreign-identity');
     }
     try {
-      await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
+      let reason = refusal;
+      const cleanupFaults = ['wrong bucket', 'wrong prefix', 'wrong access', 'wrong secret',
+        'deny DELETE', 'changed', 'changed before delete', 'server error'];
+      if (cleanupFaults.includes(fault)) {
+        reason = cleanupRefusal;
+      }
+      await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl), reason);
       assert.equal(input.reads.length, 4);
       assert.equal(outputCalls, 0);
       assert.equal(storage.objects.get('/database-backups/local-check/existing')!.toString(),
         'untouched');
       storage.objects.delete('/database-backups/local-check/existing');
-      const retained = ['deny DELETE', 'collision', 'changed', 'changed before delete'];
+      const retained = ['collision', 'changed', 'changed before delete'];
       assert.equal(storage.objects.size, Number(retained.includes(fault)));
       if (fault === 'collision' || fault.startsWith('changed')) {
         assert.equal([...storage.objects.values()][0]!.toString(), 'foreign');
       }
       if (fault === 'deny GET' || fault.endsWith('body')) {
-        assert.deepEqual(storage.requests, ['PUT', 'GET', 'DELETE']);
+        assert.deepEqual(storage.requests, ['DELETE', 'PUT', 'GET', 'DELETE']);
       }
     } finally {
       storage.objects.clear();
@@ -646,10 +653,21 @@ for (const method of ['PUT', 'GET', 'DELETE']) {
       const started = performance.now();
       try {
         const options = { signal: controller.signal, timeoutMs: 200 };
-        await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl, options));
+        const reason = method === 'DELETE' ? cleanupRefusal : refusal;
+        await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl, options),
+          reason);
         assert(performance.now() - started < 1000);
-        const expected = ['PUT', 'GET', 'DELETE'];
-        assert.deepEqual(storage.requests, expected.slice(0, expected.indexOf(method) + 1));
+        let expected = ['DELETE'];
+        if (method === 'GET') {
+          expected = ['DELETE', 'PUT', 'GET', 'DELETE'];
+        } else if (method === 'PUT') {
+          expected = ['DELETE', 'PUT', 'HEAD'];
+          if (failure === 'cancel' || failure === 'late') {
+            expected.push('DELETE');
+          }
+        }
+        assert.deepEqual(storage.requests, expected);
+        assert.equal(storage.objects.size, 0);
         assert.equal(input.reads.length, 4);
         assert.equal(attempts.at(-1)!.destroyed, true);
       } finally {
@@ -689,7 +707,7 @@ for (const name of ['backup-store', 'backup-trust', 'backup-identity']) {
       listener.storage.state.onRequest = replace;
       try {
         await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
-        assert.deepEqual(listener.storage.requests, ['PUT', 'GET', 'DELETE']);
+        assert.deepEqual(listener.storage.requests, ['DELETE', 'PUT', 'GET', 'DELETE']);
         assert.equal(listener.storage.objects.size, 0);
         assert(input.reads.length > 4);
       } finally {
@@ -719,7 +737,7 @@ for (const field of ['endpointURL', 'destinationPath']) {
     }
     try {
       await checkCnpgBackupReferences(input.backup, namespace, change);
-      assert.deepEqual(listener.storage.requests, ['PUT', 'GET', 'DELETE']);
+      assert.deepEqual(listener.storage.requests, ['DELETE', 'PUT', 'GET', 'DELETE']);
       assert.deepEqual(alternate.storage.requests, []);
       assert.equal(listener.storage.objects.size, 0);
     } finally {
@@ -737,7 +755,7 @@ async function removesStoredVersion() {
   listener.storage.state.fault = 'versioned';
   try {
     await checkCnpgBackupReferences(input.backup, namespace, input.kubectl);
-    assert.deepEqual(listener.storage.requests, ['PUT', 'GET', 'DELETE']);
+    assert.deepEqual(listener.storage.requests, ['DELETE', 'PUT', 'GET', 'DELETE']);
     assert.equal(listener.storage.objects.size, 0);
   } finally {
     listener.storage.objects.clear();

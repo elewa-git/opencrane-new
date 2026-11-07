@@ -31,6 +31,13 @@ type StoredObject = {
   data?: Record<string, string>;
 };
 const refusal = 'CNPG backup references are incomplete or incompatible';
+const cleanupRefusal = 'CNPG backup marker cannot be removed';
+
+class CleanupError extends Error {
+  constructor() {
+    super(cleanupRefusal);
+  }
+}
 
 function requireValid(condition: unknown): asserts condition {
   if (!condition) throw new Error(refusal);
@@ -206,12 +213,15 @@ function storageTransport(signal: AbortSignal, deadline: number) {
 }
 
 async function markerResponse(response: IncomingMessage, method: string,
-  signal: AbortSignal, deadline: number) {
+  signal: AbortSignal, deadline: number, expectedStatuses: number[]) {
   const limits = { signal, deadline };
   try {
     commandTimeout(30_000, limits);
-    const expectedStatus = method === 'DELETE' ? 204 : 200;
-    requireValid(response.statusCode === expectedStatus);
+    const status = response.statusCode!;
+    requireValid(expectedStatuses.includes(status));
+    if (status === 403 || status === 404) {
+      return { status, bytes: Buffer.alloc(0), etag: undefined, versionId: undefined };
+    }
     const chunks: Buffer[] = [];
     let size = 0;
     for await (const chunk of response) {
@@ -223,15 +233,14 @@ async function markerResponse(response: IncomingMessage, method: string,
     }
     commandTimeout(30_000, limits);
     const versionId = response.headers['x-amz-version-id'];
-    return { bytes: Buffer.concat(chunks), etag: response.headers.etag, versionId };
+    return { status, bytes: Buffer.concat(chunks), etag: response.headers.etag, versionId };
   } finally {
     response.destroy();
   }
 }
 
-async function checkStorage(target: ReturnType<typeof destination>,
-  address: ReturnType<typeof serviceAddress>, ca: string, accessKey: string, secretKey: string,
-  signal: AbortSignal, deadline: number) {
+function storageSession(address: ReturnType<typeof serviceAddress>, ca: string,
+  accessKey: string, secretKey: string, signal: AbortSignal, deadline: number) {
   const limits = { signal, deadline };
   const agentOptions = { ca, rejectUnauthorized: true, keepAlive: false, maxCachedSessions: 0 };
   const agent = new https.Agent(agentOptions);
@@ -245,38 +254,84 @@ async function checkStorage(target: ReturnType<typeof destination>,
   for (let status = 100; status < 1000; status++) {
     statuses.push(status);
   }
-  let query = '';
-  async function exchange(method: string, headers: Record<string, string>, payload = '') {
+  async function exchange(target: { bucketName: string; objectName: string }, method: string,
+    headers: Record<string, string>, query = '', payload = '', expectedStatuses = [200]) {
     commandTimeout(30_000, limits);
     const options = { ...target, method, headers, query };
     const response = await client.makeRequestAsync(options, payload, statuses, 'us-east-1');
-    return markerResponse(response, method, signal, deadline);
+    return markerResponse(response, method, signal, deadline, expectedStatuses);
   }
+  function close() {
+    agent.destroy();
+  }
+  return { exchange, close };
+}
+
+function versionQuery(versionId: unknown) {
+  if (versionId === undefined) {
+    return '';
+  }
+  requireValid(typeof versionId === 'string' && versionId.length > 0);
+  return `versionId=${encodeURIComponent(versionId)}`;
+}
+
+async function checkStorage(target: ReturnType<typeof destination>,
+  address: ReturnType<typeof serviceAddress>, ca: string, accessKey: string, secretKey: string,
+  signal: AbortSignal, deadline: number) {
+  const session = storageSession(address, ca, accessKey, secretKey, signal, deadline);
   const random = randomBytes(32);
   const marker = random.toString('hex');
   const hash = createHash('md5');
   hash.update(marker);
   const digest = hash.digest('hex');
   const match = { 'if-match': `"${digest}"` };
-  try {
-    // Require atomic creation and deletion. Never overwrite or remove another writer's object.
-    const absent = { 'if-none-match': '*' };
-    const created = await exchange('PUT', absent, marker);
-    if (created.versionId !== undefined) {
-      requireValid(typeof created.versionId === 'string' && created.versionId.length > 0);
-      query = `versionId=${encodeURIComponent(created.versionId)}`;
-    }
+  let query: string | undefined;
+  let markerMayExist = false;
+  async function removeMarker() {
+    // Allow cleanup to finish after the check is cancelled or its deadline expires.
+    const cleanupSignal = AbortSignal.timeout(1000);
+    const cleanupDeadline = Date.now() + 1000;
+    const cleanup = storageSession(address, ca, accessKey, secretKey,
+      cleanupSignal, cleanupDeadline);
     try {
-      requireValid(created.etag === match['if-match'] && created.bytes.length === 0);
-      const stored = await exchange('GET', match);
-      requireValid(stored.versionId === created.versionId);
-      requireValid(stored.etag === match['if-match'] && stored.bytes.equals(Buffer.from(marker)));
-    } finally {
-      const removed = await exchange('DELETE', match);
+      if (query === undefined) {
+        const stored = await cleanup.exchange(target, 'HEAD', match, '', '', [200, 404]);
+        if (stored.status === 404 || stored.etag !== match['if-match']) {
+          return;
+        }
+        query = versionQuery(stored.versionId);
+      }
+      const removed = await cleanup.exchange(target, 'DELETE', match, query, '', [204]);
       requireValid(removed.bytes.length === 0);
+    } catch {
+      throw new CleanupError();
+    } finally {
+      cleanup.close();
     }
+  }
+  try {
+    try {
+      // Check deletion before writing. Name a version to avoid creating a delete marker.
+      const absentVersion = `versionId=${randomUUID()}`;
+      const removed = await session.exchange(target, 'DELETE', match, absentVersion, '', [204]);
+      requireValid(removed.bytes.length === 0);
+    } catch {
+      throw new CleanupError();
+    }
+    // Mark the attempt before sending PUT: a lost reply does not mean nothing was stored.
+    const absent = { 'if-none-match': '*' };
+    markerMayExist = true;
+    const created = await session.exchange(target, 'PUT', absent, '', marker);
+    query = versionQuery(created.versionId);
+    requireValid(created.etag === match['if-match'] && created.bytes.length === 0);
+    const stored = await session.exchange(target, 'GET', match, query);
+    requireValid(stored.versionId === created.versionId);
+    requireValid(stored.etag === match['if-match'] && stored.bytes.equals(Buffer.from(marker)));
   } finally {
-    agent.destroy();
+    session.close();
+    if (markerMayExist) {
+      await removeMarker();
+    }
   }
 }
 
@@ -337,8 +392,11 @@ export async function checkCnpgBackupReferences(backup: Backup, namespace: strin
     if (options.signal) signals.push(options.signal);
     const signal = AbortSignal.any(signals);
     await check(backup, namespace, kubectl, signal, deadline);
-  } catch {
+  } catch (error) {
     // Discard parser, cancellation and dependency details; keep Secret data only in memory.
+    if (error instanceof CleanupError) {
+      throw new Error(cleanupRefusal);
+    }
     throw new Error(refusal);
   }
 }
