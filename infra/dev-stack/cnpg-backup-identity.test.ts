@@ -66,7 +66,7 @@ async function prepare() {
   await writeFile(`${directory}/stack-owner`, process.cwd());
   await writeFile(`${directory}/minio.env`,
     `MINIO_ROOT_USER=${rootAccess}\nMINIO_ROOT_PASSWORD=${rootSecret}\n`);
-  await writeFile(`${directory}/settings.env`, 'MINIO_PORT=9000\n');
+  await writeFile(`${directory}/settings.env`, 'MINIO_PORT=9000\nSILO_ID=silo-one\n');
   identity = await import('./cnpg-backup-identity.ts');
   mock.method(AssumeRoleProvider.prototype, 'getCredentials', credentials);
   mock.method(Client.prototype, 'makeBucket', makeBucket);
@@ -108,6 +108,17 @@ async function confinedCredentialPasses() {
     result.credentials), result.destinationPath);
 }
 test('a correctly confined provisioned credential passes', confinedCredentialPasses);
+
+async function foreignSiloRefuses() {
+  returnedPolicy = undefined;
+  madeBuckets = [];
+  existingBuckets = new Set();
+  const foreignBinding = { ...binding, silo: 'silo-two' };
+  await assert.rejects(identity.provisionCnpgBackupIdentity(foreignBinding),
+    { message: 'CNPG backup identity provisioning refused' });
+  assert.deepEqual(madeBuckets, []);
+}
+test('a foreign silo cannot obtain a backup credential', foreignSiloRefuses);
 
 async function overGrantedPolicyRefuses() {
   madeBuckets = [];
