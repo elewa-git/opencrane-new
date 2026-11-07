@@ -244,7 +244,7 @@ function toolMatches(policy: ReturnType<typeof toolPolicyFromRows>,
     return tool.name === release.toolName;
   }
   const tool = policy.tools.find(matchesTool);
-  return server.available && server.sequence === release.policyRevision &&
+  return server.available && policy.policyRevision === release.policyRevision &&
     policy.published && tool?.reviewed && tool.mode !== 'block' &&
     tool.revision === release.toolRevision && tool.costCents === 0 &&
     policy.catalogue?.schemaDigest === release.schemaDigest;

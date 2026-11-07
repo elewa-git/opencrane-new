@@ -4931,7 +4931,9 @@ events. The request expires within 15 minutes. Its strict routine binding must
 match the release and frozen active run. The caller's current access check and
 the exact Ask stream position are checked again before the audit append. The
 current registered destination, tool revision, catalogue schema and account
-profile must still match. A failed read, extra use or changed field refuses.
+profile must still match. An unchanged catalogue check keeps the saved policy
+revision valid even though the server stream position advances. A failed read,
+extra use or changed field refuses.
 No production company sender or custody hand-off is enabled by this check.
 
 ## Initial memory permission decisions

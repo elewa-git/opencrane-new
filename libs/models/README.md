@@ -717,6 +717,8 @@ They keep OAuth copies for the separate refresh or provider revocation worker.
 A member can explicitly choose a verified OAuth account. The choice survives refresh for
 the same account. Internal checks use the current generation, expiry and each tool’s
 required scopes. Renewing an unchanged tool catalogue keeps the choice readable.
+An approved company Ask also remains valid after that renewal. Its saved tool policy
+revision stays the same, while the check still refuses a changed policy or lost access.
 Saved membership removals and grant revocations refuse access even if another history
 or permission receipt cannot be read. These checks grant no permission to send a call.
 

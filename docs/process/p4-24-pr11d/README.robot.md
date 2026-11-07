@@ -17,7 +17,9 @@ account, tool and schema revisions, argument and destination digests. The audit
 then checks the Ask stream position again with current owner and tool access.
 The company profile and published tool checks still run separately before that
 short access check. They now check the registered destination and distinct tool
-and catalogue revisions. Reading the Ask never saves an event.
+and catalogue revisions. An unchanged catalogue check advances the server stream
+position but preserves the policy revision bound to the Ask. Reading the Ask never
+saves an event.
 
 The company verification reader is injected only by tests. Production still
 has no caller for company release or routine execution. This part records no
