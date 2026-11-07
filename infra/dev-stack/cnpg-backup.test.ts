@@ -851,3 +851,13 @@ async function refusesConfiguredSiloAccess() {
 }
 test('storage refuses configured-silo grants when the installer cannot enumerate locations',
   refusesConfiguredSiloAccess);
+
+async function callerMadeRecordRefusesBeforeWrite() {
+  const input = fixture();
+  const before = matching.storage.requests.length;
+  const evidence = Object.freeze({ success: true });
+  const run = checkCnpgBackupReferences(input.backup, namespace, input.kubectl, { evidence });
+  await refused(run, scopeRefusal);
+  assert.equal(matching.storage.requests.length, before);
+}
+test('a caller-made success record refuses before marker writes', callerMadeRecordRefusesBeforeWrite);
