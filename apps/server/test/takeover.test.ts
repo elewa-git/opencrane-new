@@ -3,7 +3,8 @@ import { grantStream } from '@opencrane/authz';
 import { computerSummary, readComputerControl } from '@opencrane/auth';
 import { auditTrail, readAudit } from '@opencrane/projections';
 import type { AppendCommand } from '@opencrane/event-store';
-import { requestControl, startRequesterWriter, requesterWriterSlot }
+import { requestControl, startRequesterWriter, renewRequesterWriter,
+  returnRequesterWriter, requesterWriterSlot }
   from '../src/computers/takeover.ts';
 import { writerProxyInstanceId } from '../src/computers/writer-lease.ts';
 import { turnCommand } from '../src/chat/turns.ts';
@@ -146,7 +147,7 @@ async function refusesRemovedMember(reinvite: boolean) {
 it.each([false, true])('refuses saved removal while IAM still allows access, reinvite=%s',
   refusesRemovedMember, 30_000);
 
-async function writerAfterQuietProof(changed: 'member' | 'request') {
+async function startedLease() {
   const { options, input } = await setup();
   await requestControl(options, 'alice', input);
   const proof = { assistantId: 'assistant', computerId: 'desktop', generation: 1,
@@ -165,6 +166,10 @@ async function writerAfterQuietProof(changed: 'member' | 'request') {
   const { affectedTurnIds: _affected, bridgeEpoch: _bridge,
     supervisorEpoch: _supervisor, ...command } = lease;
   expect((await startRequesterWriter(options, 'alice', command)).phase).toBe('started');
+  return { options, command };
+}
+async function writerAfterQuietProof(changed: 'member' | 'request') {
+  const { options, command } = await startedLease();
   if (changed === 'member') {
     await fixture.append('member-alice', 'member.removed', {
       memberId: 'alice', removedBy: 'owner' });
@@ -179,3 +184,19 @@ async function writerAfterQuietProof(changed: 'member' | 'request') {
 }
 it.each(['member', 'request'] as const)(
   'refuses a writer after a newer %s change', writerAfterQuietProof, 30_000);
+
+async function renewAndReturnRequesterLease() {
+  const { options, command } = await startedLease();
+  const slot = requesterWriterSlot(options, 'alice', command);
+  expect(await slot.claim()).toBe(true);
+  const renewal = { ...command, commandId: 'renew-command',
+    expiresAt: new Date(Date.now() + 90_000).toISOString() };
+  expect((await renewRequesterWriter(options, 'alice', renewal)).phase).toBe('renewed');
+  const { proxyInstanceId: _proxy, expiresAt: _expiry,
+    originalExpiresAt: _original, ...returnFields } = command;
+  const returned = { ...returnFields, commandId: 'return-command' };
+  expect((await returnRequesterWriter(options, 'alice', returned)).phase).toBe('returning');
+  expect(slot.allows(command.leaseId, command.writerSessionId)).toBe(false);
+}
+it('renews and returns the current requester lease through checked server commands',
+  renewAndReturnRequesterLease, 30_000);
