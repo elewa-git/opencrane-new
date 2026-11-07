@@ -14,6 +14,7 @@ const evidenceSchema = z.strictObject({
   status: z.literal('verified'), siloId: id, serverId: id, profileId: id,
   ownerKind: z.literal('company'), connectionId: id, profileRevision: z.int().positive(),
   generation: z.int().positive(), accountDigest: digest, configurationDigest: digest,
+  accountId: z.string().min(1).max(300).optional(),
   scopes: z.array(z.string()).max(64), expiresAt: z.int().positive(),
 });
 // Accept only a trusted, pure reader of saved verification evidence. No live reader exists yet.
@@ -64,7 +65,9 @@ export async function companySelectionFacts(store: EventStore, silo: string, cho
     throw new Error('Selection unavailable');
   }
   const oauth = { profileRevision: sequence, configurationCurrent };
-  return { binding, positions, expiresAt, connectionId: choice.connectionId, available: true, oauth };
+  return { binding, positions, expiresAt, connectionId: choice.connectionId, available: true,
+    accountId: account.accountId, scopes: account.scopes, toolScopes: configuration.toolScopes,
+    oauth };
 }
 
 function matchesConfiguration(configuration: z.infer<typeof oauthConfigurationSchema>,

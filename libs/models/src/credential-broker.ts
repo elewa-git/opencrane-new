@@ -20,6 +20,13 @@ function refuse(): never {
   throw new Error('Release unavailable');
 }
 
+function personalEvidence(evidence: Awaited<ReturnType<typeof credentialReleaseEvidence>>) {
+  if ('company' in evidence) {
+    refuse();
+  }
+  return evidence;
+}
+
 async function binding(store: EventStore, silo: string,
   context: ReturnType<typeof contextSchema.safeParse>) {
   if (!context.success) {
@@ -28,7 +35,8 @@ async function binding(store: EventStore, silo: string,
   const rows = await history(store, `decision-${context.data.requestId}`, silo,
     performance.now() + 10_000);
   const release = decisionRecordedDataSchema.parse(rows[0]?.event.data).release;
-  if (!release || release.ownerId !== context.data.userId) {
+  if (!release || release.ownerKind !== 'personal' ||
+      release.ownerId !== context.data.userId) {
     refuse();
   }
   const expected = savedContextSchema.parse(release);
@@ -120,8 +128,9 @@ async function sendCurrent(store: EventStore, locked: Db, custody: Custody, silo
   sendAccess: (material: string) => Promise<void>) {
   const profile = { siloId: silo, userId: release.userId,
     serverId: release.serverId, profileId: release.profileId };
-  const evidence = await credentialReleaseEvidence(store, silo, decisionId, release,
+  const checked = await credentialReleaseEvidence(store, silo, decisionId, release,
     loadConfiguration);
+  const evidence = personalEvidence(checked);
   if (!evidence.oauth || evidence.receipts.length !== 0 ||
       !Number.isFinite(evidence.expiresAt) || Date.now() >= evidence.expiresAt) {
     refuse();

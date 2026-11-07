@@ -7005,10 +7005,15 @@ Restart and repeated cleanup retain that finish and the original Stop source.
 The bridge independently recovers saved open starts for exact-turn interruption and
 cancels that turn's pending start acknowledgement before sending Stop.
 
-No event/API field, dependency or authority stream was added. Production routine
-delivery and `executionAvailable` remain disabled. Company credentials, owner Ask,
+No event/API field, dependency or authority stream was added by the Stop slice. Production routine
+delivery and `executionAvailable` remain disabled. Owner Ask,
 success completion, process-exit evidence and fresh-install qualification remain later.
 See [the own-check contract](../../docs/process/p4-24-pr12i/README.robot.md).
+
+The private models library has a company audit check, but this server does not
+register its synthetic profile reader or a company sender. No public route, routine
+composition switch or browser path can invoke it. See the
+[company call contract](../../docs/process/p4-24-pr11c/README.robot.md).
 
 ## Explicit requester account kind (P3-8 PR 4s; Part of #49)
 

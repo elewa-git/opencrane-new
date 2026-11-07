@@ -18,6 +18,15 @@ export const toolCredentialReleaseSchema = legacyCredentialReleaseSchema.extend(
   issuedAt: z.int().nonnegative(), expiresAt: z.int().positive(),
 });
 
+export const companyCredentialReleaseSchema = toolCredentialReleaseSchema.extend({
+  ownerKind: z.literal('company'), routineId: id, occurrenceId: id,
+  companyAccountId: id, payingGroupId: id, connectionRevision: z.int().positive(),
+  schemaDigest: digest,
+});
+export const credentialReleaseSchema = z.union([
+  toolCredentialReleaseSchema, companyCredentialReleaseSchema,
+]);
+
 export const toolCredentialReleaseExample: z.infer<typeof toolCredentialReleaseSchema> = {
   requestId: 'request', permitId: 'permit', connectionId: 'connection', profileId: 'profile',
   leaseId: 'lease', generation: 1, purpose: 'tool_call', userId: 'member', ownerId: 'member',

@@ -91,6 +91,8 @@ checking until the computer confirms removal for that exact turn and private thr
 If removal finishes first, failed interruption cleanup still retries until the turn ends.
 The models process also refuses calls directly from these saved records, before
 spending cleanup finishes. Automatic routines remain unavailable.
+The private models library can check a saved routine's company account before a
+release audit. The server has no route or sender that starts a company call yet.
 
 Owners and admins can read, save or remove company account opt-in for a tool installation.
 Re-registering the server clears the effective choice. Saving opt-in grants no tool access.
