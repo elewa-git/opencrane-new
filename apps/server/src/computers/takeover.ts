@@ -22,6 +22,9 @@ const id = z.string().regex(/^[\w-]{1,200}$/u);
 const requestSchema = z.object({
   commandId: id, conversationId: id, requesterEventId: id, generation: z.int().positive(),
 }).strict();
+const writerIdentitySchema = z.object({ requesterId: id, conversationId: id,
+  requesterEventId: id, generation: z.int().positive(), assistantId: id,
+  computerId: id, podUid: id });
 type ControlRequest = z.infer<typeof requestSchema>;
 
 const turnOwnerSchema = z.object({ conversationId: id, requesterId: id });
@@ -259,25 +262,18 @@ async function loadControl(options: ChatOptions, conversationId: string, turnId:
 }
 
 async function writerAccess(options: ChatOptions, memberId: string, raw: unknown) {
-  const input = z.object({ requesterId: id, conversationId: id, requesterEventId: id,
-    generation: z.int().positive(), assistantId: id, computerId: id, podUid: id }).parse(raw);
+  const input = writerIdentitySchema.parse(raw);
   if (input.requesterId !== memberId) throw new RequesterOnly('Requester only');
   const loaded = await loadControl(options, input.conversationId, input.requesterEventId);
   const { chat, computer, accessOptions } = loaded;
   await chatAccess(accessOptions, { memberId, conversationId: input.conversationId });
   if (chat.conversationClosed || chat.latestHuman?.id !== input.requesterEventId
     || chat.latestHuman.authorId !== memberId) throw new RequesterOnly('Requester only');
-  const ready = readySchema.safeParse(computer?.lifecycle?.event.data);
-  if (computer?.lifecycle?.event.type !== 'computer.ready' || !ready.success
-    || ready.data.assistantId !== input.assistantId
-    || ready.data.computerId !== input.computerId
-    || ready.data.generation !== input.generation || ready.data.podUid !== input.podUid) {
-    throw new ControlConflict('Control conflict');
-  }
+  const ready = writerReady(computer, input);
   const request = { commandId: 'writer-access', conversationId: input.conversationId,
     requesterEventId: input.requesterEventId, generation: input.generation };
   const authority = await refusalAccess(accessOptions, memberId, request, chat, computer);
-  await controlAccess(accessOptions, memberId, request, ready.data, chat,
+  await controlAccess(accessOptions, memberId, request, ready, chat,
     options.store, authority);
   async function checkBeforeAppend() {
     await authority();
@@ -286,6 +282,17 @@ async function writerAccess(options: ChatOptions, memberId: string, raw: unknown
     await authority();
   }
   return checkBeforeAppend;
+}
+function writerReady(computer: ReturnType<typeof takeComputer> | undefined,
+  input: z.infer<typeof writerIdentitySchema>) {
+  const ready = readySchema.safeParse(computer?.lifecycle?.event.data);
+  if (computer?.lifecycle?.event.type !== 'computer.ready' || !ready.success
+    || ready.data.assistantId !== input.assistantId
+    || ready.data.computerId !== input.computerId
+    || ready.data.generation !== input.generation || ready.data.podUid !== input.podUid) {
+    throw new ControlConflict('Control conflict');
+  }
+  return ready.data;
 }
 
 export async function startRequesterWriter(options: ChatOptions, memberId: string, raw: unknown) {

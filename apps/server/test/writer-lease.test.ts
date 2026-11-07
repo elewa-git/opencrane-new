@@ -140,8 +140,8 @@ async function rejectsStaleWriter() {
   const oldProxy = new WriterSlot(store, 'test', { ...input, proxyInstanceId: 'old' },
     accessAllowed);
   expect(await oldProxy.claim()).toBe(false);
-  const unavailable = new WriterSlot(store, 'test', input,
-    async function noAccess() { throw new Error('Unavailable'); });
+  function noAccess(): Promise<void> { return Promise.reject(new Error('Unavailable')); }
+  const unavailable = new WriterSlot(store, 'test', input, noAccess);
   expect(await unavailable.claim()).toBe(false);
   await returnWriter(store, 'test', returnInput(input), accessAllowed);
   const afterReturn = new WriterSlot(store, 'test', input, accessAllowed);

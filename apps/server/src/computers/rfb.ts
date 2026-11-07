@@ -31,15 +31,7 @@ function clientStream(forward: (bytes: Buffer) => void, refuse: () => void,
       if (pending.length < size) return;
       const message = pending.subarray(0, size);
       if (!allowed()) return reject();
-      if (stage < 3 && !message.equals(stage === 0 ? Buffer.from('RFB 003.008\n') : Buffer.from([1]))) return reject();
-      if (!validDisplayMessage(stage, message)) return reject();
-      if (stage === 3 && (message[0] === 4 || message[0] === 5) && !writer) {
-        return reject();
-      }
-      if (stage === 3 && message[0] === 5 &&
-        (message.readUInt16BE(2) > 4096 || message.readUInt16BE(4) > 4096)) {
-        return reject();
-      }
+      if (!validClientMessage(stage, message, writer)) return reject();
       // Raw display only: do not negotiate clipboard, continuous updates or Kasm extensions.
       forward(stage === 3 && message[0] === 2 ? Buffer.from([2, 0, 0, 1, 0, 0, 0, 0]) : message);
       pending = pending.subarray(size);
@@ -48,6 +40,17 @@ function clientStream(forward: (bytes: Buffer) => void, refuse: () => void,
   };
 }
 function alwaysAllowed() { return true; }
+function validClientMessage(stage: number, message: Buffer, writer: boolean) {
+  if (stage < 3) {
+    const expected = stage === 0 ? Buffer.from('RFB 003.008\n') : Buffer.from([1]);
+    return message.equals(expected);
+  }
+  if (!validDisplayMessage(stage, message)) return false;
+  if (!writer && (message[0] === 4 || message[0] === 5)) return false;
+  if (message[0] === 5 &&
+    (message.readUInt16BE(2) > 4096 || message.readUInt16BE(4) > 4096)) return false;
+  return true;
+}
 
 function messageSize(bytes: Buffer, stage: number, writer: boolean): number {
   if (stage < 3) return stage === 0 ? 12 : 1;
