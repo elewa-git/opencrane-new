@@ -298,6 +298,10 @@ async function checksLiveReplacementGrants() {
     await append(subject, 'grant.given', { resourceType: 'model', resourceId: 'gpt-6.1-sol',
       granteeKind, granteeId, grantedBy: 'owner' });
   }
+  await append('provider-secondary', 'provider.verification_recorded', {
+    providerId: 'secondary', changedBy: 'owner', revision: 3,
+    kind: 'reachability', attemptId: 'retest', outcome: 'pass',
+  });
   const withoutPayer = await request('GET', 'primary', undefined, 'owner', undefined, undefined,
     'dependencies');
   const missingPayer = withoutPayer.json<{ expectedProviderSequence: number;
@@ -325,17 +329,17 @@ async function checksLiveReplacementGrants() {
   });
   const withoutBudget = await request('GET', 'primary', undefined, 'owner', undefined,
     undefined, 'dependencies');
-  const unbudgetedRows = withoutBudget.json<{ dependencies: { dependantId: string;
-    replacements: { providerId: string }[] }[] }>().dependencies;
+  const unbudgeted = withoutBudget.json<typeof missingPayer>();
+  const unbudgetedRows = unbudgeted.dependencies;
   const unbudgetedChoice = unbudgetedRows.find(isPreviewDependency);
   expect(unbudgetedChoice?.replacements).toEqual([]);
+  const unbudgetedProposal = { expectedProviderSequence: unbudgeted.expectedProviderSequence,
+    choices: unbudgetedRows.map(proposedChoice) };
+  expect((await request('POST', 'primary', unbudgetedProposal, 'owner', undefined,
+    undefined, 'dependencies/preview')).statusCode).toBe(409);
   await append('budget-acme', 'budget.ceiling_set', {
     scope: 'global', dailyCeilingCents: 2000, ceilingCents: 20000,
     setBy: 'owner', defaultPayingGroupId: 'personal',
-  });
-  await append('provider-secondary', 'provider.verification_recorded', {
-    providerId: 'secondary', changedBy: 'owner', revision: 3,
-    kind: 'reachability', attemptId: 'retest', outcome: 'pass',
   });
   const response = await request('GET', 'primary', undefined, 'owner', undefined, undefined,
     'dependencies');
