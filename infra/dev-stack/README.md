@@ -29,6 +29,7 @@ The services include [PostgreSQL](../../GLOSSARY.md#postgresql-database) for rea
 tables and a separate jobs database, [NATS](../../GLOSSARY.md#nats) for the event log,
 [OpenFGA](../../GLOSSARY.md#openfga-permissions-service) for permissions and
 [MinIO](../../GLOSSARY.md#minio-file-storage) for files.
+Local setup uses the event store's certificate issuer to give NATS services private keys.
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) provides test sign-in.
 
 The dispatcher uses the server's read-only content connection to coordinate gateway

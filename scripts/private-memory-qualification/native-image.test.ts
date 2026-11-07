@@ -1,6 +1,6 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -11,6 +11,8 @@ import { protectionMessages } from './protection-failure.ts';
 const tag = `private-native-test:${randomUUID()}`;
 const packageTag = `${tag}-package`;
 const missingTag = `${tag}-missing`;
+const missingHelperTag = `${tag}-missing-helper`;
+const changedLauncherTag = `${tag}-changed-launcher`;
 const receiptSchema = z.record(z.string(), z.unknown());
 const siloHash = createHash('sha256');
 siloHash.update('native-test');
@@ -46,6 +48,7 @@ const faults: [string, string, string][] = [
   ['saved path', "thread['path']", "'/saved'"],
   ['execution environment', "thread['environments']", '[{}]'],
   ['resumed thread', "thread['turns']", '[{}]'],
+  ['wrong CLI version', "thread['cliVersion']", "'0.0.0'"],
   ['disk home', 'statfsSync(home).type', '0xef53'],
   ['core limit', "readFileSync(`${base}/limits`, 'utf8')",
     "'Max core file size        1 1 bytes\\nMax processes 256 256 processes\\n'"],
@@ -158,23 +161,25 @@ function prepare(): void {
   docker(['build', '-q', '-f', 'infra/package/Dockerfile', '-t', packageTag, '.'], 600_000);
   const directory = mkdtempSync(join(tmpdir(), 'private-native-image-'));
   try {
-    for (const name of ['private-codex.ts', 'codex-config.ts', 'codex-connection.ts', 'http.ts']) {
-      cpSync(`apps/computer/src/${name}`, join(directory, name));
-    }
     writeFileSync(join(directory, 'preload.mjs'), preload);
-    const computerImage = process.env['COMPUTER_TEST_IMAGE'] ?? 'ocn-upload-computer:test';
-    const dockerfile = `FROM ${computerImage} AS native
-FROM ${packageTag} AS without_native
+    const dockerfile = `FROM ${packageTag} AS with_native
 USER root
 COPY preload.mjs /fixture/preload.mjs
-FROM without_native
-COPY --from=native /spike/node_modules/@openai /opt/native/node_modules/@openai
-COPY *.ts /app/apps/computer/src/
-RUN ln -s /opt/native/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex
+FROM with_native AS missing_native
+RUN rm -f /usr/local/bin/codex
+FROM with_native AS missing_helper
+RUN rm -f /app/apps/computer/src/codex-connection.ts
+FROM with_native AS changed_launcher
+RUN rm -f /usr/local/bin/codex && ln -s /missing-launcher /usr/local/bin/codex
+FROM with_native
 `;
     writeFileSync(join(directory, 'Dockerfile'), dockerfile);
-    docker(['build', '--network=none', '-q', '--target', 'without_native',
+    docker(['build', '--network=none', '-q', '--target', 'missing_native',
       '-t', missingTag, directory], 180_000);
+    docker(['build', '--network=none', '-q', '--target', 'missing_helper',
+      '-t', missingHelperTag, directory], 180_000);
+    docker(['build', '--network=none', '-q', '--target', 'changed_launcher',
+      '-t', changedLauncherTag, directory], 180_000);
     docker(['build', '--network=none', '-q', '-t', tag, directory], 180_000);
   } finally {
     const removalOptions = { recursive: true, force: true };
@@ -182,17 +187,23 @@ RUN ln -s /opt/native/node_modules/@openai/codex/bin/codex.js /usr/local/bin/cod
   }
 }
 function cleanup(): void {
-  docker(['image', 'rm', '-f', tag, missingTag, packageTag]);
+  docker(['image', 'rm', '-f', tag, missingTag, missingHelperTag, changedLauncherTag, packageTag]);
 }
 beforeAll(prepare, 970_000);
 afterAll(cleanup, 30_000);
 
-function startContainer(caseName: string, image: string): string {
+function startContainer(caseName: string, image: string, scratchDirectory?: string): string {
   const containerName = `private-native-${randomUUID()}`;
   const args = ['run', '-d', '--name', containerName, '--network=none', '--read-only', '--init', '--user=0',
     '--cap-add=SYS_PTRACE', '--cpus=0.5', '--pids-limit=256', '--ulimit=core=0:0',
-    '--ulimit=nproc=256:256', '--tmpfs', '/home/private:mode=711', '--tmpfs', '/run',
+    '--ulimit=nproc=256:256', '--tmpfs', '/home/private:mode=711',
     '-e', 'SILO_ID=native-test', '-e', `CASE=${caseName}`, image, 'sleep', '120'];
+  const mountIndex = args.indexOf('-e');
+  if (scratchDirectory) {
+    args.splice(mountIndex, 0, '--mount', `type=bind,src=${scratchDirectory},dst=/run`);
+  } else {
+    args.splice(mountIndex, 0, '--tmpfs', '/run');
+  }
   docker(args);
   return containerName;
 }
@@ -205,8 +216,9 @@ function nativeCommand(image: string): string[] {
   command.push('/app/scripts/private-memory-qualification/journey.mjs');
   return command;
 }
-function run(caseName: string, image = tag, name = request.name): Record<string, unknown> {
-  const containerName = startContainer(caseName, image);
+function run(caseName: string, image = tag, name = request.name,
+  scratchDirectory?: string): Record<string, unknown> {
+  const containerName = startContainer(caseName, image, scratchDirectory);
   const command = ['exec', '-i', containerName, ...nativeCommand(image)];
   try {
     const namedRequest = { ...request, name };
@@ -278,6 +290,30 @@ function missingNative(): void {
   expect(run('safe', missingTag)).toEqual(expected);
 }
 it('refuses the package without native files even with safe host observations', missingNative);
+
+function missingHelper(): void {
+  const expected = { result: 'FAIL', reason: 'journey_failed' };
+  expect(run('safe', missingHelperTag)).toEqual(expected);
+}
+it('refuses a missing production connection helper', missingHelper, 60_000);
+
+function changedLauncher(): void {
+  const expected = { result: 'FAIL', reason: 'journey_failed' };
+  expect(run('safe', changedLauncherTag)).toEqual(expected);
+}
+it('refuses a changed launcher link', changedLauncher, 60_000);
+
+function persistentScratch(): void {
+  const directory = mkdtempSync(join(tmpdir(), 'private-native-scratch-'));
+  try {
+    const expected = { result: 'FAIL', reason: 'journey_failed' };
+    expect(run('safe', tag, request.name, directory)).toEqual(expected);
+  } finally {
+    const removalOptions = { recursive: true, force: true };
+    rmSync(directory, removalOptions);
+  }
+}
+it('refuses writable scratch that is not tmpfs', persistentScratch, 60_000);
 
 function recallPrerequisites(): void {
   const expected = { ...request, name: 'nativeRecall', result: 'NOT RUN', complete: false };

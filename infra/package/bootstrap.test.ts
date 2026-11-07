@@ -572,6 +572,7 @@ async function checksBootstrapContextImports() {
       continue;
     }
     visited.add(file);
+    assert.ok(!/(^|\/)tests?\//u.test(file), 'Bootstrap runtime must not import a test folder');
     if (file.startsWith('infra/dev-stack/')) {
       assert.ok(rules.has(`!${file}`), 'Bootstrap runtime import is outside the Docker context');
     }

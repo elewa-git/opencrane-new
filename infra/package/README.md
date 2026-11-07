@@ -18,7 +18,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, runner protection and installs"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images with Codex, protection and installs"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and private values| package
@@ -60,7 +60,9 @@ rendering cannot prove that the saved data is readable.
 
 - Installs the website, server, workers and core services together with [Helm](../../GLOSSARY.md#helm).
 - Uses fixed, reviewed images and checks their licences before installation.
+- Builds the server image with a fixed Codex executable for private memory checks.
 - Checks that a proposed server and website image matches its source and all shipped layers.
+- Refuses a bootstrap image if its setup code imports a test-only file.
 - Keeps the install in the test space [claimed](../../GLOSSARY.md#claim) by this worktree.
 - Refuses missing private settings and public network access.
 - Renders an optional three-peer event log and prepares its separate private certificates.
@@ -95,7 +97,9 @@ Before a new server and website image is approved, its source label, fixed image
 digest and licence inventory must agree with the recorded review. The scan includes
 files hidden by later image layers. The build copies the cleaned filesystem into
 one filesystem layer, so removed npm and computer files are absent from the saved image.
-The image checks follow every relative setup import and run the setup entry point
+The image also carries the four small helpers used to start and check private
+Codex processes. Its saved layers must contain their exact source and the fixed
+Codex version. The image checks follow every relative setup import and run the setup entry point
 with made-up services and settings. This checks that the packaged code loads and
 finishes the fixture; a running installation needs its own checks.
 The image also contains a small Linux helper that protects and measures the memory

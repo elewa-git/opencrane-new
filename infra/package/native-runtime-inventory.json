@@ -1,0 +1,21 @@
+{
+  "sourceLock": "spikes/s0-1b-proxy-gvisor/package-lock.json",
+  "sourceLockSha256": "01b30a8ed6c0bde6f7c6292c7079eefd3e33004947f9a1625ac506bf74556b74",
+  "nativeSource": "npm:@openai/codex@0.159.2 and npm:@openai/codex@0.159.2-linux-x64",
+  "nativeLicence": "Apache-2.0",
+  "nativeLicenceReview": "apps/computer/reviewed-licences.json",
+  "nativeLicenceReviewSha256": "31e40da85e443b376e42f28aba53ab82d73d7684ccc6de13543ee0944c46845b",
+  "computerInventorySha256": "0c58af26c94d1ef09ed9498baed4db0bc848df7316badd94112b7f10271bbed9",
+  "files": {
+    "opt/native/node_modules/@openai/codex/bin/codex.js": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70",
+    "opt/native/node_modules/@openai/codex/package.json": "d4e69a623f79ede30c5abb2a4a4bef8b7ff71dbda1362ebe198676ab56113c15",
+    "opt/native/node_modules/@openai/codex-linux-x64/package.json": "64bcf4ada80b1236fbc20de2a41f10cd91ede666e50350148a931e221eb5c25f",
+    "opt/native/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex": "1748767b230ebfc3d4ab7e4e254920d0c0ad9691fd8c11f190e7d44511a4a92e",
+    "app/apps/computer/src/private-codex.ts": "97f8dfee3ca713a5b759d62c9d0adfa4a99eff78c383a658b8f3726ec63b62c9",
+    "app/apps/computer/src/codex-config.ts": "c76a1cf30abb03ce318764f23c6784eaae983d26f5b5508953dd163d856140ef",
+    "app/apps/computer/src/codex-connection.ts": "b3ad1d74cabc65151eacac402f42a71f779287b1a017ae50e37e0774c6a9f330",
+    "app/apps/computer/src/http.ts": "00651afc84257edbd9cb5a784ec2c67a6e1919112a66c47ec7925f7e64da86e6"
+  },
+  "helperLicence": "AGPL-3.0-or-later",
+  "helperLicenceSource": "LICENSE"
+}

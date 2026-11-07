@@ -5,7 +5,7 @@ import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:f
 import { resolve, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
-import { issueCertificate } from '../../libs/event-store/test/certificates.ts';
+import { issueCertificate } from '../../libs/event-store/src/certificates.ts';
 import { directory, root } from '../dev-stack/config.ts';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
 
