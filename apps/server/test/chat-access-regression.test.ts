@@ -341,6 +341,41 @@ async function directChatRejectsParticipants() {
 it('does not read conversation streams while a direct chat socket is idle',
   idleDirectChatSocket, 120_000);
 
+it('keeps dispatcher maintenance out of direct and group chats',
+  humanChatDispatcherReadiness, 120_000);
+
+async function humanChatDispatcherReadiness() {
+  for (const mode of ['direct', 'group'] as const) {
+    const context = await fixture();
+    let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+    try {
+      const conversationId = `human-${mode}`;
+      context.options.dispatcherReady = function unavailableDispatcher() {
+        return Promise.resolve(false);
+      };
+      context.keys.provision('test', conversationId);
+      await context.append(`conversation-${conversationId}`, 'conversation.created', {
+        conversationId, createdBy: 'alice', mode, participantIds: ['alice', 'bob'],
+      });
+      await context.runner.run(conversations);
+      const request = {
+        url: `/api/conversations/${conversationId}/messages`, headers: context.headers(),
+      };
+      const response = await context.app.inject(request);
+      expect(response.statusCode).toBe(200);
+      expect(chatFeedSchema.parse(response.json()).dispatcherReady).toBe(true);
+      client = await openChatSocket(context, conversationId);
+      function isReady(message: ReturnType<typeof chatMessageSchema.parse>) {
+        return message.type === 'ready';
+      }
+      expect(client.received.find(isReady)?.dispatcherReady).toBe(true);
+    } finally {
+      await client?.close();
+      await context.close();
+    }
+  }
+}
+
 async function idleDirectChatSocket() {
   const context = await fixture(true);
   let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
