@@ -36,13 +36,13 @@ const commandSchema = z.discriminatedUnion('action', [
 ]);
 type BindingInput = z.infer<typeof commandSchema>;
 type Inventory = Awaited<ReturnType<typeof inventory>>;
-type Choice = z.infer<typeof providerBindingSchema> & { position: number };
+export type Choice = z.infer<typeof providerBindingSchema> & { position: number };
 
-function choiceKey(choice: Pick<Choice, 'kind' | 'dependantId' | 'task'>) {
+export function choiceKey(choice: Pick<Choice, 'kind' | 'dependantId' | 'task'>) {
   return JSON.stringify([choice.kind, choice.dependantId, choice.task]);
 }
 
-async function inventory(store: EventStore, silo: string) {
+export async function inventory(store: EventStore, silo: string) {
   const rows = await history(store, 'provider-*', silo, performance.now() + 10_000);
   const providers = new Map<string, ProviderState>();
   const bindings = new Map<string, Choice>();
@@ -217,7 +217,7 @@ function isAssistantCreation(row: StoredEvent) {
   return row.event.type === 'assistant.created';
 }
 
-async function checkedHistory(store: EventStore, silo: string, subject: string, deadline: number) {
+export async function checkedHistory(store: EventStore, silo: string, subject: string, deadline: number) {
   const position = await store.head(subject, deadline);
   const rows = await history(store, subject, silo, deadline);
   if ((rows.at(-1)?.sequence ?? 0) !== position ||
@@ -227,7 +227,7 @@ async function checkedHistory(store: EventStore, silo: string, subject: string, 
   return rows;
 }
 
-async function providerCreation(store: EventStore, silo: string, providerId: string) {
+export async function providerCreation(store: EventStore, silo: string, providerId: string) {
   const subject = `provider-${providerId}`;
   const deadline = performance.now() + 10_000;
   // Read only the creation record needed for permission, even if the inventory fails.

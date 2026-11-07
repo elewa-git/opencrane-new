@@ -9,6 +9,9 @@ This folder lets owners and admins connect OpenCrane to AI model providers. It h
 - Offers a price estimate for a connection test and requests the chosen checks.
 - Reports connection and model-test results without returning keys.
 - Saves provider choices, counts affected assistants and returns original saved results.
+- Shows saved assistant bindings, safe replacement choices and unresolved routines
+  before a provider can retire. It checks the payer and spending limits. A
+  proposed choice changes nothing.
 - Pauses new model turns before a provider change and records when managed provider calls are switched on.
 
 A turn is one message and the assistant's reply. New managed turns use the assistant's chosen provider or the installation default. Renewing, repeating or closing a saved turn keeps its original model and provider. Running turns keep their original path during a pause. Provider lists also report that the model-access requests are available. Starting or cancelling the pause saves a change.
@@ -23,13 +26,24 @@ Dependency requests check for saved routines through one indexed database positi
 They require the routine table to have caught up with the event log. Older and retired
 routines still mean that complete dependency information is unsupported. A failed read
 cannot report an empty result, and current permissions are checked before returning it.
+The retirement preview also shows safe routine names and saved positions. It cannot
+confirm retirement because routine model bindings and the retirement command are not built.
 
 ## Main files
 
 | File | What it does |
 | --- | --- |
 | [routes.ts](routes.ts) | Handles provider lists, keys, verification, model choices, pauses and switch-on. |
+| [README.robot.md](README.robot.md) | Gives the preview route contract and safety limits. |
 
 ## How it connects
 
 The [server](../../README.md) registers these requests for the [website](../../../web/README.md). [Models](../models/README.md) controls who may use each model. The [models library](../../../../libs/models/README.md) owns provider rules and saved changes; [chat](../chat/README.md) uses the saved choice when starting work. Verification goes through the models process and AI gateway rather than calling a provider directly from these routes.
+
+```mermaid
+flowchart LR
+  web["apps/web<br/>provider pages"] -->|requests| routes["providers<br/>server routes"]
+  routes -.-> models["libs/models<br/>provider rules"]
+  models -->|reads provider, payer and spending changes| store["event log<br/>saved changes"]
+  routes -->|reads progress| tables["read tables<br/>routine view"]
+```

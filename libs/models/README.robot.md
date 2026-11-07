@@ -2,14 +2,19 @@
 
 For people, read [README.md](README.md) first.
 
-`changesDecisionActivity` is also used by initial memory delivery to classify new
-turn events. It keeps ordinary messages, files and other turns separate from
-closure, replacement and memory changes that refuse the current turn.
+## Provider retirement preview
 
-`requireActiveConversationTurn` checks previously read history for Stop, completion
-or failure of the requested turn. Credential renewal uses this same check as model
-decisions before starting the short access check. Later activity checks read only
-new events, so the saved-history check must run first.
+`providerRetirementPreview` reuses provider event inventory, checked assistant
+history and indexed routine presence. It appends nothing. Old routine records
+have no model binding, so they keep the review incomplete. Replacements need
+current connection readiness, price, a configured personal payer, positive
+daily and monthly limits, and the personal owner's and assistant's saved and
+live model grants. Shared audiences are unproved and offer pause only. Each
+preview checks at most 200 candidate or owner steps within ten seconds. It
+marks assistant dependencies unavailable if that work is incomplete. Pages
+carry provider and routine positions. Routine absence is checked again after
+candidate work. Current admin access is checked again before the reply. The
+retirement command remains later work.
 
 ## Private company OAuth preparation (Part of #50)
 

@@ -8,6 +8,7 @@ import { readProviders } from '@opencrane/projections';
 import { providerAuthority, providerCommand, providerReceipt,
   providerDrainCommand, providerDrainStatus, providerSwitchOn, providerSwitchOnChange,
   readActiveMember, MemberAccessRefused, providerBindingCommand, providerDependencies,
+  providerRetirementPreview,
   ProviderRefused, ProviderUnpriced, ProviderConflict, AuthorityApplying,
   providerHistory, providerSecretRef,
   type ProviderSecrets, requestProviderVerification, providerTestQuote,
@@ -38,6 +39,9 @@ export function registerProviderRoutes(app: FastifyInstance, config: AuthConfig,
   app.post('/api/org/providers/:providerId/drain', { bodyLimit: 4096 }, handlerFor(drain));
   app.post('/api/org/providers/:providerId/switch-on', { bodyLimit: 4096 }, handlerFor(switchOn));
   app.get('/api/org/providers/:providerId/bindings', handlerFor(bindings));
+  app.get('/api/org/providers/:providerId/dependencies', handlerFor(dependencies));
+  app.post('/api/org/providers/:providerId/dependencies/preview',
+    { bodyLimit: 8192 }, handlerFor(dependencies));
   app.post('/api/org/providers/:providerId/bindings', { bodyLimit: 4096 }, handlerFor(bindings));
   app.get('/api/org/providers/:providerId/changes/:commandId', handlerFor(readStatus));
   app.post('/api/org/providers/:providerId/key', { bodyLimit: 8192 }, handlerFor(writeKey));
@@ -311,6 +315,23 @@ async function bindings(request: FastifyRequest, reply: FastifyReply,
   }
   const result = await providerDependencies(options.store, options.binding,
     memberId, providerId, options.db);
+  return reply.send(result);
+}
+
+async function dependencies(request: FastifyRequest, reply: FastifyReply,
+  options: ProviderOptions, memberId: string) {
+  const { providerId } = providerParameters.parse(request.params);
+  const query = z.object({ after: z.coerce.number().int().nonnegative().optional(),
+    expectedProviderSequence: z.coerce.number().int().nonnegative().optional(),
+    expectedRoutinePosition: z.coerce.number().int().nonnegative().optional() }).strict()
+    .parse(request.query);
+  const proposal = request.method === 'POST' ? request.body : undefined;
+  const expectedPositions = query.expectedProviderSequence !== undefined &&
+    query.expectedRoutinePosition !== undefined
+    ? { provider: query.expectedProviderSequence, routine: query.expectedRoutinePosition }
+    : undefined;
+  const result = await providerRetirementPreview(options.store, options.binding,
+    memberId, providerId, options.db, query.after, proposal, expectedPositions);
   return reply.send(result);
 }
 

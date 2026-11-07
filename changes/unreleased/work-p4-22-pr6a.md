@@ -1,0 +1,1 @@
+Owners and admins can preview a provider's saved assistant bindings, see unresolved routine records, and check explicit replacement or pause choices against current access, payer and spending limits without changing a connection.
