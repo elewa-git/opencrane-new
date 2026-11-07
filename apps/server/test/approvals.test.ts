@@ -841,7 +841,7 @@ it('permits one unchanged retry only after the gateway proves no dispatch',
 async function readsOriginalCallWithoutChangingIt() {
   let signal: { approvalId: string; turnId: string; permitId: string;
     expiresAt: string } | undefined;
-  async function retainedCall() { return signal; }
+  function retainedCall() { return Promise.resolve(signal); }
   const setup = await approvalFixture(false, retainedCall);
   try {
     await setup.call();
@@ -854,6 +854,8 @@ async function readsOriginalCallWithoutChangingIt() {
     const permitId = card.uses?.[0]?.permitId;
     expect(permitId).toBeDefined();
     const url = `/api/conversations/conversation/tool-requests/${card.approvalId}`;
+    const anonymous = await setup.app.inject({ url });
+    expect(anonymous.statusCode).toBe(401);
     const append = vi.spyOn(setup.nats.store, 'append');
     const first = await setup.app.inject({ url, headers: setup.headers() });
     expect(first.statusCode).toBe(200);
@@ -863,6 +865,7 @@ async function readsOriginalCallWithoutChangingIt() {
     expect(unknown.attempts).toHaveLength(1);
     expect(unknown.attempts[0]).toMatchObject({ requestId: permitId,
       outcome: 'not_dispatched', evidence: 'connection_refused' });
+    expect(Date.parse(unknown.attempts[0]!.startedAt!)).not.toBeNaN();
     signal = { approvalId: card.approvalId, turnId: 'turn', permitId: permitId!,
       expiresAt: new Date(Date.now() + 5_000).toISOString() };
     const tabs = await Promise.all([
@@ -902,7 +905,7 @@ it('reads a saved call in two tabs only while its original bridge hold is live',
 async function refusesAnotherCallsObservation() {
   let signal: { approvalId: string; turnId: string; permitId: string;
     expiresAt: string } | undefined;
-  async function retainedCall() { return signal; }
+  function retainedCall() { return Promise.resolve(signal); }
   const setup = await approvalFixture(false, retainedCall);
   try {
     await setup.call();
@@ -930,6 +933,31 @@ async function refusesAnotherCallsObservation() {
     expect(status.attempts).toHaveLength(1);
     expect(status.attempts[0]).toMatchObject({ requestId: permitId });
     expect(status.attempts[0]).not.toHaveProperty('outcome');
+    await setup.append('conversation-conversation', 'agent.turn_failed', {
+      conversationId: 'conversation', turnId: 'turn', reason: 'computer_lost',
+    });
+    const ended = await setup.app.inject({ url, headers: setup.headers() });
+    expect(originalCallStatusSchema.parse(ended.json()).retry).toBe('ended');
+    const foreignObservation = { ...observation, logicalRequestId: card.approvalId };
+    const foreign = envelope('foreign', `decision-${permitId}`,
+      'tool.dispatch_recorded', foreignObservation);
+    const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
+    async function* readWithForeignObservation(subject: string, fromSequence = 1,
+      deadline = Infinity, includeConversationCloses = false) {
+      yield* originalRead(subject, fromSequence, deadline, includeConversationCloses);
+      if (subject === `decision-${permitId}`) {
+        yield { sequence: Number.MAX_SAFE_INTEGER, event: foreign };
+      }
+    }
+    const reader = vi.spyOn(setup.nats.store, 'readStream')
+      .mockImplementation(readWithForeignObservation);
+    try {
+      const unavailable = await setup.app.inject({ url, headers: setup.headers() });
+      expect(unavailable.statusCode).toBe(503);
+      expect(unavailable.json()).toEqual({ status: 'unavailable' });
+    } finally {
+      reader.mockRestore();
+    }
   } finally {
     await setup.close();
   }
