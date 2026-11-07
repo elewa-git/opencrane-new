@@ -15,7 +15,7 @@ workers, starts and pauses computers in [Kubernetes](../../GLOSSARY.md#kubernete
 
 ```mermaid
 flowchart LR
-  apps["apps<br/>applications"] --> computer["apps/computer<br/>assistant computer"]
+  apps["apps<br/>applications"] --> computer["apps/computer<br/>assistant computer and worker preparation"]
   apps --> ops["apps/ops<br/>background workers"]
   apps --> server["apps/server<br/>back end"]
   ops -->|starts and pauses| computer
@@ -82,6 +82,11 @@ private reply buffers are cleared before waiting for interruption to finish.
   Prepares checked package files or empty Git folders in a private directory.
   Each plan can prepare files only once, and cleanup removes only its own files.
   Cleanup also removes newly created folders if opening them fails.
+  A checked dispatch path starts one operation only when the trusted caller confirms
+  the turn is active and isolation, scanning and egress are ready. A clean process
+  exit waits for scanning; a crash or missing exit leaves the result unknown.
+  Dispatch closes its open file handles after each launch attempt and keeps the files
+  for a later scan or recovery check.
   Network execution stays disabled until the call's identity and isolation are proved.
 - Renders checked personal memories as labelled JSON beside the rebuilt private transcript.
   The complete input must fit its limit without shortening the message. Native delivery

@@ -1566,6 +1566,8 @@ It can empty an owned directory that was renamed but cannot remove its new name.
 Unowned additions remain; a directory that cannot be removed reports a fixed cleanup
 error. All preparation errors use fixed text and retain no filesystem error details.
 The caller must call the returned `cleanup()` when finished; repeated cleanup is harmless.
+After a launch attempt, `cleanup(true)` closes the descriptors but keeps the private
+files for scanning or recovery. A refusal before launch uses `cleanup()` to remove them.
 
 `worker-input.test.ts` covers checked npm bytes, empty Git locations, copied/reused plans,
 unsafe parents, traversal, existing roots, replacement links, partial writes and two
@@ -1576,6 +1578,35 @@ protection against a hostile process with the supervisor's UID.
 The existing executor refusal and UID 1001 socket-denial regression remains unchanged.
 Native delivery, worker runtime installation, chroot, quotas, scanning, publication,
 CONNECT and fresh gVisor qualification remain unbuilt or NOT RUN in this slice.
+
+## Checked worker dispatch — P3-20 PR 3d, first part
+
+`dispatchWorker` checks explicit isolation, scanner and egress readiness before reading
+the fixed native request. It uses the private registration lookup, checks the saved
+turn and operation against current supervisor state, then prepares the one-use input.
+It checks readiness and the active turn again immediately before calling a trusted
+launcher. A missing or forged registration, another command connection, a changed
+computer, an ended turn or an unsupported argument starts no process.
+
+The launcher receives the validated fixed plan and the private operation root.
+The checked input remains in the private files, not in a log, reply or plan. The
+dispatch code enforces the plan's five-minute wall limit. A zero exit means only
+`awaiting_scan`; a non-zero exit, lost exit or launcher exception means `unknown`.
+Neither result publishes files. The registration was consumed before launch, so
+reconnect or duplicate delivery cannot start another process. Dispatch calls cleanup
+once after every preparation. A refusal before launch removes the files. Every launch
+attempt closes the preparation's descriptors after exit, timeout or launch failure.
+The private root stays available for a later scanner or recovery check. Validation
+and preparation errors return only `refused`.
+
+`worker-dispatch.test.ts` uses the private registration store and a recording process.
+It checks both fixed operations, pre-launch refusals, duplicate delivery, crash,
+non-zero and missing exits, and launcher failure. Descriptor counts check that each
+outcome releases the preparation's open handles. This is a local dispatch check.
+Production still supplies no trusted
+native registration delivery, confined UID 1004 launcher, scanner readiness or egress
+readiness. The root connector therefore keeps `worker_execution_disabled`. Runtime
+confinement, remaining quotas, scan/publication and a fresh gVisor journey are NOT RUN.
 
 ## Private proxy callers — P4-15 PR 4a, first part
 
