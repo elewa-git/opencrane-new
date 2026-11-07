@@ -4424,6 +4424,9 @@ check share the original deadline. A late
 saved admission keeps the hold but grants no send. An already expired request cannot
 publish a release either; existing later evidence checks can release an unsent hold. `requireCurrent` refuses while recovery
 is pending. Restart and replay preserve admissions, root allowances and integer-cent holds.
+Before a saved child root starts, the actor catches up with budget events and checks
+its remaining cents and all current ceilings. A lower ceiling can refuse the start
+even when the root was allocated earlier.
 
 A failed final check retains private evidence of its own newly saved admission on that
 error instance. Egress consumes this evidence once to record the existing refused outcome

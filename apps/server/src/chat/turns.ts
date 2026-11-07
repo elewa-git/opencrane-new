@@ -18,10 +18,14 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { readStreamSummary, readEventAt, WrongSiloError, type AppendCommand, type EventStore,
   type StoredEvent, type AppendResult } from '@opencrane/event-store';
-import { chatMembership } from './participation.ts';
+import { BudgetAdmissionRejected, requireTurnMember, TurnAdmissionRejected }
+  from './turn-authority.ts';
+export { BudgetAdmissionRejected, requireTurnMember, TurnAdmissionRejected }
+  from './turn-authority.ts';
 import { readChatFacts, type ChatFacts } from './chat-summary.ts';
 import { creationEvent } from './private-session.ts';
 import { agentSessionData, ReportRejected } from './reports.ts';
+import { admitChildTurn, type ChildStartAdmission } from './child-turn.ts';
 
 const bindingFields = optionalProviderTurnBindingSchema.safeExtend({
   conversationId: z.string(), turnId: z.string(), threadId: z.string().optional(),
@@ -64,20 +68,13 @@ type TurnInput = {
 };
 type TurnContext = {
   silo: string; computerId: string; assistantId: string; binding?: Binding;
+  childStart?: (() => Promise<ChildStartAdmission>) | undefined;
+  onChildStartSaved?: ((saved: StoredEvent | undefined,
+    status: TurnInput['status']) => Promise<void>) | undefined;
   routineStart?: ((input: TurnInput) => Promise<{ payer: string; fresh: WriteAuthority;
     deadline: number; confirmStarted: (saved: StoredEvent | undefined) => Promise<void>;
     provider: Awaited<ReturnType<typeof providerTurnAdmission>> }>) | undefined;
 };
-export class TurnAdmissionRejected extends ReportRejected {}
-export class BudgetAdmissionRejected extends TurnAdmissionRejected {
-  readonly stopId: string;
-
-  constructor(stopId: string) {
-    super('Turn stopped by a spending cap');
-    this.stopId = stopId;
-  }
-}
-
 type WriteAuthority = () => Promise<void>;
 
 /** Append one lifecycle event. Reports cannot reopen a closed turn. */
@@ -138,8 +135,14 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   if (refusal) throw refusal;
   // Check authority and stops again after the separate computer append finishes.
   await confirmBudget?.(saved);
+  await notifyChildStart(context, saved, status);
   if (input.status === 'started') return admittedTurn(data, executionMode);
   return undefined;
+}
+
+async function notifyChildStart(context: TurnContext, saved: StoredEvent | undefined,
+  status: TurnInput['status']) {
+  await context.onChildStartSaved?.(saved, status);
 }
 
 function addNativeTermination(data: { nativeTermination?: 'turn_completed' },
@@ -164,12 +167,11 @@ async function startAuthority(store: EventStore, context: TurnContext, conversat
   facts: ComputerFacts, data: TurnBinding, requested: unknown, mode: ExecutionMode,
   input: TurnInput) {
   if (conversation.created?.['routinePreparation'] !== undefined) {
-    if (!context.routineStart || facts.turn?.hasStart) {
-      throw new TurnAdmissionRejected('Routine start unavailable');
-    }
-    const admission = await context.routineStart(input);
-    applyProviderChoice(data, admission.provider);
-    return { ...admission, confirmBudget: admission.confirmStarted };
+    return admitRoutineTurn(context, facts, data, input);
+  }
+  if (context.childStart) {
+    return admitChildTurn({ ...context, childStart: context.childStart },
+      data, mode, requested, input);
   }
   if (input.messageId !== undefined || input.rootId !== undefined ||
       input.senderAttemptId !== undefined) throw new ReportRejected('Unexpected routine binding');
@@ -193,6 +195,16 @@ async function startAuthority(store: EventStore, context: TurnContext, conversat
   }
   const admission = await admitTurn(store, context, conversation, facts, data, requested, mode);
   return { ...admission, deadline: undefined };
+}
+
+async function admitRoutineTurn(context: TurnContext, facts: ComputerFacts,
+  data: TurnBinding, input: TurnInput) {
+  if (!context.routineStart || facts.turn?.hasStart) {
+    throw new TurnAdmissionRejected('Routine start unavailable');
+  }
+  const admission = await context.routineStart(input);
+  applyProviderChoice(data, admission.provider);
+  return { ...admission, confirmBudget: admission.confirmStarted };
 }
 
 function requireNoBudgetStop(stop: string | undefined) {
@@ -226,9 +238,19 @@ async function saveTurn(store: EventStore, facts: ComputerFacts,
     if (result.status !== 'appended') throw new Error('Turn append conflict or unavailable');
     const saved = await readEventAt(store, subject, result.sequence, performance.now() + 10_000);
     verifyBinding(saved?.event.id === id ? saved : undefined, data);
-    return saved;
+    return savedNewStart(result, saved);
   }
+  verifyExistingStart(event, facts, data);
   return undefined;
+}
+
+function savedNewStart(result: AppendResult, saved: StoredEvent | undefined) {
+  if (result.outcome?.kind === 'duplicate_saved') return undefined;
+  return saved;
+}
+
+function verifyExistingStart(event: EventEnvelope, facts: ComputerFacts, data: TurnBinding) {
+  if (event.type === 'computer.turn_started') verifyBinding(facts.turn?.firstStart, data);
 }
 
 function canRetryRoutineStart(result: AppendResult) {
@@ -494,15 +516,6 @@ function addLifecycleDetails(data: { executionMode?: ExecutionMode; status?: 'co
   } else {
     data.status = status;
   }
-}
-
-export async function requireTurnMember(store: EventStore, silo: string, requesterId: string) {
-  const subjects = [`member-${requesterId}`];
-  const fresh = await authorityFence(store, performance.now(), subjects);
-  const active = await chatMembership(store, silo, requesterId, fresh.deadline);
-  if (!active) throw new TurnAdmissionRejected('Active silo membership required');
-  await fresh();
-  return fresh;
 }
 
 function applyProviderChoice(data: TurnBinding,

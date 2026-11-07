@@ -80,7 +80,7 @@ export { prepareGatewayConfiguration, gatewayConfigurationCurrent, PublicationUn
   from './gateway-generation.ts';
 export { renderGatewayConfiguration, type GatewayRenderSettings } from './gateway-renderer.ts';
 export { readRootStopEvidence, readRoutineRemoval, readRoutineDeactivation } from './root-stop-evidence.ts';
-export { RootBudgetRefused, rootTotals } from './root-budget.ts';
+export { RootBudgetRefused, rootTotals, requireRootStartCapacity } from './root-budget.ts';
 export { registerHosted, hostedRegistrationChange } from './hosted-registration.ts';
 export { gatewayDelivery } from './gateway-delivery.ts';
 

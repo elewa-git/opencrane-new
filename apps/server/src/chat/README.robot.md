@@ -181,3 +181,11 @@ describes recovery. This does not register production routine delivery.
 Normal completion retains the computer's checked native termination marker on the
 server closure. A saved routine Stop can therefore finish as interrupted even when
 the computer completed before receiving cancellation. The first closure remains final.
+
+## Checked first child turn
+
+`child-start.ts` checks a saved activation and its prepared computer thread before the
+first restricted turn. It obtains or reuses the saved budget root, checks current access
+and available cents and current spending ceilings, and saves the existing computer turn
+start once. A lower ceiling can refuse an already allocated root. Replays do not send
+to the computer. The bridge does not call this command yet.

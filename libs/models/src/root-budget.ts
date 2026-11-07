@@ -99,6 +99,18 @@ export async function setRootAllowance(state: BudgetState, silo: string, now: Da
   await append('budget.root_allowance_set', payload);
   return findRoot(state, rootId);
 }
+export function requireRootStartCapacity(state: BudgetState, rootId: string,
+  firstCallBoundCents: number, now: Date) {
+  const root = findRoot(state, rootId);
+  const availableCents = rootTotals(state, rootId).availableCents;
+  if (root.stop || availableCents < firstCallBoundCents) {
+    throw new RootBudgetRefused('allowance_unavailable', availableCents);
+  }
+  if (budgetStopId(state, root, now) !== undefined ||
+      exceededReasons(state, root, now, root.allowanceCents).length > 0) {
+    throw new RootBudgetRefused('ceiling_stop', 0);
+  }
+}
 async function stopRoot(state: BudgetState,
   payload: z.infer<typeof budgetRootStoppedDataSchema>, append: Append) {
   const root = findRoot(state, payload.rootId);
