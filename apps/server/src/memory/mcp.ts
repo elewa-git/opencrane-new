@@ -176,12 +176,8 @@ export function registerMemoryMcp(app: FastifyInstance, config: AuthConfig,
       const target = { scopeId, memoryId };
       const save = operation === 'correct' ? correct : forget;
       const receipt = await save(options!, context.requester, target, command, agent);
-      if (operation === 'correct') {
-        // Withhold the receipt if access or the turn ended while the save reply was delayed.
-        await confirm();
-      } else {
-        confirmQualification();
-      }
+      // Withhold the receipt if access or the turn ended while the save reply was delayed.
+      await confirm();
       result = { content: [], structuredContent: receipt };
     }
     if (parsed.input?.operation === 'remember') {
@@ -266,5 +262,6 @@ function needsWriteQualification(input: ReturnType<typeof parseMemoryRequest>['i
   if (!evidence.chat.memoryContext?.initialLoaded) {
     return false;
   }
-  return input?.operation === 'remember' || input?.operation === 'correct';
+  return input?.operation === 'remember' || input?.operation === 'correct'
+    || input?.operation === 'forget';
 }

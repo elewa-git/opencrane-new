@@ -22,6 +22,8 @@ async function runnerFixture(remember = false) {
     tools[0]!.modes['remember'] = 'allow';
     tools[0]!.definitions.push(...privateToolOffer('correct')[0]!.definitions);
     tools[0]!.modes['correct'] = 'allow';
+    tools[0]!.definitions.push(...privateToolOffer('forget')[0]!.definitions);
+    tools[0]!.modes['forget'] = 'allow';
   }
   const turn = { type: 'turn', id: 'first', conversationId: 'chat',
     assistantId: 'assistant', requesterId: 'alice', executionMode: 'restricted',
@@ -239,7 +241,7 @@ async function restrictNativeItems(kind: typeof nativeItems[number], remember = 
     const event = { method: 'item/started', params: { threadId: pending['threadId'], item } };
     test.computer.channel.notification(event);
     const expectedPermission = kind === 'recall'
-      || (remember && (kind === 'remember' || kind === 'correct'));
+      || (remember && (kind === 'remember' || kind === 'correct' || kind === 'forget'));
     function expectedAccess() {
       const permitted = test.native.callers.permits('first', 'first');
       expect(permitted).toBe(expectedPermission);
