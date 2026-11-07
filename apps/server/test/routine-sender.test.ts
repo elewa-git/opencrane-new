@@ -1364,9 +1364,9 @@ it.each([['slow', 'Pause'], ['error', 'Pause'], ['slow', 'Access'], ['slow', 'Ad
 
 async function finishWithNativeEvidence(kind: 'terminal' | 'timeout' | 'connection loss') {
   const link = await startRunning();
-  const stop = await saveProhibition('Stop');
-  await actor.stopRoot(actor.state.roots[0]!.rootId, 'routine_stop',
-    'routine-orders', stop.position);
+  await saveProhibition('Stop');
+  const reaction = routineLifecycle(actor, requireLifecycleLeader, { enabled: true });
+  await reaction.poll();
   await pollRoutine();
   await vi.waitFor(interruptedOnce);
   if (kind === 'terminal') {
@@ -1386,6 +1386,7 @@ async function finishWithNativeEvidence(kind: 'terminal' | 'timeout' | 'connecti
     expect(closure).toBeDefined();
   }
   await vi.waitFor(savedClosure, { timeout: 12_000, interval: 50 });
+  await reaction.poll();
   const request = { ...input,
     terminalEvidence: { eventId: closure!.event.id, position: closure!.sequence } };
   function complete() {
@@ -1512,7 +1513,7 @@ it.each(['Stop', 'Admin', 'Denied'] as const)(
   'saved %s reaction finishes only its terminated turn and leaves its neighbour running',
   savedStopFinishes);
 
-async function stopHeldAcknowledgement() {
+async function stopHeldAcknowledgement(kind: 'Stop' | 'Admin' | 'Denied') {
   const held = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const acknowledge = credentials.releaseTurnCredentials;
@@ -1534,9 +1535,11 @@ async function stopHeldAcknowledgement() {
   }
   vi.spyOn(link.socket, 'send').mockImplementation(recordFrame);
   const sending = sender().send(preparedComputer.wake);
+  let stopEventId: string | undefined;
   try {
     await held.promise;
-    await saveProhibition('Stop');
+    const saved = await saveProhibition(kind);
+    stopEventId = saved.eventId;
     await pollRoutine();
   } finally {
     release.resolve();
@@ -1545,8 +1548,11 @@ async function stopHeldAcknowledgement() {
   await link.settled();
   expect(grants).toBe(0);
   expect(preparedComputer.starts).toBe(0);
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  expect(rows.at(-1)!.event.id).toBe(stopEventId);
 }
-it('saved Stop cancels a held start acknowledgement before credentials escape',
+it.each(['Stop', 'Admin', 'Denied'] as const)(
+  'saved %s cancels a held start acknowledgement before credentials escape',
   stopHeldAcknowledgement);
 
 function requireLifecycleLeader() {
@@ -1591,6 +1597,7 @@ async function restartedStopReaction(failure: 'budget.root_stopped' | 'routine.r
   await reaction.poll();
   expect(lost).toBe(true);
   vi.restoreAllMocks();
+  await preparedComputer.restart();
   actor = new BudgetActor(nats.store, 'test');
   await actor.start();
   const recovered = routineLifecycle(actor, requireLifecycleLeader, { enabled: true });
