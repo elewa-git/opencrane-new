@@ -3,7 +3,7 @@ import { PassThrough } from 'node:stream';
 import { natsFixture, event } from '@opencrane/event-store/testing';
 import type { StoredEvent } from '@opencrane/event-store';
 import { readComputerControl } from '@opencrane/auth';
-import { grantWriter, renewWriter, returnWriter, WriterSlot,
+import { endWriter, grantWriter, renewWriter, returnWriter, WriterSlot,
   writerProxyInstanceId } from '../src/computers/writer-lease.ts';
 import { viewerStream, writerStream } from '../src/computers/rfb.ts';
 
@@ -315,3 +315,72 @@ async function closesInputWhenReturnCannotBeSaved() {
 }
 it('closes input on a Return append outage and refuses another socket',
   closesInputWhenReturnCannotBeSaved);
+
+async function closesAfterDrainingTheLastInput() {
+  const { store, input } = await setup();
+  await grantWriter(store, 'test', input, accessAllowed);
+  const slot = new WriterSlot(store, 'test', input, accessAllowed);
+  expect(await slot.claim()).toBe(true);
+  const sent: string[] = [];
+  const pending: Array<() => void> = [];
+  function queueInput(bytes: Buffer) {
+    return new Promise<void>(function waitForDelivery(resolve) {
+      pending.push(function deliver() { sent.push(bytes.toString('hex')); resolve(); });
+    });
+  }
+  const key = Buffer.from([4, 1, 0, 0, 0, 0, 0, 65]);
+  slot.send(key, queueInput);
+  let drained = false;
+  async function drain() {
+    expect(slot.allows(input.leaseId, input.writerSessionId)).toBe(false);
+    await slot.drain();
+    drained = true;
+    return 'pod-drain';
+  }
+  const ending = endWriter(store, 'test', { ...returnInput(input),
+    commandId: 'end-command', reason: 'returned' }, drain, accessAllowed);
+  await Promise.resolve();
+  expect(drained).toBe(false);
+  expect(sent).toHaveLength(0);
+  expect(slot.send(key, queueInput)).toBe(false);
+  pending[0]?.();
+  const ended = await ending;
+  expect(sent).toHaveLength(1);
+  expect(ended.phase).toBe('ended');
+  expect(ended.closureReceiptId).toBe('pod-drain');
+  expect(ended.canStartNewWork).toBe(true);
+}
+it('closes input before draining and accounts for the last accepted key',
+  closesAfterDrainingTheLastInput);
+
+async function keepsUnknownClosurePaused() {
+  const { store, input } = await setup();
+  await grantWriter(store, 'test', input, accessAllowed);
+  const slot = new WriterSlot(store, 'test', input, accessAllowed);
+  expect(await slot.claim()).toBe(true);
+  async function unavailableDrain() { return undefined; }
+  const unknown = await endWriter(store, 'test', { ...returnInput(input),
+    commandId: 'unknown-command', reason: 'disconnect' }, unavailableDrain, accessAllowed);
+  expect(unknown.phase).toBe('closure_unknown');
+  expect(unknown.canStartNewWork).toBeUndefined();
+  expect(slot.allows(input.leaseId, input.writerSessionId)).toBe(false);
+  const second = new WriterSlot(store, 'test', input, accessAllowed);
+  expect(await second.claim()).toBe(false);
+  expect((await readComputerControl(store, 'test', 'assistant'))?.phase).toBe('closure_unknown');
+}
+it('marks an unproved disconnect unknown and leaves agent work paused',
+  keepsUnknownClosurePaused);
+
+async function closesOnFailedEndAppend() {
+  const { store, input } = await setup();
+  await grantWriter(store, 'test', input, accessAllowed);
+  const slot = new WriterSlot(store, 'test', input, accessAllowed);
+  expect(await slot.claim()).toBe(true);
+  async function drain() { return 'pod-drain'; }
+  vi.spyOn(store, 'append').mockResolvedValue({ status: 'unavailable', cause: 'fixture' });
+  await expect(endWriter(store, 'test', { ...returnInput(input),
+    commandId: 'end-command', reason: 'expired' }, drain, accessAllowed))
+    .rejects.toThrow('Control unavailable');
+  expect(slot.allows(input.leaseId, input.writerSessionId)).toBe(false);
+}
+it('keeps input shut if saving expiry fails', closesOnFailedEndAppend);
