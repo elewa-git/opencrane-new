@@ -5,10 +5,9 @@ import { databases, openfga } from '@opencrane/authz/testing';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { pgDb } from '@opencrane/projections';
 import { decisionRecordedDataSchema, getEventDefinition,
-  routineActivationSchema }
+  routineActivationSchema, routineDefinitionSchema }
   from '@opencrane/events';
-import { routineDefinitionEventSchema, routineDueSchema }
-  from '../../events/src/routines.ts';
+import { z } from 'zod';
 import { confirmCredentialRelease } from '../src/credential-release.ts';
 import { connectionOperationId } from '../src/bearer-connections.ts';
 import { oauthConfigurationDigest } from '../src/oauth-attempt.ts';
@@ -90,8 +89,9 @@ async function readyHistory(userId: string, serverId: string, profileId: string,
   selection.principal = { kind: 'human', id: userId };
   await nats.seed([selection]);
   const routineSubject = `routine-${routineId}`;
-  const original = routineDefinitionEventSchema.parse(getEventDefinition('routine.created')!.example);
-  const originalDefinition = original.definition;
+  const fields = z.record(z.string(), z.unknown());
+  const original = fields.parse(getEventDefinition('routine.created')!.example);
+  const originalDefinition = routineDefinitionSchema.parse(original['definition']);
   const definition = { ...originalDefinition, ownerId: userId, assistantId: 'assistant',
     payingGroupId: 'payer', assistantPayingGroupId: 'payer', connectionId: 'installed',
     profileId, profileRevision, connectionRevision: profileRevision,
@@ -100,7 +100,7 @@ async function readyHistory(userId: string, serverId: string, profileId: string,
     source: 'opencrane-server', commandId: `created-${routineId}`,
     principal: { kind: 'human' as const, id: userId },
     data: { ...original, routineId, actorId: userId, status: 'active', definition } };
-  const originalDue = routineDueSchema.parse(getEventDefinition('routine.due')!.example);
+  const originalDue = fields.parse(getEventDefinition('routine.due')!.example);
   const due = { ...event(`due-${routineId}`, routineSubject, 'routine.due'),
     source: 'opencrane-server', commandId: `due-${routineId}`,
     principal: { kind: 'system' as const, id: 'opencrane-server' },
