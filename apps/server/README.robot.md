@@ -5803,6 +5803,12 @@ remain later work. Fresh-install qualification: NOT RUN.
 
 ## Approval reply evidence
 
+The original call route reads saved approval, permit and turn history before its
+final participant access check. It uses no approval-card cache or audit read table.
+Only the original requester can read a shared child call. The optional retained-call
+reader has no production bridge source yet, so a production reply cannot be eligible.
+The route neither appends nor wakes a bridge. Read failures return 503.
+
 The approval GET includes `toolReplied` from the models reader. It is true only when
 the latest consumed permit has matching `adapter_response_received` evidence.
 The saved state remains `outcome_unknown`, and retry permission is unchanged.
