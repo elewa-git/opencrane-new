@@ -1,3 +1,4 @@
+import { registerOverviewRoutes } from './overview/routes.ts';
 import { registerRoutineReads } from './routine-routes.ts';
 import { registerTakeoverRoutes } from './computers/takeover-routes.ts';
 import { registerChildRoutes } from './chat/child-routes.ts';
@@ -106,6 +107,8 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerInvitations(app, authConfig, options.invitationEmail);
   registerOwnershipRoutes(app, authConfig, options.ownership);
   registerProviderRoutes(app, authConfig, options.providers);
+  registerOverviewRoutes(app, authConfig, options.memberReads, options.integrations,
+    Boolean(options.audit));
   registerModelAccessRoutes(app, authConfig, options.modelAccess);
   registerMemoryReads(app, authConfig, options.memory);
   registerMemoryMcp(app, authConfig, options.memory);

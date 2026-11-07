@@ -24,6 +24,9 @@ describe('organisation overview rows', () => {
     const second = buildOverview([source('providers', rows)], 50, first.next);
     expect(second.rows).toHaveLength(40);
     expect(second.rows[0]?.id).toBe('provider-20');
+    const changed = source('providers', rows);
+    changed.checkpoint = 13;
+    expect(() => buildOverview([changed], 50, first.next)).toThrow();
     expect(() => buildOverview([source('providers', rows)], 51, undefined)).toThrow();
   });
 
@@ -36,7 +39,7 @@ describe('organisation overview rows', () => {
     rows[2]!.sourceId = 'same-record';
     const overview = buildOverview([source('people', rows)], undefined, undefined);
     expect(overview.rows.map(item => item.id)).toEqual([
-      'unknown', 'old-input', 'input', 'failure', 'ready']);
+      'unknown', 'old-input', 'input', 'input', 'ready']);
   });
 
   it('keeps other rows and never reports all clear when a source is unavailable', () => {
