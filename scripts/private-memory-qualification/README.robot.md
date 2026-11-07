@@ -380,6 +380,11 @@ Only completed agent-message notifications followed by successful turn completio
 match. Question-only output, a returned scripted string without native notifications,
 wrong thread/turn, changed binding, old revision, forgotten fact, lost evidence and
 late output refuse. Answer comparison stays in RAM and produces no diagnostics.
+The caller supplies the other people's known fixture facts. The checker copies these
+facts into buffers and clears them after the attempt. It refuses any completed answer
+or streamed answer text containing one, even if the requester's fact is present too.
+It binds answer messages and streamed text to the ID in the native turn-start
+notification. A foreign-turn message or delta permanently refuses the attempt.
 The tests use the production JSON-RPC decoder and scripted notifications. The backend
 regression starts disposable services and compares the actual recalled fact against
 the backend observation captured before delivery and a cold event read.

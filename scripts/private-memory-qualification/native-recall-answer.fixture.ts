@@ -22,7 +22,7 @@ export function fixture() {
   const state = { now: 1000, safe: true, dispatches: 0, native: true, save: true,
     reply: answer, nativeThread: binding.threadId, nativeTurn: 'native-turn',
     completed: true, early: false, otherTurnMessage: false, otherTurnDelta: false,
-    answerDelta: '',
+    answerDeltas: [] as string[],
     reads: 0, failRead: false, beforeRead() {}, afterLoaded() {} };
   function read() {
     state.reads += 1;
@@ -74,9 +74,9 @@ export function fixture() {
           itemId: 'other-reply', delta: 'another turn' };
         incoming.write(JSON.stringify({ method: 'item/agentMessage/delta', params }) + '\n');
       }
-      if (state.answerDelta) {
+      for (const delta of state.answerDeltas) {
         const params = { threadId: state.nativeThread, turnId: state.nativeTurn,
-          itemId: 'reply', delta: state.answerDelta };
+          itemId: 'reply', delta };
         incoming.write(JSON.stringify({ method: 'item/agentMessage/delta', params }) + '\n');
       }
       if (state.native) {
@@ -96,6 +96,6 @@ export function fixture() {
     return 'native-turn';
   }
   const driver = { read, now: current, protectedHost, dispatch };
-  const check = recallAnswerCheck(binding, reference, answer, question, driver);
+  const check = recallAnswerCheck(binding, reference, answer, question, driver, []);
   return { answer, question, binding, reference, observed, state, driver, check };
 }

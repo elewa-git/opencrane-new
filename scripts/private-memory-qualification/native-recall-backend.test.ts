@@ -154,7 +154,7 @@ async function checksStoredAnswer() {
   }
   const driver = { ...local.driver, read, dispatch };
   const check = recallAnswerCheck(local.binding, local.reference, factText,
-    'Recall my destination', driver);
+    'Recall my destination', driver, []);
   expect(await check()).toEqual({ result: 'PARTIAL', complete: false });
   expect(await check()).toEqual({ result: 'FAIL', reason: 'journey_failed', complete: false });
   expect(test.deliveries).toHaveLength(1);

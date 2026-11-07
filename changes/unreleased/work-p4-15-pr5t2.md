@@ -1,1 +1,1 @@
-- Add a one-use native recall answer checker that compares private output in memory against saved references. Scripted checks remain incomplete and cannot enable personal memory.
+- Refuse native recall answers that mix a requester's fact with another person's known test fact or include output from another native turn. Scripted checks remain incomplete and cannot enable personal memory.

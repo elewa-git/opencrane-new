@@ -136,7 +136,7 @@ async function separatesCallers() {
   bob.binding.requesterId = 'bob';
   bob.observed.binding.requesterId = 'bob';
   const bobCheck = recallAnswerCheck(bob.binding, bob.reference, bob.answer,
-    bob.question, bob.driver);
+    bob.question, bob.driver, [alice.answer]);
   alice.state.reply = bob.answer;
   bob.state.reply = alice.answer;
   const outcomes = await Promise.all([alice.check(), bobCheck()]);
@@ -177,13 +177,20 @@ it('refuses an answer delta from another native turn', refusesForeignDelta);
 async function refusesPrivateDelta() {
   const alice = fixture();
   const bob = fixture();
-  alice.state.answerDelta = bob.answer;
+  alice.state.answerDeltas = [bob.answer.slice(0, 10), bob.answer.slice(10)];
   const check = recallAnswerCheck(alice.binding, alice.reference, alice.answer,
     alice.question, alice.driver, [bob.answer]);
   expect(await check()).toEqual(refused);
   expect(alice.state.dispatches).toBe(1);
 }
-it('refuses another person’s fact in a streamed answer delta', refusesPrivateDelta);
+it('refuses another person’s fact split across streamed answer deltas', refusesPrivateDelta);
+
+async function acceptsOwnDeltas() {
+  const test = fixture();
+  test.state.answerDeltas = [test.answer.slice(0, 10), test.answer.slice(10)];
+  expect(await test.check()).toEqual(partial);
+}
+it('accepts streamed text from the requested native turn', acceptsOwnDeltas);
 
 async function correctedNewTurn() {
   const test = fixture();
@@ -194,7 +201,7 @@ async function correctedNewTurn() {
   const corrected = randomUUID();
   test.state.reply = corrected;
   const check = recallAnswerCheck(test.binding, test.reference, corrected,
-    test.question, test.driver);
+    test.question, test.driver, []);
   test.state.nativeThread = test.binding.threadId;
   expect(await check()).toEqual(partial);
   expect(await test.check()).toEqual(refused);
@@ -204,7 +211,7 @@ it('uses the corrected revision in a new thread and refuses the old expectation'
 async function refusesLeakedQuestion() {
   const test = fixture();
   const check = recallAnswerCheck(test.binding, test.reference, test.answer,
-    test.answer, test.driver);
+    test.answer, test.driver, []);
   expect(await check()).toEqual(refused);
   expect(test.state.dispatches).toBe(0);
 }

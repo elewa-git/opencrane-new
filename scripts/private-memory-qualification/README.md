@@ -18,7 +18,7 @@ It uses Docker on the deployment host and reads the deployment's event store.
 ```mermaid
 flowchart LR
   scripts["scripts<br/>developer tools"] -.-> collector["private-memory-qualification<br/>collects observed results"]
-  fixtures["disposable fixtures<br/>recall and storage tests"] -.->|tests local checks| collector
+  fixtures["disposable fixtures<br/>recall and storage tests"] -.->|tests answer checks| collector
   scripts -.-> sibling["check-local-qualification<br/>checks local results"]
   server["apps/server<br/>memory preparation"] -->|reads and rechecks results| collector
   collector -.->|checks memory, Stop and reply loss| server
@@ -78,6 +78,8 @@ real server, bridge and gateway to recall only the requester's fact. It checks t
 saved reference before delivery and refuses the other person's scope. This test
 does not generate a model answer or qualify the deployment. A separate one-use checker
 compares native answer notifications with the saved fact and its reference in memory.
+It refuses another person's known test fact in an answer, even when the answer also
+contains the requester's fact. It also refuses answer text from another native turn.
 It refuses changed identities, revisions, expired grants and missing output. Tests feed
 it scripted native notifications; connecting it to measured native execution is still pending.
 A storage scanner now checks named folders for private test bytes, including hidden files.

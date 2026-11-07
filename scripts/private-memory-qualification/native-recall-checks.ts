@@ -60,11 +60,22 @@ function object(value: unknown): Record<string, unknown> {
   return parsed.data;
 }
 
-function nativeAnswer(binding: Binding, expected: Buffer, question: string) {
+function containsForbiddenFact(answer: Buffer, forbiddenFacts: readonly Buffer[]): boolean {
+  for (const fact of forbiddenFacts) {
+    if (answer.includes(fact)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function nativeAnswer(binding: Binding, expected: Buffer, question: string,
+  forbiddenFacts: readonly Buffer[]) {
   let matched = false;
   let failed = false;
   let completed = false;
   let nativeTurn: unknown;
+  let deltaBytes = Buffer.alloc(0);
   function receive(value: unknown) {
     const event = object(value);
     const params = object(event['params']);
@@ -72,19 +83,49 @@ function nativeAnswer(binding: Binding, expected: Buffer, question: string) {
       failed = true;
       return;
     }
-    if (event['method'] === 'item/completed') {
+    if (event['method'] === 'turn/started') {
+      // Bind later answer text to the turn started on this connection.
+      const turn = object(params['turn']);
+      if (typeof turn['id'] !== 'string' || nativeTurn !== undefined) {
+        failed = true;
+        return;
+      }
+      nativeTurn = turn['id'];
+    } else if (event['method'] === 'item/agentMessage/delta') {
+      const delta = params['delta'];
+      if (nativeTurn === undefined || params['turnId'] !== nativeTurn
+        || typeof delta !== 'string') {
+        failed = true;
+        return;
+      }
+      const bytes = Buffer.from(delta);
+      if (deltaBytes.length + bytes.length > 65_536) {
+        failed = true;
+        bytes.fill(0);
+        return;
+      }
+      const combined = Buffer.concat([deltaBytes, bytes]);
+      deltaBytes.fill(0);
+      bytes.fill(0);
+      deltaBytes = combined;
+      if (containsForbiddenFact(deltaBytes, forbiddenFacts)) {
+        failed = true;
+      }
+    } else if (event['method'] === 'item/completed') {
       const item = object(params['item']);
       if (item['type'] !== 'agentMessage') {
         return;
       }
       const answer = item['text'];
-      if (typeof answer !== 'string' || Buffer.byteLength(answer) > 65_536 || matched) {
+      if (nativeTurn === undefined || params['turnId'] !== nativeTurn
+        || typeof answer !== 'string' || Buffer.byteLength(answer) > 65_536 || matched) {
         failed = true;
         return;
       }
-      nativeTurn = params['turnId'];
       const bytes = Buffer.from(answer);
-      matched = answer !== question && bytes.includes(expected);
+      // Refuse a mixed answer even when it includes the requester's own fact.
+      matched = answer !== question && bytes.includes(expected)
+        && !containsForbiddenFact(bytes, forbiddenFacts);
       bytes.fill(0);
     } else if (event['method'] === 'turn/completed') {
       const turn = object(params['turn']);
@@ -99,19 +140,34 @@ function nativeAnswer(binding: Binding, expected: Buffer, question: string) {
   function accepted(turnId: string) {
     return !failed && matched && completed && nativeTurn === turnId;
   }
-  return { receive, accepted };
+  function clear() {
+    deltaBytes.fill(0);
+  }
+  return { receive, accepted, clear };
+}
+
+function toBuffer(value: string): Buffer {
+  return Buffer.from(value);
 }
 
 // Keep this local checker separate from deployment qualification: its driver must be measured.
 export function recallAnswerCheck(
   binding: Binding, reference: Reference, answer: string, question: string, driver: Driver,
+  otherPeopleFacts: readonly string[],
 ): () => Promise<Outcome> {
   const expectedBinding = { ...binding };
   const expectedReference = { ...reference };
   const expected = Buffer.from(answer);
+  const forbiddenFacts = otherPeopleFacts.map(toBuffer);
   const validInput = expected.length > 0 && expected.length <= 4096
     && question.length > 0 && Buffer.byteLength(question) <= 4096 && !question.includes(answer);
-  const native = nativeAnswer(expectedBinding, expected, question);
+  let validFacts = true;
+  for (const fact of forbiddenFacts) {
+    if (fact.length === 0 || fact.length > 4096) {
+      validFacts = false;
+    }
+  }
+  const native = nativeAnswer(expectedBinding, expected, question, forbiddenFacts);
   let used = false;
   let failed = false;
   let loaded = false;
@@ -171,7 +227,7 @@ export function recallAnswerCheck(
     used = true;
     try {
       deadline = driver.now() + 120_000;
-      if (!validInput || !await inspect(false)) {
+      if (!validInput || !validFacts || !await inspect(false)) {
         return refused;
       }
       dispatching = true;
@@ -187,6 +243,10 @@ export function recallAnswerCheck(
       dispatching = false;
       failed = true;
       expected.fill(0);
+      for (const fact of forbiddenFacts) {
+        fact.fill(0);
+      }
+      native.clear();
     }
   }
   return run;
