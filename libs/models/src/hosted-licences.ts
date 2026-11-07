@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { z } from 'zod';
 import { currentHostedVerification, verifyHostedImage } from './hosted-verification.ts';
 
 const execute = promisify(execFile);
@@ -47,8 +48,10 @@ async function stageImage(directory: string, blobs: Map<string, Buffer>, imageDi
   await writeFile(join(directory, 'oci-layout'), '{"imageLayoutVersion":"1.0.0"}');
 }
 
-export async function inspectHostedLicences(request: unknown, trust: unknown,
-  read: RegistryRead, options: Options) {
+export async function inspectHostedLicences<Extra = never>(request: unknown, trust: unknown,
+  read: RegistryRead, options: Options, onSbom?: (sbom: Buffer, evidence: {
+    imageDigest: string; platform: string; sbomDigest: string; packageCount: number;
+  }) => Promise<Extra>) {
   const blobs = new Map<string, Buffer>();
   async function capture(repository: string, resource: string, signal: AbortSignal) {
     const received = await read(repository, resource, signal);
@@ -106,13 +109,21 @@ export async function inspectHostedLicences(request: unknown, trust: unknown,
     }
     const evidence = { ...verification.evidence, sbomDigest: digest(scanned.stdout),
       reviewDigest: digest(review) };
+    if (onSbom) {
+      const document = z.object({ artifacts: z.array(z.unknown()) }).parse(
+        JSON.parse(scanned.stdout));
+      const packageCount = document.artifacts.length;
+      const checked = await onSbom(Buffer.from(scanned.stdout), { ...evidence, packageCount });
+      if (!currentHostedVerification(verification.evidence, request, trust)) {
+        return { verdict: 'fail', reasonCode: 'signature_refused' } as const;
+      }
+      return checked;
+    }
     return { verdict: 'pass', evidence } as const;
   } catch {
     // Keep subprocess output and package data out of errors, logs and receipts.
     return { verdict: 'unavailable', reasonCode: 'scanner_unavailable' } as const;
   } finally {
-    if (directory) {
-      await rm(directory, cleanupOptions);
-    }
+    if (directory) await rm(directory, cleanupOptions);
   }
 }
