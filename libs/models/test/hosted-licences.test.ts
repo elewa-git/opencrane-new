@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -107,7 +108,10 @@ it('scans the SBOM from the signed and licence-clean image', async () => {
     if (args[1] === 'import') return Promise.resolve({ stdout: '' });
     if (args[1] === 'status') return Promise.resolve({ stdout: JSON.stringify({
       valid: true, schemaVersion: '6.0.0', built }) });
-    const report = { matches: [], source: { type: 'sbom-file', target: args[0]!.slice(5) },
+    const sbomPath = args[0]!.slice(5);
+    const sbomBytes = readFileSync(sbomPath);
+    const source = JSON.parse(sbomBytes.toString()).source;
+    const report = { matches: [], source: { type: 'image', target: source.metadata },
       descriptor: { name: 'grype', version: '0.121.0',
         db: { built, schemaVersion: '6.0.0' } } };
     return Promise.resolve({ stdout: JSON.stringify(report) });
@@ -135,6 +139,20 @@ it('scans the SBOM from the signed and licence-clean image', async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+it('refuses a reviewed package that Syft omitted before calling the vulnerability scanner',
+  async () => {
+    const licenceOnly = await inspect('supplementary');
+    expect(licenceOnly.verdict).toBe('pass');
+    let scans = 0;
+    function checkSbom() {
+      scans += 1;
+      return Promise.resolve({ verdict: 'pass' });
+    }
+    const combined = await inspect('supplementary', '', checkSbom);
+    expect(combined).toEqual({ verdict: 'fail', reasonCode: 'licence_refused' });
+    expect(scans).toBe(0);
+  });
 async function acceptsReviewedImage(mode: string) {
   const result = await inspect(mode);
   expect(result.verdict).toBe('pass');

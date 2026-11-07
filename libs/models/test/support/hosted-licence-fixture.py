@@ -91,6 +91,18 @@ else:
         'primary': {'source': '/app/node_modules/private-fixture/LICENSE',
                     'sources': ['/app/node_modules/private-fixture/package.json'],
                     'spdx': [licence], 'reason': 'Reviewed fixture terms.'}}
+    if mode == 'supplementary':
+        review['packages'].append('npm:unrecognised-binary@1.0.0')
+        review['applications']['npm:unrecognised-binary@1.0.0'] = {
+            'files': file_hashes, 'detected': [],
+            'primary': {'source': '/app/node_modules/private-fixture/LICENSE',
+                        'sources': ['/app/node_modules/private-fixture/package.json'],
+                        'spdx': [licence], 'reason': 'Reviewed fixture terms.'}}
+        review['evidence']['artifacts'] = [{
+            'id': 'extra-package', 'name': 'unrecognised-binary', 'version': '1.0.0',
+            'type': 'npm', 'locations': [{
+                'path': '/app/node_modules/private-fixture/package.json',
+                'layerID': 'sha256:' + digest(layer_bytes)}]}]
     if mode == 'application-cc0':
         review['osLayers'] = ['sha256:' + digest(layer_bytes)]
     if mode == 'incomplete':
