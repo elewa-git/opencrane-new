@@ -164,6 +164,7 @@ async function refusesOtherFailedOutput(output: string): Promise<void> {
   assertNoRunningJourney();
 }
 const failedOutputs = [
+  '{"result":"FAIL","reason":"host_refused","protectionFailure":"private_process_missing"}',
   '{"result":"FAIL","reason":"host_refused","protectionFailure":"/private/helper"}',
   '{"result":"FAIL","reason":"host_refused","protectionFailure":null}',
   '{"result":"FAIL","reason":"host_refused","protectionFailure":"helper_unavailable","extra":1}',

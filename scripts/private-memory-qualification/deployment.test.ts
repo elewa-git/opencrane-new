@@ -526,6 +526,24 @@ async function savesIncompleteProcessRefusal(): Promise<void> {
 }
 it('saves incomplete private process proof as a named refusal', savesIncompleteProcessRefusal);
 
+async function rejectsProcessRefusalWithoutIncompleteStatus(): Promise<void> {
+  function refuse(receipt: Record<string, unknown>): void {
+    for (const key of Object.keys(receipt)) {
+      delete receipt[key];
+    }
+    Object.assign(receipt, {
+      result: 'FAIL', reason: 'host_refused', protectionFailure: 'private_process_missing',
+    });
+  }
+  alter = refuse;
+  const expected = { result: 'FAIL', reason: 'collection_failed' };
+  expect(await collectDeployment()).toEqual(expected);
+  expect(writeFileSync).toHaveBeenLastCalledWith(expect.any(String), JSON.stringify(expected),
+    { flag: 'wx', mode: 0o600 });
+}
+it('rejects missing incomplete status from a private process refusal',
+  rejectsProcessRefusalWithoutIncompleteStatus);
+
 async function rejectsUnknownProtection(protectionFailure: unknown): Promise<void> {
   function refuse(receipt: Record<string, unknown>): void {
     for (const key of Object.keys(receipt)) {
