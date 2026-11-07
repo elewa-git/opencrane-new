@@ -146,6 +146,9 @@ The image build requires the Linux Codex programs. A missing download stops the 
 before image checks begin.
 
 Repository CI builds a separate test image once for the tests that need it.
+The image build retries short network failures when it downloads Debian packages.
+If the package server stays unavailable, the build stops instead of waiting for
+the whole CI job to end.
 The [CI test guide](../../scripts/ci/README.md) explains how those files are grouped.
 The CI test image uses saved Debian packages from GitHub's registry when the
 recorded digest matches the current build inputs. The first published image is

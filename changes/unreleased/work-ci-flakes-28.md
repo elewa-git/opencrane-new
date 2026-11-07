@@ -1,0 +1,1 @@
+- Computer image builds retry stalled Debian downloads and fail within the fixture job limit when the pinned snapshot is unavailable.
