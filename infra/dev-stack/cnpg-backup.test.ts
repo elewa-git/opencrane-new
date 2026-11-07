@@ -125,9 +125,10 @@ async function accepts() {
   }
   const before = attempts.length;
   await checkCnpgBackupReferences(input.backup, namespace, input.kubectl);
-  assert.equal(attempts.length, before + 1);
+  assert.equal(attempts.length, before + 4);
   assert.equal(attempts.at(-1)!.destroyed, true);
-  assert.equal(Buffer.concat(matching.received).length, 0);
+  assert.deepEqual(matching.storage.requests, ['PUT', 'GET', 'DELETE']);
+  assert.equal(matching.storage.objects.size, 0);
   for (const name of Object.keys(input.objects)) {
     function matches(value: string) {
       return value === name;
@@ -398,7 +399,7 @@ for (const name of ['namespace', 'backup-store', 'backup-trust']) {
       atPeer(input, listener.port);
       try {
         await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
-        assert.equal(handshakes, 1);
+        assert.equal(handshakes, 4);
         assert(input.reads.length > 4);
       } finally {
         await listener.close();
@@ -435,7 +436,9 @@ for (const stage of ['before reads', 'before connection', 'during handshake', 'a
     try {
       const options = { signal: controller.signal };
       await refused(checkCnpgBackupReferences(input.backup, namespace, read, options));
-      const expected = stage === 'during handshake' || stage === 'after handshake' ? 1 : 0;
+      let expected = 0;
+      if (stage === 'during handshake') expected = 1;
+      if (stage === 'after handshake') expected = 4;
       assert.equal(attempts.length - before, expected);
       const expectedReads = { 'before reads': 0, 'before connection': 4,
         'during handshake': 4, 'after handshake': 5 };
@@ -470,7 +473,9 @@ for (const stage of ['initial read', 'before connection', 'after handshake', 'fi
     if (stage === 'after handshake') atPeer(input, listener.port);
     try {
       await refused(checkCnpgBackupReferences(input.backup, namespace, read));
-      const expected = stage === 'after handshake' || stage === 'final read' ? 1 : 0;
+      let expected = 0;
+      if (stage === 'after handshake') expected = 1;
+      if (stage === 'final read') expected = 4;
       assert.equal(attempts.length - before, expected);
       if (expected) assert.equal(attempts.at(-1)!.destroyed, true);
       const expectedReads = { 'initial read': 1, 'before connection': 4,
