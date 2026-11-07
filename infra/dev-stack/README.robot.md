@@ -2168,6 +2168,26 @@ so the private kubeconfig filename remains outside child command arguments.
 
 ## Backup reference checks behind the install gate
 
+`cnpg-backup-identity.ts` is the first part of the replacement for backup storage
+probes. It reads the local MinIO root identity only after the saved stack owner
+matches this worktree. It derives `ocn-backup-<silo>/cnpg` from the supplied owned
+installation identity and asks MinIO STS for a 15-minute lease. Its fixed policy
+allows object reads, writes, deletion and version operations only under `cnpg/`.
+Bucket listing and version listing require a prefix under `cnpg/`. The provisioner
+checks the HS512 signature with the local root secret, the access key, root parent,
+expiry and exact session policy before it creates or reuses the private bucket.
+It keeps a process-local record of the credential, destination, endpoint, CA and
+Namespace and Service UIDs. `inspectCnpgBackupIdentity` rejects changed values,
+missing records and expired leases. Root credentials stay in the local provisioning
+process. Unit tests use a signed fake STS reply and make no real MinIO request.
+
+This helper is not connected to the CNPG reference checker or Helm preview yet.
+The checker still refuses every backup after its marker and probe checks. The next
+split must carry session-token references through the preview and checker, check
+the process-local record before marker writes, then remove the invented probes and
+the unconditional inventory refusal. Real MinIO issuance, policy enforcement and
+renewal must pass on an owned local store before installation is enabled.
+
 Part of #15, P5-3 PR 3c/3d/3e. `cnpg-backup.ts` extends the existing CNPG checker.
 `preflight.mjs` still refuses every backup and recovery property before Helm,
 including disabled and null settings. The helper cannot return success or enable installation.

@@ -1,1 +1,1 @@
-- Check backup storage access with a temporary marker and clean it after interrupted requests. Backup approval now refuses because the installer cannot enumerate other silos’ real storage locations; denied requests to invented names cannot establish isolation. Backup and recovery installation remain disabled.
+- Prepare a short-lived, silo-specific MinIO backup credential and verify its signed policy before returning it. Backup marker cleanup remains bounded, and backup and recovery installation remain disabled while the credential is connected to the installer.

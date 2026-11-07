@@ -75,6 +75,9 @@ available for diagnosis.
   Stops the check on cancellation or timeout, then gives marker cleanup its own short deadline.
   Checks deletion permission before writing.
   Backup and recovery installation remain blocked.
+  A separate local helper can issue a short-lived backup credential for a private
+  silo bucket. It checks the policy signed into the credential before returning it.
+  The installer does not use that helper yet.
   Requires runtime and setup replica settings to match the chart before Helm runs.
   Checks mounted event-log certificates and keys, connection settings and account rules.
   Checks three-node eligibility, prepared certificates and image compatibility for

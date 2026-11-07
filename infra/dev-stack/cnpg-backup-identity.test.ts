@@ -36,7 +36,9 @@ function signedToken(policy: unknown, accessKey: string, expiry: number) {
 }
 
 async function credentials(this: AssumeRoleProvider) {
-  writtenPolicy = this.policy!;
+  const request = this.getRequestConfig();
+  const parameters = new URLSearchParams(request.requestData);
+  writtenPolicy = parameters.get('Policy')!;
   const policy = returnedPolicy ?? JSON.parse(writtenPolicy);
   if (reorderActions) {
     policy.Statement[0].Action.reverse();
@@ -141,16 +143,23 @@ async function substitutedCredentialRefuses() {
   existingBuckets = new Set();
   const result = await identity.provisionCnpgBackupIdentity(binding);
   result.credentials.secretKey = 'substituted';
-  assert.throws(() => identity.inspectCnpgBackupIdentity(result.evidence, binding,
-    result.credentials), { message: 'CNPG backup identity is not confined to its destination' });
+  function inspectSubstitutedCredential() {
+    identity.inspectCnpgBackupIdentity(result.evidence, binding, result.credentials);
+  }
+  assert.throws(inspectSubstitutedCredential,
+    { message: 'CNPG backup identity is not confined to its destination' });
   const originalCredentials = { ...result.credentials, secretKey: 'leased-secret' };
   const changedBinding = { ...binding, serviceUid: 'other-service' };
-  assert.throws(() => identity.inspectCnpgBackupIdentity(result.evidence,
-    changedBinding, originalCredentials),
-  { message: 'CNPG backup identity is not confined to its destination' });
-  assert.throws(() => identity.inspectCnpgBackupIdentity({}, binding,
-    originalCredentials),
-  { message: 'CNPG backup identity is not confined to its destination' });
+  function inspectChangedBinding() {
+    identity.inspectCnpgBackupIdentity(result.evidence, changedBinding, originalCredentials);
+  }
+  assert.throws(inspectChangedBinding,
+    { message: 'CNPG backup identity is not confined to its destination' });
+  function inspectMissingEvidence() {
+    identity.inspectCnpgBackupIdentity({}, binding, originalCredentials);
+  }
+  assert.throws(inspectMissingEvidence,
+    { message: 'CNPG backup identity is not confined to its destination' });
 }
 test('a substituted credential, binding or evidence is refused', substitutedCredentialRefuses);
 
@@ -179,3 +188,21 @@ async function reorderedPolicyPasses() {
   }
 }
 test('MinIO may reorder actions without changing the signed policy', reorderedPolicyPasses);
+
+async function expiredRecordRefuses(context: import('node:test').TestContext) {
+  returnedPolicy = undefined;
+  madeBuckets = [];
+  existingBuckets = new Set();
+  const result = await identity.provisionCnpgBackupIdentity(binding);
+  const afterExpiry = Date.now() + 901_000;
+  function expiredTime() {
+    return afterExpiry;
+  }
+  context.mock.method(Date, 'now', expiredTime);
+  function inspectExpiredRecord() {
+    identity.inspectCnpgBackupIdentity(result.evidence, binding, result.credentials);
+  }
+  assert.throws(inspectExpiredRecord,
+    { message: 'CNPG backup identity is not confined to its destination' });
+}
+test('an expired process-local record is refused', expiredRecordRefuses);
