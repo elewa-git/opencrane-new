@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { PassThrough } from 'node:stream';
 import { natsFixture, event } from '@opencrane/event-store/testing';
+import type { StoredEvent } from '@opencrane/event-store';
 import { readComputerControl } from '@opencrane/auth';
 import { grantWriter, renewWriter, returnWriter, WriterSlot,
   writerProxyInstanceId } from '../src/computers/writer-lease.ts';
@@ -59,6 +60,20 @@ async function grantsOnlyAfterQuietProof() {
     .rejects.toThrow();
 }
 it('saves one exclusive writer lease after quiet proof', grantsOnlyAfterQuietProof);
+
+async function refusesChangedStartRetries() {
+  const { store, input } = await setup();
+  await grantWriter(store, 'test', input, accessAllowed);
+  const changedExpiry = { ...input,
+    expiresAt: new Date(Date.parse(input.expiresAt) - 1000).toISOString() };
+  const changedOriginal = { ...input,
+    originalExpiresAt: new Date(Date.parse(input.originalExpiresAt) - 1000).toISOString() };
+  await expect(grantWriter(store, 'test', changedExpiry, accessAllowed))
+    .rejects.toThrow('Control conflict');
+  await expect(grantWriter(store, 'test', changedOriginal, accessAllowed))
+    .rejects.toThrow('Control conflict');
+}
+it('refuses a start command id reused with changed expiry fields', refusesChangedStartRetries);
 
 async function refusesBeforeQuietProof() {
   const { store, input } = await setup(false);
@@ -169,6 +184,106 @@ async function renewsOnlyTheLiveSlot() {
   expect(await reopened.claim()).toBe(false);
 }
 it('renews only a live slot within the original deadline', renewsOnlyTheLiveSlot);
+
+async function refusesChangedRenewalRetries() {
+  const { store, input } = await setup();
+  await grantWriter(store, 'test', input, accessAllowed);
+  const slot = new WriterSlot(store, 'test', input, accessAllowed);
+  expect(await slot.claim()).toBe(true);
+  try {
+    const renewal = { ...input, commandId: 'renew-command',
+      expiresAt: new Date(Date.now() + 90_000).toISOString() };
+    await renewWriter(store, 'test', renewal, accessAllowed);
+    const changedExpiry = { ...renewal,
+      expiresAt: new Date(Date.parse(renewal.expiresAt) - 1000).toISOString() };
+    const changedOriginal = { ...renewal,
+      originalExpiresAt: new Date(Date.parse(renewal.originalExpiresAt) - 1000).toISOString() };
+    await expect(renewWriter(store, 'test', changedExpiry, accessAllowed))
+      .rejects.toThrow('Control conflict');
+    await expect(renewWriter(store, 'test', changedOriginal, accessAllowed))
+      .rejects.toThrow('Control conflict');
+  } finally {
+    slot.close();
+  }
+}
+it('refuses a renewal command id reused with changed expiry fields',
+  refusesChangedRenewalRetries);
+
+async function refusesAccessRemovedDuringComputerRead() {
+  const { store, input } = await setup();
+  await grantWriter(store, 'test', input, accessAllowed);
+  let releaseRead: (() => void) | undefined;
+  let signalRead: (() => void) | undefined;
+  const readHeld = new Promise<void>(function captureSignal(resolve) { signalRead = resolve; });
+  const readReleased = new Promise<void>(function captureRelease(resolve) {
+    releaseRead = resolve;
+  });
+  const originalRead = store.readStream.bind(store);
+  let readCount = 0;
+  async function* delayedRead(rows: AsyncIterable<StoredEvent>) {
+    signalRead?.();
+    await readReleased;
+    for await (const row of rows) yield row;
+  }
+  function readStream(subject: string, sequence?: number, deadline?: number,
+    includeConversationCloses?: boolean) {
+    readCount += 1;
+    const rows = originalRead(subject, sequence, deadline, includeConversationCloses);
+    if (readCount === 2) return delayedRead(rows);
+    return rows;
+  }
+  vi.spyOn(store, 'readStream').mockImplementation(readStream);
+  let removed = false;
+  let accessChecks = 0;
+  async function checkAccess() {
+    accessChecks += 1;
+    if (removed) throw new Error('Member removed');
+  }
+  const slot = new WriterSlot(store, 'test', input, checkAccess);
+  try {
+    const claim = slot.claim();
+    await readHeld;
+    removed = true;
+    releaseRead?.();
+    expect(await claim).toBe(false);
+    expect(accessChecks).toBeGreaterThanOrEqual(2);
+    expect(slot.allows(input.leaseId, input.writerSessionId)).toBe(false);
+  } finally {
+    releaseRead?.();
+    slot.close();
+  }
+}
+it('refuses input when access is removed during a delayed computer read',
+  refusesAccessRemovedDuringComputerRead);
+
+async function keepsLeaseExpiryAfterClockMovesBack() {
+  const { store, input } = await setup();
+  await grantWriter(store, 'test', input, accessAllowed);
+  const wallStart = Date.now();
+  let wallNow = wallStart;
+  let monotonicNow = 1000;
+  vi.spyOn(Date, 'now').mockImplementation(function clockTime() { return wallNow; });
+  vi.spyOn(performance, 'now').mockImplementation(function monotonicTime() {
+    return monotonicNow;
+  });
+  let accessChecks = 0;
+  async function checkAccess() { accessChecks += 1; }
+  const slot = new WriterSlot(store, 'test', input, checkAccess);
+  try {
+    expect(await slot.claim()).toBe(true);
+    monotonicNow += 61_000;
+    wallNow -= 60_000;
+    await vi.waitFor(function refreshCompleted() {
+      expect(accessChecks).toBeGreaterThan(1);
+      expect(slot['checking']).toBe(false);
+    });
+    expect(slot.allows(input.leaseId, input.writerSessionId)).toBe(false);
+  } finally {
+    slot.close();
+  }
+}
+it('does not extend a saved lease after the wall clock moves backwards',
+  keepsLeaseExpiryAfterClockMovesBack);
 
 async function closesInputWhenReturnCannotBeSaved() {
   const { store, input } = await setup();
