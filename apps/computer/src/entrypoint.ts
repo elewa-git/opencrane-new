@@ -10,6 +10,7 @@ import { randomBytes } from 'node:crypto';
 import { privateConfig, privateEnvironments } from './codex-config.ts';
 import { privateCodexLaunch } from './private-codex.ts';
 import { supervisorStop } from './supervisor-stop.ts';
+import { supervisePrivateChild } from './private-supervisor.ts';
 import { workerExecutor } from './worker-executor.ts';
 import { createServer, connect, type Socket } from 'node:net';
 // Resolve each child through an open parent; mutate only the checked descriptor.
@@ -53,58 +54,6 @@ function preparePrivateHome(privateHome: string) {
   }
 }
 
-function supervisePrivateChild(child: ChildProcess, socket: Socket, privateHome: string,
-  children: Set<ChildProcess>) {
-  let exited = false;
-  let timer: NodeJS.Timeout | undefined;
-  let killAttempts = 0;
-  function childExited() {
-    exited = true;
-    if (timer) clearTimeout(timer);
-    children.delete(child);
-    socket.destroy();
-    rmSync(privateHome, { recursive: true, force: true });
-  }
-  function killFailed() {
-    if (exited) return;
-    // Log fixed text only. Child output and private paths can contain member content.
-    process.stderr.write('Private process cleanup failed\n');
-    if (killAttempts < 3) {
-      timer = setTimeout(killAsPrivateUser, 1000);
-    }
-  }
-  function killAsPrivateUser() {
-    if (exited || !child.pid) return;
-    killAttempts++;
-    const args = ['--reuid=1003', '--regid=1003', '--clear-groups', '--',
-      '/bin/kill', '-KILL', String(child.pid)];
-    const killer = spawn('/usr/bin/setpriv', args, { stdio: 'ignore' });
-    let failed = false;
-    function retryKill() {
-      if (failed) return;
-      failed = true;
-      killFailed();
-    }
-    function killerExited(code: number | null) {
-      if (code !== 0) retryKill();
-    }
-    killer.on('error', retryKill);
-    killer.on('exit', killerExited);
-  }
-  function socketClosed() {
-    child.stdin?.destroy();
-    if (!exited && !timer) timer = setTimeout(killAsPrivateUser, 5000);
-  }
-  function socketFailed() {
-    socket.destroy();
-    socketClosed();
-  }
-  child.on('error', childExited);
-  child.on('exit', childExited);
-  child.stdin?.on('error', socketFailed);
-  socket.on('error', socketFailed);
-  socket.on('close', socketClosed);
-}
 
 if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
   const socket = connect(process.argv[2] === 'connect-host' ? '/run/executor/host.sock' : '/run/executor/exec.sock');
@@ -157,7 +106,6 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
       supervisePrivateChild(child, socket, privateHome, privateChildren);
       if (!child.stdin || !child.stdout) throw new Error('Missing private pipes');
       socket.pipe(child.stdin);
-      child.stdout.pipe(socket);
     } catch {
       socket.destroy();
       if (child) {
@@ -227,7 +175,7 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
     function refused() { socket.destroy(); }
     void acceptPrivateLaunch(socket, launchKey).then(launch, refused);
   }
-  createServer(privateConnection).listen('/run/executor/private.sock');
+  createServer({ allowHalfOpen: true }, privateConnection).listen('/run/executor/private.sock');
   executor(['host']).listen('/run/executor/host.sock', () => {
     executor([]).listen('/run/executor/exec.sock', () => {
       process.umask(0o077);

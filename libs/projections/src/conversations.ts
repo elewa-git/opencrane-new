@@ -130,7 +130,8 @@ export async function rebuildConversationsProjection(db: Db, source: EventSource
 
 function conversationFeedEntry(event: EventEnvelope) {
   // Keep private memory evidence and audit records away from public chat replies.
-  const auditTypes = ['agent.memory_context_recorded', 'agent.native_request_refused',
+  const auditTypes = ['agent.memory_context_recorded', 'agent.private_exited',
+    'agent.native_request_refused',
     'conversation.child_requested', 'conversation.child_start_failed',
     'conversation.child_retry_requested', 'conversation.child_activated'];
   if (auditTypes.includes(event.type)) return;

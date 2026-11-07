@@ -28,7 +28,9 @@ const existingReportSchema = z.object({
   nativeTermination: z.literal('turn_completed').optional(),
   reason: z.enum(['bridge_interrupted', 'restricted_tool_refused',
     'stop_interrupted', 'model_error', 'bridge_restarted']).optional(),
-  type: z.enum(['agent.output_lost', 'agent.command_ran', 'agent.reasoning_summarised', 'agent.turn_started', 'agent.turn_completed', 'agent.turn_failed', 'agent.message_delta', 'agent.message_completed']),
+  type: z.enum(['agent.output_lost', 'agent.private_exited', 'agent.command_ran',
+    'agent.reasoning_summarised', 'agent.turn_started', 'agent.turn_completed',
+    'agent.turn_failed', 'agent.message_delta', 'agent.message_completed']),
 }).strict();
 const toolReportFields = {
   sequence: z.int().positive(), previousSequence: z.int().nonnegative().optional(),
@@ -155,6 +157,7 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
     report.turnId, context.computerId, first.sequence, deadline);
   const created = agentSessionData(facts.created);
   const authorId = reportAuthor(report, context.assistantId, created, facts.message);
+  requirePrivateExitShape(report);
   requireMemoryFreeContent(report, facts);
   const digest = reportDigest(batch?.at(-1) ?? report);
   const subject = `conversation-${report.conversationId}`;
@@ -162,6 +165,7 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
     return verifyRecordedReport(store, keys, context, report, batch, facts.reportPosition, digest);
   }
   await requireSharedReportTurn(store, context, report, created, authorId);
+  await requirePrivateExitTurn(store, context, report);
   let previousSequence = facts.lastReportSequence;
   let expectedPrevious = first.previousSequence;
   if (expectedPrevious === undefined) {
@@ -222,6 +226,18 @@ function requireMemoryFreeContent(report: Report, facts: ChatFacts) {
   const hasArtifacts = 'artifacts' in report && Boolean(report.artifacts?.length);
   if (hasText || hasCommandDigest || hasArtifacts) {
     throw new MemoryReportRejected('Memory-bearing report content refused');
+  }
+}
+
+function requirePrivateExitShape(report: Report) {
+  if (report.type !== 'agent.private_exited') return;
+  const allowed = new Set(['type', 'sequence', 'previousSequence', 'conversationId',
+    'turnId', 'assistantId', 'requesterId', 'threadId', 'executionMode']);
+  for (const name of Object.keys(report)) {
+    if (!allowed.has(name)) throw new ReportRejected('Private exit report mismatch');
+  }
+  if (report.executionMode !== 'restricted') {
+    throw new ReportRejected('Private exit report mismatch');
   }
 }
 
@@ -298,7 +314,7 @@ async function requireSharedReportTurn(store: EventStore,
   context: { silo: string; assistantId: string; computerId: string },
   report: z.infer<typeof reportSchema>, created: ReturnType<typeof agentSessionData>,
   requesterId: unknown) {
-  if (report.type === 'agent.turn_started') return;
+  if (report.type === 'agent.turn_started' || report.type === 'agent.private_exited') return;
   if (!('contextKind' in created) || created.contextKind !== 'shared_child') return;
   function take(summary: ComputerSummary) {
     const turn = summary.turns.get(report.turnId);
@@ -317,6 +333,35 @@ async function requireSharedReportTurn(store: EventStore,
     throw new ReportRejected('Shared report has no admitted turn');
   }
   verifySharedReportBinding(savedTurn, context, report, requesterId);
+}
+
+async function requirePrivateExitTurn(store: EventStore, context: ReportContext, report: Report) {
+  if (report.type !== 'agent.private_exited') return;
+  const subject = `computer-${context.assistantId}`;
+  function take(summary: ComputerSummary) {
+    const turn = summary.turns.get(report.turnId);
+    return { start: turn?.firstStart, closeSequence: turn?.firstClose?.sequence,
+      closeStatus: turn?.firstClose?.status };
+  }
+  const saved = await readStreamSummary(store, context.silo, subject,
+    computerSummary, performance.now() + 10_000, take);
+  let start = saved.start;
+  if (!start && saved.closeSequence !== undefined) {
+    start = await readEventAt(store, subject, saved.closeSequence,
+      performance.now() + 10_000);
+  }
+  // An exit can overtake the separate computer start save. The report carries no output.
+  if (!start) return;
+  const data = z.object({ conversationId: z.string(), computerId: z.string(),
+    executionMode: z.string().optional() }).parse(start?.event.data);
+  const admitted = start?.event.type === 'computer.turn_started'
+    && data.executionMode === 'restricted';
+  const refused = start?.event.type === 'computer.turn_closed'
+    && saved.closeStatus === 'failed' && !data.executionMode;
+  if ((!admitted && !refused) || data.conversationId !== report.conversationId ||
+      data.computerId !== context.computerId) {
+    throw new ReportRejected('Private exit turn mismatch');
+  }
 }
 
 function verifySharedReportBinding(savedTurn: StoredEvent,
@@ -388,7 +433,8 @@ function reportData(report: z.infer<typeof reportSchema>, silo: string, assistan
     return data;
   } else if (report.type === 'agent.turn_failed') {
     return failedTurnData(report);
-  } else if (report.type === 'agent.turn_completed' || report.type === 'agent.output_lost') {
+  } else if (report.type === 'agent.turn_completed' || report.type === 'agent.output_lost'
+    || report.type === 'agent.private_exited') {
     return common;
   } else {
     return { ...common, messageId: z.string().parse(report.messageId), contentType: 'text',

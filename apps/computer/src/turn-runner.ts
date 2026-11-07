@@ -109,6 +109,7 @@ class TurnRunner {
   private readonly turnModels = new Map<string, string>();
   private readonly renewals = new Map<string, Promise<void>>();
   private readonly stopRemovals = new WeakMap<Turn, Promise<void>>();
+  private readonly stoppedAccessRemoved = new WeakSet<Turn>();
   private readonly interrupts = new WeakMap<Turn, Promise<void>>();
   private readonly grantInstalls = new Map<string, { pending: number; terminal: boolean }>();
   private readonly driver: TurnDriver;
@@ -462,8 +463,15 @@ class TurnRunner {
       settle(new Error('Turn ended'));
     }
     if (threadId && turn) {
-      void this.gate.track(this.dropAccess(threadId, turn));
+      this.releaseTurnAccess(threadId, turn);
     }
+  }
+
+  private releaseTurnAccess(threadId: string, turn: Turn) {
+    // Keep a separate removal while Stop is pending, as the thread may be reused.
+    // A completed private Stop has already removed that private grant.
+    if (turn.executionMode === 'restricted' && this.stoppedAccessRemoved.has(turn)) return;
+    void this.gate.track(this.dropAccess(threadId, turn));
   }
 
   private keepInstallingTurn(turnId: string) {
@@ -542,6 +550,21 @@ class TurnRunner {
     this.state.sessions.set(input.id, session);
     const sessionClosed = this.privateSessionClosed.bind(this, input);
     void session.closed.then(sessionClosed, sessionClosed);
+    if (session.exited) {
+      const processExited = this.privateProcessExited.bind(this, input);
+      void session.exited.then(processExited);
+    }
+  }
+
+  private privateProcessExited(input: Turn) {
+    const started = this.lastStartedReport(input.id);
+    if (started?.executionMode === 'restricted') {
+      try {
+        this.appendReport(input, 'agent.private_exited');
+      } catch {
+        // Leave closure pending if the exit proof cannot be saved.
+      }
+    }
   }
 
   async prepareRoutine(value: Record<string, unknown>) {
@@ -719,6 +742,8 @@ class TurnRunner {
       this.confirmPrivateClearance(turnId, cleared);
       return;
     }
+    const privateSession = input.executionMode === 'restricted'
+      ? this.state.sessions.get(input.id) : undefined;
 
     if (!this.gate.closed) {
       this.stoppedTurns.add(turnId);
@@ -727,10 +752,19 @@ class TurnRunner {
     this.boundRoutineStop(input);
     this.confirmPrivateClearance(turnId, cleared);
     const heldThread = this.findRunningThread(turnId);
+    await this.stopRunningTurn(input, heldThread, privateSession, value['reason']);
+  }
+
+  private async stopRunningTurn(input: Turn, heldThread: string | undefined,
+    privateSession: PrivateSession | undefined, reason: unknown) {
+    // Close this process only for a closed chat. Other Stops keep their terminal ordering.
+    const sessionToClose = !this.gate.closed && reason === 'conversation_closed'
+      ? privateSession : undefined;
     if (!this.gate.closed) {
       try {
         await this.removeStoppedAccess(input, heldThread);
       } catch (error) {
+        sessionToClose?.close();
         // Retry this private turn on the next Stop without disconnecting its neighbours.
         if (input.senderAttemptId && input.executionMode === 'restricted') {
           return;
@@ -738,15 +772,21 @@ class TurnRunner {
         throw error;
       }
     } else this.endTurnHolds(heldThread);
-    const codexTurnId = this.state.codexTurns.get(turnId);
+    const codexTurnId = this.state.codexTurns.get(input.id);
     if (!codexTurnId) {
+      sessionToClose?.close();
       return;
     }
-    const threadId = this.findRunningThread(turnId);
+    const threadId = this.findRunningThread(input.id);
     if (!threadId) {
+      sessionToClose?.close();
       return;
     }
-    await this.interruptOnce(input, threadId, codexTurnId);
+    try {
+      await this.interruptOnce(input, threadId, codexTurnId);
+    } finally {
+      sessionToClose?.close();
+    }
   }
 
   private boundRoutineStop(input: Turn) {
@@ -777,11 +817,13 @@ class TurnRunner {
     const pending = revokeTurnAccess(input.id, this.state.waiting,
       this.journal.reports, revoke, endHolds);
     const removals = this.stopRemovals;
+    const removed = this.stoppedAccessRemoved;
+    function finished() { removed.add(input); }
     function failed(error: unknown): never {
       removals.delete(input);
       throw error;
     }
-    const removal = pending.catch(failed);
+    const removal = pending.then(finished, failed);
     removals.set(input, removal);
     return removal;
   }

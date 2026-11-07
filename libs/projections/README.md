@@ -40,7 +40,7 @@ flowchart LR
   models["libs/models<br/>model and replay tests"] -.->|uses database locks and the test helper| projections
   ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and checks saved changes| projections["libs/projections<br/>read tables, change history, routines, memory, surveys and personas"]
   server["apps/server<br/>back end"] -->|reads tables, own and admin routine lists, run pages and spending choices| pg["PostgreSQL<br/>database"]
-  projections -->|saves admission, removal, role, ownership, control and spending history; keeps private audits outside feeds; saves routines and receipts| pg
+  projections -->|saves history and spending; keeps private audits and process exits outside chat feeds| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections
   server -.->|reads member references, tool readiness, nightly memory inputs and child requests awaiting activation| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
@@ -84,8 +84,9 @@ Keep the first write at an equal memory revision, including its expiry and saved
 position. The nightly scanner shares this rule. A nightly review covers expiry only
 through its intended time, so a delayed selection cannot hide later expiry.
 
-Private memory reference records and native request refusal audits stay in the saved event log. They do not enter
-the chat read table, so history pages and live chat show only public rows.
+Private memory records, process exit reports and native request refusal audits stay
+in the saved event log. They do not enter the chat read table, so history pages
+and live chat show only public rows.
 
 The optional private tool-instance table keeps each recorded run and its status.
 It checks each new observation against the preceding saved revision.

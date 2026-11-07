@@ -38,6 +38,9 @@ async function replaysToolFeed() {
     const finished = { ...started, status: 'completed', durationMs: 75 };
     await append('agent.tool_call_started', 'conversation-chat', started);
     await append('agent.tool_call_finished', 'conversation-chat', finished);
+    await append('agent.private_exited', 'conversation-chat', {
+      conversationId: 'chat', turnId: 'turn',
+    });
     const logger = createLogger('tool-feed', { level: 'silent' });
     const runner = new ProjectionRunner(storage.db, nats.reader, logger);
     await runner.initialise(conversations);

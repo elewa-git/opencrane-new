@@ -11,13 +11,20 @@ type Link = { socket: WebSocket; connectionId: number; sentStops: Map<string, nu
 type Assistant = {
   current: StoredEvent['event'] | undefined;
   started: Set<string>;
+  privateStarted: Set<string>;
   closed: Set<string>;
   lostTurns: Set<string>;
   turnComputers: Map<string, string>;
   closedStatuses: Map<string, 'completed' | 'failed'>;
 };
 type Options = { silo: string; store: EventStore };
-type SavedTurns = { ended: Set<string>; cancelled: Set<string>; starts: Set<string> };
+type SavedTurns = { ended: Set<string>; cancelled: Set<string>; starts: Set<string>;
+  exited: Set<string> };
+type CleanupDecision = { pending: boolean; stop: boolean };
+type CleanupWriter = { rows: ChatRows; saved: SavedTurns; sequence: number;
+  computerStarts?: { turnIds: Set<string>; sequence: number } };
+const recoveryItemLimit = 32;
+const recoveryTimeLimitMs = 1000;
 const turnData = z.object({ turnId: z.string() });
 const computerData = z.object({ computerId: z.string() });
 const postedAuthor = z.object({ authorKind: z.enum(['human', 'agent', 'system']) });
@@ -52,6 +59,19 @@ function reportedStarts(rows: ChatRows) {
   return started;
 }
 
+function privateExits(rows: ChatRows, turnComputers?: Map<string, string>) {
+  const exited = new Set<string>();
+  for (const row of rows) {
+    if (row.event.type !== 'agent.private_exited' || row.event.source !== 'computer-bridge') {
+      continue;
+    }
+    const turnId = turnData.parse(row.event.data).turnId;
+    const originalComputer = turnComputers?.get(turnId);
+    if (originalComputer && row.event.report?.computerId === originalComputer) exited.add(turnId);
+  }
+  return exited;
+}
+
 function postedInputs(rows: ChatRows) {
   function isPosted(row: ChatRows[number]) {
     return row.event.type === 'message.posted' &&
@@ -66,26 +86,49 @@ function failureId(conversationId: string, turnId: string) {
   return digest.digest('hex');
 }
 
+function savedTurns(rows: ChatRows, assistant: Assistant): SavedTurns {
+  return { ended: terminalTurns(rows), cancelled: cleanupFailures(rows),
+    starts: reportedStarts(rows), exited: privateExits(rows, assistant.turnComputers) };
+}
+
+function conversationSequence(rows: ChatRows, conversationId: string) {
+  const subject = `conversation-${conversationId}`;
+  let sequence = 0;
+  for (const row of rows) {
+    if (row.event.subject === subject) sequence = Math.max(sequence, row.sequence);
+  }
+  return sequence;
+}
+
+async function computerStarts(options: Options, assistantId: string) {
+  const started = new Set<string>();
+  const rows = await history(options.store, `computer-${assistantId}`);
+  let sequence = 0;
+  for (const row of rows) {
+    sequence = Math.max(sequence, row.sequence);
+    if (row.event.type === 'computer.turn_started') {
+      started.add(turnData.parse(row.event.data).turnId);
+    }
+  }
+  return { turnIds: started, sequence };
+}
+
 async function appendTerminal(options: Options, conversationId: string, turnId: string,
-  assistantId: string, status: 'completed' | 'failed', allowStarted: boolean) {
+  assistantId: string, status: 'completed' | 'failed', allowStarted: boolean,
+  writer: CleanupWriter, assistant: Assistant) {
   const subject = `conversation-${conversationId}`;
   const id = failureId(conversationId, turnId);
   for (let attempt = 0; attempt < 3; attempt++) {
-    const rows = await chatHistory(options.store, options.silo, conversationId);
-    const ended = terminalTurns(rows);
-    if (ended.has(turnId)) return;
-    const started = reportedStarts(rows);
-    if (started.has(turnId) && !allowStarted) return;
+    if (writer.saved.ended.has(turnId)) return;
+    if (writer.saved.starts.has(turnId) && !allowStarted) return;
     if (!allowStarted) {
-      const computerRows = await history(options.store, `computer-${assistantId}`);
-      for (const computerRow of computerRows) {
-        if (computerRow.event.type === 'computer.turn_started' &&
-            turnData.parse(computerRow.event.data).turnId === turnId) return;
+      writer.computerStarts ??= await computerStarts(options, assistantId);
+      if (writer.computerStarts.turnIds.has(turnId)) return;
+      const currentSequence = await options.store.head(`computer-${assistantId}`, Infinity);
+      if (currentSequence !== writer.computerStarts.sequence) {
+        // Retry with a fresh computer history before deciding that a turn never started.
+        throw new Error('Close cleanup changed; retrying');
       }
-    }
-    let sequence = 0;
-    for (const row of rows) {
-      if (row.event.subject === subject) sequence = Math.max(sequence, row.sequence);
     }
     const data = status === 'completed'
       ? { conversationId, turnId }
@@ -96,22 +139,37 @@ async function appendTerminal(options: Options, conversationId: string, turnId: 
       source: 'opencrane-server', principal: { kind: 'system' as const, id: 'close-cleanup' },
       time: new Date().toISOString(), correlation: {}, data,
     };
-    const result = await options.store.append({ expectedSequence: sequence,
+    const result = await options.store.append({ expectedSequence: writer.sequence,
       historyChecked: true, event });
-    if (result.status === 'appended') return;
+    if (result.status === 'appended') {
+      writer.sequence++;
+      writer.saved.ended.add(turnId);
+      if (status === 'failed') writer.saved.cancelled.add(turnId);
+      return;
+    }
     if (result.status !== 'rejected') throw new Error('Close cleanup unavailable');
+    // Read fresh history after a concurrent append before another conditional write.
+    writer.rows = await chatHistory(options.store, options.silo, conversationId);
+    writer.saved = savedTurns(writer.rows, assistant);
+    writer.sequence = conversationSequence(writer.rows, conversationId);
+    delete writer.computerStarts;
   }
   throw new Error('Close cleanup changed; retrying');
 }
 
 function recoverableTerminal(row: ChatRows[number], started: Set<string> | undefined,
-  lostTurns: Set<string> | undefined) {
+  lostTurns: Set<string> | undefined, privateStarted: Set<string> | undefined,
+  exited: Set<string>) {
   if (row.event.type !== 'agent.turn_completed' && row.event.type !== 'agent.turn_failed') {
     return false;
   }
   const turnId = turnData.parse(row.event.data).turnId;
   if (started && !started.has(turnId)) return false;
-  if (row.event.principal?.id === 'close-cleanup' && !lostTurns?.has(turnId)) return false;
+  if (privateStarted?.has(turnId) && !exited.has(turnId) && !lostTurns?.has(turnId)) {
+    return false;
+  }
+  if (row.event.principal?.id === 'close-cleanup'
+    && !lostTurns?.has(turnId) && !exited.has(turnId)) return false;
   return true;
 }
 
@@ -126,13 +184,17 @@ async function refreshClosedTurns(options: Options, assistantId: string, closed:
 
 export async function recoverTerminalTurns(options: Options, computerId: string,
   assistantId: string, conversationId: string, rows: ChatRows, closed: Set<string>,
-  started?: Set<string>, turnComputers?: Map<string, string>, lostTurns?: Set<string>) {
+  started?: Set<string>, turnComputers?: Map<string, string>, lostTurns?: Set<string>,
+  privateStarted?: Set<string>, maxActions = Infinity, deadline = Infinity) {
   // Recover a server crash between the agent report and the separate computer event.
   let refreshed = false;
+  let actions = 0;
+  const exited = privateExits(rows, turnComputers);
   for (const row of rows) {
-    if (!recoverableTerminal(row, started, lostTurns)) continue;
+    if (!recoverableTerminal(row, started, lostTurns, privateStarted, exited)) continue;
     const terminal = turnData.parse(row.event.data);
     if (closed.has(terminal.turnId)) continue;
+    if (actions >= maxActions || performance.now() >= deadline) return false;
     if (!refreshed) {
       await refreshClosedTurns(options, assistantId, closed);
       refreshed = true;
@@ -143,29 +205,43 @@ export async function recoverTerminalTurns(options: Options, computerId: string,
     await turnCommand(options.store, { silo: options.silo, computerId: boundComputer, assistantId },
       { conversationId, turnId: terminal.turnId, status });
     closed.add(terminal.turnId);
+    actions++;
   }
+  return true;
 }
 
 async function settleClosedInput(options: Options, conversationId: string, assistantId: string,
-  turnId: string, assistant: Assistant, saved: SavedTurns) {
+  turnId: string, assistant: Assistant, writer: CleanupWriter): Promise<CleanupDecision> {
+  const saved = writer.saved;
   const admitted = saved.starts.has(turnId) || assistant.started.has(turnId);
-  if (!admitted && !saved.ended.has(turnId)) {
-    await appendTerminal(options, conversationId, turnId, assistantId, 'failed', false);
-    return false;
+  if (!admitted) {
+    if (!saved.ended.has(turnId)) {
+      await appendTerminal(options, conversationId, turnId, assistantId, 'failed', false,
+        writer, assistant);
+    }
+    return { pending: false, stop: false };
   }
+  // Keep cleanup open until the supervisor confirms exit or this computer is known lost.
+  const waitingForPrivateExit = assistant.privateStarted.has(turnId)
+    && !saved.exited.has(turnId) && !assistant.lostTurns.has(turnId);
+  if (waitingForPrivateExit) return { pending: true, stop: true };
   const unsettledCancellation = saved.cancelled.has(turnId) &&
     assistant.started.has(turnId) && !assistant.closed.has(turnId);
-  if (saved.ended.has(turnId) && !unsettledCancellation) return false;
+  if (saved.ended.has(turnId) && !unsettledCancellation) {
+    return { pending: !assistant.closed.has(turnId), stop: false };
+  }
   const savedStatus = assistant.closedStatuses.get(turnId);
   if (savedStatus) {
-    await appendTerminal(options, conversationId, turnId, assistantId, savedStatus, true);
-    return false;
+    await appendTerminal(options, conversationId, turnId, assistantId, savedStatus, true,
+      writer, assistant);
+    return { pending: !assistant.closed.has(turnId), stop: false };
   }
-  if (assistant.lostTurns.has(turnId)) {
-    await appendTerminal(options, conversationId, turnId, assistantId, 'failed', true);
-    return false;
+  if (assistant.lostTurns.has(turnId) || saved.exited.has(turnId)) {
+    await appendTerminal(options, conversationId, turnId, assistantId, 'failed', true,
+      writer, assistant);
+    return { pending: !assistant.closed.has(turnId), stop: false };
   }
-  return true;
+  return { pending: true, stop: true };
 }
 
 async function sendCloseStop(conversationId: string, assistantId: string, turnId: string,
@@ -183,31 +259,48 @@ async function sendCloseStop(conversationId: string, assistantId: string, turnId
   const lastStop = readyLink.sentStops.get(stopKey) ?? -Infinity;
   if (now - lastStop < 1000) return readyLink;
   readyLink.sentStops.set(stopKey, now);
-  readyLink.socket.send(JSON.stringify({ type: 'stop', turnId, conversationId }));
+  readyLink.socket.send(JSON.stringify({ type: 'stop', turnId, conversationId,
+    reason: 'conversation_closed' }));
   return readyLink;
 }
 
 export async function cleanClosedConversation(options: Options, conversationId: string,
   assistantId: string, rows: ChatRows, assistant: Assistant, refused: Set<string>,
-  connection: (computerId: string, assistantId: string) => Promise<Link>) {
-  const saved = { ended: terminalTurns(rows), cancelled: cleanupFailures(rows),
-    starts: reportedStarts(rows) };
+  connection: (computerId: string, assistantId: string) => Promise<Link>, cursor = 0) {
+  const writer: CleanupWriter = { rows, saved: savedTurns(rows, assistant),
+    sequence: conversationSequence(rows, conversationId) };
   const currentComputer = assistant.current
     ? computerData.parse(assistant.current.data).computerId : undefined;
   const inputs = postedInputs(rows);
+  const deadline = performance.now() + recoveryTimeLimitMs;
   let pending = false;
   let link: Link | undefined;
-  for (const input of inputs) {
+  let visited = 0;
+  let nextCursor = inputs.length === 0 ? 0 : cursor % inputs.length;
+  while (visited < inputs.length && visited < recoveryItemLimit
+    && performance.now() < deadline) {
+    const input = inputs[nextCursor];
+    if (!input) break;
     const turnId = input.event.id;
-    const needsStop = await settleClosedInput(options, conversationId, assistantId,
-      turnId, assistant, saved);
-    if (!needsStop) continue;
-    pending = true;
-    link = await sendCloseStop(conversationId, assistantId, turnId, assistant,
-      refused, link, connection);
+    const decision = await settleClosedInput(options, conversationId, assistantId,
+      turnId, assistant, writer);
+    if (decision.pending) pending = true;
+    if (decision.stop) {
+      link = await sendCloseStop(conversationId, assistantId, turnId, assistant,
+        refused, link, connection);
+    }
+    visited++;
+    nextCursor = (nextCursor + 1) % inputs.length;
   }
-  await recoverTerminalTurns(options, currentComputer ?? '', assistantId, conversationId,
-    rows, assistant.closed, assistant.started, assistant.turnComputers, assistant.lostTurns);
-  if (link) return { pending, retry: pending, connectionId: link.connectionId };
-  return { pending, retry: pending };
+  const moreInputs = visited < inputs.length;
+  if (moreInputs) pending = true;
+  const remainingActions = recoveryItemLimit - visited;
+  const recovered = await recoverTerminalTurns(options, currentComputer ?? '', assistantId,
+    conversationId, writer.rows, assistant.closed, assistant.started,
+    assistant.turnComputers, assistant.lostTurns, assistant.privateStarted,
+    remainingActions, deadline);
+  if (!recovered) pending = true;
+  const result = { pending, retry: pending, cursor: moreInputs ? nextCursor : 0 };
+  if (link) return { ...result, connectionId: link.connectionId };
+  return result;
 }

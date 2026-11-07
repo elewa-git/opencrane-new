@@ -27,6 +27,8 @@ Computer turn records can keep a routine's input id separate from its turn id,
 alongside the allocated spending root. These identifiers grant no permission to send.
 A failed turn can also record a confirmed native terminal reply. Socket failure and
 requested cancellation alone do not prove that the turn ended.
+A private process exit record confirms that the supervisor saw the process end.
+It carries no reply text and stays out of chat history.
 
 Account refresh starts record one attempt for a saved generation. Rebuilding these
 records keeps the account and attempt without contacting its provider.
@@ -49,7 +51,7 @@ Allow, Ask or Block choice for a tool.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions, including private persona revisions"]
-  server["apps/server<br/>back end"] -.->|checks assistant file lists and records, native termination, routine turn identities, allowance fingerprints, owner, approval and unconfirmed delivery Stop intent, owner-removal pauses and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
+  server["apps/server<br/>back end"] -.->|checks assistant file lists and records, private exit, native termination, routine turn identities, allowance fingerprints, owner, approval and unconfirmed delivery Stop intent, owner-removal pauses and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
