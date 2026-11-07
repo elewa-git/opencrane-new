@@ -1,8 +1,30 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { gzipSync } from 'node:zlib';
 import { test, vi } from 'vitest';
 import { scanHostedImage } from '../infra/clamav/image-walk.mjs';
+
+const cleanupFailure = vi.hoisted(() => ({ active: false }));
+vi.mock('node:fs/promises', async importOriginal => {
+  const actual = await importOriginal();
+  async function removeScratch(path, options) {
+    if (cleanupFailure.active && String(path).includes('hosted-image-scan-')) {
+      await actual.rm(path, options);
+      throw new Error(`EACCES: ${path}`);
+    }
+    return actual.rm(path, options);
+  }
+  return { ...actual, rm: removeScratch };
+});
+
+const execute = promisify(execFile);
+const walker = fileURLToPath(new URL('../infra/clamav/image-walk.py', import.meta.url));
 
 const eicar = Buffer.from('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*');
 const scanner = { imageDigest: `sha256:${'a'.repeat(64)}`,
@@ -34,6 +56,28 @@ function tar(files) {
   }
   blocks.push(Buffer.alloc(1024));
   return Buffer.concat(blocks);
+}
+function paxRecord(key, value) {
+  const body = ` ${key}=${value}\n`;
+  let length = body.length + 1;
+  while (`${length}`.length + body.length !== length) {
+    length = `${length}`.length + body.length;
+  }
+  return `${length}${body}`;
+}
+function sparseTar() {
+  const files = [];
+  for (let index = 0; index < 27; index++) {
+    const name = `sparse-${index}`;
+    const records = [
+      paxRecord('GNU.sparse.map', '0,1,20971520,0'),
+      paxRecord('GNU.sparse.realsize', '20971520'),
+      paxRecord('GNU.sparse.name', name),
+    ];
+    files.push({ name: `pax-${index}`, type: 'x', bytes: Buffer.from(records.join('')) });
+    files.push({ name, bytes: Buffer.from('x') });
+  }
+  return tar(files);
 }
 function fixture(layerFiles, compressed = false) {
   const layers = layerFiles.map(files => {
@@ -122,6 +166,9 @@ const badFiles = [
   ['nested archive', { name: 'nested.zip', bytes: Buffer.from('PK\x03\x04encrypted') }],
   ['EICAR inside tar', { name: 'nested.tar', bytes: tar([{ name: 'eicar', bytes: eicar }]) }],
   ['unsupported archive', { name: 'nested.rar', bytes: Buffer.from('Rar!\x1a\x07') }],
+  ['self-extracting RAR', { name: 'installer.exe',
+    bytes: Buffer.concat([Buffer.from('MZ'), Buffer.alloc(4096),
+      Buffer.from('Rar!\x1a\x07\x01\x00'), eicar]) }],
   ['large file', { name: 'huge', bytes: Buffer.alloc(20 * 1024 * 1024 + 1) }],
 ];
 for (const [label, file] of badFiles) {
@@ -132,6 +179,32 @@ for (const [label, file] of badFiles) {
     assert.equal('validate' in result, false);
   });
 }
+
+test('PAX sparse files cannot exceed the extracted-byte budget', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'sparse-image-walk-test-'));
+  try {
+    const layer = sparseTar();
+    assert.ok(layer.length < 100_000);
+    const layers = [{ mediaType: 'application/vnd.oci.image.layer.v1.tar',
+      diffId: `sha256:${hash(layer)}` }];
+    await writeFile(join(directory, 'layers.json'), JSON.stringify(layers));
+    await writeFile(join(directory, 'layer-0'), layer);
+    await assert.rejects(execute('python3', [walker, directory]));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 120_000);
+
+test('scratch cleanup errors return a fixed result without a private path', async () => {
+  const image = fixture([[{ name: 'safe', bytes: Buffer.from('safe') }]]);
+  cleanupFailure.active = true;
+  try {
+    const result = await scanHostedImage(image, scanner, recordingScanner([]));
+    assert.deepEqual(result, { verdict: 'unavailable', reasonCode: 'image_scan_unavailable' });
+  } finally {
+    cleanupFailure.active = false;
+  }
+});
 
 test('truncated layer, changed digest, scanner outage and stale definitions refuse', async () => {
   const image = fixture([[{ name: 'safe', bytes: Buffer.from('safe') }]]);
