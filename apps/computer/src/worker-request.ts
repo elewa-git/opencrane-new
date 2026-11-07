@@ -13,7 +13,7 @@ export type Registration = Binding & Readonly<{
   threadId: string; toolCallId: string; turnId: string; operationId: string;
   operationDigest: string; host: string; port: number; expiresAt: number;
 }>;
-type Lookup = (binding: Binding) => {
+export type Lookup = (binding: Binding) => {
   registration: Registration;
   input: string;
   // Claim this exact registration atomically, only while it is current and unused.
