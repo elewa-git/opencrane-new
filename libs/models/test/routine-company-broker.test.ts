@@ -386,7 +386,8 @@ it('refuses an allowed decision that did not consume the saved Ask',
   });
 
 it('refuses a Block saved after the owner approved', async function blockedTool() {
-  const test = await fixture({ toolMode: 'block' });
+  const test = await fixture({ toolMode: 'block',
+    accountScopes: ['openid', 'read', 'write'] });
   const rows = await history(nats.store, `mcp-${test.serverId}`, 'test');
   const policy = toolPolicyFromRows(rows);
   expect(policy.policyRevision).toBe(test.release.policyRevision);
