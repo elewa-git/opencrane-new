@@ -555,10 +555,8 @@ it.each(withdrawals)('checks saved %s inside the final append callback',
 const releaseChanges = [...withdrawals, 'deadline'] as const;
 async function withdrawsAfterSave(change: typeof releaseChanges[number]) {
   const test = await forgetFixture();
-  if (change === 'unrelated') {
-    // Let the unrelated event finish without spending the receipt deadline.
-    memoryClock();
-  }
+  // Keep each saved change within the receipt deadline unless this case advances time.
+  const clock = memoryClock();
   const store = test.setup.nats.store;
   const append = store.append.bind(store);
   const saved = Promise.withResolvers<number>();
@@ -581,7 +579,8 @@ async function withdrawsAfterSave(change: typeof releaseChanges[number]) {
     const deadline = await Promise.race([saved.promise, pending.then(finishedBeforeSave)]);
     expect(await tombstones(test)).toHaveLength(1);
     if (change === 'deadline') {
-      vi.spyOn(performance, 'now').mockReturnValue(deadline + 1);
+      clock.advance(deadline - performance.now() + 1);
+      expect(performance.now()).toBeGreaterThan(deadline);
     } else {
       await saveWithdrawal(test, change);
     }
