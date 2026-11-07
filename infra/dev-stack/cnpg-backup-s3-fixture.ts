@@ -71,7 +71,16 @@ export function storageFixture() {
     } else if (method === 'PUT') {
       operation = 'write';
     }
-    const extraGrant = identity === 'fixture-root' || identity === `fixture-${area}-${operation}`;
+    const configuredObject = path.startsWith('/database-backups/other-silo/') ||
+      path.startsWith('/other-silo-backups/');
+    const prefix = url.searchParams.get('prefix');
+    const configuredListing = prefix &&
+      ((path === '/database-backups' && prefix.startsWith('other-silo/')) ||
+        path === '/other-silo-backups');
+    const configuredAccess = listing ? configuredListing : configuredObject;
+    const configuredGrant = identity === 'fixture-configured-silos' && configuredAccess;
+    const extraGrant = identity === 'fixture-root' || identity === `fixture-${area}-${operation}` ||
+      configuredGrant;
     const allowed = ownObject || extraGrant;
     const needsRead = method === 'PUT' && request.headers['if-match'] !== undefined;
     const lacksRead = needsRead && !ownObject && identity !== 'fixture-root';

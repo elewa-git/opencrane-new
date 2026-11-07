@@ -17,7 +17,8 @@ const namespace = 'opencrane-package-1';
 const refusal = 'CNPG backup references are incomplete or incompatible';
 const cleanupRefusal = 'CNPG backup marker cannot be removed';
 const scopeRefusal = 'CNPG backup credential is not confined to its bucket and prefix';
-const successfulRequests = ['DELETE', 'PUT', 'GET', 'DELETE',
+const inventoryRefusal = 'CNPG cannot enumerate other silos\' backup locations';
+const checkedRequests = ['DELETE', 'PUT', 'GET', 'DELETE',
   'GET', 'GET', 'GET', 'PUT', 'GET', 'GET', 'PUT'];
 const privateValue = 'private-value-/private/path';
 let directory: string;
@@ -101,7 +102,7 @@ async function refused(run: Promise<unknown>, reason = refusal) {
   }
   await assert.rejects(run, safeError);
 }
-async function accepts() {
+async function refusesMissingInventory() {
   const input = fixture();
   const images: Record<string, string> = {};
   const secrets: Record<string, string> = {};
@@ -130,10 +131,10 @@ async function accepts() {
     }
   }
   const before = attempts.length;
-  await checkCnpgBackupReferences(input.backup, namespace, input.kubectl);
+  await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl), inventoryRefusal);
   assert.equal(attempts.length, before + 12);
   assert.equal(attempts.at(-1)!.destroyed, true);
-  assert.deepEqual(matching.storage.requests, successfulRequests);
+  assert.deepEqual(matching.storage.requests, checkedRequests);
   assert.equal(matching.storage.objects.size, 0);
   for (const name of Object.keys(input.objects)) {
     function matches(value: string) {
@@ -143,7 +144,8 @@ async function accepts() {
     assert.equal(matchingReads.length, 2);
   }
 }
-test('valid backup references are read and checked again', accepts);
+test('valid backup references are rechecked but cannot pass without silo locations',
+  refusesMissingInventory);
 
 const objectFaults = [
   ['metadata.name', 'foreign'], ['metadata.namespace', 'foreign'],
@@ -715,7 +717,7 @@ for (const name of ['backup-store', 'backup-trust', 'backup-identity']) {
       listener.storage.state.onRequest = replace;
       try {
         await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl));
-        assert.deepEqual(listener.storage.requests, successfulRequests);
+        assert.deepEqual(listener.storage.requests, checkedRequests);
         assert.equal(listener.storage.objects.size, 0);
         assert(input.reads.length > 4);
       } finally {
@@ -744,8 +746,8 @@ for (const field of ['endpointURL', 'destinationPath']) {
       return output;
     }
     try {
-      await checkCnpgBackupReferences(input.backup, namespace, change);
-      assert.deepEqual(listener.storage.requests, successfulRequests);
+      await refused(checkCnpgBackupReferences(input.backup, namespace, change), inventoryRefusal);
+      assert.deepEqual(listener.storage.requests, checkedRequests);
       assert.deepEqual(alternate.storage.requests, []);
       assert.equal(listener.storage.objects.size, 0);
     } finally {
@@ -762,8 +764,8 @@ async function removesStoredVersion() {
   atPeer(input, listener.port);
   listener.storage.state.fault = 'versioned';
   try {
-    await checkCnpgBackupReferences(input.backup, namespace, input.kubectl);
-    assert.deepEqual(listener.storage.requests, successfulRequests);
+    await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl), inventoryRefusal);
+    assert.deepEqual(listener.storage.requests, checkedRequests);
     assert.equal(listener.storage.objects.size, 0);
   } finally {
     listener.storage.objects.clear();
@@ -829,3 +831,20 @@ for (const binding of [undefined, 's3://database-backups/other-silo']) {
   }
   test(`storage refuses a destination binding of ${binding}`, refusesUnboundDestination);
 }
+
+async function refusesConfiguredSiloAccess() {
+  const input = fixture();
+  input.objects['backup-identity'].data.ACCESS_KEY_ID = encoded('fixture-configured-silos');
+  const listener = await peer(directory);
+  atPeer(input, listener.port);
+  try {
+    const run = checkCnpgBackupReferences(input.backup, namespace, input.kubectl);
+    await refused(run, inventoryRefusal);
+    assert.deepEqual(listener.storage.requests, checkedRequests);
+    assert.equal(listener.storage.objects.size, 0);
+  } finally {
+    await listener.close();
+  }
+}
+test('storage refuses configured-silo grants when the installer cannot enumerate locations',
+  refusesConfiguredSiloAccess);
