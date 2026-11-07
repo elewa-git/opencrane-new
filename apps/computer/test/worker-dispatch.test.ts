@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { homedir } from 'node:os';
 import { spawn } from 'node:child_process';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { workerRegistrations } from '../src/worker-registrations.ts';
 import { dispatchWorker } from '../src/worker-dispatch.ts';
 
@@ -45,7 +45,7 @@ function fixture(argv = gitArgs, input = '') {
   const state = { root, binding, params, registration, store, frame, starts, launch,
     active, ready };
   function dispatch() {
-    return dispatchWorker({ frame, binding, lookup: store.lookup, parent: root,
+    return dispatchWorker({ frame: state.frame, binding, lookup: store.lookup, parent: root,
       active: state.active, ready, launch: state.launch, now });
   }
   return { ...state, dispatch, state };
@@ -53,6 +53,7 @@ function fixture(argv = gitArgs, input = '') {
 
 function now() { return 1000; }
 function cleanup() {
+  vi.useRealTimers();
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 }
 afterEach(cleanup);
@@ -75,6 +76,11 @@ it('starts one checked npm operation with only prepared input', async () => {
 async function refusesForeign(field: string) {
   const test = fixture();
   if (field === 'missing registration') test.store.disconnect(test.binding.executorId);
+  if (field === 'forged registration') {
+    const request = JSON.parse(test.frame.toString('utf8'));
+    request.params.registration = { ...test.registration, executorId: 'forged' };
+    test.state.frame = Buffer.from(`${JSON.stringify(request)}\n`);
+  }
   if (field === 'wrong computer') test.binding.computerId = 'another-computer';
   if (field === 'wrong turn') test.state.active = identity => identity.turnId === 'another-turn';
   if (field === 'wrong operation') {
@@ -86,7 +92,7 @@ async function refusesForeign(field: string) {
   await expect(test.dispatch()).resolves.toBe('refused');
   expect(test.starts).toEqual([]);
 }
-it.each(['missing registration', 'wrong computer', 'wrong turn', 'wrong operation',
+it.each(['missing registration', 'forged registration', 'wrong computer', 'wrong turn', 'wrong operation',
   'sibling command', 'ended turn', 'revoked turn'])(
   'starts no process for %s', refusesForeign);
 
@@ -121,6 +127,23 @@ async function unknownAfterCrash() {
   expect(test.starts).toEqual([]);
 }
 it('leaves a crashed worker unknown and never resends the command', unknownAfterCrash);
+
+async function unknownAfterLostExit() {
+  vi.useFakeTimers();
+  const test = fixture();
+  let killed = false;
+  test.state.launch = (_plan, path) => {
+    test.starts.push(path);
+    return { exit: new Promise<number>(() => {}), kill() { killed = true; } };
+  };
+  const result = test.dispatch();
+  await vi.advanceTimersByTimeAsync(300_000);
+  await expect(result).resolves.toBe('unknown');
+  expect(killed).toBe(true);
+  await expect(test.dispatch()).resolves.toBe('refused');
+  expect(test.starts).toHaveLength(1);
+}
+it('leaves a missing exit unknown and never resends after its wall limit', unknownAfterLostExit);
 
 async function recordingProcess() {
   const test = fixture();
