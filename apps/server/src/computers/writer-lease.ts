@@ -8,6 +8,8 @@ import { takeoverStartedLeaseDataSchema, takeoverRenewedDataSchema,
 import { envelope } from '@opencrane/models';
 
 const id = z.string().regex(/^[\w-]{1,200}$/u);
+const readyIdentity = z.object({ assistantId: id, computerId: id,
+  generation: z.int().positive(), podUid: id });
 const common = z.object({ commandId: id, assistantId: id, computerId: id,
   generation: z.int().positive(), podUid: id, conversationId: id,
   requesterId: id, requesterEventId: id, takeoverId: id, leaseId: id,
@@ -77,9 +79,9 @@ function repeated(control: ComputerControl | undefined, input: Return, phase: st
 function validReady(facts: Awaited<ReturnType<typeof current>>, input: Return) {
   const ready = facts.lifecycle;
   if (ready?.event.type !== 'computer.ready') throw new Error('Computer unavailable');
-  const data = ready.event.data as Record<string, unknown>;
-  if (data['assistantId'] !== input.assistantId || data['computerId'] !== input.computerId
-    || data['generation'] !== input.generation || data['podUid'] !== input.podUid) {
+  const data = readyIdentity.parse(ready.event.data);
+  if (data.assistantId !== input.assistantId || data.computerId !== input.computerId
+    || data.generation !== input.generation || data.podUid !== input.podUid) {
     throw new Error('Computer conflict');
   }
 }
@@ -131,9 +133,10 @@ export async function renewWriter(store: EventStore, silo: string, raw: unknown,
   }
   const now = Date.now();
   const expires = Date.parse(input.expiresAt);
-  if (!control.expiresAt || Date.parse(control.expiresAt) <= now
+  if (!control.expiresAt || !control.originalExpiresAt
+    || Date.parse(control.expiresAt) <= now
     || expires <= now || expires > now + MAX_LEASE_MS
-    || expires > Date.parse(control.originalExpiresAt!)) throw new Error('Control conflict');
+    || expires > Date.parse(control.originalExpiresAt)) throw new Error('Control conflict');
   const { commandId: _commandId, ...renewedData } = input;
   const data = takeoverRenewedDataSchema.parse(renewedData);
   const saved = await append(store, silo, `computer-${input.assistantId}`,
@@ -229,7 +232,7 @@ export class WriterSlot {
     // Consume once permission is proved and before any input is admitted.
     consumed.add(leaseKey);
     this.owner = true;
-    this.timer = setInterval(this.refresh.bind(this), 250);
+    this.timer = setInterval(this.scheduleRefresh.bind(this), 250);
     this.timer.unref();
     return true;
   }
@@ -243,6 +246,9 @@ export class WriterSlot {
     } finally {
       this.checking = false;
     }
+  }
+  private scheduleRefresh() {
+    void this.refresh();
   }
   allows(leaseId: string, writerSessionId: string) {
     const now = performance.now();
