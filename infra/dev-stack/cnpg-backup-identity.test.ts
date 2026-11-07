@@ -51,8 +51,10 @@ async function credentials(this: AssumeRoleProvider) {
   const sessionToken = signedToken(policy, returnedAccessKey, expiry);
   let returnedToken = sessionToken;
   if (alterSignature) {
-    const replacement = sessionToken.endsWith('A') ? 'B' : 'A';
-    returnedToken = `${sessionToken.slice(0, -1)}${replacement}`;
+    const parts = sessionToken.split('.');
+    const signature = Buffer.from(parts[2]!, 'base64url');
+    signature[0] = signature[0]! ^ 1;
+    returnedToken = `${parts[0]}.${parts[1]}.${signature.toString('base64url')}`;
   }
   return {
     accessKey: returnedAccessKey,

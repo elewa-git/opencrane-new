@@ -638,6 +638,58 @@ async function privateNetworkFailure(context: import('node:test').TestContext) {
 }
 test('TLS discards nested network diagnostics and CA data', privateNetworkFailure);
 
+async function expiringLeaseRefusesBeforePut(context: import('node:test').TestContext) {
+  const input = fixture();
+  const listener = await peer(directory);
+  atPeer(input, listener.port);
+  const issued = await issueFor(input);
+  const tokenParts = issuedToken.split('.');
+  const claims = JSON.parse(Buffer.from(tokenParts[1]!, 'base64url').toString('utf8'));
+  let now = claims.exp * 1000 - 31_000;
+  function clock() {
+    return now;
+  }
+  function advanceDuringDelete(method: string) {
+    if (method === 'DELETE') {
+      now += 2_000;
+    }
+  }
+  listener.storage.state.onRequest = advanceDuringDelete;
+  context.mock.method(Date, 'now', clock);
+  try {
+    await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl,
+      { evidence: issued.evidence }), scopeRefusal);
+    assert.deepEqual(listener.storage.requests, ['DELETE']);
+    assert.equal(listener.storage.objects.size, 0);
+    assert.equal(input.reads.length, 4);
+  } finally {
+    await listener.close();
+  }
+}
+test('a lease entering its final 30 seconds during DELETE refuses before PUT',
+  expiringLeaseRefusesBeforePut);
+
+async function changedDestinationRefusesBeforeStorage() {
+  const input = fixture();
+  const listener = await peer(directory);
+  atPeer(input, listener.port);
+  const destinationPath = 's3://ocn-backup-silo-one/cnpg/elsewhere';
+  input.backup.destinationPath = destinationPath;
+  input.objects['backup-identity'].metadata.annotations['opencrane.dev/backup-destination'] =
+    destinationPath;
+  const before = attempts.length;
+  try {
+    await refused(checkWithIdentity(input, input.kubectl), scopeRefusal);
+    assert.equal(attempts.length, before + 1);
+    assert.equal(input.reads.length, 4);
+    assert.deepEqual(listener.storage.requests, []);
+  } finally {
+    await listener.close();
+  }
+}
+test('a changed prefix with matching annotation refuses before storage',
+  changedDestinationRefusesBeforeStorage);
+
 for (const fault of ['wrong bucket', 'wrong prefix', 'wrong access', 'wrong secret',
   'deny PUT', 'deny GET', 'deny DELETE', 'missing', 'collision', 'changed',
   'changed before delete', 'bad body', 'large body', 'server error']) {
