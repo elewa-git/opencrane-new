@@ -25,11 +25,16 @@ export function memoryClock() {
   function resume() {
     times.mockImplementation(realPerformanceNow);
   }
+  let restored = false;
   function restore() {
+    if (restored) {
+      return;
+    }
+    restored = true;
     contexts.mockRestore();
     times.mockRestore();
     dates.mockRestore();
   }
   onTestFinished(restore);
-  return { advance, resume };
+  return { advance, resume, restore };
 }

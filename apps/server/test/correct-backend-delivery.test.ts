@@ -43,7 +43,13 @@ async function correctionFixture() {
   await test.write('weather', 'The garden is sheltered.');
   await test.write('route', 'The garden path is short.');
   await test.setup.runner.run(test.projection);
-  await test.start();
+  // Keep fixture turn delivery within its access deadline on a busy host.
+  const clock = memoryClock();
+  try {
+    await test.start();
+  } finally {
+    clock.restore();
+  }
   const query = { scopeId, query: 'garden' };
   const response = await test.native.recall(threadId, query);
   const parsed = responseSchema.parse(response);
@@ -324,6 +330,10 @@ async function checkWithdrawal(test: Backend, change: Withdrawal, response: unkn
 const withdrawals = ['stop', 'closure', 'replacement', 'removal', 'qualification', 'unrelated'] as const;
 async function withdrawsDuringLock(change: Withdrawal) {
   const test = await correctionFixture();
+  if (change === 'unrelated') {
+    // Keep a slow database lock from spending the acceptance deadline.
+    memoryClock();
+  }
   const reference = commandReference('test', scopeId, 'alice', test.args.commandId, 'agent');
   const lockName = `memory-command:${reference}`;
   const databaseLockName = `opencrane:projection:${lockName}`;
@@ -365,6 +375,10 @@ it.each(withdrawals)('checks saved %s after waiting for the real database lock',
 
 async function withdrawsAtAppend(change: Withdrawal) {
   const test = await correctionFixture();
+  if (change === 'unrelated') {
+    // Let the unrelated event save without spending the acceptance deadline.
+    memoryClock();
+  }
   const store = test.setup.nats.store;
   const append = store.append.bind(store);
   let changed = false;
