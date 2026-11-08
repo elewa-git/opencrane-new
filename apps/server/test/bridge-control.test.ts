@@ -612,7 +612,12 @@ it('bounds queued close cancellations and reads each history once per pass', asy
   expect(reads.mock.calls.filter(isConversationRead).length).toBeLessThan(5);
   let pending = true;
   for (let pass = 0; pass < 8 && pending; pass++) {
-    pending = await test.process();
+    const progress = await test.process();
+    if (typeof progress === 'boolean') {
+      pending = progress;
+    } else {
+      pending = progress.pending;
+    }
   }
   expect(pending).toBe(false);
   const finalRows = await chatHistory(test.store, 'test', 'chat');

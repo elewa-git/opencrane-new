@@ -1,1 +1,1 @@
-Authorised participants can permanently close a conversation. Saved files and history remain readable with their existing access rights, while new messages, uploads and work are refused.
+Authorised participants can permanently close a conversation. Saved files and history remain readable with their existing access rights, while new messages, uploads and work are refused. Group members can still leave or be removed after close, and large closed chats finish cleanup and recover missing computer endings.

@@ -166,6 +166,25 @@ async function recoverChildSelfRemoval(options: ChatOptions, memberId: string,
   return { status: 'appended' as const, sequence: previous.sequence };
 }
 
+async function loadClosureForAddition(options: ChatOptions, input: Input,
+  conversationId: string, deadline: number) {
+  if (input.action !== 'add') return;
+  await conversationClosed(options.store, options.db, options.silo, conversationId, deadline);
+}
+
+async function requireOpenForAddition(options: ChatOptions, input: Input,
+  conversationId: string, closeFacts: Awaited<ReturnType<typeof readChatCommandFacts>>,
+  fresh: Awaited<ReturnType<typeof conversationAccessFence>>) {
+  if (input.action !== 'add') return;
+  const oldClose = await conversationClosed(options.store, options.db, options.silo,
+    conversationId, fresh.deadline);
+  const newClose = await contentClosedAfter(options, conversationId, closeFacts.sequence,
+    fresh.deadline);
+  if (closeFacts.closed || oldClose || newClose) {
+    throw new ChatConflict('Conversation is closed');
+  }
+}
+
 export async function participantCommand(options: ChatOptions, memberId: string,
   conversationId: string, value: unknown) {
   const input = chatParticipantCommandSchema.parse(value);
@@ -193,7 +212,7 @@ export async function participantCommand(options: ChatOptions, memberId: string,
   // Load chat history before the short check. Only later content needs checking inside it.
   const closeFacts = await readChatCommandFacts(options.store, options.silo,
     conversationId, input.id);
-  await conversationClosed(options.store, options.db, options.silo, conversationId, deadline);
+  await loadClosureForAddition(options, input, conversationId, deadline);
   if (!previous) validateEdit(access, input, memberId);
   if (!previous && input.action === 'add') {
     await activeChatMember(options, input.participantId);
@@ -210,13 +229,7 @@ export async function participantCommand(options: ChatOptions, memberId: string,
     return { status: 'appended' as const, sequence: previous.sequence };
   }
   validateEdit(current, input, memberId);
-  const oldClose = await conversationClosed(options.store, options.db, options.silo,
-    conversationId, fresh.deadline);
-  const newClose = await contentClosedAfter(options, conversationId, closeFacts.sequence,
-    fresh.deadline);
-  if (closeFacts.closed || oldClose || newClose) {
-    throw new ChatConflict('Conversation is closed');
-  }
+  await requireOpenForAddition(options, input, conversationId, closeFacts, fresh);
   if (input.action === 'add') await activeChatMember(options, input.participantId, fresh);
   await confirmParticipantAccess(fresh);
   const command = { event, expectedSequence: facts.sequence, historyChecked: true as const,

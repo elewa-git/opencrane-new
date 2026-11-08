@@ -23,6 +23,7 @@ type SavedTurns = { ended: Set<string>; cancelled: Set<string>; starts: Set<stri
 type CleanupDecision = { pending: boolean; stop: boolean };
 type CleanupWriter = { rows: ChatRows; saved: SavedTurns; sequence: number;
   computerStarts?: { turnIds: Set<string>; sequence: number } };
+export type CloseCleanupCursor = { index: number; pending: boolean };
 const recoveryItemLimit = 32;
 const recoveryTimeLimitMs = 1000;
 const turnData = z.object({ turnId: z.string() });
@@ -264,43 +265,65 @@ async function sendCloseStop(conversationId: string, assistantId: string, turnId
   return readyLink;
 }
 
+type InputBatch = {
+  options: Options;
+  conversationId: string;
+  assistantId: string;
+  assistant: Assistant;
+  refused: Set<string>;
+  connection: (computerId: string, assistantId: string) => Promise<Link>;
+  writer: CleanupWriter;
+  cursor: CloseCleanupCursor | undefined;
+  deadline: number;
+};
+
+async function visitClosedInputs(batch: InputBatch) {
+  const inputs = postedInputs(batch.writer.rows);
+  let inputPending = batch.cursor?.pending ?? false;
+  let link: Link | undefined;
+  let visited = 0;
+  let nextIndex = batch.cursor?.index ?? 0;
+  if (nextIndex >= inputs.length) nextIndex = 0;
+  // Leave one action in every pass for a missing computer ending.
+  while (nextIndex < inputs.length && visited < recoveryItemLimit - 1
+    && performance.now() < batch.deadline) {
+    const input = inputs[nextIndex];
+    if (!input) break;
+    const turnId = input.event.id;
+    const decision = await settleClosedInput(batch.options, batch.conversationId,
+      batch.assistantId, turnId, batch.assistant, batch.writer);
+    if (decision.pending) inputPending = true;
+    if (decision.stop) {
+      link = await sendCloseStop(batch.conversationId, batch.assistantId, turnId,
+        batch.assistant, batch.refused, link, batch.connection);
+    }
+    visited++;
+    nextIndex++;
+  }
+  return { inputPending, link, visited, nextIndex, moreInputs: nextIndex < inputs.length };
+}
+
 export async function cleanClosedConversation(options: Options, conversationId: string,
   assistantId: string, rows: ChatRows, assistant: Assistant, refused: Set<string>,
-  connection: (computerId: string, assistantId: string) => Promise<Link>, cursor = 0) {
+  connection: (computerId: string, assistantId: string) => Promise<Link>,
+  cursor?: CloseCleanupCursor) {
   const writer: CleanupWriter = { rows, saved: savedTurns(rows, assistant),
     sequence: conversationSequence(rows, conversationId) };
   const currentComputer = assistant.current
     ? computerData.parse(assistant.current.data).computerId : undefined;
-  const inputs = postedInputs(rows);
   const deadline = performance.now() + recoveryTimeLimitMs;
-  let pending = false;
-  let link: Link | undefined;
-  let visited = 0;
-  let nextCursor = inputs.length === 0 ? 0 : cursor % inputs.length;
-  while (visited < inputs.length && visited < recoveryItemLimit
-    && performance.now() < deadline) {
-    const input = inputs[nextCursor];
-    if (!input) break;
-    const turnId = input.event.id;
-    const decision = await settleClosedInput(options, conversationId, assistantId,
-      turnId, assistant, writer);
-    if (decision.pending) pending = true;
-    if (decision.stop) {
-      link = await sendCloseStop(conversationId, assistantId, turnId, assistant,
-        refused, link, connection);
-    }
-    visited++;
-    nextCursor = (nextCursor + 1) % inputs.length;
-  }
-  const moreInputs = visited < inputs.length;
-  if (moreInputs) pending = true;
-  const remainingActions = recoveryItemLimit - visited;
+  const batch = { options, conversationId, assistantId, assistant, refused, connection,
+    writer, cursor, deadline };
+  const progress = await visitClosedInputs(batch);
+  const remainingActions = recoveryItemLimit - progress.visited;
   const recovered = await recoverTerminalTurns(options, currentComputer ?? '', assistantId,
     conversationId, writer.rows, assistant.closed, assistant.started,
     assistant.turnComputers, assistant.lostTurns, assistant.privateStarted,
     remainingActions, deadline);
-  if (!recovered) pending = true;
-  const result = { pending, retry: pending, cursor: moreInputs ? nextCursor : 0 };
-  if (link) return { ...result, connectionId: link.connectionId };
+  const pending = progress.inputPending || progress.moreInputs || !recovered;
+  const nextCursor = { index: progress.moreInputs ? progress.nextIndex : 0,
+    pending: progress.moreInputs ? progress.inputPending : false };
+  const result = { pending, retry: pending, cursor: nextCursor };
+  if (progress.link) return { ...result, connectionId: progress.link.connectionId };
   return result;
 }
