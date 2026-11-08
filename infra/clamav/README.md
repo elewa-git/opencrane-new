@@ -22,7 +22,7 @@ flowchart LR
   infra --> nats["infra/nats<br/>event log settings"]
   stack -->|builds and starts the Linux amd64 image| clamav
   server["apps/server<br/>file uploads"] -->|sends file bytes over HTTPS| launcher
-  worker["private image walk<br/>worker wiring planned"] -->|checks bounded files through HTTPS| launcher
+  worker["private image worker"] -->|checks bounded files through HTTPS| launcher
   packaging["packaging job"] -->|checks image databases| clamav
   launcher["separate HTTPS service"] -->|limits requests and checks caller passes| clamav
 ```
@@ -66,8 +66,9 @@ flowchart LR
    unpacks each layer into private temporary files and scans every regular file.
    It counts the size of sparse files before writing them. It refuses links, unsafe
    paths, nested archives including hidden RAR files, and unfinished work. The result
-   must still match the current image, saved attempt and scanner when used. Worker wiring is not
-   built yet, and image admission stays closed.
+   must still match the current image, saved attempt and scanner when used. A private
+   worker reads that attempt before preparing bytes and checks it again after scanning.
+   Image admission stays closed.
 
 ## How to run or test it
 

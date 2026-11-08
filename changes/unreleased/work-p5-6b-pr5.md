@@ -1,0 +1,1 @@
+An image scan worker now reads the saved installation attempt before preparing image bytes and checks the active attempt, scanner settings and every part's proof again after scanning. It keeps only a private verdict. Image admission remains closed until the other image checks and deployed qualification are complete.
