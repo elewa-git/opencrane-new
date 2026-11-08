@@ -9,7 +9,7 @@ import { envelope } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { auditResponseSchema, auditDetailSchema } from '@opencrane/protocol';
 import { auditTrail, connectMemberFeed, conversations, members, pgDb, ProjectionRunner,
-  rebuildAuditProjection } from '@opencrane/projections';
+  readAudit, rebuildAuditProjection } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -62,7 +62,7 @@ async function setup() {
   await runner.initialise(members);
   await runner.initialise(conversations);
   await runner.initialise(auditTrail);
-  for (const memberId of ['owner', 'admin', 'reviewer', 'guest']) {
+  for (const memberId of ['owner', 'admin', 'reviewer', 'guest', 'child_reader']) {
     const role = memberId === 'owner' ? 'owner' : memberId === 'guest' ? 'member' : 'admin';
     await append(`member-${memberId}`, 'member.invited', {
       memberId, role, invitationId: `invite-${memberId}`, invitedBy: 'owner',
@@ -85,7 +85,8 @@ async function setup() {
     conversationId: 'parent', createdBy: 'owner', mode: 'group', participantIds: ['owner', 'guest'],
   }, 'parent-created');
   await append('conversation-child', 'conversation.created', {
-    conversationId: 'child', createdBy: 'admin', mode: 'group', participantIds: ['admin', 'guest'],
+    conversationId: 'child', createdBy: 'admin', mode: 'group',
+    participantIds: ['admin', 'child_reader'],
   }, 'child-created');
   await runner.run(members);
   await runner.run(conversations);
@@ -199,6 +200,38 @@ it('shows only independently permitted publication facts and a parent task link'
   expect(JSON.stringify(logArguments)).not.toContain(privateText);
   expect(await nats.store.head()).toBe(before);
   expect(appends).not.toHaveBeenCalled();
+});
+
+it('keeps a child publication out of a parent reader’s matching turn', async () => {
+  await publish('publication');
+  await append('decision-parent', 'decision.recorded', {
+    requestId: 'parent-request', requesterId: 'guest', conversationId: 'parent',
+    turnId: 'turn', route: 'mcp', outcome: 'allow', reason: 'policy_allow',
+    contextDigest: '0'.repeat(64),
+  }, 'parent-decision');
+  await runner.run(auditTrail);
+  expect((await auth.conversation('guest', 'parent', 'read')).allowed).toBe(true);
+  expect((await auth.conversation('guest', 'child', 'read')).allowed).toBe(false);
+
+  const projected = await readAudit(db, 'test', {
+    conversationId: 'parent', requesterId: 'guest',
+  });
+  const decision = projected.rows.find(row => row.id === 'parent-decision');
+  expect(decision).toBeDefined();
+  expect(decision?.records.map(record => record.eventId)).toEqual(['parent-decision']);
+
+  const history = await app.inject({ url: '/api/conversations/parent/history',
+    headers: headers('guest') });
+  expect(history.statusCode, history.body).toBe(200);
+  expect(history.body).not.toContain('child');
+  const page = auditResponseSchema.parse(history.json());
+  expect(page.rows.find(row => row.id === 'parent-decision')?.records)
+    .toHaveLength(1);
+
+  const detailResponse = await detail('owner', 'parent-decision');
+  expect(detailResponse.statusCode, detailResponse.body).toBe(200);
+  const detailPage = auditDetailSchema.parse(detailResponse.json());
+  expect(detailPage.records.map(record => record.eventId)).toEqual(['parent-decision']);
 });
 
 it('returns a fixed error and logs no private publication text after a failed read', async () => {
