@@ -9,6 +9,13 @@ import { readChatFacts } from './chat-summary.ts';
 type RefusedTurn = {
   silo: string; assistantId: string; conversationId: string; turnId: string; stopId: string;
 };
+type RecoveryControl = { signal: AbortSignal; deadline: number };
+
+function requireRecoveryLive(control?: RecoveryControl) {
+  if (control?.signal.aborted || performance.now() >= (control?.deadline ?? Infinity)) {
+    throw new Error('Bridge report recovery cancelled');
+  }
+}
 
 function budgetClosePositions(summary: ComputerSummary) {
   const positions: number[] = [];
@@ -20,13 +27,17 @@ function budgetClosePositions(summary: ComputerSummary) {
 
 /** Recover saved refusals even when a restarted computer has no reports left to replay. */
 export async function recoverBudgetRefusals(store: EventStore, silo: string,
-  assistantId: string) {
+  assistantId: string, control?: RecoveryControl) {
+  requireRecoveryLive(control);
   const subject = `computer-${assistantId}`;
-  const deadline = performance.now() + 10_000;
+  const deadline = Math.min(performance.now() + 10_000, control?.deadline ?? Infinity);
   const positions = await readStreamSummary(store, silo, subject,
     computerSummary, deadline, budgetClosePositions);
+  requireRecoveryLive(control);
   for (const position of positions) {
+    requireRecoveryLive(control);
     const saved = await readEventAt(store, subject, position, deadline);
+    requireRecoveryLive(control);
     if (!saved || saved.event.silo !== silo || saved.event.type !== 'computer.turn_closed') {
       throw new Error('Saved budget close unavailable');
     }
@@ -37,13 +48,18 @@ export async function recoverBudgetRefusals(store: EventStore, silo: string,
     }
     const refused = { silo, assistantId, conversationId: close.conversationId,
       turnId: close.turnId, stopId: close.budgetStopId };
-    await recordBudgetRefusal(store, refused);
+    await recordBudgetRefusal(store, refused, control);
   }
 }
 
 /** Save the admission refusal before the bridge acknowledges it, without reserving money. */
-export async function recordBudgetRefusal(store: EventStore, turn: RefusedTurn) {
-  const facts = await readChatFacts(store, turn.silo, turn.conversationId, turn.turnId);
+export async function recordBudgetRefusal(store: EventStore, turn: RefusedTurn,
+  control?: RecoveryControl) {
+  requireRecoveryLive(control);
+  const readDeadline = Math.min(performance.now() + 10_000, control?.deadline ?? Infinity);
+  const facts = await readChatFacts(store, turn.silo, turn.conversationId, turn.turnId,
+    undefined, undefined, readDeadline);
+  requireRecoveryLive(control);
   const requesterId = z.string().parse(facts.message?.authorId);
   const identity = ['budget-turn-refusal', turn.silo, turn.conversationId, turn.turnId];
   const hash = createHash('sha256');
@@ -65,13 +81,17 @@ export async function recordBudgetRefusal(store: EventStore, turn: RefusedTurn) 
     time: new Date().toISOString(), correlation: {}, data,
   };
   // Use one stream per refused turn so reconnects remain idempotent after NATS deduplication expires.
-  const command = { event, expectedSequence: 0, historyChecked: true as const };
+  const command = { event, expectedSequence: 0, historyChecked: true as const,
+    ...(control ? { signal: control.signal, deadline: control.deadline } : {}) };
   const result = await store.append(command);
+  requireRecoveryLive(control);
   if (result.status === 'appended') return;
   if (result.status !== 'conflict') throw new Error('Budget refusal save unavailable');
-  const deadline = performance.now() + 10_000;
+  const deadline = Math.min(performance.now() + 10_000, control?.deadline ?? Infinity);
   const position = await store.head(event.subject, deadline);
+  requireRecoveryLive(control);
   const saved = await readEventAt(store, event.subject, position, deadline);
+  requireRecoveryLive(control);
   if (saved?.event.id !== id || saved.event.silo !== turn.silo ||
       saved.event.type !== event.type ||
       decisionRecordedDataSchema.parse(saved.event.data).contextDigest !== data.contextDigest) {

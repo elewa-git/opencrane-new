@@ -231,6 +231,9 @@ bridge connection wait. Cancellation reaches the resume command before it saves
 `computer.resumed` or issues a pass. A cancelled bridge opening stops its
 credential command and closes its socket. An opening shared with another caller
 can continue for that caller, but the cancelled wake cannot use it.
+Bridge report recovery carries the same wake signal and deadline through budget
+refusal reads and the decision append. A delayed read cannot save a decision
+after the wake ends. The held read test is in `test/bridge-opening.test.ts`.
 
 The bridge completes a routine sender's one-use wait only after the matching start
 is saved and its existing credential acknowledgement path finishes without refusal.

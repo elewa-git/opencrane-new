@@ -127,6 +127,8 @@ repeats their input or rereads the computer history for each finished chat.
 Routine preparation can wake the recorded sleeping computer through this same bridge.
 It waits for the same computer generation to become ready and checks again after
 connecting. Other turns on the shared computer keep running.
+If a wake ends while the bridge reads saved reports, it stops before saving a late
+spending refusal.
 The models process releases the routine only after checked native closure and budget Stop.
 If the native turn completes before Stop reaches it, the routine still finishes as interrupted.
 

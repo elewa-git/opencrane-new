@@ -103,7 +103,7 @@ async function cancelledReportRecoveryDoesNotSaveBudgetRefusal() {
     await readFinished.promise;
     await new Promise<void>(resolve => setImmediate(resolve));
     expect(readFailure).toBeUndefined();
-    const decisions = await nats.store.readStream('decision-*');
+    const decisions = nats.store.readStream('decision-*');
     const saved = [];
     for await (const row of decisions) saved.push(row);
     expect(saved).toEqual([]);
@@ -112,7 +112,13 @@ async function cancelledReportRecoveryDoesNotSaveBudgetRefusal() {
     releaseRead.resolve();
     vi.restoreAllMocks();
     for (const client of sockets.clients) client.terminate();
-    await new Promise<void>(resolve => sockets.close(resolve));
+    function closeSockets(resolve: () => void) {
+      function finished() {
+        resolve();
+      }
+      sockets.close(finished);
+    }
+    await new Promise<void>(closeSockets);
     server.close();
     await nats.close();
   }

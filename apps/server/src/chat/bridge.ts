@@ -277,7 +277,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   try {
     requireWakeLive(wakeControl);
     function resumeReports() {
-      return resumeBridgeReports(options, input, socket, control, routines.recover);
+      return resumeBridgeReports(options, input, socket, control, routines.recover, wakeControl);
     }
     if (wakeControl) {
       await readBeforeDeadline(resumeReports, wakeControl.deadline, wakeControl.signal);

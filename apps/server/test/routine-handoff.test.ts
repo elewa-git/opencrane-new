@@ -30,7 +30,7 @@ import { stopUnconfirmedRoutine } from '../src/routine-delivery-stop.ts';
 import { createRoutineComposition, createRoutineDelivery } from '../src/routine-composition.ts';
 import { bindRoutineBudgetOwner } from '../src/routine-delivery-owner.ts';
 import { createRoutineWake } from '../src/chat/routine-wake.ts';
-import { resumeComputer } from '../../ops/src/lifecycle.ts';
+import { resumeComputer } from '../../ops/test/server.ts';
 
 let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
 let storage: Awaited<ReturnType<typeof database>>;
@@ -334,7 +334,7 @@ async function cancellationInsideResume() {
   const originalRead = nats.store.readStream.bind(nats.store);
   const readStarted = Promise.withResolvers<void>();
   const releaseRead = Promise.withResolvers<void>();
-  const caller = new AbortController();
+  let caller = new AbortController();
   async function* heldRead(stream: string, fromSequence = 1, deadline = Infinity,
     includeConversationCloses = false) {
     if (stream === subject) {
@@ -349,11 +349,16 @@ async function cancellationInsideResume() {
   const append = vi.spyOn(nats.store, 'append');
   // Keep the outer read limit out of this check so the read returns after cancellation.
   const control = { signal: caller.signal, deadline: Infinity };
-  const pending = resumeComputer(nats.store, preparedComputer.tokens, 'other',
+  const pending = resumeComputer(nats.store, preparedComputer.tokens, 'test',
     'sales-assistant', undefined, control);
   await readStarted.promise;
   releaseRead.resolve();
   await expect(pending).rejects.toThrow('Computer wake cancelled');
+  // Check cancellation before the saved silo too, so the post-history check is required.
+  caller = new AbortController();
+  const changedSiloControl = { signal: caller.signal, deadline: Infinity };
+  await expect(resumeComputer(nats.store, preparedComputer.tokens, 'other',
+    'sales-assistant', undefined, changedSiloControl)).rejects.toThrow('Computer wake cancelled');
   const rows = await history(nats.store, subject, 'test');
   expect(rows.some(row => row.event.type === 'computer.resumed')).toBe(false);
   expect(append).not.toHaveBeenCalled();

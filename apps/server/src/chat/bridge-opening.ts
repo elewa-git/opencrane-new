@@ -8,7 +8,6 @@ import { SandboxClient } from '../../../ops/src/kubernetes.ts';
 import { executorStop } from '../computers/stop-executor.ts';
 import { readyBridgePass } from './bridge-control.ts';
 import type { WatchOptions } from './bridge-conversation.ts';
-import type { connectBridge } from './bridge.ts';
 
 export type BridgeInput = { url: string; computerId: string; assistantId: string;
   bearer: string; generation?: number };
@@ -54,9 +53,12 @@ export async function openBridgeSocket(input: BridgeInput, control?: WakeControl
   return { socket, stopWatching, get approvalWaiting() { return approvalWaiting; } };
 }
 
-export async function openBridge(options: WatchOptions, tokens: Tokens, kube: SandboxClient,
+export async function openBridge<Link extends { socket: WebSocket; rejection: string | undefined }>(
+  options: WatchOptions, tokens: Tokens, kube: SandboxClient,
   proxyUrl: string, computer: Pick<BridgeInput, 'computerId' | 'assistantId'>,
-  refused: Set<string>, logger: Logger, connect: typeof connectBridge,
+  refused: Set<string>, logger: Logger,
+  connect: (options: WatchOptions, input: BridgeInput, tokens: Tokens,
+    control?: WakeControl) => Promise<Link>,
   control?: WakeControl) {
   requireWakeLive(control);
   const token = await readyBridgePass(options, computer, tokens, control);
