@@ -507,6 +507,45 @@ it.each(['retry', 'append'] as const)(
   'refuses and does not decrypt after removal during a %s receipt read',
   removalDuringSavedReceipt);
 
+async function removalBeforeGeneratedPersona() {
+  const position = await completeSurvey();
+  const read = nats.store.readStream.bind(nats.store);
+  const decrypt = keys.decrypt.bind(keys);
+  let removed = false;
+  let decryptedAfterRemoval = false;
+
+  nats.store.readStream = async function* removeAfterHistory(subject, from, deadline, closes) {
+    yield* read(subject, from, deadline, closes);
+    if (subject === 'personal-alice' && !removed) {
+      const removal = { ...event('removed-before-persona-generation', 'member-alice',
+        'member.removed'), data: { memberId: 'alice', removedBy: 'owner' } };
+      expect((await nats.store.append({ event: removal, expectedSequence: 1 })).status)
+        .toBe('appended');
+      removed = true;
+    }
+  };
+  keys.decrypt = function detectDecryption(silo, conversation, value) {
+    if (removed) decryptedAfterRemoval = true;
+    return decrypt(silo, conversation, value);
+  };
+
+  let response;
+  try {
+    response = await revise('generated-after-removal', position);
+  } finally {
+    nats.store.readStream = read;
+    keys.decrypt = decrypt;
+  }
+
+  expect(removed).toBe(true);
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+  expect(decryptedAfterRemoval).toBe(false);
+  expect(await nats.store.head('personal-alice')).toBe(position);
+}
+it('does not open saved answers after removal during persona history loading',
+  removalBeforeGeneratedPersona);
+
 async function personaRefusals() {
   const position = await completeSurvey();
   expect((await revise('too-long', position, 'é'.repeat(2049))).statusCode).toBe(422);
