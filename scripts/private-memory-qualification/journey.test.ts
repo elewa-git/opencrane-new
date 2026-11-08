@@ -5,11 +5,13 @@ import { probeHost } from './host-probe.ts';
 import { runJourney } from './journey.ts';
 import { probeContainer } from './container-probe.ts';
 import { checkNative } from './native-checks.ts';
+import { proveCanaryHelper } from './canary-helper-proof.ts';
 import { probePrivateProcessInventory } from './private-processes.ts';
 
 vi.mock('./host-probe.ts', { spy: true });
 vi.mock('./container-probe.ts', { spy: true });
 vi.mock('./native-checks.ts', { spy: true });
+vi.mock('./canary-helper-proof.ts', { spy: true });
 vi.mock('./private-processes.ts', { spy: true });
 const request = {
   sourceSha: 'a'.repeat(40), imageDigest: `sha256:${'b'.repeat(64)}`,
@@ -19,6 +21,8 @@ const request = {
   challengeId: '22222222-2222-4222-8222-222222222222', name: 'privateTurns',
 };
 function prepare(): void {
+  vi.mocked(proveCanaryHelper).mockReset();
+  vi.mocked(proveCanaryHelper).mockReturnValue(true);
   vi.mocked(probeHost).mockReset();
   vi.mocked(probeHost).mockReturnValue(true);
   vi.mocked(probeContainer).mockReturnValue('swap_measurement_failed');
@@ -158,3 +162,20 @@ async function missingNative(): Promise<void> {
   });
 }
 it('refuses a host-only result when the native binary is absent', missingNative);
+
+async function checksCanaryHelperAroundResult(): Promise<void> {
+  const result = await runJourney(JSON.stringify({ ...request, name: 'persistence' }));
+  expect(result).toMatchObject({ result: 'NOT RUN', complete: false });
+  expect(proveCanaryHelper).toHaveBeenCalledTimes(2);
+}
+it('checks the supervised canary helper before and after a journey result',
+  checksCanaryHelperAroundResult);
+
+async function refusesCanaryHelperUnsafeAtFinalRead(): Promise<void> {
+  vi.mocked(proveCanaryHelper).mockReturnValueOnce(true).mockReturnValue('process_dumpable');
+  const result = await runJourney(JSON.stringify({ ...request, name: 'persistence' }));
+  expect(result).toEqual({ result: 'FAIL', reason: 'host_refused',
+    protectionFailure: 'process_dumpable', complete: false });
+}
+it('refuses a helper that becomes unsafe before the journey result',
+  refusesCanaryHelperUnsafeAtFinalRead);
