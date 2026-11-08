@@ -1,0 +1,1 @@
+Checked routine claims can use one guarded callback to prepare their private input, fixed spending allowance and computer turn; automatic execution remains unavailable until the worker has all delivery services.

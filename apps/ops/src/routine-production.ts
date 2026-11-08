@@ -18,7 +18,11 @@ export async function runRoutineScheduler(options: { enabled?: boolean; replay?:
   if (options.enabled !== true || options.replay === true) {
     return { status: 'disabled' as const, executionAvailable: false as const };
   }
-  if (!delivery) {
+  if (!delivery || typeof delivery.handoff !== 'function' ||
+      typeof delivery.db?.query !== 'function' ||
+      typeof delivery.store?.append !== 'function' ||
+      typeof delivery.worker?.checkCurrent !== 'function' ||
+      !delivery.worker.binding || !delivery.worker.signal) {
     // Refuse before an enabled host can occupy a slot without checked delivery.
     throw new Error('Routine delivery unavailable');
   }

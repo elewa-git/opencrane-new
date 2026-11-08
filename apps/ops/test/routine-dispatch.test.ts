@@ -159,8 +159,15 @@ async function enabledProductionNeedsDelivery() {
   const before = await nats.store.head('routine-orders');
   await expect(runRoutineScheduler({ enabled: true }))
     .rejects.toThrow(/^Routine delivery unavailable$/u);
-  const incomplete = { db: storage.db, store: nats.store, worker: {}, handoff: undefined };
-  const delivery = incomplete as unknown as Parameters<typeof runRoutineScheduler>[1];
+  function current() {
+    return Promise.resolve(true);
+  }
+  function handoff() {
+    return Promise.resolve({ status: 'sent' as const });
+  }
+  const worker = { silo: 'test', binding, signal: stop.signal, checkCurrent: current };
+  const delivery = { db: storage.db, store: nats.store, worker, handoff };
+  Reflect.deleteProperty(delivery, 'handoff');
   await expect(runRoutineScheduler({ enabled: true }, delivery))
     .rejects.toThrow(/^Routine delivery unavailable$/u);
   expect(await nats.store.head('routine-orders')).toBe(before);

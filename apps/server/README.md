@@ -222,7 +222,7 @@ flowchart LR
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, checked publication history, current accounting and exact membership receipts| postgres
   server -->|waits briefly for Forget locks| postgres
-  server <-->|chat work, private routine preparation and delivery, retained call status, Stops, checked reports and publication files| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, checked routine turns, retained call status, Stops, checked reports and publication files| computer["apps/computer<br/>assistant computers"]
   server -->|checks an activated child start and its root allowance| runtime
   computer -.->|records private thread for memory discovery| server
   server -.->|prepares up to four private memory tools| computer
@@ -425,7 +425,10 @@ ownership before saving, and again before returning the session reference. Retri
 that same session by checking its saved claim and worker. An ordinary human chat cannot
 become a routine session. Public chat routes reserve these session ids for the worker.
 A stopped, changed or expired occurrence cannot prepare a session.
-This operation has no production caller. It saves no input and starts no work.
+The server can pass a checked routine claim through private input, a fixed spending
+allowance and one computer turn. It checks access again after waking the computer.
+The routines worker still has no deployed delivery connection, so automatic runs
+remain unavailable.
 
 1. **A person joins.** [Auth](src/auth/README.md) checks their sign-in.
    [Members](src/members/README.md) handles the first owner's claim or a later invitation.

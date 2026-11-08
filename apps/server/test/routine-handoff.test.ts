@@ -15,9 +15,8 @@ import { BudgetActor, history, rootTotals, readRootStopEvidence } from '@opencra
 import { conversationKeys, ProjectionRunner, routines } from '@opencrane/projections';
 import { database } from '@opencrane/projections/testing';
 import { createLogger } from '@opencrane/observability';
-import { dispatchRoutineCandidates, withRoutineLeadership }
+import { dispatchRoutineCandidates, withRoutineLeadership, runRoutineScheduler }
   from '../../ops/test/support/routine-handoff.ts';
-import { runRoutineScheduler } from '../../ops/src/routine-production.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { openfga } from '../../../libs/authz/test/services.ts';
@@ -243,8 +242,13 @@ let leaseSignal: AbortSignal;
 async function dispatch(options: Options = { enabled: true }, continuation = false) {
   await runner.run(routines);
   let progress;
+  const identity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
+  const production = createRoutineDelivery(nats.store, keys, identity, actor, wake);
   const receive: Handoff = async function receive(due, lease) {
     expect(lease.signal).toBe(leaseSignal);
+    if (options.enabled === true && options.replay !== true) {
+      return production(due, lease);
+    }
     async function checkCurrent(deadline: number) {
       if (lease.signal.aborted) {
         return false;
