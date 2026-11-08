@@ -194,6 +194,12 @@ discovery. That fixture does not call a model or recall facts. The backend fixtu
 now checks delivery through the real gateway. Admission stays disabled. Fixtures do not
 qualify deployment.
 
+`test/personal-correct-forget-native.test.ts` loads the four reviewed definitions on
+one personal native thread. It corrects a loaded fact, starts a new native thread to
+recall the replacement, then forgets that revision. It loses the append reply and
+reads the accepted original command status. The existing Correct and Forget backend
+files check late replies, refused identities, Stop and later recall after forgetting.
+
 ## Real backend recall fixture
 
 `test/recall-backend-delivery.test.ts` sends a saved personal turn through the production

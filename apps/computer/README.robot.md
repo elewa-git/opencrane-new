@@ -27,6 +27,11 @@ stdout while it keeps running. These are fixture checks, not a live process qual
 
 For people, read [README.md](README.md) first.
 
+The private loader and proxy can list and call Recall, Remember, Correct and Forget
+on the admitted personal thread. Each session keeps its own catalogue and caller.
+The server checks the current turn and memory rights again before a write. A lost
+reply does not cause the proxy to send the command again.
+
 Repository CI builds the upload test image in one fixture job. A public registry
 base supplies its Debian packages when its digest and build inputs match. Otherwise,
 CI builds that base from source. See the

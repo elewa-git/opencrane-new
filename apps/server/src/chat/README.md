@@ -51,14 +51,16 @@ preparation. People cannot create, change or read those sessions through these r
 History and list titles also check how the session was created before opening private
 text, even when a history page starts after the creation record.
 
-The private recall tool-list builder checks the saved turn, requester, matching grant
-and registered caller before selecting the exact reviewed built-in definition.
+The personal memory tool-list builder checks the saved turn, requester, matching grant
+and registered caller before selecting the reviewed Recall, Remember, Correct and Forget
+definitions.
 Only the requester's personal scope is accepted. Passing privacy evidence must match
 the server source, computer image and host. The builder repeats these checks after
 waiting for tool definitions and permissions. A separate internal remember builder
 uses the same privacy evidence, saved-turn, caller and policy checks without reading
 or saving facts.
-Recall privacy evidence cannot enable writes. Live private tool delivery remains disabled.
+Memory writes need their own checked permissions and current turn. Deployment checks
+still decide whether a private memory turn can start.
 The internal personal memory adapter checks saved membership before the catalogue or
 permissions. It checks each permission once, then confirms that the access records
 have not changed while waiting. A saved removal keeps its refusal even when another
@@ -87,7 +89,7 @@ Ordinary messages do not delay delivery. Browser support is still planned.
 
 **Live updates.** Open chat pages keep checking access when installation or group membership changes. Removing someone from a group closes their private session with its assistant within two seconds. If another permission update takes too long, the page reconnects after five seconds and resumes from saved messages. The server checks each open chat's feed position every 100 ms and loads content only when it changes. Computer status comes from a small read-table record updated by background workers. A sleeping or waking computer shows Starting; recovery lasts until a new ready record appears.
 
-**Private and shared work.** Each assistant has one [computer](../../../../GLOSSARY.md#computer); a group shares its assistant's computer. Each member gets a separate private session and a [private turn](../../../../GLOSSARY.md#private-turn) by default. That turn gets earlier completed replies from the same member and starts a fresh [Codex](../../../../GLOSSARY.md#codex), the AI agent, without local tools. Personal memory starts require the deployment’s own passing checks. Native memory tools and browser display of private replies remain unavailable. A [memory-free turn](../../../../GLOSSARY.md#memory-free-turn) can use the shared disk and browser but receives no earlier private context. Losing spending access does not remove the right to read or stop existing work.
+**Private and shared work.** Each assistant has one [computer](../../../../GLOSSARY.md#computer); a group shares its assistant's computer. Each member gets a separate private session and a [private turn](../../../../GLOSSARY.md#private-turn) by default. That turn gets earlier completed replies from the same member and starts a fresh [Codex](../../../../GLOSSARY.md#codex), the AI agent. Personal memory starts require the deployment’s own passing checks. An admitted personal turn can use four reviewed memory tools. Browser display of private replies remains unavailable. A [memory-free turn](../../../../GLOSSARY.md#memory-free-turn) can use the shared disk and browser but receives no earlier private context. Losing spending access does not remove the right to read or stop existing work.
 
 Personal memory-free turns can receive a short list of reviewed, free tools available to both the person and assistant. Ask tools also need reviewed approval details. The gateway checks rights again for each call. The computer and gateway keep the reviewed Allow mode, so changing a tool to Ask refuses an old automatic call. The server checks whether a computer supports approval messages first; older computers get Allow tools only. Private turns with a group assistant stay restricted and receive no tools. [Memory](../memory/README.md) explains fact references and the extra checks before renewing a pass. Invalid older memory records do not prevent ordinary messages or stop requests.
 
