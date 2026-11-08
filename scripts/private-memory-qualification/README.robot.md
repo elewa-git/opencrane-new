@@ -388,7 +388,7 @@ collector cannot save PASS and 5i remains held. Own checks are in the
 
 P4-15 PR 5m, Part of #97, extends the image-owned assertions above. Both wrappers and
 native executables must be alive together, with different homes, child identities,
-PIDs, process/start identities and empty ephemeral threads. Their environment values
+PIDs, process/start identities and initially empty ephemeral threads. Their environment values
 must match their own generated homes and child identities. The first process and
 home must disappear before a metadata read from the second returns its original
 thread and process identities. The second process and home must then disappear.
@@ -401,12 +401,33 @@ including a failure. Cleanup freezes each wrapper before reading its children, s
 a startup still in progress cannot create a child after that read. It kills and checks both processes,
 even when startup, RPC or assertions fail. It refuses a surviving process or failed
 home removal. A pre-existing home is refused before it belongs to cleanup. A failed
-process cleanup retains the homes and refuses. The existing supervisor kills the
-whole group on collector EOF; abrupt cancellation may leave homes in tmpfs and
-returns no successful receipt. No model input is sent.
+process cleanup retains the homes and refuses. The supervisor kills the whole group
+on collector EOF or timeout, then removes homes and launch records created during
+that run. It returns no successful receipt after cancellation. No paid model call is sent.
 
 The derivative-image tests observe overlap and independent cleanup, check process
-liveness after failures, and exercise actual supervisor EOF with two native children.
+liveness after failures, and exercise supervisor EOF and timeout with two native children.
+
+The held native check starts a local response server inside a disposable copy of the
+packaged computer. A private `turn/start` reaches that server with the bound caller
+and thread, then stays open without a paid model.
+Before making a private home, the runner writes a root-owned mode-0600 record under
+tmpfs `/run` with the fresh journey challenge. It adds the launched wrapper and
+Codex child's PID and Linux start time after the child answers.
+Before and after native RPC work it
+uses `private-processes.ts` to read executable, command, UID, cgroup and PID namespace,
+then checks the kernel parent and child list, process group, pinned executable hashes
+and the live native child's executable inode,
+zero soft and hard core limits, and effective container swap controls. A native helper
+opens a Linux pidfd for each process so an exited PID cannot count as a live peer.
+The wrapper and child must share their kernel stdin and stdout endpoints.
+Missing records, changed identities, a second child and failed probes refuse. Cleanup
+stops both processes, removes their private homes and removes the launch records.
+After collector loss, the supervisor removes only homes named by this run's protected
+records, using the challenge to leave other turns alone.
+This proves only the two native process groups during this held check. The canary helper,
+joined inventory, persistence scans and full fresh-install journeys remain unproved;
+admission stays disabled.
 Only the test loader substitutes bad observations or faults. The ordinary package
 now carries the native runtime and production launch helpers, but remains unqualified.
 Those shipped files and safe host settings remain prerequisites for a deployment run.

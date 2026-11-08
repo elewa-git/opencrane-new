@@ -24,7 +24,7 @@ flowchart LR
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
   collector -->|measures, starts checks and checks refusal format| docker["Docker<br/>running image and host"]
   docker -->|checks service processes and pinned Codex| deployment["deployment<br/>service processes and journey runner"]
-  collector -->|checks live bridge, supervisor and held proxy calls| computer["computer container<br/>root launch records"]
+  collector -->|checks live bridge, supervisor and held proxy calls| computer["computer container<br/>root and native launch records"]
 ```
 
 ## What it is responsible for
@@ -44,6 +44,8 @@ flowchart LR
 - Save protection refusals with a fixed message naming the failed check.
 - Accept results only from processes it starts in the measured image.
 - Check two private Codex processes from the deployment image without a model call.
+- Hold one private Codex turn while checking its wrapper and native child against
+  protected launch records and live kernel settings.
 - Save its own result in a protected file and recheck the deployment whenever it is used.
 - Refuse copied, edited, stale or foreign receipts.
 - Keep failures free of private paths and child process output.
@@ -70,15 +72,20 @@ new subscribers cannot recover it, and delayed old output is refused. Cold reads
 retain saved references and status without granting execution or restoring private input. It records these checks as PARTIAL and missing
 journeys as NOT RUN. For private turns, it requires the pinned Codex executable,
 two fresh empty threads, disabled tools, separate homes in RAM and safe process limits.
+It holds one private turn with a local response server, without a paid model call.
+During that turn it checks both process identities, their parent and child link, their
+protected launch record, zero core limits and the container's zero swap allowance.
 It closes the first process and checks that its home is gone while the second still
 answers with its original identity. It then closes and checks the second before returning
 PARTIAL for private turns. Recall checks require the same native observations and
 the matching silo before and after the work. The shipped recall journey still returns NOT RUN: empty
 threads cannot prove that an answer used a stored fact. Missing native files refuse
 both checks. Cleanup checks process start times before signalling and keeps its first
-result, so another cleanup call leaves reused process IDs alone. Memory tool calls, full process isolation and live storage checks are still pending. The package image does not
-contain Codex or its launch helpers, so its native check refuses. Tests add those
-files to a separate disposable image; they do not change the deployment image.
+result, so another cleanup call leaves reused process IDs alone. Memory tool calls,
+the canary helper, joined process inventory and live storage checks are still pending.
+The server package image does not contain Codex or its launch helpers, so its native
+check refuses. Tests put the qualification scripts into a disposable copy of the
+packaged computer image. They do not change the deployment image.
 Tests build the package image and run all six memory checks against a disposable event store.
 Another test stores facts for two people, then uses a scripted native peer and the
 real server, bridge and gateway to recall only the requester's fact. It checks the

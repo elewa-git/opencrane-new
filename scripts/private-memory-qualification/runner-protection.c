@@ -8,6 +8,8 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/un.h>
+#include <sys/syscall.h>
+#include <poll.h>
 #include <unistd.h>
 #include <string.h>
 
@@ -154,6 +156,25 @@ static napi_value probe(napi_env env, napi_callback_info info) {
     return result;
 }
 
+// Hold a kernel reference while checking that a measured PID has not exited.
+static napi_value pid_alive(napi_env env, napi_callback_info info) {
+    size_t count = 1;
+    napi_value argument;
+    int32_t pid;
+    if (napi_get_cb_info(env, info, &count, &argument, NULL, NULL) != napi_ok ||
+        count != 1 || napi_get_value_int32(env, argument, &pid) != napi_ok || pid <= 0) {
+        return boolean_result(env, false);
+    }
+    int descriptor = (int)syscall(SYS_pidfd_open, pid, 0);
+    if (descriptor < 0) {
+        return boolean_result(env, false);
+    }
+    struct pollfd entry = { .fd = descriptor, .events = POLLIN };
+    int result = poll(&entry, 1, 0);
+    close(descriptor);
+    return boolean_result(env, result == 0);
+}
+
 static napi_value initialise(napi_env env, napi_value exports) {
     real_uid = getuid();
     effective_uid = geteuid();
@@ -162,17 +183,23 @@ static napi_value initialise(napi_env env, napi_value exports) {
     napi_value protect_function;
     napi_value check_function;
     napi_value probe_function;
+    napi_value pid_alive_function;
     if (napi_create_function(env, "protect", NAPI_AUTO_LENGTH, protect, NULL,
                              &protect_function) != napi_ok ||
         napi_create_function(env, "check", NAPI_AUTO_LENGTH, check, NULL,
                              &check_function) != napi_ok ||
         napi_create_function(env, "probe", NAPI_AUTO_LENGTH, probe, NULL,
                              &probe_function) != napi_ok ||
+        napi_create_function(env, "pidAlive", NAPI_AUTO_LENGTH, pid_alive, NULL,
+                             &pid_alive_function) != napi_ok ||
         napi_set_named_property(env, exports, "protect", protect_function) != napi_ok ||
         napi_set_named_property(env, exports, "check", check_function) != napi_ok) {
         return NULL;
     }
     if (napi_set_named_property(env, exports, "probe", probe_function) != napi_ok) {
+        return NULL;
+    }
+    if (napi_set_named_property(env, exports, "pidAlive", pid_alive_function) != napi_ok) {
         return NULL;
     }
     return exports;

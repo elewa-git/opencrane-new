@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
-import { mkdirSync, readdirSync, readFileSync, rmdirSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, rmdirSync,
+  statfsSync } from 'node:fs';
+import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const lock = '/run/opencrane-memory-qualification.lock';
@@ -12,6 +14,9 @@ let stopping = false;
 let received = '';
 let size = 0;
 const output = [];
+let recordsBefore = new Set();
+let snapshotsReady = false;
+let journeyChallenge;
 const deadline = setTimeout(cancel, 120_000);
 
 function killGroup() {
@@ -75,6 +80,46 @@ function isHostRefusal() {
   }
 }
 
+function names(directory) {
+  if (!existsSync(directory)) {
+    return new Set();
+  }
+  const information = lstatSync(directory);
+  if (!information.isDirectory() || information.uid !== 0 ||
+      statfsSync(directory).type !== 0x01021994) {
+    throw new Error('transient_directory_untrusted');
+  }
+  return new Set(readdirSync(directory));
+}
+
+function clearTransientFiles() {
+  const recordName = /^opencrane-native-[0-9a-f-]{36}\.identity$/u;
+  const currentHomes = names('/home/private');
+  for (const name of names('/run')) {
+    if (!recordName.test(name) || recordsBefore.has(name)) {
+      continue;
+    }
+    const recordPath = join('/run', name);
+    const record = lstatSync(recordPath);
+    if (!record.isFile() || record.uid !== 0 || record.nlink !== 1 ||
+        (record.mode & 0o077) !== 0 || record.size > 128) {
+      throw new Error('native_record_untrusted');
+    }
+    const contents = readFileSync(recordPath, 'utf8');
+    if (!journeyChallenge ||
+        (contents !== `${journeyChallenge}\n` &&
+         !contents.startsWith(`${journeyChallenge} `))) {
+      continue;
+    }
+    const childId = name.slice('opencrane-native-'.length, -'.identity'.length);
+    const homeName = `turn-${childId}`;
+    if (currentHomes.has(homeName)) {
+      rmSync(join('/home/private', homeName), { recursive: true, force: true });
+    }
+    rmSync(recordPath, { force: true });
+  }
+}
+
 async function finish(code) {
   if (stopping) {
     return;
@@ -86,6 +131,9 @@ async function finish(code) {
     await childClosed;
     while (child?.pid && groupIsRunning()) {
       await delay(10);
+    }
+    if (snapshotsReady) {
+      clearTransientFiles();
     }
     if (locked) {
       rmdirSync(lock);
@@ -141,9 +189,18 @@ function receive(buffer) {
   }
   try {
     const input = JSON.parse(received);
+    if (input !== '') {
+      const request = JSON.parse(input);
+      if (typeof request?.challengeId === 'string') {
+        journeyChallenge = request.challengeId;
+      }
+    }
     const lockOptions = { mode: 0o700 };
     mkdirSync(lock, lockOptions);
     locked = true;
+    names('/home/private');
+    recordsBefore = names('/run');
+    snapshotsReady = true;
     // Put the journey and its children in one process group, outside this supervisor.
     const childOptions = { detached: true, stdio: 'pipe' };
     child = spawn(args[0], args.slice(1), childOptions);
