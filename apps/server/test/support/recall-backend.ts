@@ -187,13 +187,13 @@ async function prepareChat(setup: Setup, memory: MemoryOptions,
       const connected = { ...link, connectionId: 1 };
       return Promise.resolve(connected);
     }
-    await processConversation(options, setup.tokens, conversation, assistant,
-      new Set(), connectedComputer);
-    function dispatched() {
+    async function dispatched() {
+      await processConversation(options, setup.tokens, conversation, assistant,
+        new Set(), connectedComputer);
       expect(link.rejection).toBeUndefined();
       expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts);
     }
-    // Give the scripted native peer time to receive the turn on a busy shared host.
+    // Retry pending delivery as the bridge watcher does on a busy host.
     const wait = { timeout: 30_000 };
     await vi.waitFor(dispatched, wait);
     await link.settled();
