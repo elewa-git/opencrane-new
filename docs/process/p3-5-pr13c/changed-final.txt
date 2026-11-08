@@ -1,10 +1,17 @@
-npm notice run npx
-npm notice run 'vitest' run apps/computer/test/mcp-proxy.test.ts apps/computer/test/approval-holds.test.ts apps/computer/test/bridge-socket.test.ts apps/computer/test/thread-load-lifecycle.test.ts apps/server/test/bridge-approvals.test.ts apps/server/test/approvals.test.ts apps/server/test/main-retained-call.test.ts --maxWorkers=2
+Changed test suites: apps/computer/test/mcp-proxy.test.ts,
+apps/computer/test/approval-holds.test.ts,
+apps/computer/test/bridge-socket.test.ts,
+apps/computer/test/thread-load-lifecycle.test.ts,
+apps/server/test/bridge-approvals.test.ts,
+apps/server/test/approvals.test.ts,
+apps/server/test/main-retained-call.test.ts.
 
- RUN  v5.0.3 <worktree>
+First final run (8 November 2026, 07:23:57 UTC):
+Test Files  7 passed (7)
+Tests       208 passed | 1 skipped (209)
+Duration    485.31s
 
-
- Test Files  7 passed (7)
-      Tests  205 passed | 1 skipped (206)
-   Start at  06:11:26
-   Duration  422.57s (tests 97%, transform 2%, import 1%)
+Second final run (8 November 2026, 07:32:09 UTC):
+Test Files  7 passed (7)
+Tests       208 passed | 1 skipped (209)
+Duration    568.12s

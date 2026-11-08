@@ -41,3 +41,31 @@ All Vitest, ESLint and typecheck commands ran under `nice -n 10`. The test runs
 used a throwaway PostgreSQL database through `PG_TEST_URL`; it was removed after
 the final pass. The first server suite attempt had a missing pinned gateway binary
 in this worktree. Linking that fixture binary fixed setup before the passing runs.
+
+## Caller status, Origin and expiry checks
+
+8 November 2026. Source: `d657a68db`; failing-first test commit: `99a340b9b`.
+The isolated worktree used a disposable PostgreSQL 17.6 container, local NATS
+fixtures and the existing gateway fixture. No dev stack or fresh installation ran.
+
+- FAIL as expected before the fix: all three focused regressions failed. A POST
+  with the original cookie and valid CSRF token reached the step-up check despite
+  a foreign Origin. A current participant could distinguish a saved call from a
+  missing one. An expired uncertain call kept its waiting slot.
+- FAIL during the first broad run: an existing approval POST test returned 503
+  for a missing approval after the new missing-record error was introduced.
+  The POST reader now maps that error to its existing 403 refusal. The focused
+  test passed before the final runs.
+- PASS: the final changed-suite command passed twice across seven files, with
+  208 passed and one existing skip each time. The two summaries are in
+  [changed-final.txt](changed-final.txt). The suites include the status, POST,
+  bridge watcher, computer hold and proxy paths.
+- PASS: workspace typecheck and a final server typecheck. Scoped ESLint had zero
+  errors and one existing function-length warning. Markdownlint checked 482
+  files with no issues. `check:events` matched 164 event types. Knip and
+  `lint:changelog` completed successfully.
+- NOT RUN: the local root suite and a fresh-install live journey. This is a
+  source-ready result with live qualification still outstanding.
+
+Vitest, ESLint and typecheck ran under `nice -n 10`. The disposable PostgreSQL
+container was removed after the final test run.
