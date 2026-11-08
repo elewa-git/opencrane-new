@@ -85,7 +85,9 @@ export async function chatFixture(page, scenario = 'live', options = {}) {
       if (scenario === 'tools') {
         add('agent.command_ran', { turnId: human.id, exitCode: 0, commandDigest: 'b'.repeat(64) });
       }
-      if (scenario === 'closed') add('conversation.closed', {});
+      if (scenario === 'closed') {
+        add('conversation.closed', { conversationId: 'chat', closedBy: 'me' });
+      }
     }
   }
   const conversations = ['chat', 'research', 'done', 'closed', 'failed'].map((id, index) => ({ conversationId: id, assistantId: 'assistant', assistantKind: teamSession ? 'team' : 'personal', ...(teamSession ? { payingGroupId: 'opaque-sales' } : {}), createdBy: 'me', mode: 'agent_session', createdAt: '2026-10-02T10:40:00Z',

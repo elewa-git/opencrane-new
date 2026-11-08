@@ -277,12 +277,18 @@ try {
         assert(badge.fontFamily.includes('DM Mono'));
       }
       await page.evaluate(() => new Promise(resolve => globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(resolve))));
-      for (const selector of ['.workspace-header', '.transcript', '.composer-dock']) {
+      if (scenario === 'closed') {
+        assert.equal(await page.locator('.composer-dock').count(), 0);
+      }
+      const dockSelector = scenario === 'closed' ? '.closed-session-composer' : '.composer-dock';
+      for (const selector of ['.workspace-header', '.transcript', dockSelector]) {
         const box = await page.locator(selector).boundingBox();
         assert(box.x >= 0 && box.x + box.width <= width, `${frame} ${selector} stays in the column`);
       }
       if (width === 390) {
-        const header = await page.locator('.workspace-header').boundingBox(), transcript = await page.locator('.transcript').boundingBox(), dock = await page.locator('.composer-dock').boundingBox();
+        const header = await page.locator('.workspace-header').boundingBox();
+        const transcript = await page.locator('.transcript').boundingBox();
+        const dock = await page.locator(dockSelector).boundingBox();
         assert(transcript.y >= header.y + header.height && transcript.y + transcript.height <= dock.y + 1, 'Transcript stays between header and dock');
         for (const target of await page.locator('button:visible, textarea:visible').all()) {
           if (await target.evaluate(node => node.classList.contains('citation'))) {
