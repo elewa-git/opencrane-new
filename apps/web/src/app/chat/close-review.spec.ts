@@ -96,6 +96,9 @@ it('does not infer that closing a parent closes its child', () => {
 it('shows a known closer by name and ignores an old reply after access loss', async () => {
   expect(closedByName('other', 'me', [{ memberId: 'other', displayName: 'Grace' }]))
     .toBe('Grace');
+  expect(closedByName('missing-member', 'me', [])).toBe('a participant');
+  expect(closedByName('other', 'me', [{ memberId: 'other', displayName: null }]))
+    .toBe('a participant');
   let finish!: (response: Response) => void;
   function saveFinish(resolve: (response: Response) => void): void { finish = resolve; }
   const held = new Promise<Response>(saveFinish);

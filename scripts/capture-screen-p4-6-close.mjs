@@ -96,6 +96,17 @@ function countSmallControls(controls) {
   }).length;
 }
 
+function clippedCloseContent(elements) {
+  return elements.filter(element => {
+    const bounds = element.getBoundingClientRect();
+    const container = element.closest('.transcript, .workspace-header, .composer-dock');
+    if (!container) return false;
+    const containerBounds = container.getBoundingClientRect();
+    return element.scrollWidth > element.clientWidth + 1
+      || bounds.right > containerBounds.right + 1;
+  });
+}
+
 async function capture(browser, width, kind, closed) {
   const page = await browser.newPage({ viewport: { width, height: width === 390 ? 844 : 900 },
     reducedMotion: 'reduce' });
@@ -128,6 +139,11 @@ async function capture(browser, width, kind, closed) {
     }
     await page.evaluate(waitForFonts);
     assert(await page.evaluate(pageHasNoOverflow), `No overflow at ${width}px`);
+    if (kind === 'group' && width === 390) {
+      const clipped = await page.locator('.workspace-header h1, .closed-chat-notice, '
+        + '.closed-composer-notice').evaluateAll(clippedCloseContent);
+      assert.equal(clipped.length, 0, 'The group title and close notices fit the phone');
+    }
     const small = await page.locator('oc-close-review-dialog dialog button:visible, '
       + '.close-opener:visible, .closed-session-composer:visible, '
       + '.closed-composer-notice:visible').evaluateAll(countSmallControls);

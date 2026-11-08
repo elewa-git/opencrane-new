@@ -289,7 +289,7 @@ const downloadScenarios: DownloadScenario[] = [
   },
   {
     name: 'your upload in a closed conversation',
-    expectedVisible: false,
+    expectedVisible: true,
     rows: [
       {
         id: 'upload', position: 1, type: 'file.uploaded', time: '2026-10-03T10:00:00Z',
@@ -346,6 +346,56 @@ afterEach(() => {
 });
 
 it.each(downloadScenarios)('shows Download only when the route can serve $name', runDownloadScenario);
+
+it('keeps an authorised image download and preview after a live close', async () => {
+  const uploaded = {
+    id: 'upload', position: 1, type: 'file.uploaded', time: '2026-10-03T10:00:00Z',
+    data: {
+      conversationId: 'chat', fileId: 'file', uploadedBy: 'me',
+      name: 'picture.png', size: 1024, mime: 'image/png',
+    },
+  };
+  const context = await createCaptureWorkspace([uploaded]);
+  try {
+    await vi.waitFor(() => expect(context.root.querySelector('.file-card a')).not.toBeNull());
+    expect(context.root.querySelector('.file-thumbnail')).not.toBeNull();
+
+    const closed = {
+      id: 'closed', position: 2, type: 'conversation.closed',
+      time: '2026-10-03T10:00:01Z', data: { conversationId: 'chat', closedBy: 'me' },
+    };
+    sendConversationRow(context.socket, closed);
+    context.fixture.detectChanges();
+
+    expect(context.root.querySelector('.file-card a')).not.toBeNull();
+    const thumbnail = context.root.querySelector<HTMLButtonElement>('.file-thumbnail');
+    expect(thumbnail).not.toBeNull();
+    thumbnail?.click();
+    context.fixture.detectChanges();
+    expect(context.root.querySelector('oc-file-preview dialog[open]')).not.toBeNull();
+  } finally {
+    context.fixture.destroy();
+  }
+});
+
+it('explains an empty closed session without inviting another message', async () => {
+  const context = await createCaptureWorkspace();
+  try {
+    const closed = {
+      id: 'closed', position: 1, type: 'conversation.closed',
+      time: '2026-10-03T10:00:01Z', data: { conversationId: 'chat', closedBy: 'me' },
+    };
+    sendConversationRow(context.socket, closed);
+    context.fixture.detectChanges();
+
+    const empty = context.root.querySelector('[aria-label="Empty conversation"]');
+    expect(empty?.textContent).toContain('No messages');
+    expect(empty?.textContent).toContain('closed');
+    expect(empty?.textContent).not.toContain('Send a message');
+  } finally {
+    context.fixture.destroy();
+  }
+});
 
 it('reads status without sending another screenshot request', async () => {
   const context = await createCaptureWorkspace();
