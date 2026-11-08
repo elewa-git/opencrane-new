@@ -10,6 +10,7 @@ import { protectionMessages } from './protection-failure.ts';
 
 const tag = `private-native-test:${randomUUID()}`;
 const packageTag = `${tag}-package`;
+const computerTag = `${tag}-computer`;
 const missingTag = `${tag}-missing`;
 const missingHelperTag = `${tag}-missing-helper`;
 const changedLauncherTag = `${tag}-changed-launcher`;
@@ -25,7 +26,8 @@ const request = {
 const faults: [string, string, string][] = [
   ['missing binary', 'readFileSync(binary)', "readFileSync('/missing-native')"],
   ['replaced binary', 'readFileSync(binary)', "Buffer.from('replacement')"],
-  ['changed running binary', 'binaryDigest(`${base}/exe`)', "'changed'"],
+  ['changed running binary', 'statSync(`${base}/exe`)',
+    "{ dev: -1, ino: -1, size: -1 }"],
   ['shared home', 'randomUUID()', "'11111111-1111-4111-8111-111111111111'"],
   ['used home', 'mkdirSync(home, directoryOptions);',
     "mkdirSync(home, directoryOptions); writeFileSync(home + '/retained', 'keep'); " +
@@ -57,6 +59,38 @@ const faults: [string, string, string][] = [
   ['unreadable limits', "readFileSync(`${base}/limits`, 'utf8')",
     "readFileSync('/unreadable-limits', 'utf8')"],
   ['changed process', 'processIdentity(nativePid)', '`${processIdentity(nativePid)}-${++sample}`'],
+  ['missing launch record', "writeFileSync(state.recordPath, contents, { flag: 'w' });",
+    'void contents;'],
+  ['forged launch record', "writeFileSync(state.recordPath, contents, { flag: 'w' });",
+    "writeFileSync(state.recordPath, 'forged\\n', { flag: 'w' });"],
+  ['writable launch record', 'mode: 0o600', 'mode: 0o666'],
+  ['swapped native child', 'state.nativePid = nativePid;', 'state.nativePid = child.pid;'],
+  ['stopped native child', 'recordNativeLaunch(supervised);',
+    "recordNativeLaunch(supervised); process.kill(nativePid, 'SIGSTOP');"],
+  ['double native child', 'const trimmed = children.trim();', "const trimmed = '10 11';"],
+];
+const proofFaults: [string, string, string][] = [
+  ['wrong wrapper hash', "digest('/usr/local/bin/codex')", "'wrong-hash'"],
+  ['wrong native executable', 'sameExecutable(binding.childPid, binding.childBinary)', 'false'],
+  ['swapped native pipe', 'sameNativePipes(wrapper.pid, child.pid)', 'false'],
+  ['wrong wrapper UID', 'wrapper.uid !== 1003', 'wrapper.uid !== 0'],
+  ['wrong wrapper executable', "wrapper.executable !== '/usr/local/bin/node'",
+    "wrapper.executable !== '/usr/bin/node'"],
+  ['wrong wrapper command', 'wrapper.commandLine !== wrapperCommand',
+    "wrapper.commandLine !== 'wrong-command'"],
+  ['wrong native command', 'child.commandLine !== `${binding.childBinary}\\0app-server\\0--stdio\\0`',
+    "child.commandLine !== 'wrong-command'"],
+  ['wrong parent', 'wrapperNumbers.parent !== runner.pid', 'wrapperNumbers.parent !== 1'],
+  ['wrong start time', 'wrapperNumbers.start !== wrapper.startTime',
+    "wrapperNumbers.start !== '1'"],
+  ['wrong namespace', 'wrapper.containerIdentity !== runner.containerIdentity',
+    "wrapper.containerIdentity !== 'pid:[1]'"],
+  ['container replacement', 'const protection = probeContainer();',
+    "const protection = 'private_process_identity_changed';"],
+  ['live core allowance', '!coreProtected(wrapper.pid)', 'true'],
+  ['live swap allowance', 'const protection = probeContainer();',
+    "const protection = 'swap_not_disabled';"],
+  ['lost kernel probe', 'return helper.pidAlive(pid) === true;', 'return false;'],
 ];
 for (const feature of ['shell_tool', 'unified_exec', 'code_mode_host', 'apps',
   'plugins', 'remote_plugin', 'multi_agent', 'shell_snapshot', 'memories']) {
@@ -73,9 +107,15 @@ function docker(args: string[], timeout = 30_000): string {
   const output = execFileSync('/usr/bin/docker', args, options);
   return output.trim();
 }
+
+function installation(containerName: string): string {
+  const format = '{{.Id}}|{{.Image}}|{{.State.StartedAt}}|{{.State.Pid}}';
+  return docker(['inspect', '--format', format, containerName]);
+}
 // Inject observations only in this fixture image. The shipped entry has no fault switch.
 const preload = `import { registerHooks } from 'node:module';
 const faults = ${JSON.stringify(faults)};
+const proofFaults = ${JSON.stringify(proofFaults)};
 function load(url, context, next) {
   const loaded = next(url, context);
   if (url.endsWith('/host-probe.ts') && process.env.CASE !== 'host') {
@@ -85,10 +125,18 @@ function load(url, context, next) {
     return row[0] === process.env.CASE;
   }
   const fault = faults.find(selected);
+  const proofFault = proofFaults.find(selected);
   if (url.endsWith('/codex-connection.ts') && process.env.CASE === 'startup timeout') {
     const originalSource = String(loaded.source);
     const source = originalSource.replace('30_000', '200');
     return { ...loaded, source };
+  }
+  if (url.endsWith('/native-process-proof.ts') && proofFault) {
+    const source = String(loaded.source);
+    if (!source.includes(proofFault[1])) {
+      process.exit(2);
+    }
+    return { ...loaded, source: source.replace(proofFault[1], proofFault[2]) };
   }
   if (url.endsWith('/native-checks.ts')) {
     let source = String(loaded.source);
@@ -117,7 +165,8 @@ function observe(home, child, threadId) {
   const observation = { home, pid: child.pid, nativePid, threadId };
   observed.push(observation);
   writeFileSync('/run/native-count', String(observed.length));
-  if (process.env.CASE === 'collector EOF' && observed.length === 2) {
+  if ((process.env.CASE === 'collector EOF' || process.env.CASE === 'collector timeout') &&
+      observed.length === 2) {
     process.kill(process.pid, 'SIGSTOP');
   }
 }
@@ -159,18 +208,23 @@ registerHooks(hooks);`;
 
 function prepare(): void {
   docker(['build', '-q', '-f', 'infra/package/Dockerfile', '-t', packageTag, '.'], 600_000);
+  docker(['buildx', 'build', '--load', '-q', '-f', 'apps/computer/Dockerfile',
+    '--build-context', 'project=.', '-t', computerTag, 'apps/computer'], 600_000);
   const directory = mkdtempSync(join(tmpdir(), 'private-native-image-'));
   try {
     writeFileSync(join(directory, 'preload.mjs'), preload);
-    const dockerfile = `FROM ${packageTag} AS with_native
+    const dockerfile = `FROM ${computerTag} AS with_native
 USER root
+COPY --from=${packageTag} /app/scripts/private-memory-qualification /app/scripts/private-memory-qualification
+COPY --from=${packageTag} /app/apps/computer/src /app/apps/computer/src
+COPY --from=${packageTag} /app/node_modules/zod /app/node_modules/zod
 COPY preload.mjs /fixture/preload.mjs
 FROM with_native AS missing_native
 RUN rm -f /usr/local/bin/codex
 FROM with_native AS missing_helper
 RUN rm -f /app/apps/computer/src/codex-connection.ts
 FROM with_native AS changed_launcher
-RUN rm -f /usr/local/bin/codex && ln -s /missing-launcher /usr/local/bin/codex
+RUN rm -f /usr/local/bin/codex && ln -s /fixture/preload.mjs /usr/local/bin/codex
 FROM with_native
 `;
     writeFileSync(join(directory, 'Dockerfile'), dockerfile);
@@ -187,15 +241,23 @@ FROM with_native
   }
 }
 function cleanup(): void {
-  docker(['image', 'rm', '-f', tag, missingTag, missingHelperTag, changedLauncherTag, packageTag]);
+  docker(['image', 'rm', '-f', tag, missingTag, missingHelperTag,
+    changedLauncherTag, packageTag, computerTag]);
 }
 beforeAll(prepare, 970_000);
 afterAll(cleanup, 30_000);
 
 function startContainer(caseName: string, image: string, scratchDirectory?: string): string {
   const containerName = `private-native-${randomUUID()}`;
+  const coreLimit = caseName === 'core allowance' ? 'core=1:1' : 'core=0:0';
+  const swapLimit = caseName === 'swap allowance' ? '1g' : '512m';
+  const memoryOptions: string[] = [];
+  if (caseName !== 'host') {
+    memoryOptions.push('--memory=512m', `--memory-swap=${swapLimit}`);
+  }
   const args = ['run', '-d', '--name', containerName, '--network=none', '--read-only', '--init', '--user=0',
-    '--cap-add=SYS_PTRACE', '--cpus=0.5', '--pids-limit=256', '--ulimit=core=0:0',
+    '--cap-add=SYS_PTRACE', '--cpus=0.5', ...memoryOptions,
+    '--pids-limit=256', `--ulimit=${coreLimit}`,
     '--ulimit=nproc=256:256', '--tmpfs', '/home/private:mode=711',
     '-e', 'SILO_ID=native-test', '-e', `CASE=${caseName}`, image, 'sleep', '120'];
   const mountIndex = args.indexOf('-e');
@@ -219,6 +281,7 @@ function nativeCommand(image: string): string[] {
 function run(caseName: string, image = tag, name = request.name,
   scratchDirectory?: string): Record<string, unknown> {
   const containerName = startContainer(caseName, image, scratchDirectory);
+  const installationBefore = installation(containerName);
   const command = ['exec', '-i', containerName, ...nativeCommand(image)];
   try {
     const namedRequest = { ...request, name };
@@ -229,6 +292,7 @@ function run(caseName: string, image = tag, name = request.name,
     expect(result.error).toBeUndefined();
     expect(result.stderr).toBe('');
     const receipt = receiptSchema.parse(JSON.parse(result.stdout));
+    expect(installation(containerName) === installationBefore).toBe(true);
     expect(result.status).toBe(receipt['result'] === 'FAIL' ? 1 : 0);
     assertStopped(containerName, ['failed home cleanup', 'used home', 'surviving process'].includes(caseName));
     if (caseName === 'used home') {
@@ -277,6 +341,10 @@ function refusesFault(name: string): void {
   expect(run(name)).toEqual(expected);
 }
 it.each(faults)('refuses %s without returning native output', refusesFault, 60_000);
+it.each(proofFaults)('refuses %s before a private-turn receipt', refusesFault, 60_000);
+it.each(['core allowance', 'swap allowance'])(
+  'refuses a live %s before a private-turn receipt', refusesFault, 60_000,
+);
 function refusesHost(): void {
   const expected = { result: 'FAIL', reason: 'host_refused',
     protectionFailure: 'memory_limit_unproved' };
@@ -301,7 +369,7 @@ function changedLauncher(): void {
   const expected = { result: 'FAIL', reason: 'journey_failed' };
   expect(run('safe', changedLauncherTag)).toEqual(expected);
 }
-it('refuses a changed launcher link', changedLauncher, 60_000);
+it('refuses a stand-in launcher script', changedLauncher, 60_000);
 
 function persistentScratch(): void {
   const directory = mkdtempSync(join(tmpdir(), 'private-native-scratch-'));
@@ -324,10 +392,14 @@ function recallPrerequisites(): void {
 it('requires shipped native files for recall without qualifying empty threads',
   recallPrerequisites, 60_000);
 
-async function collectorEof(): Promise<void> {
-  const containerName = startContainer('collector EOF', tag);
+async function collectorLoss(caseName: string): Promise<void> {
+  const containerName = startContainer(caseName, tag);
+  const installationBefore = installation(containerName);
   try {
-    const source = readFileSync(new URL('./supervisor.mjs', import.meta.url), 'utf8');
+    let source = readFileSync(new URL('./supervisor.mjs', import.meta.url), 'utf8');
+    if (caseName === 'collector timeout') {
+      source = source.replace('120_000', '15_000');
+    }
     const failures = Object.keys(protectionMessages);
     const args = ['exec', '-i', containerName, 'node', '--input-type=module', '--eval',
       source, JSON.stringify(failures), JSON.stringify(nativeCommand(tag))];
@@ -357,15 +429,31 @@ async function collectorEof(): Promise<void> {
         await delay(50);
       }
       expect(ready).toBe(true);
+      const unrelatedHome = 'turn-33333333-3333-4333-8333-333333333333';
+      docker(['exec', containerName, 'mkdir', `/home/private/${unrelatedHome}`]);
     } finally {
-      child.stdin.end();
+      if (caseName === 'collector EOF') {
+        child.stdin.end();
+      }
     }
     expect(await stopped).toBe(1);
+    expect(installation(containerName) === installationBefore).toBe(true);
     expect(Buffer.concat(output).length).toBe(0);
     assertStopped(containerName, true);
+    const remainingHome = "const fs = require('node:fs'); " +
+      "const names = fs.readdirSync('/home/private'); " +
+      "if (names.length !== 1 || names[0] !== 'turn-33333333-3333-4333-8333-333333333333') " +
+      'process.exit(1);';
+    expect(docker(['exec', containerName, 'node', '-e', remainingHome])).toBe('');
     docker(['exec', containerName, 'test', '!', '-e', '/run/opencrane-memory-qualification.lock']);
+    const recordsGone = "const fs = require('node:fs'); " +
+      "function isNativeRecord(name) { return /^opencrane-native-/.test(name); } " +
+      "if (fs.readdirSync('/run').some(isNativeRecord)) process.exit(1);";
+    expect(docker(['exec', containerName, 'node', '-e', recordsGone])).toBe('');
   } finally {
     docker(['rm', '-f', '-v', containerName]);
   }
 }
-it('collector EOF stops both native processes in the supervisor group', collectorEof, 30_000);
+it.each(['collector EOF', 'collector timeout'])(
+  '%s stops both native processes in the supervisor group', collectorLoss, 40_000,
+);

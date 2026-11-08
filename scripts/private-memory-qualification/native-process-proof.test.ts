@@ -21,14 +21,15 @@ afterEach(function removeRecords(): void {
   }
 });
 
-async function standInCannotPass(): Promise<void> {
+function standInCannotPass(): void {
   const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
     stdio: 'ignore',
   });
   try {
     expect(child.pid).toBeDefined();
     const path = record(`${child.pid} 1\n`);
-    const result = proveNativePair({ wrapperPid: child.pid!, childPid: child.pid!,
+    const result = proveNativePair({ challengeId: '11111111-1111-4111-8111-111111111111',
+      wrapperPid: child.pid!, childPid: child.pid!,
       recordPath: path, childBinary: process.execPath });
     expect(result).not.toBe(true);
   } finally {
@@ -39,7 +40,8 @@ async function standInCannotPass(): Promise<void> {
 it('refuses a stand-in process even with a fixture-reported PID', standInCannotPass);
 
 function missingRecordCannotPass(): void {
-  const result = proveNativePair({ wrapperPid: process.pid, childPid: process.pid,
+  const result = proveNativePair({ challengeId: '11111111-1111-4111-8111-111111111111',
+    wrapperPid: process.pid, childPid: process.pid,
     recordPath: '/run/missing-native-proof-record', childBinary: process.execPath });
   expect(result).not.toBe(true);
 }
@@ -48,7 +50,8 @@ it('refuses a missing launch record', missingRecordCannotPass);
 
 function writableRecordCannotPass(): void {
   const path = record(`${process.pid} 1\n`, 0o666);
-  const result = proveNativePair({ wrapperPid: process.pid, childPid: process.pid,
+  const result = proveNativePair({ challengeId: '11111111-1111-4111-8111-111111111111',
+    wrapperPid: process.pid, childPid: process.pid,
     recordPath: path, childBinary: process.execPath });
   expect(result).not.toBe(true);
 }
