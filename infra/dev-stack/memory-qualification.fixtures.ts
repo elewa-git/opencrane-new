@@ -8,6 +8,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 vi.mock('node:fs', { spy: true });
 vi.mock('node:fs/promises', { spy: true });
 vi.mock('node:child_process', { spy: true });
+vi.mock('../../scripts/private-memory-qualification/bridge-proof.ts', { spy: true });
+vi.mock('../../scripts/private-memory-qualification/supervisor-proof.ts', { spy: true });
 const root = new URL('../../', import.meta.url).pathname.slice(0, -1);
 const directory = `${homedir()}/.config/opencrane/dev-stack-1`;
 const targetPath = '/etc/opencrane/private-memory-qualification.json';
@@ -154,7 +156,8 @@ function prepare(): void {
   vi.stubEnv('MEMORY_CLAIMED_ID', '1');
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-01-01T00:00:03Z'));
-  target = JSON.stringify({ containerId, siloId: 'fixture-silo' });
+  target = JSON.stringify({ containerId, computerContainerId: 'd'.repeat(64),
+    siloId: 'fixture-silo' });
   saved = 'prior evidence';
   pending = '';
   container = freshContainer();
@@ -194,6 +197,15 @@ function restore(): void {
 beforeEach(prepare);
 afterEach(restore);
 async function launch(signal?: AbortSignal): Promise<void> {
+  const bridgeProof = await import('../../scripts/private-memory-qualification/bridge-proof.ts');
+  const supervisorProof = await import(
+    '../../scripts/private-memory-qualification/supervisor-proof.ts');
+  vi.mocked(bridgeProof.containerIdentity).mockReturnValue({
+    Id: 'd'.repeat(64), Image: imageDigest,
+    State: { Running: true, StartedAt: container.State.StartedAt, Pid: 4321 },
+  });
+  vi.mocked(bridgeProof.proveComputerBridge).mockResolvedValue(true);
+  vi.mocked(supervisorProof.proveComputerSupervisor).mockResolvedValue(true);
   const launcher = await import('./memory-qualification.ts');
   await launcher.prepareMemoryQualification(signal);
 }
