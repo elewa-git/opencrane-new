@@ -13,8 +13,9 @@ import { approvalJourneyTool } from '../../../../infra/dev-stack/journey-tool-po
 import { z } from 'zod';
 const exec = promisify(execFile);
 
-/** Disposable runtime image with this branch's sources; no shared-stack Pods or credentials. */
-export async function uploadComputer(deliverCredential = true, nodeOptions = '') {
+/** Start a disposable computer with a local model stub and no shared stack. */
+export async function uploadComputer(deliverCredential = true, nodeOptions = '',
+  fixtureOptions: { image?: string; protected?: boolean } = {}) {
   const capture = await mkdtemp(`${tmpdir()}/upload-requests-`);
   const stub = spawn(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'],
     {
@@ -61,10 +62,25 @@ export async function uploadComputer(deliverCredential = true, nodeOptions = '')
     let url = '';
     const start = async () => {
       // Match the silo's capabilities; Docker's defaults include CAP_KILL.
-      container = await docker('run', '-d', '--name', `upload-computer-${randomUUID()}`, '-p', '127.0.0.1::8081',
+      const runArgs = ['run', '-d', '--name', `upload-computer-${randomUUID()}`,
+        '-p', '127.0.0.1::8081',
         '--cap-drop=ALL', '--cap-add=SETUID', '--cap-add=SETGID', '--cap-add=CHOWN', '--cap-add=DAC_OVERRIDE',
-        '-v', `${disk}:/home/agent`, '-v', `${resolve('apps/computer/src')}:/app/src:ro`, '-e', 'POD_UID=fixture', '-e', `GATEWAY=http://${gateway}:${relay!.port}`, '-e', `NODE_OPTIONS=${nodeOptions}`,
-        process.env['COMPUTER_TEST_IMAGE'] ?? 'ocn-upload-computer:test', ...command);
+        '-v', `${disk}:/home/agent`];
+      if (fixtureOptions.protected) {
+        runArgs.push('--read-only', '--memory=256m', '--memory-swap=256m',
+          '--ulimit=core=0:0', '--cap-add=SYS_PTRACE');
+        for (const path of ['/run', '/home/codex', '/home/desktop', '/home/private',
+          '/home/tool', '/tmp']) {
+          runArgs.push('--tmpfs', path);
+        }
+      } else {
+        runArgs.push('-v', `${resolve('apps/computer/src')}:/app/src:ro`);
+      }
+      runArgs.push('-e', 'POD_UID=fixture', '-e', `GATEWAY=http://${gateway}:${relay!.port}`,
+        '-e', `NODE_OPTIONS=${nodeOptions}`,
+        fixtureOptions.image ?? process.env['COMPUTER_TEST_IMAGE'] ?? 'ocn-upload-computer:test',
+        ...command);
+      container = await docker(...runArgs);
       const port = Number((await docker('port', container, '8081/tcp')).split(':')[1]);
       url = `http://127.0.0.1:${port}`;
     };
@@ -88,7 +104,8 @@ export async function uploadComputer(deliverCredential = true, nodeOptions = '')
     };
     await ready();
     if (deliverCredential) await credentials();
-    return { get url() { return url; }, close, install, issue, credential, privateVerifier, requests: () => readFile(`${capture}/requests.jsonl`, 'utf8'), async restart() { await docker('rm', '-f', '-v', container!); await start(); await credentials(); },
+    return { get url() { return url; }, get containerId() { return container!; }, close,
+      install, issue, credential, privateVerifier, requests: () => readFile(`${capture}/requests.jsonl`, 'utf8'), async restart() { await docker('rm', '-f', '-v', container!); await start(); await credentials(); },
       exec: (...args: string[]) => docker('exec', container!, ...args),
       pause: () => docker('pause', container!), resume: () => docker('unpause', container!),
       read: (path: string) => docker('exec', container!, 'cat', path),

@@ -224,6 +224,10 @@ swap and dump protection and checks process identity again after the exchange.
 The collector checks the exact computer container once more before accepting
 the narrow response. A wrong container, changed installation, missing record,
 unreadable process or changed bridge returns only a fixed failure category.
+The computer may mount its fixed data homes, `/tmp`, `/run` and `/var`.
+Mounting executable code paths such as `/app` still refuses. The container
+fixture builds the computer image and runs its root entrypoint and packaged
+bridge, with a normal `/home/agent` volume and no source-code mount.
 Without `computerContainerId`, this group has no cross-container proof.
 
 The server-container runner still cannot see the bridge in its separate computer

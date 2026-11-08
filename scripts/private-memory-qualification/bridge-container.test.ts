@@ -122,8 +122,9 @@ async function provesPackagedBridge(): Promise<void> {
     { image: packagedImage, protected: true });
   try {
     expect(await proveComputerBridge(computer.containerId, installationId)).toBe(true);
-    expect(await computer.read('/run/executor/supervisor/bridge-identity'))
-      .toMatch(/^[1-9][0-9]* [1-9][0-9]*\n$/u);
+    const record = execFileSync('/usr/bin/docker', ['exec', computer.containerId,
+      'cat', '/run/executor/supervisor/bridge-identity'], { encoding: 'utf8' });
+    expect(record).toMatch(/^[1-9][0-9]* [1-9][0-9]*\n$/u);
   } finally {
     await computer.close();
   }

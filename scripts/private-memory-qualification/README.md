@@ -106,8 +106,10 @@ server and computer bridge each protect their own process and answer a local liv
 check. The runner records their command arguments with their process identity before
 checking which script they run. For the bridge, it also requires the root entrypoint's
 record of the process launched in the computer container. It checks the process again
-after its answer. An
-early client disconnect closes only that client's protection socket. The
+after its answer. An early client disconnect closes only that client's protection socket. The
+collector accepts the computer's fixed data volumes, including `/home/agent`,
+while keeping its code paths inside the checked image. A container test starts
+the packaged bridge through the root entrypoint to check this path. The
 computer bridge lives in another container, so the current server-container runner
 cannot see it. The collector still refuses the container path before a journey:
 the bridge, supervisor, proxy, native wrapper, native child and canary helpers lack

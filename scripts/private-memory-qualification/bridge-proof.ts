@@ -13,6 +13,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function isDataMount(destination: string): boolean {
+  // Allow the computer's fixed data homes while keeping shipped code inside the image.
+  const computerHomes = new Set([
+    '/home/agent', '/home/codex', '/home/desktop', '/home/private', '/home/tool',
+  ]);
+  if (computerHomes.has(destination) || destination === '/tmp') {
+    return true;
+  }
+  return destination === '/run' || destination.startsWith('/run/') ||
+    destination === '/var' || destination.startsWith('/var/');
+}
+
 function containerIdentity(containerId: string): ContainerIdentity {
   const args = ['--host', 'unix:///var/run/docker.sock', 'inspect', '--type', 'container',
     containerId];
@@ -37,8 +49,7 @@ function containerIdentity(containerId: string): ContainerIdentity {
   }
   for (const mount of mounts) {
     if (!isRecord(mount) || typeof mount['Destination'] !== 'string' ||
-        (!mount['Destination'].startsWith('/run/') &&
-          !mount['Destination'].startsWith('/var/'))) {
+        !isDataMount(mount['Destination'])) {
       throw new Error('private_process_identity_changed');
     }
   }
