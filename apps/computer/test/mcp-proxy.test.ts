@@ -412,6 +412,45 @@ async function duplicateHoldKeepsOriginalBytes() {
 it('keeps the original retained call after a duplicate hold closes',
   duplicateHoldKeepsOriginalBytes);
 
+async function sendsRetainedReplacementOnlyOnce() {
+  const test = await fixture(true);
+  const controller = new AbortController();
+  try {
+    const askTools: ToolServer[] = [{ ...tools[0]!, modes: { read: 'ask' } }];
+    await test.catalogue(loadA, 'chat-A', 'thread-A', askTools);
+    await test.grant();
+    test.answer(403, true, JSON.stringify({ reason: 'approval_requested', approvalId }));
+    const original = test.send(call, {}, loadA, 'POST', controller.signal);
+    void original.catch(ignoreAbortedCall);
+    function waiting() { expect(test.waiting).toHaveBeenCalledOnce(); }
+    await vi.waitFor(waiting);
+    test.answer(503, false, '{"reason":"dispatch_refused"}');
+    await test.approvals.settle(approvalId, 'approved');
+    const retained = test.retainedCall(approvalId);
+    expect(retained).toMatchObject({ callId: 'call' });
+    test.answer(200, false, '{"jsonrpc":"2.0","id":7,"result":{"content":[]}}');
+    await Promise.all([
+      test.approvals.settle(approvalId, 'retry'),
+      test.approvals.settle(approvalId, 'retry'),
+    ]);
+    function replacementSent() { expect(test.received).toHaveLength(3); }
+    await vi.waitFor(replacementSent);
+    const result = await original;
+    expect(result.status).toBe(200);
+    expect(test.received).toHaveLength(3);
+    expect(test.received[2]?.raw).toBe(result.raw);
+    expect(test.received[2]?.headers['x-opencrane-approval-id']).toBe(approvalId);
+    expect(test.retainedCall(approvalId)).toBeUndefined();
+    await test.approvals.settle(approvalId, 'retry');
+    expect(test.received).toHaveLength(3);
+  } finally {
+    controller.abort();
+    await test.close();
+  }
+}
+it('sends the retained Ask request once through the live proxy after retry is saved',
+  sendsRetainedReplacementOnlyOnce);
+
 async function retainedCallsHaveTotalByteLimit() {
   const test = await fixture(true);
   const controllers: AbortController[] = [];
