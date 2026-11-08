@@ -1720,6 +1720,9 @@ route checks publication records, including records linked to another entry. The
 projection keeps publications out of other entries' evidence. No history GET
 decrypts the published text, reads a file, appends an event or starts a turn. The
 event has no file receipt, so this read offers no asset count or asset link.
+`test/audit-child-publication.test.ts` also supplies a linked publication from
+an older projection. It checks that a parent reader cannot see the child id or
+result id when the row reaches conversation history.
 Saved tool starts and observations use these same list and detail routes and metadata
 fields. The [audit projection contract](../../libs/projections/README.robot.md) explains
 their status meanings and the required replay for existing installations.
