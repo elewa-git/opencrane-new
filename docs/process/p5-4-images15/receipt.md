@@ -41,8 +41,10 @@ approved inventory, historical records and promotion gates are unchanged.
 ## Own checks
 
 - PASS — Clean `npm ci` and linked local NATS and lychee tools.
-- PASS — The new seven Python fixtures through Vitest, twice. The fixture includes
-  an actual signed-source npm test file and the official launcher-link rows.
+- PASS — Eight Python fixtures through Vitest, twice. They include an actual
+  signed-source npm test file and the official launcher-link rows. Removing each
+  authentication, source, candidate, layer, recipe or archive recheck guard in
+  turn made its matching refusal test fail; the checker was restored each time.
 - PASS — Exact source, official archive, archived Dockerfile and both saved
   candidate layers. The new checker returned the bounded results above.
 - PASS — Scoped ESLint, Markdown lint, typecheck, event catalogue, Knip and
