@@ -587,6 +587,10 @@ it('settles an ended private turn when its computer is replaced before an exit r
 it('bounds queued close cancellations and reads each history once per pass', async () => {
   fixture = await bridgeFixture(true);
   const test = fixture;
+  const turn = await startFixtureTurn(test);
+  await test.append('conversation-chat', 'agent.turn_failed', {
+    conversationId: 'chat', turnId: turn.turnId, reason: 'bridge_interrupted',
+  });
   for (let index = 0; index < 96; index++) {
     await test.append('conversation-chat', 'message.posted', {
       conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text',
@@ -606,9 +610,18 @@ it('bounds queued close cancellations and reads each history once per pass', asy
     return call[0] === 'conversation-chat';
   }
   expect(reads.mock.calls.filter(isConversationRead).length).toBeLessThan(5);
-  for (let pass = 0; pass < 5; pass++) await test.process();
+  let pending = true;
+  for (let pass = 0; pass < 8 && pending; pass++) {
+    pending = await test.process();
+  }
+  expect(pending).toBe(false);
   const finalRows = await chatHistory(test.store, 'test', 'chat');
-  expect(finalRows.filter(isClosedFailure)).toHaveLength(97);
+  expect(finalRows.filter(isClosedFailure)).toHaveLength(96);
+  const computerRows = [];
+  for await (const row of test.store.readStream('computer-assistant')) {
+    computerRows.push(row);
+  }
+  expect(computerRows.filter(isComputerTurnClosed).map(turnIdOf)).toEqual([turn.turnId]);
 });
 
 it('rechecks a queued input when a computer start arrives during the cleanup pass', async () => {

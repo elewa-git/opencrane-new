@@ -334,6 +334,48 @@ async function closedGroupCannotReadd() {
 it('does not re-add a group member after close while projection is behind',
   closedGroupCannotReadd, 120_000);
 
+async function removeAfterGroupClose(action: 'remove' | 'leave') {
+  const fixture = await directFixture();
+  try {
+    await fixture.create('group');
+    expect((await closeChat(fixture, 'group-close')).statusCode).toBe(200);
+    const memberId = action === 'leave' ? 'bob' : 'alice';
+    const participants = await fixture.app.inject({
+      url: '/api/conversations/direct/participants', headers: fixture.headers(memberId),
+    });
+    expect(participants.statusCode).toBe(200);
+    const accessPosition = participants.json<{ accessPosition: number }>().accessPosition;
+    const payload = action === 'leave'
+      ? { id: `closed-${action}`, action, expectedAccessPosition: accessPosition }
+      : { id: `closed-${action}`, action, participantId: 'bob',
+        expectedAccessPosition: accessPosition };
+    const removal = await fixture.app.inject({ method: 'POST',
+      url: '/api/conversations/direct/participants', headers: fixture.headers(memberId),
+      payload,
+    });
+    expect(removal.statusCode).toBe(200);
+    const saved = await history(fixture.nats.store, 'participation-direct', 'test');
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.event).toMatchObject({ type: 'participant.removed',
+      data: { participantId: 'bob', removedBy: memberId } });
+    const beforeProjection = await fixture.app.inject({
+      url: '/api/conversations/direct/messages', headers: fixture.headers('bob'),
+    });
+    expect(beforeProjection.statusCode).toBe(403);
+    await fixture.auth.handler.handle(saved[0]!.event, fixture.db);
+    await fixture.runner.run(conversations);
+    const afterProjection = await fixture.app.inject({
+      url: '/api/conversations/direct/messages', headers: fixture.headers('bob'),
+    });
+    expect(afterProjection.statusCode).toBe(403);
+  } finally {
+    await fixture.close();
+  }
+}
+it.each(['remove', 'leave'] as const)(
+  'allows a group participant to %s after public close and revokes history access',
+  removeAfterGroupClose, 120_000);
+
 async function archiveAfterLostReply() {
   const fixture = await directFixture();
   try {
