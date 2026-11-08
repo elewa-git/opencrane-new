@@ -1,6 +1,6 @@
 import type { EventEnvelope } from '@opencrane/events';
 import { memoryMaintenanceRecordedDataSchema } from '@opencrane/events';
-import { registerHandler } from '@opencrane/handlers';
+import { registerHandler } from './registration.ts';
 
 export function memoryPrepareHandler(decisionUrl: string) {
   async function prepare(event: EventEnvelope) {

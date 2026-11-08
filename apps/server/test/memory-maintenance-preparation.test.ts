@@ -8,11 +8,11 @@ import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { budgetRootAllowanceSetDataSchema, type EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
+import { memoryPrepareHandler } from '@opencrane/handlers';
 import { BudgetActor, providerSecretRef, providerSecrets, readToolPolicy,
   losslessJson } from '@opencrane/models';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { maintenanceOrChildRoute } from '../../../libs/models/src/decision-maintenance.ts';
-import { memoryPrepareHandler } from '../../ops/src/memory-prepare.ts';
 import { memoryKeys, memoryProjection, memoryScopeId, pgDb, ProjectionRunner,
   type Query }
   from '@opencrane/projections';

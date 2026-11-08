@@ -18,7 +18,7 @@ under `apps`. [apps/server](../server/README.md) saves changes as
 flowchart LR
   apps["apps<br/>applications"] --> ops["apps/ops<br/>workers, recovery and readiness"]
   apps --> server["apps/server<br/>back end"]
-  ops -.->|checked claim when supplied| server
+  ops -.->|checked claim and saved nightly preparation| server
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events and checks unfinished welcomes at startup| nats
   ops -->|saves checked results, welcome completion and routine records| nats

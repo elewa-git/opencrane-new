@@ -17,7 +17,7 @@ import { memberAuthorisation } from '@opencrane/authz';
 import { tokenIssuer } from '@opencrane/auth';
 import { createLogger } from '@opencrane/observability';
 import { scanNightlyMemory } from './nightly-memory.ts';
-import { memoryPrepareHandler } from './memory-prepare.ts';
+import { memoryPrepareHandler } from '@opencrane/handlers';
 import { SandboxClient } from './kubernetes.ts';
 import { lifecycleHandlers, watchComputers } from './lifecycle.ts';
 import { personalKeyHandler } from './personal-keys.ts';

@@ -51,6 +51,9 @@ silo mismatches and subscription changes. Registration takes a catalogue
 name and handle function; subscriptions come from `libs/events`, checked
 against the [catalogue](../../docs/architecture/events.md) by `check:events`.
 The ops host registers the OpenFGA permission reaction from `libs/authz`.
+`memoryPrepareHandler` sends only a saved scope and night identifier to the
+decision process. The ops worker registers it as `dream-memory`; it does not
+send fact text or start a turn.
 
 One `key_strict_fifo` queue per handler keys jobs by stream id. Defaults:
 four worker slots, five retries, exponential backoff starting at one second,

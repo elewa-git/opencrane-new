@@ -605,6 +605,8 @@ original night. Seeing the event alone does not mean queue cleanup has finished.
 With `MODEL_DECISION_URL`, `dream-memory` sends only a saved scope and night
 identifier to the loopback decision process. It ignores server results and
 retries unavailable preparation. It sends no memory text.
+The worker registers `memoryPrepareHandler` from `libs/handlers` so the same
+HTTP preparation path is used by the server admission test.
 
 ### Nightly recovery test evidence
 

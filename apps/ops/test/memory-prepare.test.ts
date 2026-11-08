@@ -4,8 +4,8 @@ import { expect, it, vi } from 'vitest';
 import { event } from '@opencrane/event-store/testing';
 import type { EventEnvelope } from '@opencrane/events';
 import type { Query } from '@opencrane/projections';
+import { memoryPrepareHandler } from '@opencrane/handlers';
 import { maintenanceOrChildRoute } from '../../../libs/models/src/decision-maintenance.ts';
-import { memoryPrepareHandler } from '../src/memory-prepare.ts';
 
 it('sends a due night through the worker and decision HTTP route', async function wiredPreparation() {
   const scopeId = 'd'.repeat(64);
