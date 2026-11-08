@@ -35,12 +35,13 @@ function auditAllowListIncludesSafeFamilies(): void {
     const publicationEvidence = event.type === 'conversation.child_result_published';
     const delegationEvidence = event.type === 'delegation.started' ||
       event.type === 'delegation.completed';
+    const maintenanceEvidence = event.type === 'memory.maintenance_recorded';
     const expected = previouslyAllowed || ownershipEvidence || invitationEvidence ||
-      dispatchEvidence || publicationEvidence || delegationEvidence;
+      dispatchEvidence || publicationEvidence || delegationEvidence || maintenanceEvidence;
     expect(isAuditEventType(event.type), event.type).toBe(expected);
   }
 }
-it('preserves the audit allow-list and includes ownership, publication and delegation',
+it('preserves the audit allow-list and includes safe maintenance history',
   auditAllowListIncludesSafeFamilies);
 
 function fixture(type: string, id: string, data: Record<string, unknown> = {}, correlated = true): EventEnvelope {
