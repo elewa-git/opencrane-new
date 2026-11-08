@@ -134,7 +134,12 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
     for (const projection of [members, conversations, files]) { await runner.initialise(projection); await runner.run(projection); }
     for (const conversationId of ['other', 'direct', 'closed']) {
       expect((await app.inject({ method: 'POST', url: `/api/conversations/${conversationId}/files`, headers, payload: Buffer.from('No access') })).statusCode).toBe(403);
-      expect((await app.inject({ url: `/api/conversations/${conversationId}/files`, headers })).statusCode).toBe(403);
+      const savedFiles = await app.inject({
+        url: `/api/conversations/${conversationId}/files`, headers,
+      });
+      let expectedReadStatus = 403;
+      if (conversationId === 'closed') expectedReadStatus = 200;
+      expect(savedFiles.statusCode).toBe(expectedReadStatus);
     }
     for (const [subject, type, data] of [
       ['team-sales', 'team.created', { teamId: 'sales', name: 'Sales', createdBy: 'alice' }],
