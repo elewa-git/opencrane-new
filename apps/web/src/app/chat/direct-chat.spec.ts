@@ -1590,6 +1590,37 @@ async function opensParticipantPickerWithCreatorLockedAndStalePeopleVisible(): P
 it('locks the creator and keeps a stale participant visible',
   opensParticipantPickerWithCreatorLockedAndStalePeopleVisible);
 
+async function keepsRemovedMemberIdsOutOfClosedParticipantPanel(): Promise<void> {
+  const api = createFetchFixture();
+  api.addGroupConversation();
+  function closedGroupHistory(request: RequestRecord): Response | undefined {
+    const path = new URL(request.url, location.origin).pathname;
+    if (path !== '/api/conversations/group-chat/messages' || request.method !== 'GET') {
+      return undefined;
+    }
+    const closed = { id: 'closed-group', position: 2, type: 'conversation.closed',
+      time: '2026-10-06T09:00:00Z',
+      data: { conversationId: 'group-chat', closedBy: 'alice' } };
+    return reply({ rows: [eventRow(1, 'bob', 'Hello everyone'), closed],
+      position: 2, generation: 1, computerState: 'not_applicable' });
+  }
+  api.override(closedGroupHistory);
+  const fixture = await mount(api);
+  await openParticipantScreen(fixture);
+  const panel = root(fixture).querySelector('.participant-panel');
+  expect(panel?.textContent).toContain('Former colleague');
+  expect(panel?.textContent).toContain('Participants cannot be changed.');
+  expect(panel?.textContent).not.toContain('stale');
+  expect(panel?.querySelector('.participant-search')).toBeNull();
+  expect(panel?.querySelector('.participant-action')).toBeNull();
+  expect(panel?.querySelector('.participant-leave')).toBeNull();
+  expect(root(fixture).textContent).toContain('This conversation is closed.');
+  fixture.destroy();
+}
+
+it('keeps removed member ids out of a closed group participant panel',
+  keepsRemovedMemberIdsOutOfClosedParticipantPanel);
+
 function headingHasFocus(heading: Element | null): void {
   expect(document.activeElement).toBe(heading);
 }
