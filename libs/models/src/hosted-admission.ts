@@ -146,6 +146,16 @@ export async function readHostedAdmission(store: EventStore, silo: string, serve
   return foldHostedAdmission(rows, silo, serverId, now ?? new Date());
 }
 
+export async function readHostedImageScanAttempt(store: EventStore, silo: string,
+  serverId: string) {
+  const admission = await readHostedAdmission(store, silo, serverId);
+  if (!admission || admission.status !== 'checking' || admission.checks) return;
+  // Keep the saved attempt separate from image bytes supplied to the scanner.
+  return { silo, serverId: admission.serverId, attemptId: admission.attemptId,
+    platform: admission.platform, imageDigest: admission.imageDigest,
+    status: 'checking' as const };
+}
+
 export async function writeHostedAdmission(store: EventStore, silo: string, raw: unknown,
   now?: Date) {
   const parsed = hostedImageCheckedSchema.safeParse(raw);

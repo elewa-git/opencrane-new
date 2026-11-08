@@ -1,0 +1,1 @@
+Bind private hosted image part scans to the saved checking attempt and require complete ordered part coverage before a clean malware result. Image admission remains closed while worker wiring and live qualification are outstanding.

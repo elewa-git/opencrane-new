@@ -6,7 +6,8 @@ This package runs [ClamAV](../../GLOSSARY.md#clamav-virus-scanner), a virus scan
 for files uploaded to OpenCrane and bounded parts of container images. The server
 accepts an upload only after an explicit clean result. A private image walk checks
 every regular file in every supplied layer, including files removed by later layers.
-It does not admit the image for use.
+It ties the scan to one saved installation attempt and checks that no part is skipped
+or repeated. It does not admit the image for use.
 
 ## Where it fits
 
@@ -65,7 +66,7 @@ flowchart LR
    unpacks each layer into private temporary files and scans every regular file.
    It counts the size of sparse files before writing them. It refuses links, unsafe
    paths, nested archives including hidden RAR files, and unfinished work. The result
-   must still match the current image and scanner when used. Worker wiring is not
+   must still match the current image, saved attempt and scanner when used. Worker wiring is not
    built yet, and image admission stays closed.
 
 ## How to run or test it

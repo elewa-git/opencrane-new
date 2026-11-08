@@ -363,3 +363,18 @@ Scratch cleanup errors also return that fixed result, without a private path.
 The walk is private and has no worker caller, event writer or admission effect. A
 clean local fixture does not authorise hosted execution. Production scanner release,
 fresh-install journey and live scanner qualification remain NOT RUN.
+
+`scanHostedImageAttempt` takes a saved checking attempt separately from the supplied
+image bytes. The attempt comes from `readHostedImageScanAttempt` in models, which
+reads the event history and returns the exact silo, server, attempt, platform and
+image digest only while that attempt is checking. The walk requires the image,
+scanner settings and saved attempt to agree before scanning. At use, its validation
+function requires the current checking attempt, image bytes and scanner settings
+again. The scanner settings are deployment owned; their silo must match the saved
+attempt. Each part still uses `scanImagePart`, its authenticated HTTPS connection
+and its own fresh request id. The ordered parts must be numbered without gaps or
+duplicates, and each must have a current validated result. Missing or unknown
+replies, cancellation and expiry refuse the whole scan. The caller retains no
+portable proof. This function does not write an image event. Signature,
+vulnerability and licence checks still need their separate production worker
+composition before any clean image can be admitted.

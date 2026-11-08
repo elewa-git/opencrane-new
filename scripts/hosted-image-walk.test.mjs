@@ -160,8 +160,10 @@ test('one checked attempt cannot authorise another silo or changed image attempt
 });
 
 test('part coverage refuses missing, duplicate, reordered and extra parts', () => {
-  const parts = [0, 1].map(index => ({ name: `part-${index}`,
-    sha256: 'a'.repeat(64), byteCount: 1 }));
+  const parts = [
+    { name: 'part-0', sha256: 'a'.repeat(64), byteCount: 1 },
+    { name: 'part-1', sha256: 'a'.repeat(64), byteCount: 1 },
+  ];
   assert.equal(checkImagePartCoverage(parts), 2);
   for (const candidate of [[parts[0]], [parts[0], parts[0]],
     [parts[1], parts[0]], [parts[0], parts[1], parts[1]]]) {
