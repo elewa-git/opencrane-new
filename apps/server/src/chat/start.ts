@@ -29,6 +29,9 @@ export async function startBridges(options: ChatOptions & {
   const bridgeOptions = { ...options, ...(keyDirectory ? { keyDirectory } : {}),
     installRetainedCall(read: NonNullable<ChatOptions['retainedCall']>) {
       options.retainedCall = read;
+    },
+    installRoutineWake(wake: NonNullable<ChatOptions['routineWake']>) {
+      options.routineWake = wake;
     } };
   const work = watchBridges(bridgeOptions, tokens, new SandboxClient(kubeconfig, namespace), url, stop.signal);
   function watcherFailed(error: unknown) {

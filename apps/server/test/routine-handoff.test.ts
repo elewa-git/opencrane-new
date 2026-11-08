@@ -29,6 +29,8 @@ import * as routineSession from '../src/routine-session.ts';
 import { stopUnconfirmedRoutine } from '../src/routine-delivery-stop.ts';
 import { createRoutineComposition, createRoutineDelivery } from '../src/routine-composition.ts';
 import { bindRoutineBudgetOwner } from '../src/routine-delivery-owner.ts';
+import { createRoutineWake } from '../src/chat/routine-wake.ts';
+import { resumeComputer } from '../../ops/test/server.ts';
 
 let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
 let storage: Awaited<ReturnType<typeof database>>;
@@ -200,7 +202,7 @@ async function startComputer() {
     issuer: 'https://routine.test/' };
   const tokens = await tokenIssuer(tokenOptions);
   const connection = { computerId: 'computer', assistantId: 'sales-assistant',
-    bearer: 'fixture-bridge', url: `ws://127.0.0.1:${address.port}/bridge` };
+    generation: 1, bearer: 'fixture-bridge', url: `ws://127.0.0.1:${address.port}/bridge` };
   const options = { silo: 'test', store: nats.store, keys, binding };
   const link = await connectBridge(options, connection, tokens);
   const send = link.socket.send.bind(link.socket);
@@ -226,7 +228,7 @@ async function startComputer() {
   function executed() {
     return executedThreads.length === 1;
   }
-  return { link, wake, close, executed, executedThreads, frames, send: track,
+  return { link, wake, close, executed, executedThreads, frames, send: track, tokens,
     get nativeStarts() {
       return nativeStarts;
     } };
@@ -244,6 +246,175 @@ async function cleanup() {
 }
 beforeEach(setup);
 afterEach(cleanup);
+
+async function recordedWake() {
+  const suspended = record('suspended', 'computer-sales-assistant',
+    'computer.suspended', { assistantId: 'sales-assistant', computerId: 'computer' });
+  await nats.seed([suspended]);
+  let connections = 0;
+  function connection(computerId: string, assistantId: string) {
+    expect(computerId).toBe('computer');
+    expect(assistantId).toBe('sales-assistant');
+    connections++;
+    return Promise.resolve(preparedComputer.link);
+  }
+  const service = createRoutineWake(nats.store, 'test', preparedComputer.tokens,
+    stop.signal, connection);
+  wake = service;
+  const delivery = dispatch();
+  async function resumed() {
+    const rows = await history(nats.store, 'computer-sales-assistant', 'test');
+    return rows.some(row => row.event.type === 'computer.resumed');
+  }
+  await until(resumed);
+  const ready = record('ready-after-resume', 'computer-sales-assistant', 'computer.ready',
+    { assistantId: 'sales-assistant', computerId: 'computer', generation: 1 });
+  await nats.seed([ready]);
+  await delivery;
+  expect(connections).toBe(1);
+  await until(preparedComputer.executed);
+  expect(preparedComputer.nativeStarts).toBe(1);
+}
+it('wakes the recorded cold computer through the authenticated bridge once', recordedWake);
+
+async function replacementDuringWake() {
+  const suspended = record('suspended', 'computer-sales-assistant',
+    'computer.suspended', { assistantId: 'sales-assistant', computerId: 'computer' });
+  await nats.seed([suspended]);
+  function openRecordedBridge() {
+    return Promise.resolve(preparedComputer.link);
+  }
+  const connection = vi.fn(openRecordedBridge);
+  const service = createRoutineWake(nats.store, 'test', preparedComputer.tokens,
+    stop.signal, connection);
+  const waiting = service('sales-assistant');
+  async function resumed() {
+    const rows = await history(nats.store, 'computer-sales-assistant', 'test');
+    return rows.some(row => row.event.type === 'computer.resumed');
+  }
+  await until(resumed);
+  const replacement = record('replacement', 'computer-sales-assistant', 'computer.claimed',
+    { assistantId: 'sales-assistant', computerId: 'replacement', generation: 2,
+      tokenId: 'token:replacement' });
+  const ready = record('replacement-ready', 'computer-sales-assistant', 'computer.ready',
+    { assistantId: 'sales-assistant', computerId: 'replacement', generation: 2 });
+  await nats.seed([replacement, ready]);
+  await expect(waiting).rejects.toThrow('Routine computer unavailable');
+  expect(connection).not.toHaveBeenCalled();
+}
+it('never connects a replacement generation after a cold wake', replacementDuringWake);
+
+async function cancelledWake() {
+  const suspended = record('suspended', 'computer-sales-assistant',
+    'computer.suspended', { assistantId: 'sales-assistant', computerId: 'computer' });
+  await nats.seed([suspended]);
+  function openRecordedBridge() {
+    return Promise.resolve(preparedComputer.link);
+  }
+  const connection = vi.fn(openRecordedBridge);
+  const service = createRoutineWake(nats.store, 'test', preparedComputer.tokens,
+    stop.signal, connection);
+  const waiting = service('sales-assistant');
+  async function resumed() {
+    const rows = await history(nats.store, 'computer-sales-assistant', 'test');
+    return rows.some(row => row.event.type === 'computer.resumed');
+  }
+  await until(resumed);
+  stop.abort();
+  await expect(waiting).rejects.toThrow('Routine computer unavailable');
+  expect(connection).not.toHaveBeenCalled();
+}
+it('refuses cancellation during wake without opening a bridge', cancelledWake);
+
+async function cancellationInsideResume() {
+  const subject = 'computer-sales-assistant';
+  const suspended = record('suspended-for-cancellation', subject,
+    'computer.suspended', { assistantId: 'sales-assistant', computerId: 'computer' });
+  await nats.seed([suspended]);
+  const originalRead = nats.store.readStream.bind(nats.store);
+  const readStarted = Promise.withResolvers<void>();
+  const releaseRead = Promise.withResolvers<void>();
+  let caller = new AbortController();
+  async function* heldRead(stream: string, fromSequence = 1, deadline = Infinity,
+    includeConversationCloses = false) {
+    if (stream === subject) {
+      readStarted.resolve();
+      await releaseRead.promise;
+    }
+    yield* originalRead(stream, fromSequence, deadline, includeConversationCloses);
+    if (stream === subject) caller.abort();
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(heldRead);
+  const issuedPass = vi.spyOn(preparedComputer.tokens, 'computer');
+  const append = vi.spyOn(nats.store, 'append');
+  // Keep the outer read limit out of this check so the read returns after cancellation.
+  const control = { signal: caller.signal, deadline: Infinity };
+  const pending = resumeComputer(nats.store, preparedComputer.tokens, 'test',
+    'sales-assistant', undefined, control);
+  await readStarted.promise;
+  releaseRead.resolve();
+  await expect(pending).rejects.toThrow('Computer wake cancelled');
+  // Check cancellation before the saved silo too, so the post-history check is required.
+  caller = new AbortController();
+  const changedSiloControl = { signal: caller.signal, deadline: Infinity };
+  await expect(resumeComputer(nats.store, preparedComputer.tokens, 'other',
+    'sales-assistant', undefined, changedSiloControl)).rejects.toThrow('Computer wake cancelled');
+  const rows = await history(nats.store, subject, 'test');
+  expect(rows.some(row => row.event.type === 'computer.resumed')).toBe(false);
+  expect(append).not.toHaveBeenCalled();
+  expect(issuedPass).not.toHaveBeenCalled();
+}
+it('does not save a resume or issue a pass after cancellation during history',
+  cancellationInsideResume);
+
+async function resumeHistoryHasDeadline() {
+  const subject = 'computer-sales-assistant';
+  const suspended = record('suspended-for-deadline', subject, 'computer.suspended',
+    { assistantId: 'sales-assistant', computerId: 'computer' });
+  await nats.seed([suspended]);
+  const originalRead = nats.store.readStream.bind(nats.store);
+  const releaseRead = Promise.withResolvers<void>();
+  async function* heldRead(stream: string, fromSequence = 1, deadline = Infinity,
+    includeConversationCloses = false) {
+    if (stream === subject) await releaseRead.promise;
+    yield* originalRead(stream, fromSequence, deadline, includeConversationCloses);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(heldRead);
+  const append = vi.spyOn(nats.store, 'append');
+  const issuePass = vi.spyOn(preparedComputer.tokens, 'computer');
+  const control = { signal: AbortSignal.timeout(100), deadline: performance.now() + 100 };
+  const expected = { computerId: 'computer', generation: 1 };
+  try {
+    await expect(resumeComputer(nats.store, preparedComputer.tokens, 'test',
+      'sales-assistant', expected, control)).rejects.toThrow();
+    expect(append).not.toHaveBeenCalled();
+    expect(issuePass).not.toHaveBeenCalled();
+  } finally {
+    releaseRead.resolve();
+  }
+}
+it('ends a held resume history read at its deadline without saving or issuing',
+  resumeHistoryHasDeadline);
+
+async function connectionWaitHasWakeDeadline() {
+  const connectionStarted = Promise.withResolvers<void>();
+  const releaseConnection = Promise.withResolvers<typeof preparedComputer.link>();
+  function connection() {
+    connectionStarted.resolve();
+    return releaseConnection.promise;
+  }
+  const service = createRoutineWake(nats.store, 'test', preparedComputer.tokens,
+    stop.signal, connection);
+  const pending = service('sales-assistant');
+  await connectionStarted.promise;
+  try {
+    await expect(pending).rejects.toThrow('Routine computer unavailable');
+  } finally {
+    releaseConnection.resolve(preparedComputer.link);
+  }
+}
+it('ends a held connection wait within the 20-second wake limit',
+  connectionWaitHasWakeDeadline, 25_000);
 
 type Lease = Parameters<Parameters<typeof withRoutineLeadership>[1]>[0];
 type Options = Parameters<typeof createRoutineComposition>[0];

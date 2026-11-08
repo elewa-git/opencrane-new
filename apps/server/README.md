@@ -436,6 +436,8 @@ become a routine session. Public chat routes reserve these session ids for the w
 A stopped, changed or expired occurrence cannot prepare a session.
 The server can pass a checked routine claim through private input, a fixed spending
 allowance and one computer turn. It checks access again after waking the computer.
+The wake uses the computer already recorded for that assistant and its existing
+authenticated bridge. A replacement or cancelled wake cannot prepare the turn.
 The models process now binds this path to the same budget actor that handles ordinary
 calls. A lost budget leader or a second actor refuses routine delivery. The routines
 worker still has no deployed delivery connection, so automatic runs remain unavailable.

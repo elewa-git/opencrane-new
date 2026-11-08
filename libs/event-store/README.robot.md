@@ -94,6 +94,10 @@ the same transient NATS failures without exposing SDK types to callers.
 A failed authority read proves neither permission nor denial;
 it must never extend a caller's existing permission lease. A failed subscription
 batch cancels its sibling reads so they cannot keep retrying after the failure.
+`readBeforeDeadline(read, deadline, signal)` is also exported for callers that
+must stop waiting for a pending read or connection. Its signal and absolute
+deadline bound the caller's wait. Callers must still stop any late side effects
+in the work they started.
 
 An optional `expectedSubject` can select the event's whole category, such as
 `member-*`, instead of its entity. `expectedSequence` then checks the latest

@@ -1,4 +1,7 @@
 import { pendingRoutineStarts } from './routine-start.ts';
+import { createRoutineWake } from './routine-wake.ts';
+import { openBridge, openBridgeSocket, requireWakeLive,
+  type BridgeInput, type WakeControl } from './bridge-opening.ts';
 import { recallBridge } from './recall-bridge.ts';
 import { privateOutput } from './private-output.ts';
 import { pullArtifact, type ArtifactPublication } from '../files/artifacts.ts';
@@ -6,16 +9,15 @@ import { routineBridge } from '../routine-bridge.ts';
 import { memoryBridge } from '../memory/bridge.ts';
 import { releaseTurnCredentials, sendAcknowledgement } from './turn-credentials.ts';
 import { prepareRoutineThread } from './routine-thread.ts';
-import { executorStop } from '../computers/stop-executor.ts';
 import { admitBridgeTurn, checkedReportStage } from './bridge-turn-admission.ts';
 import { createHash } from 'node:crypto';
 import { fileDeliveredDataSchema, fileUploadedDataSchema } from '@opencrane/events';
 import { sendFile } from '../files/delivery.ts';
 import { ownConversation, fileCommand } from '../files/commands.ts';
-import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket, type RawData } from 'ws';
-import { computerTokenAudience, readComputerControl, type tokenIssuer } from '@opencrane/auth';
+import { readComputerControl, type tokenIssuer } from '@opencrane/auth';
+import { readBeforeDeadline } from '@opencrane/event-store';
 import type { WatchOptions, AgentSession } from './bridge-conversation.ts';
 import type { TurnDelivery } from './turn-tools.ts';
 import { assistantProcessor, groupSessions } from './bridge-poll.ts';
@@ -23,7 +25,7 @@ import { listOpenConversations } from '@opencrane/projections';
 import { createLogger, type Logger } from '@opencrane/observability';
 import { z } from 'zod';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
-import { bridgeControl, readyBridgePass } from './bridge-control.ts';
+import { bridgeControl } from './bridge-control.ts';
 import { turnCommand } from './turns.ts';
 import { chatHistory } from './commands.ts';
 import { recordBridgeReports, canCombineReports, ReportRejected, turnStatus } from './reports.ts';
@@ -44,8 +46,6 @@ type ReportOptions = BridgeOptions & { routineStart: RoutineStart;
   output: ReturnType<typeof privateOutput>; memory: ReturnType<typeof memoryBridge>;
   routines: ReturnType<typeof routineBridge>;
   retained: ReturnType<typeof bridgeRetainedCalls> };
-type BridgeInput = { url: string; computerId: string; assistantId: string;
-  bearer: string; generation?: number };
 type ReportBatch = { values: unknown[]; sequences: number[]; textLength: number;
   bytes: number; started: boolean };
 type ReportQueue = { pending: Promise<void>; count: number; bytes: number;
@@ -239,20 +239,14 @@ function reportReceiver(options: ReportOptions, input: BridgeInput,
   return { receiveReport, settled };
 }
 
-export async function connectBridge(options: BridgeOptions, input: BridgeInput, tokens?: Tokens) {
-  const socketOptions = { headers: { 'x-bridge-token': input.bearer },
-    maxPayload: 256 * 1024, handshakeTimeout: 5000 };
-  const socket = new WebSocket(input.url, socketOptions);
-  let approvalWaiting = false;
-  function readSupport(response: import('node:http').IncomingMessage) {
-    approvalWaiting = response.headers['x-opencrane-approval-waiting'] === 'true';
-  }
-  socket.on('upgrade', readSupport);
+export async function connectBridge(options: BridgeOptions, input: BridgeInput, tokens?: Tokens,
+  wakeControl?: WakeControl) {
+  requireWakeLive(wakeControl);
+  const opening = await openBridgeSocket(input, wakeControl);
+  const socket = opening.socket;
   function terminateSocket() {
     socket.terminate();
   }
-  socket.on('error', terminateSocket);
-  await once(socket, 'open');
   let rejection: string | undefined;
   function refuse(reason: string) {
     rejection = reason;
@@ -281,11 +275,21 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   const reports = reportReceiver(reportOptions, input, tokens, socket, refuse, approvals, control);
   socket.on('message', reports.receiveReport);
   try {
-    await resumeBridgeReports(options, input, socket, control, routines.recover);
+    requireWakeLive(wakeControl);
+    function resumeReports() {
+      return resumeBridgeReports(options, input, socket, control, routines.recover, wakeControl);
+    }
+    if (wakeControl) {
+      await readBeforeDeadline(resumeReports, wakeControl.deadline, wakeControl.signal);
+    }
+    else await resumeReports();
+    requireWakeLive(wakeControl);
   } catch (error) {
     socket.terminate();
+    opening.stopWatching();
     throw error;
   }
+  opening.stopWatching();
   const delivered = new Set<string>();
   let transfers = Promise.resolve();
   function deliver(file: Upload, bytes: Buffer, checkControl?: () => Promise<boolean>) {
@@ -303,9 +307,11 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     return reportsDone;
   }
   return {
-    socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting, control, memory,
+    socket, deliver, delivered, sentTurns, sentStops, approvals,
+    approvalWaiting: opening.approvalWaiting, control, memory,
     routines, retainedCall: retained.read,
     bindRoutineStart: starts.bind, computerId: input.computerId, assistantId: input.assistantId,
+    generation: input.generation,
     prepareRoutineThread: prepareRoutineThread.bind(undefined, socket),
     get rejection() { return rejection; },
     settled,
@@ -342,8 +348,11 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   const connectionIds = new Map<string, number>();
   let lastConnectionId = 0;
   const opening = new Map<string, Promise<Awaited<ReturnType<typeof connectBridge>>>>();
-  async function connection(computerId: string, assistantId: string) {
+  async function connection(computerId: string, assistantId: string,
+    wakeSignal?: AbortSignal, wakeDeadline = Infinity) {
     if (signal.aborted) throw new Error('Bridge watcher stopped');
+    const wakeControl = wakeSignal ? { signal: wakeSignal, deadline: wakeDeadline } : undefined;
+    requireWakeLive(wakeControl);
     let link = links.get(computerId);
     if (!link || link.socket.readyState !== link.socket.OPEN) {
       let connecting = opening.get(computerId);
@@ -352,11 +361,19 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
         function finishOpening() {
           opening.delete(computerId);
         }
-        const opened = openBridge(options, tokens, kube, proxyUrl, computer, refused, logger);
+        const opened = openBridge(options, tokens, kube, proxyUrl, computer, refused, logger,
+          connectBridge, wakeControl);
         connecting = opened.finally(finishOpening);
         opening.set(computerId, connecting);
       }
-      const connected = await connecting;
+      const openingConnection = connecting;
+      function waitForConnection() {
+        return openingConnection;
+      }
+      const connected = wakeControl
+        ? await readBeforeDeadline(waitForConnection, wakeDeadline, wakeSignal)
+        : await openingConnection;
+      requireWakeLive(wakeControl);
       if (signal.aborted) {
         connected.socket.terminate();
         await connected.settled();
@@ -398,6 +415,9 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
     }
     return undefined;
   }
+  const routineWake = createRoutineWake(options.store, options.silo, tokens,
+    signal, connection);
+  options.installRoutineWake?.(routineWake);
   const processor = assistantProcessor(options, tokens, refused, connection, connectionId,
     logger, connected);
   const controls = processor.watchControls(signal);
@@ -470,30 +490,6 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
 
 function isAgentSession(conversation: Conversation): conversation is AgentSession {
   return conversation.mode === 'agent_session';
-}
-
-async function openBridge(options: WatchOptions, tokens: Tokens, kube: SandboxClient,
-  proxyUrl: string, computer: Pick<BridgeInput, 'computerId' | 'assistantId'>,
-  refused: Set<string>, logger: Logger) {
-  const token = await readyBridgePass(options, computer, tokens);
-  const claims = await tokens.verify(token.value, computerTokenAudience);
-  const generation = z.int().positive().parse(claims['generation']);
-  await kube.credentials(computer.computerId, token, tokens.jwks.keys[0], true);
-  const proxy = proxyUrl.replace('http:', 'ws:');
-  const pod = `${proxy}/api/v1/namespaces/${kube.namespace}/pods/${computer.computerId}:8081`;
-  const input = { ...computer, generation, bearer: token.value, url: `${pod}/proxy/bridge` };
-  const stopExecution = executorStop(kube.kubeconfig, kube.namespace);
-  const bridgeOptions = { ...options, stopExecution };
-  const connected = await connectBridge(bridgeOptions, input, tokens);
-  function recordRejection() {
-    if (!connected.rejection) return;
-    refused.add(computer.computerId);
-    const details = { computerId: computer.computerId, reason: connected.rejection };
-    logger.error(details, 'Bridge recovery stopped; report rejected');
-  }
-  connected.socket.once('close', recordRejection);
-  if (connected.socket.readyState === connected.socket.CLOSED) recordRejection();
-  return connected;
 }
 
 function settledBridge(link: Awaited<ReturnType<typeof connectBridge>>) {

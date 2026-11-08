@@ -217,6 +217,24 @@ failure through the backend. See the [own-check receipt](../../../../docs/proces
 
 ## Routine hand-off completion
 
+`routine-wake.ts` reads the saved computer claim before resuming a suspended
+computer. It waits for a ready record with the same computer id and generation,
+then asks the bridge watcher for its existing authenticated connection. It checks
+the saved identity again after connecting. The watcher installs this internal wake
+function for the server; it never creates a second computer channel. Cancellation,
+replacement, control intent, a closed socket or a wake longer than 20 seconds
+refuses with a fixed error. Routine preparation checks the saved owner and Stop
+again after this wait. The deployed routine execution switch remains off.
+
+The same wake deadline bounds each computer history read, resume append and
+bridge connection wait. Cancellation reaches the resume command before it saves
+`computer.resumed` or issues a pass. A cancelled bridge opening stops its
+credential command and closes its socket. An opening shared with another caller
+can continue for that caller, but the cancelled wake cannot use it.
+Bridge report recovery carries the same wake signal and deadline through budget
+refusal reads and the decision append. A delayed read cannot save a decision
+after the wake ends. The held read test is in `test/bridge-opening.test.ts`.
+
 The bridge completes a routine sender's one-use wait only after the matching start
 is saved and its existing credential acknowledgement path finishes without refusal.
 The wait lasts at most ten seconds after preparation; cancellation and socket loss

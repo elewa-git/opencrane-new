@@ -7139,6 +7139,12 @@ delivery and `executionAvailable` remain disabled. Owner Ask,
 success completion, process-exit evidence and fresh-install qualification remain later.
 See [the own-check contract](../../docs/process/p4-24-pr12i/README.robot.md).
 
+The bridge watcher now installs an internal routine wake function on the server's
+chat options. It resumes only the saved assistant computer and requires the same
+generation on the authenticated bridge. The function is available to checked
+preparation, but no deployed scheduler callback calls it. Automatic company calls
+and the public execution switch remain disabled.
+
 The private models library has a company audit check, but this server does not
 register its synthetic profile reader or a company sender. No public route, routine
 composition switch or browser path can invoke it. See the

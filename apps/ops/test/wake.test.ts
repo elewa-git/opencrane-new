@@ -10,6 +10,41 @@ import { envelope } from '@opencrane/models';
 import { getEventDefinition } from '@opencrane/events';
 import { history, resumeComputer, watchComputers } from '../src/lifecycle.ts';
 
+async function refusesReplacementPass() {
+  const nats = await natsFixture();
+  const directory = await mkdtemp(`${tmpdir()}/routine-wake-`);
+  try {
+    const key = generateKeyPairSync('ec', { namedCurve: 'P-256',
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' } });
+    const keyFile = `${directory}/key.pem`;
+    await writeFile(keyFile, key.privateKey, { mode: 0o600 });
+    const tokens = await tokenIssuer({ privateKeyPath: keyFile, issuer: 'https://wake.test/' });
+    const subject = 'computer-assistant';
+    const claimData = { assistantId: 'assistant', computerId: 'replacement', generation: 2,
+      tokenId: 'token:replacement' };
+    const claim = envelope('test', subject, 'computer.claimed', claimData);
+    const first = await nats.store.append({ expectedSequence: 0, event: claim });
+    expect(first.status).toBe('appended');
+    const readyData = { assistantId: 'assistant', computerId: 'replacement', generation: 2,
+      podUid: 'replacement-pod' };
+    const ready = envelope('test', subject, 'computer.ready', readyData);
+    const second = await nats.store.append({ expectedSequence: 1, event: ready });
+    expect(second.status).toBe('appended');
+    const issue = vi.spyOn(tokens, 'computer');
+    const expected = { computerId: 'original', generation: 1 };
+    await expect(resumeComputer(nats.store, tokens, 'test', 'assistant', expected))
+      .rejects.toThrow('Computer identity changed');
+    expect(issue).not.toHaveBeenCalled();
+    expect(await history(nats.store, subject)).toHaveLength(2);
+  } finally {
+    await nats.close();
+    await rm(directory, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  }
+}
+it('does not issue a wake pass for a replacement computer', refusesReplacementPass);
+
 it.each(['state', 'mode'] as const)('keeps watching other computers when Kubernetes %s fails', async (operation) => {
   const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/wake-errors-`), stop = new AbortController();
   const key = generateKeyPairSync('ec', { namedCurve: 'P-256', privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });

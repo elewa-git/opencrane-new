@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { WebSocket } from 'ws';
 import { computerSummary, readComputerControl, type ComputerControl, type tokenIssuer }
   from '@opencrane/auth';
-import { readStreamSummary, type EventStore } from '@opencrane/event-store';
+import { readBeforeDeadline, readStreamSummary, type EventStore } from '@opencrane/event-store';
 import { createLogger } from '@opencrane/observability';
 import { requireTurnMember } from './turns.ts';
 
@@ -37,8 +37,26 @@ async function facts(options: Options, computer: Computer) {
 }
 
 // Issue a connection pass without waking a computer that became suspended during polling.
-export async function readyBridgePass(options: Options, computer: Computer, tokens: Tokens) {
-  const saved = await facts(options, computer);
+type WakeControl = { signal: AbortSignal; deadline: number };
+
+function requireWakeLive(control?: WakeControl) {
+  if (control?.signal.aborted || performance.now() >= (control?.deadline ?? Infinity)) {
+    throw new Error('Bridge opening cancelled');
+  }
+}
+
+async function readyFacts(options: Options, computer: Computer, control?: WakeControl) {
+  function readFacts() {
+    return facts(options, computer);
+  }
+  if (!control) return readFacts();
+  const saved = await readBeforeDeadline(readFacts, control.deadline, control.signal);
+  requireWakeLive(control);
+  return saved;
+}
+
+function readyPassDetails(saved: Awaited<ReturnType<typeof facts>>,
+  computer: Computer, silo: string) {
   if (saved.lifecycle?.event.type !== 'computer.ready') throw new Error('Computer is not ready');
   const identity = readyData.omit({ podUid: true });
   // Keep older ready records usable for reports; gate delivery requires the full identity.
@@ -57,9 +75,28 @@ export async function readyBridgePass(options: Options, computer: Computer, toke
       throw new Error('Computer identity changed');
     }
   }
-  const details = { ...computer, silo: options.silo,
+  return { ...computer, silo,
     generation: claim.generation, tokenId: grant.tokenId };
-  return tokens.computer(details);
+}
+
+async function issueReadyPass(tokens: Tokens,
+  details: ReturnType<typeof readyPassDetails>, control?: WakeControl) {
+  function issuePass() {
+    return tokens.computer(details);
+  }
+  if (!control) return issuePass();
+  const pass = await readBeforeDeadline(issuePass, control.deadline, control.signal);
+  requireWakeLive(control);
+  return pass;
+}
+
+export async function readyBridgePass(options: Options, computer: Computer, tokens: Tokens,
+  control?: WakeControl) {
+  requireWakeLive(control);
+  const saved = await readyFacts(options, computer, control);
+  const details = readyPassDetails(saved, computer, options.silo);
+  requireWakeLive(control);
+  return issueReadyPass(tokens, details, control);
 }
 
 function requireReadyControl(control: Exclude<ComputerControl, { phase: 'unverified' }>,
