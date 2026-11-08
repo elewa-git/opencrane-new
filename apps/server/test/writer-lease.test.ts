@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { PassThrough } from 'node:stream';
+import { setTimeout as wait } from 'node:timers/promises';
 import { natsFixture, event } from '@opencrane/event-store/testing';
 import type { StoredEvent } from '@opencrane/event-store';
 import { readComputerControl } from '@opencrane/auth';
@@ -309,6 +310,116 @@ async function refusesAnExpiredSlotBeforeApplyingANewExpiry() {
 it('does not revive an expired slot when a later saved expiry arrives',
   refusesAnExpiredSlotBeforeApplyingANewExpiry);
 
+async function cancelsQueuedInputAtLeaseExpiry() {
+  const { store, input } = await setup();
+  input.expiresAt = new Date(Date.now() + 1_200).toISOString();
+  await grantWriter(store, 'test', input, accessAllowed);
+  let signalRefresh: (() => void) | undefined;
+  let releaseRefresh: (() => void) | undefined;
+  const refreshHeld = new Promise<void>(function captureRefresh(resolve) {
+    signalRefresh = resolve;
+  });
+  const refreshReleased = new Promise<void>(function captureRelease(resolve) {
+    releaseRefresh = resolve;
+  });
+  let accessChecks = 0;
+  async function checkAccess() {
+    accessChecks += 1;
+    if (accessChecks === 3) {
+      signalRefresh?.();
+      await refreshReleased;
+    }
+  }
+  const slot = new WriterSlot(store, 'test', input, checkAccess);
+  const forwarded: string[] = [];
+  let releaseDelivery: (() => void) | undefined;
+  let deliverySignal: AbortSignal | undefined;
+  function queueDelivery(bytes: Buffer, signal: AbortSignal) {
+    deliverySignal = signal;
+    return new Promise<void>(function holdDelivery(resolve) {
+      releaseDelivery = function deliver() {
+        if (!signal.aborted) forwarded.push(bytes.toString('hex'));
+        resolve();
+      };
+    });
+  }
+  try {
+    expect(await slot.claim()).toBe(true);
+    const refresh = slot['refresh']();
+    await refreshHeld;
+    const untilQueue = slot['leaseUntil'] - performance.now() - 100;
+    await wait(Math.max(0, untilQueue));
+    expect(slot.send(Buffer.from([4, 1, 0, 0, 0, 0, 0, 65]), queueDelivery)).toBe(true);
+    await wait(Math.max(0, slot['leaseUntil'] - performance.now() + 100));
+    expect(deliverySignal?.aborted).toBe(true);
+    releaseDelivery?.();
+    await slot.drain();
+    expect(forwarded).toEqual([]);
+    releaseRefresh?.();
+    await refresh;
+  } finally {
+    releaseDelivery?.();
+    releaseRefresh?.();
+    slot.close();
+  }
+}
+it('aborts a key queued just before lease expiry before it can be forwarded',
+  cancelsQueuedInputAtLeaseExpiry);
+
+async function cancelsQueuedInputWhileRefreshIsStalled() {
+  const { store, input } = await setup();
+  await grantWriter(store, 'test', input, accessAllowed);
+  let signalRefresh: (() => void) | undefined;
+  let releaseRefresh: (() => void) | undefined;
+  const refreshHeld = new Promise<void>(function captureRefresh(resolve) {
+    signalRefresh = resolve;
+  });
+  const refreshReleased = new Promise<void>(function captureRelease(resolve) {
+    releaseRefresh = resolve;
+  });
+  let accessChecks = 0;
+  async function checkAccess() {
+    accessChecks += 1;
+    if (accessChecks === 3) {
+      signalRefresh?.();
+      await refreshReleased;
+      throw new Error('Member removed');
+    }
+  }
+  const slot = new WriterSlot(store, 'test', input, checkAccess);
+  const forwarded: string[] = [];
+  let releaseDelivery: (() => void) | undefined;
+  let deliverySignal: AbortSignal | undefined;
+  function queueDelivery(bytes: Buffer, signal: AbortSignal) {
+    deliverySignal = signal;
+    return new Promise<void>(function holdDelivery(resolve) {
+      releaseDelivery = function deliver() {
+        if (!signal.aborted) forwarded.push(bytes.toString('hex'));
+        resolve();
+      };
+    });
+  }
+  try {
+    expect(await slot.claim()).toBe(true);
+    expect(slot.send(Buffer.from([4, 1, 0, 0, 0, 0, 0, 65]), queueDelivery)).toBe(true);
+    const refresh = slot['refresh']();
+    await refreshHeld;
+    await wait(Math.max(0, slot['permissionUntil'] - performance.now() + 100));
+    expect(deliverySignal?.aborted).toBe(true);
+    releaseDelivery?.();
+    await slot.drain();
+    expect(forwarded).toEqual([]);
+    releaseRefresh?.();
+    await refresh;
+  } finally {
+    releaseDelivery?.();
+    releaseRefresh?.();
+    slot.close();
+  }
+}
+it('aborts queued input while a revocation check is stalled',
+  cancelsQueuedInputWhileRefreshIsStalled);
+
 async function closesInputWhenReturnCannotBeSaved() {
   const { store, input } = await setup();
   await grantWriter(store, 'test', input, accessAllowed);
@@ -391,6 +502,59 @@ async function keepsUnknownClosurePaused() {
 }
 it('marks an unproved disconnect unknown and leaves agent work paused',
   keepsUnknownClosurePaused);
+
+async function resolvesEndAfterLostReadback(proved: boolean) {
+  const { store, input } = await setup();
+  await grantWriter(store, 'test', input, accessAllowed);
+  if (proved) {
+    const slot = new WriterSlot(store, 'test', input, accessAllowed);
+    expect(await slot.claim()).toBe(true);
+  }
+  const command = { ...returnInput(input), commandId: 'end-after-lost-reply',
+    reason: proved ? 'expired' : 'disconnect' };
+  const expectedPhase = proved ? 'ended' : 'closure_unknown';
+  let proofCalls = 0;
+  function proveDrain() {
+    proofCalls += 1;
+    return Promise.resolve('pod-drain');
+  }
+  const originalAppend = store.append.bind(store);
+  const originalRead = store.readStream.bind(store);
+  let loseReadback = false;
+  let appendCalls = 0;
+  async function append(commandToSave: Parameters<typeof store.append>[0]) {
+    appendCalls += 1;
+    const result = await originalAppend(commandToSave);
+    if (result.status === 'appended') loseReadback = true;
+    return result;
+  }
+  async function* lostReadback(): AsyncIterable<StoredEvent> {
+    throw new Error('Readback lost');
+  }
+  function readStream(subject: string, sequence?: number, deadline?: number,
+    includeConversationCloses?: boolean) {
+    if (loseReadback) {
+      loseReadback = false;
+      return lostReadback();
+    }
+    return originalRead(subject, sequence, deadline, includeConversationCloses);
+  }
+  vi.spyOn(store, 'append').mockImplementation(append);
+  vi.spyOn(store, 'readStream').mockImplementation(readStream);
+  await expect(endWriter(store, 'test', command, proveDrain, accessAllowed))
+    .rejects.toThrow('Readback lost');
+  const saved = await readComputerControl(store, 'test', input.assistantId);
+  expect(saved?.phase).toBe(expectedPhase);
+  const resolved = await endWriter(store, 'test', command, proveDrain, accessAllowed);
+  expect(resolved).toEqual(saved);
+  expect(appendCalls).toBe(1);
+  expect(proofCalls).toBe(proved ? 1 : 0);
+  await expect(endWriter(store, 'test', { ...command, reason: 'revoked' },
+    proveDrain, accessAllowed)).rejects.toThrow('Control conflict');
+  expect(appendCalls).toBe(1);
+}
+it.each([true, false])('resolves a %s proof end after its saved reply is lost',
+  resolvesEndAfterLostReadback);
 
 async function closesOnFailedEndAppend() {
   const { store, input } = await setup();
