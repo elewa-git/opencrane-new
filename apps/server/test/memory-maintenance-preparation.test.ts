@@ -1,10 +1,11 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { createStore, memberAuthorisation } from '@opencrane/authz';
+import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
+import { BudgetActor, providerSecretRef, providerSecrets } from '@opencrane/models';
 import { memoryKeys, memoryProjection, memoryScopeId, pgDb, ProjectionRunner }
   from '@opencrane/projections';
 import { prepareNightlyMaintenance } from '../src/memory/maintenance-preparation.ts';
@@ -17,6 +18,7 @@ let directory: string;
 let options: Parameters<typeof prepareNightlyMaintenance>[0];
 let runner: ProjectionRunner;
 let projection: ReturnType<typeof memoryProjection>;
+let authorisation: ReturnType<typeof memberAuthorisation>;
 let factPosition: number;
 let factData: unknown;
 let serial = 0;
@@ -34,7 +36,10 @@ async function append(subject: string, type: string, data: unknown) {
   let source = 'test';
   let principal: { kind: 'human' | 'system'; id: string } =
     { kind: 'human', id: 'dreamer' };
-  if (type === 'memory.maintenance_bound') source = 'opencrane-server';
+  if (type === 'memory.maintenance_bound') {
+    source = 'opencrane-server';
+    principal = { kind: 'human', id: z.object({ memberId: z.string() }).parse(data).memberId };
+  }
   if (type === 'memory.maintenance_recorded') {
     source = 'opencrane-nightly';
     principal = { kind: 'system', id: 'nightly-memory' };
@@ -54,6 +59,7 @@ async function setup() {
   directory = await mkdtemp('/tmp/night-prepare-');
   const binding = await createStore(fga.apiUrl, 'acme');
   const auth = memberAuthorisation(binding);
+  authorisation = auth;
   const keys = memoryKeys(directory);
   const db = pgDb(storage.queue);
   runner = new ProjectionRunner(db, nats.reader, createLogger('night-prepare'));
@@ -64,16 +70,18 @@ async function setup() {
     displayName: 'Dreamer',
   });
   await auth.handler.handle(member, db);
-  await append('team-payer', 'team.created', {
+  const team = await append('team-payer', 'team.created', {
     teamId: 'payer', name: 'Payer', createdBy: 'dreamer',
   });
+  await auth.handler.handle(team, db);
   const membership = await append('team-payer', 'team.member_added', {
     teamId: 'payer', memberId: 'dreamer', addedBy: 'dreamer',
   });
   await auth.handler.handle(membership, db);
-  await append('assistant-dreamer-assistant', 'assistant.created', {
+  const assistant = await append('assistant-dreamer-assistant', 'assistant.created', {
     assistantId: 'dreamer-assistant', kind: 'personal', ownerId: 'dreamer',
   });
+  await auth.handler.handle(assistant, db);
   const identity = { silo: 'acme', scopeId, scopeKind: 'person' as const,
     ownerId: 'dreamer', memoryId: 'fact-one', revision: 1 };
   keys.provision(identity);
@@ -158,6 +166,103 @@ it('keeps one original night when managed admission is unavailable', async funct
     'SELECT data FROM memory_maintenance_runs WHERE silo=$1 AND scope_id=$2 ORDER BY position',
     ['acme', scopeId]);
   expect(after.rows).toEqual(before.rows);
+});
+
+it('admits one eligible night with one exact root and allowance', async function eligibleNight() {
+  const actor = new BudgetActor(nats.store, 'acme', firstNight);
+  await actor.start(2000, 20000, 'payer');
+  const ownerId = 'eligible-owner';
+  const assistantId = 'eligible-assistant';
+  const eligibleScopeId = memoryScopeId('acme', 'person', ownerId);
+  const member = await append(`member-${ownerId}`, 'member.joined', {
+    memberId: ownerId, role: 'member', email: 'eligible@example.test',
+    displayName: 'Eligible',
+  });
+  await authorisation.handler.handle(member, options.db);
+  const membership = await append('team-payer', 'team.member_added', {
+    teamId: 'payer', memberId: ownerId, addedBy: 'dreamer',
+  });
+  await authorisation.handler.handle(membership, options.db);
+  const assistant = await append(`assistant-${assistantId}`, 'assistant.created', {
+    assistantId, kind: 'personal', ownerId,
+  });
+  await authorisation.handler.handle(assistant, options.db);
+  const identity = { silo: 'acme', scopeId: eligibleScopeId, scopeKind: 'person' as const,
+    ownerId, memoryId: 'eligible-fact', revision: 1 };
+  const keys = memoryKeys(directory);
+  keys.provision(identity);
+  const ciphertext = keys.encrypt(identity, 'Eligible private fact');
+  const { silo: _silo, ...factIdentity } = identity;
+  await append(`scope-${eligibleScopeId}`, 'memory.written', {
+    schemaVersion: 1, ...factIdentity, kind: 'fact', pinned: false, expiresAt: null,
+    sources: [], dependsOn: [], ...ciphertext,
+  });
+  const position = await nats.store.head(`scope-${eligibleScopeId}`);
+  await append(`scope-${eligibleScopeId}`, 'memory.maintenance_bound', {
+    scopeId: eligibleScopeId, scopeKind: 'person', ownerId, memberId: ownerId,
+    assistantId, payingGroupId: 'payer', enabled: true, acceptedCapCents: 100, revision: 1,
+  });
+  const grantKinds = ['model', 'memory_read', 'memory_write'];
+  for (const kind of grantKinds) {
+    const resourceId = kind === 'model' ? 'gpt-6-luna' : eligibleScopeId;
+    for (const granteeKind of ['member', 'assistant']) {
+      const granteeId = granteeKind === 'member' ? ownerId : assistantId;
+      const grant = await append(grantStream(kind, resourceId), 'grant.given', {
+        resourceType: kind, resourceId, granteeKind, granteeId, grantedBy: ownerId,
+      });
+      await authorisation.handler.handle(grant, options.db);
+    }
+  }
+  await append(`computer-${assistantId}`, 'computer.ready', {
+    assistantId, computerId: 'dream-computer', generation: 1,
+  });
+  await append('provider-primary', 'provider.created', {
+    providerId: 'primary', provider: 'openai', name: 'Primary', revision: 1,
+    changedBy: ownerId,
+  });
+  const keyCommand = `night-prepare-${serial + 1}`;
+  const reference = providerSecretRef('acme', 'primary', keyCommand);
+  const secrets = providerSecrets(`${directory}/providers`);
+  await secrets.save(reference, 'test-only-key');
+  await append('provider-primary', 'provider.key_saved', {
+    providerId: 'primary', revision: 2, changedBy: ownerId, secretRef: reference,
+  });
+  await append('provider-primary', 'provider.models_selected', {
+    providerId: 'primary', revision: 3, changedBy: ownerId, models: ['gpt-6-luna'],
+  });
+  await append('provider-primary', 'provider.model_binding_set', {
+    providerId: 'primary', revision: 4, changedBy: ownerId,
+    expectedProviderSequence: 0, previousBindingSequence: 0,
+    kind: 'assistant', dependantId: assistantId, task: 'chat_turn',
+    state: 'active', model: 'gpt-6-luna',
+  });
+  await append('budget-acme', 'provider.managed_calls_enabled', {
+    providerId: 'primary', revision: 5, changedBy: ownerId,
+    expectedProviderSequence: 0,
+  });
+  const eligibleId = '6'.repeat(64);
+  await append(`scope-${eligibleScopeId}`, 'memory.maintenance_recorded', {
+    scopeId: eligibleScopeId, nightId: eligibleId, batchKey: '7'.repeat(64),
+    inputRevision: '8'.repeat(64), date: '2026-10-19', bindingRevision: 1,
+    memberId: ownerId, acceptedCapCents: 100,
+    intendedAt: '2026-10-19T02:00:00.000Z', selectedAt: '2026-10-19T02:00:01.000Z',
+    inputRefs: [{ memoryId: 'eligible-fact', revision: 1, position, expiresAt: null }],
+    action: 'due', reason: null,
+  });
+  function eligibleTime() { return new Date('2026-10-19T02:05:00.000Z'); }
+  const first = await prepareNightlyMaintenance(options, eligibleScopeId, eligibleId,
+    eligibleTime, { actor, secrets });
+  const repeated = await prepareNightlyMaintenance(options, eligibleScopeId, eligibleId,
+    eligibleTime, { actor, secrets });
+  expect(first).toMatchObject({ outcome: 'prepared', nightId: eligibleId,
+    allowanceCents: 100, dispatch: 'disabled' });
+  expect(repeated).toEqual(first);
+  const roots = actor.state.roots.filter(function matchingRoot(root) {
+    return root.requesterId === ownerId && root.assistantId === assistantId;
+  });
+  expect(roots).toHaveLength(1);
+  expect(roots[0]).toMatchObject({ payingGroupId: 'payer', allowanceCents: 100 });
+  expect(actor.state.reservations).toHaveLength(0);
 });
 
 async function claimNight(claimDate: string, claimId: string, bindingRevision: number,
