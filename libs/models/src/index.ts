@@ -18,7 +18,7 @@ export { modelGrantHandler, migrateModelGrants } from './grants.ts';
 export { payingGroupAuthority, groupMembership, PayingGroupRefused, AuthorityApplying } from './paying-group.ts';
 export { initialiseBudgetProjection, rebuildBudgetProjection } from './rebuild.ts';
 
-export { approvalCards, readApproval, decideApproval } from './approvals.ts';
+export { approvalCards, readApproval, decideApproval, ApprovalNotFound } from './approvals.ts';
 export { readOriginalCallStatus, type RetainedCall } from './original-call-status.ts';
 export {
   authorityFence, decisionAuthorityFence, ownershipWriteAccess,

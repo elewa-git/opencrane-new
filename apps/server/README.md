@@ -47,6 +47,9 @@ A hand-off without a saved outcome stays unknown, even when other evidence repor
 does not prove a business change succeeded. Reading history never sends a tool call.
 The original-call read checks a private live signal; a missing signal leaves retry unknown.
 The bridge supplies that reader to the same chat options used by the HTTP routes.
+The requester can save one retry only while that original call is still held. The
+bridge wakes that call after the decision is saved, and the computer sends its
+original bytes through the gateway with fresh checks.
 
 Refused control attempts in enabled test setups save a small audit record. They do not
 change the current controller or interrupt work. Production control stays disabled.
@@ -224,7 +227,8 @@ flowchart LR
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, checked publication history, current accounting and exact membership receipts| postgres
   server -->|waits briefly for Forget locks| postgres
-  server <-->|chat work, checked routine turns, retained call status, Stops, checked reports and publication files| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, checked routine turns, private routine preparation and delivery, retained call status, Stops, checked reports and publication files| computer["apps/computer<br/>assistant computers"]
+  server -->|wakes the original held Ask call| computer
   server -->|checks an activated child start and its root allowance| runtime
   computer -.->|records private thread for memory discovery| server
   server -.->|prepares up to four private memory tools| computer

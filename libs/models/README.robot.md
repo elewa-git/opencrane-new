@@ -11,6 +11,9 @@ Eligibility needs one proved non-dispatched permit, the same approval, conversat
 turn, tool, connection, computer id and generation, plus the original saved approval
 expiry. A failed live read leaves retry unknown. A lost or replaced computer and an
 ended turn report ended. The signal carries no call bytes and never authorises a send.
+After `approval.retry_requested`, the gateway requires the original approval id on
+the replacement request. The held proxy supplies it with the retained bytes. A new
+message cannot consume that permit, even if its reviewed arguments match.
 
 ## Provider retirement preview
 

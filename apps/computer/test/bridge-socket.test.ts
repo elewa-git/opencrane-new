@@ -2,8 +2,9 @@ import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { WebSocket } from 'ws';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { bridgeSocket, type BridgeSocketState } from '../src/bridge-socket.ts';
+import { approvalHolds } from '../src/approval-holds.ts';
 import type { BridgeReport } from '../src/report-journal.ts';
 import type { TurnDriver } from '../src/turn-runner.ts';
 import { record } from '../src/http.ts';
@@ -13,7 +14,8 @@ function report(sequence: number, text = 'partial'): BridgeReport {
     type: 'agent.message_delta', messageId: 'reply', text };
 }
 
-async function fixture(retainedCall?: TurnDriver['retainedCall']) {
+async function fixture(retainedCall?: TurnDriver['retainedCall'],
+  approvals?: ReturnType<typeof approvalHolds>) {
   const server = createServer();
   const state: BridgeSocketState = { resumed: false };
   const reports: BridgeReport[] = [];
@@ -37,7 +39,7 @@ async function fixture(retainedCall?: TurnDriver['retainedCall']) {
       if (saved.sequence > since) send(saved);
     }
   }
-  const bridge = bridgeSocket(server, driver, state, runner, reportCount, replayReports);
+  const bridge = bridgeSocket(server, driver, state, runner, reportCount, replayReports, approvals);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const address = server.address();
@@ -58,7 +60,8 @@ async function fixture(retainedCall?: TurnDriver['retainedCall']) {
     }
     socket.on('message', receive);
     await once(socket, 'open');
-    socket.send(JSON.stringify({ type: 'resume', since }));
+    socket.send(JSON.stringify({ type: 'resume', since,
+      ...(approvals ? { approvalWaiting: true } : {}) }));
     await flush(socket);
     return { socket, received };
   }
@@ -97,6 +100,39 @@ async function answersOnlyAuthenticatedRetainedCallReads() {
 }
 it('answers retained-call reads only on the authenticated computer bridge',
   answersOnlyAuthenticatedRetainedCallReads);
+
+async function wakesOneReplacementOverAuthenticatedBridge() {
+  const approvalId = 'a'.repeat(64);
+  const waiting = vi.fn().mockReturnValue(true);
+  const renew = vi.fn().mockResolvedValue(undefined);
+  const holds = approvalHolds({ waiting, renew });
+  const send = vi.fn().mockResolvedValue('retained');
+  const retry = vi.fn().mockResolvedValue(undefined);
+  const answer = vi.fn();
+  holds.resume(true);
+  holds.add({ approvalId, thread: 'thread', send, retry, answer });
+  const computer = await fixture(undefined, holds);
+  try {
+    const connection = await computer.connect(0);
+    connection.socket.send(JSON.stringify({ type: 'approval_settled',
+      approvalId, state: 'approved' }));
+    function retained() { expect(holds.isRetained(approvalId, 'thread')).toBe(true); }
+    await vi.waitFor(retained);
+    connection.socket.send(JSON.stringify({ type: 'approval_settled',
+      approvalId, state: 'retry' }));
+    connection.socket.send(JSON.stringify({ type: 'approval_settled',
+      approvalId, state: 'retry' }));
+    function replaced() { expect(retry).toHaveBeenCalledOnce(); }
+    await vi.waitFor(replaced);
+    expect(renew).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenCalledOnce();
+    expect(answer).not.toHaveBeenCalled();
+  } finally {
+    await computer.close();
+  }
+}
+it('delivers one saved retry wake over the authenticated computer bridge',
+  wakesOneReplacementOverAuthenticatedBridge);
 
 async function doesNotSendAnInFlightSequenceTwice() {
   const computer = await fixture();

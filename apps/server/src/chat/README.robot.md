@@ -39,8 +39,9 @@ once every input and terminal is settled, including chats with more than 32 inpu
 `GET /api/conversations/:conversationId/tool-requests/:logicalRequestId` reads
 saved Ask approval and permit histories before one final participant access check.
 It compares the request position with the person's current participation interval.
-Shared child status belongs only to the requester. Missing or bad saved evidence
-never proves non-dispatch. The route checks current access after every history read,
+Call status belongs only to the requester in every chat. A missing call receives
+the same refusal as another requester's call. Bad saved evidence never proves
+non-dispatch. The route checks current access after every history read,
 including a failed read. A removed or foreign caller receives the same refusal for
 saved and missing calls. The reply excludes tool arguments and results, and the
 route never saves an event, wakes a bridge or releases a credential. An authorised
@@ -50,7 +51,16 @@ computer over its authenticated bridge socket after the person's access check.
 It checks the reply's computer id and
 generation, then compares the saved turn, tool, connection, native call id and original
 approval expiry. Two readers see the same private hold. The bridge reply contains no
-request bytes. The route never sends a replacement call.
+request bytes. The GET never sends a replacement call.
+
+The retry POST checks the same saved proof and live signal before saving
+`approval.retry_requested`. It reads the original history before the short write
+access check. A missing hold or mismatched turn, computer, call or tool returns a
+conflict. The bridge keeps watching an uncertain approval until its original
+deadline. After the saved retry event, it wakes the original held response. The
+computer renews the turn pass, and the gateway checks one new permit. An uncertain
+watch ends at the original approval expiry, even without non-dispatch proof. Tabs and
+repeated bridge wakes share the same saved decision.
 
 ## Dispatcher readiness in chat
 

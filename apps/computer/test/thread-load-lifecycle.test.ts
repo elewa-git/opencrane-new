@@ -184,7 +184,8 @@ async function keepsSiblingHolds() {
     const loadKey = 'a'.repeat(32);
     local.catalogue({ loadKey, turnId: 'turn', conversation: 'chat', thread: 'thread', tools });
     holds.resume(true);
-    holds.add({ approvalId: 'a'.repeat(64), thread: 'thread', send: renew, answer });
+    holds.add({ approvalId: 'a'.repeat(64), thread: 'thread', send: renew,
+      retry: renew, answer });
     local.extendThread('thread', Date.now() + 120_000);
     await vi.advanceTimersByTimeAsync(120_001);
     expect(local.size).toBe(1);

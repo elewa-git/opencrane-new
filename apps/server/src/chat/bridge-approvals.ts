@@ -1,7 +1,7 @@
 import { pendingBudgetStops, sendBudgetStops } from './bridge-budget-stops.ts';
 import type { EventStore } from '@opencrane/event-store';
 import { toolApprovalRequestedDataSchema } from '@opencrane/events';
-import { history, readApproval } from '@opencrane/models';
+import { history, readApproval, readOriginalCallStatus } from '@opencrane/models';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
 
@@ -23,12 +23,57 @@ type Waiting = z.infer<typeof waitingSchema> & {
   retryDelay?: number;
   expiresAt?: number;
   pending?: Promise<void> | undefined;
+  outcomeSent?: boolean;
 };
 
 function matchesRequest(request: z.infer<typeof toolApprovalRequestedDataSchema>,
   entry: Waiting, assistantId: string) {
   return request.approvalId === entry.approvalId && request.assistantId === assistantId &&
     request.conversationId === entry.conversationId && request.turnId === entry.turnId;
+}
+
+function isSavedRetry(last: { type: string; source: string } | undefined,
+  state: string) {
+  return last?.type === 'approval.retry_requested' &&
+    last.source === 'opencrane-server' && state === 'approved';
+}
+
+function shouldRead(entry: Waiting, positions: {
+  approvalHead: number; computerHead: number; conversationHead: number;
+  participationHead: number; policyHead: number | undefined;
+}) {
+  const expired = entry.expiresAt !== undefined && Date.now() >= entry.expiresAt;
+  return entry.approvalHead !== positions.approvalHead ||
+    entry.computerHead !== positions.computerHead ||
+    entry.conversationHead !== positions.conversationHead ||
+    entry.participationHead !== positions.participationHead ||
+    entry.policyHead !== positions.policyHead || expired;
+}
+
+function rememberPositions(entry: Waiting, positions: {
+  approvalHead: number; computerHead: number; conversationHead: number;
+  participationHead: number; policyHead: number;
+}, expiresAt: string) {
+  entry.approvalHead = positions.approvalHead;
+  entry.computerHead = positions.computerHead;
+  entry.conversationHead = positions.conversationHead;
+  entry.participationHead = positions.participationHead;
+  entry.policyHead = positions.policyHead;
+  entry.expiresAt = Date.parse(expiresAt);
+}
+
+async function hasSavedNonDispatch(store: EventStore, silo: string,
+  entry: Waiting, deadline: number) {
+  const original = await readOriginalCallStatus(store, silo, entry.approvalId,
+    undefined, deadline);
+  const attempt = original.status.attempts[0];
+  return original.conversationId === entry.conversationId &&
+    original.status.turnId === entry.turnId &&
+    Date.parse(original.status.expiresAt) > Date.now() &&
+    original.status.attempts.length === 1 &&
+    attempt?.outcome === 'not_dispatched' &&
+    (attempt.evidence === 'connection_refused' ||
+      attempt.evidence === 'adapter_dispatch_refused');
 }
 
 export function bridgeApprovals(store: EventStore, silo: string, assistantId: string,
@@ -56,6 +101,23 @@ export function bridgeApprovals(store: EventStore, silo: string, assistantId: st
     socket.send(JSON.stringify(signal));
   }
 
+  async function keepUncertain(entry: Waiting, deadline: number, positions: {
+    approvalHead: number; computerHead: number; conversationHead: number;
+    participationHead: number; policyHead: number;
+  }, expiresAt: string) {
+    if (!entry.outcomeSent) {
+      await sendSavedStop(entry, deadline);
+      sendSettlement(entry.approvalId, 'outcome_unknown');
+      entry.outcomeSent = true;
+    }
+    // Release the watch at its original deadline. Unknown dispatch stays saved.
+    if (Date.parse(expiresAt) <= Date.now()) {
+      waiting.delete(entry.approvalId);
+      return;
+    }
+    rememberPositions(entry, positions, expiresAt);
+  }
+
   async function check(entry: Waiting) {
     const deadline = performance.now() + 10_000;
     const subject = `approval-${entry.approvalId}`;
@@ -67,11 +129,9 @@ export function bridgeApprovals(store: EventStore, silo: string, assistantId: st
     if (entry.serverId !== undefined) {
       policyHead = await store.head(`mcp-${entry.serverId}`, deadline);
     }
-    const expired = entry.expiresAt !== undefined && Date.now() >= entry.expiresAt;
-    if (entry.approvalHead === approvalHead && entry.conversationHead === conversationHead
-      && entry.computerHead === computerHead
-      && entry.participationHead === participationHead
-      && entry.policyHead === policyHead && !expired) return;
+    const beforeRead = { approvalHead, computerHead, conversationHead,
+      participationHead, policyHead };
+    if (!shouldRead(entry, beforeRead)) return;
     const rows = await history(store, subject, silo, deadline);
     if (rows.length === 0) {
       waiting.delete(entry.approvalId);
@@ -88,17 +148,27 @@ export function bridgeApprovals(store: EventStore, silo: string, assistantId: st
     const checkedPolicyHead = policyHead ?? await store.head(`mcp-${request.serverId}`, deadline);
     const result = await readApproval(store, silo, entry.approvalId, { deadline });
     if (socket.readyState !== WebSocket.OPEN) return;
+    const last = rows.at(-1)?.event;
+    if (isSavedRetry(last, result.state)) {
+      if (!await hasSavedNonDispatch(store, silo, entry, deadline)) {
+        waiting.delete(entry.approvalId);
+        return;
+      }
+      await sendCheckedSettlement(entry, 'retry', computerHead, deadline);
+      return;
+    }
+    const positions = { approvalHead, computerHead, conversationHead,
+      participationHead, policyHead: checkedPolicyHead };
+    if (result.state === 'outcome_unknown') {
+      await keepUncertain(entry, deadline, positions, request.expiresAt);
+      return;
+    }
     if (result.state !== 'requested') {
       await sendCheckedSettlement(entry, result.state, computerHead, deadline);
       return;
     }
     // Keep the positions from before the read, so a concurrent change gets another look.
-    entry.approvalHead = approvalHead;
-    entry.computerHead = computerHead;
-    entry.conversationHead = conversationHead;
-    entry.participationHead = participationHead;
-    entry.policyHead = checkedPolicyHead;
-    entry.expiresAt = Date.parse(request.expiresAt);
+    rememberPositions(entry, positions, request.expiresAt);
   }
 
   async function sendCheckedSettlement(entry: Waiting, state: string,
