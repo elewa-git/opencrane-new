@@ -23,9 +23,12 @@ vi.mock('node:fs', filesystem);
 vi.mock('node:child_process', processes);
 
 const replacement = 'My walking destination is the summer garden.';
-const proofReply = z.object({ result: z.object({ structuredContent: z.object({
-  recallProof: z.string(),
-}) }) });
+const recallProofShape = { recallProof: z.string() };
+const recallProofSchema = z.object(recallProofShape);
+const structuredContentShape = { structuredContent: recallProofSchema };
+const structuredContentSchema = z.object(structuredContentShape);
+const resultShape = { result: structuredContentSchema };
+const recallResponseSchema = z.object(resultShape);
 
 async function savedChanges(test: Awaited<ReturnType<typeof recallBackend>>) {
   const rows = await history(test.setup.nats.store, `scope-${scopeId}`, 'test');
@@ -36,14 +39,20 @@ async function nativeCorrectAndForget() {
   const test = await recallBackend(true);
   const firstClock = memoryClock();
   await test.start();
-  const original = await test.native.recall(threadId, { scopeId, query: 'winter garden' });
-  const proof = proofReply.parse(original).result.structuredContent.recallProof;
-  const correction = { scopeId, commandId: 'combined-correct', memoryId: 'garden',
+  const originalQuery = { scopeId, query: 'winter garden' };
+  const original = await test.native.recall(threadId, originalQuery);
+  const originalResponse = recallResponseSchema.parse(original);
+  const proof = originalResponse.result.structuredContent.recallProof;
+  const correctionRequest = { scopeId, commandId: 'combined-correct', memoryId: 'garden',
     expectedRevision: 1, text: replacement, kind: 'fact', pinned: false, expiresAt: null,
     dependsOn: [], recallProof: proof };
-  const corrected = await test.native.call(threadId, 'correct', correction);
-  expect(corrected).toHaveProperty('result.structuredContent.outcome', 'accepted');
-  expect(corrected).toHaveProperty('result.structuredContent.revision', 2);
+  const corrected = await test.native.call(threadId, 'correct', correctionRequest);
+  const expectedCorrectionOutcome = 'accepted';
+  const expectedCorrectionRevision = 2;
+  expect(corrected).toHaveProperty('result.structuredContent.outcome',
+    expectedCorrectionOutcome);
+  expect(corrected).toHaveProperty('result.structuredContent.revision',
+    expectedCorrectionRevision);
   firstClock.restore();
 
   await test.setup.runner.run(test.projection);
@@ -51,10 +60,12 @@ async function nativeCorrectAndForget() {
   const next = await test.admit('after-correct', nextThread);
   const secondClock = memoryClock();
   await next.start();
-  const current = await test.native.recall(nextThread, { scopeId, query: 'summer garden' });
+  const currentQuery = { scopeId, query: 'summer garden' };
+  const current = await test.native.recall(nextThread, currentQuery);
   expect(JSON.stringify(current)).toContain(replacement);
   expect(JSON.stringify(current)).not.toContain('winter garden');
-  const currentProof = proofReply.parse(current).result.structuredContent.recallProof;
+  const currentResponse = recallResponseSchema.parse(current);
+  const currentProof = currentResponse.result.structuredContent.recallProof;
 
   const append = test.setup.nats.store.append.bind(test.setup.nats.store);
   let forgetAppends = 0;
@@ -67,10 +78,12 @@ async function nativeCorrectAndForget() {
     return result;
   }
   vi.spyOn(test.setup.nats.store, 'append').mockImplementation(loseForgetReply);
-  const forgetting = { scopeId, commandId: 'combined-forget', memoryId: 'garden',
+  const forgetRequest = { scopeId, commandId: 'combined-forget', memoryId: 'garden',
     expectedRevision: 2, recallProof: currentProof };
-  const forgotten = await test.native.call(nextThread, 'forget', forgetting);
-  expect(forgotten).toHaveProperty('result.structuredContent.outcome', 'unknown');
+  const forgotten = await test.native.call(nextThread, 'forget', forgetRequest);
+  const expectedForgetOutcome = 'unknown';
+  expect(forgotten).toHaveProperty('result.structuredContent.outcome',
+    expectedForgetOutcome);
   secondClock.restore();
   const rows = await savedChanges(test);
   function isCorrection(row: typeof rows[number]) {
@@ -83,9 +96,10 @@ async function nativeCorrectAndForget() {
   expect(rows.filter(isForget)).toHaveLength(1);
   expect(forgetAppends).toBe(1);
   const scope = { scopeId, scopeKind: 'person' as const, ownerId: 'alice' };
-  const status = await readAgentChange(test.memory, 'alice', scope, forgetting.commandId);
-  expect(status).toMatchObject({ operation: 'forget', outcome: 'accepted', hidden: true,
-    revision: 3 });
+  const status = await readAgentChange(test.memory, 'alice', scope, forgetRequest.commandId);
+  const expectedStatus = { operation: 'forget', outcome: 'accepted', hidden: true,
+    revision: 3 };
+  expect(status).toMatchObject(expectedStatus);
   expect(JSON.stringify(status)).not.toContain(replacement);
 
 }
