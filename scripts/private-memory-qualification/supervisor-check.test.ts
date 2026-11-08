@@ -19,13 +19,15 @@ const inspector = { ...supervisor, pid: 20, startTime: '456',
   commandLine: '/usr/local/bin/node\0--experimental-strip-types\0' +
     '/scripts/private-memory-qualification/supervisor-check.ts\0' };
 
+function identitiesMatch(first: ProcessIdentity, second: ProcessIdentity): boolean {
+  return JSON.stringify(first) === JSON.stringify(second);
+}
+
 function prepare(): void {
   vi.clearAllMocks();
   vi.mocked(supervisorIdentity).mockReturnValue(supervisor);
   vi.mocked(readProcessIdentity).mockReturnValue(inspector);
-  vi.mocked(sameProcessIdentity).mockImplementation(function same(first, second) {
-    return JSON.stringify(first) === JSON.stringify(second);
-  });
+  vi.mocked(sameProcessIdentity).mockImplementation(identitiesMatch);
   vi.mocked(probeContainer).mockReturnValue(true);
   vi.mocked(checkLiveService).mockReturnValue(true);
   vi.spyOn(process, 'getuid').mockReturnValue(0);
@@ -70,8 +72,9 @@ function refusesProtectionAllowance(): void {
 it('refuses swap and dump allowance using the existing readers', refusesProtectionAllowance);
 
 function refusesChangedLaunch(): void {
-  vi.mocked(supervisorIdentity).mockReturnValueOnce(supervisor)
-    .mockReturnValueOnce({ ...supervisor, startTime: '124' });
+  const identityMock = vi.mocked(supervisorIdentity);
+  identityMock.mockReturnValueOnce(supervisor);
+  identityMock.mockReturnValueOnce({ ...supervisor, startTime: '124' });
   expect(checkSupervisor()).toEqual({ result: 'private_process_identity_changed' });
 }
 it('refuses a replaced supervisor after the live reply', refusesChangedLaunch);

@@ -12,6 +12,7 @@ const installationId = `sha256:${'b'.repeat(64)}`;
 const image = `sha256:${'c'.repeat(64)}`;
 let pid = 4321;
 let response: Record<string, unknown> = {};
+let inspectionReads = 0;
 
 function inspect(): string {
   return JSON.stringify([{ Id: containerId, Image: image,
@@ -26,10 +27,18 @@ function answer(_container: string, _args: string[], input = ''): Promise<unknow
   }
   return Promise.resolve({ ...request, result: true, pid: 1, startTime: '123', ...response });
 }
+function inspectReplacement(): string {
+  inspectionReads += 1;
+  if (inspectionReads === 2) {
+    pid = 4322;
+  }
+  return inspect();
+}
 function prepare(): void {
   vi.clearAllMocks();
   pid = 4321;
   response = {};
+  inspectionReads = 0;
   vi.mocked(execFileSync).mockImplementation(inspect);
   vi.mocked(runInContainer).mockImplementation(answer);
 }
@@ -52,12 +61,7 @@ async function refusesClaimedReceipt(): Promise<void> {
 it('does not accept an application-shaped success receipt', refusesClaimedReceipt);
 
 async function refusesReplacementDuringInspection(): Promise<void> {
-  let reads = 0;
-  vi.mocked(execFileSync).mockImplementation(function changed() {
-    reads += 1;
-    if (reads === 2) pid = 4322;
-    return inspect();
-  });
+  vi.mocked(execFileSync).mockImplementation(inspectReplacement);
   expect(await proveComputerSupervisor(containerId, installationId))
     .toBe('private_process_identity_changed');
 }
