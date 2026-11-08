@@ -1,4 +1,4 @@
-/* eslint max-lines: ["error", { max: 525, skipBlankLines: true, skipComments: true }] */
+/* eslint max-lines: ["error", { max: 690, skipBlankLines: true, skipComments: true }] */
 import { PrivateReplyState } from './private-reply';
 import { sendUpload } from './upload';
 import { UploadBatch } from './upload-batch';
@@ -14,6 +14,8 @@ import { isActiveTurn, lastConfirmedTurnAt, shouldShowMaintenance,
 import { shortTime } from './file-presentation';
 import { ChatSessionStop, type StopScreen } from './chat-session-stop';
 import { ReadFailure, requestChat, savedChatChange } from './chat-session-http';
+import { ReadMarker } from './read-marker';
+import { readReplacementHistory, type ReplacementHistory } from './chat-replacement-history';
 import { displayAgentSessions, includeRequestedConversation, isTeamConversation,
   createPendingMessage, resumeAgentSession, selectedSessionPayingGroupId,
   updateSessionSummaries, selectedSessionAssistant }
@@ -49,13 +51,15 @@ export class ChatSession implements OnDestroy {
   readonly requestedLookupFailed = signal(false);
   readonly retryIn = signal(6);
   readonly waitSeconds = signal(0);
-  readonly waiting = computed(() => this.queued() ? 'queued' : this.active() && this.computer() !== 'ready' ? 'starting' : this.selected() && !this.connected() && !this.loading() ? 'reconnecting' : '');
+  readonly waiting = computed(this.waitingReason.bind(this));
   readonly waitingForMaintenance = computed(() => shouldShowMaintenance(
     this.waiting(), this.waitSeconds(), this.dispatcherReady()));
   readonly busy = signal(false);
   readonly error = signal('');
   readonly announcement = signal('');
   readonly reconnectedAt = signal('');
+  readonly caughtUp = signal(false);
+  readonly historyFailure = signal(false);
   readonly denied = signal(false);
   readonly queued = signal(false);
   readonly connected = this.socket.isConnected;
@@ -82,11 +86,20 @@ export class ChatSession implements OnDestroy {
   private revision = 0;
   private sawReconnecting = false;
   private conversationReady = false;
+  private historyLoading = false;
+  private historyRun = 0;
+  private needsReplacement = false;
+  private bufferedRows: ChatRow[] = [];
+  private readonly readMarker = new ReadMarker(
+    this.selected.bind(this), this.readAllowed.bind(this),
+    this.reloadReadRow.bind(this), this.clearDenied.bind(this));
   private reconnectCount = 0;
   private pending: { id: string; conversationId: string; text: string;
     executionMode?: 'memory_free' } | undefined;
   private subscription = this.socket.received.subscribe(message => this.receive(message));
   private readonly accessLossSubscription = this.socket.accessLost.subscribe(this.clearDenied.bind(this));
+  private readonly connectionCloseSubscription = this.socket.connectionClosed.subscribe(
+    this.socketClosed.bind(this));
 
   constructor() {
     effect(onCleanup => {
@@ -126,19 +139,33 @@ export class ChatSession implements OnDestroy {
       if (context.memoryAdmission) this.memoryAdmission.set(context.memoryAdmission);
       await this.list(revision);
       if (revision !== this.revision) return;
+      this.railLoading.set(false);
       const id = new URL(location.href).searchParams.get('conversation');
       if (id) await this.resumeRequested(id, revision);
       else if (this.conversations()[0]) await this.select(this.conversations()[0]!.conversationId);
     } catch (error) {
-      if (revision === this.revision) this.fail(error);
-      this.railUnavailable.set(!this.denied() && !this.requestedLookupFailed());
+      if (revision === this.revision) {
+        this.fail(error);
+        this.railUnavailable.set(this.shouldRetryRail());
+      }
     }
-    finally { this.loading.set(false); this.railLoading.set(false); }
+    finally {
+      if (revision === this.revision) {
+        this.loading.set(false);
+        this.railLoading.set(false);
+      }
+    }
+  }
+  private shouldRetryRail(): boolean {
+    return !this.denied() && !this.selected() && !this.requestedLookupFailed();
   }
   private async resumeRequested(id: string, revision: number): Promise<void> {
     const requested = await resumeAgentSession(id, this.conversations());
     if (revision !== this.revision) return;
-    if (requested.kind === 'denied') throw new ReadFailure(403);
+    if (requested.kind === 'denied') {
+      this.clearDenied();
+      return;
+    }
     if (requested.kind === 'unavailable') {
       this.requestedLookupFailed.set(true);
       throw new Error('Conversation lookup unavailable');
@@ -165,12 +192,17 @@ export class ChatSession implements OnDestroy {
     const revision = ++this.revision;
     this.sawReconnecting = false;
     this.conversationReady = false;
+    this.caughtUp.set(false);
+    this.historyFailure.set(false);
+    this.needsReplacement = false;
+    this.bufferedRows = [];
     this.stopState.reset();
     this.reconnectCount = 0;
     this.reconnectedAt.set('');
     this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
     this.selected.set(id); this.rows.set([]); this.position = 0; this.generation = 0;
     const conversation = this.conversations().find(row => row.conversationId === id);
+    this.readMarker.setRow(conversation);
     const isTeam = isTeamConversation(conversation);
     this.executionMode.set(isTeam ? 'restricted' : 'memory_free');
     this.error.set(''); this.loading.set(true); this.computer.set('ready');
@@ -200,6 +232,10 @@ export class ChatSession implements OnDestroy {
     this.reconnectedAt.set('');
     this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
     this.selected.set(''); this.rows.set([]); this.error.set('');
+    this.readMarker.clear();
+    this.caughtUp.set(false);
+    this.bufferedRows = [];
+    this.needsReplacement = false;
     this.requestedUnavailable.set(false);
     this.requestedLookupFailed.set(false);
     this.position = 0; this.generation = 0; this.computer.set('ready'); this.loading.set(false);
@@ -241,13 +277,23 @@ export class ChatSession implements OnDestroy {
   async refresh(): Promise<boolean> {
     if (this.denied() || !this.selected()) return false;
     const revision = this.revision;
+    this.error.set('');
     try {
       await this.catchUp(this.selected(), revision);
+      if (revision === this.revision && !this.connected()) this.socket.connect();
       return revision === this.revision;
     } catch (error) {
       if (revision === this.revision) this.fail(error);
       return false;
     }
+  }
+  async retryRead(): Promise<void> {
+    if (this.selected()) await this.refresh();
+    else await this.load();
+  }
+  async markRendered(nearNewest: boolean): Promise<void> {
+    await this.readMarker.rendered(this.rows(), this.caughtUp(),
+      document.visibilityState === 'visible', nearNewest);
   }
   reconnect(): void { if (!this.denied()) this.socket.connect(); }
   selectedPayingGroupId(): string {
@@ -264,6 +310,8 @@ export class ChatSession implements OnDestroy {
     ++this.revision;
     this.subscription.unsubscribe();
     this.accessLossSubscription.unsubscribe();
+    this.connectionCloseSubscription.unsubscribe();
+    this.readMarker.clear();
     this.socket.disconnect();
   }
 
@@ -283,13 +331,55 @@ export class ChatSession implements OnDestroy {
   private currentRevision(): number { return this.revision; }
 
   private async list(revision = this.revision): Promise<void> {
+    const previous = this.selectedConversation();
     const value = chatListSchema.parse(await requestChat('/api/conversations'));
     if (revision !== this.revision || this.denied()) return;
     this.listHasMore.set(Boolean(value.nextCursor));
     this.conversations.set(displayAgentSessions(value.rows));
+    const current = this.selectedConversation();
+    if (previous?.joinEventId && current?.joinEventId
+      && previous.joinEventId !== current.joinEventId) this.resetForNewJoin();
+    this.readMarker.setRow(current);
+  }
+  private resetForNewJoin(): void {
+    // Clear old rows before the new join can acknowledge anything on screen.
+    this.caughtUp.set(false);
+    this.conversationReady = false;
+    this.historyRun += 1;
+    this.historyLoading = false;
+    this.historyFailure.set(false);
+    this.bufferedRows = [];
+    this.rows.set([]);
+    this.position = 0;
+    this.generation = 0;
+    this.socket.disconnect();
+  }
+  private readAllowed(): boolean {
+    return !this.denied() && this.caughtUp() && document.visibilityState === 'visible'
+      && Boolean(this.selected());
+  }
+  private waitingReason(): string {
+    if (this.queued()) return 'queued';
+    if (this.active() && this.computer() !== 'ready') return 'starting';
+    if (this.selected() && !this.connected() && !this.loading()
+      && !this.historyFailure()) return 'reconnecting';
+    return '';
+  }
+  private async reloadReadRow(): Promise<ChatConversation | undefined> {
+    const previousJoin = this.selectedConversation()?.joinEventId;
+    await this.list();
+    const currentJoin = this.selectedConversation()?.joinEventId;
+    if (previousJoin && currentJoin && previousJoin !== currentJoin) await this.refresh();
+    return this.selectedConversation();
   }
   private isTeamSession(): boolean {
     return isTeamConversation(this.selectedConversation());
+  }
+  private socketClosed(): void {
+    this.conversationReady = false;
+    this.caughtUp.set(false);
+    this.reconnectedAt.set('');
+    if (this.announcement().includes("You're caught up")) this.announcement.set('');
   }
   private subscribeWhenConnected(): void {
     if (this.denied() || !this.selected()) return;
@@ -297,8 +387,12 @@ export class ChatSession implements OnDestroy {
     if (state === 'reconnecting') {
       this.sawReconnecting = true;
       this.conversationReady = false;
+      this.caughtUp.set(false);
     }
-    if (state === 'connecting') this.conversationReady = false;
+    if (state === 'connecting') {
+      this.conversationReady = false;
+      this.caughtUp.set(false);
+    }
     if (state !== 'open') {
       return;
     }
@@ -386,20 +480,83 @@ export class ChatSession implements OnDestroy {
     this.creationId = '';
   }
   private async catchUp(id: string, revision: number): Promise<void> {
-    let more = true;
-    while (more) {
-      const feed = chatFeedSchema.parse(await requestChat(`/api/conversations/${id}/messages?since=${this.position}`));
-      if (revision !== this.revision) return;
-      this.privateState.checkProjection(feed.generation);
-      if (this.position && feed.generation !== this.generation) { this.position = 0; this.rows.set([]); continue; }
-      this.generation = feed.generation;
-      this.setComputerState(feed.computerState);
-      this.dispatcherReady.set(feed.dispatcherReady ?? true);
-      this.computerRecovered.set(feed.computerRecovered ?? false);
-      this.computerLostAt.set(feed.computerLostAt ?? '');
-      for (const row of feed.rows) this.apply(row);
-      more = feed.rows.length > 0 && this.position < feed.position;
+    const run = ++this.historyRun;
+    this.historyLoading = true;
+    this.caughtUp.set(false);
+    try {
+      if (this.needsReplacement) {
+        const isCurrent = this.isCurrentHistoryRun.bind(this, revision, run);
+        const replacement = await readReplacementHistory(id, isCurrent);
+        if (!replacement) return;
+        this.applyReplacement(replacement);
+      } else {
+        let more = true;
+        while (more) {
+          const feed = chatFeedSchema.parse(await requestChat(
+            `/api/conversations/${id}/messages?since=${this.position}`));
+          if (!this.isCurrentHistoryRun(revision, run)) return;
+          this.privateState.checkProjection(feed.generation);
+          if (this.resetChangedGeneration(feed.generation)) continue;
+          this.generation = feed.generation;
+          this.setComputerState(feed.computerState);
+          this.dispatcherReady.set(feed.dispatcherReady ?? true);
+          this.computerRecovered.set(feed.computerRecovered ?? false);
+          this.computerLostAt.set(feed.computerLostAt ?? '');
+          for (const row of feed.rows) this.apply(row);
+          more = feed.rows.length > 0 && this.position < feed.position;
+        }
+      }
+      this.historyFailure.set(false);
+    } catch (error) {
+      if (revision === this.revision && run === this.historyRun) this.historyFailure.set(true);
+      throw error;
+    } finally {
+      this.endHistoryRun(run, revision);
     }
+  }
+  private isCurrentHistoryRun(revision: number, run: number): boolean {
+    return revision === this.revision && run === this.historyRun;
+  }
+  private applyReplacement(replacement: ReplacementHistory): void {
+    const { rows, position, feed } = replacement;
+    this.privateState.checkProjection(feed.generation);
+    this.rows.set(rows);
+    this.position = position;
+    this.generation = feed.generation;
+    this.setComputerState(feed.computerState);
+    this.dispatcherReady.set(feed.dispatcherReady ?? true);
+    this.computerRecovered.set(feed.computerRecovered ?? false);
+    this.computerLostAt.set(feed.computerLostAt ?? '');
+    this.needsReplacement = false;
+    const summaries = updateSessionSummaries(
+      this.conversations(), this.selected(), this.rows(), this.turns());
+    this.conversations.set(summaries);
+  }
+  private endHistoryRun(run: number, revision: number): void {
+    if (revision !== this.revision || run !== this.historyRun) return;
+    this.historyLoading = false;
+    if (!this.historyFailure()) this.finishCatchUp();
+  }
+  private resetChangedGeneration(generation: number): boolean {
+    if (!this.position || generation === this.generation) return false;
+    this.position = 0;
+    this.rows.set([]);
+    this.bufferedRows = [];
+    return true;
+  }
+  private finishCatchUp(): void {
+    const buffered = this.bufferedRows.sort((left, right) => left.position - right.position);
+    this.bufferedRows = [];
+    for (const row of buffered) this.apply(row);
+    if (!this.conversationReady || !this.connected()) return;
+    this.caughtUp.set(true);
+    if (!this.sawReconnecting) return;
+    this.sawReconnecting = false;
+    this.reconnectCount += 1;
+    const connectedAt = new Date().toISOString();
+    this.reconnectedAt.set(connectedAt);
+    const words = this.reconnectCount === 1 ? 'Reconnected at' : 'Reconnected again at';
+    this.announcement.set(`${words} ${shortTime(connectedAt)}. You're caught up.`);
   }
   private receive(message: ServerMessage): void {
     if (message.type === 'private_reply' || message.type === 'private_output_cleared') return;
@@ -408,20 +565,40 @@ export class ChatSession implements OnDestroy {
     if (message.type === 'refused') { this.fail(new ReadFailure(403)); return; }
     if (message.type === 'resync') {
       this.conversationReady = false;
-      this.position = 0; this.generation = message.generation; this.rows.set([]); this.socket.connect(); return;
-    }
-    if (message.type === 'ready' && this.sawReconnecting) {
-      this.sawReconnecting = false;
-      this.reconnectCount += 1;
-      const connectedAt = new Date().toISOString();
-      this.reconnectedAt.set(connectedAt);
-      const reconnectWords = this.reconnectCount === 1 ? 'Reconnected at' : 'Reconnected again at';
-      this.announcement.set(`${reconnectWords} ${shortTime(connectedAt)}. You're caught up.`);
+      this.caughtUp.set(false);
+      // Keep the checked transcript until every replacement page has arrived.
+      this.needsReplacement = true;
+      this.bufferedRows = [];
+      this.sawReconnecting = true;
+      this.socket.disconnect();
+      const revision = this.revision;
+      void this.reloadAfterResync(this.selected(), revision);
+      return;
     }
     this.conversationReady = message.type === 'ready' || this.conversationReady;
     this.generation = message.generation;
     this.updateComputerState(message);
-    if (message.row) this.receiveRow(message.row);
+    if (message.row) this.acceptSocketRow(message.row);
+    if (message.type === 'ready' && !this.historyLoading && !this.historyFailure()) {
+      this.finishCatchUp();
+    }
+  }
+  private acceptSocketRow(raw: unknown): void {
+    const row = chatRowSchema.safeParse(raw);
+    if (!row.success) {
+      this.receiveRow(raw);
+      return;
+    }
+    if (this.historyLoading || this.historyFailure()) this.bufferedRows.push(row.data);
+    else this.receiveRow(row.data);
+  }
+  private async reloadAfterResync(id: string, revision: number): Promise<void> {
+    try {
+      await this.catchUp(id, revision);
+      if (revision === this.revision) this.socket.connect();
+    } catch (error) {
+      if (revision === this.revision) this.fail(error);
+    }
   }
   private receiveRow(raw: unknown): void {
     const parsed = chatRowSchema.safeParse(raw);
@@ -496,6 +673,13 @@ export class ChatSession implements OnDestroy {
     this.selected.set('');
     this.position = 0;
     this.generation = 0;
+    this.historyRun += 1;
+    this.historyLoading = false;
+    this.needsReplacement = false;
+    this.bufferedRows = [];
+    this.caughtUp.set(false);
+    this.historyFailure.set(false);
+    this.readMarker.purge();
     this.pending = undefined;
     this.stopState.reset();
     this.queued.set(false);

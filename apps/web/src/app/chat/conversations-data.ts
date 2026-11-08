@@ -31,15 +31,17 @@ export function workspaceTitle(
 ): string {
   if (denied) return 'Unavailable';
   if (!selected) return 'New session';
+  let savedTitle = '';
+  for (const conversation of conversations) {
+    if (conversation.conversationId === selected && conversation.title
+      && conversation.title !== 'New session') savedTitle = conversation.title;
+  }
+  // Show a long saved title in full; short session names still follow the first message.
+  if (savedTitle.length > 24) return savedTitle;
   for (const turn of turns) {
     if (turn.author === 'you' && turn.text) return sessionSlug(turn.text);
   }
-  for (const conversation of conversations) {
-    if (conversation.conversationId === selected) {
-      return sessionSlug(conversation.title ?? 'Personal session');
-    }
-  }
-  return sessionSlug('Personal session');
+  return savedTitle || 'New session';
 }
 
 export function selectedSessionPayingGroupId(
@@ -248,7 +250,7 @@ export function displayAgentSessions(rows: ChatConversation[]): ChatConversation
   const sessions: ChatConversation[] = [];
   for (const row of rows) {
     if (row.mode !== 'agent_session') continue;
-    const title = row.title ? sessionSlug(row.title) : 'New session';
+    const title = row.title?.trim() || 'New session';
     sessions.push({ ...row, title });
   }
   return sessions;
@@ -305,7 +307,9 @@ export function updateSessionSummaries(
   }
   function updateConversation(row: ChatConversation): ChatConversation {
     if (row.conversationId !== selected) return row;
-    if (title) return { ...row, title, status };
+    if (title && (!row.title || row.title === 'New session')) {
+      return { ...row, title, status };
+    }
     return { ...row, status };
   }
   return conversations.map(updateConversation);

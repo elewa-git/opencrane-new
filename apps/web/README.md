@@ -18,7 +18,7 @@ flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages and file drops where Attach is available"] -->|requests and tab sign-out| web
   web -->|messages, close reviews, child reviews and group names| server["apps/server<br/>the back end"]
-  server -->|saved updates, permitted publication history, file cards and private reply clearance| web
+  server -->|saved chat pages, live updates, files and private reply clearance| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
   web -->|saved and private replies| capture["Chat workspace<br/>reply details and isolated diagrams"]
@@ -56,6 +56,9 @@ For everyone, the website:
   Returning tabs check the session before accepting private frames.
 - Expands saved command and tool details under their activity lines in chat.
 - Lists recent and archived conversations and opens saved chat links.
+- Catches up saved assistant chats before saying they are current. A failed read keeps the
+  messages already shown and offers another try. Missing chat links show no chat details.
+  Private shared sessions show the checked paying group name without exposing its id.
 - Lets people the server authorises close a conversation after a review. Closed chats keep
   their saved messages and files for people who can still read them. A closed group keeps
   its participant list readable without offering changes or showing a removed person's id.

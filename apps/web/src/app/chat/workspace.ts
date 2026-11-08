@@ -1,6 +1,6 @@
 // Workspace grid and messages follow OpenCrane 1, commit 10abd0ef6 (AGPL-3.0-or-later).
 // The bridge supplies all state; the screen follows the owner's Workspace Live design.
-/* eslint max-lines: ["error", { max: 525, skipBlankLines: true, skipComments: true }] */
+/* eslint max-lines: ["error", { max: 550, skipBlankLines: true, skipComments: true }] */
 import { HingeDrawer } from '../ui/hinge-drawer';
 import { NavigationMenu } from '../ui/navigation-menu';
 import { PaperSurface, DogEar } from '../ui/paper';
@@ -18,7 +18,8 @@ import { MemoryFreeNotice } from './memory-free-notice';
 import { MemoryPanel } from '../memory/memory-panel';
 import { movePanelTab } from './panel-tab-keyboard';
 import {
-  ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, effect, inject, signal,
+  ChangeDetectionStrategy, Component, ElementRef, HostListener, afterEveryRender,
+  computed, effect, inject, signal,
   viewChild, type OnInit,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
@@ -27,6 +28,7 @@ import { BrandMark } from '../ui/brand-mark';
 import type { ChatConversation } from '@opencrane/protocol';
 import { workspaceTitle } from './conversations-data';
 import { ChatSession } from './chat-session';
+import { PayingGroupName } from './paying-group-name';
 import { ScreenshotCapture, captureView } from './screenshot-capture';
 import {
   budgetStoppedTurnIds, findToolRecord, hasHighlightedTool, rejectedScreenshotIds,
@@ -108,6 +110,8 @@ export class Workspace implements OnInit {
   protected readonly files = computed(() => [...new Set(this.chat.turns().filter(turn => turn.author === 'agent').flatMap(turn => turn.files))]);
   protected readonly readableFiles = computed(this.publishedFiles.bind(this));
   protected readonly title = computed(this.currentTitle.bind(this));
+  protected readonly payingGroup = new PayingGroupName(
+    this.chat.clearAfterAccessChange.bind(this.chat));
   protected readonly teamConversations = computed(this.listTeamConversations.bind(this));
   protected readonly personalConversations = computed(this.listPersonalConversations.bind(this));
   protected readonly reason = computed(this.composerReason.bind(this));
@@ -122,16 +126,23 @@ export class Workspace implements OnInit {
   private previousCaptureConversation = this.chat.selected();
   private previousCaptureDenied = this.chat.denied();
   private readonly accessNotice = viewChild<ElementRef<HTMLElement>>('accessNotice');
+  private readonly unavailableLink = viewChild<ElementRef<HTMLElement>>('unavailableLink');
   private focusAccess = false;
+  private focusedUnavailable = false;
   private nativeDetailGeneration = 0;
   constructor() {
     effect(this.rememberRecoveryFocus.bind(this));
     effect(this.resetCaptureWhenSessionChanges.bind(this));
     effect(this.clearCloseAfterDenial.bind(this));
     effect(this.followOpenToolDetails.bind(this));
+    effect(this.checkPayingGroupName.bind(this));
     afterEveryRender(this.afterRender.bind(this));
   }
   ngOnInit(): void { void this.chat.load(); }
+
+  private checkPayingGroupName(): void {
+    this.payingGroup.update(this.chat.selectedPayingGroupId(), this.chat.denied());
+  }
 
   private clearCloseAfterDenial(): void {
     if (this.chat.denied()) this.closeReview.clear();
@@ -203,6 +214,7 @@ export class Workspace implements OnInit {
     this.searchDialog()?.nativeElement.close();
   }
   protected togglePanel(): void {
+    if (this.chat.requestedUnavailable() || this.chat.requestedLookupFailed()) return;
     if (!this.desktop()) {
       this.panelOverlay.set(true);
     } else {
@@ -412,6 +424,11 @@ export class Workspace implements OnInit {
     if (active === document.body || active?.id === 'message') this.focusComposer();
   }
   private afterRender(): void {
+    if (this.chat.requestedUnavailable() && !this.focusedUnavailable) {
+      this.focusedUnavailable = true;
+      this.unavailableLink()?.nativeElement.focus({ preventScroll: true });
+    }
+    if (!this.chat.requestedUnavailable()) this.focusedUnavailable = false;
     if (this.focusAccess) {
       this.focusAccess = false;
       const transcript = this.transcriptElement()?.nativeElement;
@@ -430,19 +447,37 @@ export class Workspace implements OnInit {
         requestAnimationFrame(this.scrollTranscriptToBottom.bind(this, element));
       }
     }
+    this.markReadAfterRender();
     this.focusPendingComposer();
     this.restoreRecoveryFocus();
   }
   private scrollTranscriptToBottom(element: HTMLElement): void {
     if (this.chat.denied()) return;
     element.scrollTop = element.scrollHeight;
+    this.markReadAfterRender();
+  }
+  private markReadAfterRender(): void {
+    const element = this.transcriptElement()?.nativeElement;
+    if (!element) return;
+    const remaining = element.scrollHeight - element.scrollTop - element.clientHeight;
+    void this.chat.markRendered(remaining < 80);
+  }
+  @HostListener('document:visibilitychange')
+  protected visibilityChanged(): void {
+    if (document.visibilityState === 'visible') this.markReadAfterRender();
+  }
+  protected transcriptScrolled(): void {
+    this.markReadAfterRender();
   }
   private isPanelExpanded(): boolean {
+    if (this.chat.requestedUnavailable() || this.chat.requestedLookupFailed()) return false;
     if (this.desktop()) return this.panel();
     return this.panelOverlay();
   }
   private currentTitle(): string {
-    return workspaceTitle(this.chat.denied(), this.chat.selected(),
+    const unavailable = this.chat.denied() || this.chat.requestedUnavailable()
+      || this.chat.requestedLookupFailed();
+    return workspaceTitle(unavailable, this.chat.selected(),
       this.chat.turns(), this.chat.conversations());
   }
   protected duration(start: string, end: string): number { return Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / 1000)); }

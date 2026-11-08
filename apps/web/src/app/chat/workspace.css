@@ -239,3 +239,34 @@ oc-file-preview { position: absolute; }
   border: 1px solid #d9dfe0; background: #eef1f2; color: #2b3133;
   line-height: 1.5; overflow-wrap: anywhere; }
 .closed-session-composer { min-height: 56px; }
+.workspace-header h1:focus { white-space: normal; overflow-wrap: anywhere; }
+.history-warning,.unavailable-link {
+  max-width: 780px;
+  margin: 0 auto 16px;
+  padding: 16px 20px;
+  border-radius: 9px;
+  line-height: 1.5;
+}
+.history-warning {
+  border: 1px solid #efcf99;
+  background: #fff8ef;
+}
+.unavailable-link {
+  border: 1px solid #d9dfe0;
+  background: #eef1f2;
+}
+.history-warning h2,.unavailable-link h2 { font-size: 15px; }
+.history-warning p,.unavailable-link p { margin: 8px 0; }
+.history-warning button,.unavailable-link a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 6px;
+}
+.history-warning button { border: 1px solid #d9dfe0; background: white; }
+.unavailable-link a { background: #0db5cc; color: #172b2f; text-decoration: none; }
+@media(max-width:700px) {
+  .history-warning button,.unavailable-link a { width: 100%; }
+}
