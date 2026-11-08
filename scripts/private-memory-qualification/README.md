@@ -18,13 +18,13 @@ It uses Docker on the deployment host and reads the deployment's event store.
 ```mermaid
 flowchart LR
   scripts["scripts<br/>developer tools"] -.-> collector["private-memory-qualification<br/>collects observed results"]
-  fixtures["disposable fixtures<br/>recall and storage tests"] -.->|tests answer checks| collector
   scripts -.-> sibling["check-local-qualification<br/>checks local results"]
   server["apps/server<br/>memory preparation"] -->|reads and rechecks results| collector
   collector -.->|checks memory, Stop and reply loss| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
   collector -->|measures, starts checks and checks refusal format| docker["Docker<br/>running image and host"]
-  docker -->|checks service processes and pinned Codex| deployment["deployment<br/>service processes, launch record and journey runner"]
+  docker -->|checks service processes and pinned Codex| deployment["deployment<br/>service processes and journey runner"]
+  collector -->|checks live bridge| computer["computer container<br/>root launch record"]
 ```
 
 ## What it is responsible for
@@ -35,6 +35,7 @@ flowchart LR
 - Refuse an old or used event store, changed deployment, or missing check.
 - Refuse swap, crash dumps, unsafe process limits and unreadable host settings.
 - Refuse container journeys while any process that can hold private text lacks protection proof.
+- Check the live bridge inside its computer container when the protected target names it.
 - Mark missing process proof as incomplete in the runner and saved collector result.
 - Reject a missing-process refusal unless it says `complete: false`.
 - Save protection refusals with a fixed message naming the failed check.
@@ -105,8 +106,10 @@ server and computer bridge each protect their own process and answer a local liv
 check. The runner records their command arguments with their process identity before
 checking which script they run. For the bridge, it also requires the root entrypoint's
 record of the process launched in the computer container. It checks the process again
-after its answer. An
-early client disconnect closes only that client's protection socket. The
+after its answer. An early client disconnect closes only that client's protection socket. The
+collector accepts the computer's fixed data volumes, including `/home/agent`,
+while keeping its code paths inside the checked image. A container test starts
+the packaged bridge through the root entrypoint to check this path. The
 computer bridge lives in another container, so the current server-container runner
 cannot see it. The collector still refuses the container path before a journey:
 the bridge, supervisor, proxy, native wrapper, native child and canary helpers lack

@@ -4,6 +4,7 @@ import { closeSync, constants, fstatSync, openSync, readFileSync, renameSync, wr
 import { z } from 'zod';
 import { checks, qualifications } from './collect.ts';
 import { runInContainer } from './container-process.ts';
+import { proveComputerBridge } from './bridge-proof.ts';
 import {
   isPrivateProcessFailure, isProtectionFailure, protectionMessages, type ProtectionFailure,
 } from './protection-failure.ts';
@@ -255,6 +256,7 @@ function deploymentTarget() {
     const content = readFileSync(descriptor, 'utf8');
     const targetSchema = z.strictObject({
       containerId: z.string().regex(/^[a-f0-9]{64}$/u),
+      computerContainerId: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
       siloId: z.string().min(1).max(200),
     });
     return targetSchema.parse(JSON.parse(content));
@@ -283,6 +285,16 @@ export async function collectDeployment(...unexpectedArguments: unknown[]): Prom
       environmentId: before.environmentId, siloId: before.siloId,
       installationId, runId: randomUUID(), freshInstall: true,
     });
+    if (target.computerContainerId) {
+      const bridge = await proveComputerBridge(target.computerContainerId, installationId);
+      await assertInstallation(containerId, before, streamCreated);
+      if (bridge !== true) {
+        const refusal: Result = { result: 'FAIL', reason: 'host_refused',
+          protectionFailure: bridge, complete: false, message: protectionMessages[bridge] };
+        saveResult(refusal);
+        return refusal;
+      }
+    }
     const results: Record<string, Status> = {};
     const complete: Record<string, Status> = {};
     const receiptDigests: string[] = [];

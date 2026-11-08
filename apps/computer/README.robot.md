@@ -47,8 +47,12 @@ the check runs inside this container. The root entrypoint writes the bridge PID 
 Linux start time to `/run/executor/supervisor/bridge-identity`, inside a root-owned
 directory. It replaces that record on each launch. The inventory accepts a bridge
 child only when its process identity matches the record and its fixed script arguments.
-The server-container runner cannot observe
-this separate PID namespace yet, so full private-process qualification still refuses.
+The collector can run `bridge-check.ts` inside the computer container named by
+its root-owned target file. The checker runs as root with zero core limits. It
+checks swap, dump protection and the live bridge before and after the socket
+exchange. The collector checks the exact computer container identity before and
+after this run. The server-container runner still cannot observe the bridge,
+and the other private process groups remain unproved. Full qualification refuses.
 
 ## Routine start identity
 

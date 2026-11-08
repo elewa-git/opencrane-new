@@ -47,6 +47,12 @@ COPY --from=project scripts/private-memory-qualification/runner-protection.ts \
   /scripts/private-memory-qualification/runner-protection.ts
 COPY --from=project scripts/private-memory-qualification/protection-failure.ts \
   /scripts/private-memory-qualification/protection-failure.ts
+COPY --from=project scripts/private-memory-qualification/private-processes.ts \
+  /scripts/private-memory-qualification/private-processes.ts
+COPY --from=project scripts/private-memory-qualification/container-probe.ts \
+  /scripts/private-memory-qualification/container-probe.ts
+COPY --from=project scripts/private-memory-qualification/bridge-check.ts \
+  /scripts/private-memory-qualification/bridge-check.ts
 COPY --from=process-protection-build /runner-protection.node \
   /scripts/private-memory-qualification/runner-protection.node
 COPY requirements.lock /tmp/requirements.lock
