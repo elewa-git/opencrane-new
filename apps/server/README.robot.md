@@ -7,7 +7,8 @@ already connected computer using the authenticated WebSocket. Each request has a
 random read id and a 1.5-second receipt limit. Replies must match that request,
 computer and generation. A missing socket, reply or valid binding returns no signal.
 Bridge startup and the HTTP routes share one chat options object, so the installed
-reader reaches the status route. `test/bridge-retained-call.test.ts` checks that link.
+reader reaches the status route. `test/main-retained-call.test.ts` checks that link
+through the production entrypoint.
 The public GET still checks saved history and current participation before replying;
 it never sends call bytes or wakes a computer. Replacement sending remains disabled.
 

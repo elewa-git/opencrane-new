@@ -3,22 +3,12 @@ import { createServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
 import { expect, it } from 'vitest';
 import { bridgeRetainedCalls } from '../src/chat/bridge-retained-call.ts';
-import { bridgeOptionsForChat } from '../src/chat/start.ts';
-import type { ChatOptions } from '../src/chat/routes.ts';
 
 const approvalId = 'a'.repeat(64);
 const signal = { approvalId, callId: 'native-call',
   turnId: 'turn', conversationId: 'conversation', computerId: 'computer',
   generation: 1, serverId: 'server', connectionId: 'connection',
   toolName: 'write', expiresAt: new Date(Date.now() + 5_000).toISOString() };
-
-function productionBridgeAndRoutesShareChatOptions() {
-  const chat: Pick<ChatOptions, 'retainedCall'> = {};
-  const bridgeOptions = bridgeOptionsForChat(chat, {});
-  expect(bridgeOptions).toBe(chat);
-}
-it('uses the route chat object when preparing the production bridge',
-  productionBridgeAndRoutesShareChatOptions);
 
 async function matchesOnlyTheRequestedLiveReference() {
   const server = createServer();

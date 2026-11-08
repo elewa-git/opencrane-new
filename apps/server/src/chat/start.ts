@@ -8,12 +8,6 @@ import { SandboxClient } from '../../../ops/src/kubernetes.ts';
 import { watchBridges } from './bridge.ts';
 import type { ChatOptions } from './routes.ts';
 
-export function bridgeOptionsForChat<Chat extends Pick<ChatOptions, 'retainedCall'>,
-  Additions extends object>(chat: Chat, additions: Additions): Chat & Additions {
-  // Let the bridge install its live reader on the object used by HTTP routes.
-  return Object.assign(chat, additions);
-}
-
 /** The dev host reaches private Pods through its scoped Kubernetes identity. No public listener. */
 export async function startBridges(options: ChatOptions & {
   objects?: Client;

@@ -3,7 +3,7 @@ import type { ChatOptions } from '../src/chat/routes.ts';
 import type { BuildServerOptions } from '../src/server.ts';
 
 const wiring = vi.hoisted(() => {
-  const read = vi.fn(async () => undefined);
+  const read = vi.fn(() => Promise.resolve(undefined));
   let serverOptions: BuildServerOptions | undefined;
   return {
     read,
@@ -18,10 +18,10 @@ vi.mock('@opencrane/observability', () => ({
   startTelemetry: vi.fn(), createLogger: () => ({ info: vi.fn() }),
 }));
 vi.mock('@opencrane/event-store', () => ({
-  connectEventStore: async () => ({ store: {}, close: vi.fn() }),
+  connectEventStore: () => Promise.resolve({ store: {}, close: vi.fn() }),
 }));
 vi.mock('@opencrane/projections', () => ({
-  connectMemberFeed: async () => ({ close: vi.fn() }),
+  connectMemberFeed: () => Promise.resolve({ close: vi.fn() }),
   connectMcpCatalogue: () => ({ close: vi.fn() }),
   connectComputers: () => ({ close: vi.fn() }),
   connectProjectionDb: () => ({ db: {}, close: vi.fn() }),
@@ -32,16 +32,17 @@ vi.mock('../src/chat/child-recovery.ts', () => ({ startChildRecovery: vi.fn() })
 vi.mock('../src/computers/desktop.ts', () => ({ desktopConnection: vi.fn() }));
 vi.mock('../src/chat/start.ts', async (importOriginal) => {
   const original = await importOriginal<typeof import('../src/chat/start.ts')>();
-  async function startBridges(options: ChatOptions) {
+  function startBridges(options: ChatOptions) {
     options.retainedCall = wiring.read;
-    return vi.fn();
+    return Promise.resolve(vi.fn());
   }
   return { ...original, startBridges };
 });
 vi.mock('../src/server.ts', () => ({
   buildProductionServer: (_config: unknown, options: BuildServerOptions) => {
     wiring.serverOptions = options;
-    return { listen: async () => 'http://127.0.0.1:1234', server: {}, log: { info: vi.fn() } };
+    return { listen: () => Promise.resolve('http://127.0.0.1:1234'),
+      server: {}, log: { info: vi.fn() } };
   },
 }));
 vi.mock('../src/websocket.ts', () => ({

@@ -10,7 +10,7 @@ import type { FileOptions } from './files/routes.ts';
 import { requireLegacyClosesProjected } from './chat/participation.ts';
 import { conversationKeys } from './chat/keys.ts';
 import { startChildRecovery } from './chat/child-recovery.ts';
-import { bridgeOptionsForChat, startBridges } from './chat/start.ts';
+import { startBridges } from './chat/start.ts';
 import type { ChatOptions } from './chat/routes.ts';
 import { dispatcherReady } from './chat/dispatcher-status.ts';
 import { loadAuthConfig } from '@opencrane/auth';
@@ -90,7 +90,7 @@ if (chat && process.env['MINIO_CREDENTIALS_FILE']) {
   files = { ...chat, objects, scan };
 }
 const budgetDecisionUrl = process.env['MODEL_DECISION_URL'] ?? (process.env['NODE_ENV'] === 'development' ? 'http://127.0.0.1:43001' : undefined);
-const bridgeOptions = chat ? bridgeOptionsForChat(chat, {
+const bridgeOptions = chat ? Object.assign(chat, {
   ...(files ? { objects: files.objects, files } : {}),
   ...(catalogue ? { catalogue } : {}),
   ...(budgetDecisionUrl ? { childStartUrl: budgetDecisionUrl } : {}) }) : undefined;
