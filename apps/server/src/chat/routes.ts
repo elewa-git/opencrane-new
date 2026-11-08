@@ -167,12 +167,14 @@ async function readChatRoute(request: FastifyRequest, reply: FastifyReply,
   }
   const preference = await stateChange(options, memberId, conversationId,
     commandId, idSchema.parse(access.joinEventId));
-  const close = preference ? undefined : await closeChange(options, memberId,
-    conversationId, commandId, access.historyPosition);
-  const result = preference ?? close ?? await chatChange(options, conversationId,
+  if (preference) return reply.send(preference);
+  const projected = await chatChange(options, conversationId,
     commandId, access.historyPosition);
-  if (result.status === 'not_found') reply.code(404);
-  return reply.send(result);
+  if (projected.status === 'appended') return reply.send(projected);
+  const close = await closeChange(options, memberId, conversationId,
+    commandId, access.historyPosition);
+  if (close) return reply.send(close);
+  return reply.code(404).send(projected);
 }
 
 async function participantReply(request: FastifyRequest, reply: FastifyReply,

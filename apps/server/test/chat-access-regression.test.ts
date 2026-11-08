@@ -1574,7 +1574,7 @@ async function participationVolume(sharedChild = false) {
   }
 }
 
-async function refusesCloseBeforeBufferedReport() {
+async function retainsFilesAfterCloseBeforeBufferedReport() {
   const context = await fixture();
   try {
     await context.agentSession('agent');
@@ -1597,14 +1597,14 @@ async function refusesCloseBeforeBufferedReport() {
     }, false);
     const response = await context.app.inject({ url: '/api/conversations/agent/files',
       headers: context.headers() });
-    expect.soft(response.statusCode, response.body).toBe(403);
+    expect.soft(response.statusCode, response.body).toBe(200);
     await expect(viewAccess(context.options, 'alice', 'agent')).rejects.toThrow();
   } finally {
     await context.close();
   }
 }
-it('refuses files and desktop leases after an unprojected close followed by a report',
-  refusesCloseBeforeBufferedReport, 120_000);
+it('keeps saved file reads and ends desktop leases after an unprojected close',
+  retainsFilesAfterCloseBeforeBufferedReport, 120_000);
 
 async function retainsVerifiedLegacyParticipation() {
   const context = await fixture();

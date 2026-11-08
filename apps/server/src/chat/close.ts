@@ -5,7 +5,6 @@ import { getEventDefinition } from '@opencrane/events';
 import { ChatRefused, writeChatAccess, type ChatOptions } from './access.ts';
 import { ChatConflict } from './commands.ts';
 import { readChatCommandFacts } from './chat-summary.ts';
-import { chatChange } from './reads.ts';
 import { privateSessionCreation, requirePrivateReader } from './private-session.ts';
 
 const closeInput = z.object({ id: z.string().min(1) }).strict();
@@ -100,17 +99,7 @@ export async function closeChange(options: ChatOptions, memberId: string,
   if (!row || !savedCloseMatches(row, commandId, options, memberId, conversationId)) {
     return undefined;
   }
-  let content: 'current' | 'applying' = 'applying';
-  try {
-    const projected = await chatChange(options, conversationId, commandId, historyPosition);
-    if (projected.status === 'appended' && projected.type === 'conversation.closed' &&
-        projected.sequence === row.sequence) {
-      content = 'current';
-    }
-  } catch {
-    // Keep the saved receipt available while the read table is unavailable.
-  }
   return { status: 'appended' as const, conversationId, commandId,
     type: 'conversation.closed', sequence: row.sequence,
-    projection: { content, iam: 'current' as const } };
+    projection: { content: 'applying' as const, iam: 'current' as const } };
 }
