@@ -11,6 +11,7 @@ import type { EventStore } from '@opencrane/event-store';
 import type { Query, connectMemberFeed } from '@opencrane/projections';
 import type { conversationKeys } from './keys.ts';
 import type { RetainedCall } from '@opencrane/models';
+import type { createRoutineWake } from './routine-wake.ts';
 
 export interface ChatOptions {
   silo: string;
@@ -22,6 +23,7 @@ export interface ChatOptions {
   dispatcherReady?: () => Promise<boolean>;
   retainedCall?: (approvalId: string, assistantId: string,
     computerId: string) => Promise<RetainedCall | undefined>;
+  routineWake?: ReturnType<typeof createRoutineWake>;
 }
 
 export class ChatRefused extends Error {}

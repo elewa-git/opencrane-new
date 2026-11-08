@@ -201,7 +201,7 @@ async function startComputer() {
     issuer: 'https://routine.test/' };
   const tokens = await tokenIssuer(tokenOptions);
   const connection = { computerId: 'computer', assistantId: 'sales-assistant',
-    bearer: 'fixture-bridge', url: `ws://127.0.0.1:${address.port}/bridge` };
+    generation: 1, bearer: 'fixture-bridge', url: `ws://127.0.0.1:${address.port}/bridge` };
   const options = { silo: 'test', store: nats.store, keys, binding };
   const link = await connectBridge(options, connection, tokens);
   const send = link.socket.send.bind(link.socket);
@@ -251,11 +251,11 @@ async function recordedWake() {
     'computer.suspended', { assistantId: 'sales-assistant', computerId: 'computer' });
   await nats.seed([suspended]);
   let connections = 0;
-  async function connection(computerId: string, assistantId: string) {
+  function connection(computerId: string, assistantId: string) {
     expect(computerId).toBe('computer');
     expect(assistantId).toBe('sales-assistant');
     connections++;
-    return preparedComputer.link;
+    return Promise.resolve(preparedComputer.link);
   }
   const service = createRoutineWake(nats.store, 'test', preparedComputer.tokens,
     stop.signal, connection);
@@ -280,7 +280,10 @@ async function replacementDuringWake() {
   const suspended = record('suspended', 'computer-sales-assistant',
     'computer.suspended', { assistantId: 'sales-assistant', computerId: 'computer' });
   await nats.seed([suspended]);
-  const connection = vi.fn(preparedComputer.wake);
+  function openRecordedBridge() {
+    return Promise.resolve(preparedComputer.link);
+  }
+  const connection = vi.fn(openRecordedBridge);
   const service = createRoutineWake(nats.store, 'test', preparedComputer.tokens,
     stop.signal, connection);
   const waiting = service('sales-assistant');
@@ -304,7 +307,10 @@ async function cancelledWake() {
   const suspended = record('suspended', 'computer-sales-assistant',
     'computer.suspended', { assistantId: 'sales-assistant', computerId: 'computer' });
   await nats.seed([suspended]);
-  const connection = vi.fn(preparedComputer.wake);
+  function openRecordedBridge() {
+    return Promise.resolve(preparedComputer.link);
+  }
+  const connection = vi.fn(openRecordedBridge);
   const service = createRoutineWake(nats.store, 'test', preparedComputer.tokens,
     stop.signal, connection);
   const waiting = service('sales-assistant');

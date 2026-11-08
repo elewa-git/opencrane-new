@@ -124,6 +124,9 @@ The server renews computer passes through authenticated Kubernetes management ac
 Saved routine Stop cancels the exact turn's waiting start acknowledgement. A restarted
 bridge recovers accepted starts once when it connects, only to stop them. It never
 repeats their input or rereads the computer history for each finished chat.
+Routine preparation can wake the recorded sleeping computer through this same bridge.
+It waits for the same computer generation to become ready and checks again after
+connecting. Other turns on the shared computer keep running.
 The models process releases the routine only after checked native closure and budget Stop.
 If the native turn completes before Stop reaches it, the routine still finishes as interrupted.
 

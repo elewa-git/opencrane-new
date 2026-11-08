@@ -1,4 +1,5 @@
 import { pendingRoutineStarts } from './routine-start.ts';
+import { createRoutineWake } from './routine-wake.ts';
 import { recallBridge } from './recall-bridge.ts';
 import { privateOutput } from './private-output.ts';
 import { pullArtifact, type ArtifactPublication } from '../files/artifacts.ts';
@@ -306,6 +307,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting, control, memory,
     routines, retainedCall: retained.read,
     bindRoutineStart: starts.bind, computerId: input.computerId, assistantId: input.assistantId,
+    generation: input.generation,
     prepareRoutineThread: prepareRoutineThread.bind(undefined, socket),
     get rejection() { return rejection; },
     settled,
@@ -398,6 +400,9 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
     }
     return undefined;
   }
+  const routineWake = createRoutineWake(options.store, options.silo, tokens,
+    signal, connection);
+  options.installRoutineWake?.(routineWake);
   const processor = assistantProcessor(options, tokens, refused, connection, connectionId,
     logger, connected);
   const controls = processor.watchControls(signal);

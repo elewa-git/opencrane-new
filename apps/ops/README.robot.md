@@ -405,6 +405,10 @@ restore suspension when needed. Lost and retired computers wait for another
 lifecycle event. Claims and resumes are checked every 250 ms until ready, unless a failed change
 requires a longer wait.
 
+`resumeComputer` accepts an optional expected computer id and generation for
+routine wake. It checks both before saving a resume and before returning a
+computer pass. A replacement cannot inherit the old request.
+
 Idle checks run at most once every 30 seconds, including during Kubernetes retries.
 They read any new events after the Pod check so a newly posted message prevents
 suspension. A pending message prevents suspension until a completed or failed turn

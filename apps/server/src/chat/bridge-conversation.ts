@@ -1,4 +1,5 @@
 import type { ArtifactPublication } from '../files/artifacts.ts';
+import type { createRoutineWake } from './routine-wake.ts';
 import { childRequestHeld } from './child-hold.ts';
 import { pendingBudgetStops, sendBudgetStops } from './bridge-budget-stops.ts';
 import { chatMembership } from './participation.ts';
@@ -33,6 +34,7 @@ export type WatchOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'sto
     objects?: Client;
     catalogue?: Pick<ReturnType<typeof connectMcpCatalogue>, 'rows'>;
     installRetainedCall?: (read: NonNullable<ChatOptions['retainedCall']>) => void;
+    installRoutineWake?: (wake: ReturnType<typeof createRoutineWake>) => void;
   };
 type Conversation = Awaited<ReturnType<typeof listConversations>>[number];
 export type AgentSession = Extract<Conversation, { mode: 'agent_session' }>;

@@ -223,11 +223,16 @@ export async function suspendComputer(store: Store, state: ComputerState): Promi
 }
 
 export async function resumeComputer(store: Store, tokens: Tokens,
-  silo: string, assistantId: string): Promise<IssuedToken> {
+  silo: string, assistantId: string,
+  expected?: { computerId: string; generation: number }): Promise<IssuedToken> {
   const subject = `computer-${assistantId}`;
   let events = await history(store, subject);
   const current = events.findLast(r => isLifecycleEvent(r.event))?.event;
   if (!current || current.silo !== silo) throw new Error('Computer not found');
+  if (expected && (field(current.data, 'computerId') !== expected.computerId ||
+      generation(events) !== expected.generation)) {
+    throw new Error('Computer identity changed');
+  }
   if (current.type === 'computer.suspended') {
     await append(store, current, events, 'computer.resumed', subject,
       { assistantId, computerId: field(current.data, 'computerId'), generation: generation(events), tokenId: `token:${randomUUID()}` });
@@ -236,7 +241,14 @@ export async function resumeComputer(store: Store, tokens: Tokens,
   const latest = events.findLast(r => isLifecycleEvent(r.event))!.event;
   if (!['computer.resumed', 'computer.ready'].includes(latest.type)) throw new Error('Computer is not running');
   const grant = events.findLast(({ event }) => ['computer.claimed', 'computer.resumed'].includes(event.type))!.event;
-  return tokens.computer({ generation: generation(events), silo, computerId: field(grant.data, 'computerId'), assistantId,
+  const currentComputerId = field(grant.data, 'computerId');
+  const currentGeneration = generation(events);
+  if (expected && (currentComputerId !== expected.computerId ||
+      currentGeneration !== expected.generation ||
+      field(latest.data, 'computerId') !== expected.computerId)) {
+    throw new Error('Computer identity changed');
+  }
+  return tokens.computer({ generation: currentGeneration, silo, computerId: currentComputerId, assistantId,
     tokenId: field(grant.data, 'tokenId') });
 }
 

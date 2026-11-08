@@ -29,6 +29,8 @@ flowchart LR
 ```
 
 The computers run in [Kubernetes](../../GLOSSARY.md#kubernetes).
+The server can ask this worker to resume a sleeping computer for a saved routine.
+The request keeps the computer's recorded identity.
 [OpenFGA](../../GLOSSARY.md#openfga-permissions-service) checks who may use what.
 The package backup tool reuses this package’s checks for computer home ownership
 and suspension. Those checks read metadata and change no resources.
