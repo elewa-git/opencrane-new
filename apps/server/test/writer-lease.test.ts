@@ -528,16 +528,14 @@ async function resolvesEndAfterLostReadback(proved: boolean) {
     if (result.status === 'appended') loseReadback = true;
     return result;
   }
-  async function* lostReadback(): AsyncIterable<StoredEvent> {
-    throw new Error('Readback lost');
-  }
-  function readStream(subject: string, sequence?: number, deadline?: number,
+  async function* readStream(subject: string, sequence?: number, deadline?: number,
     includeConversationCloses?: boolean) {
     if (loseReadback) {
       loseReadback = false;
-      return lostReadback();
+      throw new Error('Readback lost');
     }
-    return originalRead(subject, sequence, deadline, includeConversationCloses);
+    const rows = originalRead(subject, sequence, deadline, includeConversationCloses);
+    for await (const row of rows) yield row;
   }
   vi.spyOn(store, 'append').mockImplementation(append);
   vi.spyOn(store, 'readStream').mockImplementation(readStream);

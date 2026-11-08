@@ -90,6 +90,13 @@ function repeated(control: ComputerControl | undefined, input: Return | Grant, p
     || control.proxyInstanceId !== input.proxyInstanceId)) return undefined;
   return control;
 }
+function repeatedEnd(control: ComputerControl, input: End) {
+  if (control.phase !== 'ended' && control.phase !== 'closure_unknown') return undefined;
+  const retry = repeated(control, input, control.phase);
+  const savedReason = control.phase === 'ended' ? control.reason : control.requestedEndReason;
+  if (retry && savedReason === input.reason) return retry;
+  return undefined;
+}
 function validReady(facts: Awaited<ReturnType<typeof current>>, input: Return) {
   const ready = facts.lifecycle;
   if (ready?.event.type !== 'computer.ready') throw new Error('Computer unavailable');
@@ -181,6 +188,8 @@ export async function endWriter(store: EventStore, silo: string, raw: unknown,
   const slot = WriterSlot.closeCurrent(store, silo, input);
   const facts = await current(store, silo, input.assistantId);
   const control = checkedControl(facts.control);
+  const retry = repeatedEnd(control, input);
+  if (retry) return retry;
   if (!sameOwner(control, input) || !['started', 'renewed', 'returning'].includes(control.phase)
     || control.writerSessionId !== input.writerSessionId
     || (input.reason === 'returned' && control.phase !== 'returning')) {
@@ -203,7 +212,8 @@ export async function endWriter(store: EventStore, silo: string, raw: unknown,
   const system = input.reason !== 'returned';
   const closureAccess = system ? accessNotRequired : checkAccess;
   if (!closureReceiptId) {
-    const data = takeoverClosureUnknownDataSchema.parse(binding);
+    const data = takeoverClosureUnknownDataSchema.parse({ ...binding,
+      requestedEndReason: input.reason });
     const saved = await append(store, silo, subject, 'takeover.closure_unknown',
       data, input, facts.sequence, closureAccess, system);
     return checkedControl(saved.control);
@@ -234,7 +244,8 @@ export class WriterSlot {
   private leaseUntil = 0;
   private originalUntil = 0;
   private savedExpiresAt: string | undefined;
-  private timer: ReturnType<typeof setInterval> | undefined;
+  private refreshTimer: ReturnType<typeof setInterval> | undefined;
+  private deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   private pendingSends = new Set<Promise<void>>();
   private inputFailed = false;
   private readonly inputAbort = new AbortController();
@@ -259,6 +270,7 @@ export class WriterSlot {
     const savedExpiry = this.savedControl(second);
     this.updateDeadlines(savedExpiry.expiresAt, savedExpiry.originalExpiresAt);
     this.permissionUntil = permissionUntil;
+    this.scheduleDeadline();
   }
 
   private savedControl(facts: Awaited<ReturnType<typeof current>>) {
@@ -296,6 +308,16 @@ export class WriterSlot {
     }
   }
 
+  private scheduleDeadline() {
+    if (this.closed) return;
+    if (this.deadlineTimer) clearTimeout(this.deadlineTimer);
+    // Close queued input at the earliest deadline even while a refresh read is blocked.
+    const deadline = Math.min(this.permissionUntil, this.leaseUntil, this.originalUntil);
+    const remaining = Math.max(0, Math.ceil(deadline - performance.now()));
+    this.deadlineTimer = setTimeout(this.close.bind(this), remaining);
+    this.deadlineTimer.unref();
+  }
+
   async claim() {
     if (this.input.proxyInstanceId !== writerProxyInstanceId) return false;
     if (this.closed || this.owner || this.checking || WriterSlot.active.has(this.key)) return false;
@@ -321,8 +343,8 @@ export class WriterSlot {
     consumed.add(leaseKey);
     this.owner = true;
     this.claimed = true;
-    this.timer = setInterval(this.scheduleRefresh.bind(this), 250);
-    this.timer.unref();
+    this.refreshTimer = setInterval(this.scheduleRefresh.bind(this), 250);
+    this.refreshTimer.unref();
     return true;
   }
   private async refresh() {
@@ -369,7 +391,8 @@ export class WriterSlot {
     this.closed = true;
     this.owner = false;
     this.inputAbort.abort();
-    if (this.timer) clearInterval(this.timer);
+    if (this.refreshTimer) clearInterval(this.refreshTimer);
+    if (this.deadlineTimer) clearTimeout(this.deadlineTimer);
     if (WriterSlot.active.get(this.key) === this) WriterSlot.active.delete(this.key);
     if (!this.claimed) return;
     let closed = WriterSlot.closed.get(this.store);

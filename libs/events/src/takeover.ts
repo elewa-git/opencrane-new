@@ -90,9 +90,11 @@ export const takeoverEndedWithProofDataSchema = takeoverReturnRequestedDataSchem
   reason: takeoverEndReasonSchema, closureReceiptId: id, startedAt: z.iso.datetime(),
   endedAt: z.iso.datetime(), canStartNewWork: z.boolean(),
 }).strict();
-export const takeoverClosureUnknownDataSchema = takeoverReturnRequestedDataSchema.strict();
+export const takeoverClosureUnknownDataSchema = takeoverReturnRequestedDataSchema.extend({
+  requestedEndReason: takeoverEndReasonSchema,
+}).strict();
 const unknown = event('takeover.closure_unknown', 'computer',
   'Writer input was closed locally, but its final delivery could not be proved.',
-  takeoverClosureUnknownDataSchema, returnExample);
+  takeoverClosureUnknownDataSchema, { ...returnExample, requestedEndReason: 'disconnect' });
 export const takeoverEvents = [refused, requested, pausing, paused, failed,
   renewed, returned, unknown];

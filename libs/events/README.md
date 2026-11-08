@@ -25,6 +25,7 @@ fingerprint of the checked request and a fixed reason. They contain no computer 
 Writer lease records name one requester, computer generation and writer session.
 Return records close that lease without allowing new assistant work.
 Closure records distinguish a proved end from an unknown final input state.
+An unknown closure keeps the requested end reason for identical command retries.
 They carry no keys, clipboard or screen content.
 
 Approval cancellation can record takeover as its fixed cause. It ends unused

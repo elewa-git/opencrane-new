@@ -50,8 +50,10 @@ Refused control attempts in enabled test setups save a small audit record. They 
 change the current controller or interrupt work. Production control stays disabled.
 Internal commands can now save a short writer lease after quiet proof, renew it within
 its original deadline, and save Return. A closing writer stops local input first.
+Queued input is cancelled when its access or lease time runs out, even if a check is slow.
 It saves an end reason only after its last accepted input and the computer's drain
 receipt are accounted for. Missing proof is saved as unknown and keeps work paused.
+The same end command can read its saved result again if its reply is lost.
 The desktop writer is not live yet.
 
 An internal helper can save one encrypted routine input in its prepared private session.
@@ -213,7 +215,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|sign-out, requests, Office uploads, survey and persona reads, Memory setup reads, own and admin routine lists, approval replies and original call status, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks saved membership before personal memory tools and history errors; prepares allowances; checks routine admission and retirement replacements; applies Stop, Pause and Retire; verifies termination, settled model cost and admin authority; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
-  server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, writer closure, routine sessions, inputs, cancellations, confirmed results, checked finishes and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, writer closure and retries, routine sessions, inputs, cancellations, confirmed results, checked finishes and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, checked publication history, current accounting and exact membership receipts| postgres

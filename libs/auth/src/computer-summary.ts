@@ -4,6 +4,7 @@ import { takeoverRequestedDataSchema, takeoverPausingDataSchema,
   takeoverPausedDataSchema, takeoverFailedDataSchema, takeoverStartedLeaseDataSchema,
   takeoverRenewedDataSchema, takeoverReturnRequestedDataSchema,
   takeoverEndedWithProofDataSchema, takeoverClosureUnknownDataSchema,
+  takeoverEndReasonSchema,
   computerTurnStartedDataSchema as startDetails,
   computerTurnClosedDataSchema as closeDetails } from '@opencrane/events';
 import { readStreamSummary, type EventStore, type StoredEvent, type SummaryKind }
@@ -25,6 +26,7 @@ export type ComputerControl = (Omit<z.infer<typeof takeoverRequestedDataSchema>,
   quietReceiptId?: string; writerSessionId?: string; proxyInstanceId?: string;
   expiresAt?: string; originalExpiresAt?: string;
   startedAt?: string; endedAt?: string; closureReceiptId?: string;
+  requestedEndReason?: z.infer<typeof takeoverEndReasonSchema>;
   canStartNewWork?: boolean;
   position: number; commandId: string; requestedAt: string;
 }) | { phase: 'unverified'; position: number };
@@ -204,11 +206,13 @@ function addUnknownClosure(summary: ComputerSummary, row: StoredEvent) {
   if (!control || control.phase === 'unverified' || !details
     || !['started', 'renewed', 'returning'].includes(control.phase)
     || !sameWriterBinding(details, control)
-    || details.writerSessionId !== control.writerSessionId) {
+    || details.writerSessionId !== control.writerSessionId
+    || (details.requestedEndReason === 'returned' && control.phase !== 'returning')) {
     summary.control = { phase: 'unverified', position: row.sequence };
     return;
   }
-  summary.control = { ...control, phase: 'closure_unknown', position: row.sequence,
+  summary.control = { ...control, requestedEndReason: details.requestedEndReason,
+    phase: 'closure_unknown', position: row.sequence,
     commandId: row.event.commandId ?? '' };
 }
 function addEndedWriter(summary: ComputerSummary, row: StoredEvent) {

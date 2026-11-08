@@ -1,1 +1,1 @@
-Writer input closes before Return or abnormal end is saved. A proved end records its reason; an unproved closure keeps assistant work paused.
+Queued writer input stops at its access or lease deadline, even during a slow check. An identical end command can recover its saved result after a lost reply. A proved end records its reason; an unproved closure keeps assistant work paused.

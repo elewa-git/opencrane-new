@@ -32,13 +32,17 @@ native helper expose no protection socket. Memory admission remains disabled.
 `WriterSlot` admits one saved lease per server process. It checks access and the
 saved computer generation while the socket is active. Input is shut before Return
 or end reads the computer stream. Each accepted send is tracked until its transport
-callback settles. Closing the slot aborts queued sends. A transport callback must
+callback settles. The earliest access, lease or original deadline closes the slot
+and aborts queued sends, even while a refresh read is stuck. A transport callback must
 honour its abort signal before forwarding delayed bytes. The internal end command
 waits at most two seconds for local sends and a separate computer-side input-drain
 receipt. Without both, it saves
 `takeover.closure_unknown`; a missing or failed append leaves input closed and work
 paused. A proved `takeover.ended` stores the exact reason. Only proved Return sets
 `canStartNewWork`; current turn admission still requires a later checked start path.
+An identical end command reads its saved result after a lost reply. An unknown
+closure saves the requested end reason to check retries; it is not proof that input
+reached the computer. Changed retries are refused.
 The public writer route remains disabled. This internal callback does not yet supply
 live Pod closure proof, so no physical closure or restart qualification is claimed.
 

@@ -240,8 +240,9 @@ refuse work passes. Neither shape restores work or grants a writer.
 `takeover.ended` now accepts a strict input-drain receipt, saved start time, end
 time and exact reason. It qualifies only after the matching writer lease or Return.
 Only a proved Return may set `canStartNewWork`. `takeover.closure_unknown` keeps the
-computer paused without an exact end reason. Replaying either record performs no
-input or tool send. Old end records remain unverified.
+computer paused without an exact end reason. It keeps the requested end reason so
+an identical command can resolve its saved result after a lost reply. Replaying
+either record performs no input or tool send. Old end records remain unverified.
 
 ## Signed takeover gates
 
