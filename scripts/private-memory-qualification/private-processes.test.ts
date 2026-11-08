@@ -44,8 +44,11 @@ function detectsReplacement(): void {
   expect(sameProcessIdentity(original, foreignGroup)).toBe(false);
   const foreignNamespace = { ...original, containerIdentity: 'pid:[1]' };
   expect(sameProcessIdentity(original, foreignNamespace)).toBe(false);
+  const changedCommand = { ...original, commandLine: 'node\0/other/script.ts\0' };
+  expect(sameProcessIdentity(original, changedCommand)).toBe(false);
 }
-it('detects PID reuse, UID changes, exec and foreign cgroups', detectsReplacement);
+it('detects PID reuse, changed scripts, UID changes, exec and foreign cgroups',
+  detectsReplacement);
 
 function refusesUnprovedGroups(): void {
   vi.mocked(runnerProtected).mockReturnValue(true);
@@ -75,3 +78,25 @@ function refusesDeniedProcRead(): void {
   expect(checkLiveService('serverDelivery', identity)).toBe('private_process_unreadable');
 }
 it('refuses a service whose process files cannot be read', refusesDeniedProcRead);
+
+async function snapshotsServerBeforeCheckingArguments(): Promise<void> {
+  const reads: string[] = [];
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  vi.mocked(readFileSync).mockImplementation(function recordRead(path, options) {
+    const pathText = String(path);
+    reads.push(pathText);
+    return actual.readFileSync(path, options);
+  });
+  try {
+    vi.mocked(runnerProtected).mockReturnValue(true);
+    probePrivateProcessInventory();
+  } finally {
+    vi.mocked(readFileSync).mockImplementation(actual.readFileSync);
+  }
+  const firstStat = reads.indexOf('/proc/1/stat');
+  const firstArguments = reads.indexOf('/proc/1/cmdline');
+  expect(firstStat, reads.join(', ')).toBeGreaterThanOrEqual(0);
+  expect(firstArguments).toBeGreaterThan(firstStat);
+}
+it('takes the server identity snapshot before checking its command arguments',
+  snapshotsServerBeforeCheckingArguments);
