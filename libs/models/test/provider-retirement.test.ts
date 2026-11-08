@@ -16,12 +16,12 @@ function retiredEvent(payload: unknown = retirement) {
   return envelope('test', 'provider-primary', 'provider.retired', payload);
 }
 
-it('accepts only complete, same-connection, unambiguous retirement facts', () => {
+function rejectsIncompleteRetirementFacts() {
   const definition = getEventDefinition('provider.retired');
   expect(definition).toBeDefined();
   const schema = definition!.dataSchema;
   expect(schema.safeParse(retirement).success).toBe(true);
-  const bad = [
+  const invalidPayloads = [
     { ...retirement, choices: [{ ...choice, old: { ...choice.old, providerId: 'foreign' } }] },
     { ...retirement, choices: [choice, choice] },
     { ...retirement, choices: [{ ...choice, next: { state: 'active', model: 'gpt-6-luna' } }] },
@@ -34,10 +34,15 @@ it('accepts only complete, same-connection, unambiguous retirement facts', () =>
     { ...retirement, choices: [{ ...choice, instructions: 'private-fixture-value' }] },
     { ...retirement, choices: [{ ...choice, modelArguments: 'private-fixture-value' }] },
   ];
-  for (const payload of bad) expect(schema.safeParse(payload).success).toBe(false);
-});
+  for (const payload of invalidPayloads) {
+    const result = schema.safeParse(payload);
+    expect(result.success).toBe(false);
+  }
+}
+it('accepts only complete, same-connection, unambiguous retirement facts',
+  rejectsIncompleteRetirementFacts);
 
-it('folds retirement without losing metadata and does not reactivate on a late result', () => {
+function keepsRetiredMetadataAfterLateResult() {
   const created = envelope('test', 'provider-primary', 'provider.created', {
     ...provider, revision: 1, provider: 'openai', name: 'Primary',
   });
@@ -58,23 +63,26 @@ it('folds retirement without losing metadata and does not reactivate on a late r
   state = applyProvider(state, late, 5);
   expect(state).toMatchObject({ name: 'Primary', retired: { changeId: retirementRecord.id },
     reachable: { outcome: 'pass' } });
-});
+}
+it('folds retirement without losing metadata and does not reactivate on a late result',
+  keepsRetiredMetadataAfterLateResult);
 
+async function refusesRetirementBeforeDispatch() {
+  const setup = await managedFixture();
+  const head = await setup.nats.store.head();
+  const checked = await decisionProvider(setup.nats.store, 'test',
+    { providerId: 'primary', model: 'gpt-6-luna' }, performance.now() + 2000, head);
+  await setup.append('provider-primary', 'provider.retired', retirement);
+  await expect(checked.confirm(performance.now() + 2000)).rejects.toThrow('Provider unavailable');
+  const refusal = await setup.call();
+  expect(refusal.status).toBe(403);
+  expect(refusal.text).not.toContain(credential);
+  expect(setup.received()).toBe(0);
+}
 it('refuses a saved retirement at the final dispatch check with a lagging projection',
-  async () => {
-    const setup = await managedFixture();
-    const head = await setup.nats.store.head();
-    const checked = await decisionProvider(setup.nats.store, 'test',
-      { providerId: 'primary', model: 'gpt-6-luna' }, performance.now() + 2000, head);
-    await setup.append('provider-primary', 'provider.retired', retirement);
-    await expect(checked.confirm(performance.now() + 2000)).rejects.toThrow('Provider unavailable');
-    const refusal = await setup.call();
-    expect(refusal.status).toBe(403);
-    expect(refusal.text).not.toContain(credential);
-    expect(setup.received()).toBe(0);
-  });
+  refusesRetirementBeforeDispatch);
 
-it('refuses retirement saved after allow audit and releases an unsent hold', async () => {
+async function releasesUnsentHoldAfterRetirement() {
   const setup = await managedFixture();
   const append = setup.nats.store.append.bind(setup.nats.store);
   let saved = false;
@@ -94,14 +102,22 @@ it('refuses retirement saved after allow audit and releases an unsent hold', asy
   expect(saved).toBe(true);
   expect(setup.received()).toBe(0);
   expect(setup.actor.state.reservations[0]?.settledCents).toBe(0);
-});
+}
+it('refuses retirement saved after allow audit and releases an unsent hold',
+  releasesUnsentHoldAfterRetirement);
 
-it('finishes a streaming response admitted before retirement and keeps its charge', async function inFlightRetirement() {
+async function inFlightRetirement() {
   const setup = await managedFixture();
+  function providerReceived() {
+    return setup.received() === 1;
+  }
+  function admissionObserved() {
+    return setup.admitted.length === 1;
+  }
   setup.hold();
   const pendingCall = setup.call();
-  await until(() => setup.received() === 1);
-  await until(() => setup.admitted.length === 1);
+  await until(providerReceived);
+  await until(admissionObserved);
   expect(setup.actor.state.reservations[0]?.settledCents).toBeUndefined();
   try {
     await setup.append('provider-primary', 'provider.retired', retirement);
@@ -116,4 +132,6 @@ it('finishes a streaming response admitted before retirement and keeps its charg
   expect(setup.received()).toBe(1);
   expect(setup.actor.state.reservations[0]?.settledCents).toBe(1);
   expect((await setup.call()).status).toBe(403);
-});
+}
+it('finishes a streaming response admitted before retirement and keeps its charge',
+  inFlightRetirement);

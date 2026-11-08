@@ -41,10 +41,12 @@ const retirementChoice = z.object({
       revision }).strict(),
   ]),
 }).strict();
-export const providerRetiredSchema = z.object({ ...base,
+const providerRetiredFieldsSchema = z.object({ ...base,
   expectedProviderSequence: z.int().nonnegative(),
   choices: z.array(retirementChoice).max(200),
-}).strict().superRefine((payload, context) => {
+}).strict();
+function validateRetirementChoices(payload: z.infer<typeof providerRetiredFieldsSchema>,
+  context: z.RefinementCtx) {
   const seen = new Set<string>();
   for (const [index, choice] of payload.choices.entries()) {
     const key = JSON.stringify([choice.kind, choice.dependantId, choice.task]);
@@ -59,7 +61,9 @@ export const providerRetiredSchema = z.object({ ...base,
     }
     seen.add(key);
   }
-});
+}
+export const providerRetiredSchema = providerRetiredFieldsSchema.superRefine(
+  validateRetirementChoices);
 const verification = { ...base, attemptId: id, kind: z.enum(['reachability', 'model']),
   model: modelId.optional(), reservedCents: centsSchema.optional() };
 export const providerRequestedSchema = z.object(verification).strict();

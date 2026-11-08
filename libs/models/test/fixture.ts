@@ -148,8 +148,15 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     mcpName: string | string[] | undefined;
   }[] = [];
   function completeResponse(response: ServerResponse) {
-    response.end(`event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: { id: 'resp_stub', object: 'response', status: 'completed', model: 'gpt-6-luna',
-      output: [], usage } })}\n\n`);
+    const completed = {
+      type: 'response.completed',
+      response: {
+        id: 'resp_stub', object: 'response', status: 'completed',
+        model: 'gpt-6-luna', output: [], usage,
+      },
+    };
+    const event = `event: response.completed\ndata: ${JSON.stringify(completed)}\n\n`;
+    response.end(event);
   }
   // S0.1c's scripted Responses stream, reduced to the final usage-bearing event.
   const stub = createServer((req, res) => {
