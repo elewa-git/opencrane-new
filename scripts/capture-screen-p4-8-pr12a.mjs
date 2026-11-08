@@ -26,6 +26,11 @@ async function servePage(route) {
       next: null } });
     return;
   }
+  if (url.pathname === '/api/chat/groups/sales-paying-group') {
+    await route.fulfill({ json: { groupId: 'sales-paying-group', name: 'Sales team',
+      position: 1, members: [] } });
+    return;
+  }
   if (url.pathname === '/api/conversations') {
     await route.fulfill({ json: { rows: [conversation], nextCursor: null } });
     return;
@@ -87,6 +92,7 @@ async function capture(browser, width, frame) {
     } else {
       await action.click();
       await page.getByText('€10.00 for this work').waitFor();
+      await page.getByText('Sales team · fixed for this work').waitFor();
       await page.getByRole('button', { name: 'Start child thread' }).waitFor();
       assert.equal(await page.locator('oc-modal-sheet dialog[open] header h2').evaluate(element =>
         element === globalThis.document.activeElement), true);

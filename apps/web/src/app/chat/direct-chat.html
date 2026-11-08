@@ -277,7 +277,8 @@
                   <p>{{ directDisplayText(row) }}</p>
                   @if (childReview.canOpen(row, selectedConversation(), currentMemberId)) {
                     <button class="child-review-action" type="button"
-                      (click)="childReview.open(row, selectedConversation()!, $event.currentTarget)">
+                      (click)="childReview.open(row, selectedConversation()!, messages(),
+                        $event.currentTarget)">
                       Ask {{ childReview.assistantName(childReview.selectedAssistant()) }} to work on this
                     </button>
                   }
@@ -319,7 +320,8 @@
                 <div><dt>Assistant</dt><dd>{{ childReview.assistantName(review.assistantId) }}</dd></div>
                 <div><dt>Child audience</dt><dd>{{ childReview.audienceNames(
                   review.participantIds, currentMemberId, knownColleagues()) }}</dd></div>
-                <div><dt>Paying group</dt><dd>{{ review.payingGroupId }} · fixed for this work</dd></div>
+                <div><dt>Paying group</dt><dd>{{ childReview.payingGroupName() ||
+                  'Group name unavailable' }} · fixed for this work</dd></div>
                 <div><dt>Allowance</dt><dd>€{{ (review.allowanceBoundCents / 100).toFixed(2) }} for this work</dd></div>
               </dl>
             }
@@ -328,7 +330,8 @@
                 (change)="childReview.selectedAssistant.set($any($event.target).value);
                   childReview.requestReview(selectedConversation()!)">
                 @for (assistant of childReview.assistants(); track assistant.assistantId) {
-                  <option [value]="assistant.assistantId">{{ assistant.name || assistant.assistantId }}</option>
+                  <option [value]="assistant.assistantId">{{ childReview.assistantName(
+                    assistant.assistantId) }}</option>
                 }
               </select>
             </label>
@@ -368,16 +371,6 @@
       || selectedPeople().length > 1
       || groupSnapshot() || pending())) {
       <footer class="composer-dock">
-        @if (selectedConversation()?.mode === 'group' && draft().includes('@agent')) {
-          <p class="child-mention-guidance" role="status">
-            @if (childReview.assistants().length) {
-              Typing @agent is plain text. Use “Ask assistant to work on this” on your own
-              message to start a child thread.
-            } @else {
-              No assistants are available to you here, so there’s nothing to suggest.
-            }
-          </p>
-        }
         <div class="send-feedback">
           @if (sendState() === 'applying') {
             <oc-shared-state kind="applying" [message]="applyingMessage()"
@@ -409,6 +402,22 @@
               selectedPeople(), groupSnapshot())"
             (draftChange)="changeDraft($event)" (submitted)="submitMessage($event)" />
         </div>
+        @if (selectedConversation()?.mode === 'group' && draft().includes('@agent')) {
+          <div class="child-mention-guidance" role="status">
+            @if (childReview.assistantState() === 'loading') {
+              Checking available assistants…
+            } @else if (childReview.assistantState() === 'failed') {
+              Assistants could not be loaded.
+              <button type="button" (click)="childReview.loadAssistants(selectedConversationId())">
+                Try assistants again</button>
+            } @else if (childReview.assistants().length) {
+              Typing @agent is plain text. Use “Ask assistant to work on this” on your own
+              message to start a child thread.
+            } @else {
+              No assistants are available to you here, so there’s nothing to suggest.
+            }
+          </div>
+        }
       </footer>
     }
   </main>

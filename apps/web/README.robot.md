@@ -23,8 +23,12 @@ under `docs/process/uploads-reasons/`. This does not qualify a fresh installatio
 
 An own saved group message shows a child review action when the current assistant list
 offers an eligible shared assistant. The server still checks authority. The review
-POST binds the source event id, assistant and requested audience. The dialog shows
-the returned participant ids, paying group, allowance and expiry. Cancel and Escape
+POST binds the source event id, assistant and requested audience. People added after
+the source message are left out of the first audience and later audience resets.
+The dialog shows the returned participants, the checked paying group name and allowance.
+If the group name cannot be checked, it shows a neutral label.
+Assistant discovery has separate loading, failure and empty states, with a retry for
+failure. Cancel and Escape
 discard the review without sending a start. Start saves one request id in session
 storage before posting the original signed review. An uncertain reply checks that
 same id through GET; it never sends a second start. A stale or expired review needs

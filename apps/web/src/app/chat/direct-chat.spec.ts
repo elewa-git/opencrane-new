@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { By } from '@angular/platform-browser';
 import { ChatComposer } from './composer';
 import { DirectChat } from './direct-chat';
+import { ChildReview } from './child-review';
 import { RANDOM_SOURCE, SOCKET_FACTORY, type SocketLike } from '../core/socket-factory';
 import { WebSocketService } from '../core/websocket.service';
 import type { ChatRow } from '@opencrane/protocol';
@@ -2689,6 +2690,12 @@ const reviewAssistant = { assistantId: 'team-sales', ownerId: 'sales', kind: 'te
   changedAt: '2026-10-06T09:00:00Z', name: 'Sales assistant',
   payingGroupId: 'sales', canStartSession: true, busy: false };
 
+it('never uses assistant or participant identifiers as display names', () => {
+  const review = new ChildReview(vi.fn());
+  expect(review.assistantName('opaque-assistant')).toBe('Shared assistant');
+  expect(review.audienceNames(['opaque-member'], 'alice', [])).toBe('Participant');
+});
+
 function reviewFixture() {
   const api = createFetchFixture();
   api.addReviewableGroupMessage();
@@ -2770,7 +2777,8 @@ it('excludes someone added after the source from the first review and later rese
   await waitForText(fixture, '€7.40');
   const firstReview = childPosts(api, '/child-review')[0];
   expect(firstReview?.body?.['participantIds']).toEqual(['alice', 'bob', 'carol']);
-  expect(root(fixture).textContent).not.toContain('Peter Otieno');
+  expect(root(fixture).querySelector('oc-modal-sheet dialog')?.textContent)
+    .not.toContain('Peter Otieno');
   fixture.destroy();
 });
 
@@ -2916,6 +2924,7 @@ it('requires a fresh review after expiry and keeps the start request out of the 
 
 it('resets the audience and requests a new signed review after review_stale', async () => {
   const api = reviewFixture();
+  api.addParticipantAfterSource();
   const reviews: RequestRecord[] = [];
   function stale(request: RequestRecord): Response | undefined {
     if (request.url === '/api/assistants') return reply({ rows: [reviewAssistant] });

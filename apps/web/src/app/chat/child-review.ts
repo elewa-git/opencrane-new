@@ -38,10 +38,13 @@ function savedPending(): Pending | undefined {
 
 export class ChildReview {
   readonly assistants = signal<Assistant[]>([]);
+  readonly assistantState = signal<'loading' | 'ready' | 'failed'>('loading');
   readonly selectedAssistant = signal('');
   readonly source = signal<ChatRow | undefined>(undefined);
   readonly review = signal<Review | undefined>(undefined);
   readonly audience = signal<string[]>([]);
+  readonly payingGroupName = signal('');
+  private sourceAudience: string[] = [];
   readonly notice = signal('');
   readonly busy = signal(false);
   readonly pending = signal<Pending | undefined>(savedPending());
@@ -67,7 +70,7 @@ export class ChildReview {
 
   assistantName(assistantId: string): string {
     const assistant = this.assistants().find(candidate => candidate.assistantId === assistantId);
-    return assistant?.name ?? assistantId;
+    return assistant?.name?.trim() || 'Shared assistant';
   }
 
   audienceNames(participantIds: string[], memberId: string,
@@ -79,7 +82,7 @@ export class ChildReview {
         continue;
       }
       const person = colleagues.find(candidate => candidate.memberId === participantId);
-      names.push(person?.displayName ?? participantId);
+      names.push(person?.displayName?.trim() || 'Participant');
     }
     return names.join(', ');
   }
@@ -92,10 +95,13 @@ export class ChildReview {
     this.generation += 1;
     this.request?.abort();
     this.assistants.set([]);
+    this.assistantState.set('loading');
     this.selectedAssistant.set('');
     this.source.set(undefined);
     this.review.set(undefined);
     this.audience.set([]);
+    this.sourceAudience = [];
+    this.payingGroupName.set('');
     this.notice.set('');
     this.busy.set(false);
     this.opener.set(undefined);
@@ -112,6 +118,7 @@ export class ChildReview {
     const generation = ++this.generation;
     this.request?.abort();
     this.request = new AbortController();
+    this.assistantState.set('loading');
     try {
       const response = await fetch('/api/assistants', {
         headers: { accept: 'application/json' }, signal: this.request.signal,
@@ -126,11 +133,15 @@ export class ChildReview {
       if (generation !== this.generation) return;
       const eligible = parsed.rows.filter(isEligibleAssistant);
       this.assistants.set(eligible);
+      this.assistantState.set('ready');
       this.selectedAssistant.set(eligible[0]?.assistantId ?? '');
       const pending = this.pending();
       if (pending?.conversationId === conversationId) await this.checkStatus(conversationId);
     } catch {
-      if (generation === this.generation) this.assistants.set([]);
+      if (generation === this.generation) {
+        this.assistants.set([]);
+        this.assistantState.set('failed');
+      }
     }
   }
 
@@ -140,13 +151,15 @@ export class ChildReview {
     return !this.pending();
   }
 
-  async open(row: ChatRow, conversation: ChatConversation, action: EventTarget | null): Promise<void> {
+  async open(row: ChatRow, conversation: ChatConversation, history: ChatRow[],
+    action: EventTarget | null): Promise<void> {
     if (!(action instanceof HTMLButtonElement) || this.busy() ||
         conversation.mode !== 'group') return;
     this.opener.set(action);
     this.source.set(row);
     this.notice.set('');
-    this.audience.set([...conversation.participantIds]);
+    this.sourceAudience = audienceAtSource(row, conversation, history);
+    this.audience.set([...this.sourceAudience]);
     await this.requestReview(conversation);
   }
 
@@ -164,7 +177,7 @@ export class ChildReview {
   async chooseAudience(conversation: ChatConversation, memberId: string, onlyMe: boolean):
     Promise<void> {
     if (conversation.mode !== 'group') return;
-    this.audience.set(onlyMe ? [memberId] : [...conversation.participantIds]);
+    this.audience.set(onlyMe ? [memberId] : [...this.sourceAudience]);
     this.review.set(undefined);
     await this.requestReview(conversation);
   }
@@ -197,10 +210,27 @@ export class ChildReview {
       this.checkReviewBinding(review, source.id, body.requestId, assistantId);
       this.review.set(review);
       this.notice.set('');
+      void this.loadPayingGroupName(review.payingGroupId, generation);
     } catch {
       if (generation === this.generation) this.notice.set('Review unavailable. Try again.');
     } finally {
       if (generation === this.generation) this.busy.set(false);
+    }
+  }
+
+  private async loadPayingGroupName(groupId: string, generation: number): Promise<void> {
+    this.payingGroupName.set('');
+    try {
+      const response = await fetch(`/api/chat/groups/${encodeURIComponent(groupId)}`, {
+        headers: { accept: 'application/json' }, signal: this.request?.signal ?? null,
+      });
+      if (!response.ok) return;
+      const group = z.object({ groupId: z.string(), name: z.string() }).parse(
+        await response.json());
+      if (generation !== this.generation || group.groupId !== groupId) return;
+      this.payingGroupName.set(group.name.trim());
+    } catch {
+      // Keep a neutral label when the checked group name cannot be read.
     }
   }
 
@@ -217,7 +247,7 @@ export class ChildReview {
     if (!review || this.busy() || this.pending()) return;
     if (review.expiresAt <= Date.now()) {
       this.review.set(undefined);
-      this.resetChoices(conversation);
+      this.resetChoices();
       this.notice.set('This review expired. Review the request again.');
       return;
     }
@@ -237,7 +267,7 @@ export class ChildReview {
           review: review.review }),
       });
       if (generation !== this.generation) return;
-      const queued = await this.handleStartResponse(response, pending, conversation, generation);
+      const queued = await this.handleStartResponse(response, pending, generation);
       if (!queued || generation !== this.generation) return;
       this.source.set(undefined);
       this.review.set(undefined);
@@ -253,13 +283,12 @@ export class ChildReview {
     }
   }
 
-  private resetChoices(conversation: Extract<ChatConversation, { mode: 'group' }>): void {
-    this.audience.set([...conversation.participantIds]);
+  private resetChoices(): void {
+    this.audience.set([...this.sourceAudience]);
     this.selectedAssistant.set(this.assistants()[0]?.assistantId ?? '');
   }
 
-  private async handleStartResponse(response: Response, pending: Pending,
-    conversation: Extract<ChatConversation, { mode: 'group' }>, generation: number):
+  private async handleStartResponse(response: Response, pending: Pending, generation: number):
     Promise<boolean> {
     if (response.status === 401 || response.status === 403) {
       this.accessChanged();
@@ -273,7 +302,7 @@ export class ChildReview {
         this.pending.set(undefined);
         sessionStorage.removeItem(pendingKey);
         this.review.set(undefined);
-        this.resetChoices(conversation);
+        this.resetChoices();
         this.notice.set('Access changed. Review the request again.');
         return false;
       }
@@ -318,6 +347,23 @@ export class ChildReview {
 
 function isEligibleAssistant(assistant: Assistant): boolean {
   return assistant.canStartSession && assistant.status !== 'retired';
+}
+
+function audienceAtSource(source: ChatRow, conversation: ChatConversation,
+  history: ChatRow[]): string[] {
+  if (conversation.mode !== 'group') return [];
+  const joinedLater = new Set<string>();
+  for (const row of history) {
+    if (row.type !== 'participant.added' || row.position <= source.position) continue;
+    const participantId = row.data['participantId'];
+    if (typeof participantId === 'string') joinedLater.add(participantId);
+  }
+  // A later join, including a rejoin, cannot read the source message.
+  const audience: string[] = [];
+  for (const participantId of conversation.participantIds) {
+    if (!joinedLater.has(participantId)) audience.push(participantId);
+  }
+  return audience;
 }
 
 function childUrl(conversationId: string, suffix: string): string {

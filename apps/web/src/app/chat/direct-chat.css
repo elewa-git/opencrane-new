@@ -120,7 +120,8 @@ button[aria-disabled="true"] { opacity: .65; cursor: wait; }
 }
 .child-review-action { display: block; min-height: 44px; margin-top: 4px; padding: 8px 0;
   border: 0; background: transparent; color: #007d91; text-align: left; cursor: pointer; }
-.child-mention-guidance { margin: 0 0 8px; color: #4f575a; font-size: 12px; }
+.child-mention-guidance { margin: 8px 0 0; color: #4f575a; font-size: 12px; }
+.child-mention-guidance button { margin-left: 8px; min-height: 44px; }
 .child-request-notice { display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap; margin: 12px 0; padding: 12px; border: 1px solid #d9dfe0;
   border-radius: 8px; background: #fff; }

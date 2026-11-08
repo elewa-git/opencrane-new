@@ -1,1 +1,1 @@
-Group chat members can review their own saved message before asking a shared assistant to start a child thread.
+Group chat members can review their own saved message with its eligible audience and a checked paying group name before asking a shared assistant to start a child thread. Assistant discovery failures offer a retry.
