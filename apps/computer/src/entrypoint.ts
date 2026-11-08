@@ -239,6 +239,7 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
       const bridgeEnvironment = {
         PATH: process.env['PATH'], HOME: '/home/codex', GATEWAY: process.env['GATEWAY'],
         MODEL: process.env['MODEL'] ?? 'stub-model', PROXY_CALLER_TOKEN: caller,
+        POD_UID: process.env['POD_UID'],
       };
       const bridgeOptions = {
         uid: 1000, gid: 1000,

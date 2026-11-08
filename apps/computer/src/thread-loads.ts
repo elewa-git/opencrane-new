@@ -34,7 +34,8 @@ export interface PrivateThreadBinding {
   checkTools(tools: object, identity: { caller: string; grant: PrivateGrant }): boolean;
   authority: Pick<ReturnType<typeof privateCallers>, 'identify' | 'permits' | 'check'>;
   registration: ReturnType<ReturnType<typeof privateCallers>['register']>;
-  session: Pick<ThreadLoadDriver, 'rpc'> & { close(): void; closed: Promise<void> };
+  session: Pick<ThreadLoadDriver, 'rpc'> & { close(): void; closed: Promise<void>;
+    allowMemoryConsent?(serverKey: string): void };
 }
 
 type PrivateThreadSession = Omit<PrivateThreadBinding, 'tools' | 'grant' | 'checkTools'>;

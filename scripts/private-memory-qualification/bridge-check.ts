@@ -2,9 +2,13 @@ import { bridgeIdentity, checkLiveService, readProcessIdentity,
   sameProcessIdentity, type ProcessIdentity } from './private-processes.ts';
 import { probeContainer } from './container-probe.ts';
 import { isProtectionFailure, type ProtectionFailure } from './protection-failure.ts';
+import type { ServiceRole } from './service-protection.ts';
 
 type Request = { containerId: string; installationId: string;
   computerInstallationId: string; challengeId: string };
+
+const bridgeCommandLine = '/usr/local/bin/node\0--disable-sigusr1\0' +
+  '--experimental-strip-types\0/app/src/bridge.ts\0';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -25,15 +29,19 @@ function isRequest(value: unknown): value is Request {
     /^[0-9a-f-]{36}$/u.test(value['challengeId']);
 }
 
-function liveBridge(): { identity: ProcessIdentity; result: true | ProtectionFailure } {
+function liveBridge(role: ServiceRole):
+  { identity: ProcessIdentity; result: true | ProtectionFailure } {
   const first = bridgeIdentity();
   if (!first) {
     return { identity: readProcessIdentity(process.pid), result: 'private_process_missing' };
   }
-  if (first.uid !== 1000) {
+  const inspector = readProcessIdentity(process.pid);
+  if (first.uid !== 1000 || first.executable !== '/usr/local/bin/node' ||
+      first.commandLine !== bridgeCommandLine || first.cgroup !== inspector.cgroup ||
+      first.containerIdentity !== inspector.containerIdentity) {
     return { identity: first, result: 'private_process_identity_changed' };
   }
-  const protection = checkLiveService('bridge', first);
+  const protection = checkLiveService(role, first);
   if (protection !== true) {
     return { identity: first, result: protection };
   }
@@ -44,7 +52,7 @@ function liveBridge(): { identity: ProcessIdentity; result: true | ProtectionFai
   return { identity: second, result: true };
 }
 
-export function checkBridge(): { pid?: number; startTime?: string;
+function checkComputerService(role: ServiceRole): { pid?: number; startTime?: string;
   result: true | ProtectionFailure } {
   if (process.getuid?.() !== 0) {
     return { result: 'private_process_unreadable' };
@@ -55,7 +63,7 @@ export function checkBridge(): { pid?: number; startTime?: string;
     if (container !== true) {
       return { result: container };
     }
-    const bridge = liveBridge();
+    const bridge = liveBridge(role);
     if (bridge.result !== true) {
       return { result: bridge.result };
     }
@@ -76,7 +84,17 @@ export function checkBridge(): { pid?: number; startTime?: string;
   }
 }
 
-async function main(): Promise<void> {
+export function checkBridge(): { pid?: number; startTime?: string;
+  result: true | ProtectionFailure } {
+  return checkComputerService('bridge');
+}
+
+export function checkProxy(): { pid?: number; startTime?: string;
+  result: true | ProtectionFailure } {
+  return checkComputerService('proxy');
+}
+
+export async function runServiceCheck(role: 'bridge' | 'proxy'): Promise<void> {
   let input = '';
   for await (const chunk of process.stdin) {
     input += String(chunk);
@@ -94,7 +112,7 @@ async function main(): Promise<void> {
     process.stdout.write(JSON.stringify({ result: 'private_process_unreadable' }));
     return;
   }
-  const proof = checkBridge();
+  const proof = checkComputerService(role);
   if (proof.result !== true && !isProtectionFailure(proof.result)) {
     process.stdout.write(JSON.stringify({ ...request, result: 'private_process_unreadable' }));
     return;
@@ -103,5 +121,5 @@ async function main(): Promise<void> {
 }
 
 if (process.argv[1]?.endsWith('/bridge-check.ts')) {
-  await main();
+  await runServiceCheck('bridge');
 }

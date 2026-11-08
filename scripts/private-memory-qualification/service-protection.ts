@@ -1,20 +1,24 @@
 import { createServer, type Socket } from 'node:net';
 import { runnerProtected } from './runner-protection.ts';
 
-export type ServiceRole = 'serverDelivery' | 'bridge' | 'supervisor';
+export type ServiceRole = 'serverDelivery' | 'bridge' | 'supervisor' | 'proxy';
 
-function answer(socket: Socket, bytes: Buffer): void {
+function answer(socket: Socket, bytes: Buffer, ready: () => boolean): void {
   const request = bytes.toString('utf8');
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\n$/u.test(request)) {
     socket.destroy();
     return;
   }
   const challenge = request.slice(0, -1);
+  if (!ready()) {
+    socket.destroy();
+    return;
+  }
   const result = runnerProtected();
   socket.end(`${challenge}|${String(result)}\n`);
 }
 
-function serve(socket: Socket): void {
+function serve(socket: Socket, ready: () => boolean): void {
   let request = Buffer.alloc(0);
   function receive(chunk: Buffer): void {
     if (request.length + chunk.length > 64) {
@@ -24,7 +28,7 @@ function serve(socket: Socket): void {
     request = Buffer.concat([request, chunk]);
     if (request.includes(10)) {
       socket.removeListener('data', receive);
-      answer(socket, request);
+      answer(socket, request, ready);
     }
   }
   function timedOut(): void {
@@ -39,13 +43,17 @@ function serve(socket: Socket): void {
   socket.once('timeout', timedOut);
 }
 
-export async function startServiceProtection(role: ServiceRole): Promise<void> {
+export async function startServiceProtection(role: ServiceRole,
+  ready: () => boolean = alwaysReady): Promise<void> {
   const result = runnerProtected();
   if (result !== true) {
     // Development installations without the native helper cannot provide proof.
     return;
   }
-  const server = createServer(serve);
+  function guardedServe(socket: Socket): void {
+    serve(socket, ready);
+  }
+  const server = createServer(guardedServe);
   const address = `\0opencrane-private-${role}`;
   await new Promise<void>(function listen(resolve, reject) {
     server.once('error', reject);
@@ -54,4 +62,8 @@ export async function startServiceProtection(role: ServiceRole): Promise<void> {
       resolve();
     });
   });
+}
+
+function alwaysReady(): boolean {
+  return true;
 }

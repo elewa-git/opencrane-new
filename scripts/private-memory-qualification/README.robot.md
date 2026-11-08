@@ -196,6 +196,23 @@ See [own checks](../../docs/process/p4-15-pr5r/receipt.md).
 
 ## Private process inventory
 
+The MCP proxy is part of the packaged bridge process, not a separate child.
+`proveComputerProxy` checks its fixed process command and the root entrypoint's
+bridge launch record. The caller must supply the owner-approved computer image
+digest; an image containing a stand-in bridge is refused before inspection.
+The checker runs in that exact read-only container with a fresh challenge. It
+checks UID 1000, Node's executable, command, start time, parent, control group,
+PID namespace, swap and dump settings. A native socket probe reads the peer PID
+from Linux and asks the proxy process to measure its own dumpability and core
+limits. The proxy responds only during a validated private MCP request with an
+open native reply. The checker repeats process and container checks afterwards.
+It returns only true or a fixed protection category. The supervised inspector
+is stopped with its process group on timeout or collector loss. No private
+request, argument, path or probe reply enters a receipt. The proxy check is
+separate from deployment collection because it needs a live held native call.
+The runner still refuses its complete inventory. Native children and canary
+helpers remain unproved; replay starts no proxy check.
+
 The current container inventory names the runner, server delivery, bridge,
 supervisor, proxy, native Codex wrapper, native child and any helper that receives
 a private test value. `private-processes.ts` is the first bounded part. It reads

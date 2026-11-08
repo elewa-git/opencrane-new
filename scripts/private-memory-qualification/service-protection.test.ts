@@ -1,4 +1,5 @@
-import { createServer } from 'node:net';
+import { createServer, connect } from 'node:net';
+import { once } from 'node:events';
 import { expect, it, vi } from 'vitest';
 import { runnerProtected } from './runner-protection.ts';
 import { startServiceProtection, type ServiceRole } from './service-protection.ts';
@@ -39,3 +40,38 @@ it.each(['serverDelivery', 'bridge'] as const)(
   'keeps the %s protection service alive when a client disconnects early',
   closesOnlyTheClientThatDisconnectsEarly,
 );
+
+async function answersOnlyDuringPrivateWork(): Promise<void> {
+  vi.mocked(runnerProtected).mockReturnValue(true);
+  const actual = await vi.importActual<typeof import('node:net')>('node:net');
+  vi.mocked(createServer).mockImplementation(actual.createServer);
+  let held = false;
+  function privateWorkHeld(): boolean { return held; }
+  await startServiceProtection('proxy', privateWorkHeld);
+  const server: unknown = vi.mocked(createServer).mock.results.at(-1)?.value;
+  if (!(server instanceof actual.Server)) throw new Error('proxy service missing');
+  async function challenge(): Promise<string> {
+    const socket = connect('\0opencrane-private-proxy');
+    await once(socket, 'connect');
+    socket.write('11111111-1111-4111-8111-111111111111\n');
+    const chunks: Buffer[] = [];
+    function collect(chunk: Buffer): void { chunks.push(chunk); }
+    socket.on('data', collect);
+    await once(socket, 'close');
+    return Buffer.concat(chunks).toString('utf8');
+  }
+  try {
+    expect(await challenge()).toBe('');
+    held = true;
+    expect(await challenge()).toBe('11111111-1111-4111-8111-111111111111|true\n');
+  } finally {
+    await new Promise<void>(function close(resolve, reject) {
+      server.close(function closed(error) {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+  }
+}
+it('answers proxy challenges only while a private tool response is open',
+  answersOnlyDuringPrivateWork);

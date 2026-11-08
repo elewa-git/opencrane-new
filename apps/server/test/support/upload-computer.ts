@@ -11,11 +11,19 @@ import { tcpProxy } from '@opencrane/event-store/testing';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { approvalJourneyTool } from '../../../../infra/dev-stack/journey-tool-policy.ts';
 import { z } from 'zod';
+import { WebSocket } from 'ws';
 const exec = promisify(execFile);
+
+export async function openComputerBridge(url: string, credential: string): Promise<WebSocket> {
+  const options = { headers: { 'x-bridge-token': credential } };
+  const socket = new WebSocket(`${url.replace('http:', 'ws:')}/bridge`, options);
+  await once(socket, 'open');
+  return socket;
+}
 
 /** Start a disposable computer with a local model stub and no shared stack. */
 export async function uploadComputer(deliverCredential = true, nodeOptions = '',
-  fixtureOptions: { image?: string; protected?: boolean } = {}) {
+  fixtureOptions: { image?: string; protected?: boolean; holdPrivateTool?: boolean } = {}) {
   const capture = await mkdtemp(`${tmpdir()}/upload-requests-`);
   const stub = spawn(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'],
     {
@@ -25,6 +33,7 @@ export async function uploadComputer(deliverCredential = true, nodeOptions = '',
         MODEL_STUB_CAPTURE: `${capture}/requests.jsonl`,
         MODEL_STUB_MCP_GENERATION: randomUUID(),
         MODEL_STUB_MCP_REVISION: catalogueDigest([approvalJourneyTool()]),
+        MODEL_STUB_PROXY_HOLD: fixtureOptions.holdPrivateTool ? '1' : '0',
       },
       stdio: ['ignore', 'pipe', 'ignore'],
     });

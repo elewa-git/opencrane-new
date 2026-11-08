@@ -2,6 +2,11 @@
 
 For people, read [README.md](README.md) first.
 
+`model-stub.ts` accepts `MODEL_STUB_PROXY_HOLD=1` only in a disposable computer
+fixture. A synthetic `PROXY_PROOF` prompt makes the native agent call the offered
+recall tool. The stub leaves that tool response open until the fixture stops.
+It supplies no memory fact or paid model result. Normal stub runs omit this setting.
+
 The packaged installer runs preflight and Helm from the values file's directory.
 It passes only the filename as the values argument, so an absolute private
 directory does not enter child command arguments.

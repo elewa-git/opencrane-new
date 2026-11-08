@@ -56,6 +56,8 @@ available for diagnosis.
 - Checks the computer recorded by the deployment owner before collecting private memory results.
 - Sets up test sign-in and a free stand-in AI provider; real providers need an explicit choice.
   The stand-in also runs on its own for computer startup checks.
+  A disposable computer test can keep one synthetic private tool reply open while
+  the process checker measures the proxy.
 - Runs browser checks for chat, files, people, groups, shared assistants and spending.
   Checks money in admin Change history and keeps it out of member action history.
   Scrolls waiting approvals into view before saving desktop and phone pictures.

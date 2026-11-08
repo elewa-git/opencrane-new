@@ -117,7 +117,8 @@ it('takes the server identity snapshot before checking its command arguments',
   snapshotsServerBeforeCheckingArguments);
 
 async function discoverBridgeWithLaunchRecord(recordStartTime: string,
-  script = '/app/src/bridge.ts'): Promise<boolean> {
+  script = '/app/src/bridge.ts', recordMode = 0o100600,
+  children = `${process.pid} `): Promise<boolean> {
   const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
   const recordPath = '/run/executor/supervisor/bridge-identity';
   const directoryPath = '/run/executor/supervisor';
@@ -127,7 +128,7 @@ async function discoverBridgeWithLaunchRecord(recordStartTime: string,
     if (path === directoryPath || path === recordPath) {
       const stat = actual.lstatSync('/proc/self/stat');
       stat.uid = 0;
-      stat.mode = path === directoryPath ? 0o040700 : 0o100600;
+      stat.mode = path === directoryPath ? 0o040700 : recordMode;
       stat.size = 32;
       return stat;
     }
@@ -135,7 +136,7 @@ async function discoverBridgeWithLaunchRecord(recordStartTime: string,
   });
   vi.mocked(readFileSync).mockImplementation(function bridgeFile(path, options) {
     if (path === '/proc/1/task/1/children') {
-      return `${process.pid} `;
+      return children;
     }
     if (path === `/proc/${process.pid}/cmdline`) {
       return commandLine;
@@ -172,6 +173,23 @@ async function acceptsRecordedBridgeChild(): Promise<void> {
   expect(await discoverBridgeWithLaunchRecord(identity.startTime)).toBe(true);
 }
 it('finds the child recorded at launch when its script matches', acceptsRecordedBridgeChild);
+
+async function refusesWritableLaunchRecord(): Promise<void> {
+  const identity = readProcessIdentity(process.pid);
+  await expect(discoverBridgeWithLaunchRecord(identity.startTime,
+    '/app/src/bridge.ts', 0o100622)).rejects.toThrow('private_process_unreadable');
+}
+it('refuses a writable root launch record', refusesWritableLaunchRecord);
+
+async function refusesWrongParentOrDuplicateChild(): Promise<void> {
+  const identity = readProcessIdentity(process.pid);
+  expect(await discoverBridgeWithLaunchRecord(identity.startTime,
+    '/app/src/bridge.ts', 0o100600, '')).toBe(false);
+  expect(await discoverBridgeWithLaunchRecord(identity.startTime,
+    '/app/src/bridge.ts', 0o100600, `${process.pid} ${process.pid}`)).toBe(false);
+}
+it('refuses a child outside the recorded parent or listed twice',
+  refusesWrongParentOrDuplicateChild);
 
 async function inspectSupervisorRecord(recordMode: number, recordStart?: string,
   recordPresent = true): Promise<boolean> {
