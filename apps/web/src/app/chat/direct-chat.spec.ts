@@ -5,6 +5,7 @@ import { ChatComposer } from './composer';
 import { DirectChat } from './direct-chat';
 import { RANDOM_SOURCE, SOCKET_FACTORY, type SocketLike } from '../core/socket-factory';
 import { WebSocketService } from '../core/websocket.service';
+import type { ChatRow } from '@opencrane/protocol';
 
 type ReplyOverride = (request: RequestRecord) => Response | Promise<Response> | undefined;
 
@@ -219,7 +220,7 @@ function createFetchFixture() {
   const closedSockets: SocketLike[] = [];
   let openNewSockets = true;
   const savedConversations = [conversation('existing', 'bob')];
-  const savedMessages = new Map<string, ReturnType<typeof eventRow>[]>([
+  const savedMessages = new Map<string, ChatRow[]>([
     ['existing', [eventRow(1, 'bob', 'Is the Tuesday slot still open?'),
       eventRow(2, 'alice', 'Yes, I will confirm by noon.')]],
   ]);
@@ -356,6 +357,13 @@ function createFetchFixture() {
       savedMessages.get('group-chat')?.push(eventRow(3, 'alice',
         'Compare the two delivery proposals'));
     },
+    addParticipantAfterSource() {
+      const group = savedConversations.find(row => row.conversationId === 'group-chat');
+      group?.participantIds.push('peter');
+      const added = { id: 'added-peter', position: 4, type: 'participant.added',
+        time: '2026-10-06T09:01:00Z', data: { participantId: 'peter' } };
+      savedMessages.get('group-chat')?.push(added);
+    },
     addGroupConversationForParticipant() {
       participantCreator = 'bob';
       participantCanManage = false;
@@ -449,6 +457,13 @@ function enterMessage(fixture: ComponentFixture<DirectChat>, value: string): voi
   field.dispatchEvent(new Event('input', { bubbles: true }));
   fixture.detectChanges();
   field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  fixture.detectChanges();
+}
+
+function enterDraft(fixture: ComponentFixture<DirectChat>, value: string): void {
+  const field = messageField(fixture);
+  field.value = value;
+  field.dispatchEvent(new Event('input', { bubbles: true }));
   fixture.detectChanges();
 }
 
@@ -2679,6 +2694,9 @@ function reviewFixture() {
   api.addReviewableGroupMessage();
   function childReplies(request: RequestRecord): Response | undefined {
     if (request.url === '/api/assistants') return reply({ rows: [reviewAssistant] });
+    if (request.url === '/api/chat/groups/paying-team') return reply({
+      groupId: 'paying-team', name: 'Sales paying group', position: 1, members: [],
+    });
     if (request.url.endsWith('/child-review')) return reply({
       requestId: request.body?.['requestId'], sourceMessageId: 'event-3',
       assistantId: 'team-sales', participantIds: ['alice', 'bob'],
@@ -2727,7 +2745,8 @@ it('shows reviewed payer, audience and allowance; Cancel and Escape save no chil
   const fixture = await openReviewGroup(api);
   root(fixture).querySelector<HTMLButtonElement>('.child-review-action')?.click();
   await waitForText(fixture, '€7.40');
-  expect(root(fixture).textContent).toContain('paying-team');
+  await waitForText(fixture, 'Sales paying group');
+  expect(root(fixture).textContent).not.toContain('paying-team');
   expect(root(fixture).textContent).toContain('Alex Kim, Grace Achieng');
   expect(root(fixture).textContent).not.toContain('€10.00');
   buttonNamed(fixture, 'Cancel').click();
@@ -2740,6 +2759,52 @@ it('shows reviewed payer, audience and allowance; Cancel and Escape save no chil
   await settle(fixture);
   expect(childPosts(api, '/children')).toHaveLength(0);
   expect(root(fixture).querySelector('oc-modal-sheet dialog[open]')).toBeNull();
+  fixture.destroy();
+});
+
+it('excludes someone added after the source from the first review and later resets', async () => {
+  const api = reviewFixture();
+  api.addParticipantAfterSource();
+  const fixture = await openReviewGroup(api);
+  root(fixture).querySelector<HTMLButtonElement>('.child-review-action')?.click();
+  await waitForText(fixture, '€7.40');
+  const firstReview = childPosts(api, '/child-review')[0];
+  expect(firstReview?.body?.['participantIds']).toEqual(['alice', 'bob', 'carol']);
+  expect(root(fixture).textContent).not.toContain('Peter Otieno');
+  fixture.destroy();
+});
+
+it.each(['unavailable', 'network', 'malformed'])(
+  'shows assistant discovery %s as an error with retry', async failure => {
+    const api = reviewFixture();
+    let attempts = 0;
+    function failingAssistants(request: RequestRecord): Response | Promise<Response> | undefined {
+      if (request.url !== '/api/assistants') return undefined;
+      attempts += 1;
+      if (attempts > 1) return reply({ rows: [reviewAssistant] });
+      if (failure === 'network') return Promise.reject(new TypeError('Connection lost'));
+      if (failure === 'malformed') return reply({ rows: 'invalid' });
+      return reply({ status: 'unavailable' }, 503);
+    }
+    api.override(failingAssistants);
+    const fixture = await openReviewGroup(api);
+    enterDraft(fixture, '@agent please compare these');
+    await waitForText(fixture, 'Assistants could not be loaded');
+    expect(root(fixture).textContent).not.toContain('No assistants are available');
+    buttonNamed(fixture, 'Try assistants again').click();
+    await waitForText(fixture, 'Typing @agent is plain text');
+    expect(attempts).toBe(2);
+    fixture.destroy();
+  });
+
+it('keeps mention guidance below the composer while typing', async () => {
+  const api = reviewFixture();
+  const fixture = await openReviewGroup(api);
+  enterDraft(fixture, '@agent please compare these');
+  const composer = root(fixture).querySelector('.composer-wrap');
+  const guidance = root(fixture).querySelector('.child-mention-guidance');
+  expect(composer?.compareDocumentPosition(guidance!))
+    .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   fixture.destroy();
 });
 
