@@ -1394,6 +1394,11 @@ before the other reads the changed member stream.
 projection reads. After its NATS restart, it waits until the projection connection
 can read the saved stream before dispatching again. The lost-reply case still checks
 the original occurrence, identifiers and start deadline, one send and one saved run.
+The production scheduler entry also calls `createRoutineDelivery` with a checked due
+receipt. That adapter carries the saved occurrence and turn id into the existing
+composition, checks that the leader is still current, and waits for sender acknowledgement.
+The deployed routines worker has no budget actor, computer wake, key custody or company
+sender callback. Its explicit enabled setting therefore still refuses at startup.
 [Own load checks](../../docs/process/evidence/ci-flakes-29.md).
 See the [invitation contract](../../docs/architecture/events.md#organisation-members-and-teams)
 for identity/expiry requirements, retries and the missing bootstrap policy.

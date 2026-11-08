@@ -18,7 +18,7 @@ under `apps`. [apps/server](../server/README.md) saves changes as
 flowchart LR
   apps["apps<br/>applications"] --> ops["apps/ops<br/>workers, recovery and readiness"]
   apps --> server["apps/server<br/>back end"]
-  server -.->|checked delivery when supplied| ops
+  ops -.->|checked claim when supplied| server
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
   ops -->|saves checked results and daily or weekly routine records| nats
@@ -65,8 +65,9 @@ If cancellation arrives while a read waits, the old holder cannot save a new cla
 The callback must stop and await its work before returning. Only then does the helper
 release the session. Captured ownership checks stay refused after release.
 The routine worker still only updates read tables; automatic scheduling is not connected.
-The internal scheduler entry leaves the disabled worker untouched and refuses an
-enabled run without a delivery callback.
+The server has a guarded callback for a checked claim, private input and one computer
+turn. The internal scheduler entry leaves the disabled worker untouched and refuses an
+enabled run without that callback and its other required services.
 The models process in `apps/server` handles saved routine Stop and checked completion.
 Rebuilding these read tables never stops or finishes work.
 

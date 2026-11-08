@@ -4,6 +4,32 @@ import { createRoutineSender } from './routine-sender.ts';
 
 type Preparation = Parameters<typeof prepareRoutineComputer>;
 type Ready = { link: Preparation[5]; generation: number };
+type DeliveryWorker = Pick<Preparation[2], 'silo' | 'binding' | 'workerId' | 'now'>;
+type Leadership = { signal: AbortSignal; checkCurrent: (deadline: number) => Promise<boolean> };
+type CheckedDue = { status: 'confirmed'; executionAvailable: false; routineId: string;
+  occurrenceId: string; turnId: string };
+
+/** Carry the claimed occurrence into the saved preparation and one sender attempt. */
+export function createRoutineDelivery(store: Preparation[0], keys: Preparation[1],
+  identity: DeliveryWorker, actor: Preparation[4], wake: (assistantId: string) => Promise<Ready>) {
+  async function receive(due: CheckedDue, leadership: Leadership) {
+    if (due.status !== 'confirmed' || due.executionAvailable !== false ||
+        leadership.signal.aborted || identity.silo !== identity.binding.silo) {
+      return { status: 'unknown' as const };
+    }
+    async function checkCurrent(deadline: number) {
+      if (leadership.signal.aborted) return false;
+      const current = await leadership.checkCurrent(deadline);
+      return current && !leadership.signal.aborted;
+    }
+    const worker = { ...identity, signal: leadership.signal, checkCurrent };
+    const input = { routineId: due.routineId, occurrenceId: due.occurrenceId };
+    const composition = createRoutineComposition({ enabled: true }, store, keys, worker,
+      input, actor, due.turnId);
+    return composition.send(wake);
+  }
+  return receive;
+}
 
 // Keep this internal entry disabled until company calls, Ask and lifecycle Stop are connected.
 export function createRoutineComposition(options: { enabled?: boolean; replay?: boolean },

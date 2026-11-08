@@ -1151,7 +1151,10 @@ worker calls this entry at startup with the single `ROUTINE_EXECUTION_ENABLED`
 setting, which defaults off. Setting it to true currently refuses startup because
 the worker has no delivery callback. The same enabled option can be passed to the
 server composition when the budget actor and bridge share a checked production
-hand-off. Public routine reads still report `executionAvailable: false`. See
+hand-off. `createRoutineDelivery` now carries the scheduler's checked due receipt,
+leadership cancellation and original turn id into that composition. The test runs
+this callback through `runRoutineScheduler`; the worker still supplies none of its
+runtime dependencies. Public routine reads still report `executionAvailable: false`. See
 [the build record](../../docs/process/p4-24-pr10i/README.robot.md).
 `test/routine-dispatch.test.ts` starts the real worker with absent, false, true
 and invalid settings. It checks continued projection work when off and startup

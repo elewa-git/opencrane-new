@@ -15,7 +15,7 @@ import { BudgetActor, history, rootTotals, readRootStopEvidence } from '@opencra
 import { conversationKeys, ProjectionRunner, routines } from '@opencrane/projections';
 import { database } from '@opencrane/projections/testing';
 import { createLogger } from '@opencrane/observability';
-import { dispatchRoutineCandidates, withRoutineLeadership }
+import { dispatchRoutineCandidates, withRoutineLeadership, runRoutineScheduler }
   from '../../ops/test/support/routine-handoff.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
@@ -27,7 +27,7 @@ import * as turns from '../src/chat/turns.ts';
 import * as credentials from '../src/chat/turn-credentials.ts';
 import * as routineSession from '../src/routine-session.ts';
 import { stopUnconfirmedRoutine } from '../src/routine-delivery-stop.ts';
-import { createRoutineComposition } from '../src/routine-composition.ts';
+import { createRoutineComposition, createRoutineDelivery } from '../src/routine-composition.ts';
 
 let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
 let storage: Awaited<ReturnType<typeof database>>;
@@ -242,8 +242,13 @@ let leaseSignal: AbortSignal;
 async function dispatch(options: Options = { enabled: true }, continuation = false) {
   await runner.run(routines);
   let progress;
+  const identity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
+  const production = createRoutineDelivery(nats.store, keys, identity, actor, wake);
   const receive: Handoff = async function receive(due, lease) {
     expect(lease.signal).toBe(leaseSignal);
+    if (options.enabled === true && options.replay !== true) {
+      return production(due, lease);
+    }
     async function checkCurrent(deadline: number) {
       if (lease.signal.aborted) {
         return false;
@@ -327,6 +332,24 @@ async function reachesNativeThread() {
 }
 it('hands a checked due to its prepared thread once across duplicate delivery and restart',
   reachesNativeThread);
+
+async function productionDeliveryUsesCheckedDue() {
+  await runner.run(routines);
+  const workerIdentity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
+  const handoff = createRoutineDelivery(nats.store, keys, workerIdentity, actor, wake);
+  async function work(lease: Lease) {
+    const worker = { ...lease, silo: 'test', binding, now: clock };
+    const delivery = { db: storage.db, store: nats.store, worker, handoff };
+    await runRoutineScheduler({ enabled: true }, delivery);
+  }
+  const leadership = { databaseUrl, silo: 'test', signal: stop.signal };
+  await withRoutineLeadership(leadership, work);
+  await until(preparedComputer.executed);
+  await assertSingleRun();
+  expect(preparedComputer.nativeStarts).toBe(1);
+}
+it('connects the production scheduler entry to one guarded routine delivery',
+  productionDeliveryUsesCheckedDue);
 async function recoversLostReply() {
   const append = nats.store.append.bind(nats.store);
   async function loseReply(...args: Parameters<typeof append>): Promise<never> {
