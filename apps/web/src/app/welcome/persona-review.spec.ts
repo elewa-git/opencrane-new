@@ -8,8 +8,9 @@ const steps = [1, 2, 3, 4].map(step => ({
 const revision = { revision: 2, revisionId: 'revision-two', generation: 1,
   current: true, replacement: 'Private saved persona r2', approved: false };
 
-function progress(currentRevision: number | null = 2, position = 6) {
-  return { state: 'review', survey: { generation: 1, position, nextStep: null, steps },
+function progress(currentRevision: number | null = 2, position = 6, savedSteps = steps) {
+  return { state: 'review', survey: { generation: 1, position, nextStep: null,
+    steps: savedSteps },
     currentRevision, approval: null };
 }
 
@@ -76,7 +77,8 @@ describe('saved persona review', () => {
       const pending = deferredReply();
       const screen = open((url) => {
         if (url === '/api/onboarding') {
-          return reply(progress(state === 'absent' ? null : 2));
+          return reply(progress(state === 'absent' ? null : 2, 6,
+            state === 'absent' ? steps.slice(0, 3) : steps));
         }
         if (url === '/api/onboarding/persona/revisions') {
           if (state === 'loading') return pending.promise;
@@ -116,7 +118,7 @@ describe('saved persona review', () => {
     button(screen.root, 'Approve this version').click();
     await show(screen, 'Private saved persona r3');
     expect(screen.root.textContent).toContain('Proposal changed');
-    expect(screen.root.querySelector('a[href="/welcome"]')).toBeNull();
+    expect(screen.root.querySelector('a[href="/workspace"]')).toBeNull();
     expect(screen.fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/persona'))
       .toHaveLength(1);
   });
@@ -141,7 +143,8 @@ describe('saved persona review', () => {
         if (url === `/api/personal/changes/${commandId}`) {
           confirmed = true;
           return reply({ status: 'confirmed', commandId, operation: 'onboarding.persona_approved',
-            revision: 2, revisionId: revision.revisionId });
+            revision: 2, revisionId: revision.revisionId,
+            time: '2026-10-14T09:35:00.000Z' });
         }
         return reply({ status: 'unavailable' }, 503);
       });
@@ -150,11 +153,14 @@ describe('saved persona review', () => {
       approval.click();
       approval.click();
       await show(screen, 'Save status unknown');
-      expect(screen.root.querySelector('a[href="/welcome"]')).toBeNull();
+      expect(screen.root.querySelector('a[href="/workspace"]')).toBeNull();
       button(screen.root, 'Check status').click();
       await show(screen, 'Approved revision r2');
       expect(confirmed).toBe(true);
-      expect(screen.root.querySelector('a[href="/welcome"]')).not.toBeNull();
+      expect(screen.root.querySelector('a[href="/workspace"]')?.textContent)
+        .toContain('Continue to workspace');
+      expect(screen.root.querySelector('time')?.dateTime).toBe('2026-10-14T09:35:00.000Z');
+      expect(screen.root.textContent).toContain('14 Oct 2026, 09:35 UTC');
       expect(screen.fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/persona'))
         .toHaveLength(1);
     });
@@ -191,5 +197,108 @@ describe('saved persona review', () => {
     failed = false;
     button(screen.root, 'Try again').click();
     await show(screen, revision.replacement);
+  });
+
+  it('generates the first revision after four saved steps and reads its saved text', async () => {
+    let currentRevision: number | null = null;
+    let commandBody: unknown;
+    const screen = open((url, init) => {
+      if (url === '/api/onboarding') return reply(progress(currentRevision, currentRevision ? 7 : 6));
+      if (url === '/api/onboarding/persona' && init?.method === 'POST') {
+        commandBody = JSON.parse(String(init.body));
+        currentRevision = 1;
+        return reply({ status: 'confirmed', operation: 'onboarding.persona_revised',
+          commandId: z.object({ commandId: z.string() }).parse(commandBody).commandId,
+          revision: 1, revisionId: 'revision-one' });
+      }
+      if (url === '/api/onboarding/persona/revisions') {
+        return reply({ currentRevision: 1,
+          revisions: [{ revision: 1, revisionId: 'revision-one' }] });
+      }
+      if (url.endsWith('/revision-one')) {
+        return reply({ ...revision, revision: 1, revisionId: 'revision-one',
+          replacement: 'Generated private persona' });
+      }
+      return reply({ status: 'unavailable' }, 503);
+    });
+    await show(screen, 'Generated private persona');
+    expect(commandBody).toMatchObject({ operation: 'revise', mode: 'generate',
+      generation: 1, expectedPosition: 6 });
+    expect(screen.fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/persona'))
+      .toHaveLength(1);
+    expect(button(screen.root, 'Approve this version').disabled).toBe(false);
+  });
+
+  it('checks an uncertain first revision without sending another command', async () => {
+    let currentRevision: number | null = null;
+    let commandId = '';
+    const screen = open((url, init) => {
+      if (url === '/api/onboarding') return reply(progress(currentRevision));
+      if (url === '/api/onboarding/persona' && init?.method === 'POST') {
+        const body = z.object({ commandId: z.string() }).parse(JSON.parse(String(init.body)));
+        commandId = body.commandId;
+        return reply({ status: 'unknown' }, 503);
+      }
+      if (url === `/api/personal/changes/${commandId}`) {
+        currentRevision = 1;
+        return reply({ status: 'confirmed', operation: 'onboarding.persona_revised',
+          commandId, revision: 1, revisionId: 'revision-one' });
+      }
+      if (url === '/api/onboarding/persona/revisions') {
+        return reply({ currentRevision: 1,
+          revisions: [{ revision: 1, revisionId: 'revision-one' }] });
+      }
+      if (url.endsWith('/revision-one')) {
+        return reply({ ...revision, revision: 1, revisionId: 'revision-one' });
+      }
+      return reply({ status: 'unavailable' }, 503);
+    });
+    await show(screen, 'Save status unknown');
+    expect(screen.root.querySelector('button.approve')).toBeNull();
+    button(screen.root, 'Check status').click();
+    await show(screen, revision.replacement);
+    expect(screen.fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/persona'))
+      .toHaveLength(1);
+  });
+
+  it('reloads after a first revision conflict without posting another revision', async () => {
+    let currentRevision: number | null = null;
+    const screen = open((url, init) => {
+      if (url === '/api/onboarding') return reply(progress(currentRevision));
+      if (url === '/api/onboarding/persona' && init?.method === 'POST') {
+        currentRevision = 1;
+        return reply({ status: 'conflict' }, 409);
+      }
+      if (url === '/api/onboarding/persona/revisions') {
+        return reply({ currentRevision: 1,
+          revisions: [{ revision: 1, revisionId: 'revision-one' }] });
+      }
+      if (url.endsWith('/revision-one')) {
+        return reply({ ...revision, revision: 1, revisionId: 'revision-one',
+          replacement: 'Other device persona' });
+      }
+      return reply({ status: 'unavailable' }, 503);
+    });
+    await show(screen, 'Other device persona');
+    expect(screen.root.textContent).toContain('Proposal changed');
+    expect(screen.fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/persona'))
+      .toHaveLength(1);
+  });
+
+  it('shows the saved approval time when opening an approved revision', async () => {
+    const approved = { ...progress(), approval: { revision: 2,
+      revisionId: revision.revisionId, time: '2026-10-14T09:35:00.000Z' } };
+    const screen = open((url) => {
+      if (url === '/api/onboarding') return reply(approved);
+      if (url === '/api/onboarding/persona/revisions') {
+        return reply({ currentRevision: 2, revisions: [revision] });
+      }
+      return reply(revision);
+    });
+    await show(screen, 'Approved revision r2');
+    expect(screen.root.querySelector('time')?.dateTime).toBe(approved.approval.time);
+    expect(screen.root.textContent).toContain('14 Oct 2026, 09:35 UTC');
+    expect(screen.root.querySelector('a[href="/workspace"]')?.textContent)
+      .toContain('Continue to workspace');
   });
 });
