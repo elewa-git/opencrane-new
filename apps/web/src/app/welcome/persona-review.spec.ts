@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { z } from 'zod';
 import { PersonaReview } from './persona-review';
 
 const steps = [1, 2, 3, 4].map(step => ({
@@ -30,8 +31,10 @@ function button(root: HTMLElement, label: string): HTMLButtonElement {
 }
 
 function open(read: (url: string, init?: RequestInit) => Promise<Response>) {
-  const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((url, init) =>
-    read(String(url), init));
+  const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((url, init) => {
+    const address = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+    return read(address, init);
+  });
   TestBed.configureTestingModule({ imports: [PersonaReview] });
   const fixture = TestBed.createComponent(PersonaReview);
   fixture.detectChanges();
@@ -130,7 +133,9 @@ describe('saved persona review', () => {
         }
         if (url.endsWith('/revision-two')) return reply(revision);
         if (url === '/api/onboarding/persona' && init?.method === 'POST') {
-          commandId = JSON.parse(String(init.body)).commandId;
+          if (typeof init.body !== 'string') throw new Error('Missing approval body');
+          const body: unknown = JSON.parse(init.body);
+          commandId = z.object({ commandId: z.string() }).parse(body).commandId;
           return reply({ status: 'unknown' }, 503);
         }
         if (url === `/api/personal/changes/${commandId}`) {
@@ -141,7 +146,9 @@ describe('saved persona review', () => {
         return reply({ status: 'unavailable' }, 503);
       });
       await show(screen, revision.replacement);
-      button(screen.root, 'Approve this version').click();
+      const approval = button(screen.root, 'Approve this version');
+      approval.click();
+      approval.click();
       await show(screen, 'Save status unknown');
       expect(screen.root.querySelector('a[href="/welcome"]')).toBeNull();
       button(screen.root, 'Check status').click();

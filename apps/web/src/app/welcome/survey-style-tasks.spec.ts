@@ -143,12 +143,12 @@ describe('survey style and tasks', () => {
     expect(Object.keys(body.answers)).toEqual(['step', 'tasks', 'ownTask']);
   });
 
-  it('resumes completed progress with the recorded time and honest persona availability', async () => {
+  it('resumes completed progress with the recorded time and persona review link', async () => {
     const { root, fixture, fetchSpy } = open(progress([name, work, style, tasks]));
     await show(root, fixture, 4);
     expect(root.querySelector('time')?.dateTime).toBe(tasks.time);
-    expect(root.textContent).toContain('Persona review is not available yet');
-    expect(root.querySelector('a[href="/account/assistant"]')).not.toBeNull();
+    expect(root.textContent).toContain('ready to shape a private persona');
+    expect(root.querySelector('a[href="/welcome/persona"]')).not.toBeNull();
     button(root, 'Back').click();
     await show(root, fixture, 3);
     button(root, 'Formal').click();

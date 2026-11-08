@@ -56,7 +56,7 @@ async function serve(state, route) {
 
 async function prepare(page, state) {
   if (state === 'assistant') {
-    await page.getByText('Persona review is not available yet.').waitFor();
+    await page.getByText('Assistant settings are not available yet.').waitFor();
     assert.equal(await page.getByText('Your assistant is assigned').count(), 0);
     return;
   }

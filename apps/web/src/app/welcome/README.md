@@ -1,28 +1,48 @@
-# Welcome survey
+# Welcome survey and persona review
 
-This folder shows the welcome survey after sign-in. People enter their name, describe their work and choose how they would like their assistant to help.
+## What this is
+
+This folder shows the welcome survey and the saved persona it creates. People can
+review the current private text and approve that exact saved version.
+
+## Where it fits
+
+These screens are part of the website. The server supplies saved survey answers,
+persona versions and approval results.
+
+```mermaid
+flowchart LR
+  web["apps/web<br/>personal screens"] -->|opens| welcome["welcome<br/>survey and review"]
+  welcome -->|reads and saves| server["apps/server<br/>private onboarding"]
+  welcome -.->|uses| state["shared-state<br/>status messages"]
+```
 
 ## What it is responsible for
 
-- Opens `/welcome/survey` at the first unsaved step and shows saved progress.
-- Collects a name, optional pronouns and a work description, with current groups shown as read-only context.
-- Saves tone, answer length, citation preference, suggested tasks and an optional own task. These wishes install nothing and grant no access.
-- Warns before editing earlier answers clears later ones or replaces saved group context.
-- Checks recovered progress before saving a draft made during a failed read.
-- Clears answers when sign-in or access ends and ignores older replies. Answers stay out of browser storage and addresses.
+- Show four saved survey steps and let people continue from their confirmed answers.
+- Read the current saved persona and show its private text only after access checks.
+- Approve the exact current version and check an uncertain approval by its command id.
+- Clear private text when access ends.
+- Not built yet: persona editing, replacement and survey restart from the review screen.
 
-## Main files
+## Processes it handles
 
-| File | What it does |
-| --- | --- |
-| `survey.ts`, `survey.html`, `survey.css` | Coordinate steps, saves, recovery and completion. |
-| `survey-name.ts` | Keep and check name and pronoun answers. |
-| `survey-work.ts` | Read current groups and check work answers. |
-| `survey-choices.ts` | Keep style and task choices and their keyboard behaviour. |
+1. **Survey.** A person saves each answer. The screen reads progress again before
+   moving on. The completed survey links to persona review.
+2. **Persona review.** The screen reads progress, the current version list and that
+   version's text. It offers approval only when they agree. A competing edit makes
+   the screen read the latest version again.
+3. **Approval.** The screen sends one command. If the result is uncertain, it checks
+   that same command. Confirmed approval offers the welcome link.
 
-## How it connects
+## How to run or test it
 
-[Account](../settings/README.md) links to unfinished surveys.
-[The server](../../../../server/README.md) supplies progress and saves answers.
-[Status messages](../shared-state/README.md) explain saves and failures.
-Completion links to the Assistant settings page, which currently says persona review is unavailable.
+Run `npm test -w apps/web -- --watch=false --include='**/persona-review.spec.ts'`
+for the focused review tests. Run `npm run visual:screen-p4-19-persona` for
+intercepted browser captures at desktop and phone widths.
+
+## Where to read more
+
+[README.robot.md](README.robot.md) records the HTTP and state details.
+[The server onboarding folder](../../../../server/src/onboarding/README.md)
+describes where the private answers are saved.
