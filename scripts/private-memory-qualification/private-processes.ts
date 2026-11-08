@@ -254,6 +254,10 @@ export function bridgeIdentity(): ProcessIdentity | undefined {
   return found;
 }
 
+export function supervisorIdentity(): ProcessIdentity | undefined {
+  return undefined;
+}
+
 function probeService(role: ServiceRole): true | ProtectionFailure {
   let identity: ProcessIdentity | undefined;
   try {

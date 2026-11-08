@@ -5,11 +5,13 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { collectDeployment } from './deployment.ts';
 import { proveComputerBridge } from './bridge-proof.ts';
+import { proveComputerSupervisor } from './supervisor-proof.ts';
 import { protectionMessages, type ProtectionFailure } from './protection-failure.ts';
 
 vi.mock('node:child_process', { spy: true });
 vi.mock('node:fs', { spy: true });
 vi.mock('./bridge-proof.ts', { spy: true });
+vi.mock('./supervisor-proof.ts', { spy: true });
 const containerId = 'c'.repeat(64);
 const imageDigest = `sha256:${'b'.repeat(64)}`;
 const sourceSha = 'a'.repeat(40);
@@ -61,6 +63,7 @@ function docker(_file: unknown, args: unknown, options: unknown): string {
 
 function prepare(): void {
   vi.mocked(proveComputerBridge).mockResolvedValue(true);
+  vi.mocked(proveComputerSupervisor).mockResolvedValue(true);
   vi.mocked(execFileSync).mockReset();
   vi.mocked(spawn).mockImplementation(spawnDocker);
   vi.mocked(openSync).mockReturnValue(42);
@@ -121,6 +124,22 @@ async function savesOnlyFixedComputerRefusal(): Promise<void> {
 }
 it('saves only a fixed refusal when the separate computer bridge cannot be proved',
   savesOnlyFixedComputerRefusal);
+
+async function refusesSupervisorReplacementDuringWork(): Promise<void> {
+  const computerContainerId = 'a'.repeat(64);
+  vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
+    containerId, computerContainerId, siloId: 'fixture-silo',
+  }));
+  vi.mocked(proveComputerSupervisor).mockResolvedValueOnce(true)
+    .mockResolvedValueOnce('private_process_identity_changed');
+  const result = await collectDeployment();
+  expect(result).toEqual({ result: 'FAIL', reason: 'host_refused', complete: false,
+    protectionFailure: 'private_process_identity_changed',
+    message: protectionMessages.private_process_identity_changed });
+  expect(responses).toHaveLength(1);
+}
+it('refuses a supervisor replaced while the private journey was awaited',
+  refusesSupervisorReplacementDuringWork);
 
 async function refusesInventedBundle(): Promise<void> {
   const invented = JSON.stringify({ result: 'PASS', sourceSha, imageDigest, checks: names });

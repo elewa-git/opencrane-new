@@ -2,7 +2,7 @@ import { lstatSync, readFileSync, readlinkSync } from 'node:fs';
 import { beforeEach, expect, it, vi } from 'vitest';
 import {
   bridgeIdentity, checkLiveService, privateProcessNames, probePrivateProcessInventory,
-  readProcessIdentity,
+  readProcessIdentity, supervisorIdentity,
   sameProcessIdentity,
 } from './private-processes.ts';
 import { runnerProtected } from './runner-protection.ts';
@@ -172,3 +172,60 @@ async function acceptsRecordedBridgeChild(): Promise<void> {
   expect(await discoverBridgeWithLaunchRecord(identity.startTime)).toBe(true);
 }
 it('finds the child recorded at launch when its script matches', acceptsRecordedBridgeChild);
+
+async function inspectSupervisorRecord(recordMode: number, recordStart?: string,
+  recordPresent = true): Promise<boolean> {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  const original = actual.readFileSync(`/proc/${process.pid}/stat`, 'utf8');
+  const start = readProcessIdentity(process.pid).startTime;
+  const stat = `1${original.slice(original.indexOf(' '))}`;
+  const directory = '/run/executor/supervisor';
+  const record = `${directory}/supervisor-identity`;
+  vi.mocked(lstatSync).mockImplementation(function supervisorStat(path, options) {
+    if (path === directory || path === record) {
+      if (path === record && !recordPresent) return undefined;
+      const info = actual.lstatSync('/proc/self/stat');
+      info.uid = 0;
+      info.mode = path === directory ? 0o040700 : recordMode;
+      info.size = 32;
+      return info;
+    }
+    return actual.lstatSync(path, options);
+  });
+  vi.mocked(readFileSync).mockImplementation(function supervisorFile(path, options) {
+    if (path === record) return `1 ${recordStart ?? start}\n`;
+    if (path === '/proc/1/stat') return stat;
+    if (path === '/proc/1/status') return 'Uid:\t0\t0\t0\t0\n';
+    if (path === '/proc/1/cgroup') return actual.readFileSync('/proc/self/cgroup', 'utf8');
+    if (path === '/proc/1/cmdline') {
+      return '/usr/local/bin/node\0--disable-sigusr1\0--experimental-strip-types\0' +
+        '/app/src/entrypoint.ts\0';
+    }
+    return actual.readFileSync(path, options);
+  });
+  vi.mocked(readlinkSync).mockImplementation(function supervisorLink(path, options) {
+    if (path === '/proc/1/exe') return '/usr/local/bin/node';
+    if (path === '/proc/1/ns/pid') return actual.readlinkSync(`/proc/${process.pid}/ns/pid`);
+    return actual.readlinkSync(path, options);
+  });
+  try {
+    return supervisorIdentity() !== undefined;
+  } finally {
+    vi.mocked(lstatSync).mockImplementation(actual.lstatSync);
+    vi.mocked(readFileSync).mockImplementation(actual.readFileSync);
+    vi.mocked(readlinkSync).mockImplementation(actual.readlinkSync);
+  }
+}
+
+async function acceptsProtectedSupervisorRecord(): Promise<void> {
+  expect(await inspectSupervisorRecord(0o100600)).toBe(true);
+}
+it('binds PID 1 to the root-owned launch record', acceptsProtectedSupervisorRecord);
+
+async function refusesUnsafeSupervisorRecords(): Promise<void> {
+  expect(await inspectSupervisorRecord(0o100666)).toBe(false);
+  expect(await inspectSupervisorRecord(0o100600, '999')).toBe(false);
+  expect(await inspectSupervisorRecord(0o100600, undefined, false)).toBe(false);
+}
+it('refuses writable, stale and missing supervisor launch records',
+  refusesUnsafeSupervisorRecords);

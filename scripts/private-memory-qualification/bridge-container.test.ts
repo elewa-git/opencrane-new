@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { uploadComputer } from '../../apps/server/test/support/upload-computer.ts';
 import { proveComputerBridge } from './bridge-proof.ts';
+import { proveComputerSupervisor } from './supervisor-proof.ts';
 
 const helperImage = `bridge-helper:${randomUUID()}`;
 const fixtureImage = `bridge-fixture:${randomUUID()}`;
@@ -92,6 +93,7 @@ async function provesOnlyTheBridgeGroup(): Promise<void> {
   const container = start();
   await waitForBridge(container);
   expect(await proveComputerBridge(container, installationId)).toBe(true);
+  expect(await proveComputerSupervisor(container, installationId)).not.toBe(true);
   const inventory = docker(['exec', container, '/usr/local/bin/node',
     '--experimental-strip-types', '--input-type=module', '--eval',
     "import { probePrivateProcessInventory } from '/scripts/private-memory-qualification/private-processes.ts'; process.stdout.write(String(probePrivateProcessInventory()));"]);
@@ -122,6 +124,7 @@ async function provesPackagedBridge(): Promise<void> {
     { image: packagedImage, protected: true });
   try {
     expect(await proveComputerBridge(computer.containerId, installationId)).toBe(true);
+    expect(await proveComputerSupervisor(computer.containerId, installationId)).toBe(true);
     const record = execFileSync('/usr/bin/docker', ['exec', computer.containerId,
       'cat', '/run/executor/supervisor/bridge-identity'], { encoding: 'utf8' });
     expect(record).toMatch(/^[1-9][0-9]* [1-9][0-9]*\n$/u);
