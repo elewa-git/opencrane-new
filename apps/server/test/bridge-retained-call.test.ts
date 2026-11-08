@@ -13,7 +13,7 @@ const signal = { approvalId, callId: 'native-call',
   toolName: 'write', expiresAt: new Date(Date.now() + 5_000).toISOString() };
 
 function productionBridgeAndRoutesShareChatOptions() {
-  const chat = {} as ChatOptions;
+  const chat: Pick<ChatOptions, 'retainedCall'> = {};
   const bridgeOptions = bridgeOptionsForChat(chat, {});
   expect(bridgeOptions).toBe(chat);
 }

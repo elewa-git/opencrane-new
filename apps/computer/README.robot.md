@@ -1,5 +1,15 @@
 # Computer image — P2-1
 
+## Retained Ask call limits
+
+The proxy keeps at most 16 original Ask requests and 8 MiB of their request bytes.
+An approved send that receives HTTP 503 cannot keep its bytes when either limit is
+full. It answers that call with the existing unconfirmed result. Closing one held
+response releases only its own bytes, even when another response used the same
+approval id. Closing a turn answers its holds and releases their bytes.
+
+`test/mcp-proxy.test.ts` checks both limits, release and duplicate holds.
+
 ## Private process exit after Stop
 
 The private supervisor keeps the socket half open after the bridge closes its writing

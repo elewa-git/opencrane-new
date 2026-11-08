@@ -43,6 +43,8 @@ interface Catalogue {
 const VERSION = '2026-07-28';
 const MAX_REQUEST_BYTES = 1024 * 1024;
 const MAX_CATALOGUES = 64;
+const MAX_RETAINED_CALLS = 16;
+const MAX_RETAINED_BYTES = 8 * 1024 * 1024;
 const UNCONFIRMED = 'The tool did not confirm a result. It may have received the request. '
   + 'OpenCrane will not send it again.';
 const UNAVAILABLE = 'This tool is not available in this conversation. Nothing was sent.';
@@ -53,6 +55,13 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
   const current = new Map<string, string>();
   const requests = proxyRequests();
   const retained = new Map<string, RetainedRequest>();
+  let retainedBytes = 0;
+
+  function deleteRetained(approvalId: string, owner: RetainedRequest) {
+    if (retained.get(approvalId) !== owner) return;
+    retained.delete(approvalId);
+    retainedBytes -= owner.raw.length;
+  }
 
   function retainedCall(approvalId: string): RetainedCallSignal | undefined {
     const request = retained.get(approvalId);
@@ -209,6 +218,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     const boundLoad = load;
     const boundServer = server;
     function hold(approvalId: string) {
+      let ownedRequest: RetainedRequest | undefined;
       function answer(text: string) { toolError(response, id, text); }
       async function send() {
         const renewed = liveCallGrant(boundLoad, boundServer, metadata, params['name'],
@@ -233,14 +243,18 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
             computerId: liveGrant.computerId, generation: liveGrant.generation,
             serverId: boundServer.serverId, connectionId: boundServer.connectionId,
             toolName, thread: String(thread) };
+          if (retained.has(approvalId) || retained.size >= MAX_RETAINED_CALLS ||
+            retainedBytes + raw.length > MAX_RETAINED_BYTES) return false;
           retained.set(approvalId, request);
+          retainedBytes += raw.length;
+          ownedRequest = request;
           return true;
         }
         return forward(incoming, response, gateway, boundServer, liveGrant, String(thread),
           id, raw, requests, undefined, approvalId, keepFailedAttempt);
       }
       function disconnected() {
-        retained.delete(approvalId);
+        if (ownedRequest) deleteRetained(approvalId, ownedRequest);
         if (!response.writableEnded) approvals.endThread(String(thread));
       }
       response.once('close', disconnected);

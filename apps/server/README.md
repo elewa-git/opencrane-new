@@ -46,6 +46,7 @@ conversation history. Each control command can save only one outcome.
 A hand-off without a saved outcome stays unknown, even when other evidence reports success. A response
 does not prove a business change succeeded. Reading history never sends a tool call.
 The original-call read checks a private live signal; a missing signal leaves retry unknown.
+The bridge supplies that reader to the same chat options used by the HTTP routes.
 
 Refused control attempts in enabled test setups save a small audit record. They do not
 change the current controller or interrupt work. Production control stays disabled.

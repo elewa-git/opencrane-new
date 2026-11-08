@@ -392,6 +392,8 @@ async function duplicateHoldKeepsOriginalBytes() {
     test.answer(403, true, JSON.stringify({ reason: 'approval_requested', approvalId }));
     const original = test.send(call, {}, loadA, 'POST', originalController.signal);
     void original.catch(ignoreAbortedCall);
+    const originalSettled = vi.fn();
+    void original.then(originalSettled, originalSettled);
     const follower = test.send();
     function bothWaiting() { expect(test.received).toHaveLength(2); }
     await vi.waitFor(bothWaiting);
@@ -399,6 +401,7 @@ async function duplicateHoldKeepsOriginalBytes() {
     await test.approvals.settle(approvalId, 'approved');
     await follower;
     expect(test.retainedCall(approvalId)).toMatchObject({ callId: 'call' });
+    expect(originalSettled).not.toHaveBeenCalled();
     test.approvals.endThread('thread-A');
     await original;
   } finally {
@@ -418,7 +421,7 @@ async function retainedCallsHaveTotalByteLimit() {
     await test.catalogue(loadA, 'chat-A', 'thread-A', askTools);
     await test.grant();
     const largeCall = { ...call, params: { ...call.params,
-      arguments: { text: 'x'.repeat(900_000) } } };
+      arguments: { ...call.params.arguments, text: 'x'.repeat(900_000) } } };
     for (let index = 0; index < 10; index++) {
       const id = index.toString(16).padStart(64, '0');
       const body = { ...largeCall, params: { ...largeCall.params,
@@ -458,6 +461,40 @@ async function retainedCallsHaveTotalByteLimit() {
 }
 it('bounds retained request bytes and releases capacity when a hold closes',
   retainedCallsHaveTotalByteLimit, 30_000);
+
+async function retainedCallsHaveEntryLimit() {
+  const test = await fixture(true);
+  const controllers: AbortController[] = [];
+  const pending: Promise<unknown>[] = [];
+  try {
+    const askTools: ToolServer[] = [{ ...tools[0]!, modes: { read: 'ask' } }];
+    await test.catalogue(loadA, 'chat-A', 'thread-A', askTools);
+    await test.grant();
+    for (let index = 0; index < 17; index++) {
+      const id = index.toString(16).padStart(64, '0');
+      const body = { ...call, params: { ...call.params,
+        _meta: { ...metadata, callId: `small-call-${index}` } } };
+      const controller = new AbortController();
+      controllers.push(controller);
+      test.answer(403, true, JSON.stringify({ reason: 'approval_requested', approvalId: id }));
+      const held = test.send(body, {}, loadA, 'POST', controller.signal);
+      pending.push(held.catch(ignoreAbortedCall));
+      function receivedHold() { expect(test.waiting).toHaveBeenCalledTimes(index + 1); }
+      await vi.waitFor(receivedHold);
+      test.answer(503, false, '{"reason":"dispatch_refused"}');
+      await test.approvals.settle(id, 'approved');
+    }
+    expect(test.retainedCall('0'.repeat(64))).toBeDefined();
+    expect(test.retainedCall((15).toString(16).padStart(64, '0'))).toBeDefined();
+    expect(test.retainedCall((16).toString(16).padStart(64, '0'))).toBeUndefined();
+  } finally {
+    for (const controller of controllers) controller.abort();
+    await Promise.all(pending);
+    await test.close();
+  }
+}
+it('refuses a seventeenth retained call even when its request is small',
+  retainedCallsHaveEntryLimit, 30_000);
 async function heldCall(state: string) {
   const test = await fixture(true);
   try {

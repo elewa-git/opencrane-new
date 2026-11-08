@@ -52,7 +52,8 @@ The computer saves that confirmation without private reply text.
 - Sends AI model calls and reviewed [tool server](../../GLOSSARY.md#mcp-server-tool-server)
   calls through agentgateway. Shell and file tools run locally inside the computer.
 - Keeps the original Ask tool call in private memory while its response is waiting.
-  Stopping the turn or losing the computer removes that copy.
+  It limits the number and size of waiting calls. Stopping the turn or losing the
+  computer removes each copy.
 - Runs a [private turn](../../GLOSSARY.md#private-turn) on a shared computer in a fresh,
   short-lived Codex process with no tools. Initial personal memory requires deployment checks.
   The server supplies its complete input once; the runner keeps it out of the journal.
