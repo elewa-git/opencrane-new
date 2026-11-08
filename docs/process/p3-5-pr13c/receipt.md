@@ -69,3 +69,23 @@ fixtures and the existing gateway fixture. No dev stack or fresh installation ra
 
 Vitest, ESLint and typecheck ran under `nice -n 10`. The disposable PostgreSQL
 container was removed after the final test run.
+
+## Earlier participant in caller status test
+
+8 November 2026. Test commit: `2eb2fd677`.
+Bob now joins the conversation before Alice makes her approval request. His
+participation position therefore permits him to read that part of the history.
+Only the check that the requester is Alice can refuse his status request.
+
+- PASS: the focused test returned 403 for Bob with the requester check present.
+- FAIL as expected: temporarily removing that check returned 200 for Bob, and
+  the same test failed at its 403 assertion. The production file was restored.
+- PASS: all seven changed test files passed twice, with 208 passed and one
+  existing skip in each run. The summaries are in [changed-final.txt](changed-final.txt).
+- PASS: workspace typecheck, scoped ESLint with no errors and four size
+  warnings, Markdownlint with no issues, `check:events`, Knip and
+  `lint:changelog`.
+- NOT RUN: the local full root suite and a fresh-install live journey.
+
+All Vitest, ESLint and typecheck commands ran under `nice -n 10`. Vitest used
+the supplied PostgreSQL test URL and local fixtures. No dev stack was started.

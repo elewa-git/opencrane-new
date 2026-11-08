@@ -15,3 +15,13 @@ Second final run (8 November 2026, 07:32:09 UTC):
 Test Files  7 passed (7)
 Tests       208 passed | 1 skipped (209)
 Duration    568.12s
+
+Earlier-participant test change, first run (8 November 2026, 08:12:40 UTC):
+Test Files  7 passed (7)
+Tests       208 passed | 1 skipped (209)
+Duration    353.28s
+
+Earlier-participant test change, second run (8 November 2026, 08:18:39 UTC):
+Test Files  7 passed (7)
+Tests       208 passed | 1 skipped (209)
+Duration    351.06s
