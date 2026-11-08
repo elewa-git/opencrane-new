@@ -6,7 +6,8 @@ import { z } from 'zod';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import { budgetRootAllowanceSetDataSchema, type EventEnvelope } from '@opencrane/events';
+import { budgetRootAllowanceSetDataSchema, memoryMaintenanceRecordedDataSchema,
+  type EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { memoryPrepareHandler } from '@opencrane/handlers';
 import { BudgetActor, providerSecretRef, providerSecrets, readToolPolicy,
@@ -180,12 +181,12 @@ async function candidateNight(digit: string, change: CandidateChange = {}) {
     assistantId, computerId: `computer-${digit}`, generation: 1,
   });
   await append('provider-primary', 'provider.model_binding_set', {
-    providerId: 'primary', revision: 3, changedBy: ownerId,
+    providerId: 'primary', revision: 4, changedBy: ownerId,
     expectedProviderSequence: 0, previousBindingSequence: 0,
     kind: 'assistant', dependantId: assistantId, task: 'chat_turn',
     state: 'active', model: change.model ?? 'gpt-6-luna',
   });
-  const candidateNightId = digit.repeat(64);
+  const candidateNightId = digit[0]!.repeat(64);
   const due = await append(`scope-${candidateScopeId}`, 'memory.maintenance_recorded', {
     scopeId: candidateScopeId, nightId: candidateNightId,
     batchKey: 'c'.repeat(64), inputRevision: 'd'.repeat(64), date: '2026-10-19',
@@ -378,10 +379,13 @@ it('admits one eligible night with one exact root and allowance', async function
     providerId: 'primary', revision: 2, changedBy: 'dreamer', secretRef: reference,
   });
   await append('provider-primary', 'provider.models_selected', {
-    providerId: 'primary', revision: 3, changedBy: 'dreamer', models: ['gpt-6-luna'],
+    providerId: 'primary', revision: 3, changedBy: 'dreamer', models: ['gpt-6-astra'],
+  });
+  await append('provider-primary', 'provider.models_selected', {
+    providerId: 'primary', revision: 4, changedBy: 'dreamer', models: ['gpt-6-luna'],
   });
   await append('budget-acme', 'provider.managed_calls_enabled', {
-    providerId: 'primary', revision: 3, changedBy: 'dreamer',
+    providerId: 'primary', revision: 4, changedBy: 'dreamer',
     expectedProviderSequence: 0,
   });
   const definition = losslessJson(JSON.stringify({ name: 'correct',
@@ -459,12 +463,18 @@ it('admits one eligible night with one exact root and allowance', async function
     await once(server, 'close');
   }
   expect(rootReplyLost).toBe(true);
+  await append(`scope-${eligibleScopeId}`, 'memory.maintenance_bound', {
+    scopeId: eligibleScopeId, scopeKind: 'person', ownerId, memberId: ownerId,
+    assistantId, payingGroupId: 'payer', enabled: true,
+    acceptedCapCents: 100, revision: 2,
+  });
+  function afterEligibleWindow() { return new Date('2026-10-19T02:16:00.000Z'); }
   const afterLostRoot = await prepareNightlyMaintenance(options, eligibleScopeId, eligibleId,
-    eligibleTime, admission);
+    afterEligibleWindow, admission);
   expect(afterLostRoot).toMatchObject({ outcome: 'unknown', nightId: eligibleId });
   const repeatReads = [
-    prepareNightlyMaintenance(options, eligibleScopeId, eligibleId, eligibleTime, admission),
-    prepareNightlyMaintenance(options, eligibleScopeId, eligibleId, eligibleTime, admission),
+    prepareNightlyMaintenance(options, eligibleScopeId, eligibleId, afterEligibleWindow, admission),
+    prepareNightlyMaintenance(options, eligibleScopeId, eligibleId, afterEligibleWindow, admission),
   ];
   const [repeated, concurrent] = await Promise.all(repeatReads);
   expect(repeated).toMatchObject({ outcome: 'prepared', nightId: eligibleId,
@@ -474,7 +484,7 @@ it('admits one eligible night with one exact root and allowance', async function
   const restartedActor = new BudgetActor(nats.store, 'acme', firstNight);
   await restartedActor.start(2000, 20000, 'payer');
   const restarted = await prepareNightlyMaintenance(options, eligibleScopeId, eligibleId,
-    eligibleTime, { ...admission, actor: restartedActor });
+    afterEligibleWindow, { ...admission, actor: restartedActor });
   expect(restarted).toEqual(repeated);
   const roots = actor.state.roots.filter(function matchingRoot(root) {
     return root.requesterId === ownerId && root.assistantId === assistantId;
@@ -619,4 +629,18 @@ it('saves the original window result and refuses an occupied scope', async funct
   const occupied = await prepareNightlyMaintenance(options, scopeId, occupiedNightId,
     duringWindow);
   expect(occupied).toMatchObject({ outcome: 'refused', reason: 'scope_occupied' });
+});
+
+it('refuses a new night while another prepared root is unresolved', async function preparedOverlap() {
+  const candidate = await candidateNight('aa');
+  const due = memoryMaintenanceRecordedDataSchema.parse(candidate.due.data);
+  await append(`scope-${candidate.scopeId}`, 'memory.maintenance_recorded', {
+    ...due, nightId: 'b'.repeat(64), date: '2026-10-18',
+    intendedAt: '2026-10-18T02:00:00.000Z',
+    selectedAt: '2026-10-18T02:01:00.000Z', action: 'prepared', reason: null,
+    rootId: 'c'.repeat(64), model: 'gpt-6-luna', providerId: 'primary',
+  });
+  const result = await prepareNightlyMaintenance(options, candidate.scopeId,
+    candidate.nightId, candidateTime);
+  expect(result).toMatchObject({ outcome: 'refused', reason: 'scope_occupied' });
 });
