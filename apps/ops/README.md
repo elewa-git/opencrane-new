@@ -18,7 +18,7 @@ under `apps`. [apps/server](../server/README.md) saves changes as
 flowchart LR
   apps["apps<br/>applications"] --> ops["apps/ops<br/>workers, recovery and readiness"]
   apps --> server["apps/server<br/>back end"]
-  server -.->|tests supply delivery with start confirmation| ops
+  server -.->|checked delivery when supplied| ops
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events| nats
   ops -->|saves checked results and daily or weekly routine records| nats
@@ -53,6 +53,8 @@ for checked preparation. It sends no memory text and cannot dispatch a turn.
 - Provides internal commands that claim, skip or record missed routine slots without starting work.
 - Holds one routine scheduler owner per silo while its callback prepares claims.
 - Inspects small pages of routine references and dispatches checked commands from saved events.
+- Leaves routine scheduling off by default. An enabled routines worker refuses startup
+  until a checked delivery callback is connected.
 
 ## Processes it handles
 
@@ -63,6 +65,8 @@ If cancellation arrives while a read waits, the old holder cannot save a new cla
 The callback must stop and await its work before returning. Only then does the helper
 release the session. Captured ownership checks stay refused after release.
 The routine worker still only updates read tables; automatic scheduling is not connected.
+The internal scheduler entry leaves the disabled worker untouched and refuses an
+enabled run without a delivery callback.
 The models process in `apps/server` handles saved routine Stop and checked completion.
 Rebuilding these read tables never stops or finishes work.
 

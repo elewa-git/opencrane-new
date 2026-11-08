@@ -119,11 +119,16 @@ async function state() {
 }
 async function production(options: { enabled?: boolean; replay?: boolean },
   handoff?: Parameters<typeof dispatchRoutineCandidates>[3]) {
-  let result: Awaited<ReturnType<typeof scanRoutineCandidates>> | undefined;
+  let result: Awaited<ReturnType<typeof runRoutineScheduler>> | undefined;
   async function work(lease: Lease) {
     leaseSignal = lease.signal;
     const worker = { ...lease, silo: 'test', binding, now: clock };
-    result = await runRoutineScheduler(storage.db, nats.store, worker, options, handoff);
+    if (handoff) {
+      const delivery = { db: storage.db, store: nats.store, worker, handoff };
+      result = await runRoutineScheduler(options, delivery);
+    } else {
+      result = await runRoutineScheduler(options);
+    }
   }
   const leadership = { databaseUrl, silo: 'test', signal: stop.signal };
   await withRoutineLeadership(leadership, work);
@@ -132,12 +137,17 @@ async function production(options: { enabled?: boolean; replay?: boolean },
 async function disabledProductionDoesNotClaim() {
   await save([creation()]);
   const before = await nats.store.head('routine-orders');
-  const result = await production({});
-  expect(result).toMatchObject({ examined: 1, executionAvailable: false });
+  const handoff: NonNullable<Parameters<typeof dispatchRoutineCandidates>[3]> =
+    function refuseDelivery() {
+      return Promise.reject(new Error('Unexpected routine delivery'));
+    };
+  const result = await production({}, handoff);
+  expect(result).toEqual({ status: 'disabled', executionAvailable: false });
   expect(await nats.store.head('routine-orders')).toBe(before);
   expect((await state()).activeRun).toBeNull();
-  await production({ enabled: true, replay: true });
+  await production({ enabled: true, replay: true }, handoff);
   expect(await nats.store.head('routine-orders')).toBe(before);
+  expect(await nats.store.head('budget-test')).toBe(0);
 }
 it('keeps the production entry read only by default and during replay',
   disabledProductionDoesNotClaim);
@@ -156,14 +166,14 @@ async function enabledProductionHandsOffSavedDue() {
   await save([creation()]);
   const seen: string[] = [];
   const handoff: NonNullable<Parameters<typeof dispatchRoutineCandidates>[3]> =
-    async function receive(due, lease) {
+    function receive(due, lease) {
       expect(lease.signal).toBe(leaseSignal);
       expect(due.routineId).toBe('orders');
       seen.push(due.occurrenceId);
-      return { status: 'sent' };
+      return Promise.resolve({ status: 'sent' });
     };
   const result = await production({ enabled: true }, handoff);
-  expect(result).toMatchObject({ examined: 1, executionAvailable: true });
+  expect(result).toMatchObject({ examined: 1, executionAvailable: false });
   expect(seen).toEqual([(await state()).activeRun!.occurrenceId]);
 }
 it('passes one confirmed due under the existing leadership session when enabled',
