@@ -14,6 +14,7 @@ import { reviewedRemoval } from './support/reviewed-removal.ts';
 import { viewFixture } from './support/view-fixture.ts';
 import { recordLeaseNotices } from './support/rfb-viewer.ts';
 import { viewAccess } from '../src/computers/view-access.ts';
+import { conversations } from '@opencrane/projections';
 
 type Fixture = Awaited<ReturnType<typeof viewFixture>>;
 type InjectionPoint = 'fence start' | 'last access read';
@@ -730,6 +731,54 @@ async function checksUnprojectedActivityOnce() {
 }
 it('skips unprojected chat activity and still finds a later close',
   checksUnprojectedActivityOnce, 30_000);
+
+async function publicCloseEndsOnlyItsViewer() {
+  const current = await createFixture();
+  await grantDirectly(current);
+  await current.append('conversation-other', 'conversation.created', {
+    conversationId: 'other', assistantId: 'assistant', createdBy: 'alice',
+    mode: 'agent_session',
+  }, true);
+  await current.runner.run(conversations);
+  const first = await startViewer(current);
+  const headers = requestHeaders(current);
+  const ticketReply = await current.app.inject({ method: 'POST',
+    url: '/api/conversations/other/view', headers });
+  expect(ticketReply.statusCode).toBe(200);
+  const ticket = ticketReply.json<{ ticket: string }>().ticket;
+  const address = current.app.server.address();
+  if (!address || typeof address === 'string') throw new Error('Viewer address missing');
+  const secondUrl = `ws://127.0.0.1:${address.port}/ws/conversations/other/view`;
+  const second = new WebSocket(secondUrl, ['binary', ticket], { headers });
+  second.on('error', ignoreSocketError);
+  const other = observeViewer(second);
+  try {
+    await once(second, 'open');
+    await until(other.hasValidNotice);
+    for (let index = 0; index < 30; index++) {
+      await appendInjection(current, conversationEvent('file.uploaded'));
+    }
+    const access = { store: current.nats.store, db: current.db,
+      silo: 'test', binding: current.binding };
+    await expect(viewAccess(access, 'alice', 'chat')).resolves.toBeDefined();
+    expect(first.viewer.readyState).toBe(WebSocket.OPEN);
+    expect(second.readyState).toBe(WebSocket.OPEN);
+    await current.runner.run(conversations);
+    const closed = await current.app.inject({ method: 'POST',
+      url: '/api/conversations/chat/close', headers, payload: { id: 'public-close' } });
+    expect(closed.statusCode).toBe(200);
+    const closedAt = performance.now();
+    await current.runner.run(conversations);
+    await expectRevoked(current, first, closedAt, 'public close');
+    await delay(1600);
+    expect(second.readyState).toBe(WebSocket.OPEN);
+    expect(other.result()).toBeUndefined();
+  } finally {
+    second.terminate();
+  }
+}
+it('keeps a busy chat readable and ends only its viewer after public close',
+  publicCloseEndsOnlyItsViewer, 30_000);
 
 async function keepsExactChangedMessage() {
   const current = await createFixture();

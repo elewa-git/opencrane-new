@@ -20,7 +20,8 @@ import { agentSession } from './reports.ts';
 import type { ChatOptions } from './routes.ts';
 import { buildTurnTools, buildRecallOffer, mayOfferTurnTools, toolsForMessage, type TurnDelivery }
   from './turn-tools.ts';
-import { cleanClosedConversation, recoverTerminalTurns } from './close-cleanup.ts';
+import { cleanClosedConversation, recoverTerminalTurns,
+  type CloseCleanupCursor } from './close-cleanup.ts';
 
 type ChatRows = Awaited<ReturnType<typeof chatHistory>>;
 type Upload = z.infer<typeof fileUploadedDataSchema>;
@@ -50,7 +51,7 @@ export type ConversationProgress = {
   // Recheck an unchanged chat while delivery or recovery still needs work.
   retry: boolean;
   connectionId?: number;
-  cursor?: number;
+  cursor?: CloseCleanupCursor;
 };
 const turnIdData = z.object({ turnId: z.string() });
 const computerData = z.object({ computerId: z.string() });
@@ -208,7 +209,7 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   conversation: AgentSession, assistant: ReturnType<typeof assistantSnapshot>,
   refused: Set<string>, connection: Connection,
   computerHistoryUnavailable = false, checkControl?: ControlCheck,
-  closeCursor?: number): Promise<ConversationProgress> {
+  closeCursor?: CloseCleanupCursor): Promise<ConversationProgress> {
   const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
   async function refreshStops(beforeTurn = false) {
     await readNewConversationRows(options, conversation.conversationId, rows, beforeTurn);

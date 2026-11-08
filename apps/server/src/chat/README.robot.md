@@ -1,5 +1,34 @@
 # Chat contracts
 
+## Closing a conversation
+
+`POST /api/conversations/:conversationId/close` accepts only `{id}`. The server
+binds `closedBy` to the signed-in member and saves one `conversation.closed` on
+`conversation-<id>`. Either current direct participant may close. Only the
+current group creator or the session requester may close their chat. All still
+need current membership, participation and read permission. A group creator
+also needs `manage_participants`. Shared sessions retain their requester and
+assistant-group checks.
+
+The command loads chat history with its ten-second budget before the short
+access check. That check watches only streams that grant access. A competing
+content append makes the command reread facts. Later close commands return the
+first saved position; a repeat with the original id returns its own saved
+position. `GET /api/conversations/:id/changes/:commandId` finds a saved close
+before the read table catches up. It does not start cleanup or another turn.
+
+Closing keeps history and authorised saved files readable. Existing bridge
+cleanup stops unfinished work. Desktop view checks end access for the closed
+conversation while other conversations keep their own leases.
+Closing a group refuses new participants. Its creator may still remove someone,
+and another participant may leave. The saved removal revokes history access before
+the read table or permission service catches up.
+
+Cleanup visits at most 31 human inputs per pass and keeps one action available
+to repair a missing computer ending. It carries the input position and any
+unsettled work through a complete sweep. A finished sweep can stop retrying
+once every input and terminal is settled, including chats with more than 32 inputs.
+
 ## Original call status
 
 `GET /api/conversations/:conversationId/tool-requests/:logicalRequestId` reads

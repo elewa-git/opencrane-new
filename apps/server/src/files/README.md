@@ -12,6 +12,7 @@ This folder handles files people attach to conversations. It checks the file's c
 - Scans bytes before saving them in [MinIO](../../../../GLOSSARY.md#minio-file-storage), the file store.
 - Saves upload or rejection records, and recognises a repeated upload without saving it twice.
 - Lists and serves files only within the person's current conversation access.
+- Keeps saved files readable with the same access after a conversation closes.
 - Serves SVG through the same access check with a strict sandbox and content type header.
 - Sends clean files to the assistant's computer and waits for its confirmation before that chat's next turn.
 
@@ -45,3 +46,12 @@ so a broken endpoint cannot keep filling memory. Refused requests close their co
 ## How it connects
 
 The [server](../../README.md) registers file requests. [Members](../members/README.md) and [chat](../chat/README.md) check access. Chat manages computer delivery; [computers](../computers/README.md) sends screenshots through these same upload checks. The [scanner service](../../../../infra/clamav/README.md) runs separately.
+
+```mermaid
+flowchart LR
+  server[Server] --> files[Files]
+  chat[Chat] -->|current access| files
+  files -->|scans uploads| scanner[Scanner]
+  files -->|stores clean bytes| storage[File storage]
+  computer[Assistant computer] -->|sends saved files| files
+```

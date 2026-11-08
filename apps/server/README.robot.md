@@ -16,7 +16,7 @@ The event stays out of the public conversation feed. A fresh watcher reads these
 saved records and repairs missing turn endings through the existing commands.
 
 `test/bridge-control.test.ts` covers the pending and saved-exit states with event
-store fixtures. The public close route remains disabled.
+store fixtures. The public close route now saves the same event.
 
 For people, read [README.md](README.md) first.
 
@@ -445,8 +445,9 @@ after an uncertain send; it does not send the input again or wake a suspended
 computer. A saved loss or replacement of the computer generation allows the
 server to record failure. Terminal agent reports and `computer.turn_closed` are
 repaired independently, using conditional appends. The existing computer turn
-check prevents idle suspension before its ending is saved. No close route is
-available yet. Confirmed Codex thread unload remains for a later change.
+check prevents idle suspension before its ending is saved. The close route
+saves the same event used by cleanup. Confirmed Codex thread unload remains
+for a later change.
 Each pass handles at most 32 inputs or one second of work. It keeps its next input
 position for the following pass. Queued cancellations share one conversation history
 read and one computer history read per pass, except after a concurrent append forces

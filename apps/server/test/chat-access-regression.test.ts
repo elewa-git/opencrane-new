@@ -1574,7 +1574,7 @@ async function participationVolume(sharedChild = false) {
   }
 }
 
-async function refusesCloseBeforeBufferedReport() {
+async function retainsFilesAfterCloseBeforeBufferedReport() {
   const context = await fixture();
   try {
     await context.agentSession('agent');
@@ -1597,14 +1597,14 @@ async function refusesCloseBeforeBufferedReport() {
     }, false);
     const response = await context.app.inject({ url: '/api/conversations/agent/files',
       headers: context.headers() });
-    expect.soft(response.statusCode, response.body).toBe(403);
+    expect.soft(response.statusCode, response.body).toBe(200);
     await expect(viewAccess(context.options, 'alice', 'agent')).rejects.toThrow();
   } finally {
     await context.close();
   }
 }
-it('refuses files and desktop leases after an unprojected close followed by a report',
-  refusesCloseBeforeBufferedReport, 120_000);
+it('keeps saved file reads and ends desktop leases after an unprojected close',
+  retainsFilesAfterCloseBeforeBufferedReport, 120_000);
 
 async function retainsVerifiedLegacyParticipation() {
   const context = await fixture();
@@ -1743,6 +1743,7 @@ async function managesGroupParticipants(legacyClose: boolean) {
     expect(await context.nats.store.head('participation-participants')).toBe(before);
     const changed = { ...add, participantId: 'bob' };
     expect((await participantRequest(context, changed)).statusCode).toBe(409);
+    await joinParticipantMember(context, 'carol');
     let closeSubject = 'participation-participants';
     if (legacyClose) closeSubject = 'conversation-participants';
     await context.append(closeSubject, 'conversation.closed', {
@@ -1755,9 +1756,17 @@ async function managesGroupParticipants(legacyClose: boolean) {
         .resolves.toBeUndefined();
     }
     expect((await participantRequest(context, add)).statusCode).toBe(200);
+    const closedAdd = { id: 'closed-add', action: 'add', participantId: 'carol',
+      expectedAccessPosition: before };
+    expect((await participantRequest(context, closedAdd)).statusCode).toBe(409);
+    const closedSend = await context.app.inject({
+      method: 'POST', url: '/api/conversations/participants/messages',
+      headers: context.headers(), payload: { id: 'closed-send', text: 'Too late' },
+    });
+    expect(closedSend.statusCode, closedSend.body).toBe(409);
     const newEdit = { id: 'closed-edit', action: 'remove', participantId: 'bob',
       expectedAccessPosition: before };
-    expect((await participantRequest(context, newEdit)).statusCode).toBe(409);
+    expect((await participantRequest(context, newEdit)).statusCode).toBe(200);
     expect((await participantRequest(context, undefined, 'ext:jane')).statusCode).toBe(403);
   } finally {
     await context.close();
@@ -1979,13 +1988,13 @@ async function checksParticipantAdmissionAfterColdHistory() {
       expectedAccessPosition };
     const removed = await participantRequest(context, remove);
     expect(removed.statusCode, removed.body).toBe(200);
-    expect(delayed).toBe(true);
     const before = await context.nats.store.head('participation-participants');
     const add = { id: 'revoked-target', action: 'add', participantId: 'bob',
       expectedAccessPosition: before };
     context.nats.store.head = removeTargetDuringAdmission;
     revokeTarget = true;
     const response = await participantRequest(context, add);
+    expect(delayed).toBe(true);
     expect(response.statusCode, response.body).toBe(409);
     expect(targetChecks).toBe(1);
     expect(await head('participation-participants')).toBe(before);

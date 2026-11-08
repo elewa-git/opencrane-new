@@ -13,6 +13,7 @@ import { expect, it, vi } from 'vitest';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { recordReport } from '../src/chat/reports.ts';
 import { buildServer } from '../src/server.ts';
+import { uploadFile } from '../src/files/routes.ts';
 import { viewFixture } from './support/view-fixture.ts';
 import { uploadServices } from './support/upload-services.ts';
 
@@ -121,6 +122,41 @@ async function publishesAssistantFiles() {
     const tooLarge = { ...report, previousSequence: sequence, sequence: sequence + 1,
       artifacts: [{ ...artifact, size: 20 * 1024 * 1024 + 1 }] };
     await expect(recordReport(options.store, fixture.keys, context, tooLarge)).rejects.toThrow();
+    const scanned = Promise.withResolvers<void>();
+    const releaseScan = Promise.withResolvers<void>();
+    async function scanDuringClose() {
+      scanned.resolve();
+      await releaseScan.promise;
+      return cleanVerdict;
+    }
+    function cleanVerdict() { return 'clean' as const; }
+    const racingOptions = { ...options, scan: scanDuringClose };
+    const racingUpload = uploadFile(racingOptions, 'alice', 'chat', 'racing-upload',
+      'race.txt', Buffer.from('Race file'));
+    await scanned.promise;
+    await fixture.append('conversation-chat', 'conversation.closed', {
+      conversationId: 'chat', closedBy: 'alice',
+    });
+    releaseScan.resolve();
+    await expect(racingUpload).rejects.toThrow();
+    const closedRows = await chatHistory(options.store, 'test', 'chat');
+    expect(closedRows.some(isRacingUpload)).toBe(false);
+    function isRacingUpload(row: typeof closedRows[number]) {
+      return row.event.type === 'file.uploaded' &&
+        z.object({ name: z.string() }).parse(row.event.data).name === 'race.txt';
+    }
+    await fixture.runner.run((await import('@opencrane/projections')).conversations);
+    for (const memberId of ['alice', 'bob']) {
+      const now = Math.floor(Date.now() / 1000);
+      const session = { sub: memberId, orgId: 'org-test', roles: [], authTime: now,
+        exp: now + 300 };
+      const cookie = encodeSession(fixture.config, session);
+      const request = { url: `/api/conversations/chat/files/view?path=${data.path}`,
+        headers: { cookie: `${fixture.config.cookieName}=${cookie}` } };
+      const response = await app.inject(request);
+      expect(response.statusCode).toBe(memberId === 'alice' ? 200 : 403);
+      if (memberId === 'alice') expect(response.rawPayload).toEqual(bytes);
+    }
   } finally {
     socket.terminate();
     await channel.close();

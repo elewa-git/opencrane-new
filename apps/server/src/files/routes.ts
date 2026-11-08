@@ -12,8 +12,6 @@ import { z } from 'zod';
 import { fileUploadedDataSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import type { AuthConfig } from '@opencrane/auth';
-import { conversationClosed } from '../chat/participation.ts';
-import { isChatRefused } from '../chat/access.ts';
 import { listFiles } from '@opencrane/projections';
 import type { ChatOptions } from '../chat/routes.ts';
 import { sessionFor } from '../members/routes.ts';
@@ -237,16 +235,6 @@ async function authorise(options: FileOptions, config: AuthConfig,
   const { memberId, access } = context;
   const { historyPosition: joinPosition, createdBy } = access;
   if (access.mode !== 'agent_session' || !createdBy) {
-    throw new FileRefusal('conversation_refused');
-  }
-  try {
-    if (request.method === 'GET') {
-      const closed = await conversationClosed(options.store, options.db, options.silo,
-        conversationId, performance.now() + 2000);
-      if (closed) throw new FileRefusal('conversation_refused');
-    }
-  } catch (error) {
-    if (!isChatRefused(error)) throw error;
     throw new FileRefusal('conversation_refused');
   }
   if (request.method === 'POST') {
