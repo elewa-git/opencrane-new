@@ -14,7 +14,7 @@ Browser, model and application users must have no access to these. Infrastructur
 operators remain outside the application privacy promise. The collector accepts no arguments. Any supplied argument refuses before Docker runs.
 The fixed `/etc/opencrane/private-memory-qualification.json` file contains
 `containerId` (64 lowercase hex characters) and `siloId` (the expected raw `SILO_ID`).
-It may also contain `computerContainerId` for the separate bridge check.
+It must also contain `computerContainerId` for the separate bridge and supervisor checks.
 It must be a root-owned regular file, at most 1 KiB, with no group or world write
 permission. Final symlinks are refused. Root must also own and protect its parent
 directories. The deployment owner installs this file; neither its path nor target
@@ -59,7 +59,10 @@ run's lock. The runner must keep its children in that group. The image needs a
 writable `/run` and Linux `/proc`. A failed cleanup keeps the lock and refuses
 retries; the deployment owner must resolve the failure before retrying. The host
 also bounds Docker attachment to 130 seconds, allowing ten seconds for cleanup.
-The collector measures identity and event-stream creation before and after every child. A copied response
+The collector measures identity and event-stream creation before and after every child.
+It checks the computer's root supervisor before and after the bridge check, and
+again after each awaited journey. Missing supervisor proof refuses the run.
+A copied response
 cannot match the new challenge. It does not accept detached receipts or signatures.
 
 Only validated metadata is hashed into `receiptDigests`; no memory text is hashed.
@@ -100,6 +103,15 @@ This reader requires local Docker access on the deployment host; no HTTP route e
 Delivery and production admission remain disabled.
 
 ## Image-owned host probe
+
+The computer image starts its root supervisor as PID 1. Its root entrypoint saves
+the Linux start time in a mode-0600 launch record and starts the existing native
+dump-protection service before private work. The inspector checks that record,
+the fixed command, executable, UID, PID namespace and cgroup. A fresh socket
+reply binds protection to the kernel's peer PID. Swap and dump checks surround
+it. Docker checks container ID, image, start time and host PID on both sides.
+The packaged-image test uses the real entrypoint. Proxy, native wrapper, native
+child and canary helper proof remain missing.
 
 P4-15 PR 5h adds the fixed `journey.mjs` entry. The existing package Dockerfile copies
 these files; no code mount, caller executable or interpreter override is needed.
@@ -214,7 +226,7 @@ including an executable hidden by Linux dump protection, refuse. A disposable
 fixture with the required proc access proves the two service checks; it does not
 grant that access to a deployment.
 
-The protected target file may also name `computerContainerId`, the exact Docker
+The protected target file names `computerContainerId`, the exact Docker
 container id for the separate computer. Before the first server journey, the
 collector measures its running container, image, start time and host PID. It
 executes `bridge-check.ts` inside that container with a fresh challenge, the
@@ -228,7 +240,7 @@ The computer may mount its fixed data homes, `/tmp`, `/run` and `/var`.
 Mounting executable code paths such as `/app` still refuses. The container
 fixture builds the computer image and runs its root entrypoint and packaged
 bridge, with a normal `/home/agent` volume and no source-code mount.
-Without `computerContainerId`, this group has no cross-container proof.
+Without `computerContainerId`, collection refuses before a journey starts.
 
 The server-container runner still cannot see the bridge in its separate computer
 container. It refuses with `complete: false` before any journey begins, even if

@@ -210,6 +210,8 @@ async function inspectSupervisorRecord(recordMode: number, recordStart?: string,
   });
   try {
     return supervisorIdentity() !== undefined;
+  } catch {
+    return false;
   } finally {
     vi.mocked(lstatSync).mockImplementation(actual.lstatSync);
     vi.mocked(readFileSync).mockImplementation(actual.readFileSync);

@@ -122,3 +122,5 @@ export async function proveComputerBridge(containerId: string,
     return 'private_process_unreadable';
   }
 }
+
+export { containerIdentity, sameContainer, computerInstallation, type ContainerIdentity };

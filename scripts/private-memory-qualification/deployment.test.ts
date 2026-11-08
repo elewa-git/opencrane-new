@@ -4,7 +4,7 @@ import { PassThrough } from 'node:stream';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { collectDeployment } from './deployment.ts';
-import { proveComputerBridge } from './bridge-proof.ts';
+import { containerIdentity, proveComputerBridge, type ContainerIdentity } from './bridge-proof.ts';
 import { proveComputerSupervisor } from './supervisor-proof.ts';
 import { protectionMessages, type ProtectionFailure } from './protection-failure.ts';
 
@@ -24,6 +24,7 @@ let host: string;
 let responses: Record<string, unknown>[];
 let alter: (value: Record<string, unknown>) => void;
 let failChild: boolean;
+let computer: ContainerIdentity;
 
 function unchanged(): void {}
 
@@ -64,6 +65,11 @@ function docker(_file: unknown, args: unknown, options: unknown): string {
 function prepare(): void {
   vi.mocked(proveComputerBridge).mockResolvedValue(true);
   vi.mocked(proveComputerSupervisor).mockResolvedValue(true);
+  computer = { Id: 'a'.repeat(64), Image: `sha256:${'d'.repeat(64)}`,
+    State: { Running: true, StartedAt: '2026-01-01T00:00:01Z', Pid: 4321 } };
+  vi.mocked(containerIdentity).mockImplementation(function readComputer() {
+    return computer;
+  });
   vi.mocked(execFileSync).mockReset();
   vi.mocked(spawn).mockImplementation(spawnDocker);
   vi.mocked(openSync).mockReturnValue(42);
@@ -74,7 +80,8 @@ function prepare(): void {
     uid: 0, mode: 0o100600, size: 150, isFile: regularFile,
   });
   vi.mocked(fstatSync).mockReturnValue(stat);
-  vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ containerId, siloId: 'fixture-silo' }));
+  vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ containerId,
+    computerContainerId: 'a'.repeat(64), siloId: 'fixture-silo' }));
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-01-01T00:00:03Z'));
   container = {
@@ -131,6 +138,7 @@ async function refusesSupervisorReplacementDuringWork(): Promise<void> {
     containerId, computerContainerId, siloId: 'fixture-silo',
   }));
   vi.mocked(proveComputerSupervisor).mockResolvedValueOnce(true)
+    .mockResolvedValueOnce(true)
     .mockResolvedValueOnce('private_process_identity_changed');
   const result = await collectDeployment();
   expect(result).toEqual({ result: 'FAIL', reason: 'host_refused', complete: false,
@@ -140,6 +148,37 @@ async function refusesSupervisorReplacementDuringWork(): Promise<void> {
 }
 it('refuses a supervisor replaced while the private journey was awaited',
   refusesSupervisorReplacementDuringWork);
+
+async function refusesComputerReplacementDuringWork(): Promise<void> {
+  function replaceComputer(): void {
+    computer = { ...computer, State: { ...computer.State, Pid: 4322 } };
+  }
+  alter = replaceComputer;
+  const result = await collectDeployment();
+  expect(result).toEqual({ result: 'FAIL', reason: 'host_refused', complete: false,
+    protectionFailure: 'private_process_identity_changed',
+    message: protectionMessages.private_process_identity_changed });
+  expect(responses).toHaveLength(1);
+}
+it('refuses a computer replacement during awaited work even if the new inspector passes',
+  refusesComputerReplacementDuringWork);
+
+async function refusesSupervisorExitWithLostReply(): Promise<void> {
+  vi.mocked(proveComputerSupervisor).mockResolvedValueOnce(true)
+    .mockResolvedValueOnce(true)
+    .mockResolvedValueOnce('private_process_unreadable');
+  function loseReply(): void {
+    throw new Error('private arguments must stay in memory');
+  }
+  alter = loseReply;
+  const result = await collectDeployment();
+  expect(result).toEqual({ result: 'FAIL', reason: 'host_refused', complete: false,
+    protectionFailure: 'private_process_unreadable',
+    message: protectionMessages.private_process_unreadable });
+  expect(JSON.stringify(result)).not.toContain('private arguments');
+}
+it('rechecks a lost supervisor after private work loses its reply',
+  refusesSupervisorExitWithLostReply);
 
 async function refusesInventedBundle(): Promise<void> {
   const invented = JSON.stringify({ result: 'PASS', sourceSha, imageDigest, checks: names });

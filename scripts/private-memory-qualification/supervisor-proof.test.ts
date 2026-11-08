@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { runInContainer } from './container-process.ts';
 import { proveComputerSupervisor } from './supervisor-proof.ts';
 
@@ -18,7 +19,11 @@ function inspect(): string {
     HostConfig: { ReadonlyRootfs: true }, Mounts: [] }]);
 }
 function answer(_container: string, _args: string[], input = ''): Promise<unknown> {
-  const request = JSON.parse(input) as Record<string, unknown>;
+  const parsed: unknown = JSON.parse(input);
+  const request = z.record(z.string(), z.unknown()).parse(parsed);
+  if (response['result'] === 'swap_not_disabled') {
+    return Promise.resolve({ ...request, result: 'swap_not_disabled' });
+  }
   return Promise.resolve({ ...request, result: true, pid: 1, startTime: '123', ...response });
 }
 function prepare(): void {

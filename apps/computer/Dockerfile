@@ -53,6 +53,8 @@ COPY --from=project scripts/private-memory-qualification/container-probe.ts \
   /scripts/private-memory-qualification/container-probe.ts
 COPY --from=project scripts/private-memory-qualification/bridge-check.ts \
   /scripts/private-memory-qualification/bridge-check.ts
+COPY --from=project scripts/private-memory-qualification/supervisor-check.ts \
+  /scripts/private-memory-qualification/supervisor-check.ts
 COPY --from=process-protection-build /runner-protection.node \
   /scripts/private-memory-qualification/runner-protection.node
 COPY requirements.lock /tmp/requirements.lock

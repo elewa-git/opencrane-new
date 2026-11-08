@@ -24,7 +24,7 @@ flowchart LR
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
   collector -->|measures, starts checks and checks refusal format| docker["Docker<br/>running image and host"]
   docker -->|checks service processes and pinned Codex| deployment["deployment<br/>service processes and journey runner"]
-  collector -->|checks live bridge| computer["computer container<br/>root launch record"]
+  collector -->|checks live bridge and supervisor| computer["computer container<br/>root launch records"]
 ```
 
 ## What it is responsible for
@@ -35,7 +35,8 @@ flowchart LR
 - Refuse an old or used event store, changed deployment, or missing check.
 - Refuse swap, crash dumps, unsafe process limits and unreadable host settings.
 - Refuse container journeys while any process that can hold private text lacks protection proof.
-- Check the live bridge inside its computer container when the protected target names it.
+- Check the live bridge and root supervisor inside the owner-selected computer container.
+- Check the supervisor again after each awaited journey; refuse a replacement or lost check.
 - Mark missing process proof as incomplete in the runner and saved collector result.
 - Reject a missing-process refusal unless it says `complete: false`.
 - Save protection refusals with a fixed message naming the failed check.

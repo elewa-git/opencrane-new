@@ -4,6 +4,8 @@ import { PassThrough } from 'node:stream';
 import { vi } from 'vitest';
 import { z } from 'zod';
 import { collectDeployment } from '../../../../scripts/private-memory-qualification/deployment.ts';
+import * as bridgeProof from '../../../../scripts/private-memory-qualification/bridge-proof.ts';
+import * as supervisorProof from '../../../../scripts/private-memory-qualification/supervisor-proof.ts';
 
 const targetPath = '/etc/opencrane/private-memory-qualification.json';
 const resultPath = '/etc/opencrane/private-memory-qualification-result.json';
@@ -23,7 +25,7 @@ export async function initialQualificationFixture() {
   const created = new Date(Date.now() - 3000).toISOString();
   const started = new Date(Date.now() - 2000).toISOString();
   let streamCreated = new Date(Date.now() - 1000).toISOString();
-  const target = { containerId, siloId: 'test' };
+  const target = { containerId, computerContainerId: 'd'.repeat(64), siloId: 'test' };
   files.set(targetPath, JSON.stringify(target));
   const originalOpen = fs.openSync;
   const originalRead = fs.readFileSync;
@@ -113,6 +115,12 @@ export async function initialQualificationFixture() {
   vi.spyOn(fs, 'renameSync').mockImplementation(rename);
   vi.spyOn(processes, 'execFileSync').mockImplementation(docker);
   vi.spyOn(processes, 'spawn').mockImplementation(spawn);
+  vi.spyOn(bridgeProof, 'containerIdentity').mockReturnValue({
+    Id: target.computerContainerId, Image: imageDigest,
+    State: { Running: true, StartedAt: started, Pid: 4321 },
+  });
+  vi.spyOn(bridgeProof, 'proveComputerBridge').mockResolvedValue(true);
+  vi.spyOn(supervisorProof, 'proveComputerSupervisor').mockResolvedValue(true);
   const result = await collectDeployment();
   function replace(value: unknown) {
     files.set(resultPath, JSON.stringify(value));

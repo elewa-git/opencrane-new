@@ -39,6 +39,12 @@ list. The CI image build step has a 30-minute limit inside the 60-minute fixture
 
 ## Bridge process protection
 
+The root entrypoint saves PID 1 and its Linux start time before starting children.
+It starts the bridge's native dump-protection service. The collector checks the
+record, process, swap and live protection reply in the owner-selected computer.
+It repeats the check after private memory work; a changed container or root
+process refuses. The packaged-image test uses the production entrypoint.
+
 The image builds the existing native runner protection helper from source. The
 bridge calls it before reading its launch key, starting the proxy or starting
 Codex. A local socket returns only a fresh challenge and the helper's current

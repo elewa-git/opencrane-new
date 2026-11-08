@@ -1,7 +1,7 @@
 import { createServer, type Socket } from 'node:net';
 import { runnerProtected } from './runner-protection.ts';
 
-export type ServiceRole = 'serverDelivery' | 'bridge';
+export type ServiceRole = 'serverDelivery' | 'bridge' | 'supervisor';
 
 function answer(socket: Socket, bytes: Buffer): void {
   const request = bytes.toString('utf8');

@@ -76,6 +76,12 @@ function cleanup(): void {
 beforeAll(build, 310_000);
 afterAll(cleanup, 60_000);
 
+function inventoryResult(container: string): string {
+  return docker(['exec', container, '/usr/local/bin/node',
+    '--experimental-strip-types', '--input-type=module', '--eval',
+    "import { probePrivateProcessInventory } from '/scripts/private-memory-qualification/private-processes.ts'; process.stdout.write(String(probePrivateProcessInventory()));"]);
+}
+
 async function waitForBridge(container: string): Promise<void> {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     try {
@@ -94,10 +100,7 @@ async function provesOnlyTheBridgeGroup(): Promise<void> {
   await waitForBridge(container);
   expect(await proveComputerBridge(container, installationId)).toBe(true);
   expect(await proveComputerSupervisor(container, installationId)).not.toBe(true);
-  const inventory = docker(['exec', container, '/usr/local/bin/node',
-    '--experimental-strip-types', '--input-type=module', '--eval',
-    "import { probePrivateProcessInventory } from '/scripts/private-memory-qualification/private-processes.ts'; process.stdout.write(String(probePrivateProcessInventory()));"]);
-  expect(inventory).toBe('private_process_missing');
+  expect(inventoryResult(container)).toBe('private_process_missing');
   docker(['exec', container, 'sh', '-c',
     "printf '999999 1\\n' > /run/executor/supervisor/bridge-identity"]);
   expect(await proveComputerBridge(container, installationId)).not.toBe(true);
@@ -125,6 +128,7 @@ async function provesPackagedBridge(): Promise<void> {
   try {
     expect(await proveComputerBridge(computer.containerId, installationId)).toBe(true);
     expect(await proveComputerSupervisor(computer.containerId, installationId)).toBe(true);
+    expect(inventoryResult(computer.containerId)).toBe('private_process_missing');
     const record = execFileSync('/usr/bin/docker', ['exec', computer.containerId,
       'cat', '/run/executor/supervisor/bridge-identity'], { encoding: 'utf8' });
     expect(record).toMatch(/^[1-9][0-9]* [1-9][0-9]*\n$/u);
