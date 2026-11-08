@@ -89,13 +89,20 @@ export const welcomeAnswerRecordedDataSchema = z.strictObject({
 }).refine(hasMatchingPersonaDigest, {
   path: ['encryptedDigest'], message: 'Digest does not match encrypted bytes',
 });
+export const onboardingCompletedDataSchema = z.strictObject({
+  ...identity, welcomeId: chatIdSchema, scriptVersion: z.literal('welcome-v1'),
+  variant: z.enum(['assistant', 'no_assistant']), finalAnswerId: chatIdSchema,
+  confirmationRef: z.literal('welcome-v1-complete'),
+});
 const personalIdentitySchema = z.object({ memberId: chatIdSchema });
+const personalEventTypes = new Set([
+  'onboarding.persona_revised', 'onboarding.persona_approved',
+  'onboarding.welcome_started', 'onboarding.welcome_answer_recorded',
+  'onboarding.completed',
+]);
 export function validSurveyEvent(record: EventEnvelope): boolean {
   if (!record.type.startsWith('onboarding.survey_') &&
-      record.type !== 'onboarding.persona_revised' &&
-      record.type !== 'onboarding.persona_approved' &&
-      record.type !== 'onboarding.welcome_started' &&
-      record.type !== 'onboarding.welcome_answer_recorded') {
+      !personalEventTypes.has(record.type)) {
     return true;
   }
   const parsed = personalIdentitySchema.safeParse(record.data);
@@ -104,9 +111,13 @@ export function validSurveyEvent(record: EventEnvelope): boolean {
   }
   const fields = parsed.data;
   const bytes = encoder.encode(JSON.stringify(record));
+  const isCompletion = record.type === 'onboarding.completed';
+  const source = isCompletion ? 'opencrane-ops' : 'opencrane-server';
+  const kind = isCompletion ? 'system' : 'human';
+  const principalId = isCompletion ? 'onboarding-completion' : fields.memberId;
   return record.subject === `personal-${fields.memberId}` &&
-    record.source === 'opencrane-server' && record.principal?.kind === 'human' &&
-    record.principal.id === fields.memberId && Boolean(record.commandId) &&
+    record.source === source && record.principal?.kind === kind &&
+    record.principal.id === principalId && Boolean(record.commandId) &&
     bytes.byteLength <= 16384;
 }
 const exampleIdentity = { schemaVersion: 1 as const, memberId: 'alice', generation: 1 };
@@ -137,4 +148,10 @@ export const surveyEvents: readonly EventDefinition[] = [
     { ...exampleIdentity, welcomeId: 'welcome-1', scriptVersion: 'welcome-v1',
       stepId: 'continue_to_workspace', stepNumber: 1, encrypted: savedExample.ciphertext,
       encryptedDigest: savedExample.ciphertextDigest, keyRef: savedExample.keyId }),
+  event('onboarding.completed', 'personal',
+    'The system confirmed the saved final answer without starting work.',
+    onboardingCompletedDataSchema,
+    { ...exampleIdentity, welcomeId: 'welcome-1', scriptVersion: 'welcome-v1',
+      variant: 'no_assistant', finalAnswerId: 'answer-1',
+      confirmationRef: 'welcome-v1-complete' }),
 ];

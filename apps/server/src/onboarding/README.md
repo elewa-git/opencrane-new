@@ -17,6 +17,7 @@ flowchart LR
   web[Website] --> onboarding[Survey, persona and welcome routes]
   onboarding --> access[Member access]
   onboarding --> events[Personal events]
+  workers[Background workers] -->|confirm saved answer| events
   events --> tables[Read tables]
 ```
 
@@ -32,7 +33,8 @@ flowchart LR
 - Lists revision dates and opens one version for its member after an access check.
 - Approves the exact current version and shows its saved time and original receipt.
 - Starts one saved welcome from the member's actual assistant assignment.
-- Saves the next scripted answer and shows it as pending completion.
+- Saves the next scripted answer and shows it as pending until a worker confirms completion.
+- Shows a completed welcome as read-only after survey or assistant changes.
 
 Reads check current membership after loading, before opening private answers.
 Opening a persona revision loads that version before checking membership. Writes
@@ -45,8 +47,8 @@ These requests use the member's personal encryption keys rather than conversatio
 keys.
 Approval keeps its chosen version after a later edit or survey restart. It does
 not change assistant settings or grants.
-The welcome also starts no assistant turn or computer. Its final answer stays
-pending until a separate completion process confirms it.
+The welcome starts no assistant turn or computer. Its final answer stays pending
+until a worker confirms the saved answer. Completion keeps the original words.
 
 ## Main files
 

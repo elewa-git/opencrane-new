@@ -1,6 +1,7 @@
 import { scanConnections, connectionCleanupHandler, connectionCustodyFromFile,
   budgets, ownershipSeedHandler, ownershipConfirmationHandler, settlementHandler, modelGrantHandler,
-  providerDefaultHandler, initialiseBudgetProjection, budgetStopHandler } from '@opencrane/models';
+  providerDefaultHandler, initialiseBudgetProjection, budgetStopHandler,
+  welcomeCompletionHandler } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
 import { rm, writeFile } from 'node:fs/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
@@ -22,6 +23,7 @@ import { lifecycleHandlers, watchComputers } from './lifecycle.ts';
 import { personalKeyHandler } from './personal-keys.ts';
 import { departureCleanupHandler } from './departure-cleanup.ts';
 import { memoryCleanupHandler, recoverMemoryCleanup } from './memory-cleanup.ts';
+import { recoverWelcomeCompletion } from './welcome-recovery.ts';
 import { McpKubernetes } from './mcp-kubernetes.ts';
 import { prepareGatewayConfigurationHandler } from './gateway-configuration.ts';
 import { stopMcpInstanceHandler } from './mcp-stop.ts';
@@ -193,7 +195,8 @@ try {
       authorisation.handler, ownershipSeedHandler(commands.store),
       ownershipConfirmationHandler(commands.store), budgetStopHandler(commands.store),
       providerDefaultHandler(commands.store, binding), modelGrantHandler(commands.store),
-      ...lifecycleHandlers(commands.store), departureCleanupHandler(commands.store, authorisation)];
+      ...lifecycleHandlers(commands.store), departureCleanupHandler(commands.store, authorisation),
+      welcomeCompletionHandler(commands.store)];
     const mcpNamespace = process.env['MCP_KUBE_NAMESPACE']?.trim();
     if (mcpNamespace) {
       const mcpKube = new McpKubernetes(mcpNamespace);
@@ -267,6 +270,7 @@ try {
         }
         await recoverMemoryCleanup(dispatcherRuntime, store, checkpoint);
       }
+      await recoverWelcomeCompletion(dispatcherRuntime, store);
       await dispatcherRuntime.work();
       async function scanNightly(occurrence: Date) {
         await scanNightlyMemory(content!.db, commandStore, silo, occurrence);

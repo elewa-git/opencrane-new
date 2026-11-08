@@ -36,4 +36,8 @@ The no-assistant choice can start while provisioning is pending, but an
 unavailable assignment read refuses the request. Answer requires the exact
 welcome id, generation, script, first step and expected personal position.
 Its private bytes use the personal key. The last answer returns
-`completion_pending`; no completion event is written by these routes.
+`completion_pending`; no completion event is written by these routes. The
+`complete-welcome` worker handles the saved answer separately. Once it saves
+`onboarding.completed`, welcome reads return `completed` and `completedAt`.
+Survey restarts and later assignment changes retain this frozen welcome. The
+original answer command receipt still reports its saved pending result.

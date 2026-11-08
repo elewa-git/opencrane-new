@@ -100,10 +100,12 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `onboarding.persona_revised` | admitted member, complete current survey, expected personal position and generation | personal-settings: current encrypted revision; immutable persona revision history | none |
 | `onboarding.persona_approved` | admitted member, exact current revision id and number, expected personal position and generation | personal-settings: approved revision and approval time; older approval remains until another approval | none |
 | `onboarding.welcome_started` | admitted member, checked assignment and approved persona when assigned, exact personal position and generation | personal-settings: frozen script, variant, assignment and revision reference | none |
-| `onboarding.welcome_answer_recorded` | admitted member, exact next scripted step and expected personal position | personal-settings: encrypted answer and pending completion progress | none in this part; completion is separate |
+| `onboarding.welcome_answer_recorded` | admitted member, exact next scripted step and expected personal position | personal-settings: encrypted answer and pending completion progress | complete-welcome |
+| `onboarding.completed` | onboarding-completion system command, saved final answer and current member | personal-settings: permanent read-only welcome with original answer reference | none |
 
-These events require schema version 1, the member's exact personal subject, a command id,
-a matching human principal and the server source. The whole event is at most 16 KiB.
+These events require schema version 1, the member's exact personal subject and a command id.
+Member writes use a matching human principal and the server source. Completion uses the
+`onboarding-completion` system principal and ops source. The whole event is at most 16 KiB.
 Steps 1–4 store ciphertext, key references and `ciphertextDigest`: lower-case 64-hex
 SHA-256 of the exact decoded ciphertext bytes. Parsing and projection recompute it
 without keys and refuse missing, malformed or mismatched digests. Text fields are at most 4 KiB;
@@ -850,6 +852,7 @@ events. Desktop admission additionally requires an explicit member
 | `seed-provider-default` | `provider.verification_recorded`, `provider.models_selected` |
 | `seed-model-grants` | `member.joined`, `silo.owner_bootstrapped`, `assistant.created` |
 | `prepare-personal-key` | `member.joined`, `silo.owner_bootstrapped` |
+| `complete-welcome` | `onboarding.welcome_answer_recorded` |
 | `create-assistant` | `member.joined`, `silo.owner_bootstrapped` |
 | `claim-computer` | `assistant.created`, `computer.lost` |
 

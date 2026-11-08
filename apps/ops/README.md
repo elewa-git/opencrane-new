@@ -20,8 +20,8 @@ flowchart LR
   apps --> server["apps/server<br/>back end"]
   ops -.->|checked claim when supplied| server
   server -->|saves changes| nats["NATS<br/>event log"]
-  ops -->|reads events| nats
-  ops -->|saves checked results and daily or weekly routine records| nats
+  ops -->|reads events and checks unfinished welcomes at startup| nats
+  ops -->|saves checked results, welcome completion and routine records| nats
   ops -->|holds worker locks and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
@@ -50,6 +50,8 @@ for checked preparation. It sends no memory text and cannot dispatch a turn.
 - Prepares reviewed tool settings for the gateway and, when configured, removes
   forgotten memory keys and old private connection copies.
 - Provides [replay](../../GLOSSARY.md#replay), failed-job tools and upgrades for recovery.
+- Confirms one saved final welcome answer after checking current membership. On restart,
+  it retries unfinished welcome jobs from saved events.
 - Removes the dispatcher's ready marker as soon as event consumption fails, before
   database lock cleanup finishes.
 - Provides internal commands that claim, skip or record missed routine slots without starting work.
@@ -96,7 +98,7 @@ Weekly downtime records cover scheduled local dates and start no model or tool w
    private key storage is configured, it also prepares the member's private answer key.
 3. **A member leaves.** The worker removes their groups and personal grants and
    switches off their personal assistant. It checks saved results and applied
-   permissions before recording completion.
+   permissions before recording completion. A pending welcome stays unfinished.
 4. **A computer sits idle.** The worker pauses it after the configured idle period.
    A new message wakes the same assistant's computer with its saved files.
 5. **An operator rebuilds data.** Replay reads the event log again to rebuild tables

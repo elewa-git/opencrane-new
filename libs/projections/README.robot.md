@@ -1107,3 +1107,7 @@ the script, generation, assignment status, assistant id and approved revision
 reference. Answer stores encrypted bytes and `completion_pending`. A survey
 restart clears an unfinished current welcome; its old events remain in the log.
 Replay opens no key, starts no turn and appends no completion event.
+`onboarding.completed` changes only the saved welcome status and its completion
+time. A later survey step or restart keeps that completed welcome and its
+encrypted answer. Rebuilding the table repeats the same fold without running
+the completion worker.

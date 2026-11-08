@@ -4,6 +4,7 @@ export { privateCallers } from './private-callers.ts';
 export { readBudgetResource } from './budget-resource.ts';
 export { budgetChange } from './budget-change.ts';
 export { budgetStopHandler, queuedPayer } from './budget-stop-handler.ts';
+export { welcomeCompletionHandler } from './welcome-completion.ts';
 export { turnBudgetStop, turnBudgetStopDetails } from './budget-turn.ts';
 export { settlementHandler } from './settlement-handler.ts';
 export { BudgetActor, envelope, history, migrateBudgetDefault } from './actor.ts';

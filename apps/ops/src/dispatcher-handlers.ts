@@ -7,7 +7,7 @@ export function dispatcherHandlerNames(
 ): HandlerName[] {
   const names: HandlerName[] = ["update-openfga", "seed-ownership", "confirm-ownership", "seed-model-grants",
     "prepare-gateway-configuration", "seed-provider-default", "create-assistant", "claim-computer",
-    "cleanup-departure", "stop-budget-turns"];
+    "cleanup-departure", "stop-budget-turns", "complete-welcome"];
   if (env["PERSONAL_KEY_DIRECTORY"]?.trim()) {
     names.push("prepare-personal-key");
   }

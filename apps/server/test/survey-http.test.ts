@@ -8,10 +8,12 @@ import { testAuthConfig } from '@opencrane/auth/testing';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
+import { welcomeAnswerRecordedDataSchema } from '@opencrane/events';
 import { conversationKeys, pgDb, personalSettings, readSurvey, ProjectionRunner }
   from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { buildServer } from '../src/server.ts';
+import { welcomeCompletionHandler } from '@opencrane/models';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -1009,7 +1011,159 @@ async function approvedAssistantWelcome() {
   for await (const row of nats.store.readStream('personal-alice')) {
     expect(JSON.stringify(row.event)).not.toContain('Private weekly help');
     expect(JSON.stringify(row.event)).not.toContain('Private approved persona');
+    if (row.event.type === 'onboarding.welcome_answer_recorded') {
+      await welcomeCompletionHandler(nats.store).handle(row.event, pgDb(dbs.queue));
+    }
   }
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'completed', answer: 'Private weekly help',
+      revision: revision.revision, revisionId: revision.revisionId, assistantId });
 }
 it('freezes the approved revision and actual assistant assignment at welcome start',
   approvedAssistantWelcome, 60_000);
+
+async function completedWelcomeFromSavedAnswer() {
+  const position = await completeSurvey();
+  const started = (await welcome({ operation: 'start', commandId: 'finish-start',
+    generation: 1, expectedPosition: position, scriptVersion: 'welcome-v1',
+    variant: 'no_assistant' })).json<{ position: number; welcomeId: string }>();
+  const answer = { operation: 'answer', commandId: 'finish-answer', generation: 1,
+    expectedPosition: started.position, welcomeId: started.welcomeId,
+    scriptVersion: 'welcome-v1', stepId: 'continue_to_workspace', stepNumber: 1,
+    answer: 'Continue to workspace' };
+  const saved = await welcome(answer);
+  expect(saved.json()).toMatchObject({ status: 'completion_pending' });
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'completion_pending' });
+  const rows = [];
+  for await (const row of nats.store.readStream('personal-alice')) rows.push(row);
+  const finalAnswer = rows.at(-1)!;
+  const reaction = welcomeCompletionHandler(nats.store);
+  await reaction.handle(finalAnswer.event, pgDb(dbs.queue));
+  await reaction.handle(finalAnswer.event, pgDb(dbs.queue));
+  expect(await nats.store.head('personal-alice')).toBe(finalAnswer.sequence + 1);
+  const completed = (await app.inject({ url: '/api/onboarding/welcome', headers }))
+    .json<{ completedAt: string }>();
+  expect(completed)
+    .toMatchObject({ status: 'completed', answered: 1, nextStep: null });
+  expect((await welcome({ ...answer, answer: 'Changed' })).statusCode).toBe(409);
+  expect((await welcome(answer)).json()).toEqual(saved.json());
+  const laterPersona = await revise('later-persona', finalAnswer.sequence + 1,
+    'New private persona');
+  expect(laterPersona.statusCode).toBe(200);
+  const restart = await post({ operation: 'restart', commandId: 'after-completion',
+    generation: 1, expectedPosition: laterPersona.json<PositionReceipt>().position });
+  expect(restart.statusCode).toBe(200);
+  const hash = createHash('sha256');
+  hash.update('test\0alice');
+  const assistantId = `personal-${hash.digest('hex').slice(0, 32)}`;
+  const assigned = { ...event('later-assistant', `assistant-${assistantId}`, 'assistant.created'),
+    source: 'opencrane-lifecycle', principal: { kind: 'system' as const,
+      id: 'computer-lifecycle' },
+    data: { assistantId, ownerId: 'alice', kind: 'personal' } };
+  await nats.store.append({ event: assigned, expectedSequence: 0 });
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'completed', answer: 'Continue to workspace',
+      assistantId: null, completedAt: completed.completedAt });
+  function refuseEncryption(): never {
+    throw new Error('Projection opened a key');
+  }
+  function refuseDecryption(): never {
+    throw new Error('Projection opened a key');
+  }
+  const encrypt = vi.spyOn(keys, 'encrypt').mockImplementation(refuseEncryption);
+  const decrypt = vi.spyOn(keys, 'decrypt').mockImplementation(refuseDecryption);
+  try {
+    await runner.rebuild(personalSettings);
+  } finally {
+    encrypt.mockRestore();
+    decrypt.mockRestore();
+  }
+  const projected = await readSurvey(pgDb(dbs.queue), 'test', 'alice');
+  expect(projected).toMatchObject({ welcome: { status: 'completed', answered: 1 } });
+  expect(await nats.store.head('personal-alice')).toBe(finalAnswer.sequence + 3);
+}
+it('keeps the final answer pending until its saved intent completes exactly once',
+  completedWelcomeFromSavedAnswer, 60_000);
+
+async function pendingNoAssistant() {
+  const position = await completeSurvey();
+  const started = (await welcome({ operation: 'start', commandId: 'pending-start',
+    generation: 1, expectedPosition: position, scriptVersion: 'welcome-v1',
+    variant: 'no_assistant' })).json<{ position: number; welcomeId: string }>();
+  await welcome({ operation: 'answer', commandId: 'pending-answer', generation: 1,
+    expectedPosition: started.position, welcomeId: started.welcomeId,
+    scriptVersion: 'welcome-v1', stepId: 'continue_to_workspace', stepNumber: 1,
+    answer: 'Continue to workspace' });
+  const rows = [];
+  for await (const row of nats.store.readStream('personal-alice')) rows.push(row);
+  return rows.at(-1)!;
+}
+
+async function completionRaces() {
+  const answer = await pendingNoAssistant();
+  const reactionA = welcomeCompletionHandler(nats.store);
+  const reactionB = welcomeCompletionHandler(nats.store);
+  await Promise.all([reactionA.handle(answer.event, pgDb(dbs.queue)),
+    reactionB.handle(answer.event, pgDb(dbs.queue))]);
+  expect(await nats.store.head('personal-alice')).toBe(answer.sequence + 1);
+  const changed = structuredClone(answer.event);
+  const savedData = welcomeAnswerRecordedDataSchema.parse(answer.event.data);
+  changed.data = { ...savedData, stepId: 'weekly_help' };
+  await expect(reactionA.handle(changed, pgDb(dbs.queue))).rejects.toThrow();
+  expect(await nats.store.head('personal-alice')).toBe(answer.sequence + 1);
+}
+it('two workers converge on one completion and reject a changed saved intent',
+  completionRaces, 60_000);
+
+async function completionRecoversLostAppendReply() {
+  const answer = await pendingNoAssistant();
+  const append = nats.store.append.bind(nats.store);
+  nats.store.append = async function loseCompletionReply(command) {
+    await append(command);
+    throw new Error('Reply lost');
+  };
+  try {
+    await welcomeCompletionHandler(nats.store).handle(answer.event, pgDb(dbs.queue));
+  } finally {
+    nats.store.append = append;
+  }
+  await welcomeCompletionHandler(nats.store).handle(answer.event, pgDb(dbs.queue));
+  expect(await nats.store.head('personal-alice')).toBe(answer.sequence + 1);
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'completed' });
+}
+it('recovers the original completion after an append reply is lost',
+  completionRecoversLostAppendReply, 60_000);
+
+async function completionRefusesStaleIntent() {
+  const answer = await pendingNoAssistant();
+  const savedData = welcomeAnswerRecordedDataSchema.parse(answer.event.data);
+  const badScript = structuredClone(answer.event);
+  badScript.data = { ...savedData, scriptVersion: 'old-script' };
+  const reaction = welcomeCompletionHandler(nats.store);
+  await expect(reaction.handle(badScript, pgDb(dbs.queue))).rejects.toThrow();
+  const wrongOrder = structuredClone(answer.event);
+  wrongOrder.data = { ...savedData, stepId: 'weekly_help' };
+  await expect(reaction.handle(wrongOrder, pgDb(dbs.queue))).rejects.toThrow();
+  expect(await nats.store.head('personal-alice')).toBe(answer.sequence);
+  const restarted = await post({ operation: 'restart', commandId: 'invalidate-welcome',
+    generation: 1, expectedPosition: answer.sequence });
+  expect(restarted.statusCode).toBe(200);
+  await reaction.handle(answer.event, pgDb(dbs.queue));
+  expect(await nats.store.head('personal-alice')).toBe(answer.sequence + 1);
+}
+it('rejects changed script and order and leaves a restarted welcome unfinished',
+  completionRefusesStaleIntent, 60_000);
+
+async function completionPausesForRemovedMember() {
+  const answer = await pendingNoAssistant();
+  const removed = { ...event('remove-before-completion', 'member-alice', 'member.removed'),
+    data: { memberId: 'alice', removedBy: 'owner' } };
+  await nats.store.append({ event: removed, expectedSequence: 1 });
+  const reaction = welcomeCompletionHandler(nats.store);
+  await reaction.handle(answer.event, pgDb(dbs.queue));
+  expect(await nats.store.head('personal-alice')).toBe(answer.sequence);
+}
+it('does not complete a saved welcome after membership removal',
+  completionPausesForRemovedMember, 60_000);

@@ -20,7 +20,7 @@ The list is stored in PostgreSQL using pg-boss, a job queue library.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> handlers["libs/handlers<br/>background job queue"]
-  ops["apps/ops and dev startup<br/>background workers"] -->|checks changes; runs queued jobs| handlers
+  ops["apps/ops and dev startup<br/>background workers, including welcome completion"] -->|checks changes; runs queued jobs| handlers
   handlers -->|reports dispatch failure before lock cleanup| ops
   nats["NATS JetStream<br/>event log"] -->|new events| handlers
   handlers -->|runs work with cancellation and a deadline| reactions["libs/models and libs/authz<br/>registered reactions"]
@@ -35,6 +35,7 @@ flowchart LR
 - Run related jobs in order, such as changes for one member. Let unrelated jobs
   run alongside them.
 - Keep queued jobs safe across restarts, so none are lost.
+- Keep a welcome completion's member identifier out of worker attempt logs.
 - Retry failed work. Keep a job that exhausts its retries on the list and put a
   copy on a separate failure list for operators.
 - Save completion in the same database step as a reaction's table changes,

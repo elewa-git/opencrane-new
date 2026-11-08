@@ -38,6 +38,7 @@ export const handlerSubscriptions = {
   "seed-provider-default": ["provider.verification_recorded", "provider.models_selected"],
   "seed-model-grants": ["member.joined", "silo.owner_bootstrapped", "assistant.created"],
   "prepare-personal-key": ["member.joined", "silo.owner_bootstrapped"],
+  "complete-welcome": ["onboarding.welcome_answer_recorded"],
   "create-assistant": ["member.joined", "silo.owner_bootstrapped"],
   "claim-computer": ["assistant.created", "computer.lost"],
 } as const;
