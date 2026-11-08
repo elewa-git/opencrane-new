@@ -33,6 +33,42 @@ try {
 }
 it('starts the packaged proxy and refuses an unauthenticated caller', startsPackagedProxy);
 
+async function recordsBridgeIdentityAtLaunch() {
+  const computer = await uploadComputer();
+  try {
+    const inspect = `
+import assert from 'node:assert/strict';
+import { readFileSync, statSync } from 'node:fs';
+const path = '/run/executor/supervisor/bridge-identity';
+const record = readFileSync(path, 'utf8');
+const match = /^([1-9][0-9]*) ([1-9][0-9]*)\\n$/.exec(record);
+assert.ok(match, 'root entrypoint must write the bridge launch identity');
+const pid = Number(match[1]);
+const startTime = match[2];
+const file = statSync(path);
+assert.equal(file.uid, 0);
+assert.equal(file.mode & 0o777, 0o600);
+const command = readFileSync('/proc/' + pid + '/cmdline', 'utf8').split('\\0');
+assert.deepEqual(command.slice(0, 4), ['/usr/local/bin/node', '--disable-sigusr1',
+  '--experimental-strip-types', '/app/src/bridge.ts']);
+const stat = readFileSync('/proc/' + pid + '/stat', 'utf8');
+const commandEnd = stat.lastIndexOf(') ');
+assert.ok(commandEnd > 0);
+const fields = stat.slice(commandEnd + 2).trimEnd().split(' ');
+assert.equal(fields[19], startTime);
+process.stdout.write(JSON.stringify({ pid, startTime }));
+`;
+    const result = await computer.exec('node', '--input-type=module', '-e', inspect);
+    const identity = JSON.parse(result) as { pid: number; startTime: string };
+    expect(identity.pid).toBeGreaterThan(1);
+    expect(identity.startTime).toMatch(/^[1-9][0-9]*$/u);
+  } finally {
+    await computer.close();
+  }
+}
+it('records the real bridge PID and start time from the root entrypoint',
+  recordsBridgeIdentityAtLaunch, 60_000);
+
 async function refusesUncertainIdentity(fault: string) {
   const computer = await uploadComputer();
   try {
