@@ -28,6 +28,7 @@ import * as credentials from '../src/chat/turn-credentials.ts';
 import * as routineSession from '../src/routine-session.ts';
 import { stopUnconfirmedRoutine } from '../src/routine-delivery-stop.ts';
 import { createRoutineComposition, createRoutineDelivery } from '../src/routine-composition.ts';
+import { bindRoutineBudgetOwner } from '../src/routine-delivery-owner.ts';
 
 let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
 let storage: Awaited<ReturnType<typeof database>>;
@@ -38,6 +39,8 @@ let fga: Awaited<ReturnType<typeof openfga>>;
 let binding: Awaited<ReturnType<typeof createStore>>;
 let keys: ReturnType<typeof conversationKeys>;
 let actor: BudgetActor;
+let budgetOwned: boolean;
+let budgetOwner: ReturnType<typeof bindRoutineBudgetOwner>;
 let directory: string;
 let now: number;
 let wake: typeof preparedComputer.wake;
@@ -118,6 +121,12 @@ async function setup() {
   await nats.seed([computerClaimed, ready]);
   actor = new BudgetActor(nats.store, 'test');
   await actor.start(10_000, 10_000, 'sales');
+  budgetOwned = true;
+  async function requireBudgetLeader() {
+    if (!budgetOwned) throw new Error('Budget leader lost');
+  }
+  budgetOwner = bindRoutineBudgetOwner(actor, nats.store, 'test', stop.signal,
+    requireBudgetLeader);
   preparedComputer = await startComputer();
   wake = preparedComputer.wake;
   const prepareSession = routineSession.prepareRoutineSession;
@@ -243,7 +252,8 @@ async function dispatch(options: Options = { enabled: true }, continuation = fal
   await runner.run(routines);
   let progress;
   const identity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
-  const production = createRoutineDelivery(nats.store, keys, identity, actor, wake);
+  const production = createRoutineDelivery(nats.store, keys, identity, actor, wake,
+    budgetOwner);
   const receive: Handoff = async function receive(due, lease) {
     expect(lease.signal).toBe(leaseSignal);
     if (options.enabled === true && options.replay !== true) {
@@ -336,7 +346,8 @@ it('hands a checked due to its prepared thread once across duplicate delivery an
 async function productionDeliveryUsesCheckedDue() {
   await runner.run(routines);
   const workerIdentity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
-  const handoff = createRoutineDelivery(nats.store, keys, workerIdentity, actor, wake);
+  const handoff = createRoutineDelivery(nats.store, keys, workerIdentity, actor, wake,
+    budgetOwner);
   async function work(lease: Lease) {
     const worker = { ...lease, silo: 'test', binding, now: clock };
     const delivery = { db: storage.db, store: nats.store, worker, handoff };
@@ -350,6 +361,42 @@ async function productionDeliveryUsesCheckedDue() {
 }
 it('connects the production scheduler entry to one guarded routine delivery',
   productionDeliveryUsesCheckedDue);
+
+async function refusesSeparateBudgetActor() {
+  const separate = new BudgetActor(nats.store, 'test');
+  await separate.start(10_000, 10_000, 'sales');
+  async function requireLeader() {}
+  expect(() => bindRoutineBudgetOwner(separate, nats.store, 'test', stop.signal,
+    requireLeader)).toThrow('Routine budget owner unavailable');
+  expect(separate.state.roots).toEqual([]);
+  expect(actor.state.roots).toEqual([]);
+}
+it('keeps one routine root on the actor that also admits ordinary calls',
+  refusesSeparateBudgetActor);
+
+async function refusesLostBudgetLeader() {
+  budgetOwned = false;
+  const forbiddenWake = vi.fn(forbidden);
+  wake = forbiddenWake;
+  await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  expect(forbiddenWake).not.toHaveBeenCalled();
+  expect(actor.state.roots).toEqual([]);
+}
+it('refuses delivery before wake when the budget leader is lost',
+  refusesLostBudgetLeader);
+
+async function refusesBudgetLeaderLostDuringWake() {
+  async function losingWake(assistantId: string) {
+    budgetOwned = false;
+    return preparedComputer.wake(assistantId);
+  }
+  wake = losingWake;
+  await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  expect(actor.state.roots).toEqual([]);
+  expect(preparedComputer.executedThreads).toEqual([]);
+}
+it('refuses root allocation when the budget leader is lost during wake',
+  refusesBudgetLeaderLostDuringWake);
 async function recoversLostReply() {
   const append = nats.store.append.bind(nats.store);
   async function loseReply(...args: Parameters<typeof append>): Promise<never> {
