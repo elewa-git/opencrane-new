@@ -16,6 +16,7 @@ import * as tools from '../../../libs/models/src/mcp-dispatch.ts';
 import { SandboxClient } from '../src/kubernetes.ts';
 import { withRoutineLeadership } from '../src/routine-leadership.ts';
 import { dispatchRoutineCandidates, scanRoutineCandidates } from '../src/routine-scan.ts';
+import { runRoutineScheduler } from '../src/routine-production.ts';
 
 let storage: Awaited<ReturnType<typeof database>>;
 let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
@@ -116,6 +117,57 @@ async function state() {
   }
   return result!;
 }
+async function production(options: { enabled?: boolean; replay?: boolean },
+  handoff?: Parameters<typeof dispatchRoutineCandidates>[3]) {
+  let result: Awaited<ReturnType<typeof scanRoutineCandidates>> | undefined;
+  async function work(lease: Lease) {
+    leaseSignal = lease.signal;
+    const worker = { ...lease, silo: 'test', binding, now: clock };
+    result = await runRoutineScheduler(storage.db, nats.store, worker, options, handoff);
+  }
+  const leadership = { databaseUrl, silo: 'test', signal: stop.signal };
+  await withRoutineLeadership(leadership, work);
+  return result!;
+}
+async function disabledProductionDoesNotClaim() {
+  await save([creation()]);
+  const before = await nats.store.head('routine-orders');
+  const result = await production({});
+  expect(result).toMatchObject({ examined: 1, executionAvailable: false });
+  expect(await nats.store.head('routine-orders')).toBe(before);
+  expect((await state()).activeRun).toBeNull();
+  await production({ enabled: true, replay: true });
+  expect(await nats.store.head('routine-orders')).toBe(before);
+}
+it('keeps the production entry read only by default and during replay',
+  disabledProductionDoesNotClaim);
+
+async function enabledProductionNeedsDelivery() {
+  await save([creation()]);
+  const before = await nats.store.head('routine-orders');
+  await expect(production({ enabled: true })).rejects.toThrow('Routine leadership unavailable');
+  expect(await nats.store.head('routine-orders')).toBe(before);
+  expect((await state()).activeRun).toBeNull();
+}
+it('refuses an enabled host without a checked delivery callback before claiming a slot',
+  enabledProductionNeedsDelivery);
+
+async function enabledProductionHandsOffSavedDue() {
+  await save([creation()]);
+  const seen: string[] = [];
+  const handoff: NonNullable<Parameters<typeof dispatchRoutineCandidates>[3]> =
+    async function receive(due, lease) {
+      expect(lease.signal).toBe(leaseSignal);
+      expect(due.routineId).toBe('orders');
+      seen.push(due.occurrenceId);
+      return { status: 'sent' };
+    };
+  const result = await production({ enabled: true }, handoff);
+  expect(result).toMatchObject({ examined: 1, executionAvailable: true });
+  expect(seen).toEqual([(await state()).activeRun!.occurrenceId]);
+}
+it('passes one confirmed due under the existing leadership session when enabled',
+  enabledProductionHandsOffSavedDue);
 async function recoversDue() {
   const created = creation();
   await save([created]);
