@@ -223,8 +223,18 @@ async function cleanup() {
 beforeEach(setup);
 afterEach(cleanup);
 
-function compose(options: { enabled?: boolean; replay?: boolean } = { enabled: true }) {
-  return createRoutineComposition(options, nats.store, keys, worker(), input, actor,
+type Options = Parameters<typeof createRoutineComposition>[0];
+function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+  computerGeneration: number) {
+  function confirmCurrent() {
+    return Promise.resolve();
+  }
+  return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
+    computerGeneration, confirmCurrent });
+}
+function compose(options: Options = { enabled: true }) {
+  const checked = { ...options, companyPreflight: syntheticCompanyPreflight };
+  return createRoutineComposition(checked, nats.store, keys, worker(), input, actor,
     'sender-attempt');
 }
 async function saved(type: string, subject: string) {

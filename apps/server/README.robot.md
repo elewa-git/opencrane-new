@@ -7162,6 +7162,8 @@ Existing records without `serverId` remain readable but cannot pass this check.
 and changes to account, scopes, custody, profile revision, owner choice, opt-in and publication.
 `test/routine-handoff.test.ts` checks post-wake refusal before allowance and no
 preflight during disabled or replayed work. These tests use synthetic account evidence.
+`test/routine-composition.test.ts` supplies a synthetic preflight for its existing
+delivery and recovery tests; it cannot prove live company custody.
 The governed company send and fresh-install journey remain NOT RUN.
 
 The private models library has a company audit check, but this server does not
