@@ -896,8 +896,12 @@ async function welcomeAnswerRace() {
   const first = welcome({ ...answer, commandId: 'device-one' });
   const second = welcome({ ...answer, commandId: 'device-two' });
   const responses = await Promise.all([first, second]);
-  const statuses = responses.map(function status(response) { return response.statusCode; });
-  expect(statuses.sort()).toEqual([200, 409]);
+  function responseStatus(response: typeof responses[number]) {
+    return response.statusCode;
+  }
+  const statuses = responses.map(responseStatus);
+  const sortedStatuses = statuses.sort();
+  expect(sortedStatuses).toEqual([200, 409]);
   expect(await nats.store.head('personal-alice')).toBe(start.position + 1);
   expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
     .toMatchObject({ status: 'completion_pending', answered: 1 });
@@ -973,7 +977,9 @@ async function approvedAssistantWelcome() {
     .json<RevisionReceipt>();
   const approval = (await approve('approve-for-welcome', revision.position, revision))
     .json<PositionReceipt>();
-  const digest = createHash('sha256').update('test\0alice').digest('hex');
+  const hash = createHash('sha256');
+  hash.update('test\0alice');
+  const digest = hash.digest('hex');
   const assistantId = `personal-${digest.slice(0, 32)}`;
   const created = { ...event('assigned-assistant', `assistant-${assistantId}`, 'assistant.created'),
     source: 'opencrane-lifecycle', principal: { kind: 'system' as const,

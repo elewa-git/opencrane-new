@@ -27,7 +27,10 @@ type History = Awaited<ReturnType<typeof surveyHistory>>;
 type Saved = NonNullable<Awaited<ReturnType<typeof savedCommand>>>;
 
 function assignedAssistantId(silo: string, memberId: string) {
-  const digest = createHash('sha256').update([silo, memberId].join('\0')).digest('hex');
+  const hash = createHash('sha256');
+  const identity = [silo, memberId].join('\0');
+  hash.update(identity);
+  const digest = hash.digest('hex');
   return `personal-${digest.slice(0, 32)}`;
 }
 
@@ -121,7 +124,9 @@ function checkInput(input: Input, history: History) {
 function encryptedAnswer(options: ChatOptions, memberId: string, value: string) {
   const encrypted = options.keys.encrypt(options.silo, `personal:${memberId}`, value);
   const bytes = Buffer.from(encrypted.ciphertext, 'base64');
-  const encryptedDigest = createHash('sha256').update(bytes).digest('hex');
+  const hash = createHash('sha256');
+  hash.update(bytes);
+  const encryptedDigest = hash.digest('hex');
   return { encrypted: encrypted.ciphertext, encryptedDigest, keyRef: encrypted.keyId };
 }
 
