@@ -202,6 +202,8 @@ The projection checks the server source, parent stream and human publisher again
 the strict saved event before selecting the parent id, child id, publication kind and
 optional result id. It copies no ciphertext, review digest, title or file key. This
 row has only its own saved event as evidence; unrelated chat records cannot attach.
+Other entries exclude publication records from their evidence, even if the parent
+and child chats reuse a turn id. Detail pages apply the same rule.
 It ignores envelope correlation ids so a private work reference cannot become a
 request, permit or chat link on this row.
 The server removes each id unless the reader has current rights to that chat.

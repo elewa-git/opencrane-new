@@ -1,15 +1,17 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { Client } from 'minio/dist/esm/minio.mjs';
 import type { FastifyRequest } from 'fastify';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
+import type { EventEnvelope } from '@opencrane/events';
 import { envelope } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { auditResponseSchema, auditDetailSchema } from '@opencrane/protocol';
 import { auditTrail, connectMemberFeed, conversations, members, pgDb, ProjectionRunner,
-  readAudit, rebuildAuditProjection } from '@opencrane/projections';
+  readAudit, readAuditDetail, rebuildAuditProjection } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -219,6 +221,13 @@ it('keeps a child publication out of a parent reader’s matching turn', async (
   const decision = projected.rows.find(row => row.id === 'parent-decision');
   expect(decision).toBeDefined();
   expect(decision?.records.map(record => record.eventId)).toEqual(['parent-decision']);
+  const publication = await readAuditDetail(db, 'test', 'publication', { limit: 1 });
+  expect(publication?.records.map(record => record.eventId)).toEqual(['publication']);
+  expect(publication?.nextBefore).toBeUndefined();
+  const publicationContinuation = await readAuditDetail(db, 'test', 'publication', {
+    before: publication!.records[0]!.position, limit: 1,
+  });
+  expect(publicationContinuation?.records).toEqual([]);
 
   const history = await app.inject({ url: '/api/conversations/parent/history',
     headers: headers('guest') });
@@ -241,6 +250,27 @@ it('returns a fixed error and logs no private publication text after a failed re
   expect(response.statusCode).toBe(503);
   expect(response.body).toBe('{"status":"unavailable"}');
   expect(JSON.stringify(logArguments)).not.toContain(privateText);
+});
+
+it('rejects altered publication sources and payloads without logging private text', async () => {
+  await publish('publication');
+  const saved = (await nats.store.readEvent(await nats.store.head())).event;
+  const publicationData = z.record(z.string(), z.unknown()).parse(saved.data);
+  const invalidEvents: EventEnvelope[] = [
+    { ...saved, source: 'other' },
+    { ...saved, subject: 'conversation-child' },
+    { ...saved, principal: { kind: 'human', id: 'admin' } },
+    { ...saved, data: { ...publicationData, publishedBy: 'admin' } },
+    { ...saved, data: { ...publicationData, publicationKind: 'unknown' } },
+  ];
+  for (const event of invalidEvents) {
+    await expect(auditTrail.apply(db, event, 999))
+      .rejects.toThrow('Invalid publication audit event');
+  }
+  expect(JSON.stringify(logArguments)).not.toContain(privateText);
+  const history = await list('owner');
+  expect(history.statusCode, history.body).toBe(200);
+  expect(auditResponseSchema.parse(history.json()).rows).toHaveLength(1);
 });
 
 it('keeps one row across duplicate publication and replay, with stable position paging', async () => {

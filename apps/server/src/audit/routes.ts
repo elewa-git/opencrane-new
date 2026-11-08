@@ -45,7 +45,8 @@ export function registerAuditRoutes(app: FastifyInstance, config: AuthConfig, op
       if (!allowed) return reply.code(403).send({ status: 'refused' });
       if (loaded.status === 'rejected') throw loaded.reason;
       if (conversationId) {
-        const rows = loaded.value.rows.map(conversationRow);
+        const checkedRows = await visibleRows(options, memberId, loaded.value.rows);
+        const rows = checkedRows.map(conversationRow);
         return reply.send({ ...loaded.value, rows });
       }
       const rows = await visibleRows(options, memberId, loaded.value.rows);

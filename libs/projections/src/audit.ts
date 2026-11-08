@@ -412,6 +412,7 @@ async function readEvidence(db: Query, silo: string, anchor: Entry,
   if (before !== undefined) parameters.push(before);
   parameters.push(limit);
   const sql = `SELECT e.* FROM audit_entries e WHERE e.silo = $1 ${excludeAnchor}
+    AND e.event_type <> 'conversation.child_result_published'
     ${beforeCondition} AND (${anchorCondition}${direct} OR
       (e.event_type NOT IN ('tool.dispatch_started', 'tool.dispatch_recorded')
         AND e.approval_id IS NOT NULL AND EXISTS (

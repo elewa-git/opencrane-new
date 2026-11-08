@@ -1715,7 +1715,9 @@ The `conversation` family includes each saved child publication once. Its event 
 is the parent entry id. After the bounded page loads, the route checks current
 parent and child read rights separately. The parent id and parent chat link require
 parent rights; the child id and recorded result id require child rights. A removed
-member cannot use an old cursor or entry id to recover these fields. No history GET
+member cannot use an old cursor or entry id to recover these fields. Every history
+route checks publication records, including records linked to another entry. The
+projection keeps publications out of other entries' evidence. No history GET
 decrypts the published text, reads a file, appends an event or starts a turn. The
 event has no file receipt, so this read offers no asset count or asset link.
 Saved tool starts and observations use these same list and detail routes and metadata

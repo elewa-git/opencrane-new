@@ -37,6 +37,7 @@ It also shows a reviewed child publication as a saved parent entry. A parent rea
 gets a link to the parent chat; a child reader gets only the recorded child result
 reference. The server checks each chat separately when history is opened. The link
 does not open the child's chat or files.
+Conversation history checks publication references in every linked record before replying.
 Control refusals recheck access before saving and appear in the requester’s
 conversation history. Each control command can save only one outcome.
 A hand-off without a saved outcome stays unknown, even when other evidence reports success. A response
@@ -209,7 +210,7 @@ flowchart LR
   server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, routine sessions, inputs, cancellations, confirmed results and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, publication history, current accounting and exact membership receipts| postgres
+  server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, checked publication history, current accounting and exact membership receipts| postgres
   server -->|waits briefly for Forget locks| postgres
   server <-->|chat work, private routine preparation and delivery, preparation refusals, connections, routine Stops after deactivation or failed evidence reads, memory Stops after confirmed loss, private exit reports, reply removal receipts after completion, checked reports and publication files| computer["apps/computer<br/>assistant computers"]
   server -->|checks an activated child start and its root allowance| runtime

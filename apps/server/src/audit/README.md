@@ -7,6 +7,7 @@ This folder lets people see why OpenCrane allowed, refused or charged for work. 
 - Returns filtered pages of saved decisions and changes.
 - Returns details of one organisation history entry to a current owner or admin.
 - Checks parent and child chat rights separately before showing publication references.
+- Checks those rights for every publication record returned with another history entry.
 - Checks the exact read-table and permission receipts for admissions, removals, role and ownership changes.
 - Limits conversation history to the reader's own requests in a conversation they may read.
 - Loads the history before checking current access, so a slow read cannot return private information to someone removed during loading.
