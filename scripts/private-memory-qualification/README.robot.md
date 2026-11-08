@@ -695,20 +695,14 @@ Own results and outstanding live work: [receipt](../../docs/process/p4-15-pr5c/r
 
 ## Canary journey helper process
 
-The supervisor writes one root-owned `helper-identity` record in its tmpfs lock
-directory after starting the journey child and before sending its input. The record
-binds the challenge, child and supervisor PIDs and Linux start times to the image
-and installation ids supplied by the measured collector. The journey reads the
-record with custody checks. It requires the expected Node command, owner, cgroup
-and PID namespace, then rereads both process identities around protection checks.
-The collector still checks the installation before and after each journey.
+The supervisor writes a root-owned tmpfs record before sending journey input.
+It binds the challenge, image, installation and both process PIDs and Linux
+start times. The journey checks the record's owner and file type.
 
-The journey measures swap and crash-dump controls through the existing host or
-container probe. It reads its own core limits and `CoreDumping` status and asks the
-native helper for its actual dumpability after exec. It repeats protection before
-returning a result. A missing record, changed process or failed read returns only
-a fixed protection category with `complete: false`. The supervisor removes the
-record during cleanup. Replay and status reads do not run the journey helper.
-
-This check covers the supervised canary journey process. The joined inventory and
-complete live private journey remain unfinished. Admission stays disabled.
+The helper checks its command, owner, cgroup and PID namespace. It measures
+swap, crash dumps, core limits, `CoreDumping` and its own dumpability after
+exec. It rechecks both process identities and protection before every result.
+Missing or changed proof returns a fixed reason and `complete: false`.
+The collector checks the installation around each journey. Replay and status
+reads start no helper. The joined inventory and live journey remain unfinished.
+Admission stays disabled.
