@@ -99,6 +99,8 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `onboarding.survey_restarted` | admitted member, checked current progress | personal-settings: new generation with empty current steps | none |
 | `onboarding.persona_revised` | admitted member, complete current survey, expected personal position and generation | personal-settings: current encrypted revision; immutable persona revision history | none |
 | `onboarding.persona_approved` | admitted member, exact current revision id and number, expected personal position and generation | personal-settings: approved revision and approval time; older approval remains until another approval | none |
+| `onboarding.welcome_started` | admitted member, checked assignment and approved persona when assigned, exact personal position and generation | personal-settings: frozen script, variant, assignment and revision reference | none |
+| `onboarding.welcome_answer_recorded` | admitted member, exact next scripted step and expected personal position | personal-settings: encrypted answer and pending completion progress | none in this part; completion is separate |
 
 These events require schema version 1, the member's exact personal subject, a command id,
 a matching human principal and the server source. The whole event is at most 16 KiB.

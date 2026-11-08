@@ -8,6 +8,9 @@ import { requireMember, MemberRefusal, idSchema } from '../members/guard.ts';
 import { surveyCommand, SurveyConflict, SurveyUnknown } from './commands.ts';
 import { surveyHistory, savedCommand, decryptAnswers, decryptPersona,
   personaEvent, personaReceipt, surveyReceipt } from './history.ts';
+import { welcomeCommand, welcomeReceipt } from './welcome.ts';
+import { welcomeScripts } from './script.ts';
+import { welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema } from '@opencrane/events';
 
 const parameters = z.strictObject({ commandId: idSchema });
 const revisionParameters = z.strictObject({ revisionId: idSchema });
@@ -18,10 +21,12 @@ export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, o
   app.get('/api/personal/changes/:commandId', handler);
   app.get('/api/onboarding/persona/revisions', handler);
   app.get('/api/onboarding/persona/revisions/:revisionId', handler);
+  app.get('/api/onboarding/welcome', handler);
   const writeRoute = { method: 'POST' as const, url: '/api/onboarding/survey',
     bodyLimit: 16384, errorHandler: bodyRefusal, handler };
   app.route(writeRoute);
   app.route({ ...writeRoute, url: '/api/onboarding/persona' });
+  app.route({ ...writeRoute, url: '/api/onboarding/welcome' });
   async function handler(request: FastifyRequest, reply: FastifyReply) {
     try {
       const checks = { write: request.method === 'POST' };
@@ -29,6 +34,9 @@ export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, o
       const configured = context.options;
       const memberId = context.memberId;
       if (checks.write) {
+        if (request.routeOptions.url === '/api/onboarding/welcome') {
+          return await welcomeCommand(configured, memberId, request.body);
+        }
         let route: 'survey' | 'persona' = 'survey';
         if (request.routeOptions.url === '/api/onboarding/persona') route = 'persona';
         return await surveyCommand(configured, memberId, request.body, route);
@@ -40,6 +48,9 @@ export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, o
       // Check membership again after slow content reads, before returning private text.
       const accessRequest = { memberId };
       await chatAccess(configured, accessRequest);
+      if (request.routeOptions.url === '/api/onboarding/welcome') {
+        return readWelcome(configured, memberId, history);
+      }
       const special = await readSpecial(request, configured, memberId, history);
       if (special !== undefined) return special;
       function readStep(row: typeof history.steps[number]) {
@@ -50,6 +61,9 @@ export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, o
       let state = 'survey';
       if (history.position === 0) state = 'not_started';
       if (steps.length === 4) state = 'review';
+      if (history.welcome) {
+        state = history.welcome.answers.length ? 'completion_pending' : 'welcome_active';
+      }
       let nextStep: number | null = steps.length + 1;
       if (steps.length === 4) nextStep = null;
       const references = [...history.commands.values()];
@@ -83,12 +97,37 @@ async function readSpecial(request: FastifyRequest, options: ChatOptions,
         saved.row.event.type === 'onboarding.persona_approved') {
       return personaReceipt(saved.row);
     }
+    if (saved.row.event.type === 'onboarding.welcome_started' ||
+        saved.row.event.type === 'onboarding.welcome_answer_recorded') {
+      return welcomeReceipt(saved.row);
+    }
     return surveyReceipt(saved.row);
   }
   if (path === '/api/onboarding/persona/revisions') {
     return listRevisions(request, history);
   }
   return undefined;
+}
+function readWelcome(options: ChatOptions, memberId: string, history: History) {
+  const welcome = history.welcome;
+  if (!welcome) return { status: 'not_started', nextStep: null, answered: 0 };
+  const start = welcomeStartedDataSchema.parse(welcome.start.event.data);
+  const question = welcomeScripts[start.scriptVersion][start.variant];
+  const answer = welcome.answers[0];
+  let savedAnswer: string | null = null;
+  if (answer) {
+    const data = welcomeAnswerRecordedDataSchema.parse(answer.event.data);
+    savedAnswer = options.keys.decrypt(options.silo, `personal:${memberId}`,
+      { ciphertext: data.encrypted, keyId: data.keyRef });
+  }
+  const status = answer ? 'completion_pending' : 'welcome_active';
+  const nextStep = answer ? null : question.stepId;
+  return { status, welcomeId: welcome.start.event.id, scriptVersion: start.scriptVersion,
+    variant: start.variant, revision: start.revision, revisionId: start.revisionId,
+    assistantId: start.assistantId, assignmentStatus: start.assignmentStatus,
+    startedAt: welcome.start.event.time,
+    position: history.position, answered: welcome.answers.length, nextStep,
+    question: answer ? null : question.question, answer: savedAnswer };
 }
 function listRevisions(request: FastifyRequest, history: History) {
   const { limit = 20, before } = pageParameters.parse(request.query);

@@ -58,7 +58,7 @@ Allow, Ask or Block choice for a tool.
 
 ```mermaid
 flowchart LR
-  parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions, including persona approvals and private persona revisions"]
+  parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions, including persona and scripted welcome records"]
   server["apps/server<br/>back end"] -.->|checks assistant file lists and records, private exit, native termination, routine turn identities, result references and settled cents, allowance fingerprints, owner, approval and unconfirmed delivery Stop intent, owner-removal pauses and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries, activation refusals, writer closure and refusal records| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
@@ -88,6 +88,7 @@ records the next generation of the saved profile. Saving grants no access.
   give its writer permission or save it.
 - Keep older saved records readable during [replay](../../GLOSSARY.md#replay),
   reading the log again to rebuild data.
+- Check saved welcome starts and encrypted answers against their script references.
 - List which named [reactions](../../GLOSSARY.md#reaction-handler), background jobs
   following a saved change, subscribe to each event type.
 - Rebuild routine definitions and preview future dates for scheduled work, including

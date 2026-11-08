@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -20,6 +21,7 @@ let runner: ProjectionRunner;
 let directory: string;
 let keys: ReturnType<typeof conversationKeys>;
 let binding: Awaited<ReturnType<typeof createStore>>;
+let restartServer: () => Promise<void>;
 const config = testAuthConfig({ expectedOrgId: 'org-test' });
 const session = { sub: 'alice', orgId: 'org-test', roles: [], authTime: 0, exp: 2000000000 };
 const headers = { origin: 'https://app.example.test',
@@ -47,7 +49,7 @@ async function start() {
   binding = await createStore(fga.apiUrl, 'test');
   const joined = { ...event('joined', 'member-alice'), data: {
     memberId: 'alice', role: 'member', displayName: 'Alice', email: 'alice@example.test',
-    personalAssistant: 'none',
+    personalAssistant: 'provision',
   } };
   expect((await nats.store.append({ event: joined, expectedSequence: 0 })).status).toBe('appended');
   const db = pgDb(dbs.queue);
@@ -57,6 +59,10 @@ async function start() {
     binding, feed: { memberId } };
   const onboarding = { ...chat, keys };
   app = buildServer(config, { chat, onboarding });
+  restartServer = async function restartOnboardingServer() {
+    await app.close();
+    app = buildServer(config, { chat, onboarding });
+  };
   const logger = createLogger('survey-http', { level: 'silent' });
   runner = new ProjectionRunner(db, nats.reader, logger);
   await runner.initialise(personalSettings);
@@ -761,3 +767,249 @@ async function slowApprovalHistory() {
   }
 }
 it('loads approval history before the short member access check', slowApprovalHistory);
+
+function welcome(payload: object) {
+  return app.inject({ method: 'POST', url: '/api/onboarding/welcome', headers, payload });
+}
+
+async function welcomeStartAndAnswer() {
+  const surveyPosition = await completeSurvey();
+  const premature = await welcome({ operation: 'start', commandId: 'early', generation: 1,
+    expectedPosition: surveyPosition, scriptVersion: 'welcome-v1', variant: 'assistant',
+    revision: 1, revisionId: 'missing' });
+  expect(premature.statusCode).not.toBe(200);
+  const head = nats.store.head.bind(nats.store);
+  nats.store.head = async function unavailableAssignment(subject, deadline) {
+    if (subject?.startsWith('assistant-personal-')) throw new Error('Assignment unavailable');
+    return head(subject, deadline);
+  };
+  const unavailable = await welcome({ operation: 'start', commandId: 'no-assignment-read',
+    generation: 1, expectedPosition: surveyPosition, scriptVersion: 'welcome-v1',
+    variant: 'no_assistant' });
+  nats.store.head = head;
+  expect(unavailable.statusCode).toBe(503);
+  const started = await welcome({ operation: 'start', commandId: 'start-welcome', generation: 1,
+    expectedPosition: surveyPosition, scriptVersion: 'welcome-v1', variant: 'no_assistant' });
+  expect(started.statusCode).toBe(200);
+  const start = started.json<{ position: number; welcomeId: string }>();
+  const read = await app.inject({ url: '/api/onboarding/welcome', headers });
+  expect(read.json()).toMatchObject({ status: 'welcome_active',
+    welcomeId: start.welcomeId, nextStep: 'continue_to_workspace', answered: 0 });
+  const answer = { operation: 'answer', commandId: 'welcome-answer', generation: 1,
+    expectedPosition: start.position, welcomeId: start.welcomeId,
+    scriptVersion: 'welcome-v1', stepId: 'continue_to_workspace', stepNumber: 1,
+    answer: 'Continue to workspace' };
+  expect((await welcome({ ...answer, stepNumber: 2 })).statusCode).toBe(422);
+  const accepted = await welcome(answer);
+  expect(accepted.statusCode).toBe(200);
+  expect(accepted.json()).toMatchObject({ status: 'completion_pending' });
+  expect((await welcome({ ...answer, answer: 'Changed' })).statusCode).toBe(409);
+  const again = await welcome(answer);
+  expect(again.json()).toEqual(accepted.json());
+  const pending = await app.inject({ url: '/api/onboarding/welcome', headers });
+  expect(pending.json()).toMatchObject({ status: 'completion_pending',
+    nextStep: null, answered: 1 });
+  const ordinary = { ...event('ordinary-chat', 'conversation-ordinary', 'message.posted'),
+    data: { conversationId: 'ordinary', authorId: 'alice', authorKind: 'human',
+      ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' } };
+  expect((await nats.store.append({ event: ordinary, expectedSequence: 0 })).status)
+    .toBe('appended');
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'completion_pending', answered: 1 });
+  for await (const row of nats.store.readStream('personal-alice')) {
+    expect(row.event.type).not.toBe('onboarding.completed');
+    expect(JSON.stringify(row.event)).not.toContain('Continue to workspace');
+  }
+  await restartServer();
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'completion_pending', answered: 1 });
+  await rm(directory, { recursive: true, force: true });
+  await runner.rebuild(personalSettings);
+  const projected = await readSurvey(pgDb(dbs.queue), 'test', 'alice');
+  expect(projected).toMatchObject({ welcome: { answered: 1,
+    status: 'completion_pending' } });
+}
+it('starts the frozen no-assistant welcome and saves its final answer as pending',
+  welcomeStartAndAnswer, 60_000);
+
+async function welcomeRefusalsAndRetry() {
+  const position = await completeSurvey();
+  const start = { operation: 'start', commandId: 'welcome-start', generation: 1,
+    expectedPosition: position, scriptVersion: 'welcome-v1', variant: 'no_assistant' };
+  expect((await welcome({ ...start, scriptVersion: 'old-script' })).statusCode).toBe(422);
+  expect((await welcome({ ...start, variant: 'assistant' })).statusCode).toBe(409);
+  const started = await welcome(start);
+  expect(started.statusCode).toBe(200);
+  const receipt = started.json<{ position: number; welcomeId: string }>();
+  expect((await welcome({ ...start, variant: 'assistant' })).statusCode).toBe(409);
+  expect((await welcome({ ...start, generation: 2 })).statusCode).toBe(409);
+  const answer = { operation: 'answer', commandId: 'welcome-reply', generation: 1,
+    expectedPosition: receipt.position, scriptVersion: 'welcome-v1',
+    welcomeId: receipt.welcomeId, stepId: 'continue_to_workspace', stepNumber: 1,
+    answer: 'Continue to workspace' };
+  expect((await welcome({ ...answer, welcomeId: 'foreign' })).statusCode).toBe(409);
+  expect((await welcome({ ...answer, stepId: 'weekly_help' })).statusCode).toBe(409);
+  expect((await welcome({ ...answer, expectedPosition: position })).statusCode).toBe(409);
+  const append = nats.store.append.bind(nats.store);
+  nats.store.append = async function loseWelcomeReply(command) {
+    await append(command);
+    throw new Error('Reply lost');
+  };
+  const lost = await welcome(answer);
+  nats.store.append = append;
+  expect(lost.json()).toEqual({ status: 'unknown' });
+  const status = await app.inject({ url: '/api/personal/changes/welcome-reply', headers });
+  expect(status.json()).toMatchObject({ status: 'completion_pending',
+    operation: 'onboarding.welcome_answer_recorded' });
+  expect((await welcome(answer)).json()).toEqual(status.json());
+  expect((await welcome({ ...answer, answer: 'Changed' })).statusCode).toBe(409);
+  expect((await welcome({ ...answer, commandId: 'second' })).statusCode).toBe(409);
+  const wrongOrg = { ...headers, cookie: `${config.cookieName}=${encodeSession(config,
+    { ...session, orgId: 'other-org' })}` };
+  const foreign = await app.inject({ url: '/api/onboarding/welcome', headers: wrongOrg });
+  expect(foreign.statusCode).toBe(403);
+  expect(JSON.stringify(foreign.json())).not.toContain('Continue to workspace');
+  const otherMember = { ...headers, cookie: `${config.cookieName}=${encodeSession(config,
+    { ...session, sub: 'bob' })}` };
+  const denied = await app.inject({ url: '/api/onboarding/welcome', headers: otherMember });
+  expect(denied.statusCode).toBe(403);
+  expect(JSON.stringify(denied.json())).not.toContain('Continue to workspace');
+  const restarted = await post({ operation: 'restart', commandId: 'restart-after-answer',
+    generation: 1, expectedPosition: status.json<PositionReceipt>().position });
+  expect(restarted.statusCode).toBe(200);
+  expect((await welcome({ ...answer, commandId: 'old-generation',
+    expectedPosition: restarted.json<PositionReceipt>().position })).statusCode).toBe(409);
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'not_started', answered: 0 });
+}
+it('refuses old welcome references and resolves a lost answer reply from its saved event',
+  welcomeRefusalsAndRetry, 60_000);
+
+async function welcomeAnswerRace() {
+  const position = await completeSurvey();
+  const start = (await welcome({ operation: 'start', commandId: 'welcome-start',
+    generation: 1, expectedPosition: position, scriptVersion: 'welcome-v1',
+    variant: 'no_assistant' })).json<{ position: number; welcomeId: string }>();
+  const answer = { operation: 'answer', generation: 1, expectedPosition: start.position,
+    welcomeId: start.welcomeId, scriptVersion: 'welcome-v1',
+    stepId: 'continue_to_workspace', stepNumber: 1, answer: 'Continue to workspace' };
+  const first = welcome({ ...answer, commandId: 'device-one' });
+  const second = welcome({ ...answer, commandId: 'device-two' });
+  const responses = await Promise.all([first, second]);
+  function responseStatus(response: typeof responses[number]) {
+    return response.statusCode;
+  }
+  const statuses = responses.map(responseStatus);
+  const sortedStatuses = statuses.sort();
+  expect(sortedStatuses).toEqual([200, 409]);
+  expect(await nats.store.head('personal-alice')).toBe(start.position + 1);
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'completion_pending', answered: 1 });
+}
+it('saves only one answer when two devices send the same step', welcomeAnswerRace, 60_000);
+
+async function welcomeRemovalDuringLoad() {
+  const position = await completeSurvey();
+  const started = (await welcome({ operation: 'start', commandId: 'welcome-start',
+    generation: 1, expectedPosition: position, scriptVersion: 'welcome-v1',
+    variant: 'no_assistant' })).json<{ position: number; welcomeId: string }>();
+  const read = nats.store.readStream.bind(nats.store);
+  const head = nats.store.head.bind(nats.store);
+  const decrypt = keys.decrypt.bind(keys);
+  let removed = false;
+  let historyFinished = false;
+  let checkedMemberAfterHistory = false;
+  let openedAfterRemoval = false;
+  const shortChecks: { subject: string | undefined; historyFinished: boolean }[] = [];
+  nats.store.readStream = async function* removeDuringWelcomeLoad(subject, from, deadline, closes) {
+    if (subject === 'personal-alice' && !removed) {
+      await delay(2100);
+      const removal = { ...event('welcome-removal', 'member-alice', 'member.removed'),
+        data: { memberId: 'alice', removedBy: 'owner' } };
+      await nats.store.append({ event: removal, expectedSequence: 1 });
+      removed = true;
+    }
+    if (subject === 'member-alice' && removed && historyFinished) {
+      checkedMemberAfterHistory = true;
+    }
+    yield* read(subject, from, deadline, closes);
+    if (subject === 'personal-alice') historyFinished = true;
+  };
+  nats.store.head = async function watchShortAccess(subject, deadline) {
+    if (removed && (deadline ?? Infinity) - performance.now() <= 2000) {
+      shortChecks.push({ subject, historyFinished });
+    }
+    return head(subject, deadline);
+  };
+  keys.decrypt = function detectWelcomeDecryption(silo, identity, encrypted) {
+    if (removed) openedAfterRemoval = true;
+    return decrypt(silo, identity, encrypted);
+  };
+  const answer = { operation: 'answer', commandId: 'removed-answer', generation: 1,
+    expectedPosition: started.position, welcomeId: started.welcomeId,
+    scriptVersion: 'welcome-v1', stepId: 'continue_to_workspace', stepNumber: 1,
+    answer: 'Continue to workspace' };
+  let response;
+  try {
+    response = await welcome(answer);
+  } finally {
+    nats.store.readStream = read;
+    nats.store.head = head;
+    keys.decrypt = decrypt;
+  }
+  expect(removed).toBe(true);
+  expect(response.statusCode).toBe(403);
+  expect(openedAfterRemoval).toBe(false);
+  expect(shortChecks.length).toBeGreaterThan(0);
+  for (const check of shortChecks) {
+    expect(check.historyFinished).toBe(true);
+    expect(check.subject === undefined || check.subject === 'member-alice').toBe(true);
+  }
+  expect(checkedMemberAfterHistory).toBe(true);
+  expect(await nats.store.head('personal-alice')).toBe(started.position);
+}
+it('refuses an answer after removal during history loading without opening private bytes',
+  welcomeRemovalDuringLoad, 60_000);
+
+async function approvedAssistantWelcome() {
+  const position = await completeSurvey();
+  const revision = (await revise('approved-for-welcome', position, 'Private approved persona'))
+    .json<RevisionReceipt>();
+  const approval = (await approve('approve-for-welcome', revision.position, revision))
+    .json<PositionReceipt>();
+  const hash = createHash('sha256');
+  hash.update('test\0alice');
+  const digest = hash.digest('hex');
+  const assistantId = `personal-${digest.slice(0, 32)}`;
+  const created = { ...event('assigned-assistant', `assistant-${assistantId}`, 'assistant.created'),
+    source: 'opencrane-lifecycle', principal: { kind: 'system' as const,
+      id: 'computer-lifecycle' },
+    data: { assistantId, ownerId: 'alice', kind: 'personal' } };
+  expect((await nats.store.append({ event: created, expectedSequence: 0 })).status)
+    .toBe('appended');
+  const input = { operation: 'start', commandId: 'assistant-welcome', generation: 1,
+    expectedPosition: approval.position, scriptVersion: 'welcome-v1',
+    variant: 'assistant', revision: revision.revision, revisionId: revision.revisionId };
+  expect((await welcome({ ...input, revisionId: 'other' })).statusCode).toBe(409);
+  const started = await welcome(input);
+  expect(started.statusCode).toBe(200);
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'welcome_active', nextStep: 'weekly_help', assistantId,
+      revision: revision.revision, revisionId: revision.revisionId,
+      assignmentStatus: 'assigned' });
+  expect((await welcome(input)).json()).toEqual(started.json());
+  const startReceipt = started.json<{ position: number; welcomeId: string }>();
+  const saved = await welcome({ operation: 'answer', commandId: 'private-weekly-help',
+    generation: 1, expectedPosition: startReceipt.position,
+    welcomeId: startReceipt.welcomeId, scriptVersion: 'welcome-v1',
+    stepId: 'weekly_help', stepNumber: 1, answer: 'Private weekly help' });
+  expect(saved.json()).toMatchObject({ status: 'completion_pending' });
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'completion_pending', answer: 'Private weekly help' });
+  for await (const row of nats.store.readStream('personal-alice')) {
+    expect(JSON.stringify(row.event)).not.toContain('Private weekly help');
+    expect(JSON.stringify(row.event)).not.toContain('Private approved persona');
+  }
+}
+it('freezes the approved revision and actual assistant assignment at welcome start',
+  approvedAssistantWelcome, 60_000);

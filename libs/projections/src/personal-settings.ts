@@ -1,5 +1,6 @@
 import { parseEventByType, surveyStepSavedDataSchema, surveyRestartedDataSchema,
   personaRevisedDataSchema, personaApprovedDataSchema,
+  welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import type { Query } from './db.ts';
 import type { Projection } from './runner.ts';
@@ -9,7 +10,14 @@ type SavedStep = { step: number; ciphertext: string; ciphertextDigest: string; k
 type Survey = { generation: number; steps: SavedStep[]; nextStep: number | null;
   position: number; currentRevision?: number; currentRevisionId?: string;
   revisionCount?: number; approvedRevision?: number; approvedRevisionId?: string;
-  approvedTime?: string };
+  approvedTime?: string;
+  welcome?: { welcomeId: string; scriptVersion: 'welcome-v1'; variant: 'assistant' | 'no_assistant';
+    assignmentStatus: 'assigned' | 'not_requested' | 'provisioning';
+    generation: number; revision: number | null; revisionId: string | null;
+    assistantId: string | null; startedAt: string; answered: number;
+    status: 'welcome_active' | 'completion_pending';
+    answers: { eventId: string; commandId: string; position: number;
+      encrypted: string; encryptedDigest: string; keyRef: string }[] } };
 
 async function create(db: Query): Promise<void> {
   await db.query(`CREATE TABLE IF NOT EXISTS personal_settings (
@@ -36,6 +44,7 @@ function restartSurvey(survey: Survey, event: EventEnvelope) {
   survey.generation = data.generation;
   survey.steps = [];
   survey.nextStep = 1;
+  delete survey.welcome;
   delete survey.currentRevision;
   delete survey.currentRevisionId;
 }
@@ -64,6 +73,43 @@ function approvePersona(survey: Survey, event: EventEnvelope) {
   survey.approvedRevisionId = approved.revisionId;
   survey.approvedTime = event.time;
 }
+function startWelcome(survey: Survey, event: EventEnvelope) {
+  const data = welcomeStartedDataSchema.parse(event.data);
+  if (survey.welcome || data.welcomeId !== event.id ||
+      data.generation !== survey.generation || survey.steps.length !== 4) {
+    throw new Error('Invalid welcome start');
+  }
+  if (data.variant === 'assistant' &&
+      (survey.approvedRevision !== data.revision ||
+       survey.approvedRevisionId !== data.revisionId || !data.assistantId ||
+       data.assignmentStatus !== 'assigned')) {
+    throw new Error('Invalid welcome revision');
+  }
+  if (data.variant === 'no_assistant' &&
+      (data.revision !== null || data.revisionId !== null || data.assistantId !== null ||
+       data.assignmentStatus === 'assigned')) {
+    throw new Error('Invalid welcome variant');
+  }
+  survey.welcome = { welcomeId: data.welcomeId, scriptVersion: data.scriptVersion,
+    variant: data.variant, assignmentStatus: data.assignmentStatus,
+    generation: data.generation, revision: data.revision,
+    revisionId: data.revisionId, assistantId: data.assistantId, startedAt: event.time,
+    answered: 0, status: 'welcome_active', answers: [] };
+}
+function recordWelcomeAnswer(survey: Survey, event: EventEnvelope, position: number) {
+  const data = welcomeAnswerRecordedDataSchema.parse(event.data);
+  const welcome = survey.welcome;
+  const expectedStep = welcome?.variant === 'assistant' ?
+    'weekly_help' : 'continue_to_workspace';
+  if (!welcome || welcome.answered || data.welcomeId !== welcome.welcomeId ||
+      data.generation !== welcome.generation || data.scriptVersion !== welcome.scriptVersion ||
+      data.stepId !== expectedStep) throw new Error('Invalid welcome answer');
+  welcome.answers.push({ eventId: event.id, commandId: event.commandId!, position,
+    encrypted: data.encrypted, encryptedDigest: data.encryptedDigest,
+    keyRef: data.keyRef });
+  welcome.answered = 1;
+  welcome.status = 'completion_pending';
+}
 function saveStep(survey: Survey, event: EventEnvelope, position: number, commandId: string) {
   const data = surveyStepSavedDataSchema.parse(event.data);
   if (data.generation !== survey.generation || data.step > survey.steps.length + 1) {
@@ -83,14 +129,17 @@ async function apply(db: Query, event: EventEnvelope, position: number): Promise
   if (event.type !== 'onboarding.survey_step_saved' &&
       event.type !== 'onboarding.survey_restarted' &&
       event.type !== 'onboarding.persona_revised' &&
-      event.type !== 'onboarding.persona_approved') {
+      event.type !== 'onboarding.persona_approved' &&
+      event.type !== 'onboarding.welcome_started' &&
+      event.type !== 'onboarding.welcome_answer_recorded') {
     return;
   }
   if (!parseEventByType(event).success || !event.commandId) {
     throw new Error('Invalid survey event');
   }
   const dataSchema = surveyStepSavedDataSchema.or(surveyRestartedDataSchema)
-    .or(personaRevisedDataSchema).or(personaApprovedDataSchema);
+    .or(personaRevisedDataSchema).or(personaApprovedDataSchema)
+    .or(welcomeStartedDataSchema).or(welcomeAnswerRecordedDataSchema);
   const data = dataSchema.parse(event.data);
   const current = await readSurvey(db, event.silo, data.memberId);
   const survey: Survey = current ?? { generation: 1, steps: [], nextStep: 1, position: 0 };
@@ -100,6 +149,10 @@ async function apply(db: Query, event: EventEnvelope, position: number): Promise
     await revisePersona(db, survey, event, position);
   } else if (event.type === 'onboarding.persona_approved') {
     approvePersona(survey, event);
+  } else if (event.type === 'onboarding.welcome_started') {
+    startWelcome(survey, event);
+  } else if (event.type === 'onboarding.welcome_answer_recorded') {
+    recordWelcomeAnswer(survey, event, position);
   } else {
     saveStep(survey, event, position, event.commandId);
   }
