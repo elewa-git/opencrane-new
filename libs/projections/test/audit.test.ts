@@ -33,12 +33,14 @@ function auditAllowListIncludesSafeFamilies(): void {
     const invitationEvidence = ['member.invited', 'member.command_refused'].includes(event.type);
     const dispatchEvidence = ['tool.dispatch_started', 'tool.dispatch_recorded'].includes(event.type);
     const publicationEvidence = event.type === 'conversation.child_result_published';
+    const delegationEvidence = event.type === 'delegation.started' ||
+      event.type === 'delegation.completed';
     const expected = previouslyAllowed || ownershipEvidence || invitationEvidence ||
-      dispatchEvidence || publicationEvidence;
+      dispatchEvidence || publicationEvidence || delegationEvidence;
     expect(isAuditEventType(event.type), event.type).toBe(expected);
   }
 }
-it('preserves the audit allow-list and includes ownership and publication evidence',
+it('preserves the audit allow-list and includes ownership, publication and delegation',
   auditAllowListIncludesSafeFamilies);
 
 function fixture(type: string, id: string, data: Record<string, unknown> = {}, correlated = true): EventEnvelope {

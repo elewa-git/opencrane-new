@@ -83,7 +83,7 @@ export function registerAuditRoutes(app: FastifyInstance, config: AuthConfig, op
       const rights = new Map<string, boolean>();
       const records: AuditRecord[] = [];
       for (const record of result.records) {
-        records.push(await visiblePublication(options, memberId, record, rights));
+        records.push(await visibleRecord(options, memberId, record, rights));
       }
       return reply.send({ ...result, records });
     } catch (error) {
@@ -118,7 +118,7 @@ async function visibleRows(options: AuditOptions, memberId: string,
   for (const row of rows) {
     const records: AuditRecord[] = [];
     for (const record of row.records) {
-      records.push(await visiblePublication(options, memberId, record, rights));
+      records.push(await visibleRecord(options, memberId, record, rights));
     }
     const publication = row.records.find(isChildPublication);
     if (!publication) {
@@ -137,6 +137,36 @@ async function visibleRows(options: AuditOptions, memberId: string,
 }
 function isChildPublication(record: AuditRecord): boolean {
   return record.type === 'conversation.child_result_published';
+}
+async function visibleRecord(options: AuditOptions, memberId: string,
+  record: AuditRecord, rights: Map<string, boolean>): Promise<AuditRecord> {
+  if (record.type === 'delegation.completed') {
+    return visibleDelegation(options, memberId, record, rights);
+  }
+  return visiblePublication(options, memberId, record, rights);
+}
+async function visibleDelegation(options: AuditOptions, memberId: string,
+  record: AuditRecord, rights: Map<string, boolean>): Promise<AuditRecord> {
+  const childId = record.childConversationId;
+  const childAllowed = childId
+    ? await conversationRight(options, memberId, childId, rights) : false;
+  if (!childAllowed) {
+    // Show one entry without disclosing the child, its result or hidden descendants.
+    return { eventId: record.eventId, type: record.type, position: record.position,
+      source: record.source, status: 'recorded', recordedAt: record.recordedAt,
+      delegationAccess: 'restricted', joinStatus: record.joinStatus };
+  }
+  const visible: AuditRecord = { ...record, delegationAccess: 'visible',
+    taskHref: `/workspace?conversation=${childId}` };
+  const parentId = record.parentConversationId;
+  const parentAllowed = parentId
+    ? await conversationRight(options, memberId, parentId, rights) : false;
+  if (!parentAllowed) {
+    delete visible.parentConversationId;
+    delete visible.parentDelegationId;
+    delete visible.rootId;
+  }
+  return visible;
 }
 async function visiblePublication(options: AuditOptions, memberId: string,
   record: AuditRecord, rights: Map<string, boolean>): Promise<AuditRecord> {

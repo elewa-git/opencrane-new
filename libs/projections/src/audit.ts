@@ -6,8 +6,10 @@ import { auditReasons, auditResponseSchema, auditDetailSchema, type AuditRow,
 import type { Query } from './db.ts';
 import type { Projection } from './runner.ts';
 import { publicationAuditData, publicationMetadata } from './audit-publication.ts';
+import { createDelegationAuditIndexes, delegationMetadata, delegationPublicId,
+  modernDelegationData, saveDelegationStart } from './audit-delegation.ts';
 import { auditIdentifier as identifier, auditLinks, isDispatchEvent,
-  safeAuditId as safeId } from './audit-links.ts';
+  dispatchStatus, safeAuditId as safeId } from './audit-links.ts';
 
 // Free text never enters this projection, including approval reasons and tool arguments.
 const auditPrefixes = [
@@ -25,6 +27,7 @@ const auditPrefixes = [
   'ownership.',
   'assistant.',
   'grant.',
+  'delegation.',
 ];
 const auditTypes = new Set([
   // Budget records expose amounts and outcomes without request content.
@@ -68,8 +71,11 @@ export function isAuditEventType(type: string): boolean {
   }
   return false;
 }
-function auditData(event: EventEnvelope): Record<string, unknown> {
+function auditData(event: EventEnvelope): Record<string, unknown> | undefined {
   const dataSchema = z.record(z.string(), z.unknown());
+  if (event.type.startsWith('delegation.')) {
+    return modernDelegationData(event);
+  }
   if (event.type === 'conversation.child_result_published') {
     return publicationAuditData(event);
   }
@@ -103,15 +109,6 @@ function resolutionData(event: EventEnvelope): Record<string, unknown> {
     throw new Error('Invalid resolution audit event');
   }
   return data;
-}
-function dispatchStatus(outcome: unknown): AuditRecord['status'] {
-  if (outcome === 'outcome_unknown') {
-    return 'unknown';
-  }
-  if (outcome === 'not_dispatched') {
-    return 'not_dispatched';
-  }
-  return 'recorded';
 }
 const amount = (value: unknown) => z.number().int().nonnegative().safe().safeParse(value).data;
 interface Entry extends Record<string, unknown> {
@@ -217,7 +214,11 @@ function metadata(event: EventEnvelope, d: Record<string, unknown>, position: nu
   if (isDispatchEvent(event.type)) {
     status = dispatchStatus(d['outcome']);
   }
-  const reason = typeof d['reason'] === 'string' ? Object.entries(auditReasons).find(([code]) => code === d['reason'])?.[1] ?? 'Recorded reason withheld' : undefined;
+  let reason: AuditRecord['reason'];
+  if (event.type !== 'delegation.completed' && typeof d['reason'] === 'string') {
+    reason = Object.entries(auditReasons).find(([code]) => code === d['reason'])?.[1] ??
+      'Recorded reason withheld';
+  }
   const cents = amount(d['amountCents'] ?? d['settledCents']);
   const digest = commandRef(event);
   let savedOutcome: AuditRecord['savedOutcome'];
@@ -245,6 +246,7 @@ export const auditTrail: Projection = {
       'actor_id TEXT', 'outcome TEXT']) {
       await db.query(`ALTER TABLE audit_entries ADD COLUMN IF NOT EXISTS ${column}`);
     }
+    await createDelegationAuditIndexes(db);
     for (const column of ['recorded_at', 'actor_id', 'outcome']) {
       await db.query(`CREATE INDEX IF NOT EXISTS audit_${column}
         ON audit_entries (silo, ${column}, position DESC)`);
@@ -266,25 +268,34 @@ export const auditTrail: Projection = {
   async apply(db, event, position) {
     if (!isAuditEventType(event.type)) return;
     const d = auditData(event);
+    if (!d) return;
+    if (event.type === 'delegation.started') {
+      await saveDelegationStart(db, event, d, position);
+      return;
+    }
     const links = auditLinks(event, d);
     const { request, permit, approval } = links;
     const anchor = isAnchor(event, request, permit, approval);
     const digest = z.string().regex(/^[a-f0-9]{64}$/u).safeParse(d['contextDigest']).data;
-    const record = metadata(event, d, position);
+    const publicId = event.type === 'delegation.completed'
+      ? delegationPublicId(event.id) : null;
+    const record = { ...metadata(event, d, position),
+      ...await delegationMetadata(db, event, d),
+      ...(publicId ? { eventId: publicId } : {}) };
     let requesterId = links.requesterId;
     if (event.type === 'takeover.refused' && record.actor?.kind === 'person') {
       requesterId = record.actor.id;
     }
     await db.query(`INSERT INTO audit_entries (silo,event_id,position,anchor,request_id,permit_id,
       approval_id,conversation_id,turn_id,requester_id,decision,context_digest,metadata,
-      recorded_at,event_type,actor_id,outcome)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+      recorded_at,event_type,actor_id,outcome,public_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
       ON CONFLICT (silo, event_id) DO NOTHING`, [event.silo, event.id, position, anchor, request, permit, approval,
       links.conversationId, links.turnId,
       requesterId,
       event.type === 'decision.recorded' ? d['outcome'] : null, digest, JSON.stringify(record),
       event.time, event.type, record.actor?.kind === 'unverified' ? null : record.actor?.id,
-      record.status].map(value => value ?? null));
+      record.status, publicId].map(value => value ?? null));
     if (anchor || ['effect.observed', 'egress.observed', 'budget.settled',
       'security.alert_raised', 'gateway.observation_recorded',
       'tool.dispatch_started', 'tool.dispatch_recorded'].includes(event.type)) {
@@ -366,7 +377,8 @@ export async function readAudit(db: Query, silo: string,
   if (filter.reference) {
     parameters.push(filter.reference);
     const index = parameters.length;
-    where.push(`(event_id = $${index} OR request_id = $${index} OR permit_id = $${index})`);
+    where.push(`(event_id = $${index} OR public_id = $${index} OR
+      request_id = $${index} OR permit_id = $${index})`);
   }
   if (filter.before !== undefined) {
     parameters.push(filter.before);
@@ -398,7 +410,8 @@ function evidenceCondition(alias: string): string {
 
 async function readEvidence(db: Query, silo: string, anchor: Entry,
   before: number | undefined, limit: number, includeAnchor: boolean): Promise<Entry[]> {
-  if (anchor['event_type'] === 'conversation.child_result_published') {
+  if (anchor['event_type'] === 'conversation.child_result_published' ||
+      anchor['event_type'] === 'delegation.completed') {
     if (!includeAnchor || (before !== undefined && Number(anchor.position) >= before)) return [];
     return [anchor];
   }
@@ -412,7 +425,8 @@ async function readEvidence(db: Query, silo: string, anchor: Entry,
   if (before !== undefined) parameters.push(before);
   parameters.push(limit);
   const sql = `SELECT e.* FROM audit_entries e WHERE e.silo = $1 ${excludeAnchor}
-    AND e.event_type <> 'conversation.child_result_published'
+    AND e.event_type NOT IN ('conversation.child_result_published',
+      'delegation.started', 'delegation.completed')
     ${beforeCondition} AND (${anchorCondition}${direct} OR
       (e.event_type NOT IN ('tool.dispatch_started', 'tool.dispatch_recorded')
         AND e.approval_id IS NOT NULL AND EXISTS (
@@ -440,14 +454,14 @@ async function readSignals(db: Query, silo: string, anchor: Entry): Promise<Entr
 export async function readAuditDetail(db: Query, silo: string, auditId: string,
   filter: AuditDetailFilter = { limit: 20 }) {
   const anchor = (await db.query<Entry>(
-    'SELECT * FROM audit_entries WHERE silo = $1 AND event_id = $2 AND anchor = TRUE',
+    'SELECT * FROM audit_entries WHERE silo = $1 AND (event_id = $2 OR public_id = $2) AND anchor = TRUE',
     [silo, auditId])).rows[0];
   if (!anchor) return undefined;
   const page = await readEvidence(db, silo, anchor, filter.before, filter.limit + 1, true);
   const records = page.slice(0, filter.limit).map(entry => auditResponseSchema.shape.rows.element
     .shape.records.element.parse(entry.metadata));
   const nextBefore = page.length > filter.limit ? Number(page[filter.limit - 1]!.position) : undefined;
-  return auditDetailSchema.parse({ id: anchor.event_id, records,
+  return auditDetailSchema.parse({ id: anchor['public_id'] ?? anchor.event_id, records,
     ...(nextBefore ? { nextBefore } : {}) });
 }
 
@@ -465,7 +479,8 @@ function explain(anchor: Entry, entries: Entry[], signals: Entry[],
   const settlement = summaryRecords.findLast(r => r.type === 'budget.settled');
   const reservation = summaryRecords.find(r => r.type === 'budget.reserved');
   const outcome = observedOutcome(decision, summaryRecords, effect, settlement);
-  return auditResponseSchema.shape.rows.element.parse({ id: anchor.event_id, decision, outcome, records,
+  return auditResponseSchema.shape.rows.element.parse({
+    id: anchor['public_id'] ?? anchor.event_id, decision, outcome, records,
     ...(hasMoreEvidence ? { hasMoreEvidence } : {}),
     requestId: anchor.request_id ?? undefined, permitId: anchor.permit_id ?? undefined,
     conversationId: anchor.conversation_id ?? undefined, turnId: anchor.turn_id ?? undefined,
