@@ -57,7 +57,9 @@ export const routineStopSchema = routineControlSchema.extend({ ...run,
   source: z.enum(['owner', 'admin', 'approval', 'delivery']) });
 export const routineFinishedSchema = identity.extend({ ...run,
   outcome: z.enum(['succeeded', 'failed', 'cancelled', 'interrupted']),
-  reason, terminalEvidence: reference, resultReference: reference.optional() });
+  reason, terminalEvidence: reference, resultReference: reference.optional(),
+  heldCents: z.int().nonnegative().optional(),
+  settledCents: z.int().nonnegative().optional() });
 
 // Keep the old records exact so replay cannot guess a governed definition from cron text.
 const legacyCreated = z.object({ routineId: z.string().min(1), assistantId: z.string().min(1),
