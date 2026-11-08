@@ -2,10 +2,14 @@
 
 import contextlib
 import copy
+import gzip
+import hashlib
 import importlib.util
 import io
-import sys
+import json
+import subprocess
 import tarfile
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -19,6 +23,21 @@ def load_checker():
     checker = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(checker)
     return checker
+
+
+def archive_bytes(entries):
+    output = io.BytesIO()
+    with tarfile.open(fileobj=output, mode="w") as archive:
+        for name, data, kind in entries:
+            member = tarfile.TarInfo(name)
+            if kind == "file":
+                member.size = len(data)
+                archive.addfile(member, io.BytesIO(data))
+            else:
+                member.type = tarfile.SYMTYPE
+                member.linkname = data
+                archive.addfile(member)
+    return output.getvalue()
 
 
 class DifferenceTests(unittest.TestCase):
@@ -38,6 +57,17 @@ class DifferenceTests(unittest.TestCase):
             self.checker.check_difference(inventory, recipe, layers, record)
 
     def test_authentic_difference_has_separate_results_and_no_approval(self):
+        sample = (HERE / "beep.js.gz").read_bytes()
+        self.assertEqual(hashlib.sha256(sample).hexdigest(),
+                         "0805f6f5613a343903493c3cf32488864b37f72833916f774482fac7dd3abc82")
+        source_file = gzip.decompress(sample)
+        source_row = self.inventory["differences"]["sourceOnly"][0]
+        self.assertEqual(source_row[2:], [len(source_file), hashlib.sha256(source_file).hexdigest()])
+        self.assertNotIn(source_row, self.inventory["official"]["files"])
+        for launcher in self.inventory["differences"]["officialOnly"]:
+            self.assertEqual(launcher[1], "link")
+            self.assertIn(launcher, self.inventory["official"]["files"])
+            self.assertNotIn(launcher, self.inventory["source"]["files"])
         result = self.checker.check_difference(
             self.inventory, self.recipe, self.layers, self.record)
         self.assertEqual(result, {
@@ -85,23 +115,68 @@ class DifferenceTests(unittest.TestCase):
         for survivor in (source_file, launcher):
             with self.subTest(survivor=survivor[0]):
                 self.assert_refusal(layers=[[survivor], []])
-        self.assert_refusal(recipe=b"RUN true\n")
+        source_bytes = gzip.decompress((HERE / "beep.js.gz").read_bytes())
+        for name, data, kind in (("usr/local/" + source_file[0], source_bytes, "file"),
+                                 ("usr/local/" + launcher[0], launcher[3], "link")):
+            layer = archive_bytes([(name, data, kind)])
+            manifest = json.dumps([{"Layers": ["first.tar", "second.tar"]}]).encode()
+            outer = archive_bytes([("manifest.json", manifest, "file"),
+                                   ("first.tar", layer, "file"),
+                                   ("second.tar", archive_bytes([]), "file")])
+            with tempfile.TemporaryDirectory() as temporary:
+                candidate = Path(temporary) / "candidate.tar"
+                candidate.write_bytes(outer)
+                observed = self.checker.scan_layers(candidate)
+                self.assertEqual(observed[0][0][0], name.removeprefix("usr/local/"))
+                self.assert_refusal(layers=observed)
+        for changed_line in (b"RUN true\n", b"COPY --from=build / /\n"):
+            recipe = self.recipe.replace(self.checker.REQUIRED_LINES[1], changed_line)
+            self.assert_refusal(recipe=recipe)
+        recipe = self.recipe.replace(b"/usr/local/bin/npx", b"/usr/local/bin/other")
+        self.assert_refusal(recipe=recipe)
 
     def test_changed_candidate_binding_or_bytes_after_inspection_refuses(self):
         changed = copy.deepcopy(self.record)
         changed["candidateSha256"] = "0" * 64
         self.assert_refusal(record=changed)
-        with patch.object(self.checker.npm.pcre.candidate, "checked_bytes",
-                          side_effect=ValueError("private path")):
+        checker = self.checker
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(checker, "read_record", return_value=self.record))
+            stack.enter_context(patch.object(checker.npm, "read_inventory",
+                                             return_value=self.inventory))
+            stack.enter_context(patch.object(checker.npm.pcre, "check_upstream"))
+            stack.enter_context(patch.object(checker.npm.pcre, "run_checked"))
+            stack.enter_context(patch.object(checker.npm, "check_sources"))
+            stack.enter_context(patch.object(checker.npm.pcre, "check_candidate"))
+            stack.enter_context(patch.object(checker, "scan_layers", return_value=self.layers))
+            stack.enter_context(patch.object(checker, "read_recipe", return_value=self.recipe))
+            checked = stack.enter_context(patch.object(checker.npm, "checked_bytes",
+                                                       side_effect=ValueError("private path")))
             self.assert_fixed_cli_refusal()
+            self.assertEqual(checked.call_args.args[0].name, "candidate.tar")
 
     def test_changed_signed_source_and_malformed_archive_refuse(self):
         with patch.object(self.checker.npm.pcre, "check_upstream",
                           side_effect=ValueError("private source")):
             self.assert_fixed_cli_refusal()
+        with tempfile.TemporaryDirectory() as temporary:
+            malformed = Path(temporary) / "candidate.tar"
+            malformed.write_bytes(b"not a tar archive")
+            with self.assertRaises(tarfile.ReadError):
+                self.checker.scan_layers(malformed)
         with patch.object(self.checker, "scan_layers",
                           side_effect=tarfile.ReadError("private archive")):
             self.assert_fixed_cli_refusal()
+
+    def test_missing_import_has_one_fixed_error(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            script = Path(temporary) / "p5-4-images15/check-difference.py"
+            script.parent.mkdir()
+            script.write_bytes(CHECKER.read_bytes())
+            result = subprocess.run(["python3", str(script)], capture_output=True,
+                                    text=True, check=False)
+        self.assertEqual((result.returncode, result.stdout, result.stderr),
+                         (1, "", self.checker.REFUSAL + "\n"))
 
     def assert_fixed_cli_refusal(self):
         output = io.StringIO()

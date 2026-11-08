@@ -1,0 +1,15 @@
+{
+  "status": "BLOCKED",
+  "candidateSha256": "365bc4d4c4039ba62a6ce982aaae68508b2986df5edb7605355b92055457a2da",
+  "inventorySha256": "e45e886f8d283fce0c70246fc28b3e882bf8a8b7780f0e468a172bd68ad0e6a3",
+  "sourceOnlySha256": "8d16a4aa9f1ca2b398825a95e380c8453d6341f2962dd79bee8d1414078c2189",
+  "officialOnlySha256": "479ffc75bf742662cd7ec39d4b1eeb44e64321d78348bb64405905d9181c32a0",
+  "missingFromCandidateSha256": "554841cfd0d2d0d1f0c255c63f7722b5ccb883847617e4dba12ad4c97e546fa7",
+  "results": {
+    "sourceOnly": "absent",
+    "officialLaunchers": "present",
+    "candidateSourceOnly": "absent",
+    "candidateLaunchers": "absent",
+    "candidateNpmTree": "BLOCKED"
+  }
+}
