@@ -493,6 +493,48 @@ async function replaysRecordedSwitchOn() {
 it('rebuilds the recorded switch-on without changing keys, models or verification',
   replaysRecordedSwitchOn);
 
+async function replaysRetiredBindings() {
+  const source = 'retirement-source';
+  const common = { providerId: source, changedBy: 'owner' };
+  await append(`provider-${source}`, 'provider.created', {
+    ...common, revision: 1, provider: 'openai', name: 'Retirement source',
+  });
+  await append(`provider-${source}`, 'provider.key_saved', {
+    ...common, revision: 2, secretRef: providerSecretRef('acme', source, 'source-key'),
+  });
+  await append(`provider-${source}`, 'provider.models_selected', {
+    ...common, revision: 3, models: ['gpt-6.1-sol'],
+  });
+  await append(`provider-${source}`, 'provider.model_binding_set', {
+    ...common, revision: 3, kind: 'assistant', dependantId: 'one', task: 'chat_turn',
+    expectedProviderSequence: 0, previousBindingSequence: 0,
+    state: 'active', model: 'gpt-6.1-sol',
+  });
+  const bindingPosition = await nats.store.head(`provider-${source}`);
+  const choices = [{ kind: 'assistant', dependantId: 'one', task: 'chat_turn',
+    old: { providerId: source, model: 'gpt-6.1-sol', bindingSequence: bindingPosition },
+    next: { state: 'active', providerId: 'secondary', model: 'gpt-6.1-sol', revision: 3 } }];
+  await append(`provider-${source}`, 'provider.retired', {
+    ...common, revision: 3, expectedProviderSequence: bindingPosition, choices,
+  });
+  await runner.run(providers);
+  const before = await dbs.queue.query('SELECT * FROM model_bindings WHERE silo = $1 AND '
+    + 'dependant_id = $2', ['acme', 'one']);
+  expect(before.rows[0]).toMatchObject({ state: { providerId: 'secondary',
+    state: 'active', model: 'gpt-6.1-sol' } });
+  expect((await readProviders(pgDb(dbs.queue), 'acme', source))[0]).toMatchObject({
+    retired: { revision: 3, choices },
+  });
+  const logger = createLogger('retirement-replay', { level: 'silent' });
+  await rebuildProviderProjection(pgDb(dbs.queue), nats.reader, logger, { verify: true });
+  const after = await dbs.queue.query('SELECT * FROM model_bindings WHERE silo = $1 AND '
+    + 'dependant_id = $2', ['acme', 'one']);
+  expect(after.rows).toEqual(before.rows);
+  expect((await request('POST', source, {}, 'owner', undefined, undefined, 'retire'))
+    .statusCode).toBe(404);
+}
+it('replays retirement choices without opening the mutation route', replaysRetiredBindings);
+
 async function boundsReplacementPreparation() {
   const candidateModels = [
     'gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-luna', 'gpt-6-sol',
