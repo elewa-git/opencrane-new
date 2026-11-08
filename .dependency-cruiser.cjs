@@ -20,7 +20,13 @@ function libraryEntrypointRule(path) {
 module.exports = {
   forbidden: [
     { name: 'no-cycles', severity: 'error', from: {}, to: { circular: true } },
-    { name: 'no-unresolved', severity: 'error', from: {}, to: { couldNotResolve: true } },
+    { name: 'no-unresolved', severity: 'error',
+      from: { pathNot: '^scripts/private-memory-qualification/runner-protection\\.ts$' },
+      to: { couldNotResolve: true } },
+    // The image build compiles this addon; every other import here must still resolve.
+    { name: 'runner-protection-imports-resolve', severity: 'error',
+      from: { path: '^scripts/private-memory-qualification/runner-protection\\.ts$' },
+      to: { couldNotResolve: true, pathNot: '^\\./runner-protection\\.node$' } },
     { name: 'libraries-do-not-import-apps', severity: 'error', from: { path: '^libs/' }, to: { path: '^apps/' } },
     { name: 'events-are-independent', severity: 'error', from: { path: '^libs/events/' }, to: { path: '^(apps/|libs/(auth|observability|protocol|event-store|projections|handlers|authz)/)' } },
     { name: 'web-only-uses-browser-contracts', severity: 'error', from: { path: '^apps/web/' }, to: { path: '^(apps/server/|libs/(auth|events|observability|event-store|projections|handlers|authz)/)' } },

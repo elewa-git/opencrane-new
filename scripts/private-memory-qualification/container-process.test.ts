@@ -165,6 +165,8 @@ async function refusesOtherFailedOutput(output: string): Promise<void> {
 }
 const failedOutputs = [
   '{"result":"FAIL","reason":"host_refused","protectionFailure":"private_process_missing"}',
+  '{"result":"FAIL","reason":"host_refused","protectionFailure":"private_process_unreadable"}',
+  '{"result":"FAIL","reason":"host_refused","protectionFailure":"private_process_identity_changed"}',
   '{"result":"FAIL","reason":"host_refused","protectionFailure":"/private/helper"}',
   '{"result":"FAIL","reason":"host_refused","protectionFailure":null}',
   '{"result":"FAIL","reason":"host_refused","protectionFailure":"helper_unavailable","extra":1}',
@@ -192,14 +194,15 @@ it.each(['swap_measurement_failed', 'swap_not_disabled', 'memory_limit_unproved'
   'suid_dumpable_unreadable', 'core_helper_enabled'])(
   'forwards only the fixed protection category %s after cleanup', forwardsProtectionFailure, 30_000);
 
-async function forwardsIncompleteProcessRefusal(): Promise<void> {
+async function forwardsIncompleteProcessRefusal(protectionFailure: string): Promise<void> {
   const refusal = { result: 'FAIL', reason: 'host_refused',
-    protectionFailure: 'private_process_missing', complete: false };
+    protectionFailure, complete: false };
   const output = JSON.stringify(refusal);
   const source = `process.stdout.write(${JSON.stringify(output)}); process.exit(1);`;
   const args = ['/usr/local/bin/node', '--eval', source];
   expect(await runInContainer(containerId, args)).toEqual(refusal);
   assertNoRunningJourney();
 }
-it('forwards the incomplete private process refusal after cleanup',
-  forwardsIncompleteProcessRefusal, 30_000);
+it.each(['private_process_missing', 'private_process_unreadable',
+  'private_process_identity_changed'])(
+  'forwards the incomplete %s refusal after cleanup', forwardsIncompleteProcessRefusal, 30_000);

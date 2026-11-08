@@ -4,6 +4,7 @@ import { prepareTemporaryDirectory } from './display-lock.ts';
 import {
   mkdirSync, lstatSync, openSync, closeSync, fstatSync, fchmodSync, fchownSync,
   constants, symlinkSync, rmSync, readdirSync, writeFileSync, chownSync,
+  readFileSync,
 } from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -13,6 +14,29 @@ import { supervisorStop } from './supervisor-stop.ts';
 import { supervisePrivateChild } from './private-supervisor.ts';
 import { workerExecutor } from './worker-executor.ts';
 import { createServer, connect, type Socket } from 'node:net';
+
+function recordBridgeLaunch(child: ChildProcess): void {
+  const pid = child.pid;
+  if (pid === undefined) {
+    throw new Error('Bridge did not start');
+  }
+  const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+  const commandEnd = stat.lastIndexOf(') ');
+  if (!stat.startsWith(`${pid} (`) || commandEnd < 0) {
+    throw new Error('Bridge launch identity unavailable');
+  }
+  const fieldsText = stat.slice(commandEnd + 2).trimEnd();
+  const fields = fieldsText.split(' ');
+  const startTime = fields[19];
+  if (!startTime || !/^[1-9][0-9]*$/u.test(startTime)) {
+    throw new Error('Bridge launch identity unavailable');
+  }
+  // Keep the launch identity where only the root entrypoint can replace it.
+  const recordPath = '/run/executor/supervisor/bridge-identity';
+  rmSync(recordPath, { force: true });
+  writeFileSync(recordPath, `${pid} ${startTime}\n`, { flag: 'wx', mode: 0o600 });
+}
+
 // Resolve each child through an open parent; mutate only the checked descriptor.
 function directory(parent: number, name: string, uid: number, mode: number, gid = uid) {
   const path = `/proc/self/fd/${parent}/${name}`;
@@ -198,6 +222,7 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
         env: bridgeEnvironment,
       };
       const bridge = spawn('/usr/local/bin/node', bridgeArgs, bridgeOptions);
+      recordBridgeLaunch(bridge);
       const launchPipe = bridge.stdio[3];
       if (!launchPipe || !('end' in launchPipe)) throw new Error('Missing launch pipe');
       launchPipe.end(`${launchKey}\n`);

@@ -17,11 +17,15 @@ function cleanup(): void {
 beforeAll(build, 310_000);
 afterAll(cleanup);
 
-function run(source: string, memorySwap = '256m', core = '0:0', identityChange = false): string {
+function run(source: string, memorySwap = '256m', core = '0:0', identityChange = false,
+  ptrace = false): string {
   const name = `runner-protection-test-${randomUUID()}`;
   const options = { encoding: 'utf8' as const, timeout: 15_000 };
   try {
     const capabilities = identityChange ? ['--cap-add=SETUID'] : [];
+    if (ptrace) {
+      capabilities.push('--cap-add=SYS_PTRACE');
+    }
     const args = ['run', '--name', name, '--network=none', '--read-only',
       '--cap-drop=ALL', '--security-opt=no-new-privileges', '--pids-limit=32',
       ...capabilities,
@@ -51,6 +55,86 @@ function refusesUnmeasuredProcessGroups(): void {
 }
 it('refuses unmeasured private processes in a restricted container',
   refusesUnmeasuredProcessGroups, 30_000);
+
+function checksLiveServices(): void {
+  const source = `
+    import assert from 'node:assert/strict';
+    import { spawn } from 'node:child_process';
+    import { randomUUID } from 'node:crypto';
+    import { once } from 'node:events';
+    import { createConnection } from 'node:net';
+    import { setTimeout as delay } from 'node:timers/promises';
+    import { readProcessIdentity, checkLiveService } from
+      '${directory}/private-processes.ts';
+    const services = [];
+    async function start(name) {
+      const script = "import { startServiceProtection } from " +
+        "'${directory}/service-protection.ts';" +
+        "await startServiceProtection('" + name + "');" +
+        "process.on('SIGUSR1', () => {" +
+        "process.seteuid(1000); process.stdout.write('changed\\\\n'); });" +
+        "process.stdout.write('ready\\\\n');" +
+        "setInterval(() => {}, 1000);";
+      const child = spawn('/usr/bin/prlimit', ['--core=0:0', '--',
+        '/usr/local/bin/node', '--experimental-strip-types',
+        '--input-type=module', '--eval', script], { stdio: ['ignore', 'pipe', 'ignore'] });
+      services.push(child);
+      await once(child.stdout, 'data');
+      return child;
+    }
+    async function disconnectEarly(name) {
+      const socket = createConnection({ path: '\\0opencrane-private-' + name });
+      socket.on('error', function ignoreClosedClient() {});
+      await once(socket, 'connect');
+      socket.write(randomUUID() + '\\n');
+      socket.destroy();
+      await delay(25);
+    }
+    try {
+      const server = await start('serverDelivery');
+      const bridge = await start('bridge');
+      await disconnectEarly('serverDelivery');
+      await disconnectEarly('bridge');
+      assert.equal(server.exitCode, null);
+      assert.equal(bridge.exitCode, null);
+      const serverIdentity = readProcessIdentity(server.pid);
+      const bridgeIdentity = readProcessIdentity(bridge.pid);
+      assert.equal(checkLiveService('serverDelivery', serverIdentity), true);
+      assert.equal(checkLiveService('bridge', bridgeIdentity), true);
+      const reusedPid = { ...serverIdentity,
+        startTime: String(Number(serverIdentity.startTime) + 1) };
+      assert.equal(checkLiveService('serverDelivery', reusedPid),
+        'private_process_identity_changed');
+      for (const changed of [
+        { executable: '/other/node' }, { uid: serverIdentity.uid + 1 },
+        { cgroup: '0::/other\\n' }, { containerIdentity: 'pid:[1]' },
+      ]) {
+        assert.equal(checkLiveService('serverDelivery', { ...serverIdentity, ...changed }),
+          'private_process_identity_changed');
+      }
+      assert.equal(checkLiveService('serverDelivery', bridgeIdentity),
+        'private_process_identity_changed');
+      assert.equal(checkLiveService('bridge', serverIdentity),
+        'private_process_identity_changed');
+      server.kill('SIGUSR1');
+      await once(server.stdout, 'data');
+      assert.notEqual(checkLiveService('serverDelivery', serverIdentity), true);
+      server.kill('SIGKILL');
+      await once(server, 'exit');
+      assert.notEqual(checkLiveService('serverDelivery', serverIdentity), true);
+      assert.equal(checkLiveService('bridge', bridgeIdentity), true);
+      bridge.kill('SIGKILL');
+      await once(bridge, 'exit');
+      assert.notEqual(checkLiveService('bridge', bridgeIdentity), true);
+      process.stdout.write('services refused when missing');
+    } finally {
+      for (const child of services) child.kill('SIGKILL');
+    }
+  `;
+  expect(run(source, '256m', '0:0', true, true)).toBe('services refused when missing');
+}
+it('checks two live protected processes and refuses each missing process',
+  checksLiveServices, 30_000);
 function checksRestricted(): void {
   const pattern = readFileSync('/proc/sys/kernel/core_pattern', 'utf8');
   const privileged = readFileSync('/proc/sys/fs/suid_dumpable', 'utf8');

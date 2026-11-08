@@ -14,6 +14,10 @@ RUN sed -i 's|http://deb.debian.org/debian-security|http://snapshot.debian.org/a
     timeout -v -k 10s 25m apt-get install -y --no-install-recommends gcc libc6-dev
 COPY tool-user.c /tmp/tool-user.c
 RUN gcc -O2 -Wall -Wextra -Werror -o /tool-user /tmp/tool-user.c
+FROM launcher-build AS process-protection-build
+COPY --from=project scripts/private-memory-qualification/runner-protection.c /tmp/runner-protection.c
+RUN gcc -shared -fPIC -Wall -Wextra -Werror -I/usr/local/include/node \
+    -o /runner-protection.node /tmp/runner-protection.c
 # The pinned base image supplies Codex and the native launcher that applies seccomp.
 FROM ${COMPUTER_BASE} AS computer-apt-fallback
 USER root
@@ -37,6 +41,14 @@ RUN timeout -v -k 10s 25m apt-get -o Acquire::Check-Valid-Until=false update -qq
     find /spike -maxdepth 1 -type f -delete
 COPY --from=launcher-build /tool-user /usr/local/bin/tool-user
 FROM ${COMPUTER_APT_BASE} AS runtime
+COPY --from=project scripts/private-memory-qualification/service-protection.ts \
+  /scripts/private-memory-qualification/service-protection.ts
+COPY --from=project scripts/private-memory-qualification/runner-protection.ts \
+  /scripts/private-memory-qualification/runner-protection.ts
+COPY --from=project scripts/private-memory-qualification/protection-failure.ts \
+  /scripts/private-memory-qualification/protection-failure.ts
+COPY --from=process-protection-build /runner-protection.node \
+  /scripts/private-memory-qualification/runner-protection.node
 COPY requirements.lock /tmp/requirements.lock
 RUN python3 -m venv /opt/python && /opt/python/bin/pip install --no-compile --no-cache-dir --require-hashes -r /tmp/requirements.lock && \
     rm /tmp/requirements.lock && rm -rf /opt/python/lib/python3.11/site-packages/pip* /opt/python/lib/python3.11/site-packages/setuptools* /opt/python/lib/python3.11/site-packages/pkg_resources
