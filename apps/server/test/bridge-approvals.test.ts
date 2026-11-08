@@ -267,6 +267,43 @@ async function checksExpiry() {
 it('expires a requested approval without any new event',
   checksExpiry);
 
+async function releasesExpiredUncertainWatch() {
+  const expiresAt = new Date(Date.now() + 60_000).toISOString();
+  await seedRequest({ expiresAt, policySequence: await seedLiveTurn() });
+  await append(`approval-${approvalId}`, 'approval.decided', {
+    approvalId, decidedBy: 'alice', decision: 'approved',
+  });
+  await append(`approval-${approvalId}`, 'approval.used', {
+    approvalId, permitId: '00000000-0000-4000-8000-000000000001',
+  });
+  const { approvals, send } = watcher();
+  approvals.receive(waiting);
+  await poll(approvals);
+  expect(approvals.size).toBe(1);
+  expect(send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({
+    type: 'approval_settled', approvalId, state: 'outcome_unknown',
+  }));
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    vi.setSystemTime(Date.parse(expiresAt));
+    await poll(approvals);
+    expect(approvals.size).toBe(0);
+    expect(send).toHaveBeenCalledTimes(1);
+    const read = vi.spyOn(nats.store, 'readStream');
+    await poll(approvals);
+    expect(read).not.toHaveBeenCalled();
+    for (let index = 0; index < 64; index++) {
+      const nextId = index.toString(16).padStart(64, '0');
+      approvals.receive({ ...waiting, approvalId: nextId });
+    }
+    expect(approvals.size).toBe(64);
+  } finally {
+    vi.useRealTimers();
+  }
+}
+it('releases an uncertain watch at its original expiry and recovers capacity',
+  releasesExpiredUncertainWatch);
+
 async function checksIndependentReads() {
   await seedRequest();
   await append(`approval-${approvalId}`, 'approval.cancelled', { approvalId });
