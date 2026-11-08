@@ -14,9 +14,11 @@ async function fixture() {
   await writeFile(wrappingKeyFile, randomBytes(32), { mode: 0o600 });
   const writer = conversationKeys(keyDirectory, wrappingKeyFile);
   writer.provision('silo-a', 'routine-orders');
+  writer.provision('silo-b', 'routine-orders');
   const privateText = 'private-routine-custody-canary';
   const encrypted = writer.encrypt('silo-a', 'routine-orders', privateText);
-  return { keyDirectory, wrappingKeyFile, encrypted, privateText };
+  const otherEncrypted = writer.encrypt('silo-b', 'routine-orders', privateText);
+  return { keyDirectory, wrappingKeyFile, encrypted, otherEncrypted, privateText };
 }
 
 async function cleanup() {
@@ -30,7 +32,14 @@ async function readsSavedInputAfterRestart() {
     saved.wrappingKeyFile);
   expect(restarted.decrypt('silo-a', 'routine-orders', saved.encrypted))
     .toBe(saved.privateText);
-  expect(() => restarted.decrypt('silo-b', 'routine-orders', saved.encrypted))
+  const otherSilo = conversationKeys(saved.keyDirectory, saved.wrappingKeyFile);
+  expect(otherSilo.decrypt('silo-b', 'routine-orders', saved.otherEncrypted))
+    .toBe(saved.privateText);
+  expect(() => restarted.provision('silo-b', 'routine-orders'))
+    .toThrow(/^Routine custody unavailable$/u);
+  expect(() => restarted.encrypt('silo-b', 'routine-orders', saved.privateText))
+    .toThrow(/^Routine custody unavailable$/u);
+  expect(() => restarted.decrypt('silo-b', 'routine-orders', saved.otherEncrypted))
     .toThrow(/^Routine custody unavailable$/u);
   expect(JSON.stringify(saved.encrypted)).not.toContain(saved.privateText);
 }

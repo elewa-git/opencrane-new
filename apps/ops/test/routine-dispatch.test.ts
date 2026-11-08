@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { randomBytes } from 'node:crypto';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { createEventStore } from '@opencrane/event-store';
 import { createStore, memberAuthorisation, type Binding } from '@opencrane/authz';
@@ -179,7 +178,7 @@ it('refuses an enabled host without a checked delivery callback before claiming 
   enabledProductionNeedsDelivery);
 
 async function workerSetting(setting: string | undefined,
-  custody: 'valid' | 'missing-directory' | 'missing-wrap' = 'valid') {
+  custody: 'valid' | 'missing-directory' | 'missing-wrap' | 'invalid-wrap' = 'valid') {
   await nats.seed([creation()]);
   const before = await nats.store.head('routine-orders');
   const env: NodeJS.ProcessEnv = { ...process.env, ...nats.env('projection'),
@@ -187,12 +186,15 @@ async function workerSetting(setting: string | undefined,
   delete env['ROUTINE_EXECUTION_ENABLED'];
   delete env['CONVERSATION_KEYS_DIR'];
   delete env['CONVERSATION_WRAP_KEY_FILE'];
-  const directory = await mkdtemp('/tmp/routine-worker-custody-');
+  const directory = await mkdtemp('/tmp/private-routine-custody-path-');
   const keyDirectory = `${directory}/keys`;
   const wrappingKeyFile = `${directory}/wrap-key`;
   if (custody !== 'missing-directory') await mkdir(keyDirectory);
   if (custody !== 'missing-wrap') {
-    await writeFile(wrappingKeyFile, randomBytes(32), { mode: 0o600 });
+    const wrappingBytes = custody === 'invalid-wrap'
+      ? 'private-routine-custody-canary'
+      : 'private-routine-custody-canary'.padEnd(32, '!');
+    await writeFile(wrappingKeyFile, wrappingBytes, { mode: 0o600 });
   }
   env['CONVERSATION_KEYS_DIR'] = keyDirectory;
   env['CONVERSATION_WRAP_KEY_FILE'] = wrappingKeyFile;
@@ -243,6 +245,7 @@ async function workerSetting(setting: string | undefined,
     expect(await nats.store.head('budget-test')).toBe(0);
     expect(forbidden).not.toHaveBeenCalled();
     expect(output).not.toContain('private-routine-custody-canary');
+    expect(output).not.toContain(directory);
   } finally {
     if (child.exitCode === null && child.signalCode === null) {
       child.kill('SIGTERM');
@@ -261,10 +264,11 @@ async function disabledWithoutCustody(setting: string | undefined) {
 }
 it.each([undefined, 'false'])(
   'keeps disabled startup read-only without custody: %s', disabledWithoutCustody);
-async function missingCustodyCase(custody: 'missing-directory' | 'missing-wrap') {
+async function missingCustodyCase(
+  custody: 'missing-directory' | 'missing-wrap' | 'invalid-wrap') {
   await workerSetting('true', custody);
 }
-it.each(['missing-directory', 'missing-wrap'] as const)(
+it.each(['missing-directory', 'missing-wrap', 'invalid-wrap'] as const)(
   'refuses enabled startup with %s before a claim', missingCustodyCase);
 
 async function enabledProductionHandsOffSavedDue() {
