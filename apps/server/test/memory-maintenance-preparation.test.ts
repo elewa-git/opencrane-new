@@ -11,7 +11,7 @@ import { budgetRootAllowanceSetDataSchema, memoryMaintenanceRecordedDataSchema,
 import { createLogger } from '@opencrane/observability';
 import { memoryPrepareHandler } from '@opencrane/handlers';
 import { BudgetActor, providerSecretRef, providerSecrets, readToolPolicy,
-  losslessJson } from '@opencrane/models';
+  losslessJson, history } from '@opencrane/models';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { maintenanceOrChildRoute } from '../../../libs/models/src/decision-maintenance.ts';
 import { memoryKeys, memoryProjection, memoryScopeId, pgDb, ProjectionRunner,
@@ -426,7 +426,7 @@ it('admits one eligible night with one exact root and allowance', async function
   async function losePreparedReply(command: Parameters<typeof nats.store.append>[0]) {
     const result = await originalAppend(command);
     const savedEvent = savedEventShape.safeParse(command.event);
-    if (!rootReplyLost && savedEvent.success &&
+    if (!rootReplyLost && result.status === 'appended' && savedEvent.success &&
         savedEvent.data.type === 'budget.root_allowance_set') {
       rootReplyLost = true;
       throw new Error('Root reply lost after append');
@@ -481,6 +481,16 @@ it('admits one eligible night with one exact root and allowance', async function
     allowanceCents: 100, dispatch: 'disabled' });
   expect(concurrent).toEqual(repeated);
   appendSpy.mockRestore();
+  const budgetRows = await history(nats.store, 'budget-acme', 'acme');
+  function isRoot(row: (typeof budgetRows)[number]) {
+    return row.event.type === 'budget.root_allowance_set';
+  }
+  const rootEvent = budgetRows.find(isRoot);
+  if (!rootEvent) throw new Error('Saved maintenance root missing');
+  const savedRoot = budgetRootAllowanceSetDataSchema.parse(rootEvent.event.data);
+  expect(repeated).toMatchObject({ rootId: savedRoot.rootId });
+  const { rootId: _savedRootId, ...savedBinding } = savedRoot;
+  await actor.setRootAllowance(savedBinding, 1);
   const restartedActor = new BudgetActor(nats.store, 'acme', firstNight);
   await restartedActor.start(2000, 20000, 'payer');
   const restarted = await prepareNightlyMaintenance(options, eligibleScopeId, eligibleId,

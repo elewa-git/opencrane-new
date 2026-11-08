@@ -84,7 +84,7 @@ async function scopeFacts(rows: StoredEvent[], silo: string, scopeId: string,
 function nightState(rows: StoredEvent[], date: string) {
   let binding;
   let boundAt = '';
-  let overlap = false;
+  const unresolvedNights = new Set<string>();
   const runs = [];
   for (const row of rows) {
     if (row.event.type === 'memory.maintenance_bound') {
@@ -95,14 +95,19 @@ function nightState(rows: StoredEvent[], date: string) {
       const run = memoryMaintenanceRecordedDataSchema.parse(row.event.data);
       runs.push(run);
       if (run.date === date) {
-        return { binding, boundAt, overlap, claimed: true, runs };
+        return { binding, boundAt, overlap: unresolvedNights.size > 0,
+          claimed: true, runs };
       }
-      if (run.action === 'due') {
-        overlap = true;
+      if (run.action === 'due' || run.action === 'prepared' ||
+          run.reason === 'qualification_blocked') {
+        unresolvedNights.add(run.nightId);
+      } else {
+        unresolvedNights.delete(run.nightId);
       }
     }
   }
-  return { binding, boundAt, overlap, claimed: false, runs };
+  return { binding, boundAt, overlap: unresolvedNights.size > 0,
+    claimed: false, runs };
 }
 
 async function recordScope(store: EventStore, silo: string, scopeId: string,

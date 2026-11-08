@@ -10,8 +10,11 @@ memory MCP, memory-read and memory-write grants before a two-second access check
 It also checks a published, reviewed, free Allow for Correct, the current
 provider key, price, computer identity and deployment
 qualification. The budget actor checks all three spending ceilings in its serial
-queue. The prepared scope record names the root, model and provider. Recovery reads
-that same record; no step starts a turn, model call, tool call or computer.
+queue. The prepared scope record names the root, model and provider. Before new-admission
+checks, recovery reads the original budget event in case the root was saved but the
+scope result was not. It uses the saved root even after the window or binding changes.
+An unresolved earlier night blocks another night's preparation. No step starts a turn,
+model call, tool call or computer.
 
 The [server contract](../../README.robot.md) describes the existing memory commands.
 The [initial personal load contract](../../../../docs/process/p4-15-pr5d/README.robot.md)

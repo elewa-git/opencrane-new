@@ -189,7 +189,7 @@ async function selectedProvider(options: MemoryOptions, binding: Binding,
     performance.now() + 10_000);
   try {
     provider = await decisionProvider(options.store, options.silo,
-      choice, performance.now() + 10_000, 0);
+      choice, performance.now() + 10_000, providerPosition);
     await provider.credential(secrets, performance.now() + 10_000);
   } catch {
     throw new MaintenanceRootRefused('provider_unavailable');

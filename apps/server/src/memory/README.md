@@ -13,6 +13,8 @@ This folder lets people review, save, correct and forget information the assista
 - Records initial personal references in two checked steps and supplies the selected text once.
 - Records choices, safe refusals and one checked spending allowance for a saved
   personal nightly scope. It does not start a computer or send a call.
+  If a root was saved but its reply was lost, preparation finds that same root
+  before checking whether a new night could start.
 
 When a loaded fact changes, expires or loses access, the saved withdrawal stops the
 computer and asks the original browser to clear its completed reply. The reply identity

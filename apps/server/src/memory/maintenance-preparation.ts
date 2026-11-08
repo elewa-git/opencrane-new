@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { StoredEvent } from '@opencrane/event-store';
 import { memoryMaintenanceBoundDataSchema, memoryMaintenanceRecordedDataSchema,
-  parseEventByType } from '@opencrane/events';
+  budgetRootAllowanceSetDataSchema, parseEventByType } from '@opencrane/events';
 import { history, providerTurnAdmission } from '@opencrane/models';
 import type { MemoryOptions } from './access.ts';
 import { admitMaintenanceRoot, MaintenanceRootRefused,
@@ -38,12 +38,11 @@ function inspectRun(row: StoredEvent, nightId: string, intent: Run | undefined) 
         row.event.principal.id !== 'nightly-memory') {
       throw new Error('Maintenance intent unavailable');
     }
-    return { intent: run, result: undefined, occupied: false };
+    return { intent: run, result: undefined, run };
   }
   const result = run.nightId === nightId && row.event.source === 'opencrane-server'
     ? run : undefined;
-  const occupied = run.nightId !== nightId && run.action === 'due';
-  return { intent, result, occupied };
+  return { intent, result, run };
 }
 
 function originalNight(rows: StoredEvent[], nightId: string) {
@@ -52,7 +51,7 @@ function originalNight(rows: StoredEvent[], nightId: string) {
   let result: Run | undefined;
   let changedBinding = false;
   let changedInput = false;
-  let occupied = false;
+  const unresolvedNights = new Set<string>();
   for (const row of rows) {
     if (row.event.type === 'memory.maintenance_bound') {
       binding = memoryMaintenanceBoundDataSchema.parse(row.event.data);
@@ -63,7 +62,14 @@ function originalNight(rows: StoredEvent[], nightId: string) {
       const next = inspectRun(row, nightId, intent);
       intent = next.intent;
       result = next.result ?? result;
-      occupied ||= next.occupied;
+      if (next.run.nightId !== nightId) {
+        if (next.run.action === 'due' || next.run.action === 'prepared' ||
+            next.run.reason === 'qualification_blocked') {
+          unresolvedNights.add(next.run.nightId);
+        } else {
+          unresolvedNights.delete(next.run.nightId);
+        }
+      }
       continue;
     }
     if (intent && ['memory.written', 'memory.corrected', 'memory.forgotten'].includes(
@@ -71,7 +77,44 @@ function originalNight(rows: StoredEvent[], nightId: string) {
       changedInput = true;
     }
   }
-  return { intent, binding, result, changedBinding, changedInput, occupied };
+  return { intent, binding, result, changedBinding, changedInput,
+    occupied: unresolvedNights.size > 0 };
+}
+
+async function savedRoot(options: MemoryOptions, intent: Run) {
+  // Check the accepted budget event before treating this delivery as a new admission.
+  const rows = await history(options.store, `budget-${options.silo}`, options.silo,
+    performance.now() + 10_000);
+  for (const row of rows) {
+    if (row.event.type !== 'budget.root_allowance_set') continue;
+    const root = budgetRootAllowanceSetDataSchema.parse(row.event.data);
+    const maintenance = root.maintenance;
+    if (!maintenance || maintenance.scopeId !== intent.scopeId ||
+        maintenance.nightId !== intent.nightId || maintenance.batchKey !== intent.batchKey ||
+        maintenance.inputRevision !== intent.inputRevision ||
+        root.requesterId !== intent.memberId ||
+        root.allowanceCents !== intent.acceptedCapCents) {
+      continue;
+    }
+    return { rootId: root.rootId, model: maintenance.model,
+      providerId: maintenance.providerId };
+  }
+  return undefined;
+}
+
+async function recoverSavedRoot(options: MemoryOptions, rows: StoredEvent[],
+  intent: Run, clock: () => Date) {
+  let root: Awaited<ReturnType<typeof savedRoot>>;
+  try {
+    root = await savedRoot(options, intent);
+  } catch {
+    return { outcome: 'unknown' as const, nightId: intent.nightId,
+      dispatch: 'disabled' as const };
+  }
+  if (!root) return undefined;
+  const result = { action: 'prepared' as const, reason: null,
+    rootId: root.rootId, model: root.model, providerId: root.providerId };
+  return saveResult(options, rows, intent, result, clock);
 }
 
 function matchesOriginalInputs(rows: StoredEvent[], intent: Run): boolean {
@@ -137,6 +180,11 @@ function saveRefusal(options: MemoryOptions, rows: StoredEvent[], intent: Run,
   return saveResult(options, rows, intent, { action, reason }, clock);
 }
 
+function requireAssistant(binding: Binding | undefined) {
+  if (!binding?.assistantId) throw new Error('Maintenance binding unavailable');
+  return binding.assistantId;
+}
+
 export async function prepareNightlyMaintenance(options: MemoryOptions, scopeId: string,
   nightId: string, clock: () => Date = () => new Date(),
   admission?: MaintenanceAdmission) {
@@ -149,10 +197,11 @@ export async function prepareNightlyMaintenance(options: MemoryOptions, scopeId:
     throw new Error('Maintenance night unavailable');
   }
   if (state.result) return savedReceipt(state.result);
+  const recovered = await recoverSavedRoot(options, rows, intent, clock);
+  if (recovered) return recovered;
   const reason = preflightReason(state, rows, intent, clock());
   if (reason) return saveRefusal(options, rows, intent, reason, clock);
-  const assistantId = state.binding?.assistantId;
-  if (!assistantId) throw new Error('Maintenance binding unavailable');
+  const assistantId = requireAssistant(state.binding);
   try {
     if (!await managedRouteAvailable(options, assistantId)) {
       return saveRefusal(options, rows, intent, 'provider_unavailable', clock);

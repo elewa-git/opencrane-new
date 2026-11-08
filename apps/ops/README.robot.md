@@ -586,7 +586,8 @@ are retained without an expiry and recovered before the new scan. Each keeps its
 original UTC night, even after retries are exhausted or the dispatcher restarts.
 A trigger is removed only after every scope has been checked successfully.
 Selection reads the current clock after preparing each scope. Reading history
-cannot extend the original fifteen-minute window. An unresolved `due` record skips a later night as overlap.
+cannot extend the original fifteen-minute window. An unresolved `due` record,
+`qualification_blocked` intent or prepared root skips a later night as overlap.
 No model, tool, computer or budget port is available to the scan.
 
 Tests: `apps/ops/test/nightly-memory.test.ts` uses real PostgreSQL and NATS,
