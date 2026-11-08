@@ -1,0 +1,33 @@
+@if (!closed() && review().mayOpen(row())) {
+  <button #opener class="close-opener" type="button" (click)="open()">Close conversation</button>
+}
+@if (review().pendingId()) {
+  <div class="close-status" role="status">
+    <span>{{ review().notice() }}</span>
+    <button type="button" [disabled]="review().checking() || review().sending()"
+      (click)="review().checkStatus()">{{ review().checking() ? 'Checking…' : 'Check status' }}</button>
+  </div>
+}
+@if (opened()) {
+  <oc-modal-sheet [open]="true" title="Close conversation?"
+    backLabel="Back to conversation" [returnFocusTo]="opener()?.nativeElement"
+    (closed)="cancel()">
+    <div class="close-explanation">
+      <p class="close-title">{{ title() }}</p>
+      <p>Everyone in this conversation will be unable to send new messages or add files.
+        People who still have access can read saved messages and files.</p>
+      <p>Closing this conversation does not close any related conversation.</p>
+      @if (review().notice()) { <p role="status">{{ review().notice() }}</p> }
+    </div>
+    <div overlayFooter class="close-actions">
+      <button type="button" (click)="cancel()">Cancel</button>
+      @if (review().pendingId()) {
+        <button type="button" [disabled]="review().checking() || review().sending()"
+          (click)="review().checkStatus()">Check status</button>
+      } @else {
+        <button class="close-confirm" type="button" [disabled]="review().sending()"
+          (click)="confirm()">{{ review().sending() ? 'Closing…' : 'Close for everyone' }}</button>
+      }
+    </div>
+  </oc-modal-sheet>
+}

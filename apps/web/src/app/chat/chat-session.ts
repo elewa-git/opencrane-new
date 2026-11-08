@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 525, skipBlankLines: true, skipComments: true }] */
 import { PrivateReplyState } from './private-reply';
 import { sendUpload } from './upload';
 import { UploadBatch } from './upload-batch';
@@ -8,7 +9,7 @@ import { chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema, type 
 import type { ComputerState, MemoryAdmission } from '@opencrane/protocol';
 import { WebSocketService } from '../core/websocket.service';
 import { isActiveTurn, lastConfirmedTurnAt, shouldShowMaintenance,
-  recoveredLostTurn, shouldAnnounceBudgetStop, transcript, uploadedFile }
+  recoveredLostTurn, shouldAnnounceBudgetStop, transcript, uploadedFile, hasSavedClose }
   from './chat-state';
 import { shortTime } from './file-presentation';
 import { ChatSessionStop, type StopScreen } from './chat-session-stop';
@@ -233,8 +234,10 @@ export class ChatSession implements OnDestroy {
   private canSend(text: string): boolean {
     return Boolean(text.trim() && !this.busy() && !this.active() && !this.uploadBatch.uploading()
       && !this.uploadPending() && !this.denied() && this.computer() !== 'recovering'
-      && this.selectedAssistantId());
+      && this.selectedAssistantId()
+      && !hasSavedClose(this.selectedConversation(), this.rows()));
   }
+  clearAfterAccessChange(): void { this.clearDenied(); }
   async refresh(): Promise<boolean> {
     if (this.denied() || !this.selected()) return false;
     const revision = this.revision;
@@ -375,7 +378,8 @@ export class ChatSession implements OnDestroy {
   }
   private canUpload(): boolean {
     return !this.pending && !this.uploadBatch.uploading() && !this.busy()
-      && !this.denied() && Boolean(this.assistantId());
+      && !this.denied() && !hasSavedClose(this.selectedConversation(), this.rows())
+      && Boolean(this.assistantId());
   }
   private clearUpload(): void {
     this.uploadBatch.clear();

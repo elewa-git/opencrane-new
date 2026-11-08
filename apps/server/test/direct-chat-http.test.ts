@@ -131,6 +131,13 @@ async function publicClosePermissions() {
     const fixture = await directFixture();
     try {
       await fixture.create(mode);
+      const creatorList = await fixture.app.inject({ url: '/api/conversations',
+        headers: fixture.headers() });
+      expect(chatListSchema.parse(creatorList.json()).rows[0]?.canClose).toBe(true);
+      const memberList = await fixture.app.inject({ url: '/api/conversations',
+        headers: fixture.headers('bob') });
+      expect(chatListSchema.parse(memberList.json()).rows[0]?.canClose)
+        .toBe(mode === 'direct');
       const stranger = await closeChat(fixture, 'stranger-close', 'carol');
       expect(stranger.statusCode).toBe(403);
       const nonCreator = await closeChat(fixture, 'member-close', 'bob');
@@ -142,11 +149,16 @@ async function publicClosePermissions() {
       }
       const rows = await history(fixture.nats.store, 'conversation-direct', 'test');
       expect(rows.filter(isSavedClose)).toHaveLength(1);
+      await fixture.runner.run(conversations);
       for (const memberId of ['alice', 'bob']) {
         const savedHistory = await fixture.app.inject({
           url: '/api/conversations/direct/messages', headers: fixture.headers(memberId),
         });
         expect(savedHistory.statusCode).toBe(200);
+        const closeRow = chatFeedSchema.parse(savedHistory.json()).rows.find(
+          row => row.type === 'conversation.closed');
+        expect(closeRow?.data).toMatchObject({ conversationId: 'direct',
+          closedBy: mode === 'group' ? 'alice' : 'bob' });
       }
       const send = await fixture.app.inject({ method: 'POST',
         url: '/api/conversations/direct/messages', headers: fixture.headers(),
@@ -190,7 +202,9 @@ async function closeRetryAndStatus() {
     expect(await fixture.nats.store.head()).toBe(beforeRebuild);
     const list = await fixture.app.inject({ url: '/api/conversations',
       headers: fixture.headers() });
-    expect(chatListSchema.parse(list.json()).rows[0]).toMatchObject({ status: 'closed' });
+    expect(chatListSchema.parse(list.json()).rows[0]).toMatchObject({
+      status: 'closed', canClose: false,
+    });
     const settled = await fixture.app.inject({
       url: '/api/conversations/direct/changes/first-close', headers: fixture.headers(),
     });
@@ -226,6 +240,10 @@ async function personalCloseAndConcurrentCommands() {
       assistantId: 'assistant',
     });
     await fixture.runner.run(conversations);
+    const requesterList = await fixture.app.inject({ url: '/api/conversations',
+      headers: fixture.headers() });
+    const requesterRows = chatListSchema.parse(requesterList.json()).rows;
+    expect(requesterRows.filter(row => row.canClose)).toHaveLength(2);
     expect((await closeChat(fixture, 'foreign-close', 'bob')).statusCode).toBe(403);
     const commands = [closeChat(fixture, 'alice-close'), closeChat(fixture, 'other-close')];
     const replies = await Promise.all(commands);
@@ -1981,7 +1999,7 @@ async function hidesPersonalSessionHistoryBeforeJoin() {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ rows: [{
       conversationId, mode: 'agent_session', createdBy: 'alice', assistantId: 'assistant',
-      assistantKind: 'personal',
+      assistantKind: 'personal', canClose: false,
       createdAt: joinedAt.toISOString(), title: 'New session', status: 'open',
       joinEventId: joined.id, archived: false, archivePosition: 0, throughPosition: 0,
     }], nextCursor: null });

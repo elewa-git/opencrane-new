@@ -1,5 +1,6 @@
 // Workspace grid and messages follow OpenCrane 1, commit 10abd0ef6 (AGPL-3.0-or-later).
 // The bridge supplies all state; the screen follows the owner's Workspace Live design.
+/* eslint max-lines: ["error", { max: 525, skipBlankLines: true, skipComments: true }] */
 import { HingeDrawer } from '../ui/hinge-drawer';
 import { NavigationMenu } from '../ui/navigation-menu';
 import { PaperSurface, DogEar } from '../ui/paper';
@@ -33,6 +34,8 @@ import {
   type ChatAttachment, type ToolActivityRecord, type Turn,
 } from './chat-state';
 import { ChatComposer } from './composer';
+import { CloseReview } from './close-review';
+import { CloseReviewDialog } from './close-review-dialog';
 import { FileDrop } from './file-drop';
 import { WebSocketService } from '../core/websocket.service';
 import { FoldLoader } from '../ui/fold-loader/fold-loader';
@@ -52,7 +55,7 @@ import {
     HingeDrawer, NavigationMenu, PaperSurface, DogEar, GrainLoader, FlutterLoader,
     SharedState, ApprovalCards, BudgetStopNotice, ConversationFileCard, CaptureStatus,
     ToolActivityLine, RecoveryNotice, MemoryFreeNotice, MemoryPanel, AssistantMarkdown,
-    FoldLoader, ChatComposer, FileDrop, FilePreview, LiveView,
+    FoldLoader, ChatComposer, FileDrop, FilePreview, LiveView, CloseReviewDialog,
     NgTemplateOutlet, ChatIcon, BrandMark,
   ],
   providers: [ChatSession, WebSocketService, ScreenshotCapture],
@@ -70,6 +73,8 @@ import {
 })
 export class Workspace implements OnInit {
   protected readonly chat = inject(ChatSession);
+  protected readonly closeReview = new CloseReview(
+    this.chat.load.bind(this.chat), this.chat.clearAfterAccessChange.bind(this.chat));
   protected readonly capture = inject(ScreenshotCapture);
   protected readonly draft = signal('');
   protected readonly recipient = signal(true);
@@ -122,11 +127,18 @@ export class Workspace implements OnInit {
   constructor() {
     effect(this.rememberRecoveryFocus.bind(this));
     effect(this.resetCaptureWhenSessionChanges.bind(this));
+    effect(this.clearCloseAfterDenial.bind(this));
     effect(this.followOpenToolDetails.bind(this));
     afterEveryRender(this.afterRender.bind(this));
   }
   ngOnInit(): void { void this.chat.load(); }
+
+  private clearCloseAfterDenial(): void {
+    if (this.chat.denied()) this.closeReview.clear();
+  }
+
   protected async send(text: string): Promise<void> {
+    if (this.isClosedConversation()) return;
     const sent = await this.chat.send(text);
     if (sent) this.draft.set('');
   }
@@ -283,10 +295,12 @@ export class Workspace implements OnInit {
     return state.phase !== 'unknown' || Boolean(state.checkedAt);
   }
   protected async startCapture(): Promise<void> {
+    if (this.isClosedConversation()) return;
     await this.capture.start(this.chat.selected(), this.screenshotIds());
     await this.chat.refresh();
   }
   protected async repeatCapture(): Promise<void> {
+    if (this.isClosedConversation()) return;
     await this.capture.repeat(this.chat.selected(), this.screenshotIds());
     await this.chat.refresh();
   }
@@ -322,6 +336,7 @@ export class Workspace implements OnInit {
   }
   protected readonly hasScreenshotFile = hasScreenshotFile;
   protected captureAction(): void {
+    if (this.isClosedConversation()) return;
     const model = this.captureViewModel();
     if (model?.kind === 'unknown') {
       void this.checkCaptureStatus();
@@ -440,8 +455,8 @@ export class Workspace implements OnInit {
   protected focusComposer(): void { document.getElementById('message')?.focus(); }
   protected rowStatus(id: string, status = 'open'): string {
     if (id !== this.chat.selected()) return this.displayStatus(status);
-    if (this.chat.active()) return 'working';
     if (this.isClosedConversation()) return 'closed';
+    if (this.chat.active()) return 'working';
     const current = this.chat.turns().filter(this.isAgentTurn.bind(this)).at(-1)?.state ?? status;
     return this.displayStatus(current);
   }
@@ -457,7 +472,7 @@ export class Workspace implements OnInit {
     return 'Conversation loaded';
   }
   protected isClosedConversation(): boolean {
-    return this.chat.rows().some(row => row.type === 'conversation.closed');
+    return this.closeReview.isClosed(this.chat.selectedConversation(), this.chat.rows());
   }
   private composerReason(): string {
     if (this.isClosedConversation()) return 'This session is closed. Start a new session to continue.';
@@ -488,13 +503,11 @@ export class Workspace implements OnInit {
     return captureView(this.capture.state(), this.chat.attachments());
   }
   protected canDownload(path: string): boolean {
-    if (this.isClosedConversation()) return false;
     const file = this.chat.attachments().find(attachment => attachment.path === path);
     // Only the uploader can read regular uploads. Session members can read screenshots.
     return !!file && (!!file.screenshot || file.uploadedBy === this.chat.memberId());
   }
   protected canDownloadPreview(path: string): boolean {
-    if (this.isClosedConversation()) return false;
     if (!hasAttachment(path, this.chat.attachments())) return false;
     // Keep downloads available for files made by this conversation's owner.
     const ownedAgentFile = isOwnedAgentFile(

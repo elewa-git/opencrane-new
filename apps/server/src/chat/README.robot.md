@@ -2,6 +2,11 @@
 
 ## Closing a conversation
 
+Authorised conversation list rows include `canClose`. It is false once the first close
+is saved. Direct participants can close; groups require the current creator and
+`manage_participants`; private sessions require their requester. The browser uses this
+field only to show the action. The command repeats the access checks.
+
 `POST /api/conversations/:conversationId/close` accepts only `{id}`. The server
 binds `closedBy` to the signed-in member and saves one `conversation.closed` on
 `conversation-<id>`. Either current direct participant may close. Only the

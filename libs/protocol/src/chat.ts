@@ -78,6 +78,8 @@ export const chatRowSchema = z.object({
     approvalId: z.string().optional(),
     messageId: z.string().optional(),
     authorId: z.string().optional(),
+    closedBy: z.string().optional(),
+    conversationId: z.string().optional(),
     publicationKind: z.enum(['final', 'interim']).optional(),
     path: z.string().optional(),
     exitCode: z.number().optional(),
@@ -136,6 +138,7 @@ const conversationDisplay = {
   joinEventId: chatIdSchema.optional(), archived: z.boolean().optional(),
   archivePosition: z.int().nonnegative().optional(),
   throughPosition: z.int().nonnegative().optional(), throughEventId: chatIdSchema.optional(),
+  canClose: z.boolean().optional(),
 };
 export const chatListSchema = z.object({ rows: z.array(z.union([
   z.object({

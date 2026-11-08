@@ -17,7 +17,7 @@ shared rules for checking messages before the website shows them.
 flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages and file drops where Attach is available"] -->|requests and tab sign-out| web
-  web -->|messages, child reviews and group names| server["apps/server<br/>the back end"]
+  web -->|messages, close reviews, child reviews and group names| server["apps/server<br/>the back end"]
   server -->|saved updates, permitted publication history, file cards and private reply clearance| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
@@ -56,6 +56,9 @@ For everyone, the website:
   Returning tabs check the session before accepting private frames.
 - Expands saved command and tool details under their activity lines in chat.
 - Lists recent and archived conversations and opens saved chat links.
+- Lets people the server authorises close a conversation after a review. Closed chats keep
+  their saved messages and files for people who can still read them. A closed group keeps
+  its participant list readable without offering changes or showing a removed person's id.
 - Shows tool actions for review and lets the requester approve or deny them.
   A saved takeover cancellation names its cause and end time.
   Approval details say when the tool replied, while an uncertain result stays unconfirmed.

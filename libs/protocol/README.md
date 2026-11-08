@@ -38,7 +38,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.->|chat replies, service readiness and private clearances| protocol["libs/protocol<br/>shared reply shapes"]
-  server["apps/server<br/>back end"] -.->|chat replies, call status, readiness and clearances| protocol
+  server["apps/server<br/>back end"] -.->|chat replies, close permission and call status| protocol
   projections["libs/projections<br/>read tables"] -.->|saved resolution and publication history| protocol
   models["libs/models<br/>AI rules and spending"] -.-> protocol
   protocol -.-> zod["Zod<br/>data checks"]
@@ -47,6 +47,7 @@ flowchart LR
 ## What it is responsible for
 
 - Define shared message and reply shapes.
+- Check the optional close permission in authorised conversation list rows.
 - Check the safe assistant service readiness field on chat history and live updates.
 - Reject unknown fields and invalid values before callers use a reply.
 - Keep saved results separate from current state and access decisions.

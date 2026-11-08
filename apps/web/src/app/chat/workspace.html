@@ -14,13 +14,15 @@
       <div class="header-title">
         <div class="header-main">
           @if (chat.selected()) { <span class="hash" aria-hidden="true">#</span> }
-          <h1 [class.draft-title]="!chat.selected()">
+          <h1 tabindex="-1" [class.draft-title]="!chat.selected()">
             {{ chat.denied() || chat.requestedUnavailable() || chat.requestedLookupFailed() ? 'Unavailable' : title() }}
           </h1>
         </div>
         <span class="header-status" [class.waiting-status]="approvalWaiting() && chat.selected() && !chat.denied()"
           aria-live="polite">
-          @if (approvalWaiting() && chat.selected() && !chat.denied()) {
+          @if (isClosedConversation()) {
+            🔒 Closed
+          } @else if (approvalWaiting() && chat.selected() && !chat.denied()) {
             <span aria-hidden="true"><span class="approval-dot"></span> Waiting on you</span>
           } @else if (chat.active()?.state === 'stopping') {
             <oc-icon name="agent" /> Agent stopping
@@ -29,6 +31,10 @@
       </div>
       @if (teamSession()) { <span class="private-session-label">Private session</span> }
       @if (!chat.selected() && !chat.denied()) { <span class="draft-label">Draft</span> }
+      @if (chat.selected() && !chat.denied() && !chat.requestedUnavailable()) {
+        <oc-close-review-dialog [row]="chat.selectedConversation()" [title]="title()"
+          [closed]="isClosedConversation()" [review]="closeReview" />
+      }
       <span class="avatar agent"
         [attr.aria-label]="teamSession() ? 'Shared assistant' : 'Personal agent'">
         <oc-icon name="agent" />
@@ -42,18 +48,28 @@
       {{ conversationStatus() }}
     </span>
     <div class="chat-drop-area" #fileDrop="ocFileDrop"
-      [ocFileDrop]="!reason() && !teamSession() && !chat.busy() && !chat.queued()
+      [ocFileDrop]="!isClosedConversation() && !reason() && !teamSession() && !chat.busy() && !chat.queued()
         && !chat.uploadBatch.uploading() && !chat.uploadPending() && !chat.requestedUnavailable()
         && !chat.requestedLookupFailed()" (filesDropped)="chat.uploadBatch.send($event)">
     <section class="transcript" #transcript tabindex="0" aria-label="Conversation messages" [attr.aria-busy]="chat.loading()">
       <div class="transcript-inner">
+        @if (isClosedConversation()) {
+          <p class="closed-session-notice" role="status">🔒 Closed · Read only.
+            @if (closeReview.firstClose(chat.rows()); as close) {
+              Closed by {{ close.data['closedBy'] === chat.memberId() ? 'you' : 'a participant' }}
+              on {{ closeReview.closedAt(close.time) }}.
+            }
+            Saved messages and files remain available to people with access.
+          </p>
+        }
         @if (teamSession() && chat.executionMode() === 'restricted'
           && chat.computer() !== 'recovering' && !chat.recoveredLostTurn()) {
           <oc-memory-free-notice
             detail="A memory-free turn has no earlier context and writes to the shared disk."
             (memoryFreeSelected)="selectMemoryFree()" />
         }
-        @if (teamSession() && chat.selected() && !chat.loading() && !chat.denied()) {
+        @if (teamSession() && chat.selected() && !chat.loading() && !chat.denied()
+          && !isClosedConversation()) {
           <p class="payer-id-note">
             Paying group ID:
             <code>{{ chat.selectedPayingGroupId() || 'Not available' }}</code>.
@@ -94,7 +110,9 @@
           && !chat.busy() && !chat.turns().length) {
           <section class="draft" aria-label="Empty conversation">
             <oc-shared-state kind="not_configured" message="No messages yet"
-              detail="Send a message to start this conversation." [showAction]="false" />
+              [detail]="isClosedConversation()
+                ? 'This session closed before anyone sent a message.'
+                : 'Send a message to start this conversation.'" [showAction]="false" />
           </section>
         }
         @for (turn of chat.turns(); track turn.author + turn.id) {
@@ -103,6 +121,8 @@
           @let unavailable = turn.author === 'agent' && !privateReply && !teamSession()
             && (chat.unavailablePrivateTurnId() === turn.id || (turn.state === 'lost' && !turn.text));
           <article class="message"
+            [class.closed-empty]="isClosedConversation() && turn.author === 'agent'
+              && turn.state === 'working' && !turn.text"
             [class.own]="turn.author === 'you'"
             [class.agent-turn]="turn.author === 'agent'"
             [class.file-turn]="hasScreenshotFile(turn.files, screenshots()) || !!turn.screenshotRejected"
@@ -141,17 +161,26 @@
                 <div class="prose ink">
                   <oc-assistant-markdown [text]="turn.text" [availableFiles]="readableFiles()"
                     (citationOpened)="preview.set($event)" (fileOpened)="preview.set($event)" />
-                  @if (turn.state === 'working') { <span class="caret" aria-hidden="true"></span> }
+                  @if (turn.state === 'working' && !isClosedConversation()) {
+                    <span class="caret" aria-hidden="true"></span>
+                  }
                 </div>
               }
               @if (turn.text && turn.author !== 'agent') { <div class="prose">@for (paragraph of turn.text.split('\n\n'); track $index) { <div class="paragraph">@for (part of textParts(paragraph); track $index) {@switch (part.kind) {@case ('bold') {<strong>{{ part.text }}</strong>}@case ('citation') {<button type="button" class="citation" (click)="preview.set('Citation ' + part.text)"><span class="citation-paper" [ocDogEar]="true">{{ part.text.slice(1, -1) }}</span></button>}@case ('a2ui') {<div class="a2ui" [ocDogEar]="true"><header><span class="agent-badge">Ag</span> Interactive · built from approved components</header><p>This interface is not available yet.</p></div>}@default {<ng-container>{{ part.text }}</ng-container>}}}</div>}</div> }
               @if (turn.author === 'you') { <time class="own-time">{{ time(turn.time) }}</time> }
-              @if (turn.author === 'agent' && turn.state === 'working' && turn.text && chat.computer() !== 'recovering') { <div class="writing"><oc-fold-loader /><em>Writing…</em><button type="button" [disabled]="chat.busy()" (click)="chat.stop()">Stop</button></div> }
-              @if (turn.author === 'agent' && chat.stopNotConfirmedFor(turn.id)) {
+              @if (turn.author === 'agent' && turn.state === 'working' && turn.text
+                && chat.computer() !== 'recovering' && !isClosedConversation()) {
+                <div class="writing"><oc-fold-loader /><em>Writing…</em>
+                  <button type="button" [disabled]="chat.busy()" (click)="chat.stop()">Stop</button>
+                </div>
+              }
+              @if (turn.author === 'agent' && chat.stopNotConfirmedFor(turn.id)
+                && !isClosedConversation()) {
                 <p class="turn-status failed" role="status">Stop not confirmed. The agent may still be working.</p>
               }
               @if (turn.author === 'agent' && turn.state === 'working' && !turn.text
-                && !turn.budgetStop && !privateReply && !unavailable) {
+                && !turn.budgetStop && !privateReply && !unavailable
+                && !isClosedConversation()) {
                 <div class="folding" role="status"><oc-fold-loader /> Folding…</div>
               }
               @for (file of turn.files; track file) {
@@ -195,7 +224,8 @@
           <oc-shared-state kind="disabled" message="Memory admission is disabled"
             [detail]="memoryAdmissionDetail()" [showAction]="false" />
         }
-        @if (!chat.denied() && (!teamSession() || chat.executionMode() === 'memory_free')) {
+        @if (!chat.denied() && !isClosedConversation()
+          && (!teamSession() || chat.executionMode() === 'memory_free')) {
           <div class="capture-line" [class.sr-only]="captureLineVisuallyHidden()"
             [attr.role]="panelExpanded() || chat.loading() ? null : 'status'"
             [attr.aria-live]="panelExpanded() || chat.loading() ? null : 'polite'">
@@ -218,7 +248,10 @@
         }
       </div>
     </section>
-    @if (!chat.requestedUnavailable() && !chat.requestedLookupFailed()) {
+    @if (isClosedConversation()) {
+      <div class="closed-session-composer" role="status">🔒 This session is closed.
+        You can read saved messages and files, but you cannot send or add files.</div>
+    } @else if (!chat.requestedUnavailable() && !chat.requestedLookupFailed()) {
     <div class="composer-dock">
       <div class="progress" role="status" aria-live="polite">
         @if (chat.waiting()) {
@@ -471,7 +504,8 @@
       <button type="button" role="tab" [attr.aria-selected]="panelTab() === 'memory'"
         (click)="panelTab.set('memory')">Memory</button>
     </div>
-    @if (panelTab() !== 'memory' && chat.selected() && !chat.denied()) {
+    @if (panelTab() !== 'memory' && chat.selected() && !chat.denied()
+      && !isClosedConversation()) {
       <oc-live-view [conversationId]="chat.selected()" [capture]="captureViewModel()"
         [captureBusy]="captureBusy()" [captureChecking]="statusChecking()"
         [captureCanStart]="captureCanStart()"

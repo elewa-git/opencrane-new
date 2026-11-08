@@ -8,6 +8,9 @@ This folder contains the workspace where people talk to their assistant, exchang
 - Explains when a saved message waits for assistant service maintenance beyond a normal computer start. The notice returns to computer startup when the service is ready.
 - Runs colleague chats at `/workspace/direct`. One colleague makes a direct chat; several make a group chat. The first message creates the chat after recipient review. A typed `@agent` stays ordinary text. A person can review their own saved group message before asking a shared assistant to work on it. The first audience includes people who could see that message. The review shows the checked paying group name. Saved means recorded by the server, rather than delivered to a person.
 - Shows Recent and Archived at `/workspace/conversations`, with title search, more results and saved links. A missing chat leaves the authorised list available. Archiving a colleague chat changes only that person's list; the chat stays readable and can receive messages.
+- Reviews a permanent close in colleague chats and assistant sessions when the server
+  allows it. A closed chat keeps its saved history and files, with a read only notice
+  in place of the message box.
 - Keeps drafts with their conversations, resumes live updates from the last saved position and records the read place in colleague chats once new messages are visible. Lost access clears messages, drafts, names and files, including late replies.
 - Reviews recipients and participants. More than three recipients require a full review before sending. A group chat's creator manages other participants and stays in the chat; others can leave. Company group membership and chat participants are separate lists.
 - Shows tool reviews to participants while only the requester can approve or deny. Missing review fields are named. Saved decision, use and end times remain visible; closing a session clears its approval cards. Native consent refusals show their saved reference and grant no permission.
@@ -21,6 +24,7 @@ This folder contains the workspace where people talk to their assistant, exchang
 | `workspace.ts`, `workspace.html`, `composer.*` | Draw the assistant workspace, side panel and message box. |
 | `chat-session*.ts`, `chat-state.ts`, `chat-announcement.ts` | Load history, send messages, derive reply status and announce new activity. |
 | `direct-chat*.ts`, `direct-chat.html`, `recipient-picker.*` | Handle colleague chats, recipients, participant changes, archives and drafts. |
+| `close-review*` | Review closing and check a saved close with its original request id. |
 | `conversations.*`, `conversations-data.ts`, `read-marker.ts` | Load conversation lists, find saved links and save the read place. |
 | `approvals.*`, `approval-*.ts`, `tool-activity-line.*` | Show tool reviews, decisions, saved times and safe activity details. |
 | `upload.ts`, `upload-batch.ts`, `file-*.ts`, `conversation-file-card.*`, `screenshot-capture.ts`, `capture-status.*` | Upload attached and dropped files, retry failures, preview and download files, and track screenshot saves. |
@@ -78,6 +82,8 @@ members for recipient review. If membership changes before the first send, the p
 must choose the group again and review its members. A group message shows its saved
 author, using a colleague name when the current colleague list supplies one.
 Participant lists mark colleagues who have left the company as removed.
+When a closed group has a participant without a current name, the list says
+“Former colleague” and offers no participant changes.
 Phones show the participant list with a Back button.
 
 The first send keeps recovery information on screen until its result is known.

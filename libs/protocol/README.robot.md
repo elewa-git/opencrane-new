@@ -12,8 +12,11 @@ also checks the effect and separate content and IAM progress from the status GET
 `chatStateCommandSchema` strictly checks archive/read command ids and join ids.
 Archive carries a boolean and non-negative expected position. Read carries a positive
 safe position and event id. Conversation list rows optionally include `joinEventId`,
-`archived`, `archivePosition`, `throughPosition` and `throughEventId`; old replies
-still parse. The existing `chatChangeSchema` separates append and projection status.
+`archived`, `archivePosition`, `throughPosition`, `throughEventId` and `canClose`.
+Old replies still parse. The existing `chatChangeSchema` separates
+append and projection status.
+Visible close events keep `conversationId` and `closedBy` so the browser can show
+the first closer from saved history. Their event time supplies the date.
 
 Protocol defines shared browser/server message schemas so the two sides cannot drift
 through separate declarations. It owns wire shapes, not authentication, persistence

@@ -21,7 +21,7 @@
   font-size: 12px; text-decoration: none; }
 .main { display: grid; grid-template-rows: 56px minmax(0, 1fr) auto;
   min-width: 0; min-height: 0; background: #f7f9f9; }
-.workspace-header { display: flex; align-items: center; gap: 10px; padding: 0 24px;
+.workspace-header { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 0 24px;
   border-bottom: 1px solid #dee3e4; background: #fbfcfcd9; }
 .workspace-header h1 { min-width: 0; flex: 1; margin: 0; overflow: hidden; font-size: 15px;
   font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
@@ -38,6 +38,9 @@
 .archive-notice button { min-height: 44px; min-width: 44px; }
 .archive-transcript-note { margin: 18px auto; text-align: center; color: #4f575a;
   font-size: 13px; }
+.closed-chat-notice,.closed-composer-notice { padding: 14px 20px; border: 1px solid #d9dfe0;
+  background: #eef1f2; color: #2b3133; line-height: 1.5; overflow-wrap: anywhere; }
+.closed-composer-notice { min-height: 56px; }
 .participant-open,.participant-back,.participant-action,.participant-leave {
   min-width: 44px; min-height: 44px; padding: 8px 12px; border: 1px solid #cdd4d5;
   border-radius: 6px; background: #fff; color: #2b3133; cursor: pointer;
@@ -92,7 +95,8 @@
   .workspace { grid-template-columns: minmax(0, 1fr); }
   .rail { display: none; }
   .workspace-header { flex-wrap: wrap; gap: 8px; min-height: 56px; padding: 6px 12px; }
-  .workspace-header h1 { flex: 1 0 calc(100% - 60px); }
+  .workspace-header h1 { flex: 1 1 100%; white-space: normal; overflow: visible;
+    overflow-wrap: anywhere; text-overflow: clip; }
   .navigation-toggle { display: inline-flex; align-items: center; justify-content: center; }
   .transcript { padding: 16px 16px 12px; }
   .composer-dock { padding: 10px 12px max(12px, env(safe-area-inset-bottom)); }

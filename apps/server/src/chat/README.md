@@ -27,6 +27,7 @@ connected yet.
 
 - Creates direct, group and assistant conversations, and manages participants.
 - Returns visible history, conversation lists and each person's archive and read choices.
+- Tells each authorised reader whether they may close a conversation.
 - Includes the assistant service's ready or waiting state in authorised chat history and live updates.
 - Starts assistant turns, delivers files and work, and checks reports before saving replies.
 - Handles a person stopping a reply, spending stops and tool approvals.

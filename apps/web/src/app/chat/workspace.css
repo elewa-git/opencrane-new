@@ -234,3 +234,8 @@ oc-file-preview { position: absolute; }
   background: #eef1f2;
 }
 .chat-drop-area { display: contents; }
+.message.closed-empty { display: none; }
+.closed-session-notice,.closed-session-composer { padding: 14px 20px;
+  border: 1px solid #d9dfe0; background: #eef1f2; color: #2b3133;
+  line-height: 1.5; overflow-wrap: anywhere; }
+.closed-session-composer { min-height: 56px; }
