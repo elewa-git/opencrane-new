@@ -4,12 +4,14 @@ import { PassThrough } from 'node:stream';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { collectDeployment } from './deployment.ts';
-import { proveComputerBridge } from './bridge-proof.ts';
+import { containerIdentity, proveComputerBridge, type ContainerIdentity } from './bridge-proof.ts';
+import { proveComputerSupervisor } from './supervisor-proof.ts';
 import { protectionMessages, type ProtectionFailure } from './protection-failure.ts';
 
 vi.mock('node:child_process', { spy: true });
 vi.mock('node:fs', { spy: true });
 vi.mock('./bridge-proof.ts', { spy: true });
+vi.mock('./supervisor-proof.ts', { spy: true });
 const containerId = 'c'.repeat(64);
 const imageDigest = `sha256:${'b'.repeat(64)}`;
 const sourceSha = 'a'.repeat(40);
@@ -22,8 +24,17 @@ let host: string;
 let responses: Record<string, unknown>[];
 let alter: (value: Record<string, unknown>) => void;
 let failChild: boolean;
+let computer: ContainerIdentity;
 
 function unchanged(): void {}
+
+function readComputer(): ContainerIdentity {
+  return computer;
+}
+
+function replaceComputer(): void {
+  computer = { ...computer, State: { ...computer.State, Pid: 4322 } };
+}
 
 function docker(_file: unknown, args: unknown, options: unknown): string {
   expect(_file).toBe('/usr/bin/docker');
@@ -61,6 +72,10 @@ function docker(_file: unknown, args: unknown, options: unknown): string {
 
 function prepare(): void {
   vi.mocked(proveComputerBridge).mockResolvedValue(true);
+  vi.mocked(proveComputerSupervisor).mockResolvedValue(true);
+  computer = { Id: 'a'.repeat(64), Image: `sha256:${'d'.repeat(64)}`,
+    State: { Running: true, StartedAt: '2026-01-01T00:00:01Z', Pid: 4321 } };
+  vi.mocked(containerIdentity).mockImplementation(readComputer);
   vi.mocked(execFileSync).mockReset();
   vi.mocked(spawn).mockImplementation(spawnDocker);
   vi.mocked(openSync).mockReturnValue(42);
@@ -71,7 +86,8 @@ function prepare(): void {
     uid: 0, mode: 0o100600, size: 150, isFile: regularFile,
   });
   vi.mocked(fstatSync).mockReturnValue(stat);
-  vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ containerId, siloId: 'fixture-silo' }));
+  vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ containerId,
+    computerContainerId: 'a'.repeat(64), siloId: 'fixture-silo' }));
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-01-01T00:00:03Z'));
   container = {
@@ -121,6 +137,53 @@ async function savesOnlyFixedComputerRefusal(): Promise<void> {
 }
 it('saves only a fixed refusal when the separate computer bridge cannot be proved',
   savesOnlyFixedComputerRefusal);
+
+async function refusesSupervisorReplacementDuringWork(): Promise<void> {
+  const computerContainerId = 'a'.repeat(64);
+  vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
+    containerId, computerContainerId, siloId: 'fixture-silo',
+  }));
+  const supervisorMock = vi.mocked(proveComputerSupervisor);
+  supervisorMock.mockResolvedValueOnce(true);
+  supervisorMock.mockResolvedValueOnce(true);
+  supervisorMock.mockResolvedValueOnce('private_process_identity_changed');
+  const result = await collectDeployment();
+  expect(result).toEqual({ result: 'FAIL', reason: 'host_refused', complete: false,
+    protectionFailure: 'private_process_identity_changed',
+    message: protectionMessages.private_process_identity_changed });
+  expect(responses).toHaveLength(1);
+}
+it('refuses a supervisor replaced while the private journey was awaited',
+  refusesSupervisorReplacementDuringWork);
+
+async function refusesComputerReplacementDuringWork(): Promise<void> {
+  alter = replaceComputer;
+  const result = await collectDeployment();
+  expect(result).toEqual({ result: 'FAIL', reason: 'host_refused', complete: false,
+    protectionFailure: 'private_process_identity_changed',
+    message: protectionMessages.private_process_identity_changed });
+  expect(responses).toHaveLength(1);
+}
+it('refuses a computer replacement during awaited work even if the new inspector passes',
+  refusesComputerReplacementDuringWork);
+
+async function refusesSupervisorExitWithLostReply(): Promise<void> {
+  const supervisorMock = vi.mocked(proveComputerSupervisor);
+  supervisorMock.mockResolvedValueOnce(true);
+  supervisorMock.mockResolvedValueOnce(true);
+  supervisorMock.mockResolvedValueOnce('private_process_unreadable');
+  function loseReply(): void {
+    throw new Error('private arguments must stay in memory');
+  }
+  alter = loseReply;
+  const result = await collectDeployment();
+  expect(result).toEqual({ result: 'FAIL', reason: 'host_refused', complete: false,
+    protectionFailure: 'private_process_unreadable',
+    message: protectionMessages.private_process_unreadable });
+  expect(JSON.stringify(result)).not.toContain('private arguments');
+}
+it('rechecks a lost supervisor after private work loses its reply',
+  refusesSupervisorExitWithLostReply);
 
 async function refusesInventedBundle(): Promise<void> {
   const invented = JSON.stringify({ result: 'PASS', sourceSha, imageDigest, checks: names });

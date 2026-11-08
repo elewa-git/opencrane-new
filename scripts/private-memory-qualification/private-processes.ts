@@ -254,6 +254,32 @@ export function bridgeIdentity(): ProcessIdentity | undefined {
   return found;
 }
 
+export function supervisorIdentity(): ProcessIdentity | undefined {
+  const directory = '/run/executor/supervisor';
+  const recordPath = `${directory}/supervisor-identity`;
+  const directoryStat = lstatSync(directory, { throwIfNoEntry: false });
+  const recordStat = lstatSync(recordPath, { throwIfNoEntry: false });
+  if (directoryStat === undefined || recordStat === undefined) {
+    return undefined;
+  }
+  if (!directoryStat.isDirectory() || directoryStat.uid !== 0 ||
+      (directoryStat.mode & 0o077) !== 0 || !recordStat.isFile() ||
+      recordStat.uid !== 0 || (recordStat.mode & 0o022) !== 0 ||
+      recordStat.size === 0 || recordStat.size > 64) {
+    throw new Error('private_process_unreadable');
+  }
+  const record = readFileSync(recordPath, 'utf8');
+  const match = /^1 ([1-9][0-9]*)\n$/u.exec(record);
+  if (!match) {
+    throw new Error('private_process_unreadable');
+  }
+  const identity = readProcessIdentity(1);
+  if (identity.startTime !== match[1]) {
+    throw new Error('private_process_identity_changed');
+  }
+  return identity;
+}
+
 function probeService(role: ServiceRole): true | ProtectionFailure {
   let identity: ProcessIdentity | undefined;
   try {

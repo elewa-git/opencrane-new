@@ -4,7 +4,8 @@ import { closeSync, constants, fstatSync, openSync, readFileSync, renameSync, wr
 import { z } from 'zod';
 import { checks, qualifications } from './collect.ts';
 import { runInContainer } from './container-process.ts';
-import { proveComputerBridge } from './bridge-proof.ts';
+import { computerInstallation, containerIdentity, proveComputerBridge } from './bridge-proof.ts';
+import { proveComputerSupervisor } from './supervisor-proof.ts';
 import {
   isPrivateProcessFailure, isProtectionFailure, protectionMessages, type ProtectionFailure,
 } from './protection-failure.ts';
@@ -265,6 +266,22 @@ function deploymentTarget() {
   }
 }
 
+function saveProcessRefusal(failure: ProtectionFailure): Result {
+  const refusal: Result = { result: 'FAIL', reason: 'host_refused',
+    protectionFailure: failure, complete: false, message: protectionMessages[failure] };
+  saveResult(refusal);
+  return refusal;
+}
+
+function computerStillInstalled(containerId: string, expected: string): boolean {
+  try {
+    const current = containerIdentity(containerId);
+    return computerInstallation(current) === expected;
+  } catch {
+    return false;
+  }
+}
+
 // Read the permitted deployment from a root-owned file, never from the caller.
 export async function collectDeployment(...unexpectedArguments: unknown[]): Promise<Result> {
   try {
@@ -285,15 +302,44 @@ export async function collectDeployment(...unexpectedArguments: unknown[]): Prom
       environmentId: before.environmentId, siloId: before.siloId,
       installationId, runId: randomUUID(), freshInstall: true,
     });
-    if (target.computerContainerId) {
-      const bridge = await proveComputerBridge(target.computerContainerId, installationId);
-      await assertInstallation(containerId, before, streamCreated);
-      if (bridge !== true) {
-        const refusal: Result = { result: 'FAIL', reason: 'host_refused',
-          protectionFailure: bridge, complete: false, message: protectionMessages[bridge] };
-        saveResult(refusal);
-        return refusal;
-      }
+    const computerContainerId = target.computerContainerId;
+    if (!computerContainerId) {
+      return saveProcessRefusal('private_process_missing');
+    }
+    let computerAtStart: string;
+    try {
+      computerAtStart = computerInstallation(containerIdentity(computerContainerId));
+    } catch {
+      return saveProcessRefusal('private_process_unreadable');
+    }
+    const supervisorBeforeBridge = await proveComputerSupervisor(computerContainerId,
+      installationId);
+    await assertInstallation(containerId, before, streamCreated);
+    assertSame(target, deploymentTarget());
+    if (!computerStillInstalled(computerContainerId, computerAtStart)) {
+      return saveProcessRefusal('private_process_identity_changed');
+    }
+    if (supervisorBeforeBridge !== true) {
+      return saveProcessRefusal(supervisorBeforeBridge);
+    }
+    const bridge = await proveComputerBridge(computerContainerId, installationId);
+    await assertInstallation(containerId, before, streamCreated);
+    assertSame(target, deploymentTarget());
+    if (!computerStillInstalled(computerContainerId, computerAtStart)) {
+      return saveProcessRefusal('private_process_identity_changed');
+    }
+    if (bridge !== true) {
+      return saveProcessRefusal(bridge);
+    }
+    const supervisorAfterBridge = await proveComputerSupervisor(computerContainerId,
+      installationId);
+    await assertInstallation(containerId, before, streamCreated);
+    assertSame(target, deploymentTarget());
+    if (!computerStillInstalled(computerContainerId, computerAtStart)) {
+      return saveProcessRefusal('private_process_identity_changed');
+    }
+    if (supervisorAfterBridge !== true) {
+      return saveProcessRefusal(supervisorAfterBridge);
     }
     const results: Record<string, Status> = {};
     const complete: Record<string, Status> = {};
@@ -301,7 +347,25 @@ export async function collectDeployment(...unexpectedArguments: unknown[]): Prom
     let status: 'PASS' | 'PARTIAL' = 'PASS';
     for (const name of [...checks, ...qualifications]) {
       await assertInstallation(containerId, before, streamCreated);
-      const receipt = await runCheck(containerId, binding, name);
+      let receipt: Awaited<ReturnType<typeof runCheck>> | undefined;
+      try {
+        receipt = await runCheck(containerId, binding, name);
+      } catch {
+        // Recheck the supervisor even if private work lost its reply.
+      }
+      const supervisorAfterWork = await proveComputerSupervisor(computerContainerId,
+        installationId);
+      await assertInstallation(containerId, before, streamCreated);
+      assertSame(target, deploymentTarget());
+      if (!computerStillInstalled(computerContainerId, computerAtStart)) {
+        return saveProcessRefusal('private_process_identity_changed');
+      }
+      if (supervisorAfterWork !== true) {
+        return saveProcessRefusal(supervisorAfterWork);
+      }
+      if (!receipt) {
+        throw new Error('journey_failed');
+      }
       if (receipt.result === 'FAIL') {
         let message = 'Host safety checks failed: swap and core dumps must be disabled.';
         if (receipt.protectionFailure) {

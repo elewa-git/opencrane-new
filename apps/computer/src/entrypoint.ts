@@ -14,6 +14,28 @@ import { supervisorStop } from './supervisor-stop.ts';
 import { supervisePrivateChild } from './private-supervisor.ts';
 import { workerExecutor } from './worker-executor.ts';
 import { createServer, connect, type Socket } from 'node:net';
+import { startServiceProtection } from '../../../scripts/private-memory-qualification/service-protection.ts';
+
+function recordSupervisorLaunch(): void {
+  const pid = process.pid;
+  if (pid !== 1) {
+    throw new Error('Supervisor launch identity unavailable');
+  }
+  const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+  const commandEnd = stat.lastIndexOf(') ');
+  if (!stat.startsWith(`${pid} (`) || commandEnd < 0) {
+    throw new Error('Supervisor launch identity unavailable');
+  }
+  const fieldsText = stat.slice(commandEnd + 2);
+  const trimmedFieldsText = fieldsText.trimEnd();
+  const fields = trimmedFieldsText.split(' ');
+  const startTime = fields[19];
+  if (!startTime || !/^[1-9][0-9]*$/u.test(startTime)) {
+    throw new Error('Supervisor launch identity unavailable');
+  }
+  const recordPath = '/run/executor/supervisor/supervisor-identity';
+  writeFileSync(recordPath, `${pid} ${startTime}\n`, { flag: 'wx', mode: 0o600 });
+}
 
 function recordBridgeLaunch(child: ChildProcess): void {
   const pid = child.pid;
@@ -99,6 +121,8 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
   closeSync(directory(executorDirectory, 'supervisor', 0, 0o700));
   closeSync(directory(executorDirectory, 'credentials', 0, 0o750, 1000));
   closeSync(executorDirectory);
+  recordSupervisorLaunch();
+  await startServiceProtection('supervisor');
   rmSync('/run/executor/supervisor/control.sock', { force: true });
   const supervisor = supervisorStop();
   closeSync(directory(home, 'private', 0, 0o711));

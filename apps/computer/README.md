@@ -28,7 +28,7 @@ flowchart LR
   computer -->|runs| desktop["Codex, browser and desktop"]
   computer -->|checks callers and passes for AI and MCP calls| gateway["agentgateway<br/>AI gateway"]
   computer -->|checks private callers and catalogue loads| models["libs/models<br/>AI access checks"]
-  collector["private memory collector<br/>checks processes"] -->|checks live bridge| computer
+  collector["private memory collector<br/>checks processes"] -->|checks live bridge and supervisor| computer
 ```
 
 ## What it is responsible for
@@ -50,6 +50,8 @@ The computer saves that confirmation without private reply text.
   the bridge process it started so later checks can reject a replacement child.
   A protected test runner checks that record and the live process from inside the
   computer container. This does not qualify private memory on its own.
+- Protects the root supervisor before private work and records its Linux start time.
+  The collector checks that live process around each private memory journey.
 - Keeps the assistant's files when its computer pauses and starts again.
 - Runs the assistant, file tools and desktop as separate Linux users to limit their access.
 - Sends AI model calls and reviewed [tool server](../../GLOSSARY.md#mcp-server-tool-server)

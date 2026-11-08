@@ -14,7 +14,9 @@ const root = resolve(import.meta.dirname, '../..');
 const targetPath = '/etc/opencrane/private-memory-qualification.json';
 const resultPath = '/etc/opencrane/private-memory-qualification-result.json';
 const targetSchema = z.strictObject({
-  containerId: z.string().regex(/^[a-f0-9]{64}$/u), siloId: z.string().min(1).max(200),
+  containerId: z.string().regex(/^[a-f0-9]{64}$/u),
+  computerContainerId: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
+  siloId: z.string().min(1).max(200),
 });
 const containerSchema = z.object({
   Id: z.string(), Image: z.string(), Config: z.object({

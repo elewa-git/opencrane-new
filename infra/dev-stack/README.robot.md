@@ -20,6 +20,12 @@ reply without starting a development stack.
 
 ## Personal memory qualification
 
+The local collection launcher accepts `computerContainerId` in the protected
+target file. The collector requires it and checks that computer's live bridge
+and root supervisor. A missing id receives a fixed refusal before a journey.
+The fixture supplies this owner-selected id and mocks only the Docker proof
+boundary; it still runs the real collector and local launcher.
+
 Part of #94 and #95. `memory-personal-live.ts` uses an empty secondary installation,
 real SSO and the free model stub. Start with `DEV_OWNER_BOOTSTRAP=0` and `--fresh`.
 Supply the id returned by `claim.sh` as both `DEV_STACK_ID` and `MEMORY_CLAIMED_ID`.

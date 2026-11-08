@@ -21,7 +21,7 @@ flowchart LR
   stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
   stack -->|checks subscriptions and shares dispatcher readiness with chat| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|checks ownership, nodes and backup credentials| package["infra/package<br/>Helm install"]
-  stack -->|checks collection and reports host refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
+  stack -->|checks the selected computer and reports refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
 ```
 
@@ -53,6 +53,7 @@ available for diagnosis.
 - Waits for the website to answer before starting browser checks.
 - Prepares Kubernetes so background workers can start one
   [computer](../../GLOSSARY.md#computer) per assistant, including shared group assistants.
+- Checks the computer recorded by the deployment owner before collecting private memory results.
 - Sets up test sign-in and a free stand-in AI provider; real providers need an explicit choice.
   The stand-in also runs on its own for computer startup checks.
 - Runs browser checks for chat, files, people, groups, shared assistants and spending.
