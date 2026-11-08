@@ -28,9 +28,14 @@ beforeEach(async function setup() {
     data: { ...answerExample.data, schemaVersion: 1, memberId: 'alice', generation: 1,
       welcomeId: 'welcome-one', scriptVersion: 'welcome-v1',
       stepId: 'continue_to_workspace', stepNumber: 1 } };
-  await nats.store.append({ event: joined, expectedSequence: 0 });
-  await nats.store.append({ event: started, expectedSequence: 0 });
-  await nats.store.append({ event: answer, expectedSequence: 1 });
+  expect((await nats.store.append({ event: joined, expectedSequence: 0 })).status)
+    .toBe('appended');
+  expect((await nats.store.append({ event: started, expectedSequence: 0 })).status)
+    .toBe('appended');
+  const personalPosition = await nats.store.head('personal-alice');
+  expect((await nats.store.append({ event: answer,
+    expectedSequence: personalPosition })).status)
+    .toBe('appended');
 });
 
 afterEach(async function cleanup() {
@@ -39,10 +44,10 @@ afterEach(async function cleanup() {
   await nats?.close();
 });
 
-function runtime() {
+function runtime(retryLimit = 2) {
   const handler = welcomeCompletionHandler(nats.store);
   return new HandlerRuntime({ db: storage.db, logger, silo: 'test',
-    handlers: [handler], retryLimit: 0, retryDelay: 1 });
+    handlers: [handler], retryLimit, retryDelay: 1 });
 }
 
 async function completionCount() {
@@ -67,7 +72,9 @@ it('retries an exhausted welcome answer from events after a real runtime restart
     await storage.db.transaction(enqueue);
     const originalAppend = nats.store.append.bind(nats.store);
     async function unavailableAppend(command: Parameters<typeof nats.store.append>[0]) {
-      if (command.event.type === 'onboarding.completed') {
+      const savedEvent = command.event;
+      if (typeof savedEvent === 'object' && savedEvent !== null &&
+          'type' in savedEvent && savedEvent.type === 'onboarding.completed') {
         throw new Error('event store unavailable');
       }
       return originalAppend(command);
@@ -79,6 +86,7 @@ it('retries an exhausted welcome answer from events after a real runtime restart
     }
     await until(exhausted);
     const failed = (await first.deadLetters('complete-welcome'))[0]!;
+    expect(outage).toHaveBeenCalledTimes(3);
     expect(await completionCount()).toBe(0);
     await first.stop();
     outage.mockRestore();

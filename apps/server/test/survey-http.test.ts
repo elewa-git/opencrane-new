@@ -1065,12 +1065,14 @@ async function completedWelcomeFromSavedAnswer() {
   expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
     .toMatchObject({ status: 'completed', answer: 'Continue to workspace',
       assistantId: null, completedAt: completed.completedAt });
-  const encrypt = vi.spyOn(keys, 'encrypt').mockImplementation(() => {
+  function refuseEncryption(): never {
     throw new Error('Projection opened a key');
-  });
-  const decrypt = vi.spyOn(keys, 'decrypt').mockImplementation(() => {
+  }
+  function refuseDecryption(): never {
     throw new Error('Projection opened a key');
-  });
+  }
+  const encrypt = vi.spyOn(keys, 'encrypt').mockImplementation(refuseEncryption);
+  const decrypt = vi.spyOn(keys, 'decrypt').mockImplementation(refuseDecryption);
   try {
     await runner.rebuild(personalSettings);
   } finally {

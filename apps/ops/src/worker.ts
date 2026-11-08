@@ -23,6 +23,7 @@ import { lifecycleHandlers, watchComputers } from './lifecycle.ts';
 import { personalKeyHandler } from './personal-keys.ts';
 import { departureCleanupHandler } from './departure-cleanup.ts';
 import { memoryCleanupHandler, recoverMemoryCleanup } from './memory-cleanup.ts';
+import { recoverWelcomeCompletion } from './welcome-recovery.ts';
 import { McpKubernetes } from './mcp-kubernetes.ts';
 import { prepareGatewayConfigurationHandler } from './gateway-configuration.ts';
 import { stopMcpInstanceHandler } from './mcp-stop.ts';
@@ -269,6 +270,7 @@ try {
         }
         await recoverMemoryCleanup(dispatcherRuntime, store, checkpoint);
       }
+      await recoverWelcomeCompletion(dispatcherRuntime, store);
       await dispatcherRuntime.work();
       async function scanNightly(occurrence: Date) {
         await scanNightlyMemory(content!.db, commandStore, silo, occurrence);

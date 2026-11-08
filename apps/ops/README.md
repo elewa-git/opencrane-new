@@ -20,7 +20,7 @@ flowchart LR
   apps --> server["apps/server<br/>back end"]
   ops -.->|checked claim when supplied| server
   server -->|saves changes| nats["NATS<br/>event log"]
-  ops -->|reads events| nats
+  ops -->|reads events and checks unfinished welcomes at startup| nats
   ops -->|saves checked results, welcome completion and routine records| nats
   ops -->|holds worker locks and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
@@ -48,7 +48,8 @@ for checked preparation. It sends no memory text and cannot dispatch a turn.
 - Prepares reviewed tool settings for the gateway and, when configured, removes
   forgotten memory keys and old private connection copies.
 - Provides [replay](../../GLOSSARY.md#replay), failed-job tools and upgrades for recovery.
-- Confirms one saved final welcome answer after checking current membership.
+- Confirms one saved final welcome answer after checking current membership. On restart,
+  it retries unfinished welcome jobs from saved events.
 - Removes the dispatcher's ready marker as soon as event consumption fails, before
   database lock cleanup finishes.
 - Provides internal commands that claim, skip or record missed routine slots without starting work.

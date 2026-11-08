@@ -13,7 +13,9 @@ type Store = Pick<EventStore, 'readStream' | 'head' | 'append'>;
 function completionId(silo: string, memberId: string, answerId: string): string {
   const hash = createHash('sha256');
   hash.update([silo, memberId, answerId].join('\0'));
-  return `welcome-complete-${hash.digest('hex').slice(0, 32)}`;
+  const digest = hash.digest('hex');
+  const suffix = digest.slice(0, 32);
+  return `welcome-complete-${suffix}`;
 }
 
 async function personalHistory(store: Store, subject: string): Promise<StoredEvent[]> {
@@ -48,7 +50,9 @@ async function checkAssistant(store: Store, silo: string, memberId: string,
   assistantId: string) {
   const hash = createHash('sha256');
   hash.update([silo, memberId].join('\0'));
-  const expectedId = `personal-${hash.digest('hex').slice(0, 32)}`;
+  const digest = hash.digest('hex');
+  const suffix = digest.slice(0, 32);
+  const expectedId = `personal-${suffix}`;
   if (assistantId !== expectedId) throw new Error('Invalid welcome assistant');
   const subject = `assistant-${assistantId}`;
   const deadline = performance.now() + 10_000;

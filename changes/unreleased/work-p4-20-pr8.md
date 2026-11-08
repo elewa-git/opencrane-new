@@ -1,1 +1,1 @@
-The saved final welcome answer now completes once after a background check. A completed welcome stays read-only with its original words, including after survey restart or later assistant assignment.
+The saved final welcome answer completes once after a background check, even if the worker needs a restart after repeated delivery failures. A completed welcome keeps its original words after a survey restart or later assistant assignment.
