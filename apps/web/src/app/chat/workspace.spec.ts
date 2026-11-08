@@ -2419,6 +2419,72 @@ it.each([390, 1280])(
   'cancels the pending reconnect when a read reports revocation during the wait at %ipx',
   cancelsReconnectAfterRefusedRead);
 
+function postedRow(position: number): Record<string, unknown> {
+  return { id: `message-${position}`, position, type: 'message.posted',
+    time: '2026-10-14T10:00:00Z', data: { text: `Saved message ${position}`, authorId: 'me' } };
+}
+
+function savedPosition(row: ChatRow): number {
+  return row.position;
+}
+
+it('applies three history pages and an overlapping socket row once in order', async () => {
+  const capture = await createCaptureWorkspace([postedRow(1)]);
+  const chat = capture.fixture.componentInstance['chat'];
+  const originalFetch = vi.mocked(fetch).getMockImplementation();
+  if (!originalFetch) throw new Error('Missing HTTP fixture');
+  let releasePage: (reply: Response) => void = () => undefined;
+  const delayedPage = new Promise<Response>(resolve => { releasePage = resolve; });
+  function pagedRead(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const path = String(input);
+    if (!path.includes('/messages?since=')) return originalFetch!(input, init);
+    const since = Number(new URL(path, location.origin).searchParams.get('since'));
+    if (since === 1) return delayedPage;
+    const row = postedRow(since + 1);
+    return Promise.resolve(new Response(JSON.stringify({ rows: [row], position: 4,
+      generation: 1, computerState: 'ready' })));
+  }
+  vi.mocked(fetch).mockImplementation(pagedRead);
+  const refresh = chat.refresh();
+  sendConversationRow(capture.socket, postedRow(4));
+  releasePage(new Response(JSON.stringify({ rows: [postedRow(2)], position: 4,
+    generation: 1, computerState: 'ready' })));
+  await refresh;
+  capture.fixture.detectChanges();
+  expect(chat.rows().map(savedPosition)).toEqual([1, 2, 3, 4]);
+  expect(capture.root.textContent?.match(/Saved message 4/g)).toHaveLength(1);
+  capture.fixture.destroy();
+});
+
+it('waits for the reconnect gap to drain before announcing caught up', async () => {
+  const capture = await createCaptureWorkspace([postedRow(1)]);
+  const chat = capture.fixture.componentInstance['chat'];
+  capture.socket.onopen?.(new Event('open'));
+  capture.socket.onclose?.(new CloseEvent('close'));
+  await vi.waitFor(() => expect(capture.socket.onopen).not.toBeNull());
+  capture.socket.onopen?.(new Event('open'));
+  const originalFetch = vi.mocked(fetch).getMockImplementation();
+  if (!originalFetch) throw new Error('Missing HTTP fixture');
+  let releaseGap: (reply: Response) => void = () => undefined;
+  const delayedGap = new Promise<Response>(resolve => { releaseGap = resolve; });
+  function heldGap(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    if (String(input).includes('/messages?since=1')) return delayedGap;
+    return originalFetch!(input, init);
+  }
+  vi.mocked(fetch).mockImplementation(heldGap);
+  const refresh = chat.refresh();
+  const ready = { version: 1, topic: 'conversation', conversationId: 'chat',
+    type: 'ready', position: 2, generation: 1, computerState: 'ready' };
+  capture.socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify(ready) }));
+  expect(chat.announcement()).not.toContain("You're caught up");
+  releaseGap(new Response(JSON.stringify({ rows: [postedRow(2)], position: 2,
+    generation: 1, computerState: 'ready' })));
+  await refresh;
+  expect(chat.rows().map(savedPosition)).toEqual([1, 2]);
+  expect(chat.announcement()).toContain("You're caught up");
+  capture.fixture.destroy();
+});
+
 async function rendersAssistantMarkdown() {
   const capture = await createCaptureWorkspace([
     { id: 'message', position: 1, type: 'message.posted',
