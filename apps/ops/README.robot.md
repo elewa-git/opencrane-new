@@ -1143,6 +1143,21 @@ Tests no longer supply a separate execution wait. The fourteen-second wake and
 nine-second next-candidate cutoff retain their separate purposes.
 See [the completion contract](../../docs/process/p4-24-pr10h/README.robot.md).
 
+`runRoutineScheduler` is the checked scan entry for a future production callback.
+With `enabled` absent or false, or `replay` true, it returns disabled without
+reading or saving any routine. With `enabled: true`, it refuses before a due claim
+if the callback and its checked dependencies are missing. The routines projection
+worker calls this entry at startup with the single `ROUTINE_EXECUTION_ENABLED`
+setting, which defaults off. Setting it to true currently refuses startup because
+the worker has no delivery callback. The same enabled option can be passed to the
+server composition when the budget actor and bridge share a checked production
+hand-off. Public routine reads still report `executionAvailable: false`. See
+[the build record](../../docs/process/p4-24-pr10i/README.robot.md).
+`test/routine-dispatch.test.ts` starts the real worker with absent, false, true
+and invalid settings. It checks continued projection work when off and startup
+refusal without claims when on or invalid. It also checks the helper's exact
+missing-delivery error without the leadership wrapper.
+
 ## Routine Stop ownership
 
 The server's models process now reconciles saved routine prohibition with its existing

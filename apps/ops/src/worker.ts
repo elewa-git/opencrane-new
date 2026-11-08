@@ -26,6 +26,7 @@ import { McpKubernetes } from './mcp-kubernetes.ts';
 import { prepareGatewayConfigurationHandler } from './gateway-configuration.ts';
 import { stopMcpInstanceHandler } from './mcp-stop.ts';
 import { dispatcherHandlerNames } from './dispatcher-handlers.ts';
+import { runRoutineScheduler } from './routine-production.ts';
 import type { Handler } from '@opencrane/handlers';
 import type { HandlerName } from '@opencrane/events';
 
@@ -163,6 +164,13 @@ try {
   }
   connection = await connectNats();
   const store = await createEventStore(connection);
+  if (mode === 'routines') {
+    const setting = process.env['ROUTINE_EXECUTION_ENABLED'];
+    if (setting !== undefined && setting !== 'true' && setting !== 'false') {
+      throw new Error('ROUTINE_EXECUTION_ENABLED must be true or false');
+    }
+    await runRoutineScheduler({ enabled: setting === 'true' });
+  }
   if (mode === 'dispatcher') {
     const silo = required('SILO_ID');
     const commandEnv = Object.fromEntries(Object.entries(process.env)

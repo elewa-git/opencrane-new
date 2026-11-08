@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { createEventStore } from '@opencrane/event-store';
 import { createStore, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { foldRoutine, handlerSubscriptions, routineMissedSchema, type EventEnvelope, type RoutineState } from '@opencrane/events';
@@ -16,6 +18,7 @@ import * as tools from '../../../libs/models/src/mcp-dispatch.ts';
 import { SandboxClient } from '../src/kubernetes.ts';
 import { withRoutineLeadership } from '../src/routine-leadership.ts';
 import { dispatchRoutineCandidates, scanRoutineCandidates } from '../src/routine-scan.ts';
+import { runRoutineScheduler } from '../src/routine-production.ts';
 
 let storage: Awaited<ReturnType<typeof database>>;
 let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
@@ -116,6 +119,128 @@ async function state() {
   }
   return result!;
 }
+async function production(options: { enabled?: boolean; replay?: boolean },
+  handoff?: Parameters<typeof dispatchRoutineCandidates>[3]) {
+  let result: Awaited<ReturnType<typeof runRoutineScheduler>> | undefined;
+  async function work(lease: Lease) {
+    leaseSignal = lease.signal;
+    const worker = { ...lease, silo: 'test', binding, now: clock };
+    if (handoff) {
+      const delivery = { db: storage.db, store: nats.store, worker, handoff };
+      result = await runRoutineScheduler(options, delivery);
+    } else {
+      result = await runRoutineScheduler(options);
+    }
+  }
+  const leadership = { databaseUrl, silo: 'test', signal: stop.signal };
+  await withRoutineLeadership(leadership, work);
+  return result!;
+}
+async function disabledProductionDoesNotClaim() {
+  await save([creation()]);
+  const before = await nats.store.head('routine-orders');
+  const handoff: NonNullable<Parameters<typeof dispatchRoutineCandidates>[3]> =
+    function refuseDelivery() {
+      return Promise.reject(new Error('Unexpected routine delivery'));
+    };
+  const result = await production({}, handoff);
+  expect(result).toEqual({ status: 'disabled', executionAvailable: false });
+  expect(await nats.store.head('routine-orders')).toBe(before);
+  expect((await state()).activeRun).toBeNull();
+  await production({ enabled: true, replay: true }, handoff);
+  expect(await nats.store.head('routine-orders')).toBe(before);
+  expect(await nats.store.head('budget-test')).toBe(0);
+}
+it('keeps the production entry read only by default and during replay',
+  disabledProductionDoesNotClaim);
+
+async function enabledProductionNeedsDelivery() {
+  await save([creation()]);
+  const before = await nats.store.head('routine-orders');
+  await expect(runRoutineScheduler({ enabled: true }))
+    .rejects.toThrow(/^Routine delivery unavailable$/u);
+  expect(await nats.store.head('routine-orders')).toBe(before);
+  expect((await state()).activeRun).toBeNull();
+}
+it('refuses an enabled host without a checked delivery callback before claiming a slot',
+  enabledProductionNeedsDelivery);
+
+async function workerSetting(setting: string | undefined) {
+  await nats.seed([creation()]);
+  const before = await nats.store.head('routine-orders');
+  const env: NodeJS.ProcessEnv = { ...process.env, ...nats.env('projection'),
+    DATABASE_URL: databaseUrl, LOG_LEVEL: 'info' };
+  delete env['ROUTINE_EXECUTION_ENABLED'];
+  if (setting !== undefined) {
+    env['ROUTINE_EXECUTION_ENABLED'] = setting;
+  }
+  const args = ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'routines'];
+  const child = spawn(process.execPath, args, { env });
+  let output = '';
+  function collect(chunk: Buffer) {
+    output += chunk.toString();
+  }
+  child.stdout?.on('data', collect);
+  child.stderr?.on('data', collect);
+  const exited = once(child, 'exit');
+  try {
+    if (setting === undefined || setting === 'false') {
+      async function projected() {
+        if (child.exitCode !== null) {
+          throw new Error(output);
+        }
+        const saved = await storage.db.query<{ sequence: string }>(
+          "SELECT sequence FROM projection_checkpoints WHERE name='routines'");
+        return Number(saved.rows[0]?.sequence) === await nats.store.head();
+      }
+      await expect.poll(projected, { timeout: 20_000, interval: 100 }).toBe(true);
+      expect(child.exitCode).toBeNull();
+      child.kill('SIGTERM');
+      await exited;
+      expect(child.exitCode).toBe(0);
+    } else {
+      function stopped() {
+        return child.exitCode !== null;
+      }
+      await expect.poll(stopped, { timeout: 10_000, interval: 100 }).toBe(true);
+      await exited;
+      expect(child.exitCode).toBe(1);
+      if (setting === 'true') {
+        expect(output).toContain('Routine delivery unavailable');
+      } else {
+        expect(output).toContain('ROUTINE_EXECUTION_ENABLED must be true or false');
+      }
+    }
+    expect(await nats.store.head('routine-orders')).toBe(before);
+    expect((await state()).activeRun).toBeNull();
+    expect(await nats.store.head('budget-test')).toBe(0);
+    expect(forbidden).not.toHaveBeenCalled();
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGTERM');
+      await exited;
+    }
+  }
+}
+it.each([undefined, 'false', 'true', 'invalid'])(
+  'starts the routines worker with execution setting %s', workerSetting);
+
+async function enabledProductionHandsOffSavedDue() {
+  await save([creation()]);
+  const seen: string[] = [];
+  const handoff: NonNullable<Parameters<typeof dispatchRoutineCandidates>[3]> =
+    function receive(due, lease) {
+      expect(lease.signal).toBe(leaseSignal);
+      expect(due.routineId).toBe('orders');
+      seen.push(due.occurrenceId);
+      return Promise.resolve({ status: 'sent' });
+    };
+  const result = await production({ enabled: true }, handoff);
+  expect(result).toMatchObject({ examined: 1, executionAvailable: false });
+  expect(seen).toEqual([(await state()).activeRun!.occurrenceId]);
+}
+it('passes one confirmed due under the existing leadership session when enabled',
+  enabledProductionHandsOffSavedDue);
 async function recoversDue() {
   const created = creation();
   await save([created]);
