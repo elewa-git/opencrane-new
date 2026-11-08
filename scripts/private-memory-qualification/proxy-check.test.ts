@@ -15,7 +15,7 @@ const identity = {
 const inspector = { ...identity, pid: 51, uid: 0 };
 
 function prepare(): void {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   vi.spyOn(process, 'getuid').mockReturnValue(0);
   vi.mocked(bridgeIdentity).mockReturnValue(identity);
   vi.mocked(readProcessIdentity).mockReturnValue(inspector);
@@ -54,11 +54,13 @@ function wrongIdentity(): void {
 it('refuses wrong executable, UID, namespace, group and script', wrongIdentity);
 
 function changedOrVanished(): void {
-  vi.mocked(bridgeIdentity).mockReturnValueOnce(identity).mockReturnValueOnce(undefined);
+  const bridgeMock = vi.mocked(bridgeIdentity);
+  bridgeMock.mockReturnValueOnce(identity);
+  bridgeMock.mockReturnValueOnce(undefined);
   expect(checkProxy()).toEqual({ result: 'private_process_identity_changed' });
   prepare();
-  vi.mocked(bridgeIdentity).mockReturnValueOnce(identity)
-    .mockReturnValueOnce({ ...identity, startTime: '124' });
+  bridgeMock.mockReturnValueOnce(identity);
+  bridgeMock.mockReturnValueOnce({ ...identity, startTime: '124' });
   expect(checkProxy()).toEqual({ result: 'private_process_identity_changed' });
 }
 it('refuses a vanished or reused process during inspection', changedOrVanished);

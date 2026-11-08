@@ -157,6 +157,18 @@ async function provesPackagedProxyDuringNativeCall(): Promise<void> {
     const value: unknown = JSON.parse(bytes.toString('utf8'));
     frames.push(z.record(z.string(), z.unknown()).parse(value));
   }
+  function isPendingFrame(frame: Record<string, unknown>): boolean {
+    return frame['type'] === 'recall_pending';
+  }
+  function isLoadedFrame(frame: Record<string, unknown>): boolean {
+    return frame['type'] === 'recall_loaded';
+  }
+  function isStartedFrame(frame: Record<string, unknown>): boolean {
+    return frame['type'] === 'agent.turn_started';
+  }
+  function isCompletedFrame(frame: Record<string, unknown>): boolean {
+    return frame['type'] === 'agent.turn_completed';
+  }
   socket.on('message', receive);
   try {
     socket.send(JSON.stringify({ type: 'resume', since: 0 }));
@@ -167,16 +179,16 @@ async function provesPackagedProxyDuringNativeCall(): Promise<void> {
     socket.send(JSON.stringify(turn));
     let pending: Record<string, unknown> | undefined;
     function findPending(): void {
-      pending = frames.find(frame => frame['type'] === 'recall_pending');
+      pending = frames.find(isPendingFrame);
       expect(pending).toBeDefined();
     }
     await vi.waitFor(findPending, { timeout: 30_000 });
     socket.send(JSON.stringify({ ...pending, type: 'recall_load', tools: turn.tools }));
     function findLoaded(): void {
-      expect(frames.some(frame => frame['type'] === 'recall_loaded')).toBe(true);
+      expect(frames.some(isLoadedFrame)).toBe(true);
     }
     await vi.waitFor(findLoaded, { timeout: 30_000 });
-    const started = frames.find(frame => frame['type'] === 'agent.turn_started');
+    const started = frames.find(isStartedFrame);
     expect(started).toBeDefined();
     socket.send(JSON.stringify({ type: 'ack', sequence: started?.['sequence'],
       token: 'fixture-grant', expiresAt: Date.now() + 60_000,
@@ -186,7 +198,7 @@ async function provesPackagedProxyDuringNativeCall(): Promise<void> {
       expect(await proveComputerProxy(computer.containerId, installationId, image)).toBe(true);
     }
     await vi.waitFor(held, { timeout: 30_000, interval: 200 });
-    expect(frames.some(frame => frame['type'] === 'agent.turn_completed')).toBe(false);
+    expect(frames.some(isCompletedFrame)).toBe(false);
     expect(inventoryResult(computer.containerId)).toBe('private_process_missing');
   } finally {
     socket.terminate();
