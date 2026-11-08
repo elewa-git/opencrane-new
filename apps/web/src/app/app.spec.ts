@@ -593,11 +593,12 @@ describe('personal settings shell', () => {
     ['/account/tools', 'My tools'],
   ])('opens settings destination %s', checkSettingsDestination);
 
-  it('shows assistant availability without claiming an assignment', async () => {
+  it('links to persona review without claiming an assignment', async () => {
     globalThis.history.replaceState({}, '', '/account/assistant');
     const fixture = await create(response({}));
     const element = root(fixture);
-    expect(element.textContent).toContain('Persona review is not available yet.');
+    expect(element.textContent).toContain('Assistant settings are not available yet.');
+    expect(element.querySelector('a[href="/welcome/persona"]')).not.toBeNull();
     expect(element.textContent).not.toContain('Your assistant is assigned');
     expect(fetchSpy).not.toHaveBeenCalled();
   });

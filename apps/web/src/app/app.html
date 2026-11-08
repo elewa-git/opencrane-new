@@ -10,6 +10,8 @@
   <oc-shared-assistant-picker />
 } @else if (surveyPage) {
   <oc-survey-screen />
+} @else if (personaReviewPage) {
+  <oc-persona-review />
 } @else if (accountPath) {
   <oc-personal-settings-shell [activePage]="settingsPage">
     @if (!settingsPage) {
@@ -25,8 +27,9 @@
             detail="Personal preferences are not available yet." [showAction]="false" />
         } @else if (settingsPage === 'assistant') {
           <oc-shared-state kind="not_configured" message="Not available yet"
-            detail="Persona review is not available yet."
+            detail="Assistant settings are not available yet."
             [showAction]="false" />
+          <p><a href="/welcome/persona">Review your saved persona</a></p>
         } @else {
           <oc-shared-state kind="not_configured" message="Not available yet"
             detail="Your personal tool connections are not available yet." [showAction]="false" />

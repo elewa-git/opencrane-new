@@ -240,8 +240,8 @@
           </form>
         } @else if (progress()?.state === 'review' && !choices.editingCompletedTasks()) {
           <h2 #stepHeading tabindex="-1">Your survey is saved</h2>
-          <p>Your answers are ready. Persona review is not available yet.</p>
-          <a class="button-link primary" href="/account/assistant">Open Assistant page</a>
+          <p>Your answers are ready to shape a private persona.</p>
+          <a class="button-link primary" href="/welcome/persona">Review saved persona</a>
           <button type="button" (click)="editTasks()">Edit tasks</button>
           <button type="button" (click)="back()">Back</button>
         } @else {

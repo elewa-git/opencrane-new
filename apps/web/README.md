@@ -17,8 +17,8 @@ shared rules for checking messages before the website shows them.
 flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages and file drops where Attach is available"] -->|requests and tab sign-out| web
-  web -->|messages, close reviews, child reviews and group names| server["apps/server<br/>the back end"]
-  server -->|saved chat pages, live updates, files and private reply clearance| web
+  web -->|chat, persona and settings requests| server["apps/server<br/>the back end"]
+  server -->|saved chats, persona versions, files and live updates| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
   web -->|saved and private replies| capture["Chat workspace<br/>reply details and isolated diagrams"]
@@ -33,7 +33,7 @@ No credentials are built into its public assets.
 
 For everyone, the website:
 
-- Shows sign-in, first-owner setup and the welcome survey.
+- Shows sign-in, first-owner setup, the welcome survey and private persona review.
 - Supports assistant sessions and direct or group chats with colleagues.
   An own message in a group chat can open a review to ask a shared assistant for work.
   The first review includes people who could read the source message. The server
@@ -92,8 +92,8 @@ Its paying group is the group whose budget pays for that work.
 If the reply to a save is lost, the website asks the server what was saved before
 it offers another action. An unknown result stays visible with its original reference.
 
-Not built yet: organisation Overview and Routines; personal Preferences, persona
-review and My tools; some profile details and the Invitations list. The relevant
+Not built yet: organisation Overview and Routines; personal Preferences and My tools;
+some profile details and the Invitations list. The relevant
 pages explain these limits instead of showing invented data.
 
 ## Folders

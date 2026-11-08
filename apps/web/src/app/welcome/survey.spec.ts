@@ -79,7 +79,7 @@ describe('welcome survey', () => {
     const { fixture, element } = open(savedProgress);
     await ready(fixture, element);
     expect(element.textContent).toContain('Step 2 of 4');
-    expect(element.querySelector('h2')).toBe(document.activeElement);
+    await vi.waitFor(() => expect(element.querySelector('h2')).toBe(document.activeElement));
     expect(element.querySelector('time')?.dateTime).toBe('2026-10-14T09:30:00.000Z');
   });
 

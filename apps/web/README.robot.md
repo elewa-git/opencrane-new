@@ -95,8 +95,10 @@ citations choice. The grouped controls use arrow keys to move and Space to selec
 Step 4 saves distinct choices from the three offered tasks and an optional own task
 of at most 4,096 UTF-8 bytes. These are wishes only; they grant or install nothing.
 Back sends no write. Changing style warns before clearing a later task answer.
-After all four steps, the page links to `/account/assistant`, which currently shows
-that persona review is unavailable. `/account` reads only
+After all four steps, the page links to `/welcome/persona`. That page creates the
+first revision when needed, reviews its saved text and approves the current version.
+The approved screen shows the server's saved time and links to `/workspace`.
+`/account` reads only
 the onboarding `state` and links to the survey for `not_started` or `survey`.
 No survey answer is stored in the address, console or browser storage.
 `npm run visual:screen-p4-19-survey` uses intercepted replies to capture both widths.
