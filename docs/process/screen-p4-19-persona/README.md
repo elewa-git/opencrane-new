@@ -1,9 +1,11 @@
 # Saved persona review receipt
 
-The screen reads the current persona revision after four saved survey steps.
+The screen creates a persona from four saved survey steps when there is none yet.
+It then reads the current persona revision.
 Approval names that exact version. A changed version reloads for review, and
-an uncertain approval checks its original command. Access loss clears private
-text. Editing, replacement and restart controls are still unavailable.
+an uncertain creation or approval checks its original command. Access loss clears
+private text. Editing, replacement and restart controls are still unavailable.
+The approved screen shows the server's approval time and opens the workspace.
 
 The captures use intercepted responses and a browser at 1280 and 390 pixels.
 They show review, approved, absent, stale, denied and unavailable states.
@@ -22,12 +24,10 @@ They do not prove a live onboarding journey or server integration.
 
 ## Local checks
 
-- PASS: 52 focused welcome tests in each of two final runs.
-- PASS: 47 app route tests in each of two runs after updating the Assistant link.
-- PASS: scoped ESLint, event catalogue check, Knip and changelog lint twice.
-- PASS: the repository typecheck twice.
-- PASS: the web typecheck twice after the app route test changed.
-- PASS: two web builds and the intercepted browser captures at both widths.
+- PASS: 103 focused welcome and app route tests in each of two final runs.
+- PASS: scoped ESLint, event catalogue check, Knip, changelog lint and Markdown lint.
+- PASS: repository typecheck and a final web typecheck.
+- PASS: the web build and intercepted browser captures at both widths.
 - PASS: browser captures found no horizontal overflow or controls below 44 pixels.
 - PASS: the review button shows keyboard focus and reduced motion is requested.
 - NOT RUN: the root test suite and a live welcome journey. No dev stack ran.

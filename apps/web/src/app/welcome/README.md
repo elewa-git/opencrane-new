@@ -2,8 +2,8 @@
 
 ## What this is
 
-This folder shows the welcome survey and the saved persona it creates. People can
-review the current private text and approve that exact saved version.
+This folder shows the welcome survey and creates a private persona from its four
+saved answers. People can review the text and approve that exact saved version.
 
 ## Where it fits
 
@@ -12,16 +12,18 @@ persona versions and approval results.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>personal screens"] -->|opens| welcome["welcome<br/>survey and review"]
-  welcome -->|reads and saves| server["apps/server<br/>private onboarding"]
+  web["apps/web<br/>personal screens"] -->|opens| welcome["welcome<br/>survey, creation and review"]
+  welcome -->|reads, creates and saves| server["apps/server<br/>private onboarding"]
   welcome -.->|uses| state["shared-state<br/>status messages"]
 ```
 
 ## What it is responsible for
 
 - Show four saved survey steps and let people continue from their confirmed answers.
-- Read the current saved persona and show its private text only after access checks.
+- Create the first persona after the survey, then read and show its private text
+  only after access checks.
 - Approve the exact current version and check an uncertain approval by its command id.
+- Show when approval was saved and link to the workspace afterwards.
 - Clear private text when access ends.
 - Not built yet: persona editing, replacement and survey restart from the review screen.
 
@@ -30,10 +32,11 @@ flowchart LR
 1. **Survey.** A person saves each answer. The screen reads progress again before
    moving on. The completed survey links to persona review.
 2. **Persona review.** The screen reads progress, the current version list and that
-   version's text. It offers approval only when they agree. A competing edit makes
-   the screen read the latest version again.
+   version's text. If there is no version yet, it asks the server to create one
+   from the saved answers. It checks an uncertain creation without sending it again.
+   A competing edit makes the screen read the latest version again.
 3. **Approval.** The screen sends one command. If the result is uncertain, it checks
-   that same command. Confirmed approval offers the welcome link.
+   that same command. Confirmed approval shows the saved time and opens the workspace.
 
 ## How to run or test it
 

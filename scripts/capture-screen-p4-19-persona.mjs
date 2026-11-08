@@ -13,7 +13,8 @@ const replacement = 'Call me Alex. Be direct and brief. Cite sources when needed
   + 'Keep my habits private; these wishes cannot change access or budgets.';
 
 function progress(state) {
-  const steps = [1, 2, 3, 4].map(step => ({
+  const savedSteps = state === 'absent' ? [1, 2, 3] : [1, 2, 3, 4];
+  const steps = savedSteps.map(step => ({
     time: '2026-10-14T09:30:00.000Z', answers: { step },
   }));
   const approval = state === 'approved' ? { revision: 2, revisionId,
@@ -69,6 +70,11 @@ async function capture(browser, width, state) {
       denied: 'Your access has changed', unavailable: 'Persona service unavailable' };
     const expected = words[state];
     await page.getByText(expected).waitFor();
+    if (state === 'approved') {
+      assert.equal(await page.locator('time').getAttribute('datetime'),
+        '2026-10-14T09:35:00.000Z');
+      assert.equal(await page.locator('a.button-link.approve').getAttribute('href'), '/workspace');
+    }
     await page.evaluate(waitForFonts);
     assert(await page.evaluate(pageHasNoOverflow), `Overflow at ${width}px`);
     const small = await page.locator('button:visible, a:visible').evaluateAll(findSmallControls);

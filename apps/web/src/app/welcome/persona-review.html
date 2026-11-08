@@ -17,13 +17,19 @@
         <button type="button" (click)="checkStatus()">Check status</button>
       } @else {
         <p role="status">Approved revision r{{ detail()?.revision }}</p>
-        <a class="button-link approve" href="/welcome">Continue to welcome</a>
+        <p>Approved <time [attr.datetime]="approvalTime()">{{ formattedApprovalTime() }}</time></p>
+        <a class="button-link approve" href="/workspace">Continue to workspace</a>
       }
       <p class="unavailable-controls">Edit and Restart survey will be available in a later update.</p>
     } @else {
       <h1 id="review-title">Review your assistant’s persona</h1>
       @if (state() === 'loading') {
         <p role="status">Checking your saved persona…</p>
+      } @else if (state() === 'generating') {
+        <p role="status">Creating your persona from the saved survey…</p>
+      } @else if (state() === 'generation_unknown') {
+        <p role="status">Creation status unknown. Check the original command before continuing.</p>
+        <button type="button" (click)="checkStatus()">Check status</button>
       } @else if (state() === 'absent') {
         <p role="status">No persona yet. Finish the survey first.</p>
         <a class="button-link" href="/welcome/survey">Open survey</a>

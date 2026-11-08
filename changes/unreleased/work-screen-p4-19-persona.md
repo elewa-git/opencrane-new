@@ -1,1 +1,1 @@
-People can review their saved private persona, approve its exact current version and check an uncertain approval before continuing to welcome.
+People can create a private persona from their saved survey, review and approve its current version, see when approval was saved and continue to the workspace.

@@ -205,7 +205,8 @@ describe('saved persona review', () => {
     const screen = open((url, init) => {
       if (url === '/api/onboarding') return reply(progress(currentRevision, currentRevision ? 7 : 6));
       if (url === '/api/onboarding/persona' && init?.method === 'POST') {
-        commandBody = JSON.parse(String(init.body));
+        if (typeof init.body !== 'string') throw new Error('Missing generation body');
+        commandBody = JSON.parse(init.body);
         currentRevision = 1;
         return reply({ status: 'confirmed', operation: 'onboarding.persona_revised',
           commandId: z.object({ commandId: z.string() }).parse(commandBody).commandId,
@@ -235,7 +236,8 @@ describe('saved persona review', () => {
     const screen = open((url, init) => {
       if (url === '/api/onboarding') return reply(progress(currentRevision));
       if (url === '/api/onboarding/persona' && init?.method === 'POST') {
-        const body = z.object({ commandId: z.string() }).parse(JSON.parse(String(init.body)));
+        if (typeof init.body !== 'string') throw new Error('Missing generation body');
+        const body = z.object({ commandId: z.string() }).parse(JSON.parse(init.body));
         commandId = body.commandId;
         return reply({ status: 'unknown' }, 503);
       }
@@ -253,7 +255,7 @@ describe('saved persona review', () => {
       }
       return reply({ status: 'unavailable' }, 503);
     });
-    await show(screen, 'Save status unknown');
+    await show(screen, 'Creation status unknown');
     expect(screen.root.querySelector('button.approve')).toBeNull();
     button(screen.root, 'Check status').click();
     await show(screen, revision.replacement);
