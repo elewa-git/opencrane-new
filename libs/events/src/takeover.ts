@@ -83,5 +83,16 @@ const { expiresAt: _expiry, originalExpiresAt: _original,
 const returned = event('takeover.return_requested', 'computer',
   'The requester asked to close writer input. Agent work remains paused.',
   takeoverReturnRequestedDataSchema, returnExample);
+export const takeoverEndReasonSchema = z.enum([
+  'returned', 'disconnect', 'expired', 'revoked', 'proxy_failure', 'generation_lost',
+]);
+export const takeoverEndedWithProofDataSchema = takeoverReturnRequestedDataSchema.extend({
+  reason: takeoverEndReasonSchema, closureReceiptId: id, startedAt: z.iso.datetime(),
+  endedAt: z.iso.datetime(), canStartNewWork: z.boolean(),
+}).strict();
+export const takeoverClosureUnknownDataSchema = takeoverReturnRequestedDataSchema.strict();
+const unknown = event('takeover.closure_unknown', 'computer',
+  'Writer input was closed locally, but its final delivery could not be proved.',
+  takeoverClosureUnknownDataSchema, returnExample);
 export const takeoverEvents = [refused, requested, pausing, paused, failed,
-  renewed, returned];
+  renewed, returned, unknown];

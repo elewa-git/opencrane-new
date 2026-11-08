@@ -245,8 +245,10 @@ async function refusesAccessRemovedDuringComputerRead() {
     const claim = slot.claim();
     await readHeld;
     removed = true;
+    const removedAt = performance.now();
     releaseRead?.();
     expect(await claim).toBe(false);
+    expect(performance.now() - removedAt).toBeLessThan(2_000);
     expect(accessChecks).toBeGreaterThanOrEqual(2);
     expect(slot.allows(input.leaseId, input.writerSessionId)).toBe(false);
   } finally {
@@ -267,10 +269,16 @@ async function keepsLeaseExpiryAfterClockMovesBack() {
   try {
     expect(await slot.claim()).toBe(true);
     const savedDeadline = slot['leaseUntil'];
+    let monotonicNow = performance.now();
+    vi.spyOn(performance, 'now').mockImplementation(function monotonicTime() {
+      return monotonicNow;
+    });
     wallNow -= 60_000;
     await slot['refresh']();
     expect(slot['leaseUntil']).toBe(savedDeadline);
     expect(slot.allows(input.leaseId, input.writerSessionId)).toBe(true);
+    monotonicNow = savedDeadline + 1;
+    expect(slot.allows(input.leaseId, input.writerSessionId)).toBe(false);
   } finally {
     slot.close();
   }
@@ -322,14 +330,23 @@ async function closesAfterDrainingTheLastInput() {
   const slot = new WriterSlot(store, 'test', input, accessAllowed);
   expect(await slot.claim()).toBe(true);
   const sent: string[] = [];
+  let cancelled = 0;
   const pending: Array<() => void> = [];
-  function queueInput(bytes: Buffer) {
+  function queueInput(bytes: Buffer, signal: AbortSignal) {
     return new Promise<void>(function waitForDelivery(resolve) {
-      pending.push(function deliver() { sent.push(bytes.toString('hex')); resolve(); });
+      signal.addEventListener('abort', function cancel() { cancelled += 1; resolve(); },
+        { once: true });
+      pending.push(function deliver() {
+        if (!signal.aborted) sent.push(bytes.toString('hex'));
+        resolve();
+      });
     });
   }
   const key = Buffer.from([4, 1, 0, 0, 0, 0, 0, 65]);
+  function immediateInput(bytes: Buffer) { sent.push(bytes.toString('hex')); }
+  slot.send(key, immediateInput);
   slot.send(key, queueInput);
+  await returnWriter(store, 'test', returnInput(input), accessAllowed);
   let drained = false;
   async function drain() {
     expect(slot.allows(input.leaseId, input.writerSessionId)).toBe(false);
@@ -340,15 +357,19 @@ async function closesAfterDrainingTheLastInput() {
   const ending = endWriter(store, 'test', { ...returnInput(input),
     commandId: 'end-command', reason: 'returned' }, drain, accessAllowed);
   await Promise.resolve();
-  expect(drained).toBe(false);
-  expect(sent).toHaveLength(0);
+  expect(sent).toHaveLength(1);
   expect(slot.send(key, queueInput)).toBe(false);
   pending[0]?.();
   const ended = await ending;
+  expect(drained).toBe(true);
   expect(sent).toHaveLength(1);
+  expect(cancelled).toBe(1);
   expect(ended.phase).toBe('ended');
   expect(ended.closureReceiptId).toBe('pod-drain');
   expect(ended.canStartNewWork).toBe(true);
+  await readComputerControl(store, 'test', input.assistantId);
+  await readComputerControl(store, 'test', input.assistantId);
+  expect(sent).toHaveLength(1);
 }
 it('closes input before draining and accounts for the last accepted key',
   closesAfterDrainingTheLastInput);
@@ -358,7 +379,7 @@ async function keepsUnknownClosurePaused() {
   await grantWriter(store, 'test', input, accessAllowed);
   const slot = new WriterSlot(store, 'test', input, accessAllowed);
   expect(await slot.claim()).toBe(true);
-  async function unavailableDrain() { return undefined; }
+  function unavailableDrain() { return Promise.resolve(undefined); }
   const unknown = await endWriter(store, 'test', { ...returnInput(input),
     commandId: 'unknown-command', reason: 'disconnect' }, unavailableDrain, accessAllowed);
   expect(unknown.phase).toBe('closure_unknown');
@@ -376,7 +397,7 @@ async function closesOnFailedEndAppend() {
   await grantWriter(store, 'test', input, accessAllowed);
   const slot = new WriterSlot(store, 'test', input, accessAllowed);
   expect(await slot.claim()).toBe(true);
-  async function drain() { return 'pod-drain'; }
+  function drain() { return Promise.resolve('pod-drain'); }
   vi.spyOn(store, 'append').mockResolvedValue({ status: 'unavailable', cause: 'fixture' });
   await expect(endWriter(store, 'test', { ...returnInput(input),
     commandId: 'end-command', reason: 'expired' }, drain, accessAllowed))
@@ -384,3 +405,108 @@ async function closesOnFailedEndAppend() {
   expect(slot.allows(input.leaseId, input.writerSessionId)).toBe(false);
 }
 it('keeps input shut if saving expiry fails', closesOnFailedEndAppend);
+
+async function completesSavedReturnOnlyWithProof() {
+  const { store, input } = await setup();
+  await grantWriter(store, 'test', input, accessAllowed);
+  const slot = new WriterSlot(store, 'test', input, accessAllowed);
+  expect(await slot.claim()).toBe(true);
+  await returnWriter(store, 'test', returnInput(input), accessAllowed);
+  function drain() { return Promise.resolve('pod-drain'); }
+  const ended = await endWriter(store, 'test', { ...returnInput(input),
+    commandId: 'end-command', reason: 'returned' }, drain, accessAllowed);
+  expect(ended.phase).toBe('ended');
+  expect(ended.reason).toBe('returned');
+  expect(ended.canStartNewWork).toBe(true);
+  const oldSocket = new WriterSlot(store, 'test', input, accessAllowed);
+  expect(await oldSocket.claim()).toBe(false);
+}
+it('completes Return after the saved request and a Pod drain receipt',
+  completesSavedReturnOnlyWithProof);
+
+async function foreignReturnCannotCloseCurrentInput() {
+  const { store, input } = await setup();
+  await grantWriter(store, 'test', input, accessAllowed);
+  const slot = new WriterSlot(store, 'test', input, accessAllowed);
+  expect(await slot.claim()).toBe(true);
+  await expect(returnWriter(store, 'test', { ...returnInput(input), requesterId: 'bob' },
+    accessAllowed)).rejects.toThrow('Control conflict');
+  expect(slot.allows(input.leaseId, input.writerSessionId)).toBe(true);
+  slot.close();
+}
+it('does not let a different requester close the current writer',
+  foreignReturnCannotCloseCurrentInput);
+
+async function rejectsOldEndRecordsAsProof() {
+  const { store, input } = await setup();
+  await grantWriter(store, 'test', input, accessAllowed);
+  await fixture.seed([{ ...event('historical-end', 'computer-assistant', 'takeover.ended'),
+    data: { assistantId: input.assistantId, computerId: input.computerId,
+      endedBy: input.requesterId } }]);
+  const replayed = await readComputerControl(store, 'test', input.assistantId);
+  expect(replayed?.phase).toBe('unverified');
+  const oldSocket = new WriterSlot(store, 'test', input, accessAllowed);
+  expect(await oldSocket.claim()).toBe(false);
+}
+it('never treats a historical end as fresh closure proof', rejectsOldEndRecordsAsProof);
+
+async function replacementGenerationClosesOnlyItsOwnWriter() {
+  const { store, input } = await setup();
+  await grantWriter(store, 'test', input, accessAllowed);
+  const slot = new WriterSlot(store, 'test', input, accessAllowed);
+  expect(await slot.claim()).toBe(true);
+  const viewerBytes: Buffer[] = [];
+  function view(bytes: Buffer) { viewerBytes.push(bytes); }
+  function refuseViewer() { throw new Error('Viewer closed'); }
+  const viewer = viewerStream(view, refuseViewer);
+  await fixture.seed([{ ...event('replacement', 'computer-assistant', 'computer.ready'),
+    data: { assistantId: input.assistantId, computerId: input.computerId,
+      generation: 2, podUid: 'replacement' } }]);
+  await slot['refresh']();
+  expect(slot.allows(input.leaseId, input.writerSessionId)).toBe(false);
+  viewer(Buffer.from('RFB 003.008\n'));
+  expect(viewerBytes).toHaveLength(1);
+  const oldSocket = new WriterSlot(store, 'test', input, accessAllowed);
+  expect(await oldSocket.claim()).toBe(false);
+}
+it('closes the old generation without closing a separate read-only viewer',
+  replacementGenerationClosesOnlyItsOwnWriter);
+
+async function restartNeverReusesTheSavedLease() {
+  const { store, input } = await setup();
+  await grantWriter(store, 'test', input, accessAllowed);
+  let proofCalls = 0;
+  function proveDrain() {
+    proofCalls += 1;
+    return Promise.resolve('untrusted-after-restart');
+  }
+  const unknown = await endWriter(store, 'test', { ...returnInput(input),
+    commandId: 'restart-command', reason: 'proxy_failure' }, proveDrain, accessAllowed);
+  expect(unknown.phase).toBe('closure_unknown');
+  expect(proofCalls).toBe(0);
+  expect((await readComputerControl(store, 'test', input.assistantId))?.phase)
+    .toBe('closure_unknown');
+  const oldSocket = new WriterSlot(store, 'test', input, accessAllowed);
+  expect(await oldSocket.claim()).toBe(false);
+}
+it('marks a saved lease unknown after local writer state is lost',
+  restartNeverReusesTheSavedLease);
+
+async function recordsRevocationAfterAccessIsLost() {
+  const { store, input } = await setup();
+  await grantWriter(store, 'test', input, accessAllowed);
+  const slot = new WriterSlot(store, 'test', input, accessAllowed);
+  expect(await slot.claim()).toBe(true);
+  function removedAccess(): Promise<void> {
+    return Promise.reject(new Error('Member removed'));
+  }
+  function proveDrain() { return Promise.resolve('pod-drain'); }
+  const ended = await endWriter(store, 'test', { ...returnInput(input),
+    commandId: 'revoked-command', reason: 'revoked' }, proveDrain, removedAccess);
+  expect(ended.phase).toBe('ended');
+  expect(ended.reason).toBe('revoked');
+  expect(ended.canStartNewWork).toBe(false);
+  expect(slot.allows(input.leaseId, input.writerSessionId)).toBe(false);
+}
+it('records a proved revocation without the former requester access',
+  recordsRevocationAfterAccessIsLost);

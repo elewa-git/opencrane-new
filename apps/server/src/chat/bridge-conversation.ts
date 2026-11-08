@@ -160,7 +160,8 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
     if (isComputerLifecycle(row.event.type)) current = row.event;
     // Keep both saved intent and old unverified control records paused.
     const controlTypes = ['takeover.requested', 'takeover.pausing', 'takeover.paused',
-      'takeover.failed', 'takeover.started', 'takeover.ended'];
+      'takeover.failed', 'takeover.started', 'takeover.renewed',
+      'takeover.return_requested', 'takeover.closure_unknown', 'takeover.ended'];
     if (controlTypes.includes(row.event.type)) {
       controlPending = true;
     }

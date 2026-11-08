@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { takeoverRequestedDataSchema, takeoverPausingDataSchema,
   takeoverPausedDataSchema, takeoverFailedDataSchema, takeoverStartedLeaseDataSchema,
   takeoverRenewedDataSchema, takeoverReturnRequestedDataSchema,
+  takeoverEndedWithProofDataSchema, takeoverClosureUnknownDataSchema,
   computerTurnStartedDataSchema as startDetails,
   computerTurnClosedDataSchema as closeDetails } from '@opencrane/events';
 import { readStreamSummary, type EventStore, type StoredEvent, type SummaryKind }
@@ -16,11 +17,15 @@ export function isComputerLifecycle(type: string) {
   return lifecycleTypes.has(type);
 }
 export type ComputerControl = (Omit<z.infer<typeof takeoverRequestedDataSchema>, 'reason'> & {
-  phase: 'requested' | 'pausing' | 'paused' | 'failed' | 'started' | 'renewed' | 'returning';
-  reason: 'requester_requested' | 'pause_timeout';
+  phase: 'requested' | 'pausing' | 'paused' | 'failed' | 'started' | 'renewed'
+    | 'returning' | 'ended' | 'closure_unknown';
+  reason: 'requester_requested' | 'pause_timeout' | 'returned' | 'disconnect'
+    | 'expired' | 'revoked' | 'proxy_failure' | 'generation_lost';
   supervisorEpoch?: string; bridgeEpoch?: string;
   quietReceiptId?: string; writerSessionId?: string; proxyInstanceId?: string;
   expiresAt?: string; originalExpiresAt?: string;
+  startedAt?: string; endedAt?: string; closureReceiptId?: string;
+  canStartNewWork?: boolean;
   position: number; commandId: string; requestedAt: string;
 }) | { phase: 'unverified'; position: number };
 export async function readComputerControl(store: Pick<EventStore, 'readStream'>,
@@ -92,9 +97,11 @@ function addComputerControl(summary: ComputerSummary, row: StoredEvent) {
     || type === 'takeover.return_requested') {
     addWriterControl(summary, row);
   }
-  // Keep old end records paused. They contain no checked proof of writer closure.
+  if (type === 'takeover.closure_unknown') {
+    addUnknownClosure(summary, row);
+  }
   if (type === 'takeover.ended') {
-    summary.control = { phase: 'unverified', position: row.sequence };
+    addEndedWriter(summary, row);
   }
 }
 const controlSchemas = { pausing: takeoverPausingDataSchema, paused: takeoverPausedDataSchema,
@@ -163,7 +170,7 @@ function addStartedWriter(summary: ComputerSummary, row: StoredEvent,
     || details.quietReceiptId !== control.quietReceiptId
     || !sameAffectedTurns(details.affectedTurnIds, control.affectedTurnIds)) return false;
   summary.control = { ...control, ...details, phase: 'started', position: row.sequence,
-    commandId: row.event.commandId ?? '' };
+    commandId: row.event.commandId ?? '', startedAt: row.event.time };
   return true;
 }
 function addRenewedWriter(summary: ComputerSummary, row: StoredEvent,
@@ -189,6 +196,37 @@ function addReturnedWriter(summary: ComputerSummary, row: StoredEvent,
   summary.control = { ...control, phase: 'returning', position: row.sequence,
     commandId: row.event.commandId ?? '' };
   return true;
+}
+function addUnknownClosure(summary: ComputerSummary, row: StoredEvent) {
+  const control = summary.control;
+  const parsed = takeoverClosureUnknownDataSchema.safeParse(row.event.data);
+  const details = parsed.data;
+  if (!control || control.phase === 'unverified' || !details
+    || !['started', 'renewed', 'returning'].includes(control.phase)
+    || !sameWriterBinding(details, control)
+    || details.writerSessionId !== control.writerSessionId) {
+    summary.control = { phase: 'unverified', position: row.sequence };
+    return;
+  }
+  summary.control = { ...control, phase: 'closure_unknown', position: row.sequence,
+    commandId: row.event.commandId ?? '' };
+}
+function addEndedWriter(summary: ComputerSummary, row: StoredEvent) {
+  const control = summary.control;
+  const parsed = takeoverEndedWithProofDataSchema.safeParse(row.event.data);
+  const details = parsed.data;
+  if (!control || control.phase === 'unverified' || !details
+    || !['started', 'renewed', 'returning'].includes(control.phase)
+    || !sameWriterBinding(details, control)
+    || details.writerSessionId !== control.writerSessionId
+    || details.startedAt !== control.startedAt
+    || details.canStartNewWork !== (details.reason === 'returned')) {
+    // Older end records do not contain proof and cannot release the pause.
+    summary.control = { phase: 'unverified', position: row.sequence };
+    return;
+  }
+  summary.control = { ...control, ...details, phase: 'ended', position: row.sequence,
+    commandId: row.event.commandId ?? '' };
 }
 function validControlPhase(control: Exclude<ComputerControl, { phase: 'unverified' }>,
   phase: 'pausing' | 'paused' | 'failed', details: { generation: number; supervisorEpoch?: string }) {

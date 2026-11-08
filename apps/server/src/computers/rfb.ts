@@ -4,8 +4,11 @@ export function viewerStream(forward: (bytes: Buffer) => void, refuse: () => voi
   return clientStream(forward, refuse, false);
 }
 export function writerStream(slot: { allows(leaseId: string, writerSessionId: string): boolean;
-  close(): void }, leaseId: string, writerSessionId: string,
-forward: (bytes: Buffer) => void, refuse: () => void = noAction) {
+  close(): void;
+  send(bytes: Buffer, forward: (bytes: Buffer, signal: AbortSignal) => void | Promise<void>): boolean },
+leaseId: string, writerSessionId: string,
+forward: (bytes: Buffer, signal: AbortSignal) => void | Promise<void>,
+refuse: () => void = noAction) {
   function allowed() {
     return slot.allows(leaseId, writerSessionId);
   }
@@ -13,7 +16,10 @@ forward: (bytes: Buffer) => void, refuse: () => void = noAction) {
     slot.close();
     refuse();
   }
-  return clientStream(forward, closeWriter, true, allowed);
+  function send(bytes: Buffer) {
+    if (!slot.send(bytes, forward)) closeWriter();
+  }
+  return clientStream(send, closeWriter, true, allowed);
 }
 function noAction() {}
 function clientStream(forward: (bytes: Buffer) => void, refuse: () => void,

@@ -237,6 +237,12 @@ Generation replacement preserves control until a later checked recovery contract
 Old `takeover.started` and `takeover.ended` shapes become unverified control and
 refuse work passes. Neither shape restores work or grants a writer.
 
+`takeover.ended` now accepts a strict input-drain receipt, saved start time, end
+time and exact reason. It qualifies only after the matching writer lease or Return.
+Only a proved Return may set `canStartNewWork`. `takeover.closure_unknown` keeps the
+computer paused without an exact end reason. Replaying either record performs no
+input or tool send. Old end records remain unverified.
+
 ## Signed takeover gates
 
 `tokenIssuer.takeoverGate` signs ES256 with `kid: lifecycle`, payload

@@ -27,6 +27,20 @@ connections or delivery buffers. The local socket returns only a fresh challenge
 and the helper's current fixed result. The qualification runner checks Linux peer
 credentials and process identity around the reply. Development runs without the
 native helper expose no protection socket. Memory admission remains disabled.
+## Writer closure
+
+`WriterSlot` admits one saved lease per server process. It checks access and the
+saved computer generation while the socket is active. Input is shut before Return
+or end reads the computer stream. Each accepted send is tracked until its transport
+callback settles. Closing the slot aborts queued sends. A transport callback must
+honour its abort signal before forwarding delayed bytes. The internal end command
+waits at most two seconds for local sends and a separate computer-side input-drain
+receipt. Without both, it saves
+`takeover.closure_unknown`; a missing or failed append leaves input closed and work
+paused. A proved `takeover.ended` stores the exact reason. Only proved Return sets
+`canStartNewWork`; current turn admission still requires a later checked start path.
+The public writer route remains disabled. This internal callback does not yet supply
+live Pod closure proof, so no physical closure or restart qualification is claimed.
 
 ## Assistant service wait signal
 

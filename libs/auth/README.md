@@ -24,7 +24,7 @@ flowchart LR
   ops["apps/ops<br/>background workers"] -.-> auth
   models["libs/models<br/>AI access and spending"] -.-> auth
   auth -->|signs people in| zitadel["Zitadel<br/>sign-in service"]
-  auth -.->|reads computer records| store["libs/event-store<br/>saved event log"]
+  auth -.->|reads computer control and closure records| store["libs/event-store<br/>saved event log"]
   auth -.-> events["libs/events<br/>event formats"]
 ```
 
@@ -41,7 +41,7 @@ flowchart LR
   computer state and the matching turn.
 - Stop new AI work while a person is taking control of an assistant's computer,
   using saved records alone. Sign separate stop requests that cannot authorise AI calls.
-- Read the saved writer lease and Return separately from computer readiness.
+- Read the saved writer lease and closure separately from computer readiness.
 - Make one-minute passes for a computer to reach an approved outside service.
   Delivery of these passes to computers is not switched on yet.
 - Make scanner passes for a configured server or image worker, and check the
