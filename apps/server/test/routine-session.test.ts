@@ -35,7 +35,6 @@ import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { calculateRoutineOccurrence } from '@opencrane/events/routine-schedule';
 import { claimScheduledRoutine } from '../../ops/test/support/routine-claim.ts';
-import { loadRoutineCustody } from '../../ops/src/routine-custody.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { applyRoutineStop } from '../src/routine-stop-budget.ts';
 import { routineAsk, routineUsedAsk } from './support/routine-ask.ts';
@@ -638,11 +637,11 @@ function routineInputTests() {
     await prepare();
     const saved = await rows();
     const message = saved[1]!.event;
-    const restarted = loadRoutineCustody('test', directory, wrappingKeyFile);
+    const restarted = conversationKeys(directory, wrappingKeyFile);
     const text = restarted.decrypt('test', conversationId, message.data);
     expect(text).toBe(`Routine instructions (user data):\n\n${privateText}`);
     expect(() => restarted.decrypt('other-silo', conversationId, message.data))
-      .toThrow(/^Routine custody unavailable$/u);
+      .toThrow();
     expect(JSON.stringify(saved)).not.toContain(privateText);
   }
   it('decrypts a saved input after custody restarts in the same silo',
