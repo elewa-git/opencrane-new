@@ -21,6 +21,22 @@ under `docs/process/uploads-reasons/`. This does not qualify a fresh installatio
 
 ## Browser behaviour
 
+An own saved group message shows a child review action when the current assistant list
+offers an eligible shared assistant. The server still checks authority. The review
+POST binds the source event id, assistant and requested audience. People added after
+the source message are left out of the first audience and later audience resets.
+The dialog shows the returned participants, the checked paying group name and allowance.
+If the group name cannot be checked, it shows a neutral label.
+Assistant discovery has separate loading, failure and empty states, with a retry for
+failure. Cancel and Escape
+discard the review without sending a start. Start saves one request id in session
+storage before posting the original signed review. An uncertain reply checks that
+same id through GET; it never sends a second start. A stale or expired review needs
+a new POST and resets the chosen audience. Access refusal clears review data and
+the protected chat. The short status notice stands in for the later child summary.
+`npm run visual:screen-p4-8-pr12a` captures the mention guidance and review at
+1280 and 390 pixels using intercepted replies. It is not a live journey.
+
 The chat start strip waits 15 seconds before using `dispatcherReady: false` to
 explain assistant service maintenance. This allows the accepted 10–14 second
 cold resume. The strip hides its rising timer during maintenance. A later live

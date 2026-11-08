@@ -1,5 +1,5 @@
 // Keep the chat read and send flow together. Participant commands live in their own file.
-/* eslint max-lines: ["error", { max: 660, skipBlankLines: true, skipComments: true }] */
+/* eslint max-lines: ["error", { max: 675, skipBlankLines: true, skipComments: true }] */
 import {
   ChangeDetectionStrategy, Component, ElementRef, HostListener, afterEveryRender, effect, inject,
   signal, viewChild, type OnDestroy, type OnInit,
@@ -9,8 +9,10 @@ import {
 } from '@opencrane/protocol';
 import { SharedState } from '../shared-state/shared-state';
 import { PaperSurface } from '../ui/paper';
+import { ModalSheet } from '../ui/modal-sheet';
 import { NavigationMenu } from '../ui/navigation-menu';
 import { DirectChatSending } from './direct-chat-sending';
+import { ChildReview } from './child-review';
 import { DirectChatParticipants } from './direct-chat-participants';
 import { DirectChatArchive } from './direct-chat-archive';
 import { DirectChatColleagues } from './direct-chat-colleagues';
@@ -44,7 +46,7 @@ type ReadState = 'idle' | 'loading' | 'ready' | 'failed';
 
 @Component({
   selector: 'oc-direct-chat',
-  imports: [SharedState, ChatComposer, PaperSurface, NavigationMenu, RecipientPicker],
+  imports: [SharedState, ChatComposer, PaperSurface, NavigationMenu, RecipientPicker, ModalSheet],
   templateUrl: './direct-chat.html',
   styleUrl: './direct-chat.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -86,6 +88,7 @@ export class DirectChat implements OnInit, OnDestroy {
   protected readonly pageError = signal('');
   private readonly lifetime = new AbortController();
   private readonly sending = new DirectChatSending(this.sendScreen());
+  protected readonly childReview = new ChildReview(this.clearAfterAccessChange.bind(this));
   protected readonly participantManager = new DirectChatParticipants(
     this.selectedConversationId.bind(this), this.colleagues.bind(this),
     this.canReadPage.bind(this), this.refreshParticipantColleagues.bind(this),
@@ -153,6 +156,7 @@ export class DirectChat implements OnInit, OnDestroy {
     this.listRequest?.abort();
     this.participantManager.reset();
     this.archive.clear();
+    this.childReview.reset();
     this.readMarker.purge();
     this.subscription.unsubscribe();
     this.accessLossSubscription.unsubscribe();
@@ -175,6 +179,7 @@ export class DirectChat implements OnInit, OnDestroy {
       return;
     }
     this.currentMemberId = context.value.memberId;
+    this.childReview.setMember(this.currentMemberId, context.value.displayName);
     await this.people.load(this.colleagueQuery());
     if (!this.canReadPage()) return;
     const requestedId = requestedDirectConversationId();
@@ -332,6 +337,7 @@ export class DirectChat implements OnInit, OnDestroy {
     this.pageError.set('');
     await this.loadHistory(conversationId);
     if (!this.canReadPage()) return;
+    await this.childReview.loadForConversation(conversation);
     if (changed) this.focusComposerAfterRead = true;
   }
 
@@ -445,6 +451,7 @@ export class DirectChat implements OnInit, OnDestroy {
     this.historyNeedsCatchUp = false;
     this.participantManager.reset();
     this.archive.clear();
+    this.childReview.reset();
     this.readMarker.clear();
     this.historyState.set('idle');
     this.position = 0;
@@ -498,6 +505,7 @@ export class DirectChat implements OnInit, OnDestroy {
     this.listRequest?.abort();
     this.participantManager.reset();
     this.archive.clear();
+    this.childReview.clearAccess();
     this.readMarker.purge();
     this.focusComposerAfterRead = false;
     this.scrollToNewest = false;

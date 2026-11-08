@@ -20,6 +20,7 @@
         "scripts/capture-p4-15-pr3l.mjs",
         "scripts/capture-uploads-reasons.mjs",
         "scripts/capture-chat-drag-drop.mjs",
+        "scripts/capture-screen-p4-8-pr12a.mjs",
         "scripts/check-stage-b-polish.mjs",
         "scripts/check-memory-scopes-applying.mjs",
         "scripts/collect-stage-b-evidence.mjs",

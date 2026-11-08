@@ -118,3 +118,35 @@ button[aria-disabled="true"] { opacity: .65; cursor: wait; }
 @media (prefers-reduced-motion: reduce) {
   .participant-panel { scroll-behavior: auto; }
 }
+.child-review-action { display: block; min-height: 44px; margin-top: 4px; padding: 8px 0;
+  border: 0; background: transparent; color: #007d91; text-align: left; cursor: pointer; }
+.child-mention-guidance { margin: 8px 0 0; color: #4f575a; font-size: 12px; }
+.child-mention-guidance button { margin-left: 8px; min-height: 44px; }
+.child-request-notice { display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin: 12px 0; padding: 12px; border: 1px solid #d9dfe0;
+  border-radius: 8px; background: #fff; }
+.child-request-notice button { min-height: 44px; }
+.child-review-body button,.child-review-body select,.child-review-actions button {
+  min-height: 44px; padding: 8px 12px;
+  border: 1px solid #cdd4d5; border-radius: 6px; background: #fff; font: inherit; }
+.child-review-actions { display: flex; gap: 10px; }
+.child-review-actions button:first-child { background: #0db5cc; border-color: #0db5cc; }
+.child-review-actions button:disabled { opacity: .6; cursor: default; }
+.child-review-label { color: #4f575a; font-size: 12px; text-transform: uppercase; }
+.child-review-source { padding: 12px; border: 1px solid #d9dfe0; border-radius: 6px;
+  overflow-wrap: anywhere; white-space: pre-wrap; }
+.child-review-facts { margin: 12px 0; border: 1px solid #d9dfe0; border-radius: 6px; }
+.child-review-facts div { padding: 10px; border-top: 1px solid #d9dfe0; }
+.child-review-facts div:first-child { border-top: 0; }
+.child-review-facts dt { color: #4f575a; font-size: 12px; }
+.child-review-facts dd { margin: 3px 0 0; overflow-wrap: anywhere; }
+.child-review-select { display: grid; gap: 6px; margin: 14px 0; }
+.child-review-body fieldset { display: grid; gap: 8px; border: 0; padding: 0; }
+.child-review-body legend { padding: 0 0 8px; font-weight: 600; }
+.child-review-body fieldset label { display: flex; align-items: center; gap: 10px;
+  min-height: 44px; padding: 10px; border: 1px solid #d9dfe0; border-radius: 6px;
+  overflow-wrap: anywhere; }
+.child-review-body input[type="radio"] { width: 18px; height: 18px; flex: 0 0 auto; }
+@media (max-width: 700px) {
+  .child-review-actions button:first-child { flex: 1; }
+}

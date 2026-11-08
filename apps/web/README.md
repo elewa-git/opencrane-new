@@ -17,7 +17,7 @@ shared rules for checking messages before the website shows them.
 flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages and file drops where Attach is available"] -->|requests and tab sign-out| web
-  web -->|requests and live updates| server["apps/server<br/>the back end"]
+  web -->|messages, child reviews and group names| server["apps/server<br/>the back end"]
   server -->|saved updates, service readiness, file cards and private reply clearance| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
@@ -35,6 +35,10 @@ For everyone, the website:
 
 - Shows sign-in, first-owner setup and the welcome survey.
 - Supports assistant sessions and direct or group chats with colleagues.
+  An own message in a group chat can open a review to ask a shared assistant for work.
+  The first review includes people who could read the source message. The server
+  confirms the people, paying group and allowance before Start. The website reads
+  the paying group's checked name for display.
   A long computer start explains when the assistant service is waiting for maintenance.
   The saved message runs once the service and computer are ready.
   Assistant replies show headings, lists, quotes, code and safe links.

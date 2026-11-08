@@ -275,6 +275,13 @@
                     </strong><time>{{ directTime(row.time) }}</time></header>
                   }
                   <p>{{ directDisplayText(row) }}</p>
+                  @if (childReview.canOpen(row, selectedConversation(), currentMemberId)) {
+                    <button class="child-review-action" type="button"
+                      (click)="childReview.open(row, selectedConversation()!, messages(),
+                        $event.currentTarget)">
+                      Ask {{ childReview.assistantName(childReview.selectedAssistant()) }} to work on this
+                    </button>
+                  }
                   @if (ownMessage(row, currentMemberId)) {
                     <span class="message-receipt">
                       @if (selectedConversation()?.mode === 'group') { Saved · }
@@ -285,11 +292,79 @@
               </article>
             }
           }
+          @if (childReview.pending()?.conversationId === selectedConversationId()) {
+            <div class="child-request-notice" role="status">
+              <span>{{ childReview.notice() || 'Checking the child request…' }}</span>
+              <button type="button" [disabled]="childReview.busy()"
+                (click)="childReview.checkStatus(selectedConversationId())">Check status</button>
+            </div>
+          }
           }
         }
         }
       </div>
     </section>
+
+    <oc-modal-sheet [open]="!!childReview.source()" backLabel="Cancel"
+      [title]="'Ask ' + childReview.assistantName(childReview.selectedAssistant()) +
+        ' to work on this?'"
+      [returnFocusTo]="childReview.opener()"
+      [dismissDisabled]="childReview.busy() && !!childReview.pending()"
+      (closed)="childReview.close()">
+      @if (childReview.source(); as source) {
+          <div class="child-review-body">
+            <span class="child-review-label">From your message</span>
+            <p class="child-review-source">{{ directDisplayText(source) }}</p>
+            @if (childReview.review(); as review) {
+              <dl class="child-review-facts">
+                <div><dt>Assistant</dt><dd>{{ childReview.assistantName(review.assistantId) }}</dd></div>
+                <div><dt>Child audience</dt><dd>{{ childReview.audienceNames(
+                  review.participantIds, currentMemberId, knownColleagues()) }}</dd></div>
+                <div><dt>Paying group</dt><dd>{{ childReview.payingGroupName() ||
+                  'Group name unavailable' }} · fixed for this work</dd></div>
+                <div><dt>Allowance</dt><dd>€{{ (review.allowanceBoundCents / 100).toFixed(2) }} for this work</dd></div>
+              </dl>
+            }
+            <label class="child-review-select">Assistant
+              <select [value]="childReview.selectedAssistant()" [disabled]="childReview.busy()"
+                (change)="childReview.selectedAssistant.set($any($event.target).value);
+                  childReview.requestReview(selectedConversation()!)">
+                @for (assistant of childReview.assistants(); track assistant.assistantId) {
+                  <option [value]="assistant.assistantId">{{ childReview.assistantName(
+                    assistant.assistantId) }}</option>
+                }
+              </select>
+            </label>
+            <fieldset [disabled]="childReview.busy()">
+              <legend>Who can follow the child thread</legend>
+              <label><input type="radio" name="child-audience" value="all"
+                [checked]="childReview.audience().length > 1"
+                (change)="childReview.chooseAudience(selectedConversation()!, currentMemberId, false)">
+                {{ childReview.audienceNames(childReview.review()?.participantIds ||
+                  childReview.audience(), currentMemberId, knownColleagues()) }}
+              </label>
+              <label><input type="radio" name="child-audience" value="only-me"
+                [checked]="childReview.audience().length === 1"
+                (change)="childReview.chooseAudience(selectedConversation()!, currentMemberId, true)">
+                Only me
+              </label>
+            </fieldset>
+            @if (childReview.notice()) { <p role="status">{{ childReview.notice() }}</p> }
+            @if (!childReview.review() && !childReview.busy()) {
+              <button type="button" (click)="childReview.requestReview(selectedConversation()!)">
+                Review again
+              </button>
+            }
+          </div>
+      }
+      <div overlayFooter class="child-review-actions">
+        @if (childReview.source()) {
+            <button type="button" [disabled]="!childReview.review() || childReview.busy()"
+              (click)="childReview.start(selectedConversation()!, currentMemberId)">Start child thread</button>
+            <button type="button" (click)="childReview.close()">Cancel</button>
+        }
+      </div>
+    </oc-modal-sheet>
 
     @if (pageState() === 'ready' && participantManager.state() === 'closed'
       && (colleague() || selectedConversation()?.mode === 'group'
@@ -327,6 +402,22 @@
               selectedPeople(), groupSnapshot())"
             (draftChange)="changeDraft($event)" (submitted)="submitMessage($event)" />
         </div>
+        @if (selectedConversation()?.mode === 'group' && draft().includes('@agent')) {
+          <div class="child-mention-guidance" role="status">
+            @if (childReview.assistantState() === 'loading') {
+              Checking available assistants…
+            } @else if (childReview.assistantState() === 'failed') {
+              Assistants could not be loaded.
+              <button type="button" (click)="childReview.loadAssistants(selectedConversationId())">
+                Try assistants again</button>
+            } @else if (childReview.assistants().length) {
+              Typing @agent is plain text. Use “Ask assistant to work on this” on your own
+              message to start a child thread.
+            } @else {
+              No assistants are available to you here, so there’s nothing to suggest.
+            }
+          </div>
+        }
       </footer>
     }
   </main>
