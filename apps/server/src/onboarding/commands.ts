@@ -5,7 +5,8 @@ import { surveyAnswersSchema, parseEventByType, personaRevisedDataSchema,
   personaApprovedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import { isAuthorityChanged, groupMembership } from '@opencrane/models';
-import { writeChatAccess, type ChatOptions } from '../chat/access.ts';
+import { chatAccess, isChatRefused, writeChatAccess, type ChatOptions }
+  from '../chat/access.ts';
 import { idSchema } from '../members/guard.ts';
 import { surveyHistory, savedCommand, decryptAnswers, decryptPersona,
   surveyReceipt, personaReceipt } from './history.ts';
@@ -104,9 +105,13 @@ export async function surveyCommand(options: ChatOptions, memberId: string, body
   if (Buffer.byteLength(JSON.stringify(body)) > 16384) throw new z.ZodError([]);
   const history = await surveyHistory(options, memberId);
   const previous = await savedCommand(options, memberId, input.commandId, history);
-  if (previous) return checkedReceipt(options, memberId, input, previous);
+  if (previous) return await checkedReceipt(options, memberId, input, previous);
   checkProgress(input, history);
   const groups = await selectedGroupPositions(options, memberId, input);
+  if (input.operation === 'revise' && input.mode === 'generate') {
+    // Check membership after slow history reads, before opening saved answers.
+    await chatAccess(options, { memberId });
+  }
   const type = eventType(input);
   const event: EventEnvelope = { id: randomUUID(), commandId: input.commandId, type,
     source: 'opencrane-server', time: new Date().toISOString(), silo: options.silo,
@@ -138,9 +143,11 @@ async function appendSurvey(options: ChatOptions, memberId: string,
     const updated = await surveyHistory(options, memberId);
     const saved = await savedCommand(options, memberId, input.commandId, updated);
     if (!saved || saved.row.sequence !== result.sequence) throw new SurveyUnknown();
-    return checkedReceipt(options, memberId, input, saved);
+    return await checkedReceipt(options, memberId, input, saved);
   } catch (error) {
-    if (error instanceof SurveyConflict || isAuthorityChanged(error)) throw error;
+    if (error instanceof SurveyConflict || isAuthorityChanged(error) || isChatRefused(error)) {
+      throw error;
+    }
     throw new SurveyUnknown();
   }
 }
@@ -169,9 +176,11 @@ function matchesSavedCommand(options: ChatOptions, memberId: string,
   return row.event.type === 'onboarding.survey_restarted';
 }
 
-function checkedReceipt(options: ChatOptions, memberId: string,
+async function checkedReceipt(options: ChatOptions, memberId: string,
   input: z.infer<typeof commandSchema>,
   previous: NonNullable<Awaited<ReturnType<typeof savedCommand>>>) {
+  // Check current membership after the saved record loads, before opening private text.
+  await chatAccess(options, { memberId });
   const { row, reference } = previous;
   const matches = matchesSavedCommand(options, memberId, input, row);
   if (!matches || reference.previousPosition !== input.expectedPosition ||

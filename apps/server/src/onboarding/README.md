@@ -35,9 +35,12 @@ flowchart LR
 Reads check current membership after loading, before opening private answers.
 Opening a persona revision loads that version before checking membership. Writes
 finish history loading before the short access check. Each accepted request saves
-one record. Changed retries and competing edits are refused; an uncertain save
-stays unknown until its original result can be read. These requests use the
-member's personal encryption keys rather than conversation keys.
+one record. Repeated requests check membership again after loading the original
+receipt, before comparing private content. Changed retries and competing edits
+are refused; an uncertain save stays unknown until its original result can be
+read. Generating a persona also checks membership before opening saved answers.
+These requests use the member's personal encryption keys rather than conversation
+keys.
 Approval keeps its chosen version after a later edit or survey restart. It does
 not change assistant settings or grants.
 

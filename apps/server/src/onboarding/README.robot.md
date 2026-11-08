@@ -14,6 +14,12 @@ event id. It stores no persona text. `GET /api/onboarding` returns the current
 candidate separately from the approved revision and approval time. Revision list
 and detail reads mark the approved version. `GET /api/personal/changes/:commandId`
 returns the original approval receipt after a lost reply without writing again.
+POST retries and post-append receipt checks read the saved event, then check
+current membership before decrypting any saved survey answer or persona text.
+Removal during the saved event read returns 403 without decrypting.
+Persona generation checks current membership after loading survey history and
+before decrypting saved answers. Removal during that read returns 403 without
+decrypting or appending a revision.
 The approval survives a later revision, survey edit, restart and projection replay.
 Only a later explicit approval changes the approved reference.
 
