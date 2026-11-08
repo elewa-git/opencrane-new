@@ -1,0 +1,1 @@
+An approved Ask call with proved non-dispatch can now send one checked replacement from its original waiting response. The computer keeps the exact request bytes private and refuses another send after expiry, Stop, lost access or an uncertain reply.

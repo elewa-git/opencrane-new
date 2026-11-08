@@ -107,7 +107,8 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
     reply.header('cache-control', 'no-store');
     try {
       const { conversationId } = conversationParameters.parse(req.params);
-      const checks = { write: req.method === 'POST', conversationId };
+      // Read the approval and turn history before starting the short write access check.
+      const checks = { write: false, conversationId };
       const context = await requireMember(req, reply, config, options, checks);
       const { session, memberId, access } = context;
       const configured = context.options;
@@ -230,6 +231,18 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
     conversationId, request.turnId, performance.now() + 10_000);
   if (input.decision !== 'rejected' && activity.computer.control) {
     return reply.code(409).send({ status: 'conflict' });
+  }
+  if (input.decision === 'retry') {
+    const original = await readOriginalCallStatus(options.store, options.silo,
+      input.approvalId, undefined, performance.now() + 10_000);
+    if (original.conversationId !== conversationId ||
+        original.status.requesterId !== memberId) {
+      return reply.code(403).send({ status: 'refused' });
+    }
+    await updateLiveStatus(original, options, input.approvalId);
+    if (original.status.retry !== 'eligible') {
+      return reply.code(409).send({ status: 'conflict' });
+    }
   }
   const accessRequest = { memberId, conversationId, relation: 'post' as const };
   const fresh = await writeChatAccess(options, accessRequest);

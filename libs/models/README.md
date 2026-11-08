@@ -46,6 +46,8 @@ The signal must match the saved tool, turn, computer and generation.
 A remote tool start is saved before its budget check. If the call is refused before
 connecting, matching saved proof can let the requester choose one retry. Missing
 proof keeps the approval used. A retry checks current access and cannot reuse the old pass.
+Only the held Ask call can use the replacement permit. It supplies the saved approval
+id with its original bytes; a new message without that binding is refused.
 Competing calls share no permission: one consumes the approval, and the other reads
 that saved outcome. Each call reuses its earlier saved history while checking live
 permissions again before sending.
@@ -144,6 +146,7 @@ flowchart LR
   models -.->|checks receipts, checks each initial memory permission once, and preserves confirmed refusals during permission outages or invalid company saves| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|prepares separate company sign-in attempts; stages credentials, callback codes and replies, confirms first accounts, starts, joins, claims and sends refresh attempts, saves replacements, retains old access tokens until expiry and removes revoked tokens even after member removal, recovers replies and checks signed accounts, reads one exact personal access token for a private callback, shares a database lock for personal and company saves and rotations, and personal cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
+  models -->|checks one held Ask replacement permit| gateway
   gateway -->|usage and tool dispatch records| models
   models -->|saves events, local account revocations, remote starts and unsent proof; recovers budgets in order and applies saved routine Stops, pauses with saved admin authority, verified owner removal or assistant deactivation, Ask denial or expiry, unconfirmed delivery and retirements; reads payer, spending limits and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
 ```

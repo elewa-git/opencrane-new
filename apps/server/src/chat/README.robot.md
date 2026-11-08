@@ -50,7 +50,15 @@ computer over its authenticated bridge socket after the person's access check.
 It checks the reply's computer id and
 generation, then compares the saved turn, tool, connection, native call id and original
 approval expiry. Two readers see the same private hold. The bridge reply contains no
-request bytes. The route never sends a replacement call.
+request bytes. The GET never sends a replacement call.
+
+The retry POST checks the same saved proof and live signal before saving
+`approval.retry_requested`. It reads the original history before the short write
+access check. A missing hold or mismatched turn, computer, call or tool returns a
+conflict. The bridge keeps watching an uncertain approval until its original
+deadline. After the saved retry event, it wakes the original held response. The
+computer renews the turn pass, and the gateway checks one new permit. Tabs and
+repeated bridge wakes share the same saved decision.
 
 ## Dispatcher readiness in chat
 

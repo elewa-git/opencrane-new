@@ -8,9 +8,10 @@ function fixture(limit = 1000) {
   const holds = approvalHolds({ waiting, renew }, limit);
   holds.resume(true);
   const send = vi.fn().mockResolvedValue(undefined);
+  const retry = vi.fn().mockResolvedValue(undefined);
   const answer = vi.fn();
-  const input = { approvalId, thread: 'thread', send, answer };
-  return { holds, waiting, renew, send, answer, input };
+  const input = { approvalId, thread: 'thread', send, retry, answer };
+  return { holds, waiting, renew, send, retry, answer, input };
 }
 async function approvesOnce() {
   const test = fixture();
@@ -114,3 +115,38 @@ async function stopsHoldsWithoutReplacingSentAnswers() {
 }
 it('stops held approvals but leaves an action already sending on its own answer path',
   stopsHoldsWithoutReplacingSentAnswers);
+
+async function stopsRetainedReplacementDuringRenewal() {
+  const test = fixture();
+  test.send.mockResolvedValueOnce('retained');
+  test.holds.add(test.input);
+  await test.holds.settle(approvalId, 'approved');
+  expect(test.holds.isRetained(approvalId, 'thread')).toBe(true);
+  expect(test.waiting).toHaveBeenCalledTimes(2);
+  const renewal = Promise.withResolvers<void>();
+  test.renew.mockReturnValueOnce(renewal.promise);
+  const waking = test.holds.settle(approvalId, 'retry');
+  const duplicate = test.holds.settle(approvalId, 'retry');
+  test.holds.endThread('thread');
+  renewal.resolve();
+  await Promise.all([waking, duplicate]);
+  expect(test.retry).not.toHaveBeenCalled();
+  expect(test.holds.isRetained(approvalId, 'thread')).toBe(false);
+}
+it('claims one replacement and refuses Stop during pass renewal',
+  stopsRetainedReplacementDuringRenewal);
+
+async function reannouncesRetainedCallAfterReconnect() {
+  const test = fixture();
+  test.send.mockResolvedValueOnce('retained');
+  test.holds.add(test.input);
+  await test.holds.settle(approvalId, 'approved');
+  expect(test.holds.isRetained(approvalId, 'thread')).toBe(true);
+  expect(test.waiting).toHaveBeenCalledTimes(2);
+  test.waiting.mockClear();
+  test.holds.resume(true);
+  expect(test.waiting).toHaveBeenCalledExactlyOnceWith('thread', approvalId);
+  expect(test.retry).not.toHaveBeenCalled();
+}
+it('announces the original retained call after bridge reconnect without sending it',
+  reannouncesRetainedCallAfterReconnect);

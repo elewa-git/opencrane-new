@@ -1084,7 +1084,15 @@ native call id, turn, computer generation, tool binding and a five-second signal
 It never returns the bytes. The saved approval expiry still controls eligibility.
 The bridge reports no signal after Stop, disconnection, hold expiry or process restart.
 The status reader needs matching saved non-dispatch proof; a 503 alone proves nothing.
-Replacement sending is disabled until a separate command can check authority again.
+After the requester saves a checked retry, the bridge renews the original turn's pass.
+It claims the held call before renewal, so duplicate wakes cannot send twice. The proxy
+sends its retained Buffer through the existing MCP path. A closed response, expired
+hold, Stop, lost computer or refused renewal leaves the original call unsent again.
+The computer announces a retained call after the first approval watch closes.
+After a bridge reconnect, a retained hold announces itself to the new server watcher
+without sending the tool call.
+The gateway consumes one new permit and checks the current tool policy and spending.
+An uncertain replacement reply never permits a further send.
 
 `APPROVAL_WAIT_LIMIT_MS` is 900000. The decision service also expires approvals
 opened with `x-opencrane-tool-mode: ask` after 900000 ms. Its clock starts before

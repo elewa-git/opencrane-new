@@ -781,7 +781,12 @@ it('records missing review fields, blocks approval and still permits requester d
   deniesIncompleteReview, 40_000);
 
 async function retriesOnlyVerifiedNonDispatch() {
-  const setup = await approvalFixture();
+  let signal: { approvalId: string; turnId: string; callId: string;
+    conversationId: string; computerId: string; generation: number;
+    serverId: string; connectionId: string; toolName: string;
+    expiresAt: string } | undefined;
+  function retainedCall() { return Promise.resolve(signal); }
+  const setup = await approvalFixture(false, retainedCall);
   try {
     await setup.call();
     await setup.decide();
@@ -793,6 +798,14 @@ async function retriesOnlyVerifiedNonDispatch() {
     expect(cards[0]).toMatchObject({ state: 'outcome_unknown', canRetry: true });
     expect(cards[0]).toHaveProperty('usedAt');
     const firstUse = cards[0]!;
+    signal = { approvalId: firstUse.approvalId, turnId: 'turn', callId: 'approval-call',
+      conversationId: 'conversation', computerId: 'computer', generation: 1,
+      serverId: 'fixture', connectionId: 'installed', toolName: 'write',
+      expiresAt: new Date(Date.now() + 5_000).toISOString() };
+    const liveSignal = signal;
+    signal = undefined;
+    expect((await setup.decide('retry')).statusCode).toBe(409);
+    signal = { ...liveSignal, expiresAt: new Date(Date.now() + 5_000).toISOString() };
     const retries = await Promise.all([setup.decide('retry'), setup.decide('retry')]);
     function statusCode(response: typeof retries[number]) {
       return response.statusCode;
@@ -803,9 +816,13 @@ async function retriesOnlyVerifiedNonDispatch() {
     const authorised = (await setup.read()).cards[0]!;
     expect(authorised).toHaveProperty('usedAt', firstUse.usedAt);
     expect(authorised).toHaveProperty('decidedAt', firstUse.decidedAt);
-    const retriedBody = setup.body().replace('approval-call', 'approval-retry');
-    expect((await setup.call(undefined, {}, retriedBody)).status).toBe(200);
     expect((await setup.call()).status).toBe(403);
+    expect(setup.received()).toBe(0);
+    const replacementHeaders = { 'x-opencrane-approval-id': firstUse.approvalId };
+    const changedArguments = '{"order":9007199254740993,"note":"changed","amount":1.00e2}';
+    expect((await setup.call(changedArguments, replacementHeaders)).status).toBe(403);
+    expect(setup.received()).toBe(0);
+    expect((await setup.call(undefined, replacementHeaders)).status).toBe(200);
     expect(setup.received()).toBe(1);
     await setup.restart();
     await ingestUsage(setup.actor, setup.options.usageFile);
@@ -826,7 +843,7 @@ async function retriesOnlyVerifiedNonDispatch() {
       evidence: 'connection_refused', callId: 'approval-call' });
     const firstAttempt = z.object({ logicalRequestId: z.string() }).parse(attempts[0]?.data);
     expect(attempts[1]?.data).toMatchObject({ outcome: 'responded', evidence: 'response_received',
-      callId: 'approval-retry',
+      callId: 'approval-call',
       logicalRequestId: firstAttempt.logicalRequestId });
     for (const attempt of attempts) {
       expect(Date.parse(attempt.time)).not.toBeNaN();
@@ -1172,7 +1189,12 @@ it.each([503, 504])('does not grant a retry for upstream %s or error text',
   refusesRetryWithoutProof, 40_000);
 
 async function refusesRetryAfterBindingEnds(change: string) {
-  const setup = await approvalFixture();
+  let signal: { approvalId: string; turnId: string; callId: string;
+    conversationId: string; computerId: string; generation: number;
+    serverId: string; connectionId: string; toolName: string;
+    expiresAt: string } | undefined;
+  function retainedCall() { return Promise.resolve(signal); }
+  const setup = await approvalFixture(false, retainedCall);
   try {
     await setup.call();
     await setup.decide();
@@ -1182,6 +1204,10 @@ async function refusesRetryAfterBindingEnds(change: string) {
     await ingestUsage(setup.actor, setup.options.usageFile);
     const { cards } = await setup.read();
     expect(cards[0]?.canRetry).toBe(true);
+    signal = { approvalId: cards[0]!.approvalId, turnId: 'turn', callId: 'approval-call',
+      conversationId: 'conversation', computerId: 'computer', generation: 1,
+      serverId: 'fixture', connectionId: 'installed', toolName: 'write',
+      expiresAt: new Date(Date.now() + 5_000).toISOString() };
     if (change === 'expiry') {
       const now = new Date(cards[0]!.expiresAt);
       await readApproval(setup.nats.store, 'test', cards[0]!.approvalId, { now });
@@ -1196,9 +1222,7 @@ async function refusesRetryAfterBindingEnds(change: string) {
       });
     }
     const refused = await setup.decide('retry');
-    let expectedStatus = 409;
-    if (change === 'grant') expectedStatus = 503;
-    expect(refused.statusCode).toBe(expectedStatus);
+    expect(refused.statusCode).toBe(409);
     expect(setup.received()).toBe(0);
   } finally {
     await setup.close();

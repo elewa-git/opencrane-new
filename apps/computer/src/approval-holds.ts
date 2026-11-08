@@ -4,6 +4,7 @@ interface Hold {
   approvalId: string;
   thread: string;
   send(): Promise<void | 'retained'>;
+  retry(): Promise<void | 'retained'>;
   answer(text: string): void;
 }
 interface Group {
@@ -13,6 +14,8 @@ interface Group {
   timer: NodeJS.Timeout;
   sending: boolean;
   attempted: boolean;
+  retained: boolean;
+  retried: boolean;
   finishing: boolean;
   ended: boolean;
 }
@@ -42,7 +45,12 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
 
   async function settle(approvalId: string, state: string) {
     const group = groups.get(approvalId);
-    if (!group || group.finishing || group.ended) return;
+    if (!group || group.ended) return;
+    if (state === 'retry') {
+      await retry(group);
+      return;
+    }
+    if (group.finishing) return;
     // Claim the wake before renewal. Reconnects and duplicate signals cannot send twice.
     group.finishing = true;
     try {
@@ -55,6 +63,12 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
         if (outcome === 'retained' && !group.ended) {
           // Keep the original native response open. A later retry needs separate authority.
           group.sending = false;
+          group.retained = true;
+          // Start a new server watch after the first approval wake was removed.
+          if (!driver.waiting(group.first.thread, group.first.approvalId)) {
+            end(group, STOPPED);
+            return;
+          }
           for (const follower of group.followers) {
             follower.answer('This action was already answered. OpenCrane will not send it again.');
           }
@@ -73,6 +87,26 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
     }
     group.ended = true;
     clearTimeout(group.timer);
+  }
+
+  async function retry(group: Group) {
+    if (!group.retained || group.retried || !supported || stopped ||
+        Date.now() >= group.expiresAt) return;
+    // Claim the saved decision before renewal so duplicate tabs and wakes share this attempt.
+    group.retried = true;
+    try {
+      await driver.renew(group.first.thread);
+      if (group.ended || !supported || stopped || Date.now() >= group.expiresAt) return;
+      group.sending = true;
+      await group.first.retry();
+    } catch {
+      if (!group.ended) {
+        group.first.answer('The turn could not get a new pass. Nothing was sent again.');
+      }
+    } finally {
+      group.ended = true;
+      clearTimeout(group.timer);
+    }
   }
 
   function add(hold: Hold) {
@@ -105,6 +139,8 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
       timer,
       sending: false,
       attempted: false,
+      retained: false,
+      retried: false,
       finishing: false,
       ended: false,
     };
@@ -145,7 +181,9 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
     for (const group of groups.values()) {
       if (group.ended) continue;
       if (!supported) end(group, 'This server cannot wait for approval. Nothing was sent.');
-      else if (!group.finishing) driver.waiting(group.first.thread, group.first.approvalId);
+      else if (!group.finishing || (group.retained && !group.retried)) {
+        driver.waiting(group.first.thread, group.first.approvalId);
+      }
     }
   }
 
@@ -162,7 +200,7 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
   function isRetained(approvalId: string, thread: string) {
     const group = groups.get(approvalId);
     return !!group && group.first.thread === thread && group.finishing &&
-      !group.ended && Date.now() < group.expiresAt;
+      group.retained && !group.retried && !group.ended && Date.now() < group.expiresAt;
   }
 
   function retainedExpiresAt(approvalId: string, thread: string) {

@@ -10,7 +10,9 @@ Bridge startup and the HTTP routes share one chat options object, so the install
 reader reaches the status route. `test/main-retained-call.test.ts` checks that link
 through the production entrypoint.
 The public GET still checks saved history and current participation before replying;
-it never sends call bytes or wakes a computer. Replacement sending remains disabled.
+it never sends call bytes or wakes a computer. The retry POST checks the saved
+non-dispatch proof and this reader's live signal before its one conditional append.
+The bridge then wakes the held response; it sends no request bytes itself.
 
 ## Closed chat private process recovery
 

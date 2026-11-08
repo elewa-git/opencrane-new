@@ -124,6 +124,77 @@ async function sendsSavedState(state: string) {
 it.each(['approved', 'denied', 'expired', 'cancelled', 'outcome_unknown'])(
   'sends the saved %s state once, including after reconnect', sendsSavedState,
 );
+
+async function wakesRetainedCallAfterSavedRetry() {
+  await seedRequest({ policySequence: await seedLiveTurn() });
+  const { approvals, send } = watcher();
+  approvals.receive(waiting);
+  await poll(approvals);
+  await append(`approval-${approvalId}`, 'approval.decided', {
+    approvalId, decidedBy: 'alice', decision: 'approved',
+  });
+  await append(`approval-${approvalId}`, 'approval.used', {
+    approvalId, permitId: '00000000-0000-4000-8000-000000000001',
+  });
+  const permitId = '00000000-0000-4000-8000-000000000001';
+  const decision = envelope('test', `decision-${permitId}`, 'decision.recorded', {
+    requestId: permitId, permitId, route: 'mcp', outcome: 'allow',
+    reason: 'approval_used', contextDigest: 'b'.repeat(64),
+    callId: 'original-call', logicalRequestId: approvalId, serverId: 'fixture',
+    toolName: 'write', requesterId: 'alice', assistantId: 'assistant',
+    conversationId: 'chat', turnId: 'turn',
+  });
+  decision.correlation.approval = approvalId;
+  expect((await nats.store.append({ event: decision, expectedSequence: 0 })).status)
+    .toBe('appended');
+  await append(`decision-${permitId}`, 'tool.dispatch_recorded', {
+    conversationId: 'chat', turnId: 'turn', callId: 'original-call',
+    serverId: 'fixture', toolName: 'write', requestId: permitId,
+    logicalRequestId: approvalId, approvalId,
+    startedAt: new Date().toISOString(), durationMs: 1,
+    outcome: 'not_dispatched', evidence: 'connection_refused',
+  });
+  await poll(approvals);
+  expect(send).toHaveBeenCalledWith(JSON.stringify({
+    type: 'approval_settled', approvalId, state: 'outcome_unknown',
+  }));
+  const subject = `approval-${approvalId}`;
+  const expectedSequence = await nats.store.head(subject);
+  const retry = envelope('test', subject, 'approval.retry_requested', { approvalId });
+  retry.source = 'opencrane-server';
+  retry.principal = { kind: 'human', id: 'alice' };
+  expect((await nats.store.append({ event: retry, expectedSequence })).status).toBe('appended');
+  await poll(approvals);
+  expect(send).toHaveBeenCalledWith(JSON.stringify({
+    type: 'approval_settled', approvalId, state: 'retry',
+  }));
+  expect(approvals.size).toBe(0);
+}
+it('keeps watching an uncertain call and wakes its held response after saved retry',
+  wakesRetainedCallAfterSavedRetry);
+
+async function refusesRetryWithoutSavedDispatchProof() {
+  await seedRequest({ policySequence: await seedLiveTurn() });
+  await append(`approval-${approvalId}`, 'approval.decided', {
+    approvalId, decidedBy: 'alice', decision: 'approved',
+  });
+  await append(`approval-${approvalId}`, 'approval.used', {
+    approvalId, permitId: '00000000-0000-4000-8000-000000000001',
+  });
+  const subject = `approval-${approvalId}`;
+  const expectedSequence = await nats.store.head(subject);
+  const retry = envelope('test', subject, 'approval.retry_requested', { approvalId });
+  retry.source = 'opencrane-server';
+  retry.principal = { kind: 'human', id: 'alice' };
+  expect((await nats.store.append({ event: retry, expectedSequence })).status).toBe('appended');
+  const { approvals, send } = watcher();
+  approvals.receive(waiting);
+  await poll(approvals);
+  expect(send).not.toHaveBeenCalled();
+  expect(approvals.size).toBe(0);
+}
+it('never wakes a replacement from a retry event without saved non-dispatch proof',
+  refusesRetryWithoutSavedDispatchProof);
 async function checksChangedConversation(subject: string) {
   await seedRequest({ policySequence: await seedLiveTurn() });
   const { approvals, send } = watcher();

@@ -122,6 +122,7 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
   options: ApprovalReadOptions = {}):
   Promise<{ request: Request; state: ApprovalCard['state']; sequence: number;
     requestPosition: number; conversationPosition: number; canRetry: boolean; toolReplied: boolean;
+    retryRequested: boolean;
     invalidation?: EventEnvelope } &
     ReturnType<typeof approvalRecord>> {
   const now = options.now ?? new Date();
@@ -131,6 +132,7 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
   const record = approvalRecord(rows);
   const { state, permitId } = record;
   const sequence = rows.at(-1)!.sequence;
+  const retryRequested = rows.at(-1)?.event.type === 'approval.retry_requested';
   let conversationPosition = 0;
   const dispatch = await verifiedDispatch(store, silo, approvalId, permitId, deadline, state);
   const { toolReplied } = dispatch;
@@ -154,7 +156,7 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
       if (options.deferInvalidation) {
         // Let the HTTP command check ownership and current write access before saving.
         return { ...record, request, state, sequence, requestPosition: rows[0]!.sequence,
-          conversationPosition, canRetry, toolReplied, invalidation: event };
+          conversationPosition, canRetry, toolReplied, retryRequested, invalidation: event };
       }
       const result = await store.append({ event, expectedSequence: sequence });
       if (result.status === 'unavailable') throw new Error('Approval persistence unavailable');
@@ -163,7 +165,7 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
     }
   }
   return { ...record, request, state, sequence, requestPosition: rows[0]!.sequence,
-    conversationPosition, canRetry, toolReplied };
+    conversationPosition, canRetry, toolReplied, retryRequested };
 }
 
 async function verifiedDispatch(store: EventStore, silo: string, approvalId: string,
@@ -416,6 +418,10 @@ export async function approvalDecision(store: EventStore, silo: string, bound: B
   }
   const approval = await askApproval(store, silo, bound, policy, keys, now(), deadline,
     prepared, conversationRows);
+  // Require the approval id added by the held proxy path; a new Codex call lacks it.
+  if (approval.retryRequested && policy.expectedApproval !== approval.request.approvalId) {
+    return { outcome: 'deny' as const, reason: 'approval_mismatch', approvalId: undefined };
+  }
   const used = await consumeApproval(store, silo, approval, requestId, fresh, now);
   if (used) {
     return { outcome: 'allow' as const, reason: 'approval_used',

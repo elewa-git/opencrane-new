@@ -68,7 +68,7 @@ async function fixture(approvalSupport = false) {
   if (!address || typeof address === 'string') throw new Error('Missing gateway');
   const controlSocket = `${directory}/control.sock`;
   const waiting = vi.fn().mockReturnValue(true);
-  async function renew(thread: string) { await grant(thread); }
+  const renew = vi.fn(grant);
   const driver = { waiting, renew };
   const local = await proxy(`http://127.0.0.1:${address.port}`,
     { callerPath: `${directory}/caller`, controlSocket, port: 0 }, undefined, driver);
@@ -90,9 +90,9 @@ async function fixture(approvalSupport = false) {
     listedTools = tools) {
     expect(await control('/catalogue', { loadKey, turnId: thread, conversation, thread, tools: listedTools })).toBe(200);
   }
-  async function grant(thread = 'thread-A', conversation = 'chat-A') {
+  async function grant(thread = 'thread-A', conversation = 'chat-A', generation = 1) {
     const input = { thread, turnId: thread, conversation, computer: 'computer',
-      computerId: 'computer-id', generation: 1, token: `token-${thread}`,
+      computerId: 'computer-id', generation, token: `token-${thread}`,
       expires: Date.now() + 60_000 };
     expect(await control('/grant', input)).toBe(200);
   }
@@ -134,7 +134,8 @@ async function fixture(approvalSupport = false) {
   }
   return { catalogue, grant, send, sendRaw, control, answer,
     retainedCall: local.retainedCall, disconnect, partialReply,
-    oversizedReply, deferReply, deliverReply, close, received, approvals: local.approvals, waiting };
+    oversizedReply, deferReply, deliverReply, close, received, approvals: local.approvals,
+    waiting, renew };
 }
 
 async function discoveryIsPrivate() {
@@ -451,6 +452,73 @@ async function sendsRetainedReplacementOnlyOnce() {
 it('sends the retained Ask request once through the live proxy after retry is saved',
   sendsRetainedReplacementOnlyOnce);
 
+async function refusesReplacementWithoutLiveAuthority(cause: string) {
+  const test = await fixture(true);
+  const controller = new AbortController();
+  let pending: Promise<unknown> | undefined;
+  try {
+    const askTools: ToolServer[] = [{ ...tools[0]!, modes: { read: 'ask' } }];
+    await test.catalogue(loadA, 'chat-A', 'thread-A', askTools);
+    await test.grant();
+    test.answer(403, true, JSON.stringify({ reason: 'approval_requested', approvalId }));
+    pending = test.send(call, {}, loadA, 'POST', controller.signal);
+    void pending.catch(ignoreAbortedCall);
+    function waiting() { expect(test.waiting).toHaveBeenCalledOnce(); }
+    await vi.waitFor(waiting);
+    test.answer(503, false, '{"reason":"dispatch_refused"}');
+    await test.approvals.settle(approvalId, 'approved');
+    expect(test.retainedCall(approvalId)).toBeDefined();
+    if (cause === 'lost hold') test.approvals.endThread('thread-A');
+    if (cause === 'Stop') test.approvals.stop();
+    if (cause === 'changed tool') {
+      await test.control('/catalogue/drop', { loadKey: loadA });
+    }
+    if (cause === 'expired hold') {
+      const later = Date.now() + 16 * 60_000;
+      vi.spyOn(Date, 'now').mockReturnValue(later);
+    }
+    if (cause === 'revoked pass' || cause === 'spending exhausted') {
+      test.renew.mockRejectedValueOnce(new Error('Access refused'));
+    }
+    if (cause === 'replaced computer') {
+      async function replaced() { await test.grant('thread-A', 'chat-A', 2); }
+      test.renew.mockImplementationOnce(replaced);
+    }
+    await test.approvals.settle(approvalId, 'retry');
+    expect(test.received).toHaveLength(2);
+  } finally {
+    controller.abort();
+    await pending?.catch(ignoreAbortedCall);
+    await test.close();
+  }
+}
+it.each(['lost hold', 'Stop', 'changed tool', 'expired hold',
+  'revoked pass', 'spending exhausted', 'replaced computer'])(
+  'refuses a retained replacement after %s without another gateway call',
+  refusesReplacementWithoutLiveAuthority);
+
+async function lostReplacementReplyDoesNotResend() {
+  const test = await fixture(true);
+  try {
+    const askTools: ToolServer[] = [{ ...tools[0]!, modes: { read: 'ask' } }];
+    await test.catalogue(loadA, 'chat-A', 'thread-A', askTools);
+    await test.grant();
+    test.answer(403, true, JSON.stringify({ reason: 'approval_requested', approvalId }));
+    const pending = test.send();
+    function waiting() { expect(test.waiting).toHaveBeenCalledOnce(); }
+    await vi.waitFor(waiting);
+    test.answer(503, false, '{"reason":"dispatch_refused"}');
+    await test.approvals.settle(approvalId, 'approved');
+    test.disconnect();
+    await test.approvals.settle(approvalId, 'retry');
+    expect((await pending).text).toContain('may have received');
+    await test.approvals.settle(approvalId, 'retry');
+    expect(test.received).toHaveLength(3);
+  } finally { await test.close(); }
+}
+it('keeps a lost replacement reply uncertain and never sends it again',
+  lostReplacementReplyDoesNotResend);
+
 async function retainedCallsHaveTotalByteLimit() {
   const test = await fixture(true);
   const controllers: AbortController[] = [];
@@ -470,7 +538,7 @@ async function retainedCallsHaveTotalByteLimit() {
       test.answer(403, true, JSON.stringify({ reason: 'approval_requested', approvalId: id }));
       const held = test.send(body, {}, loadA, 'POST', controller.signal);
       pending.push(held.catch(ignoreAbortedCall));
-      function receivedHold() { expect(test.waiting).toHaveBeenCalledTimes(index + 1); }
+      function receivedHold() { expect(test.waiting).toHaveBeenCalledTimes(2 * index + 1); }
       await vi.waitFor(receivedHold);
       test.answer(503, false, '{"reason":"dispatch_refused"}');
       await test.approvals.settle(id, 'approved');
@@ -487,7 +555,7 @@ async function retainedCallsHaveTotalByteLimit() {
     controllers.push(freeController);
     const freed = test.send(largeCall, {}, loadA, 'POST', freeController.signal);
     pending.push(freed.catch(ignoreAbortedCall));
-    function receivedFreeHold() { expect(test.waiting).toHaveBeenCalledTimes(11); }
+    function receivedFreeHold() { expect(test.waiting).toHaveBeenCalledTimes(20); }
     await vi.waitFor(receivedFreeHold);
     test.answer(503, false, '{"reason":"dispatch_refused"}');
     await test.approvals.settle(freeId, 'approved');
@@ -518,7 +586,7 @@ async function retainedCallsHaveEntryLimit() {
       test.answer(403, true, JSON.stringify({ reason: 'approval_requested', approvalId: id }));
       const held = test.send(body, {}, loadA, 'POST', controller.signal);
       pending.push(held.catch(ignoreAbortedCall));
-      function receivedHold() { expect(test.waiting).toHaveBeenCalledTimes(index + 1); }
+      function receivedHold() { expect(test.waiting).toHaveBeenCalledTimes(2 * index + 1); }
       await vi.waitFor(receivedHold);
       test.answer(503, false, '{"reason":"dispatch_refused"}');
       await test.approvals.settle(id, 'approved');

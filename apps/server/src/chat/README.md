@@ -33,6 +33,8 @@ connected yet.
 - Handles a person stopping a reply, spending stops and tool approvals.
 - Checks saved non-dispatch proof against a private signal from the original computer
   before showing that the same Ask call is still waiting.
+- Lets the original requester authorise one replacement while that call is still waiting.
+  The computer keeps the request bytes; the server passes only the saved decision.
 - Keeps private sessions separate when people share an assistant's computer.
 - Prepares side conversations and lets members review text before sharing it back to the parent chat.
 - Refuses new work in closed chats and repairs unfinished work without disrupting other chats.
@@ -146,6 +148,7 @@ flowchart LR
   reader[Signed-in member] -->|closes and reads| chat
   chat -->|saved events| store[Event store]
   chat -->|ends work in closed chats| computer[Assistant computer]
+  chat -->|wakes a checked Ask replacement| computer
   chat -->|checks access and spending| models[Models process]
   chat -->|checks remembered facts| memory[Memory]
   files[Files] -->|checks chat access| chat

@@ -220,7 +220,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     function hold(approvalId: string) {
       let ownedRequest: RetainedRequest | undefined;
       function answer(text: string) { toolError(response, id, text); }
-      async function send() {
+      async function send(expected?: RetainedRequest) {
         const renewed = liveCallGrant(boundLoad, boundServer, metadata, params['name'],
           grants, permits);
         if (!permits(boundLoad.turnId)) {
@@ -229,6 +229,11 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
         }
         if (!renewed) { answer(UNAVAILABLE); return; }
         const liveGrant = renewed;
+        if (expected && (liveGrant.computerId !== expected.computerId ||
+            liveGrant.generation !== expected.generation)) {
+          answer(UNAVAILABLE);
+          return;
+        }
         function keepFailedAttempt() {
           if (!liveGrant.computerId || !liveGrant.generation ||
               !Number.isSafeInteger(liveGrant.generation)) return false;
@@ -250,15 +255,25 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
           ownedRequest = request;
           return true;
         }
+        const body = expected?.raw ?? raw;
         return forward(incoming, response, gateway, boundServer, liveGrant, String(thread),
-          id, raw, requests, undefined, approvalId, keepFailedAttempt);
+          id, body, requests, undefined, approvalId, keepFailedAttempt);
+      }
+      function retry() {
+        // Send only while the original response still owns its retained bytes.
+        if (!ownedRequest || retained.get(approvalId) !== ownedRequest ||
+            response.destroyed || response.writableEnded) {
+          answer(UNAVAILABLE);
+          return Promise.resolve();
+        }
+        return send(ownedRequest);
       }
       function disconnected() {
         if (ownedRequest) deleteRetained(approvalId, ownedRequest);
         if (!response.writableEnded) approvals.endThread(String(thread));
       }
       response.once('close', disconnected);
-      const held = { approvalId, thread: String(thread), send, answer };
+      const held = { approvalId, thread: String(thread), send, retry, answer };
       approvals.add(held);
       // Keep the list until this hold ends, even if its turn pass expires first.
       extendThread(String(thread), boundGrant.expires);
