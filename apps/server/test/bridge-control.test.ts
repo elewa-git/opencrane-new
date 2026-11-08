@@ -667,6 +667,11 @@ it('keeps an earlier waiting input pending after the last input batch settles', 
     conversationId: 'chat', assistantId: 'assistant', turnId: test.message.id,
     threadId: 'waiting-first',
   });
+  await test.append('computer-assistant', 'computer.turn_started', {
+    conversationId: 'chat', assistantId: 'assistant', turnId: test.message.id,
+    threadId: 'waiting-first', requesterId: 'alice', computerId: 'desktop',
+    task: 'chat_turn', payingGroupId: 'personal',
+  });
   for (let index = 0; index < 31; index++) {
     await test.append('conversation-chat', 'message.posted', {
       conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text',
@@ -684,6 +689,12 @@ it('keeps an earlier waiting input pending after the last input batch settles', 
   await test.append('conversation-chat', 'agent.turn_failed', {
     conversationId: 'chat', turnId: test.message.id, reason: 'bridge_interrupted',
   });
+  await test.append('computer-assistant', 'computer.turn_closed', {
+    conversationId: 'chat', assistantId: 'assistant', turnId: test.message.id,
+    threadId: 'waiting-first', requesterId: 'alice', computerId: 'desktop',
+    task: 'chat_turn', payingGroupId: 'personal', status: 'failed',
+  });
+  expect(await test.process()).toBe(true);
   expect(await test.process()).toBe(false);
 });
 

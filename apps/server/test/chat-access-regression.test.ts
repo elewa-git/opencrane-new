@@ -1988,13 +1988,13 @@ async function checksParticipantAdmissionAfterColdHistory() {
       expectedAccessPosition };
     const removed = await participantRequest(context, remove);
     expect(removed.statusCode, removed.body).toBe(200);
-    expect(delayed).toBe(true);
     const before = await context.nats.store.head('participation-participants');
     const add = { id: 'revoked-target', action: 'add', participantId: 'bob',
       expectedAccessPosition: before };
     context.nats.store.head = removeTargetDuringAdmission;
     revokeTarget = true;
     const response = await participantRequest(context, add);
+    expect(delayed).toBe(true);
     expect(response.statusCode, response.body).toBe(409);
     expect(targetChecks).toBe(1);
     expect(await head('participation-participants')).toBe(before);
