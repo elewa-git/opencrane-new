@@ -1,9 +1,10 @@
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, expect, it } from 'vitest';
-import { proveNativePair } from './native-process-proof.ts';
+import { nativeDumpProtected, proveNativePair } from './native-process-proof.ts';
 
 const directories: string[] = [];
 
@@ -57,3 +58,52 @@ function writableRecordCannotPass(): void {
 }
 
 it('refuses a writable launch record', writableRecordCannotPass);
+
+function executedProcessesAreDumpable(): void {
+  const first = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    stdio: 'ignore',
+  });
+  const second = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    stdio: 'ignore',
+  });
+  try {
+    expect(first.pid).toBeDefined();
+    expect(second.pid).toBeDefined();
+    expect(nativeDumpProtected(first.pid!)).toBe(false);
+    expect(nativeDumpProtected(second.pid!)).toBe(false);
+  } finally {
+    first.kill('SIGKILL');
+    second.kill('SIGKILL');
+  }
+}
+
+it('measures both executed processes as dumpable', executedProcessesAreDumpable);
+
+async function protectedProcessHasRootOwnedStatus(): Promise<void> {
+  const code = [
+    'import ctypes',
+    'import time',
+    'assert ctypes.CDLL(None).prctl(4, 0, 0, 0, 0) == 0',
+    'time.sleep(10)',
+  ].join('\n');
+  const child = spawn('python3', ['-c', code], { stdio: 'ignore' });
+  try {
+    expect(child.pid).toBeDefined();
+    let protectedStatus = false;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const status = statSync(`/proc/${child.pid}/status`);
+      if (status.uid === 0) {
+        protectedStatus = true;
+        break;
+      }
+      await delay(10);
+    }
+    expect(protectedStatus).toBe(true);
+    expect(nativeDumpProtected(child.pid!)).toBe(true);
+  } finally {
+    child.kill('SIGKILL');
+  }
+}
+
+it('accepts proc ownership only after a live process disables dumps',
+  protectedProcessHasRootOwnedStatus);
