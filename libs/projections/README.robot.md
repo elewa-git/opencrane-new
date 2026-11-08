@@ -223,6 +223,8 @@ result, scope list, file reference or private text. Financial status is
 `unavailable` until the separately owned spend join exists. Replay and duplicate
 delivery restore the same entry without starting work. Run `npm run replay -- audit`
 on existing installations, then `npm run replay -- audit --verify`.
+The reference filter accepts the returned public id as well as existing event,
+request and permit references, so a list row can be found again by its shown id.
 
 Run `node --experimental-strip-types apps/ops/src/worker.ts audit` with the usual
 projection settings. `npm run replay -- audit --verify` replays metadata under the

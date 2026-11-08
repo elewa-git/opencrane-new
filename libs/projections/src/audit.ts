@@ -377,7 +377,8 @@ export async function readAudit(db: Query, silo: string,
   if (filter.reference) {
     parameters.push(filter.reference);
     const index = parameters.length;
-    where.push(`(event_id = $${index} OR request_id = $${index} OR permit_id = $${index})`);
+    where.push(`(event_id = $${index} OR public_id = $${index} OR
+      request_id = $${index} OR permit_id = $${index})`);
   }
   if (filter.before !== undefined) {
     parameters.push(filter.before);
