@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { testAuthConfig } from '@opencrane/auth/testing';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
@@ -452,6 +452,100 @@ async function removalDuringPersonaPointRead() {
 it('refuses and does not decrypt a persona removed during its point read',
   removalDuringPersonaPointRead);
 
+async function removalDuringSavedReceipt(source: 'retry' | 'append') {
+  const surveyPosition = await completeSurvey();
+  const first = await revise('receipt-first', surveyPosition, 'Private persona text');
+  expect(first.statusCode).toBe(200);
+  const firstReceipt = first.json<RevisionReceipt>();
+  const targetPosition = source === 'retry' ? firstReceipt.position : firstReceipt.position + 1;
+  const targetCommandId = source === 'retry' ? 'receipt-first' : 'receipt-second';
+  const read = nats.store.readStream.bind(nats.store);
+  const decrypt = keys.decrypt.bind(keys);
+  let removed = false;
+  let readSavedRecord = false;
+  let decryptedAfterRemoval = false;
+
+  nats.store.readStream = async function* removeDuringSavedRead(subject, from, deadline, closes) {
+    for await (const row of read(subject, from, deadline, closes)) {
+      if (subject === 'personal-alice' && from === targetPosition &&
+          row.event.commandId === targetCommandId && !removed) {
+        readSavedRecord = true;
+        await delay(50);
+        const removal = { ...event(`removed-during-${source}-receipt`, 'member-alice',
+          'member.removed'), data: { memberId: 'alice', removedBy: 'owner' } };
+        expect((await nats.store.append({ event: removal, expectedSequence: 1 })).status)
+          .toBe('appended');
+        removed = true;
+      }
+      yield row;
+    }
+  };
+  keys.decrypt = function detectDecryption(silo, conversation, value) {
+    if (removed) decryptedAfterRemoval = true;
+    return decrypt(silo, conversation, value);
+  };
+
+  let response;
+  try {
+    if (source === 'retry') {
+      response = await revise('receipt-first', surveyPosition, 'Private persona text');
+    } else {
+      response = await revise('receipt-second', firstReceipt.position, 'Another private text');
+    }
+  } finally {
+    nats.store.readStream = read;
+    keys.decrypt = decrypt;
+  }
+
+  expect(readSavedRecord).toBe(true);
+  expect(removed).toBe(true);
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+  expect(decryptedAfterRemoval).toBe(false);
+}
+it.each(['retry', 'append'] as const)(
+  'refuses and does not decrypt after removal during a %s receipt read',
+  removalDuringSavedReceipt);
+
+async function removalBeforeGeneratedPersona() {
+  const position = await completeSurvey();
+  const read = nats.store.readStream.bind(nats.store);
+  const decrypt = keys.decrypt.bind(keys);
+  let removed = false;
+  let decryptedAfterRemoval = false;
+
+  nats.store.readStream = async function* removeAfterHistory(subject, from, deadline, closes) {
+    yield* read(subject, from, deadline, closes);
+    if (subject === 'personal-alice' && !removed) {
+      const removal = { ...event('removed-before-persona-generation', 'member-alice',
+        'member.removed'), data: { memberId: 'alice', removedBy: 'owner' } };
+      expect((await nats.store.append({ event: removal, expectedSequence: 1 })).status)
+        .toBe('appended');
+      removed = true;
+    }
+  };
+  keys.decrypt = function detectDecryption(silo, conversation, value) {
+    if (removed) decryptedAfterRemoval = true;
+    return decrypt(silo, conversation, value);
+  };
+
+  let response;
+  try {
+    response = await revise('generated-after-removal', position);
+  } finally {
+    nats.store.readStream = read;
+    keys.decrypt = decrypt;
+  }
+
+  expect(removed).toBe(true);
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+  expect(decryptedAfterRemoval).toBe(false);
+  expect(await nats.store.head('personal-alice')).toBe(position);
+}
+it('does not open saved answers after removal during persona history loading',
+  removalBeforeGeneratedPersona);
+
 async function personaRefusals() {
   const position = await completeSurvey();
   expect((await revise('too-long', position, 'é'.repeat(2049))).statusCode).toBe(422);
@@ -507,3 +601,163 @@ async function personaRefusals() {
     'Should not save')).statusCode).toBe(403);
 }
 it('rejects excess UTF-8 bytes and stale or foreign revision access', personaRefusals);
+
+function approve(commandId: string, expectedPosition: number, revision: RevisionReceipt,
+  generation = 1, requestHeaders = headers) {
+  const payload = { operation: 'approve', commandId, generation, expectedPosition,
+    revision: revision.revision, revisionId: revision.revisionId };
+  return app.inject({ method: 'POST', url: '/api/onboarding/persona',
+    headers: requestHeaders, payload });
+}
+
+async function approvalRaceAndReplay() {
+  const surveyPosition = await completeSurvey();
+  const first = (await revise('approval-r1', surveyPosition, 'First')).json<RevisionReceipt>();
+  const second = (await revise('approval-r2', first.position, 'Private second'))
+    .json<RevisionReceipt>();
+  const append = nats.store.append.bind(nats.store);
+  const bothReady = Promise.withResolvers<void>();
+  let waiting = 0;
+  nats.store.append = async function waitForBoth(command) {
+    waiting += 1;
+    if (waiting === 2) bothReady.resolve();
+    await bothReady.promise;
+    return append(command);
+  };
+  const responses = await Promise.all([
+    approve('approve-r2', second.position, second),
+    revise('approval-r3', second.position, 'Third'),
+  ]);
+  nats.store.append = append;
+  function statusCode(response: typeof responses[number]) {
+    return response.statusCode;
+  }
+  const statuses = responses.map(statusCode);
+  expect(statuses.sort()).toEqual([200, 409]);
+  const current = (await app.inject({ url: '/api/onboarding', headers })).json<{
+    approval: { revision: number; revisionId: string; time: string } | null;
+  }>();
+  const approved = responses[0].statusCode === 200;
+  if (approved) {
+    expect(current.approval).toMatchObject({ revision: 2, revisionId: second.revisionId });
+    const receipt = responses[0].json<RevisionReceipt>();
+    expect((await approve('approve-r2', second.position, second)).json()).toEqual(receipt);
+    expect((await approve('approve-r2', second.position, first)).statusCode).toBe(409);
+  } else {
+    expect(current.approval).toBeNull();
+  }
+  await runner.run(personalSettings);
+  const projected = await readSurvey(pgDb(dbs.queue), 'test', 'alice');
+  const encrypt = vi.spyOn(keys, 'encrypt').mockImplementation(function refuseEncryption() {
+    throw new Error('Replay must not encrypt');
+  });
+  const decrypt = vi.spyOn(keys, 'decrypt').mockImplementation(function refuseDecryption() {
+    throw new Error('Replay must not decrypt');
+  });
+  await runner.rebuild(personalSettings);
+  encrypt.mockRestore();
+  decrypt.mockRestore();
+  expect(await readSurvey(pgDb(dbs.queue), 'test', 'alice')).toEqual(projected);
+  if (approved) {
+    expect(projected).toMatchObject({ approvedRevision: 2,
+      approvedTime: current.approval?.time });
+  } else {
+    expect(projected).not.toHaveProperty('approvedRevision');
+  }
+}
+it('selects one exact revision under a competing edit and replays its approval time',
+  approvalRaceAndReplay, 60_000);
+
+async function approvalStatusAndAccess() {
+  const surveyPosition = await completeSurvey();
+  const revision = (await revise('status-revision', surveyPosition, 'Private original'))
+    .json<RevisionReceipt>();
+  const eventCountBeforeApproval = await nats.store.head();
+  const append = nats.store.append.bind(nats.store);
+  nats.store.append = async function loseReply(command) {
+    await append(command);
+    throw new Error('Reply lost');
+  };
+  const lost = await approve('lost-approval', revision.position, revision);
+  nats.store.append = append;
+  expect(lost.json()).toEqual({ status: 'unknown' });
+  expect(await nats.store.head()).toBe(eventCountBeforeApproval + 1);
+  const savedPosition = await nats.store.head('personal-alice');
+  const status = await app.inject({ url: '/api/personal/changes/lost-approval', headers });
+  expect(status.json()).toMatchObject({ status: 'confirmed', revision: 1,
+    revisionId: revision.revisionId, operation: 'onboarding.persona_approved' });
+  expect(await nats.store.head('personal-alice')).toBe(savedPosition);
+  expect((await approve('lost-approval', revision.position, revision)).json())
+    .toEqual(status.json());
+  expect((await approve('lost-approval', revision.position,
+    { ...revision, revisionId: 'different' })).statusCode).toBe(409);
+  const afterApproval = status.json<PositionReceipt>().position;
+  const next = (await revise('later-revision', afterApproval, 'Private later'))
+    .json<RevisionReceipt>();
+  expect((await approve('stale', afterApproval, revision)).statusCode).toBe(409);
+  expect((await approve('mismatch', next.position,
+    { ...next, revisionId: revision.revisionId })).statusCode).toBe(409);
+  const current = await app.inject({ url: '/api/onboarding', headers });
+  expect(current.json()).toMatchObject({ approval: { revision: 1,
+    revisionId: revision.revisionId }, currentRevision: 2 });
+  const restart = await post({ operation: 'restart', commandId: 'after-approval',
+    generation: 1, expectedPosition: next.position });
+  expect(restart.statusCode).toBe(200);
+  expect((await app.inject({ url: '/api/onboarding', headers })).json())
+    .toMatchObject({ approval: { revision: 1, revisionId: revision.revisionId,
+      time: current.json<{ approval: { time: string } }>().approval.time } });
+  const bobHeaders = { ...headers, cookie: `${config.cookieName}=${encodeSession(config,
+    { ...session, sub: 'bob' })}` };
+  expect((await approve('foreign', restart.json<PositionReceipt>().position,
+    revision, 2, bobHeaders)).statusCode).toBe(403);
+  expect((await app.inject({ url: '/api/personal/changes/lost-approval',
+    headers: bobHeaders })).statusCode).toBe(403);
+  const wrongOrganisation = { ...headers, cookie: `${config.cookieName}=${encodeSession(config,
+    { ...session, orgId: 'other-org' })}` };
+  expect((await approve('wrong-silo', restart.json<PositionReceipt>().position,
+    revision, 2, wrongOrganisation)).statusCode).toBe(403);
+  const removal = { ...event('approval-removal', 'member-alice', 'member.removed'),
+    data: { memberId: 'alice', removedBy: 'owner' } };
+  expect((await nats.store.append({ event: removal, expectedSequence: 1 })).status)
+    .toBe('appended');
+  expect((await app.inject({ url: '/api/onboarding', headers })).statusCode).toBe(403);
+  expect((await approve('removed-approval', restart.json<PositionReceipt>().position,
+    revision, 2)).statusCode).toBe(403);
+  for await (const row of nats.store.readStream('personal-alice')) {
+    expect(JSON.stringify(row.event)).not.toContain('Private original');
+    expect(row.event.type.startsWith('onboarding.')).toBe(true);
+  }
+}
+it('recovers a lost approval reply, preserves the old choice and refuses foreign access',
+  approvalStatusAndAccess);
+
+async function slowApprovalHistory() {
+  const position = await completeSurvey();
+  const revision = (await revise('slow-revision', position, 'Saved version'))
+    .json<RevisionReceipt>();
+  const read = nats.store.readStream.bind(nats.store);
+  const head = nats.store.head.bind(nats.store);
+  let historyFinished = false;
+  const shortChecks: { subject: string | undefined; historyFinished: boolean }[] = [];
+  nats.store.readStream = async function* delayedHistory(subject, from, deadline, closes) {
+    if (subject === 'personal-alice') await delay(2100);
+    yield* read(subject, from, deadline, closes);
+    if (subject === 'personal-alice') historyFinished = true;
+  };
+  nats.store.head = async function checkedHead(subject, deadline) {
+    if ((deadline ?? Infinity) - performance.now() <= 2000) {
+      shortChecks.push({ subject, historyFinished });
+    }
+    return head(subject, deadline);
+  };
+  const response = await approve('slow-approval', revision.position, revision);
+  nats.store.readStream = read;
+  nats.store.head = head;
+  expect(response.statusCode).toBe(200);
+  expect(shortChecks.length).toBeGreaterThan(1);
+  for (const check of shortChecks) {
+    expect(check.historyFinished).toBe(true);
+    expect(check.subject === undefined || check.subject === 'member-alice').toBe(true);
+  }
+}
+it('loads approval history before the short member access check', slowApprovalHistory);

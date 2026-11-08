@@ -1,5 +1,5 @@
 import { parseEventByType, surveyRestartedDataSchema, surveyStepSavedDataSchema,
-  personaRevisedDataSchema,
+  personaRevisedDataSchema, personaApprovedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import { readStreamSummary, readEventAt, type StoredEvent, type SummaryKind }
   from '@opencrane/event-store';
@@ -12,16 +12,38 @@ export type PersonaReference = { revision: number; sequence: number; eventId: st
   time: string; generation: number };
 type Survey = { generation: number; position: number; steps: StoredEvent[];
   commands: Map<string, Reference>; revisions: PersonaReference[];
-  currentRevision: number | null };
+  currentRevision: number | null;
+  approval: { revision: number; revisionId: string; time: string } | null };
 function empty(): Survey {
   return { generation: 1, position: 0, steps: [], commands: new Map(),
-    revisions: [], currentRevision: null };
+    revisions: [], currentRevision: null, approval: null };
+}
+function addApproval(survey: Survey, row: StoredEvent) {
+  const data = personaApprovedDataSchema.parse(row.event.data);
+  const candidate = survey.revisions.at(-1);
+  if (data.generation !== survey.generation || survey.currentRevision !== data.revision ||
+      candidate?.eventId !== data.revisionId) {
+    throw new Error('Invalid persona approval');
+  }
+  survey.approval = { revision: data.revision, revisionId: data.revisionId,
+    time: row.event.time };
+}
+function addRevision(survey: Survey, row: StoredEvent) {
+  const data = personaRevisedDataSchema.parse(row.event.data);
+  if (data.generation !== survey.generation || survey.steps.length !== 4 ||
+      data.revision !== survey.revisions.length + 1) {
+    throw new Error('Invalid persona revision');
+  }
+  survey.revisions.push({ revision: data.revision, sequence: row.sequence,
+    eventId: row.event.id, time: row.event.time, generation: data.generation });
+  survey.currentRevision = data.revision;
 }
 function add(survey: Survey, row: StoredEvent) {
   const event = row.event;
   if (event.type !== 'onboarding.survey_step_saved' &&
       event.type !== 'onboarding.survey_restarted' &&
-      event.type !== 'onboarding.persona_revised') return;
+      event.type !== 'onboarding.persona_revised' &&
+      event.type !== 'onboarding.persona_approved') return;
   if (!parseEventByType(event).success || !event.commandId) {
     throw new Error('Invalid survey event');
   }
@@ -33,15 +55,10 @@ function add(survey: Survey, row: StoredEvent) {
     survey.generation = data.generation;
     survey.steps = [];
     survey.currentRevision = null;
+  } else if (event.type === 'onboarding.persona_approved') {
+    addApproval(survey, row);
   } else if (event.type === 'onboarding.persona_revised') {
-    const data = personaRevisedDataSchema.parse(event.data);
-    if (data.generation !== survey.generation || survey.steps.length !== 4 ||
-        data.revision !== survey.revisions.length + 1) {
-      throw new Error('Invalid persona revision');
-    }
-    survey.revisions.push({ revision: data.revision, sequence: row.sequence,
-      eventId: event.id, time: event.time, generation: data.generation });
-    survey.currentRevision = data.revision;
+    addRevision(survey, row);
   } else {
     const data = surveyStepSavedDataSchema.parse(event.data);
     if (data.generation !== survey.generation || data.step > survey.steps.length + 1) {
@@ -75,8 +92,14 @@ export function surveyReceipt(row: StoredEvent) {
 }
 export function personaReceipt(row: StoredEvent) {
   const receipt = surveyReceipt(row);
-  const data = personaRevisedDataSchema.parse(row.event.data);
-  return { ...receipt, revision: data.revision, revisionId: row.event.id };
+  let data: { revision: number; revisionId: string };
+  if (row.event.type === 'onboarding.persona_approved') {
+    data = personaApprovedDataSchema.parse(row.event.data);
+  } else {
+    const revised = personaRevisedDataSchema.parse(row.event.data);
+    data = { revision: revised.revision, revisionId: row.event.id };
+  }
+  return { ...receipt, revision: data.revision, revisionId: data.revisionId };
 }
 export async function savedCommand(options: ChatOptions, memberId: string, commandId: string,
   history: Awaited<ReturnType<typeof surveyHistory>>) {

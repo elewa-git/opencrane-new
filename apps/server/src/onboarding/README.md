@@ -1,6 +1,24 @@
 # Onboarding
 
-This folder saves a member's welcome survey and persona revisions. Reloading restores both. Private answers and persona text are encrypted. Saving does not start an assistant or spend money.
+## What this is
+
+This folder saves a member's welcome survey and persona revisions. Reloading
+restores both. Private answers and persona text are encrypted. A member can
+approve one saved version for later use. Saving does not start an assistant or
+spend money.
+
+## Where it fits
+
+The website sends survey and persona requests to the server. This folder checks
+membership and saves each change in the member's personal event history.
+
+```mermaid
+flowchart LR
+  web[Website] --> onboarding[Onboarding routes]
+  onboarding --> access[Member access]
+  onboarding --> events[Personal events]
+  events --> tables[Read tables]
+```
 
 ## What it is responsible for
 
@@ -12,13 +30,19 @@ This folder saves a member's welcome survey and persona revisions. Reloading res
 - Returns the original saved confirmation when a reply is lost.
 - Builds the same first persona from the same saved answers and keeps every edited version.
 - Lists revision dates and opens one version for its member after an access check.
+- Approves the exact current version and shows its saved time and original receipt.
 
 Reads check current membership after loading, before opening private answers.
 Opening a persona revision loads that version before checking membership. Writes
 finish history loading before the short access check. Each accepted request saves
-one record. Changed retries and competing edits are refused; an uncertain save
-stays unknown until its original result can be read. These requests use the
-member's personal encryption keys rather than conversation keys.
+one record. Repeated requests check membership again after loading the original
+receipt, before comparing private content. Changed retries and competing edits
+are refused; an uncertain save stays unknown until its original result can be
+read. Generating a persona also checks membership before opening saved answers.
+These requests use the member's personal encryption keys rather than conversation
+keys.
+Approval keeps its chosen version after a later edit or survey restart. It does
+not change assistant settings or grants.
 
 ## Main files
 

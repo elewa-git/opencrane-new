@@ -71,10 +71,14 @@ export const personaRevisedDataSchema = z.strictObject({
 }).refine(hasMatchingPersonaDigest, {
   path: ['encryptedDigest'], message: 'Digest does not match encrypted bytes',
 });
+export const personaApprovedDataSchema = z.strictObject({
+  ...identity, revision: z.int().positive(), revisionId: chatIdSchema,
+});
 const personalIdentitySchema = z.object({ memberId: chatIdSchema });
 export function validSurveyEvent(record: EventEnvelope): boolean {
   if (!record.type.startsWith('onboarding.survey_') &&
-      record.type !== 'onboarding.persona_revised') {
+      record.type !== 'onboarding.persona_revised' &&
+      record.type !== 'onboarding.persona_approved') {
     return true;
   }
   const parsed = personalIdentitySchema.safeParse(record.data);
@@ -103,4 +107,7 @@ export const surveyEvents: readonly EventDefinition[] = [
     { ...exampleIdentity, revision: 1, rendererVersion: 'persona-v1', mode: 'generate',
       encrypted: savedExample.ciphertext, encryptedDigest: savedExample.ciphertextDigest,
       keyRef: savedExample.keyId }),
+  event('onboarding.persona_approved', 'personal',
+    'A member approved one exact saved persona revision.', personaApprovedDataSchema,
+    { ...exampleIdentity, revision: 1, revisionId: 'persona-revision-1' }),
 ];

@@ -61,7 +61,10 @@ export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, o
       const recentReferences = references.slice(-20);
       const recentReceipts = recentReferences.map(receiptFor);
       const survey = { generation: history.generation, position: history.position, nextStep, steps };
-      return { state, allowedActions: ['save_step', 'restart'], recentReceipts, survey };
+      const allowedActions = ['save_step', 'restart'];
+      if (history.currentRevision !== null) allowedActions.push('approve');
+      return { state, allowedActions, recentReceipts, survey,
+        currentRevision: history.currentRevision, approval: history.approval };
     } catch (error) {
       return surveyRefusal(reply, error);
     }
@@ -76,7 +79,8 @@ async function readSpecial(request: FastifyRequest, options: ChatOptions,
     const { commandId } = parameters.parse(request.params);
     const saved = await savedCommand(options, memberId, commandId, history);
     if (!saved) return { status: 'unknown' };
-    if (saved.row.event.type === 'onboarding.persona_revised') {
+    if (saved.row.event.type === 'onboarding.persona_revised' ||
+        saved.row.event.type === 'onboarding.persona_approved') {
       return personaReceipt(saved.row);
     }
     return surveyReceipt(saved.row);
@@ -96,13 +100,17 @@ function listRevisions(request: FastifyRequest, history: History) {
   function metadata(reference: typeof page[number]) {
     return { revision: reference.revision, revisionId: reference.eventId,
       position: reference.sequence, generation: reference.generation,
-      time: reference.time, current: reference.revision === history.currentRevision };
+      time: reference.time, current: reference.revision === history.currentRevision,
+      approved: reference.revision === history.approval?.revision,
+      approvedTime: reference.revision === history.approval?.revision ?
+        history.approval.time : null };
   }
   const revisions = page.map(metadata);
   const last = page.at(-1);
   let nextBefore: number | null = null;
   if (last && selected.length > page.length) nextBefore = last.revision;
-  return { revisions, nextBefore, currentRevision: history.currentRevision };
+  return { revisions, nextBefore, currentRevision: history.currentRevision,
+    approval: history.approval };
 }
 async function readRevision(request: FastifyRequest, reply: FastifyReply,
   options: ChatOptions, memberId: string, history: History) {
@@ -118,7 +126,10 @@ async function readRevision(request: FastifyRequest, reply: FastifyReply,
   if (!reference || !row) return reply.code(404).send({ status: 'not_found' });
   const replacement = decryptPersona(options, memberId, row.event);
   return { ...personaReceipt(row), generation: reference.generation,
-    current: reference.revision === history.currentRevision, replacement };
+    current: reference.revision === history.currentRevision,
+    approved: reference.revision === history.approval?.revision,
+    approvedTime: reference.revision === history.approval?.revision ?
+      history.approval.time : null, replacement };
 }
 
 function surveyRefusal(reply: FastifyReply, error: unknown) {

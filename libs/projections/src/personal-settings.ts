@@ -1,5 +1,5 @@
 import { parseEventByType, surveyStepSavedDataSchema, surveyRestartedDataSchema,
-  personaRevisedDataSchema,
+  personaRevisedDataSchema, personaApprovedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import type { Query } from './db.ts';
 import type { Projection } from './runner.ts';
@@ -8,7 +8,8 @@ type SavedStep = { step: number; ciphertext: string; ciphertextDigest: string; k
   eventId: string; commandId: string; time: string; position: number };
 type Survey = { generation: number; steps: SavedStep[]; nextStep: number | null;
   position: number; currentRevision?: number; currentRevisionId?: string;
-  revisionCount?: number };
+  revisionCount?: number; approvedRevision?: number; approvedRevisionId?: string;
+  approvedTime?: string };
 
 async function create(db: Query): Promise<void> {
   await db.query(`CREATE TABLE IF NOT EXISTS personal_settings (
@@ -52,6 +53,17 @@ async function revisePersona(db: Query, survey: Survey, event: EventEnvelope, po
   survey.currentRevisionId = event.id;
   survey.revisionCount = revised.revision;
 }
+function approvePersona(survey: Survey, event: EventEnvelope) {
+  const approved = personaApprovedDataSchema.parse(event.data);
+  if (approved.generation !== survey.generation ||
+      approved.revision !== survey.currentRevision ||
+      approved.revisionId !== survey.currentRevisionId) {
+    throw new Error('Invalid persona approval');
+  }
+  survey.approvedRevision = approved.revision;
+  survey.approvedRevisionId = approved.revisionId;
+  survey.approvedTime = event.time;
+}
 function saveStep(survey: Survey, event: EventEnvelope, position: number, commandId: string) {
   const data = surveyStepSavedDataSchema.parse(event.data);
   if (data.generation !== survey.generation || data.step > survey.steps.length + 1) {
@@ -70,14 +82,15 @@ function saveStep(survey: Survey, event: EventEnvelope, position: number, comman
 async function apply(db: Query, event: EventEnvelope, position: number): Promise<void> {
   if (event.type !== 'onboarding.survey_step_saved' &&
       event.type !== 'onboarding.survey_restarted' &&
-      event.type !== 'onboarding.persona_revised') {
+      event.type !== 'onboarding.persona_revised' &&
+      event.type !== 'onboarding.persona_approved') {
     return;
   }
   if (!parseEventByType(event).success || !event.commandId) {
     throw new Error('Invalid survey event');
   }
   const dataSchema = surveyStepSavedDataSchema.or(surveyRestartedDataSchema)
-    .or(personaRevisedDataSchema);
+    .or(personaRevisedDataSchema).or(personaApprovedDataSchema);
   const data = dataSchema.parse(event.data);
   const current = await readSurvey(db, event.silo, data.memberId);
   const survey: Survey = current ?? { generation: 1, steps: [], nextStep: 1, position: 0 };
@@ -85,6 +98,8 @@ async function apply(db: Query, event: EventEnvelope, position: number): Promise
     restartSurvey(survey, event);
   } else if (event.type === 'onboarding.persona_revised') {
     await revisePersona(db, survey, event, position);
+  } else if (event.type === 'onboarding.persona_approved') {
+    approvePersona(survey, event);
   } else {
     saveStep(survey, event, position, event.commandId);
   }
