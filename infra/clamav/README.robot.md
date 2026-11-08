@@ -360,8 +360,8 @@ digests. Its validation function checks current image bytes and scanner settings
 then each part's fresh result. Errors expose only `image_scan_unavailable`.
 Scratch cleanup errors also return that fixed result, without a private path.
 
-The walk is private and has no worker caller, event writer or admission effect. A
-clean local fixture does not authorise hosted execution. Production scanner release,
+The walk is private and has no event writer or admission effect. A clean local
+fixture does not authorise hosted execution. Production scanner release,
 fresh-install journey and live scanner qualification remain NOT RUN.
 
 `scanHostedImageAttempt` takes a saved checking attempt separately from the supplied
@@ -378,3 +378,15 @@ replies, cancellation and expiry refuse the whole scan. The caller retains no
 portable proof. This function does not write an image event. Signature,
 vulnerability and licence checks still need their separate production worker
 composition before any clean image can be admitted.
+
+`image-worker.mjs` is a private production callable for one attempt. It reads
+`readHostedImageScanAttempt` before asking its trusted image preparation callback
+for bytes. It calls the layer walk and authenticated image-part client. After the
+last part, it reads the active attempt again, obtains current deployment scanner
+settings, and calls the walk's validation function. It returns only `clean`,
+`infected` or the fixed unavailable result. Missing or changed attempts, expiry,
+cancellation and changed scanner settings refuse. It holds no portable proof and
+does not write `mcp.image_checked`. There is no production image source, scheduler,
+signature, vulnerability or licence worker composition yet. The production enable
+switch and admission remain closed. Fresh-install two-silo, deployed custody and
+rotation qualification are NOT RUN.

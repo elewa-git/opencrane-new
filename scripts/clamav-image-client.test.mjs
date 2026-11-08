@@ -9,7 +9,6 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { sharedCertificates } from '../libs/event-store/test/certificates.ts';
 import { createScannerService } from '../infra/clamav/service.mjs';
 import { scanImagePart } from '../infra/clamav/image-client.mjs';
-import { scanHostedImageAttempt } from '../infra/clamav/image-walk.mjs';
 import { runHostedImageScan } from '../infra/clamav/image-worker.mjs';
 import { envelope } from '../libs/models/src/actor.ts';
 
@@ -22,6 +21,7 @@ vi.mock('node:fs/promises', filesystem);
 let directory, server, settings, tls, updated, mode, previous;
 let received, requests;
 const bytes = Buffer.from('clean part');
+const eicar = Buffer.from('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*');
 const binding = { silo: 'first', serverId: 'server-one', attemptId: 1,
   platform: 'linux/amd64', targetImageDigest: 'c'.repeat(64) };
 function hash(content) {
@@ -64,7 +64,7 @@ function savedImageStore(image) {
   const data = { serverId: image.serverId, registeredBy: 'alice', kind: 'hosted',
     locator: `example.invalid/image@sha256:${image.imageDigest}`,
     installation: { attemptId: 1, platform: image.platform,
-      upstream: { host: 'example.invalid', port: 443 } } };
+      upstream: { host: 'api.github.com', port: 443 } } };
   const event = envelope(image.silo, `mcp-${image.serverId}`, 'mcp.server_registered', data);
   event.principal = { kind: 'human', id: 'alice' };
   const rows = [{ event, sequence: 1 }];
@@ -72,6 +72,27 @@ function savedImageStore(image) {
     if (subject === event.subject) yield* rows;
   }
   return { readStream, rows };
+}
+async function refuseAlteredImages(image, currentSettings, scannedCount) {
+  const changedBytes = { ...image, layers: [
+    { ...image.layers[0], bytes: Buffer.from('changed bytes') },
+  ] };
+  const candidates = [
+    changedBytes,
+    { ...image, imageDigest: 'd'.repeat(64) },
+    { ...image, platform: 'linux/arm64' },
+    { ...image, attemptId: 2 },
+    { ...image, layers: [] },
+  ];
+  async function settingsAgain() { return currentSettings; }
+  for (const candidate of candidates) {
+    async function candidateBytes() { return candidate; }
+    const store = savedImageStore(image);
+    const result = await runHostedImageScan(store, image.silo, image.serverId,
+      candidateBytes, settingsAgain);
+    expect(result.verdict).toBe('unavailable');
+    expect(received).toHaveLength(scannedCount);
+  }
 }
 function facts(input) {
   const now = Date.now();
@@ -149,7 +170,7 @@ async function twoSilos() {
     await bothArrived;
     const scanned = { sha256: input.sha256, byteCount: input.byteCount };
     const result = facts(scanned);
-    if (input.bytes.equals(Buffer.from('infected part'))) {
+    if (input.bytes.equals(eicar)) {
       result.verdict = 'infected';
     }
     return result;
@@ -162,7 +183,7 @@ async function twoSilos() {
   other.url = settings.url;
   const second = { silo: 'second', serverId: 'server-two', attemptId: 1,
     platform: 'linux/arm64' };
-  const infected = Buffer.from('infected part');
+  const infected = Buffer.from(eicar);
   const firstImage = imageWithPart(bytes, binding);
   const secondImage = imageWithPart(infected, second);
   const firstStore = savedImageStore(firstImage.image);
@@ -178,6 +199,55 @@ async function twoSilos() {
   expect(results[0].verdict).toBe('clean');
   expect(results[1].verdict).toBe('infected');
   expect(received).toHaveLength(2);
+  await refuseAlteredImages(firstImage.image, settings, 2);
+
+  const absentStore = savedImageStore(firstImage.image);
+  absentStore.rows.length = 0;
+  let prepared = 0;
+  async function countPreparation() {
+    prepared += 1;
+    return firstImage.image;
+  }
+  const absent = await runHostedImageScan(absentStore, 'first', 'server-one',
+    countPreparation, firstSettings);
+  expect(absent.verdict).toBe('unavailable');
+  expect(prepared).toBe(0);
+  expect(received).toHaveLength(2);
+
+  const changedStore = savedImageStore(firstImage.image);
+  let settingReads = 0;
+  async function changedSettings() {
+    settingReads += 1;
+    if (settingReads === 2) {
+      return { ...settings, manifestDigest: `sha256:${'c'.repeat(64)}` };
+    }
+    return settings;
+  }
+  const changed = await runHostedImageScan(changedStore, 'first', 'server-one',
+    firstImageBytes, changedSettings);
+  expect(changed.verdict).toBe('unavailable');
+
+  const replacedStore = savedImageStore(firstImage.image);
+  let replacementReads = 0;
+  async function replaceAttempt() {
+    replacementReads += 1;
+    if (replacementReads === 1) replacedStore.rows.length = 0;
+    return settings;
+  }
+  const replaced = await runHostedImageScan(replacedStore, 'first', 'server-one',
+    firstImageBytes, replaceAttempt);
+  expect(replaced.verdict).toBe('unavailable');
+
+  const cancelled = new AbortController();
+  let cancellationReads = 0;
+  async function cancelAfterScan() {
+    cancellationReads += 1;
+    if (cancellationReads === 2) cancelled.abort();
+    return settings;
+  }
+  const stopped = await runHostedImageScan(savedImageStore(firstImage.image), 'first',
+    'server-one', firstImageBytes, cancelAfterScan, cancelled.signal);
+  expect(stopped.verdict).toBe('unavailable');
 }
 test('production worker interleaves saved attempts from two trusted silos', twoSilos);
 
