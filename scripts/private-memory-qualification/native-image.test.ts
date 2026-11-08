@@ -91,6 +91,16 @@ const proofFaults: [string, string, string][] = [
   ['live swap allowance', 'const protection = probeContainer();',
     "const protection = 'swap_not_disabled';"],
   ['lost kernel probe', 'return helper.pidAlive(pid) === true;', 'return false;'],
+  ['dumpable wrapper', 'const wrapperDumpProtected = nativeDumpProtected(binding.wrapperPid);',
+    'const wrapperDumpProtected = false;'],
+  ['dumpable native child', 'const childDumpProtected = nativeDumpProtected(binding.childPid);',
+    'const childDumpProtected = false;'],
+  ['wrapper became dumpable',
+    'const finalWrapperDumpProtected = nativeDumpProtected(binding.wrapperPid);',
+    'const finalWrapperDumpProtected = false;'],
+  ['native child became dumpable',
+    'const finalChildDumpProtected = nativeDumpProtected(binding.childPid);',
+    'const finalChildDumpProtected = false;'],
 ];
 for (const feature of ['shell_tool', 'unified_exec', 'code_mode_host', 'apps',
   'plugins', 'remote_plugin', 'multi_agent', 'shell_snapshot', 'memories']) {
@@ -131,12 +141,23 @@ function load(url, context, next) {
     const source = originalSource.replace('30_000', '200');
     return { ...loaded, source };
   }
-  if (url.endsWith('/native-process-proof.ts') && proofFault) {
-    const source = String(loaded.source);
-    if (!source.includes(proofFault[1])) {
-      process.exit(2);
+  if (url.endsWith('/native-process-proof.ts')) {
+    let source = String(loaded.source);
+    if (process.env.CASE !== 'dumpable native') {
+      const entry = 'export function nativeDumpProtected(pid: number): boolean {';
+      if (!source.includes(entry)) {
+        process.exit(2);
+      }
+      // Keep the other fault cases focused on their own guard.
+      source = source.replace(entry, entry + ' return true;');
     }
-    return { ...loaded, source: source.replace(proofFault[1], proofFault[2]) };
+    if (proofFault) {
+      if (!source.includes(proofFault[1])) {
+        process.exit(2);
+      }
+      source = source.replace(proofFault[1], proofFault[2]);
+    }
+    return { ...loaded, source };
   }
   if (url.endsWith('/native-checks.ts')) {
     let source = String(loaded.source);
@@ -336,6 +357,12 @@ function safeNative(): void {
 }
 it('observes two simultaneous pinned native processes and keeps qualification incomplete',
   safeNative, 60_000);
+function refusesActualDumpableNative(): void {
+  const expected = { result: 'FAIL', reason: 'journey_failed' };
+  expect(run('dumpable native')).toEqual(expected);
+}
+it('refuses the actual executed native processes when they are dumpable',
+  refusesActualDumpableNative, 60_000);
 function refusesFault(name: string): void {
   const expected = { result: 'FAIL', reason: 'journey_failed' };
   expect(run(name)).toEqual(expected);

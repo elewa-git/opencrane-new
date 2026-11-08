@@ -38,7 +38,9 @@ function processNumbers(pid: number): { parent: number; group: number; start: st
   if (delimiter < 0) {
     throw new Error('private_process_unreadable');
   }
-  const fields = stat.slice(delimiter + 2).trimEnd().split(' ');
+  const fieldText = stat.slice(delimiter + 2);
+  const trimmedFields = fieldText.trimEnd();
+  const fields = trimmedFields.split(' ');
   const parent = Number(fields[1]);
   const group = Number(fields[2]);
   const start = fields[19];
@@ -75,6 +77,17 @@ function coreProtected(pid: number): boolean {
   const limits = readFileSync(`/proc/${pid}/limits`, 'utf8');
   const matches = limits.match(/^Max core file size\s+0\s+0\s+bytes[ \t]*$/gmu);
   return matches?.length === 1;
+}
+
+export function nativeDumpProtected(pid: number): boolean {
+  const dumpSetting = readFileSync('/proc/sys/fs/suid_dumpable', 'utf8');
+  if (dumpSetting !== '0\n') {
+    return false;
+  }
+  // Use proc file ownership to check the executed process. Linux gives a
+  // non-dumpable process's proc files to root when fs.suid_dumpable is 0.
+  const processStatus = statSync(`/proc/${pid}/status`);
+  return processStatus.uid === 0;
 }
 
 type KernelProbe = { pidAlive(pid: number): unknown };
@@ -155,6 +168,11 @@ export function proveNativePair(binding: NativeBinding): true | ProtectionFailur
     if (!identitiesMatch(binding, firstWrapper, firstChild)) {
       return 'private_process_identity_changed';
     }
+    const wrapperDumpProtected = nativeDumpProtected(binding.wrapperPid);
+    const childDumpProtected = nativeDumpProtected(binding.childPid);
+    if (!wrapperDumpProtected || !childDumpProtected) {
+      return 'process_dumpable';
+    }
     const protection = probeContainer();
     if (protection !== true) {
       return protection;
@@ -165,6 +183,11 @@ export function proveNativePair(binding: NativeBinding): true | ProtectionFailur
         !sameProcessIdentity(firstChild, secondChild) ||
         !identitiesMatch(binding, secondWrapper, secondChild)) {
       return 'private_process_identity_changed';
+    }
+    const finalWrapperDumpProtected = nativeDumpProtected(binding.wrapperPid);
+    const finalChildDumpProtected = nativeDumpProtected(binding.childPid);
+    if (!finalWrapperDumpProtected || !finalChildDumpProtected) {
+      return 'process_dumpable';
     }
     return true;
   } catch {

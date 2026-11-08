@@ -74,7 +74,10 @@ journeys as NOT RUN. For private turns, it requires the pinned Codex executable,
 two fresh empty threads, disabled tools, separate homes in RAM and safe process limits.
 It holds one private turn with a local response server, without a paid model call.
 During that turn it checks both process identities, their parent and child link, their
-protected launch record, zero core limits and the container's zero swap allowance.
+protected launch record, zero core limits, dumpability after each executable starts,
+and the container's zero swap allowance. A closed model response ends the held-turn
+proof. Executed processes that remain dumpable refuse the check, even when their core
+limits are zero.
 It closes the first process and checks that its home is gone while the second still
 answers with its original identity. It then closes and checks the second before returning
 PARTIAL for private turns. Recall checks require the same native observations and

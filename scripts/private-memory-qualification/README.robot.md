@@ -425,9 +425,23 @@ Missing records, changed identities, a second child and failed probes refuse. Cl
 stops both processes, removes their private homes and removes the launch records.
 After collector loss, the supervisor removes only homes named by this run's protected
 records, using the challenge to leave other turns alone.
-This proves only the two native process groups during this held check. The canary helper,
+When the check passes, it proves only the two native process groups during this held check.
+The canary helper,
 joined inventory, persistence scans and full fresh-install journeys remain unproved;
 admission stays disabled.
+
+The runner now checks `/proc/<pid>/status` file ownership for the wrapper and child
+after each executable starts, and checks both again after the container probe. With
+`fs.suid_dumpable=0`, Linux gives a non-dumpable process's proc files to root.
+The checked processes run as UID 1003, so a status file owned by UID 1003 refuses as
+`process_dumpable` ([Linux proc ownership](https://man7.org/linux/man-pages/man5/proc_pid.5.html)).
+This indirect check applies to both live PIDs. The current pinned
+launcher does not set dumpability again after exec, so the real native check refuses
+until that executable path can protect both processes. The disposable image's other
+fault cases substitute protected ownership only to exercise their own checks; its
+real-process case expects refusal. Zero core limits do not protect a dumpable process
+from a pipe-based kernel collector. The local model server also clears its held-request
+state when the response closes and checks that state around awaited measurements.
 Only the test loader substitutes bad observations or faults. The ordinary package
 now carries the native runtime and production launch helpers, but remains unqualified.
 Those shipped files and safe host settings remain prerequisites for a deployment run.

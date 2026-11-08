@@ -6,7 +6,7 @@ import {
   statSync, writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { createServer, type Server } from 'node:http';
+import { createServer, type Server, type ServerResponse } from 'node:http';
 import type { Readable, Writable } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
@@ -33,11 +33,13 @@ function pinnedBinary(): string {
 function processIdentity(nativePid: number): string {
   const base = `/proc/${nativePid}`;
   const stat = readFileSync(`${base}/stat`, 'utf8');
-  const fieldsText = stat.slice(stat.lastIndexOf(')') + 2);
+  const delimiter = stat.lastIndexOf(')');
+  const fieldsText = stat.slice(delimiter + 2);
   const fields = fieldsText.split(' ');
   assert.match(fields[19] ?? '', /^[0-9]+$/u);
   const runnerStat = readFileSync('/proc/self/stat', 'utf8');
-  const runnerText = runnerStat.slice(runnerStat.lastIndexOf(')') + 2);
+  const runnerDelimiter = runnerStat.lastIndexOf(')');
+  const runnerText = runnerStat.slice(runnerDelimiter + 2);
   const runnerFields = runnerText.split(' ');
   assert.equal(fields[2], runnerFields[2]);
   const limits = readFileSync(`${base}/limits`, 'utf8');
@@ -235,16 +237,41 @@ async function checkNativeRpc(
 
 type NativeObservation = Awaited<ReturnType<typeof checkNativeRpc>>;
 
-async function heldModel(): Promise<{ bind(caller: string, thread: string): void;
-  wait(): Promise<void>; close(): Promise<void> }> {
+function listenServer(server: Server): Promise<void> {
+  function start(resolve: () => void, reject: (reason: Error) => void): void {
+    function listening(): void {
+      server.off('error', reject);
+      resolve();
+    }
+    server.once('error', reject);
+    server.listen(8080, '127.0.0.1', listening);
+  }
+  return new Promise<void>(start);
+}
+
+function closeServer(server: Server): Promise<void> {
+  function stop(resolve: () => void): void {
+    function closed(): void {
+      resolve();
+    }
+    server.close(closed);
+  }
+  return new Promise<void>(stop);
+}
+
+export async function heldModel(): Promise<{ bind(caller: string, thread: string): void;
+  wait(): Promise<void>; assertHeld(): void; close(): Promise<void> }> {
   let received: (() => void) | undefined;
   let expectedCaller: string | undefined;
   let expectedThread: string | undefined;
-  const requestReceived = new Promise<void>(function ready(resolve): void {
+  let activeResponse: ServerResponse | undefined;
+  let closedResponse = false;
+  function markReady(resolve: () => void): void {
     received = resolve;
-  });
+  }
+  let requestReceived = new Promise<void>(markReady);
   function accept(request: import('node:http').IncomingMessage,
-    response: import('node:http').ServerResponse): void {
+    response: ServerResponse): void {
     if (!expectedCaller || !expectedThread || request.method !== 'POST' ||
         request.url !== '/v1/responses' ||
         request.headers.authorization !== `Bearer ${expectedCaller}` ||
@@ -252,21 +279,31 @@ async function heldModel(): Promise<{ bind(caller: string, thread: string): void
       response.destroy();
       return;
     }
+    function responseClosed(): void {
+      if (activeResponse === response) {
+        activeResponse = undefined;
+        closedResponse = true;
+        requestReceived = new Promise<void>(markReady);
+      }
+    }
+    response.once('close', responseClosed);
+    activeResponse = response;
+    closedResponse = false;
     request.resume();
     response.writeHead(200, { 'content-type': 'text/event-stream' });
     response.flushHeaders();
     received?.();
   }
   const server: Server = createServer(accept);
-  await new Promise<void>(function listen(resolve, reject): void {
-    server.once('error', reject);
-    server.listen(8080, '127.0.0.1', function listening(): void {
-      server.off('error', reject);
-      resolve();
-    });
-  });
-  async function wait(): Promise<void> {
-    await new Promise<void>(function held(resolve, reject): void {
+  await listenServer(server);
+  function assertHeld(): void {
+    if (activeResponse === undefined || activeResponse.destroyed ||
+        activeResponse.writableEnded) {
+      throw new Error('native_turn_not_held');
+    }
+  }
+  function waitForRequest(): Promise<void> {
+    function held(resolve: () => void, reject: (reason: Error) => void): void {
       function expired(): void {
         reject(new Error('native_turn_not_held'));
       }
@@ -276,20 +313,28 @@ async function heldModel(): Promise<{ bind(caller: string, thread: string): void
         resolve();
       }
       requestReceived.then(ready, reject);
-    });
+    }
+    return new Promise<void>(held);
+  }
+  async function wait(): Promise<void> {
+    if (activeResponse === undefined) {
+      if (closedResponse) {
+        throw new Error('native_turn_not_held');
+      }
+      await waitForRequest();
+    }
+    assertHeld();
   }
   async function close(): Promise<void> {
     server.closeAllConnections();
-    await new Promise<void>(function stopped(resolve): void {
-      server.close(function closed(): void { resolve(); });
-    });
+    await closeServer(server);
   }
   function bind(caller: string, thread: string): void {
     assert(!expectedCaller && !expectedThread);
     expectedCaller = caller;
     expectedThread = thread;
   }
-  return { bind, wait, close };
+  return { bind, wait, assertHeld, close };
 }
 
 async function checkStillRunning(
@@ -314,7 +359,8 @@ async function checkStillRunning(
 function processStart(pid: number): string | undefined {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-    const fieldsText = stat.slice(stat.lastIndexOf(')') + 2);
+    const delimiter = stat.lastIndexOf(')');
+    const fieldsText = stat.slice(delimiter + 2);
     const fields = fieldsText.split(' ');
     const start = fields[19];
     assert.match(start ?? '', /^[0-9]+$/u);
@@ -355,7 +401,8 @@ function signalProcess(pid: number, signal: NodeJS.Signals): void {
 function processState(pid: number): string | undefined {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-    return stat[stat.lastIndexOf(')') + 2];
+    const delimiter = stat.lastIndexOf(')');
+    return stat[delimiter + 2];
   } catch (error) {
     if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') {
       throw error;
@@ -471,9 +518,13 @@ async function checkPair(
   const turn = { threadId: firstObservation.threadId, input };
   await first.connection.rpc('turn/start', turn);
   await model.wait();
+  model.assertHeld();
   checkPairProtection(first, binary);
+  model.assertHeld();
   checkPairProtection(second, binary);
+  model.assertHeld();
   await checkStillRunning(first, binary, firstObservation);
+  model.assertHeld();
   await stopChild(first);
   removeHome(first.home);
   await checkStillRunning(second, binary, secondObservation);
