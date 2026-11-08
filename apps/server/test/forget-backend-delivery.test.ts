@@ -77,7 +77,22 @@ async function forgetFixture(missFirstDispatch = false) {
 async function retriesMissedTurnDelivery() {
   const test = await forgetFixture(true);
   expect(test.dispatchAttempts).toBeGreaterThan(1);
-  const response = await test.native.call(threadId, 'forget', test.args);
+  await test.native.waitForTurnStarts(1);
+  memoryClock();
+  const store = test.setup.nats.store;
+  const append = store.append.bind(store);
+  const forgotten = Promise.withResolvers<void>();
+  async function observeForget(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    if (result.status === 'appended' && command.event.type === 'memory.forgotten') {
+      forgotten.resolve();
+    }
+    return result;
+  }
+  vi.spyOn(store, 'append').mockImplementation(observeForget);
+  const pending = test.native.call(threadId, 'forget', test.args);
+  await forgotten.promise;
+  const response = await pending;
   const rows = await tombstones(test);
   expect(rows).toHaveLength(1);
   const saved = memoryForgottenEventSchema.parse(rows[0]!.event);
