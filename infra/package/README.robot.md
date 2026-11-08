@@ -1728,3 +1728,28 @@ refuses. This is no copied-code absence proof. `scripts/p5-4-images14.test.mjs`
 runs the small authentic fixtures in CI.
 Dependency grants, copied-code origins, source differences, service/logo/font/trademark
 questions, vulnerabilities, source-bound R3 and fresh/live approval remain unresolved.
+
+## npm source difference
+
+The [difference record](../../docs/process/p5-4-images15/difference.json) binds the
+[npm inventory](../../docs/process/p5-4-images14/inventory.json.gz) and the saved
+candidate record by SHA-256. Its [checker](../../docs/process/p5-4-images15/check-difference.py)
+reuses the signed Node, exact Git and release-source, official archive and candidate
+checks. It then reads both candidate layers and the archived Dockerfile again. The
+source-only test-file set and official launcher-link set are compared as exact rows,
+including file hashes and link targets. The candidate archive and source archive are
+hashed again after inspection to refuse a changed file.
+
+```sh
+nice -n 10 python3 docs/process/p5-4-images15/check-difference.py \
+  /tmp/p5-4-images4 /tmp/p5-4-images6
+```
+
+The source-only files are absent from the official archive and candidate scope. The
+two launcher links are present in the official archive and absent from the candidate.
+Both candidate layers lack the full 1,966-entry official npm tree. That remains a
+BLOCKED candidate inventory, including its real npm check refusal. Nothing here
+proves that other copied code or dependencies are absent. Licence grants, complete
+vulnerability clearance, exact-source R3 and image promotion remain blocked. The
+[receipt](../../docs/process/p5-4-images15/receipt.md) gives the exact boundary and
+own check results. `scripts/p5-4-images15.test.mjs` runs the refusal fixtures in CI.

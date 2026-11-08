@@ -18,7 +18,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images with Codex, protection and installs"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, evidence and installs"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and backup token references| package
@@ -178,6 +178,11 @@ They do not claim that this code is absent. The
 [operator notes](README.robot.md#package-image-promotion) explain the saved files
 needed to repeat these checks. Other licence reviews and installation approval
 remain outstanding.
+A separate check confirms that the 184 npm test files in Node source are absent
+from its official download and the saved candidate layers. It confirms that the
+two npm launcher links appear in the official download and are absent from those
+layers. The candidate still lacks the whole npm tree, so this check cannot approve
+the image or say whether other copied code is present.
 
 ## How to run or test it
 
