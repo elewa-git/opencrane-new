@@ -325,6 +325,63 @@ async function cancelledWake() {
 }
 it('refuses cancellation during wake without opening a bridge', cancelledWake);
 
+async function cancellationInsideResume() {
+  const subject = 'computer-sales-assistant';
+  const suspended = record('suspended-for-cancellation', subject,
+    'computer.suspended', { assistantId: 'sales-assistant', computerId: 'computer' });
+  await nats.seed([suspended]);
+  const originalRead = nats.store.readStream.bind(nats.store);
+  const readStarted = Promise.withResolvers<void>();
+  const releaseRead = Promise.withResolvers<void>();
+  let computerReads = 0;
+  async function* heldRead(stream: string, fromSequence = 1, deadline = Infinity,
+    includeConversationCloses = false) {
+    if (stream === subject && ++computerReads === 2) {
+      readStarted.resolve();
+      await releaseRead.promise;
+    }
+    yield* originalRead(stream, fromSequence, deadline, includeConversationCloses);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(heldRead);
+  const issuedPass = vi.spyOn(preparedComputer.tokens, 'computer');
+  const caller = new AbortController();
+  function connection() {
+    return Promise.resolve(preparedComputer.link);
+  }
+  const service = createRoutineWake(nats.store, 'test', preparedComputer.tokens,
+    stop.signal, connection);
+  const pending = service('sales-assistant', caller.signal);
+  await readStarted.promise;
+  caller.abort();
+  releaseRead.resolve();
+  await expect(pending).rejects.toThrow('Routine computer unavailable');
+  const rows = await history(nats.store, subject, 'test');
+  expect(rows.some(row => row.event.type === 'computer.resumed')).toBe(false);
+  expect(issuedPass).not.toHaveBeenCalled();
+}
+it('does not save a resume or issue a pass after cancellation during history',
+  cancellationInsideResume);
+
+async function connectionWaitHasWakeDeadline() {
+  const connectionStarted = Promise.withResolvers<void>();
+  const releaseConnection = Promise.withResolvers<typeof preparedComputer.link>();
+  function connection() {
+    connectionStarted.resolve();
+    return releaseConnection.promise;
+  }
+  const service = createRoutineWake(nats.store, 'test', preparedComputer.tokens,
+    stop.signal, connection);
+  const pending = service('sales-assistant');
+  await connectionStarted.promise;
+  try {
+    await expect(pending).rejects.toThrow('Routine computer unavailable');
+  } finally {
+    releaseConnection.resolve(preparedComputer.link);
+  }
+}
+it('ends a held connection wait within the 20-second wake limit',
+  connectionWaitHasWakeDeadline, 25_000);
+
 type Lease = Parameters<Parameters<typeof withRoutineLeadership>[1]>[0];
 type Options = Parameters<typeof createRoutineComposition>[0];
 type Handoff = NonNullable<Parameters<typeof dispatchRoutineCandidates>[3]>;
