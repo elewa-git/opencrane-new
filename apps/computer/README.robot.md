@@ -44,6 +44,21 @@ list. The CI image build step has a 30-minute limit inside the 60-minute fixture
 
 ## Bridge process protection
 
+The proxy shares the bridge's process. The bridge opens a separate protection
+socket for `proxy` after starting the actual proxy. It answers a fresh challenge
+only while a validated private MCP tool call still has an open native response.
+The root entrypoint passes the Pod UID to the bridge so its saved computer
+credential can bind that private call to the running Pod.
+After the reviewed memory server is loaded, the private native turn asks Codex
+for tool consent. The handler accepts only the memory server on that active
+thread and turn; every other private native request is refused. Accepted
+consent is never reported as a refusal.
+The proxy counts calls after checking their private catalogue and grant, and
+removes each count when its response closes. Ordinary calls cannot open this
+check. The native helper measures core limits and dumpability in the bridge
+process on every accepted challenge. The checker also measures zero swap in
+the computer container. The proxy check does not make the complete inventory pass.
+
 The root entrypoint saves PID 1 and its Linux start time before starting children.
 It starts the bridge's native dump-protection service. The collector checks the
 record, process, swap and live protection reply in the owner-selected computer.

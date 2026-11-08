@@ -636,11 +636,13 @@ class TurnRunner {
     // Mark execution after validating the input. Memory-free prepared turns can still retry.
     this.journal.recordExecution(input.id);
     this.gate.awaitingTerminal.add(input.id);
-    const turnParams = {
+    const turnParams: Record<string, unknown> = {
       threadId,
       model,
       input: [{ type: 'text', text: inputText, text_elements: [] }],
     };
+    // Ask Codex for memory tool consent so the private handler can check this one call.
+    if (this.recalls.get(input.id)?.ready) turnParams['approvalPolicy'] = 'on-request';
     const turnResponse = record(await this.rpcFor(input)('turn/start', turnParams));
     await this.rememberTurn(input, threadId, turnResponse);
   }

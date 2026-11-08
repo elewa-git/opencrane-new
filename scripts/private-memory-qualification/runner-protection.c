@@ -82,7 +82,7 @@ static napi_value probe(napi_env env, napi_callback_info info) {
         return null_result(env);
     }
     if ((strcmp(role, "serverDelivery") != 0 && strcmp(role, "bridge") != 0 &&
-         strcmp(role, "supervisor") != 0) ||
+         strcmp(role, "supervisor") != 0 && strcmp(role, "proxy") != 0) ||
         challenge_length != 36 || strspn(challenge, "0123456789abcdef-") != 36) {
         return null_result(env);
     }

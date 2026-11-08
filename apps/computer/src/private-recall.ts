@@ -88,6 +88,7 @@ export function privateRecall(input: Turn, owner: RecallOwner,
       }
       const binding = { ...local, tools: approved, grant, checkTools };
       await loads.loadPrivate(input, binding);
+      session.allowMemoryConsent?.(serverKey);
       ready = true;
       return { ...receipt, type: 'recall_loaded' };
     } catch {

@@ -96,19 +96,23 @@ function validResponse(value: unknown, request: Record<string, string>):
 }
 
 // Use only the collector's measured container, never a caller's process observation.
-export async function proveComputerBridge(containerId: string,
-  installationId: string): Promise<true | ProtectionFailure> {
+export async function proveComputerService(containerId: string,
+  installationId: string, role: 'bridge' | 'proxy', expectedImage?: string):
+  Promise<true | ProtectionFailure> {
   if (!/^[a-f0-9]{64}$/u.test(containerId) ||
       !/^sha256:[a-f0-9]{64}$/u.test(installationId)) {
     return 'private_process_unreadable';
   }
   try {
     const before = containerIdentity(containerId);
+    if (role === 'proxy' && before.Image !== expectedImage) {
+      return 'private_process_identity_changed';
+    }
     const request = { containerId, installationId,
       computerInstallationId: computerInstallation(before), challengeId: randomUUID() };
+    const inspector = `/scripts/private-memory-qualification/${role}-check.ts`;
     const args = ['/usr/bin/prlimit', '--core=0:0', '--', '/usr/local/bin/node',
-      '--experimental-strip-types',
-      '/scripts/private-memory-qualification/bridge-check.ts'];
+      '--experimental-strip-types', inspector];
     const response = await runInContainer(containerId, args, JSON.stringify(request));
     const after = containerIdentity(containerId);
     if (!sameContainer(before, after)) {
@@ -121,6 +125,11 @@ export async function proveComputerBridge(containerId: string,
     }
     return 'private_process_unreadable';
   }
+}
+
+export async function proveComputerBridge(containerId: string,
+  installationId: string): Promise<true | ProtectionFailure> {
+  return proveComputerService(containerId, installationId, 'bridge');
 }
 
 export { containerIdentity, sameContainer, computerInstallation, type ContainerIdentity };

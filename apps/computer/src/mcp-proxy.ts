@@ -56,6 +56,16 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
   const requests = proxyRequests();
   const retained = new Map<string, RetainedRequest>();
   let retainedBytes = 0;
+  let heldPrivateCalls = 0;
+
+  function trackPrivateResponse(load: Catalogue, response: ServerResponse): void {
+    if (!load.restricted) return;
+    heldPrivateCalls += 1;
+    function released(): void {
+      heldPrivateCalls -= 1;
+    }
+    response.once('close', released);
+  }
 
   function deleteRetained(approvalId: string, owner: RetainedRequest) {
     if (retained.get(approvalId) !== owner) return;
@@ -278,12 +288,14 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
       // Keep the list until this hold ends, even if its turn pass expires first.
       extendThread(String(thread), boundGrant.expires);
     }
+    trackPrivateResponse(boundLoad, response);
     await forward(incoming, response, gateway, server, grant, String(thread), id, raw,
       requests, hold);
   }
   return { catalogue, drop, dropTurn, dropThread, extendThread, discovered, handle,
     retainedCall,
     checkPrivateThread,
+    get hasHeldPrivateCall() { return heldPrivateCalls > 0; },
     get size() { return catalogues.size; },
     get currentSize() { return current.size; } };
 }

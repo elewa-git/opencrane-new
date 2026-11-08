@@ -2,7 +2,7 @@
 import { appendFileSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { stageBModelCall } from './stage-b-model.ts';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 const approvalRevision = process.env['MODEL_STUB_MCP_REVISION'];
 if (!approvalRevision) throw new Error('Approval stub revision is missing');
@@ -11,6 +11,10 @@ if (!approvalGeneration) throw new Error('Approval stub generation is missing');
 const calls: Array<{ body: string; requestId: string }> = [];
 let modelRequests = 0;
 const providerCounts = { managed: 0, other: 0 };
+const memoryHash = createHash('sha256');
+memoryHash.update('memory');
+const memoryDigest = memoryHash.digest('hex');
+const memoryServerKey = `oc_${memoryDigest.slice(0, 10)}`;
 function countProviderRequest(authorization: string | undefined) {
   const file = process.env['MODEL_STUB_MANAGED_FILE'];
   let value: string | undefined;
@@ -26,6 +30,12 @@ function countProviderRequest(authorization: string | undefined) {
   }
 }
 const server = createServer((req, res) => {
+  if (process.env['MODEL_STUB_PROXY_HOLD'] === '1' && req.method === 'POST' &&
+      req.url === '/mcp/memory/server') {
+    req.resume();
+    // Keep the fixture's native tool reply open until the test stops its computer.
+    return;
+  }
   if (req.method === 'GET' && req.url === '/provider-counts') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify(providerCounts));
@@ -72,7 +82,8 @@ const server = createServer((req, res) => {
     modelRequests += 1;
     countProviderRequest(req.headers.authorization);
     if (process.env['MODEL_STUB_CAPTURE']) appendFileSync(process.env['MODEL_STUB_CAPTURE'], Buffer.concat(chunks).toString() + '\n', { mode: 0o600 });
-    const body = JSON.parse(Buffer.concat(chunks).toString()) as { stream?: boolean; input?: Array<{ type?: string; role?: string; content?: unknown; output?: unknown }> };
+    const body = JSON.parse(Buffer.concat(chunks).toString()) as { stream?: boolean;
+      input?: Array<{ type?: string; role?: string; content?: unknown; output?: unknown }> };
     if (body.stream === false) {
       const content = [{ type: 'output_text', text: 'OK' }];
       const output = [{ type: 'message', role: 'assistant', content }];
@@ -87,6 +98,8 @@ const server = createServer((req, res) => {
     const pdf = prompt.includes('UPLOAD_PDF_PROOF') || prompt.includes('What is the project code in the attached PDF?');
     const output = input.slice(user+1).filter(item => ['function_call_output', 'custom_tool_call_output'].includes(item.type ?? '')).map(item => typeof item.output === 'string' ? item.output : JSON.stringify(item.output ?? '')).join('\n');
     const customOutput = input.slice(user+1).some(item => item.type === 'custom_tool_call_output');
+    const proxyProofCall = process.env['MODEL_STUB_PROXY_HOLD'] === '1' &&
+      prompt.includes('PROXY_PROOF') && !output;
     const path = /\/workspace\/uploads\/[\w/-]+\/project\.pdf\.md/u.exec(prompt)?.[0];
     const inline = !prompt.includes('UPLOAD_PDF_PROOF') && prompt.includes('Untrusted document content') ? prompt : '';
     const code = /Project code: ([\w-]+)\./u.exec(output || inline)?.[1];
@@ -110,6 +123,11 @@ const server = createServer((req, res) => {
     }
     if (demoCall) {
       emit({ type: 'response.output_item.done', item: demoCall });
+    } else if (proxyProofCall) {
+      emit({ type: 'response.output_item.done', item: { type: 'function_call',
+        id: `fc_${randomUUID()}`, status: 'completed', call_id: `call_${randomUUID()}`,
+        name: 'recall', namespace: `mcp__${memoryServerKey}`,
+        arguments: JSON.stringify({ scopeId: 'fixture', query: 'fixture' }) } });
     } else if (pdf && !code && path && !output && !customOutput) {
       // Read the file when inline text is empty, unavailable or missing the requested fact.
       // Match the real Sol call. A disabled host must fail, with no invented shell fallback.

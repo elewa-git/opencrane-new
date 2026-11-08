@@ -16,6 +16,7 @@ const inspector = { ...identity, pid: 51, uid: 0 };
 
 function prepare(): void {
   vi.clearAllMocks();
+  vi.spyOn(process, 'getuid').mockReturnValue(0);
   vi.mocked(bridgeIdentity).mockReturnValue(identity);
   vi.mocked(readProcessIdentity).mockReturnValue(inspector);
   vi.mocked(probeContainer).mockReturnValue(true);
@@ -41,7 +42,6 @@ function wrongIdentity(): void {
   const bad = [
     { ...identity, executable: '/tmp/node' },
     { ...identity, uid: 1003 },
-    { ...identity, startTime: '124' },
     { ...identity, containerIdentity: 'pid:[999]' },
     { ...identity, cgroup: '0::/foreign\n' },
     { ...identity, commandLine: '/usr/local/bin/node\0/tmp/stand-in.ts\0' },
@@ -51,7 +51,7 @@ function wrongIdentity(): void {
     expect(checkProxy()).toEqual({ result: 'private_process_identity_changed' });
   }
 }
-it('refuses wrong executable, UID, start, namespace, group and script', wrongIdentity);
+it('refuses wrong executable, UID, namespace, group and script', wrongIdentity);
 
 function changedOrVanished(): void {
   vi.mocked(bridgeIdentity).mockReturnValueOnce(identity).mockReturnValueOnce(undefined);

@@ -96,7 +96,8 @@ async function grantSelectionFixture(kind: string, needsApproval = false) {
     await new Promise<void>(stopListener);
     await new Promise<void>(stopGateway);
   }
-  return { send, close, received, permits, approvals, renew, grants, renewedGrant, catalogueTurn };
+  return { send, close, received, permits, approvals, renew, grants, renewedGrant, catalogueTurn,
+    mcp };
 }
 
 async function refusesSelectedGrant(kind: string) {
@@ -120,12 +121,14 @@ async function refusesRenewedGrant(kind: string) {
     const pending = test.send();
     function held() { expect(test.approvals.size).toBe(1); }
     await vi.waitFor(held);
+    expect(test.mcp.hasHeldPrivateCall).toBe(kind === 'restricted');
     expect(test.received).toHaveLength(1);
     expect(test.received[0]?.['x-turn-token']).toBe('initial-pass');
     expect(test.received[0]?.['x-opencrane-approval-id']).toBe('');
     test.permits.mockClear();
     await test.approvals.settle(approvalId, 'approved');
     const reply = await pending;
+    expect(test.mcp.hasHeldPrivateCall).toBe(false);
     expect.soft(test.received).toHaveLength(1);
     expect.soft(reply).not.toContain(privateResult);
     expect(reply).toContain('"isError":true');

@@ -16,7 +16,8 @@ export function nativeRefusal(method: string): Pick<BridgeReport, 'requestKind' 
 }
 
 export function nativeRequests(send: (reply: Record<string, unknown>) => void,
-  report: (message: Record<string, unknown>) => void, privateTurn = false) {
+  report: (message: Record<string, unknown>) => void, privateTurn = false,
+  permitPrivateConsent?: (message: Record<string, unknown>) => boolean) {
   // Retain ids for the lifetime of this Codex connection, including after a turn ends.
   const answered = new Set<unknown>();
   function handle(message: Record<string, unknown>) {
@@ -26,6 +27,11 @@ export function nativeRequests(send: (reply: Record<string, unknown>) => void,
     if (answered.has(id)) return true;
     answered.add(id);
     const refusal = nativeRefusal(method);
+    if (privateTurn && method === 'mcpServer/elicitation/request'
+      && permitPrivateConsent?.(message)) {
+      send({ id, result: { action: 'accept' } });
+      return true;
+    }
     if (!privateTurn && refusal.outcome === 'declined') {
       send({ id, result: { decision: 'decline' } });
     } else {

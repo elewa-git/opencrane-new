@@ -164,6 +164,7 @@ export async function proxy(gateway: string, options = DEFAULT_PROXY_OPTIONS,
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Proxy listen failed');
   return { caller, approvals, retainedCall: mcp.retainedCall, privateCaller, privateAuthority,
+    hasHeldPrivateCall: () => mcp.hasHeldPrivateCall,
     url: `http://127.0.0.1:${address.port}`, close: async () => {
     privateAuthority.close();
     server.closeAllConnections(); control.closeAllConnections();

@@ -69,11 +69,30 @@ export async function openPrivateSession(options: SessionOptions) {
   const pending = privateSocket(launch.abort.signal, binding.expires, registration.close);
   const { socket, close, closed, exited } = pending;
   let threadId: string | undefined;
+  let nativeTurnId: string | undefined;
+  let memoryServerKey: string | undefined;
+  function allowMemoryConsent(serverKey: string) {
+    memoryServerKey = serverKey;
+  }
+  function permitPrivateConsent(message: Record<string, unknown>) {
+    const params = record(message['params']);
+    const metadata = record(params['_meta']);
+    return Boolean(threadId && nativeTurnId && memoryServerKey
+      && params['threadId'] === threadId && params['turnId'] === nativeTurnId
+      && params['serverName'] === memoryServerKey && params['mode'] === 'form'
+      && metadata['codex_approval_kind'] === 'mcp_tool_call');
+  }
   function dispatchPrivateMessage(message: Record<string, unknown>) {
     if (answerPrivateRequest(message)) return;
     const params = message['params'];
     if (!params || typeof params !== 'object' || !('threadId' in params)
       || params.threadId !== threadId) return;
+    if (message['method'] === 'turn/started') {
+      const details = record(params);
+      const turn = record(details['turn']);
+      if (typeof turn['id'] === 'string') nativeTurnId = turn['id'];
+    }
+    if (message['method'] === 'turn/completed') nativeTurnId = undefined;
     notification(message);
   }
   function privateMessage(message: Record<string, unknown>) {
@@ -92,7 +111,8 @@ export async function openPrivateSession(options: SessionOptions) {
     await requestPrivateLaunch(socket, launchKey, registration.caller);
     const handlers = { message: privateMessage, failed: close };
     connection = codexConnection(socket, socket, handlers);
-    answerPrivateRequest = nativeRequests(connection.respond, reportPrivateRequest, true);
+    answerPrivateRequest = nativeRequests(connection.respond, reportPrivateRequest, true,
+      permitPrivateConsent);
     socket.resume();
     await connection.rpc('initialize', initialiseParams);
     connection.notify('initialized', {});
@@ -126,5 +146,5 @@ export async function openPrivateSession(options: SessionOptions) {
   const authority = runtimeProxy.privateAuthority;
   const recallOwner = authority ? { ...binding, registration, caller: registration.caller,
     authority } : undefined;
-  return { rpc, close, closed, exited, recallOwner };
+  return { rpc, close, closed, exited, recallOwner, allowMemoryConsent };
 }

@@ -43,6 +43,28 @@ function refusesPrivateRequests() {
 }
 it('keeps one unsupported reply for a private session', refusesPrivateRequests);
 
+function acceptsOnlyApprovedPrivateConsent() {
+  const replies: unknown[] = [];
+  const reports: unknown[] = [];
+  function send(reply: unknown) { replies.push(reply); }
+  function report(message: unknown) { reports.push(message); }
+  function permit(message: Record<string, unknown>) {
+    return message['id'] === 1;
+  }
+  const handle = nativeRequests(send, report, true, permit);
+  const request = { id: 1, method: 'mcpServer/elicitation/request', params: {} };
+  const other = { id: 2, method: 'mcpServer/elicitation/request', params: {} };
+  handle(request);
+  handle(request);
+  handle(other);
+  expect(replies).toEqual([
+    { id: 1, result: { action: 'accept' } },
+    { id: 2, error: { code: -32601, message: 'Not available in a private turn' } },
+  ]);
+  expect(reports).toEqual([other]);
+}
+it('accepts only private consent selected by the session', acceptsOnlyApprovedPrivateConsent);
+
 async function answersWithoutActiveTurn(state: string) {
   const test = await fixture();
   const replies: unknown[] = [];

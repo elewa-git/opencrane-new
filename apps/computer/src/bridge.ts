@@ -42,6 +42,7 @@ function control(path: string, input: unknown) {
 }
 const runtimeProxy = await proxy(gateway.origin, undefined,
   process.env['PROXY_CALLER_TOKEN'], approvalDriver, launchKey);
+await startServiceProtection('proxy', runtimeProxy.hasHeldPrivateCall);
 const { caller } = runtimeProxy;
 writeFileSync('/home/codex/.codex/environments.toml', memoryFreeEnvironments());
 writeFileSync('/home/codex/.codex/config.toml', memoryFreeConfig(process.env['MODEL'] ?? 'stub-model'));
