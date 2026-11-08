@@ -63,7 +63,8 @@ The computer saves that confirmation without private reply text.
 - Sends that original call once more if the requester saves a checked retry and the
   turn still has access. It uses the same request bytes and answers on the waiting call.
 - Runs a [private turn](../../GLOSSARY.md#private-turn) on a shared computer in a fresh,
-  short-lived Codex process with no tools. Initial personal memory requires deployment checks.
+  short-lived Codex process. Initial personal memory requires deployment checks.
+  An admitted personal turn can use the four reviewed memory tools through its own caller.
   The server supplies its complete input once; the runner keeps it out of the journal.
   Each private launch gets its own caller, kept in memory. The bridge binds it to
   the native thread before waiting for the server to admit the turn. Stop, expiry

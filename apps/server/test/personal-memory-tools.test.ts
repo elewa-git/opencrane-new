@@ -507,12 +507,14 @@ async function recallLoadFixture() {
     createdBy: 'alice',
   };
   await setup.save('conversation-conversation', 'conversation.created', createdConversation, false);
-  function evidence(definition: typeof recallTool | typeof rememberTool | typeof correctTool) {
+  function evidence(definition: typeof recallTool | typeof rememberTool | typeof correctTool
+    | typeof forgetTool) {
     const encoded = JSON.stringify(definition);
     const declared = { name: definition.name, reviewed: true, costCents: 0 };
     return { ...toolEvidence(declared), definition: encoded, revision: losslessJson(encoded).digest };
   }
-  const tools = [evidence(recallTool), evidence(rememberTool), evidence(correctTool)];
+  const tools = [evidence(recallTool), evidence(rememberTool), evidence(correctTool),
+    evidence(forgetTool)];
   const catalogue = catalogueEvidence(tools);
   const registeredServer = { serverId: 'memory',
     kind: 'hosted', registeredBy: 'alice', locator: `registry.example.test/memory@sha256:${'a'.repeat(64)}` };
