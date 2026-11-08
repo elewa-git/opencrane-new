@@ -76,7 +76,7 @@ export function createRoutineComposition(options: Options,
       }
       // Reload history and access after wake; its wait may exceed the earlier write deadline.
       const selection = await prepareRoutineComputer(store, keys, worker, input, actor,
-        ready.link, ready.generation);
+        ready.link, ready.generation, company.confirmCurrent);
       await company.confirmCurrent();
       const sender = createRoutineSender(options, store, keys, worker, input,
         selection, senderAttemptId);

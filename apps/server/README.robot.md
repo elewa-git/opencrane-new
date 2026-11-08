@@ -7152,18 +7152,24 @@ preparation or root allocation. It requires the frozen routine's `serverId`, own
 connection, profile revisions, verified account id and scopes to match one explicit
 company choice. It reuses `companySelectionFacts` for installation, opt-in, OAuth
 configuration, account evidence and available tools. The trusted profile reader must
-confirm credential custody; no production reader is installed. A returned local
+confirm credential custody; no production reader is installed. It also reads the
+saved MCP-server grants for the owner and assistant, checks their applied receipts
+and current permissions, and watches the grant stream. An owner can use a team grant
+only with current team membership. A returned local
 binding names the same occurrence, root and computer generation. Its current-position
-check runs again before the existing sender. Missing evidence refuses with a fixed
+check runs inside the root allowance decision after private thread preparation, then
+again before the existing sender. Missing evidence refuses with a fixed
 error. There is no credential release, company send or public execution switch.
 Existing records without `serverId` remain readable but cannot pass this check.
 
-`test/routine-company-preflight.test.ts` covers the valid choice, a stale preflight
-and changes to account, scopes, custody, profile revision, owner choice, opt-in and publication.
+`test/routine-company-preflight.test.ts` covers the valid choice, a stale preflight,
+owner and assistant grant revocations, and changes to account, scopes, custody,
+profile revision, owner choice, opt-in and publication.
 `test/routine-handoff.test.ts` checks post-wake refusal before allowance and no
 preflight during disabled or replayed work. These tests use synthetic account evidence.
 `test/routine-composition.test.ts` supplies a synthetic preflight for its existing
-delivery and recovery tests; it cannot prove live company custody.
+delivery and recovery tests. It also refuses profile and opt-in changes during native
+preparation without saving an allowance. It cannot prove live company custody.
 The governed company send and fresh-install journey remain NOT RUN.
 
 The private models library has a company audit check, but this server does not

@@ -110,7 +110,7 @@ async function fixture() {
     await memberAuthorisation(binding, nats.store).handler.handle(grant, database);
   }
   async function preflight(reader = readProfile) {
-    return checkRoutineCompanyPreflight(nats.store, 'test', run, 1,
+    return checkRoutineCompanyPreflight(nats.store, binding, 'test', run, 1,
       selected.loadConfiguration, reader);
   }
   return { preflight, evidence, definition, profileSubject, optInSubject,
@@ -141,40 +141,63 @@ async function stale() {
 }
 it('refuses a preflight kept across a later connection change', stale);
 
+async function staleGrant() {
+  const current = await fixture();
+  const company = await current.preflight();
+  const revoke = envelope('test', grantStream('mcp_server', current.serverId),
+    'grant.revoked', { resourceType: 'mcp_server', resourceId: current.serverId,
+      granteeKind: 'assistant', granteeId: current.assistantId,
+      revokedBy: current.ownerId });
+  await nats.seed([revoke]);
+  await expect(company.confirmCurrent()).rejects.toThrow('Routine company unavailable');
+}
+it('refuses an MCP grant revoked after preflight', staleGrant);
+
+async function unappliedGrant() {
+  const current = await fixture();
+  const grant = envelope('test', grantStream('mcp_server', current.serverId),
+    'grant.given', { resourceType: 'mcp_server', resourceId: current.serverId,
+      granteeKind: 'assistant', granteeId: current.assistantId,
+      grantedBy: current.ownerId });
+  await nats.seed([grant]);
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+}
+it('refuses a server grant whose access receipt is not applied', unappliedGrant);
+
 async function changed(kind: string) {
-    const current = await fixture();
-    if (kind === 'account') current.evidence.accountId = 'different';
-    if (kind === 'scopes') current.evidence.scopes = ['openid'];
-    if (kind === 'revision') current.evidence.profileRevision += 1;
-    if (kind === 'generation') current.evidence.generation += 1;
-    if (kind === 'missing-server') Object.assign(current.definition, { serverId: undefined });
-    if (kind === 'choice') {
-      const changed = envelope('test', current.selectionSubject, 'connection.selected', {
-        action: 'clear', userId: current.ownerId, serverId: current.serverId,
-        connectionId: 'installed', expectedSequence: await nats.store.head(current.selectionSubject),
-      });
-      await nats.seed([changed]);
-    }
-    if (kind === 'opt-in') {
-      const changed = envelope('test', current.optInSubject,
-        'connection.company_opt_in_set', { serverId: current.serverId,
-          connectionId: 'installed', registrationRevision: 1, enabled: false,
-          changedBy: 'admin', expectedSequence: await nats.store.head(current.optInSubject) });
-      await nats.seed([changed]);
-    }
-    if (kind === 'publication') {
-      const changed = envelope('test', `mcp-${current.serverId}`,
-        'mcp.server_unpublished', { serverId: current.serverId, unpublishedBy: 'admin' });
-      await nats.seed([changed]);
-    }
-    function unavailable(): never {
-      throw new Error('Custody unavailable');
-    }
-    const reader = kind === 'custody' ? unavailable : undefined;
-    const append = vi.spyOn(nats.store, 'append');
-    await expect(current.preflight(reader)).rejects.toThrow('Routine company unavailable');
-    expect(append).not.toHaveBeenCalled();
-    append.mockRestore();
+  const current = await fixture();
+  if (kind === 'account') current.evidence.accountId = 'different';
+  if (kind === 'scopes') current.evidence.scopes = ['openid'];
+  if (kind === 'revision') current.evidence.profileRevision += 1;
+  if (kind === 'generation') current.evidence.generation += 1;
+  if (kind === 'missing-server') Object.assign(current.definition, { serverId: undefined });
+  if (kind === 'choice') {
+    const changed = envelope('test', current.selectionSubject, 'connection.selected', {
+      action: 'clear', userId: current.ownerId, serverId: current.serverId,
+      connectionId: 'installed', expectedSequence: await nats.store.head(current.selectionSubject),
+    });
+    await nats.seed([changed]);
+  }
+  if (kind === 'opt-in') {
+    const changed = envelope('test', current.optInSubject,
+      'connection.company_opt_in_set', { serverId: current.serverId,
+        connectionId: 'installed', registrationRevision: 1, enabled: false,
+        changedBy: 'admin', expectedSequence: await nats.store.head(current.optInSubject) });
+    await nats.seed([changed]);
+  }
+  if (kind === 'publication') {
+    const changed = envelope('test', `mcp-${current.serverId}`,
+      'mcp.server_unpublished', { serverId: current.serverId, unpublishedBy: 'admin' });
+    await nats.seed([changed]);
+  }
+  function unavailable(): never {
+    throw new Error('Custody unavailable');
+  }
+  const reader = kind === 'custody' ? unavailable : undefined;
+  const append = vi.spyOn(nats.store, 'append');
+  await expect(current.preflight(reader)).rejects.toThrow('Routine company unavailable');
+  expect(append).not.toHaveBeenCalled();
+  append.mockRestore();
 }
 it.each(['account', 'scopes', 'custody', 'revision', 'generation', 'missing-server',
   'choice', 'opt-in', 'publication'])(

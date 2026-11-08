@@ -301,14 +301,16 @@ async function changedCompanyDuringPreparation(kind: 'profile' | 'opt-in') {
   }
   const prepareSpy = vi.spyOn(preparedComputer.link, 'prepareRoutineThread');
   prepareSpy.mockImplementation(changeAfterNativeStart);
-  async function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+  function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
     computerGeneration: number) {
-    async function confirmCurrent() {
+    function confirmCurrent() {
       confirmed += 1;
-      if (!current) throw new Error(`${kind} changed`);
+      if (!current) return Promise.reject(new Error(`${kind} changed`));
+      return Promise.resolve();
     }
-    return { occurrenceId: run.occurrenceId, rootId: run.rootId,
+    const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
       computerGeneration, confirmCurrent };
+    return Promise.resolve(company);
   }
   const composition = compose({ enabled: true, companyPreflight });
   expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });

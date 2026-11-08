@@ -1,1 +1,1 @@
-Routine preparation now checks the saved owner's current company account and connection after the computer wakes, before reserving money. Automatic company calls remain unavailable.
+Routine preparation now checks the saved owner's company account, connection and both current server grants after the computer wakes. It checks the company choice again after private thread preparation, before reserving money. Automatic company calls remain unavailable.
