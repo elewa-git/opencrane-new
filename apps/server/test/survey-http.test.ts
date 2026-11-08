@@ -507,3 +507,107 @@ async function personaRefusals() {
     'Should not save')).statusCode).toBe(403);
 }
 it('rejects excess UTF-8 bytes and stale or foreign revision access', personaRefusals);
+
+function approve(commandId: string, expectedPosition: number, revision: RevisionReceipt,
+  generation = 1, requestHeaders = headers) {
+  const payload = { operation: 'approve', commandId, generation, expectedPosition,
+    revision: revision.revision, revisionId: revision.revisionId };
+  return app.inject({ method: 'POST', url: '/api/onboarding/persona',
+    headers: requestHeaders, payload });
+}
+
+async function approvalRaceAndReplay() {
+  const surveyPosition = await completeSurvey();
+  const first = (await revise('approval-r1', surveyPosition, 'First')).json<RevisionReceipt>();
+  const second = (await revise('approval-r2', first.position, 'Private second'))
+    .json<RevisionReceipt>();
+  const append = nats.store.append.bind(nats.store);
+  const bothReady = Promise.withResolvers<void>();
+  let waiting = 0;
+  nats.store.append = async function waitForBoth(command) {
+    waiting += 1;
+    if (waiting === 2) bothReady.resolve();
+    await bothReady.promise;
+    return append(command);
+  };
+  const responses = await Promise.all([
+    approve('approve-r2', second.position, second),
+    revise('approval-r3', second.position, 'Third'),
+  ]);
+  nats.store.append = append;
+  function statusCode(response: typeof responses[number]) {
+    return response.statusCode;
+  }
+  const statuses = responses.map(statusCode);
+  expect(statuses.sort()).toEqual([200, 409]);
+  const current = (await app.inject({ url: '/api/onboarding', headers })).json<{
+    approval: { revision: number; revisionId: string; time: string } | null;
+  }>();
+  const approved = responses[0].statusCode === 200;
+  if (approved) {
+    expect(current.approval).toMatchObject({ revision: 2, revisionId: second.revisionId });
+    const receipt = responses[0].json();
+    expect((await approve('approve-r2', second.position, second)).json()).toEqual(receipt);
+    expect((await approve('approve-r2', second.position, first)).statusCode).toBe(409);
+  } else {
+    expect(current.approval).toBeNull();
+  }
+  await runner.run(personalSettings);
+  const projected = await readSurvey(pgDb(dbs.queue), 'test', 'alice');
+  await runner.rebuild(personalSettings);
+  expect(await readSurvey(pgDb(dbs.queue), 'test', 'alice')).toEqual(projected);
+  if (approved) {
+    expect(projected).toMatchObject({ approvedRevision: 2,
+      approvedTime: current.approval?.time });
+  } else {
+    expect(projected).not.toHaveProperty('approvedRevision');
+  }
+}
+it('selects one exact revision under a competing edit and replays its approval time',
+  approvalRaceAndReplay, 60_000);
+
+async function approvalStatusAndAccess() {
+  const surveyPosition = await completeSurvey();
+  const revision = (await revise('status-revision', surveyPosition, 'Private original'))
+    .json<RevisionReceipt>();
+  const append = nats.store.append.bind(nats.store);
+  nats.store.append = async function loseReply(command) {
+    await append(command);
+    throw new Error('Reply lost');
+  };
+  const lost = await approve('lost-approval', revision.position, revision);
+  nats.store.append = append;
+  expect(lost.json()).toEqual({ status: 'unknown' });
+  const status = await app.inject({ url: '/api/personal/changes/lost-approval', headers });
+  expect(status.json()).toMatchObject({ status: 'confirmed', revision: 1,
+    revisionId: revision.revisionId, operation: 'onboarding.persona_approved' });
+  expect((await approve('lost-approval', revision.position, revision)).json())
+    .toEqual(status.json());
+  expect((await approve('lost-approval', revision.position,
+    { ...revision, revisionId: 'different' })).statusCode).toBe(409);
+  const afterApproval = status.json<PositionReceipt>().position;
+  const next = (await revise('later-revision', afterApproval, 'Private later'))
+    .json<RevisionReceipt>();
+  expect((await approve('stale', afterApproval, revision)).statusCode).toBe(409);
+  expect((await approve('mismatch', next.position,
+    { ...next, revisionId: revision.revisionId })).statusCode).toBe(409);
+  const current = await app.inject({ url: '/api/onboarding', headers });
+  expect(current.json()).toMatchObject({ approval: { revision: 1,
+    revisionId: revision.revisionId }, currentRevision: 2 });
+  const restart = await post({ operation: 'restart', commandId: 'after-approval',
+    generation: 1, expectedPosition: next.position });
+  expect(restart.statusCode).toBe(200);
+  expect((await app.inject({ url: '/api/onboarding', headers })).json())
+    .toMatchObject({ approval: { revision: 1, revisionId: revision.revisionId } });
+  const bobHeaders = { ...headers, cookie: `${config.cookieName}=${encodeSession(config,
+    { ...session, sub: 'bob' })}` };
+  expect((await approve('foreign', restart.json<PositionReceipt>().position,
+    revision, 2, bobHeaders)).statusCode).toBe(403);
+  expect((await app.inject({ url: '/api/personal/changes/lost-approval',
+    headers: bobHeaders })).statusCode).toBe(403);
+  for await (const row of nats.store.readStream('personal-alice')) {
+    expect(JSON.stringify(row.event)).not.toContain('Private original');
+  }
+}
+it('recovers a lost approval reply, preserves the old choice and refuses foreign access',
+  approvalStatusAndAccess);
