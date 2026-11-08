@@ -27,6 +27,7 @@ connections or delivery buffers. The local socket returns only a fresh challenge
 and the helper's current fixed result. The qualification runner checks Linux peer
 credentials and process identity around the reply. Development runs without the
 native helper expose no protection socket. Memory admission remains disabled.
+
 ## Writer closure
 
 `WriterSlot` admits one saved lease per server process. It checks access and the
