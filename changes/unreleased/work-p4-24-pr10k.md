@@ -1,0 +1,1 @@
+Enabled routine startup checks the existing persistent, silo-bound conversation key store before any due claim. Missing custody refuses startup, and routine input preparation keeps key reads outside its short access check. Automatic delivery remains unavailable until its other checked services are connected.

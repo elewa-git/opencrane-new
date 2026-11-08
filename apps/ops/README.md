@@ -25,7 +25,7 @@ flowchart LR
   ops -->|holds worker locks and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
-  ops -->|deletes forgotten keys| keys["Memory key store<br/>private storage"]
+  ops -->|opens conversation keys and deletes forgotten memory keys| keys["Private key store"]
 ```
 
 The computers run in [Kubernetes](../../GLOSSARY.md#kubernetes).
@@ -54,7 +54,8 @@ for checked preparation. It sends no memory text and cannot dispatch a turn.
 - Holds one routine scheduler owner per silo while its callback prepares claims.
 - Inspects small pages of routine references and dispatches checked commands from saved events.
 - Leaves routine scheduling off by default. An enabled routines worker refuses startup
-  until a checked delivery callback is connected.
+  if its shared conversation key store is unavailable. It still needs the other
+  checked delivery services before it can claim or send work.
 
 ## Processes it handles
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { createEventStore } from '@opencrane/event-store';
 import { createStore, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { foldRoutine, handlerSubscriptions, routineMissedSchema, type EventEnvelope, type RoutineState } from '@opencrane/events';
@@ -176,12 +177,27 @@ async function enabledProductionNeedsDelivery() {
 it('refuses an enabled host without a checked delivery callback before claiming a slot',
   enabledProductionNeedsDelivery);
 
-async function workerSetting(setting: string | undefined) {
+async function workerSetting(setting: string | undefined,
+  custody: 'valid' | 'missing-directory' | 'missing-wrap' | 'invalid-wrap' = 'valid') {
   await nats.seed([creation()]);
   const before = await nats.store.head('routine-orders');
   const env: NodeJS.ProcessEnv = { ...process.env, ...nats.env('projection'),
-    DATABASE_URL: databaseUrl, LOG_LEVEL: 'info' };
+    DATABASE_URL: databaseUrl, SILO_ID: 'test', LOG_LEVEL: 'info' };
   delete env['ROUTINE_EXECUTION_ENABLED'];
+  delete env['CONVERSATION_KEYS_DIR'];
+  delete env['CONVERSATION_WRAP_KEY_FILE'];
+  const directory = await mkdtemp('/tmp/private-routine-custody-path-');
+  const keyDirectory = `${directory}/keys`;
+  const wrappingKeyFile = `${directory}/wrap-key`;
+  if (custody !== 'missing-directory') await mkdir(keyDirectory);
+  if (custody !== 'missing-wrap') {
+    const wrappingBytes = custody === 'invalid-wrap'
+      ? 'private-routine-custody-canary'
+      : 'private-routine-custody-canary'.padEnd(32, '!');
+    await writeFile(wrappingKeyFile, wrappingBytes, { mode: 0o600 });
+  }
+  env['CONVERSATION_KEYS_DIR'] = keyDirectory;
+  env['CONVERSATION_WRAP_KEY_FILE'] = wrappingKeyFile;
   if (setting !== undefined) {
     env['ROUTINE_EXECUTION_ENABLED'] = setting;
   }
@@ -217,7 +233,9 @@ async function workerSetting(setting: string | undefined) {
       await exited;
       expect(child.exitCode).toBe(1);
       if (setting === 'true') {
-        expect(output).toContain('Routine delivery unavailable');
+        const expected = custody === 'valid'
+          ? 'Routine delivery unavailable' : 'Routine custody unavailable';
+        expect(output).toContain(expected);
       } else {
         expect(output).toContain('ROUTINE_EXECUTION_ENABLED must be true or false');
       }
@@ -226,15 +244,32 @@ async function workerSetting(setting: string | undefined) {
     expect((await state()).activeRun).toBeNull();
     expect(await nats.store.head('budget-test')).toBe(0);
     expect(forbidden).not.toHaveBeenCalled();
+    expect(output).not.toContain('private-routine-custody-canary');
+    expect(output).not.toContain(directory);
   } finally {
     if (child.exitCode === null && child.signalCode === null) {
       child.kill('SIGTERM');
       await exited;
     }
+    await rm(directory, { recursive: true, force: true });
   }
 }
+async function workerSettingCase(setting: string | undefined) {
+  await workerSetting(setting);
+}
 it.each([undefined, 'false', 'true', 'invalid'])(
-  'starts the routines worker with execution setting %s', workerSetting);
+  'starts the routines worker with execution setting %s', workerSettingCase);
+async function disabledWithoutCustody(setting: string | undefined) {
+  await workerSetting(setting, 'missing-directory');
+}
+it.each([undefined, 'false'])(
+  'keeps disabled startup read-only without custody: %s', disabledWithoutCustody);
+async function missingCustodyCase(
+  custody: 'missing-directory' | 'missing-wrap' | 'invalid-wrap') {
+  await workerSetting('true', custody);
+}
+it.each(['missing-directory', 'missing-wrap', 'invalid-wrap'] as const)(
+  'refuses enabled startup with %s before a claim', missingCustodyCase);
 
 async function enabledProductionHandsOffSavedDue() {
   await save([creation()]);

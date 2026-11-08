@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { once, once as onceEvent } from 'node:events';
+import { randomBytes } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { startDecision, readToolPolicy, reviewToolPolicy } from '@opencrane/models';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -18,7 +19,7 @@ import { chatRows } from '../src/chat/history.ts';
 import { chatSubscriptionAccess } from '../src/chat/access.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
@@ -57,6 +58,7 @@ let fga: Awaited<ReturnType<typeof openfga>>;
 let binding: Awaited<ReturnType<typeof createStore>>;
 let keys: ReturnType<typeof conversationKeys>;
 let directory: string;
+let wrappingKeyFile: string;
 let now: number;
 let owned: boolean;
 let duringCheck: (() => Promise<void>) | undefined;
@@ -116,7 +118,9 @@ async function setup() {
   fga = await openfga();
   binding = await createStore(fga.apiUrl, 'test');
   directory = await mkdtemp('/tmp/routine-session-');
-  keys = conversationKeys(directory);
+  wrappingKeyFile = `${directory}/wrap-key`;
+  await writeFile(wrappingKeyFile, randomBytes(32), { mode: 0o600 });
+  keys = conversationKeys(directory, wrappingKeyFile);
   inputMode = false;
   rootMode = false;
   activationMode = false;
@@ -628,6 +632,38 @@ function routineInputTests() {
     expect(await rows()).toEqual(saved);
   }
   it('saves one encrypted owner-attributed user input across competing retries', savesOnce);
+
+  async function savedInputSurvivesCustodyRestart() {
+    await prepare();
+    const saved = await rows();
+    const message = saved[1]!.event;
+    const restarted = conversationKeys(directory, wrappingKeyFile);
+    const text = restarted.decrypt('test', conversationId, message.data);
+    expect(text).toBe(`Routine instructions (user data):\n\n${privateText}`);
+    expect(() => restarted.decrypt('other-silo', conversationId, message.data))
+      .toThrow();
+    expect(JSON.stringify(saved)).not.toContain(privateText);
+  }
+  it('decrypts a saved input after custody restarts in the same silo',
+    savedInputSurvivesCustodyRestart);
+
+  async function keepsKeyReadsOutsideShortAccessCheck() {
+    const decrypt = vi.spyOn(keys, 'decrypt');
+    const originalAppend = nats.store.append.bind(nats.store);
+    async function watchAppend(change: AppendCommand) {
+      const originalCheck = change.checkAccess;
+      async function checkAccess() {
+        const before = decrypt.mock.calls.length;
+        await originalCheck?.();
+        expect(decrypt.mock.calls).toHaveLength(before);
+      }
+      return originalAppend({ ...change, checkAccess });
+    }
+    vi.spyOn(nats.store, 'append').mockImplementation(watchAppend);
+    await prepare();
+  }
+  it('keeps key reads outside the two-second input write check',
+    keepsKeyReadsOutsideShortAccessCheck);
 
   it('recovers the original ciphertext after a lost reply, restart and deduplication expiry', recovers);
   it.each(lostAccess)('refuses input after losing %s', losesAccess);

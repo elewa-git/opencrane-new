@@ -27,6 +27,7 @@ import { prepareGatewayConfigurationHandler } from './gateway-configuration.ts';
 import { stopMcpInstanceHandler } from './mcp-stop.ts';
 import { dispatcherHandlerNames } from './dispatcher-handlers.ts';
 import { runRoutineScheduler } from './routine-production.ts';
+import { loadRoutineCustody } from './routine-custody.ts';
 import type { Handler } from '@opencrane/handlers';
 import type { HandlerName } from '@opencrane/events';
 
@@ -168,6 +169,11 @@ try {
     const setting = process.env['ROUTINE_EXECUTION_ENABLED'];
     if (setting !== undefined && setting !== 'true' && setting !== 'false') {
       throw new Error('ROUTINE_EXECUTION_ENABLED must be true or false');
+    }
+    if (setting === 'true') {
+      // Check persistent keys before any future claim or wake path can start.
+      loadRoutineCustody(required('SILO_ID'), process.env['CONVERSATION_KEYS_DIR'],
+        process.env['CONVERSATION_WRAP_KEY_FILE']);
     }
     await runRoutineScheduler({ enabled: setting === 'true' });
   }
