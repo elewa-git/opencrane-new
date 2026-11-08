@@ -97,8 +97,56 @@ async function extract(directory, signal) {
     signal, env: { PATH: '/usr/bin:/bin', PYTHONDONTWRITEBYTECODE: '1' } };
   const output = await execute('python3', args, options);
   const files = JSON.parse(output.stdout);
-  requireImage(Array.isArray(files) && files.length > 0 && files.length <= 50_000);
   return files;
+}
+
+export function checkImagePartCoverage(files, expectedCount = files?.length) {
+  requireImage(Array.isArray(files) && Number.isSafeInteger(expectedCount) &&
+    expectedCount > 0 && expectedCount <= 50_000 && files.length === expectedCount);
+  for (let index = 0; index < files.length; index++) {
+    const file = files[index];
+    // Require the walk's original order so a repeated or skipped file cannot count twice.
+    requireImage(file && file.name === `part-${index}` && hex.test(file.sha256) &&
+      Number.isSafeInteger(file.byteCount) && file.byteCount >= 0 &&
+      file.byteCount <= 20 * 1024 * 1024);
+  }
+  return files.length;
+}
+
+function exactAttempt(attempt, image, settings) {
+  requireImage(attempt && attempt.status === 'checking' && image && settings &&
+    /^[\w-]{1,200}$/u.test(attempt.silo) &&
+    /^[\w-]{1,200}$/u.test(attempt.serverId) &&
+    Number.isSafeInteger(attempt.attemptId) && attempt.attemptId > 0 &&
+    hex.test(attempt.imageDigest) &&
+    ['linux/amd64', 'linux/arm64'].includes(attempt.platform) &&
+    attempt.silo === image.silo && attempt.silo === settings.silo &&
+    attempt.serverId === image.serverId && attempt.attemptId === image.attemptId &&
+    attempt.imageDigest === image.imageDigest && attempt.platform === image.platform);
+}
+
+export async function scanHostedImageAttempt(attempt, image, settings,
+  scanPart = scanImagePart, signal) {
+  try {
+    exactAttempt(attempt, image, settings);
+    const originalAttempt = { ...attempt };
+    const result = await scanHostedImage(image, settings, scanPart, signal);
+    if (result.verdict === 'unavailable') return result;
+    exactAttempt(attempt, image, settings);
+    await result.validate(image, settings);
+    async function validate(currentAttempt, currentImage, currentSettings) {
+      try {
+        exactAttempt(currentAttempt, currentImage, currentSettings);
+        exactAttempt(originalAttempt, currentImage, currentSettings);
+        return await result.validate(currentImage, currentSettings);
+      } catch {
+        throw new Error('Image scan unavailable');
+      }
+    }
+    return { ...result, validate };
+  } catch {
+    return unavailable;
+  }
 }
 
 export async function scanHostedImage(image, settings, scanPart = scanImagePart, signal) {
@@ -118,13 +166,12 @@ export async function scanHostedImage(image, settings, scanPart = scanImagePart,
     directory = await mkdtemp(join(tmpdir(), 'hosted-image-scan-'));
     await stage(directory, image, layers, controller.signal);
     const files = await extract(directory, controller.signal);
+    const requiredPartCount = checkImagePartCoverage(files);
     const binding = bindingFor(image);
     const validations = [];
     let infected = false;
     for (const file of files) {
       controller.signal.throwIfAborted();
-      requireImage(/^part-[0-9]+$/u.test(file.name) && hex.test(file.sha256) &&
-        Number.isSafeInteger(file.byteCount) && file.byteCount <= 20 * 1024 * 1024);
       const bytes = await readFile(join(directory, file.name));
       requireImage(bytes.length === file.byteCount && hash(bytes) === file.sha256);
       const validate = await scanPart(settings, bytes, binding, controller.signal);
@@ -134,6 +181,7 @@ export async function scanHostedImage(image, settings, scanPart = scanImagePart,
       if (verdict === 'infected') infected = true;
       validations.push({ validate, bytes });
     }
+    requireImage(validations.length === requiredPartCount);
     async function validate(currentImage, currentSettings) {
       try {
         requireImage(!signal?.aborted);

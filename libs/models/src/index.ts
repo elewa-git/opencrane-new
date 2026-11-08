@@ -86,7 +86,7 @@ export { RootBudgetRefused, rootTotals, requireRootStartCapacity } from './root-
 export { registerHosted, hostedRegistrationChange } from './hosted-registration.ts';
 export { gatewayDelivery } from './gateway-delivery.ts';
 
-export { readHostedAdmission, foldHostedAdmission, requestHostedCheck }
+export { readHostedAdmission, readHostedImageScanAttempt, foldHostedAdmission, requestHostedCheck }
   from './hosted-admission.ts';
 
 export { gatewayConfigurationWorker } from './gateway-configuration-worker.ts';

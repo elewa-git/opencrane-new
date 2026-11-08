@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope, history } from '../src/actor.ts';
-import { writeHostedAdmission, readHostedAdmission, foldHostedAdmission }
+import { writeHostedAdmission, readHostedAdmission, readHostedImageScanAttempt,
+  foldHostedAdmission }
   from '../src/hosted-admission.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -42,6 +43,19 @@ async function installed() {
 async function registrations() {
   return history(nats.store, 'mcp-hosted-test', 'test');
 }
+
+async function readsOnlyTheCurrentCheckingAttempt() {
+  const serverId = await installed();
+  const attempt = await readHostedImageScanAttempt(nats.store, 'test', serverId);
+  expect(attempt).toEqual({ silo: 'test', serverId, attemptId: 1,
+    imageDigest: digest, platform: 'linux/amd64', status: 'checking' });
+  expect(await readHostedImageScanAttempt(nats.store, 'other', serverId)).toBeUndefined();
+  const saved = await writeHostedAdmission(nats.store, 'test', result(serverId), now);
+  expect(saved.status).toBe('appended');
+  expect(await readHostedImageScanAttempt(nats.store, 'test', serverId)).toBeUndefined();
+}
+it('reads only the saved checking attempt without calling a scanner',
+  readsOnlyTheCurrentCheckingAttempt);
 async function recoversResult() {
   const serverId = await installed();
   const payload = result(serverId);

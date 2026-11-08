@@ -635,6 +635,8 @@ Renewal and send checks use that message's position in the event log.
 An owner or admin can register a hosted image pinned by its SHA-256 digest.
 The library saves one request and recovers it by its original command id.
 Registration grants no access and starts no image checks.
+The private image scanner can read the saved checking attempt. This read does not
+start a scan or save an image result.
 
 The catalogue watch starts with calls paused and reads the tool list again. The models
 process uses its result before issuing a pass and immediately before sending a call.

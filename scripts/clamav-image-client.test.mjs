@@ -9,6 +9,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { sharedCertificates } from '../libs/event-store/test/certificates.ts';
 import { createScannerService } from '../infra/clamav/service.mjs';
 import { scanImagePart } from '../infra/clamav/image-client.mjs';
+import { scanHostedImageAttempt } from '../infra/clamav/image-walk.mjs';
 
 async function filesystem(importOriginal) {
   const original = await importOriginal();
@@ -25,6 +26,37 @@ function hash(content) {
   const digest = createHash('sha256');
   digest.update(content);
   return digest.digest('hex');
+}
+function imageWithPart(part, identity) {
+  const header = Buffer.alloc(512);
+  header.write('part', 0, 'utf8');
+  header.write('0000644\0', 100, 'ascii');
+  header.write('0000000\0', 108, 'ascii');
+  header.write('0000000\0', 116, 'ascii');
+  header.write(part.length.toString(8).padStart(11, '0') + '\0', 124, 'ascii');
+  header.write('00000000000\0', 136, 'ascii');
+  header.fill(32, 148, 156);
+  header.write('0', 156, 'ascii');
+  header.write('ustar\0', 257, 'ascii');
+  let checksum = 0;
+  for (const value of header) checksum += value;
+  header.write(checksum.toString(8).padStart(6, '0') + '\0 ', 148, 'ascii');
+  const padding = Buffer.alloc((512 - part.length % 512) % 512);
+  const layer = Buffer.concat([header, part, padding, Buffer.alloc(1024)]);
+  const config = Buffer.from(JSON.stringify({ os: 'linux',
+    architecture: identity.platform.split('/')[1],
+    rootfs: { diff_ids: [`sha256:${hash(layer)}`] } }));
+  const mediaType = 'application/vnd.oci.image.layer.v1.tar';
+  const manifest = Buffer.from(JSON.stringify({ schemaVersion: 2,
+    mediaType: 'application/vnd.oci.image.manifest.v1+json',
+    config: { digest: `sha256:${hash(config)}`, size: config.length },
+    layers: [{ digest: `sha256:${hash(layer)}`, size: layer.length, mediaType }] }));
+  const imageDigest = hash(manifest);
+  const image = { ...identity, imageDigest, manifest, config,
+    layers: [{ bytes: layer, digest: `sha256:${hash(layer)}`,
+      diffId: `sha256:${hash(layer)}`, mediaType }] };
+  const attempt = { ...identity, imageDigest, status: 'checking' };
+  return { image, attempt };
 }
 function facts(input) {
   const now = Date.now();
@@ -113,20 +145,22 @@ async function twoSilos() {
   server = createScannerService(serviceOptions);
   await listen();
   other.url = settings.url;
-  const second = { ...binding, silo: 'second', serverId: 'server-two', attemptId: 2,
-    platform: 'linux/arm64', targetImageDigest: 'e'.repeat(64) };
+  const second = { silo: 'second', serverId: 'server-two', attemptId: 2,
+    platform: 'linux/arm64' };
   const infected = Buffer.from('infected part');
-  const results = await Promise.all([scanImagePart(settings, bytes, binding),
-    scanImagePart(other, infected, second)]);
-  expect(results[0](bytes, binding)).toBe('clean');
-  expect(results[1](infected, second)).toBe('infected');
-  function swapped() {
-    results[0](infected, second);
-  }
-  expect(swapped).toThrow('Image part scan refused');
+  const firstImage = imageWithPart(bytes, binding);
+  const secondImage = imageWithPart(infected, second);
+  const results = await Promise.all([
+    scanHostedImageAttempt(firstImage.attempt, firstImage.image, settings),
+    scanHostedImageAttempt(secondImage.attempt, secondImage.image, other),
+  ]);
+  expect(results[0].verdict).toBe('clean');
+  expect(results[1].verdict).toBe('infected');
+  expect(await results[0].validate(firstImage.attempt, firstImage.image, settings)).toBe('clean');
+  await expect(results[0].validate(secondImage.attempt, secondImage.image, other)).rejects.toThrow();
   expect(received).toHaveLength(2);
 }
-test('interleaves two trusted silos and returns only their own part verdicts', twoSilos);
+test('interleaves complete image attempts from two trusted silos', twoSilos);
 
 function respond(request, reply) {
   requests.push(request.headers['x-scan-request-id']);

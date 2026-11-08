@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gzipSync } from 'node:zlib';
 import { test, vi } from 'vitest';
-import { scanHostedImage } from '../infra/clamav/image-walk.mjs';
+import { scanHostedImage, scanHostedImageAttempt, checkImagePartCoverage }
+  from '../infra/clamav/image-walk.mjs';
 
 function createCleanupState() {
   return { active: false };
@@ -118,12 +119,12 @@ function replaceFirstLayer(image, bytes) {
   changed.imageDigest = hash(changed.manifest);
   return changed;
 }
-function recordingScanner(seen, outcome = 'clean') {
+function recordingScanner(seen, outcome = 'clean', approvedSettings = scanner) {
   return async function scan(_settings, bytes, partBinding) {
     seen.push({ bytes: Buffer.from(bytes), binding: { ...partBinding } });
     const original = hash(bytes);
     const expected = JSON.stringify(partBinding);
-    const approved = JSON.stringify(scanner);
+    const approved = JSON.stringify(approvedSettings);
     return function validate(currentBytes, currentBinding, currentSettings) {
       if (hash(currentBytes) !== original || JSON.stringify(currentBinding) !== expected ||
           JSON.stringify(currentSettings) !== approved) throw new Error('stale part');
@@ -131,6 +132,67 @@ function recordingScanner(seen, outcome = 'clean') {
     };
   };
 }
+
+function trustedAttempt(image) {
+  return { silo: image.silo, serverId: image.serverId, attemptId: image.attemptId,
+    platform: image.platform, imageDigest: image.imageDigest, status: 'checking' };
+}
+
+test('one checked attempt cannot authorise another silo or changed image attempt', async () => {
+  const image = fixture([[{ name: 'one', bytes: Buffer.from('one') }]]);
+  const attempt = trustedAttempt(image);
+  const seen = [];
+  const settings = { ...scanner, silo: image.silo };
+  const result = await scanHostedImageAttempt(attempt, image, settings,
+    recordingScanner(seen, 'clean', settings));
+  assert.equal(result.verdict, 'clean');
+  assert.equal(await result.validate(attempt, image, { ...scanner, silo: image.silo }), 'clean');
+  for (const change of [{ silo: 'other' }, { serverId: 'other' }, { attemptId: 2 },
+    { platform: 'linux/arm64' }, { imageDigest: 'c'.repeat(64) },
+    { status: 'admitted' }]) {
+    await assert.rejects(result.validate({ ...attempt, ...change }, image,
+      { ...scanner, silo: image.silo }));
+  }
+  const foreign = await scanHostedImageAttempt({ ...attempt, silo: 'other' }, image,
+    { ...scanner, silo: 'other' }, recordingScanner([]));
+  assert.equal(foreign.verdict, 'unavailable');
+  assert.equal(seen.length, 1);
+});
+
+test('part coverage refuses missing, duplicate, reordered and extra parts', () => {
+  const parts = [
+    { name: 'part-0', sha256: 'a'.repeat(64), byteCount: 1 },
+    { name: 'part-1', sha256: 'a'.repeat(64), byteCount: 1 },
+  ];
+  assert.equal(checkImagePartCoverage(parts), 2);
+  for (const candidate of [[parts[0]], [parts[0], parts[0]],
+    [parts[1], parts[0]], [parts[0], parts[1], parts[1]]]) {
+    assert.throws(() => checkImagePartCoverage(candidate, 2));
+  }
+});
+
+test('one clean part, lost reply and changed deployment identity refuse a complete image',
+  async () => {
+    const image = fixture([[{ name: 'one', bytes: Buffer.from('one') },
+      { name: 'two', bytes: Buffer.from('two') }]]);
+    const attempt = trustedAttempt(image);
+    const settings = { ...scanner, silo: image.silo };
+    const seen = [];
+    const cleanFirst = recordingScanner(seen, 'clean', settings);
+    async function lostSecond(config, bytes, partBinding, signal) {
+      if (seen.length === 1) throw new Error('reply lost');
+      return cleanFirst(config, bytes, partBinding, signal);
+    }
+    const partial = await scanHostedImageAttempt(attempt, image, settings, lostSecond);
+    assert.equal(partial.verdict, 'unavailable');
+    assert.equal('validate' in partial, false);
+    const complete = await scanHostedImageAttempt(attempt, image, settings,
+      recordingScanner([], 'clean', settings));
+    assert.equal(complete.verdict, 'clean');
+    await assert.rejects(complete.validate(attempt, image,
+      { ...settings, manifestDigest: `sha256:${'c'.repeat(64)}` }));
+    await assert.rejects(complete.validate(attempt, image, { ...settings, silo: 'other' }));
+  });
 
 test('scans every regular file, including later and whiteouted layers', async () => {
   const image = fixture([[{ name: 'removed', bytes: eicar }],

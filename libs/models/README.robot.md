@@ -3508,6 +3508,14 @@ retry delivery and fresh-install qualification remain outside this change.
 
 ## Hosted image check requests
 
+`readHostedImageScanAttempt` reads the current `mcp` stream through the existing
+admission fold. It returns the exact silo, server, attempt, platform and image
+digest only while that attempt is checking and has no saved result. It does not
+call the scanner, write an event or turn a partial scan into admission. The
+private image walk consumes this value separately from supplied image bytes.
+The production worker and its independent signature, vulnerability and licence
+checks remain disconnected.
+
 `requestHostedCheck` reuses saveToolCommand for current admin access and one conditional
 append. The helper reuses already-read history and supplies an access check to the
 event store for each publish attempt. Request data binds the registration position,
