@@ -199,6 +199,10 @@ async function workerSetting(setting: string | undefined) {
       await exited;
       expect(child.exitCode).toBe(0);
     } else {
+      function stopped() {
+        return child.exitCode !== null;
+      }
+      await expect.poll(stopped, { timeout: 10_000, interval: 100 }).toBe(true);
       await exited;
       expect(child.exitCode).toBe(1);
       if (setting === 'true') {

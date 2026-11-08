@@ -1153,6 +1153,10 @@ the worker has no delivery callback. The same enabled option can be passed to th
 server composition when the budget actor and bridge share a checked production
 hand-off. Public routine reads still report `executionAvailable: false`. See
 [the build record](../../docs/process/p4-24-pr10i/README.robot.md).
+`test/routine-dispatch.test.ts` starts the real worker with absent, false, true
+and invalid settings. It checks continued projection work when off and startup
+refusal without claims when on or invalid. It also checks the helper's exact
+missing-delivery error without the leadership wrapper.
 
 ## Routine Stop ownership
 

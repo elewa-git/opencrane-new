@@ -36,6 +36,7 @@ to be built.
 
 Use a disposable PostgreSQL database in `PG_TEST_URL`, then run
 `nice -n 10 npx vitest run apps/ops/test/routine-dispatch.test.ts --maxWorkers=1`.
+The test starts the worker with the setting absent, off, on and invalid.
 
 ## Where to read more
 
