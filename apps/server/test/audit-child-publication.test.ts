@@ -363,11 +363,18 @@ it('refuses detail after membership removal even with an old cursor', async () =
   expect(continued.statusCode).toBe(403);
 });
 
-async function delegation(id: string, conversationId: string, parentDelegationId?: string) {
+type DelegationStartOverrides = {
+  rootId?: string;
+  assistantId?: string;
+  generation?: number;
+};
+
+async function delegation(id: string, conversationId: string, parentDelegationId?: string,
+  overrides: DelegationStartOverrides = {}) {
   const data = { ...modernDelegationExample, delegationId: id, conversationId,
     rootId: 'private-root', assistantId: 'private-assistant',
     parentDelegationId, turnId: `${id}-turn`, threadId: `${id}-thread`,
-    computerAdmission: { eventId: `${id}-admission`, position: 2 } };
+    computerAdmission: { eventId: `${id}-admission`, position: 2 }, ...overrides };
   await append(`delegation-${id}`, 'delegation.started', data, `${id}-start`);
 }
 
@@ -431,6 +438,64 @@ it('shows one neutral child placeholder unless its own conversation is readable'
   expect(neitherRecord.delegationAccess).toBe('restricted');
   expect(neither.body).not.toContain('"delegationId":"child-task"');
   expect(JSON.stringify(logArguments)).not.toContain(privateText);
+});
+
+it('finds delegation rows by their returned public id without revealing restricted ids', async () => {
+  await delegation('parent-task', 'parent');
+  await delegation('child-task', 'child', 'parent-task');
+  await finishDelegation('child-task', 'completed');
+
+  for (const memberId of ['owner', 'admin']) {
+    const listed = await list(memberId, '?type=delegation');
+    expect(listed.statusCode, listed.body).toBe(200);
+    const listedPage = auditResponseSchema.parse(listed.json());
+    expect(listedPage.rows).toHaveLength(1);
+    const publicId = listedPage.rows[0]!.id;
+    expect(publicId).toMatch(/^[a-f0-9]{64}$/u);
+    expect(publicId).not.toBe('child-task-outcome');
+
+    const found = await list(memberId, `?type=delegation&reference=${publicId}`);
+    expect(found.statusCode, found.body).toBe(200);
+    const foundPage = auditResponseSchema.parse(found.json());
+    expect(foundPage.rows).toEqual(listedPage.rows);
+    const shown = await detail(memberId, publicId);
+    expect(shown.statusCode, shown.body).toBe(200);
+    expect(auditDetailSchema.parse(shown.json()).id).toBe(publicId);
+    if (memberId === 'owner') {
+      expect(found.body).not.toContain('child-task');
+      expect(shown.body).not.toContain('child-task');
+    }
+  }
+});
+
+it('leaves a saved child unavailable when its parent is missing or has different ancestry', async () => {
+  await delegation('missing-child', 'child', 'missing-parent');
+  await finishDelegation('missing-child', 'completed');
+  const missing = await detail('admin', 'missing-child-outcome');
+  expect(missing.statusCode, missing.body).toBe(200);
+  const missingRecord = auditDetailSchema.parse(missing.json()).records[0]!;
+  expect(missingRecord.joinStatus).toBe('unavailable');
+  expect(missingRecord.taskHref).toBeUndefined();
+  expect(missingRecord.startEventId).toBeUndefined();
+
+  const mismatches: { name: string; overrides: DelegationStartOverrides }[] = [
+    { name: 'root', overrides: { rootId: 'different-root' } },
+    { name: 'assistant', overrides: { assistantId: 'different-assistant' } },
+    { name: 'generation', overrides: { generation: 2 } },
+  ];
+  for (const mismatch of mismatches) {
+    const parentId = `${mismatch.name}-parent`;
+    const childId = `${mismatch.name}-child`;
+    await delegation(parentId, 'parent', undefined, mismatch.overrides);
+    await delegation(childId, 'child', parentId);
+    await finishDelegation(childId, 'completed');
+    const response = await detail('admin', `${childId}-outcome`);
+    expect(response.statusCode, response.body).toBe(200);
+    const record = auditDetailSchema.parse(response.json()).records[0]!;
+    expect(record.joinStatus).toBe('unavailable');
+    expect(record.taskHref).toBeUndefined();
+    expect(record.startEventId).toBeUndefined();
+  }
 });
 
 it('keeps missing delegation joins unavailable and two equal-time outcomes stable', async () => {
