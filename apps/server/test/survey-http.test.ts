@@ -452,6 +452,61 @@ async function removalDuringPersonaPointRead() {
 it('refuses and does not decrypt a persona removed during its point read',
   removalDuringPersonaPointRead);
 
+async function removalDuringSavedReceipt(source: 'retry' | 'append') {
+  const surveyPosition = await completeSurvey();
+  const first = await revise('receipt-first', surveyPosition, 'Private persona text');
+  expect(first.statusCode).toBe(200);
+  const firstReceipt = first.json<RevisionReceipt>();
+  const targetPosition = source === 'retry' ? firstReceipt.position : firstReceipt.position + 1;
+  const targetCommandId = source === 'retry' ? 'receipt-first' : 'receipt-second';
+  const read = nats.store.readStream.bind(nats.store);
+  const decrypt = keys.decrypt.bind(keys);
+  let removed = false;
+  let readSavedRecord = false;
+  let decryptedAfterRemoval = false;
+
+  nats.store.readStream = async function* removeDuringSavedRead(subject, from, deadline, closes) {
+    for await (const row of read(subject, from, deadline, closes)) {
+      if (subject === 'personal-alice' && from === targetPosition &&
+          row.event.commandId === targetCommandId && !removed) {
+        readSavedRecord = true;
+        await delay(50);
+        const removal = { ...event(`removed-during-${source}-receipt`, 'member-alice',
+          'member.removed'), data: { memberId: 'alice', removedBy: 'owner' } };
+        expect((await nats.store.append({ event: removal, expectedSequence: 1 })).status)
+          .toBe('appended');
+        removed = true;
+      }
+      yield row;
+    }
+  };
+  keys.decrypt = function detectDecryption(silo, conversation, value) {
+    if (removed) decryptedAfterRemoval = true;
+    return decrypt(silo, conversation, value);
+  };
+
+  let response;
+  try {
+    if (source === 'retry') {
+      response = await revise('receipt-first', surveyPosition, 'Private persona text');
+    } else {
+      response = await revise('receipt-second', firstReceipt.position, 'Another private text');
+    }
+  } finally {
+    nats.store.readStream = read;
+    keys.decrypt = decrypt;
+  }
+
+  expect(readSavedRecord).toBe(true);
+  expect(removed).toBe(true);
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+  expect(decryptedAfterRemoval).toBe(false);
+}
+it.each(['retry', 'append'] as const)(
+  'refuses and does not decrypt after removal during a %s receipt read',
+  removalDuringSavedReceipt);
+
 async function personaRefusals() {
   const position = await completeSurvey();
   expect((await revise('too-long', position, 'é'.repeat(2049))).statusCode).toBe(422);
