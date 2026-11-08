@@ -215,7 +215,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|sign-out, requests, Office uploads, survey and persona reads, Memory setup reads, own and admin routine lists, approval replies and original call status, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|sign-out, requests, Office uploads, survey, persona and scripted welcome reads, Memory setup reads, own and admin routine lists, approval replies and original call status, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks saved membership before personal memory tools and history errors; prepares allowances; checks routine admission and retirement replacements; applies Stop, Pause and Retire; verifies termination, settled model cost and admin authority; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
   server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, writer closure and retries, routine sessions, inputs, cancellations, confirmed results, checked finishes and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
@@ -352,7 +352,7 @@ can be used now is checked separately. Missing evidence never means it is safe t
 | [members](src/members/README.md) | Manages invitations, membership, groups, roles and ownership. |
 | [memory](src/memory/README.md) | Reads, saves, corrects and forgets permitted remembered facts. |
 | [models](src/models/README.md) | Manages access to AI models for people, groups and assistants. |
-| [onboarding](src/onboarding/README.md) | Saves the private welcome survey, persona revisions and approval. |
+| [onboarding](src/onboarding/README.md) | Saves the private survey, persona approval and scripted welcome progress. |
 | [providers](src/providers/README.md) | Connects model providers and manages keys, checks and provider choices. |
 
 The server checks files the assistant creates through the same type checks, virus

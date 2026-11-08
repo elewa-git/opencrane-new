@@ -2,19 +2,19 @@
 
 ## What this is
 
-This folder saves a member's welcome survey and persona revisions. Reloading
-restores both. Private answers and persona text are encrypted. A member can
+This folder saves a member's welcome survey, persona revisions and scripted welcome. Reloading
+restores all three. Private answers and persona text are encrypted. A member can
 approve one saved version for later use. Saving does not start an assistant or
 spend money.
 
 ## Where it fits
 
-The website sends survey and persona requests to the server. This folder checks
+The website sends survey, persona and welcome requests to the server. This folder checks
 membership and saves each change in the member's personal event history.
 
 ```mermaid
 flowchart LR
-  web[Website] --> onboarding[Onboarding routes]
+  web[Website] --> onboarding[Survey, persona and welcome routes]
   onboarding --> access[Member access]
   onboarding --> events[Personal events]
   events --> tables[Read tables]
@@ -31,6 +31,8 @@ flowchart LR
 - Builds the same first persona from the same saved answers and keeps every edited version.
 - Lists revision dates and opens one version for its member after an access check.
 - Approves the exact current version and shows its saved time and original receipt.
+- Starts one saved welcome from the member's actual assistant assignment.
+- Saves the next scripted answer and shows it as pending completion.
 
 Reads check current membership after loading, before opening private answers.
 Opening a persona revision loads that version before checking membership. Writes
@@ -43,6 +45,8 @@ These requests use the member's personal encryption keys rather than conversatio
 keys.
 Approval keeps its chosen version after a later edit or survey restart. It does
 not change assistant settings or grants.
+The welcome also starts no assistant turn or computer. Its final answer stays
+pending until a separate completion process confirms it.
 
 ## Main files
 
@@ -52,6 +56,8 @@ not change assistant settings or grants.
 | [commands.ts](commands.ts) | Checks step order, revision versions and repeated requests before saving. |
 | [history.ts](history.ts) | Reads saved history and opens authorised encrypted answers. |
 | [persona.ts](persona.ts) | Builds the first persona from saved survey answers. |
+| [welcome.ts](welcome.ts) | Checks the assignment, start and next answer. |
+| [script.ts](script.ts) | Keeps the ordered questions for each saved script version. |
 
 ## How it connects
 

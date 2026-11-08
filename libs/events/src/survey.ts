@@ -74,11 +74,28 @@ export const personaRevisedDataSchema = z.strictObject({
 export const personaApprovedDataSchema = z.strictObject({
   ...identity, revision: z.int().positive(), revisionId: chatIdSchema,
 });
+export const welcomeStartedDataSchema = z.strictObject({
+  ...identity, welcomeId: chatIdSchema, scriptVersion: z.literal('welcome-v1'),
+  variant: z.enum(['assistant', 'no_assistant']),
+  assignmentStatus: z.enum(['assigned', 'not_requested', 'provisioning']),
+  revision: z.int().positive().nullable(), revisionId: chatIdSchema.nullable(),
+  assistantId: chatIdSchema.nullable(),
+});
+export const welcomeAnswerRecordedDataSchema = z.strictObject({
+  ...identity, welcomeId: chatIdSchema, scriptVersion: z.literal('welcome-v1'),
+  stepId: z.enum(['weekly_help', 'continue_to_workspace']), stepNumber: z.literal(1),
+  encrypted: surveyCiphertext, encryptedDigest: ciphertextDigest,
+  keyRef: z.string().regex(/^key:[a-f0-9]{64}$/u),
+}).refine(hasMatchingPersonaDigest, {
+  path: ['encryptedDigest'], message: 'Digest does not match encrypted bytes',
+});
 const personalIdentitySchema = z.object({ memberId: chatIdSchema });
 export function validSurveyEvent(record: EventEnvelope): boolean {
   if (!record.type.startsWith('onboarding.survey_') &&
       record.type !== 'onboarding.persona_revised' &&
-      record.type !== 'onboarding.persona_approved') {
+      record.type !== 'onboarding.persona_approved' &&
+      record.type !== 'onboarding.welcome_started' &&
+      record.type !== 'onboarding.welcome_answer_recorded') {
     return true;
   }
   const parsed = personalIdentitySchema.safeParse(record.data);
@@ -110,4 +127,14 @@ export const surveyEvents: readonly EventDefinition[] = [
   event('onboarding.persona_approved', 'personal',
     'A member approved one exact saved persona revision.', personaApprovedDataSchema,
     { ...exampleIdentity, revision: 1, revisionId: 'persona-revision-1' }),
+  event('onboarding.welcome_started', 'personal',
+    'A member saved one frozen scripted welcome reference.', welcomeStartedDataSchema,
+    { ...exampleIdentity, welcomeId: 'welcome-1', scriptVersion: 'welcome-v1',
+      variant: 'no_assistant', assignmentStatus: 'not_requested',
+      revision: null, revisionId: null, assistantId: null }),
+  event('onboarding.welcome_answer_recorded', 'personal',
+    'A member saved one encrypted welcome answer in order.', welcomeAnswerRecordedDataSchema,
+    { ...exampleIdentity, welcomeId: 'welcome-1', scriptVersion: 'welcome-v1',
+      stepId: 'continue_to_workspace', stepNumber: 1, encrypted: savedExample.ciphertext,
+      encryptedDigest: savedExample.ciphertextDigest, keyRef: savedExample.keyId }),
 ];

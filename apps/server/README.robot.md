@@ -711,6 +711,12 @@ current candidate, not history. Turn use is separate later work.
 
 ## Shared member guard
 
+The welcome routes use the same member guard. They save a frozen `welcome-v1`
+start only after checking the assistant assignment and, when assigned, the exact
+approved persona. The next answer uses one conditional personal-stream append.
+The last answer remains `completion_pending`; these routes start no turn, wake
+no computer and spend nothing. See [onboarding route contracts](src/onboarding/README.robot.md).
+
 `src/members/guard.ts` supplies `requireMember`, `MemberRefusal`, `idSchema` and
 `sameOrigin`. Chat, approval, file and personal tool-instance routes use it. Other member routes,
 screenshots, live view and integrations still use their existing checks; their

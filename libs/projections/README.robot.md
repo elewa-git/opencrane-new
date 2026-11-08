@@ -1076,3 +1076,12 @@ Stop routine readers and workers, then run `npm run replay -- routines
 this upgrade: older rows deliberately differ. Subsequent verification must pass.
 Replay rebuilds the index and invalidates earlier continuations without executing
 routines. Keep readers stopped until replay commits.
+
+## Frozen welcome progress
+
+`personal-settings` folds `onboarding.welcome_started` and
+`onboarding.welcome_answer_recorded` into the existing survey JSON. Start stores
+the script, generation, assignment status, assistant id and approved revision
+reference. Answer stores encrypted bytes and `completion_pending`. A survey
+restart clears an unfinished current welcome; its old events remain in the log.
+Replay opens no key, starts no turn and appends no completion event.

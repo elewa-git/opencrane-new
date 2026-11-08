@@ -480,6 +480,13 @@ stream position before appending it.
 Survey and persona text stay data. See the
 [accepted design](../../docs/specs/phase-4/p4-18-account-persona-welcome.md).
 
+`onboarding.welcome_started` stores `welcome-v1`, one welcome id, the survey
+generation, assigned or no-assistant variant, assignment status and the approved
+persona reference when assigned. `onboarding.welcome_answer_recorded` stores
+one ordered step id and encrypted answer. The schema checks the encrypted-byte
+digest without opening a key. Both events require the matching member, personal
+subject, human principal, server source and command id. Neither means completion.
+
 ## Exact tool review
 
 `mcp.server_reviewed` records exact catalogue and review digests, connection/account mode,
