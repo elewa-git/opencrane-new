@@ -11,7 +11,7 @@ export function closedByName(closedBy: string | undefined, memberId: string,
   colleagues: { memberId: string; displayName: string | null }[]): string {
   if (!closedBy) return 'a participant';
   if (closedBy === memberId) return 'you';
-  return colleagues.find(person => person.memberId === closedBy)?.displayName || closedBy;
+  return colleagues.find(person => person.memberId === closedBy)?.displayName || 'a participant';
 }
 
 function savedPending(): PendingClose | undefined {

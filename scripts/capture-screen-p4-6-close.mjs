@@ -97,14 +97,26 @@ function countSmallControls(controls) {
 }
 
 function clippedCloseContent(elements) {
-  return elements.filter(element => {
+  const clipped = [];
+  for (const element of elements) {
     const bounds = element.getBoundingClientRect();
-    const container = element.closest('.transcript, .workspace-header, .composer-dock');
-    if (!container) return false;
+    const container = element.closest('.transcript, .workspace-header, .composer-dock, .main');
+    if (!container) continue;
     const containerBounds = container.getBoundingClientRect();
-    return element.scrollWidth > element.clientWidth + 1
-      || bounds.right > containerBounds.right + 1;
-  });
+    const overflows = element.scrollWidth > element.clientWidth + 1
+      || bounds.right > containerBounds.right + 1
+      || bounds.right > globalThis.innerWidth + 1;
+    if (overflows) {
+      clipped.push({
+        className: element.className,
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+        right: bounds.right,
+        containerRight: containerBounds.right,
+      });
+    }
+  }
+  return clipped;
 }
 
 async function capture(browser, width, kind, closed) {
@@ -139,10 +151,12 @@ async function capture(browser, width, kind, closed) {
     }
     await page.evaluate(waitForFonts);
     assert(await page.evaluate(pageHasNoOverflow), `No overflow at ${width}px`);
-    if (kind === 'group' && width === 390) {
-      const clipped = await page.locator('.workspace-header h1, .closed-chat-notice, '
-        + '.closed-composer-notice').evaluateAll(clippedCloseContent);
-      assert.equal(clipped.length, 0, 'The group title and close notices fit the phone');
+    if (width === 390) {
+      const closeAreas = kind === 'group'
+        ? '.workspace-header h1, .closed-chat-notice, .closed-composer-notice'
+        : '.closed-session-notice, .closed-session-composer';
+      const clipped = await page.locator(closeAreas).evaluateAll(clippedCloseContent);
+      assert.deepEqual(clipped, [], 'The title and close notices fit the phone');
     }
     const small = await page.locator('oc-close-review-dialog dialog button:visible, '
       + '.close-opener:visible, .closed-session-composer:visible, '
@@ -213,7 +227,9 @@ try {
   await writeFile(`${output}/receipt.md`, `# Close review screen receipt\n\n` +
     `PASS: Captured the group chat and assistant session review and closed states at ` +
     `1280 and 390 pixels with intercepted API replies. The real routes rendered without ` +
-    `horizontal overflow. Visible close controls measured at least 44 pixels. ` +
+    `horizontal overflow. The group title and both screens' close notices and footers ` +
+    `fitted within their ` +
+    `own areas. Visible close controls measured at least 44 pixels. ` +
     `Reduced motion stopped dialog decoration. Escape and Cancel returned focus. ` +
     `A double click sent one command, and reload checked its original id. Foreign ` +
     `chats revealed no title or close action. Closed screens kept saved history ` +

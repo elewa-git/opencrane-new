@@ -110,7 +110,9 @@
           && !chat.busy() && !chat.turns().length) {
           <section class="draft" aria-label="Empty conversation">
             <oc-shared-state kind="not_configured" message="No messages yet"
-              detail="Send a message to start this conversation." [showAction]="false" />
+              [detail]="isClosedConversation()
+                ? 'This session closed before anyone sent a message.'
+                : 'Send a message to start this conversation.'" [showAction]="false" />
           </section>
         }
         @for (turn of chat.turns(); track turn.author + turn.id) {

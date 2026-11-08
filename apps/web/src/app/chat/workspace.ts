@@ -503,13 +503,11 @@ export class Workspace implements OnInit {
     return captureView(this.capture.state(), this.chat.attachments());
   }
   protected canDownload(path: string): boolean {
-    if (this.isClosedConversation()) return false;
     const file = this.chat.attachments().find(attachment => attachment.path === path);
     // Only the uploader can read regular uploads. Session members can read screenshots.
     return !!file && (!!file.screenshot || file.uploadedBy === this.chat.memberId());
   }
   protected canDownloadPreview(path: string): boolean {
-    if (this.isClosedConversation()) return false;
     if (!hasAttachment(path, this.chat.attachments())) return false;
     // Keep downloads available for files made by this conversation's owner.
     const ownedAgentFile = isOwnedAgentFile(
