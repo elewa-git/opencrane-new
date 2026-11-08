@@ -3,11 +3,11 @@ import { computerSummary, type tokenIssuer } from '@opencrane/auth';
 import { readStreamSummary, type EventStore } from '@opencrane/event-store';
 import { resumeComputer } from '../../../ops/src/lifecycle.ts';
 import { z } from 'zod';
-import type { connectBridge } from './bridge.ts';
+import type { WebSocket } from 'ws';
 
 type Tokens = Awaited<ReturnType<typeof tokenIssuer>>;
-type Link = Awaited<ReturnType<typeof connectBridge>>;
-type Connection = (computerId: string, assistantId: string) => Promise<Link>;
+type LinkIdentity = { computerId: string; assistantId: string; generation: number | undefined;
+  socket: WebSocket };
 const identity = z.object({ computerId: z.string(), assistantId: z.string(),
   generation: z.int().positive() });
 const computerIdentity = identity.omit({ generation: true });
@@ -62,8 +62,9 @@ function sameComputer(saved: Facts, recorded: z.infer<typeof identity>) {
 }
 
 /** Resume only the saved computer, then use the bridge watcher's authenticated socket. */
-export function createRoutineWake(store: EventStore, silo: string, tokens: Tokens,
-  watcherSignal: AbortSignal, connection: Connection) {
+export function createRoutineWake<Link extends LinkIdentity>(store: EventStore,
+  silo: string, tokens: Tokens, watcherSignal: AbortSignal,
+  connection: (computerId: string, assistantId: string) => Promise<Link>) {
   async function facts(assistantId: string) {
     function take(summary: ReturnType<typeof computerSummary.empty>) {
       return { lifecycle: summary.lifecycle, claim: summary.claim,
