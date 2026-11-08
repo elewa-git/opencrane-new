@@ -16,7 +16,7 @@ before and after the check. It saves only a fixed refusal when the check fails.
 | --- | --- | --- |
 | Worktree update and dependencies | PASS | Rebased on `origin/main`; the existing dependencies and local tool links were available. |
 | Failing-first commits | PASS | The bridge tests failed before the checker existed; the added data-mount test failed before the mount fix. |
-| Separate bridge container | PASS | A disposable computer image ran its packaged root entrypoint and UID 1000 bridge, with a `/home/agent` volume and no code mount. The collector's narrow check passed. |
+| Separate bridge container | PASS | A disposable computer image ran its packaged root entrypoint and UID 1000 bridge, with a `<home>/agent` volume and no code mount. The collector's narrow check passed. |
 | Refusal cases | PASS | Wrong container, stale record, changed process identity, denied process read, swap and dump allowance refused in focused tests. |
 | Changed tests, both passes | PASS | 124 tests passed twice across five files, including the packaged bridge. |
 | Other affected tests | PASS | 181 tests passed across seven files, including the changed tests before the final collector assertion. |
