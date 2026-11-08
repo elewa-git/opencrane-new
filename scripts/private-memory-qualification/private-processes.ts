@@ -1,4 +1,4 @@
-import { readFileSync, readlinkSync } from 'node:fs';
+import { lstatSync, readFileSync, readlinkSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { runnerProtected } from './runner-protection.ts';
@@ -185,7 +185,38 @@ function serverIdentity(): ProcessIdentity | undefined {
   return identity;
 }
 
+function bridgeLaunchIdentity(): { pid: number; startTime: string } | undefined {
+  const directory = '/run/executor/supervisor';
+  const recordPath = `${directory}/bridge-identity`;
+  const directoryStat = lstatSync(directory, { throwIfNoEntry: false });
+  const recordStat = lstatSync(recordPath, { throwIfNoEntry: false });
+  if (directoryStat === undefined || recordStat === undefined) {
+    return undefined;
+  }
+  if (!directoryStat.isDirectory() || directoryStat.uid !== 0 ||
+      (directoryStat.mode & 0o077) !== 0 || !recordStat.isFile() ||
+      recordStat.uid !== 0 || (recordStat.mode & 0o022) !== 0 ||
+      recordStat.size > 64) {
+    throw new Error('private_process_unreadable');
+  }
+  const record = readFileSync(recordPath, 'utf8');
+  const match = /^([1-9][0-9]*) ([1-9][0-9]*)\n$/u.exec(record);
+  if (!match) {
+    throw new Error('private_process_unreadable');
+  }
+  const pid = Number(match[1]);
+  const startTime = match[2];
+  if (!Number.isSafeInteger(pid) || startTime === undefined) {
+    throw new Error('private_process_unreadable');
+  }
+  return { pid, startTime };
+}
+
 export function bridgeIdentity(): ProcessIdentity | undefined {
+  const launched = bridgeLaunchIdentity();
+  if (launched === undefined) {
+    return undefined;
+  }
   const childList = readFileSync('/proc/1/task/1/children', 'utf8');
   const children = childList.trim();
   if (!/^(?:[1-9][0-9]* ?)*$/u.test(children)) {
@@ -210,6 +241,10 @@ export function bridgeIdentity(): ProcessIdentity | undefined {
     if (args.length !== 4 || args[1] !== '--disable-sigusr1' ||
         args[2] !== '--experimental-strip-types' || args[3] !== '/app/src/bridge.ts') {
       continue;
+    }
+    // Require the child to be the process the root entrypoint actually launched.
+    if (identity.pid !== launched.pid || identity.startTime !== launched.startTime) {
+      return undefined;
     }
     if (found !== undefined) {
       return undefined;

@@ -24,7 +24,7 @@ flowchart LR
   collector -.->|checks memory, Stop and reply loss| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
   collector -->|measures, starts checks and checks refusal format| docker["Docker<br/>running image and host"]
-  docker -->|checks service processes and pinned Codex| deployment["deployment<br/>service processes and journey runner"]
+  docker -->|checks service processes and pinned Codex| deployment["deployment<br/>service processes, launch record and journey runner"]
 ```
 
 ## What it is responsible for
@@ -103,7 +103,9 @@ Unreadable settings refuse too. It never changes host settings.
 It reads the runner's process identity before and after the helper check. The
 server and computer bridge each protect their own process and answer a local live
 check. The runner records their command arguments with their process identity before
-checking which script they run. It checks that record again after their answer. An
+checking which script they run. For the bridge, it also requires the root entrypoint's
+record of the process launched in the computer container. It checks the process again
+after its answer. An
 early client disconnect closes only that client's protection socket. The
 computer bridge lives in another container, so the current server-container runner
 cannot see it. The collector still refuses the container path before a journey:

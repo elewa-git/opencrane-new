@@ -14,6 +14,10 @@ The first identity read includes command arguments before discovery checks the
 script. Later reads compare those arguments too, so an exec into another Node
 script cannot keep the same PID and start time and pass this check. Both service
 sockets destroy a client connection after an error without stopping the service.
+The root computer entrypoint now records the bridge PID and Linux start time in
+its private runtime directory. Discovery requires that launch record and the
+expected bridge script. A replacement child cannot supply its own start time
+as the expected value.
 
 The server-container runner cannot read the bridge in the computer's separate PID
 namespace. Linux can also hide a protected process's executable from an unprivileged
@@ -28,9 +32,12 @@ complete qualification was run or marked PASS.
 | Check | Result |
 | --- | --- |
 | Failing-first discovery and socket tests | FAIL before implementation, as expected |
-| Changed qualification tests, first run | PASS: 216 tests in seven files |
-| Changed qualification tests, second run | PASS: 216 tests in seven files |
-| Scoped ESLint, TypeScript, event catalogue, Knip | PASS |
+| Failing-first replacement test | FAIL before implementation, as expected |
+| Changed qualification tests, first run | PASS: 236 tests in seven files |
+| Changed qualification tests, second run | PASS: 236 tests in seven files |
+| Scoped ESLint, repository typecheck and Knip | PASS |
+| Qualification TypeScript check | PASS |
+| Event catalogue | PASS |
 | Changelog and Markdown lint | PASS |
 | Root suite, fresh installation and full live journeys | NOT RUN |
 

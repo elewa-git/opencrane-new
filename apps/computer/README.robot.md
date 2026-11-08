@@ -33,7 +33,11 @@ The image builds the existing native runner protection helper from source. The
 bridge calls it before reading its launch key, starting the proxy or starting
 Codex. A local socket returns only a fresh challenge and the helper's current
 fixed result. Linux peer credentials bind that reply to the bridge process when
-the check runs inside this container. The server-container runner cannot observe
+the check runs inside this container. The root entrypoint writes the bridge PID and
+Linux start time to `/run/executor/supervisor/bridge-identity`, inside a root-owned
+directory. It replaces that record on each launch. The inventory accepts a bridge
+child only when its process identity matches the record and its fixed script arguments.
+The server-container runner cannot observe
 this separate PID namespace yet, so full private-process qualification still refuses.
 
 ## Routine start identity

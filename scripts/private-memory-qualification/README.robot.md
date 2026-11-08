@@ -199,6 +199,9 @@ entrypoint's kernel child list gives possible bridge children. The inventory
 reads each candidate's identity before checking its fixed command. It includes
 the command arguments in both identity reads, so an exec into another Node script
 between discovery and the live check refuses even when PID and start time stay the same.
+The root computer entrypoint records the launched bridge's PID and Linux start time
+in `/run/executor/supervisor/bridge-identity`, under a root-owned directory. The
+inventory requires that record and rejects a different child or changed start time.
 Both processes call the existing native helper before handling private work. A
 local abstract Unix socket answers a fresh challenge with the helper's current
 core-limit and dumpability result. The helper's socket probe obtains the peer PID

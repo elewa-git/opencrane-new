@@ -1,4 +1,4 @@
-import { readFileSync, readlinkSync } from 'node:fs';
+import { lstatSync, readFileSync, readlinkSync } from 'node:fs';
 import { beforeEach, expect, it, vi } from 'vitest';
 import {
   bridgeIdentity, checkLiveService, privateProcessNames, probePrivateProcessInventory,
@@ -119,10 +119,20 @@ it('takes the server identity snapshot before checking its command arguments',
 async function discoverBridgeWithLaunchRecord(recordStartTime: string,
   script = '/app/src/bridge.ts'): Promise<boolean> {
   const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
-  const expected = readProcessIdentity(process.pid);
   const recordPath = '/run/executor/supervisor/bridge-identity';
+  const directoryPath = '/run/executor/supervisor';
   const commandLine = `/usr/local/bin/node\0--disable-sigusr1\0` +
     `--experimental-strip-types\0${script}\0`;
+  vi.mocked(lstatSync).mockImplementation(function bridgeStat(path, options) {
+    if (path === directoryPath || path === recordPath) {
+      const stat = actual.lstatSync('/proc/self/stat');
+      stat.uid = 0;
+      stat.mode = path === directoryPath ? 0o040700 : 0o100600;
+      stat.size = 32;
+      return stat;
+    }
+    return actual.lstatSync(path, options);
+  });
   vi.mocked(readFileSync).mockImplementation(function bridgeFile(path, options) {
     if (path === '/proc/1/task/1/children') {
       return `${process.pid} `;
@@ -139,6 +149,7 @@ async function discoverBridgeWithLaunchRecord(recordStartTime: string,
     return bridgeIdentity() !== undefined;
   } finally {
     vi.mocked(readFileSync).mockImplementation(actual.readFileSync);
+    vi.mocked(lstatSync).mockImplementation(actual.lstatSync);
   }
 }
 
@@ -155,3 +166,9 @@ async function refusesWrongBridgeScript(): Promise<void> {
   expect(await discoverBridgeWithLaunchRecord(identity.startTime, '/app/src/other.ts')).toBe(false);
 }
 it('refuses a launched child running a different script', refusesWrongBridgeScript);
+
+async function acceptsRecordedBridgeChild(): Promise<void> {
+  const identity = readProcessIdentity(process.pid);
+  expect(await discoverBridgeWithLaunchRecord(identity.startTime)).toBe(true);
+}
+it('finds the child recorded at launch when its script matches', acceptsRecordedBridgeChild);

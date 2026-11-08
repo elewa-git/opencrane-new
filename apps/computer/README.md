@@ -15,16 +15,13 @@ workers, starts and pauses computers in [Kubernetes](../../GLOSSARY.md#kubernete
 
 ```mermaid
 flowchart LR
-  apps["apps<br/>applications"] --> computer["apps/computer<br/>protected bridge and worker preparation"]
+  apps["apps<br/>applications"] --> computer["apps/computer<br/>bridge and worker preparation"]
   apps --> ops["apps/ops<br/>background workers"]
   apps --> server["apps/server<br/>back end"]
   ops -->|starts and pauses| computer
   server -->|messages, routine preparation and retry, turns, files and Stops| computer
-  computer -->|preparation replies, reply removal receipts, matched native endings, progress, results and changed publication files| server
-  server -->|qualified private input and four permitted memory tools| computer
-  computer -->|reports private thread and memory discovery| server
-  computer -->|checks command ownership| executor["socket-denied executor"]
-  computer -->|runs| desktop["Codex, browser and desktop"]
+  computer -->|results and process reports| server
+  computer -->|checks commands| executor["socket-denied executor"]
   computer -->|checks callers and passes for AI and MCP calls| gateway["agentgateway<br/>AI gateway"]
   computer -->|checks private callers and catalogue loads| models["libs/models<br/>AI access checks"]
 ```
@@ -44,7 +41,8 @@ The computer saves that confirmation without private reply text.
   a browser, a remote desktop and document tools.
 - Runs the [bridge](../../GLOSSARY.md#bridge) that receives messages and reports progress.
 - Disables bridge process dumps before it receives private work. The bridge answers
-  a local protection check inside its computer container.
+  a local protection check inside its computer container. The root entrypoint records
+  the bridge process it started so later checks can reject a replacement child.
 - Keeps the assistant's files when its computer pauses and starts again.
 - Runs the assistant, file tools and desktop as separate Linux users to limit their access.
 - Sends AI model calls and reviewed [tool server](../../GLOSSARY.md#mcp-server-tool-server)
