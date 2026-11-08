@@ -987,8 +987,6 @@ it('gives removed and foreign callers the same refusal for saved and missing cal
 async function hidesCallPresenceFromAnotherParticipant() {
   const setup = await approvalFixture();
   try {
-    await setup.call();
-    const approvalId = (await setup.read()).cards[0]!.approvalId;
     const joined = await setup.append('member-bob', 'member.joined', {
       memberId: 'bob', email: 'bob@example.test', displayName: 'Bob', role: 'admin',
     });
@@ -997,6 +995,8 @@ async function hidesCallPresenceFromAnotherParticipant() {
       conversationId: 'conversation', participantId: 'bob', addedBy: 'alice',
     });
     await setup.auth.handler.handle(added, setup.db);
+    await setup.call();
+    const approvalId = (await setup.read()).cards[0]!.approvalId;
     const urls = [
       `/api/conversations/conversation/tool-requests/${approvalId}`,
       `/api/conversations/conversation/tool-requests/${'c'.repeat(64)}`,
