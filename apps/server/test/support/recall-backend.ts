@@ -179,8 +179,9 @@ async function prepareChat(setup: Setup, memory: MemoryOptions,
     assistantId: 'assistant', computerId: 'computer', threadId,
     task: 'chat_turn', executionMode: 'restricted', payingGroupId: 'personal-default' };
   await setup.append('computer-assistant', 'computer.turn_started', admitted);
-  async function start() {
+  async function start(missFirstDispatch = false) {
     const expectedStarts = native.received.filter(isTurnStart).length + 1;
+    let dispatchAttempts = 0;
     const rows = await history(setup.nats.store, 'computer-assistant', 'test');
     const assistant = assistantSnapshot(rows, 'personal', 'test');
     function connectedComputer() {
@@ -188,15 +189,24 @@ async function prepareChat(setup: Setup, memory: MemoryOptions,
       return Promise.resolve(connected);
     }
     async function dispatched() {
+      dispatchAttempts += 1;
+      const refused = new Set<string>();
+      if (missFirstDispatch && dispatchAttempts === 1) {
+        refused.add('computer');
+      }
       await processConversation(options, setup.tokens, conversation, assistant,
-        new Set(), connectedComputer);
+        refused, connectedComputer);
       expect(link.rejection).toBeUndefined();
+      if (missFirstDispatch && dispatchAttempts === 1) {
+        expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts - 1);
+      }
       expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts);
     }
     // Retry pending delivery as the bridge watcher does on a busy host.
     const wait = { timeout: 30_000 };
     await vi.waitFor(dispatched, wait);
     await link.settled();
+    return dispatchAttempts;
   }
   return { start, turnId };
 }

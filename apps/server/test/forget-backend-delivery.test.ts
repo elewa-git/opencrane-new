@@ -53,14 +53,15 @@ const resultSchema = z.object(resultShape);
 const responseShape = { result: resultSchema };
 const responseSchema = z.object(responseShape);
 type Backend = Awaited<ReturnType<typeof recallBackend>>;
-async function forgetFixture() {
+async function forgetFixture(missFirstDispatch = false) {
   const test = await recallBackend(true);
   await test.write('unloaded', 'A separate fact.');
   await test.setup.runner.run(test.projection);
   // Keep fixture turn delivery within its access deadline on a busy host.
   const clock = memoryClock();
+  let dispatchAttempts: number;
   try {
-    await test.start();
+    dispatchAttempts = await test.start(missFirstDispatch);
   } finally {
     clock.restore();
   }
@@ -70,8 +71,21 @@ async function forgetFixture() {
   const recallProof = parsed.result.structuredContent.recallProof;
   const args = { scopeId, commandId: 'native-forget', memoryId: 'garden', expectedRevision: 1,
     recallProof };
-  return { ...test, args };
+  return { ...test, args, dispatchAttempts };
 }
+
+async function retriesMissedTurnDelivery() {
+  const test = await forgetFixture(true);
+  expect(test.dispatchAttempts).toBeGreaterThan(1);
+  const response = await test.native.call(threadId, 'forget', test.args);
+  const rows = await tombstones(test);
+  expect(rows).toHaveLength(1);
+  const saved = memoryForgottenEventSchema.parse(rows[0]!.event);
+  const expected = expectedForgetResponse(saved);
+  expect(response).toEqual(expected);
+}
+it('retries a missed first turn dispatch before accepting the Forget receipt',
+  retriesMissedTurnDelivery, 120_000);
 
 async function tombstones(test: Backend) {
   const rows = await history(test.setup.nats.store, `scope-${scopeId}`, 'test');
