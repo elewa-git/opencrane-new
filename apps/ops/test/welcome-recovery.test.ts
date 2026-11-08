@@ -2,10 +2,12 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { welcomeCompletionHandler } from '@opencrane/models';
 import { HandlerRuntime } from '@opencrane/handlers';
+import type { EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { database } from '../../../libs/projections/test/database.ts';
 import { until } from '../../../libs/handlers/test/helpers.ts';
 import { recoverWelcomeCompletion } from '../src/welcome-recovery.ts';
+import { reactionWorker } from './support/reaction-worker.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let storage: Awaited<ReturnType<typeof database>>;
@@ -129,4 +131,36 @@ it('restores a missing answer job from saved events without duplicate completion
     } finally {
       await restarted.stop();
     }
+  }, 60_000);
+
+it('retries a failed welcome job when the real dispatcher worker restarts',
+  async function workerStartupRecovery() {
+    const setup = await reactionWorker(true);
+    const savedEvents: EventEnvelope[] = [event('joined')];
+    for await (const row of nats.store.readStream('personal-alice')) {
+      savedEvents.push(row.event);
+    }
+    await setup.nats.seed(savedEvents);
+    await setup.start();
+    async function queuedAnswer() {
+      const jobs = await setup.storage.queue.query<{ id: string }>(
+        "SELECT id FROM pgboss.job WHERE name='complete-welcome'",
+      );
+      return jobs.rows.length === 1;
+    }
+    await until(queuedAnswer);
+    const queued = await setup.storage.queue.query<{ id: string }>(
+      "SELECT id FROM pgboss.job WHERE name='complete-welcome'",
+    );
+    const jobId = queued.rows[0]!.id;
+    await setup.storage.queue.query(
+      "UPDATE pgboss.job SET state='failed', retry_count=5 WHERE id=$1", [jobId]);
+    await setup.stop();
+
+    await setup.start();
+    const recovered = await setup.storage.queue.query<{ id: string; state: string }>(
+      "SELECT id, state FROM pgboss.job WHERE name='complete-welcome'",
+    );
+    expect(recovered.rows).toEqual([{ id: jobId, state: 'retry' }]);
+    await setup.stop();
   }, 60_000);
