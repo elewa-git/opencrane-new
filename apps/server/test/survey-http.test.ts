@@ -12,6 +12,7 @@ import { conversationKeys, pgDb, personalSettings, readSurvey, ProjectionRunner 
   from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { buildServer } from '../src/server.ts';
+import { welcomeCompletionHandler } from '../../ops/src/welcome-completion.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -1013,3 +1014,33 @@ async function approvedAssistantWelcome() {
 }
 it('freezes the approved revision and actual assistant assignment at welcome start',
   approvedAssistantWelcome, 60_000);
+
+async function completedWelcomeFromSavedAnswer() {
+  const position = await completeSurvey();
+  const started = (await welcome({ operation: 'start', commandId: 'finish-start',
+    generation: 1, expectedPosition: position, scriptVersion: 'welcome-v1',
+    variant: 'no_assistant' })).json<{ position: number; welcomeId: string }>();
+  const answer = { operation: 'answer', commandId: 'finish-answer', generation: 1,
+    expectedPosition: started.position, welcomeId: started.welcomeId,
+    scriptVersion: 'welcome-v1', stepId: 'continue_to_workspace', stepNumber: 1,
+    answer: 'Continue to workspace' };
+  const saved = await welcome(answer);
+  expect(saved.json()).toMatchObject({ status: 'completion_pending' });
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'completion_pending' });
+  const rows = [];
+  for await (const row of nats.store.readStream('personal-alice')) rows.push(row);
+  const finalAnswer = rows.at(-1)!;
+  const reaction = welcomeCompletionHandler(nats.store);
+  await reaction.handle(finalAnswer.event, pgDb(dbs.queue));
+  await reaction.handle(finalAnswer.event, pgDb(dbs.queue));
+  expect(await nats.store.head('personal-alice')).toBe(finalAnswer.sequence + 1);
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'completed', answered: 1, nextStep: null });
+  await runner.rebuild(personalSettings);
+  const projected = await readSurvey(pgDb(dbs.queue), 'test', 'alice');
+  expect(projected).toMatchObject({ welcome: { status: 'completed', answered: 1 } });
+  expect(await nats.store.head('personal-alice')).toBe(finalAnswer.sequence + 1);
+}
+it('keeps the final answer pending until its saved intent completes exactly once',
+  completedWelcomeFromSavedAnswer, 60_000);
