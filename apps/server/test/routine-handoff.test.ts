@@ -334,30 +334,29 @@ async function cancellationInsideResume() {
   const originalRead = nats.store.readStream.bind(nats.store);
   const readStarted = Promise.withResolvers<void>();
   const releaseRead = Promise.withResolvers<void>();
-  let computerReads = 0;
+  const caller = new AbortController();
   async function* heldRead(stream: string, fromSequence = 1, deadline = Infinity,
     includeConversationCloses = false) {
-    if (stream === subject && ++computerReads === 2) {
+    if (stream === subject) {
       readStarted.resolve();
       await releaseRead.promise;
     }
     yield* originalRead(stream, fromSequence, deadline, includeConversationCloses);
+    if (stream === subject) caller.abort();
   }
   vi.spyOn(nats.store, 'readStream').mockImplementation(heldRead);
   const issuedPass = vi.spyOn(preparedComputer.tokens, 'computer');
-  const caller = new AbortController();
-  function connection() {
-    return Promise.resolve(preparedComputer.link);
-  }
-  const service = createRoutineWake(nats.store, 'test', preparedComputer.tokens,
-    stop.signal, connection);
-  const pending = service('sales-assistant', caller.signal);
+  const append = vi.spyOn(nats.store, 'append');
+  // Keep the outer read limit out of this check so the read returns after cancellation.
+  const control = { signal: caller.signal, deadline: Infinity };
+  const pending = resumeComputer(nats.store, preparedComputer.tokens, 'other',
+    'sales-assistant', undefined, control);
   await readStarted.promise;
-  caller.abort();
   releaseRead.resolve();
-  await expect(pending).rejects.toThrow('Routine computer unavailable');
+  await expect(pending).rejects.toThrow('Computer wake cancelled');
   const rows = await history(nats.store, subject, 'test');
   expect(rows.some(row => row.event.type === 'computer.resumed')).toBe(false);
+  expect(append).not.toHaveBeenCalled();
   expect(issuedPass).not.toHaveBeenCalled();
 }
 it('does not save a resume or issue a pass after cancellation during history',
