@@ -22,6 +22,7 @@ const PRIVATE_ITEM_TYPES = new Set(['userMessage', 'agentMessage', 'reasoning', 
 type Grant = { token: string; expiresAt: number; model?: string | undefined; context?: unknown; initialInput?: unknown };
 
 export interface TurnDriver extends ThreadLoadDriver {
+  retainedCall?(approvalId: string): import('./mcp-proxy.ts').RetainedCallSignal | undefined;
   artifactSnapshot?(): Promise<Record<string, string>>;
   artifactList?(before: Record<string, string>): Promise<NonNullable<BridgeReport['artifacts']>>;
   readArtifact?(id: string, offset: number): Promise<Buffer>;

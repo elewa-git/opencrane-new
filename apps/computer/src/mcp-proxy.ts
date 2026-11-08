@@ -11,7 +11,25 @@ export interface ProxyGrant {
   token: string;
   expires: number;
   conversation?: string;
+  computerId?: string;
+  generation?: number;
 }
+interface RetainedRequest {
+  raw: Buffer;
+  approvalId: string;
+  callId: string;
+  turnId: string;
+  conversationId: string;
+  computerId: string;
+  generation: number;
+  serverId: string;
+  connectionId: string;
+  toolName: string;
+  thread: string;
+}
+export type RetainedCallSignal = Omit<RetainedRequest, 'raw' | 'thread'> & {
+  expiresAt: string;
+};
 interface Catalogue {
   restricted: boolean;
   owner: string;
@@ -25,6 +43,8 @@ interface Catalogue {
 const VERSION = '2026-07-28';
 const MAX_REQUEST_BYTES = 1024 * 1024;
 const MAX_CATALOGUES = 64;
+const MAX_RETAINED_CALLS = 16;
+const MAX_RETAINED_BYTES = 8 * 1024 * 1024;
 const UNCONFIRMED = 'The tool did not confirm a result. It may have received the request. '
   + 'OpenCrane will not send it again.';
 const UNAVAILABLE = 'This tool is not available in this conversation. Nothing was sent.';
@@ -34,6 +54,27 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
   const catalogues = new Map<string, Catalogue>();
   const current = new Map<string, string>();
   const requests = proxyRequests();
+  const retained = new Map<string, RetainedRequest>();
+  let retainedBytes = 0;
+
+  function deleteRetained(approvalId: string, owner: RetainedRequest) {
+    if (retained.get(approvalId) !== owner) return;
+    retained.delete(approvalId);
+    retainedBytes -= owner.raw.length;
+  }
+
+  function retainedCall(approvalId: string): RetainedCallSignal | undefined {
+    const request = retained.get(approvalId);
+    if (!request || !approvals.isRetained(approvalId, request.thread)) return undefined;
+    const holdExpiry = approvals.retainedExpiresAt(approvalId, request.thread);
+    if (!holdExpiry) return undefined;
+    const expiresAt = new Date(Math.min(holdExpiry, Date.now() + 5_000)).toISOString();
+    return { approvalId: request.approvalId, callId: request.callId,
+      turnId: request.turnId, conversationId: request.conversationId,
+      computerId: request.computerId, generation: request.generation,
+      serverId: request.serverId, connectionId: request.connectionId,
+      toolName: request.toolName, expiresAt };
+  }
 
   function catalogue(input: Record<string, unknown>, restricted = false) {
     const { key, conversation, thread, turnId } = catalogueBinding(input);
@@ -177,6 +218,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
     const boundLoad = load;
     const boundServer = server;
     function hold(approvalId: string) {
+      let ownedRequest: RetainedRequest | undefined;
       function answer(text: string) { toolError(response, id, text); }
       async function send() {
         const renewed = liveCallGrant(boundLoad, boundServer, metadata, params['name'],
@@ -186,10 +228,33 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
           return;
         }
         if (!renewed) { answer(UNAVAILABLE); return; }
-        await forward(incoming, response, gateway, boundServer, renewed, String(thread),
-          id, raw, requests, undefined, approvalId);
+        const liveGrant = renewed;
+        function keepFailedAttempt() {
+          if (!liveGrant.computerId || !liveGrant.generation ||
+              !Number.isSafeInteger(liveGrant.generation)) return false;
+          const toolName = params['name'];
+          const callId = metadata['callId'];
+          if (typeof toolName !== 'string' || boundServer.modes[toolName] !== 'ask') {
+            return false;
+          }
+          if (typeof callId !== 'string' || !callId || callId.length > 200) return false;
+          const request: RetainedRequest = { raw, approvalId, callId,
+            turnId: boundLoad.turnId, conversationId: boundLoad.conversation,
+            computerId: liveGrant.computerId, generation: liveGrant.generation,
+            serverId: boundServer.serverId, connectionId: boundServer.connectionId,
+            toolName, thread: String(thread) };
+          if (retained.has(approvalId) || retained.size >= MAX_RETAINED_CALLS ||
+            retainedBytes + raw.length > MAX_RETAINED_BYTES) return false;
+          retained.set(approvalId, request);
+          retainedBytes += raw.length;
+          ownedRequest = request;
+          return true;
+        }
+        return forward(incoming, response, gateway, boundServer, liveGrant, String(thread),
+          id, raw, requests, undefined, approvalId, keepFailedAttempt);
       }
       function disconnected() {
+        if (ownedRequest) deleteRetained(approvalId, ownedRequest);
         if (!response.writableEnded) approvals.endThread(String(thread));
       }
       response.once('close', disconnected);
@@ -202,6 +267,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>,
       requests, hold);
   }
   return { catalogue, drop, dropTurn, dropThread, extendThread, discovered, handle,
+    retainedCall,
     checkPrivateThread,
     get size() { return catalogues.size; },
     get currentSize() { return current.size; } };
@@ -308,8 +374,9 @@ function refusalText(raw: Buffer) {
 function forward(incoming: IncomingMessage, response: ServerResponse, gateway: string,
   server: ToolServer, grant: ProxyGrant, thread: string, id: unknown, raw: Buffer,
   requests: ReturnType<typeof proxyRequests>,
-  hold?: (approvalId: string) => void, approvalId?: string) {
-  function send(resolve: () => void) {
+  hold?: (approvalId: string) => void, approvalId?: string,
+  keepFailedAttempt?: () => boolean) {
+  function send(resolve: (outcome?: 'retained') => void) {
     let settled = false;
     function failed() {
       if (settled) return;
@@ -345,6 +412,12 @@ function forward(incoming: IncomingMessage, response: ServerResponse, gateway: s
           const approvalId = requestedApproval(upstream.statusCode, bytes);
           if (hold && approvalId) hold(approvalId);
           else toolError(response, id, refusalText(bytes));
+        } else if (upstream.statusCode === 503 && keepFailedAttempt) {
+          if (keepFailedAttempt()) {
+            resolve('retained');
+            return;
+          }
+          toolError(response, id, UNCONFIRMED);
         } else toolError(response, id, UNCONFIRMED);
         resolve();
       }
@@ -367,7 +440,7 @@ function forward(incoming: IncomingMessage, response: ServerResponse, gateway: s
     // Preserve number text and every metadata field reviewed by the decision service.
     outgoing.end(raw);
   }
-  return new Promise<void>(send);
+  return new Promise<void | 'retained'>(send);
 }
 
 function requestedApproval(status: number | undefined, bytes: Buffer) {

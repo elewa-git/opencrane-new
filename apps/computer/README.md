@@ -20,8 +20,12 @@ flowchart LR
   apps --> server["apps/server<br/>back end"]
   ops -->|starts and pauses| computer
   server -->|messages, routine preparation and retry, turns, files and Stops| computer
+  computer -->|preparation replies, retained call status, progress, results and changed publication files| server
   computer -->|results and process reports| server
-  computer -->|checks commands| executor["socket-denied executor"]
+  server -->|qualified private input and four permitted memory tools| computer
+  computer -->|reports private thread and memory discovery| server
+  computer -->|checks commands and command ownership| executor["socket-denied executor"]
+  computer -->|runs| desktop["Codex, browser and desktop"]
   computer -->|checks callers and passes for AI and MCP calls| gateway["agentgateway<br/>AI gateway"]
   computer -->|checks private callers and catalogue loads| models["libs/models<br/>AI access checks"]
 ```
@@ -47,6 +51,9 @@ The computer saves that confirmation without private reply text.
 - Runs the assistant, file tools and desktop as separate Linux users to limit their access.
 - Sends AI model calls and reviewed [tool server](../../GLOSSARY.md#mcp-server-tool-server)
   calls through agentgateway. Shell and file tools run locally inside the computer.
+- Keeps the original Ask tool call in private memory while its response is waiting.
+  It limits the number and size of waiting calls. Stopping the turn or losing the
+  computer removes each copy.
 - Runs a [private turn](../../GLOSSARY.md#private-turn) on a shared computer in a fresh,
   short-lived Codex process with no tools. Initial personal memory requires deployment checks.
   The server supplies its complete input once; the runner keeps it out of the journal.

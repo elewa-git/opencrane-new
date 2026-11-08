@@ -39,9 +39,13 @@ never proves non-dispatch. The route checks current access after every history r
 including a failed read. A removed or foreign caller receives the same refusal for
 saved and missing calls. The reply excludes tool arguments and results, and the
 route never saves an event, wakes a bridge or releases a credential. An authorised
-reader receives 503 after a failed read. The optional retained-call reader is for the
-later authenticated bridge connection. Until it is connected, production status
-cannot be `eligible`.
+reader receives 503 after a failed saved-history read. A missing bridge connection,
+receipt or live signal leaves retry unknown. The server asks only the original
+computer over its authenticated bridge socket after the person's access check.
+It checks the reply's computer id and
+generation, then compares the saved turn, tool, connection, native call id and original
+approval expiry. Two readers see the same private hold. The bridge reply contains no
+request bytes. The route never sends a replacement call.
 
 ## Dispatcher readiness in chat
 

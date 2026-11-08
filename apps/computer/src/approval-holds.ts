@@ -3,7 +3,7 @@ const STOPPED = 'This turn was stopped. Nothing was sent.';
 interface Hold {
   approvalId: string;
   thread: string;
-  send(): Promise<void>;
+  send(): Promise<void | 'retained'>;
   answer(text: string): void;
 }
 interface Group {
@@ -12,6 +12,7 @@ interface Group {
   followers: Hold[];
   timer: NodeJS.Timeout;
   sending: boolean;
+  attempted: boolean;
   finishing: boolean;
   ended: boolean;
 }
@@ -34,7 +35,7 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
   function end(group: Group, text: string) {
     group.ended = true;
     clearTimeout(group.timer);
-    const reply = group.sending
+    const reply = group.attempted
       ? 'The tool may have received this action. OpenCrane will not send it again.' : text;
     answer(group, reply);
   }
@@ -44,13 +45,22 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
     if (!group || group.finishing || group.ended) return;
     // Claim the wake before renewal. Reconnects and duplicate signals cannot send twice.
     group.finishing = true;
-    clearTimeout(group.timer);
     try {
       await driver.renew(group.first.thread);
       if (group.ended || !supported) return;
       if (state === 'approved') {
         group.sending = true;
-        await group.first.send();
+        group.attempted = true;
+        const outcome = await group.first.send();
+        if (outcome === 'retained' && !group.ended) {
+          // Keep the original native response open. A later retry needs separate authority.
+          group.sending = false;
+          for (const follower of group.followers) {
+            follower.answer('This action was already answered. OpenCrane will not send it again.');
+          }
+          group.followers = [];
+          return;
+        }
         for (const follower of group.followers) {
           follower.answer('This action was already answered. OpenCrane will not send it again.');
         }
@@ -62,6 +72,7 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
       if (!group.ended) answer(group, 'The turn could not get a new pass. Nothing was sent.');
     }
     group.ended = true;
+    clearTimeout(group.timer);
   }
 
   function add(hold: Hold) {
@@ -80,7 +91,11 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
       } else previous.followers.push(hold);
       return;
     }
-    function expired() { void settle(hold.approvalId, 'timeout'); }
+    function expired() {
+      const active = groups.get(hold.approvalId);
+      if (active && !active.ended) end(active, refusalMessage('timeout'));
+      groups.delete(hold.approvalId);
+    }
     const timer = setTimeout(expired, limit);
     timer.unref();
     const group: Group = {
@@ -89,6 +104,7 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
       followers: [],
       timer,
       sending: false,
+      attempted: false,
       finishing: false,
       ended: false,
     };
@@ -143,7 +159,19 @@ export function approvalHolds(driver: ApprovalDriver, limit = APPROVAL_WAIT_LIMI
     return deadline;
   }
 
-  return { add, settle, endThread, resume, until, stop, get size() { return heldCount(); } };
+  function isRetained(approvalId: string, thread: string) {
+    const group = groups.get(approvalId);
+    return !!group && group.first.thread === thread && group.finishing &&
+      !group.ended && Date.now() < group.expiresAt;
+  }
+
+  function retainedExpiresAt(approvalId: string, thread: string) {
+    const group = groups.get(approvalId);
+    return isRetained(approvalId, thread) ? group?.expiresAt : undefined;
+  }
+
+  return { add, settle, endThread, resume, until, stop, isRetained, retainedExpiresAt,
+    get size() { return heldCount(); } };
 }
 
 function refusalMessage(state: string) {

@@ -30,6 +30,8 @@ connected yet.
 - Includes the assistant service's ready or waiting state in authorised chat history and live updates.
 - Starts assistant turns, delivers files and work, and checks reports before saving replies.
 - Handles a person stopping a reply, spending stops and tool approvals.
+- Checks saved non-dispatch proof against a private signal from the original computer
+  before showing that the same Ask call is still waiting.
 - Keeps private sessions separate when people share an assistant's computer.
 - Prepares side conversations and lets members review text before sharing it back to the parent chat.
 - Refuses new work in closed chats and repairs unfinished work without disrupting other chats.
@@ -146,4 +148,16 @@ flowchart LR
   chat -->|checks access and spending| models[Models process]
   chat -->|checks remembered facts| memory[Memory]
   files[Files] -->|checks chat access| chat
+  server --> memory[Memory]
+  chat -->|selects and checks input| memory
+  chat -->|four memory definitions and one-use private input| computer[Assistant computer]
+  chat -->|asks to start an activated child| models
+  models -->|checks the saved root and turn| chat
+  computer -->|reports routine start, retained call status and pass renewal| chat
+  chat -->|checks lease, deadline and cancellation before routine credentials| computer
+  computer -->|completed private reply| chat
+  chat -->|private reply, clearance, call status and service readiness| reader[Authenticated reader]
+  chat -->|checks access, spending and loaded references| models[Models process]
+  collector["private-memory-qualification<br/>checks deployment results"]
+  chat -->|checks deployment results| collector
 ```

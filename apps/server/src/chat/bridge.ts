@@ -28,6 +28,7 @@ import { turnCommand } from './turns.ts';
 import { chatHistory } from './commands.ts';
 import { recordBridgeReports, canCombineReports, ReportRejected, turnStatus } from './reports.ts';
 import { bridgeApprovals } from './bridge-approvals.ts';
+import { bridgeRetainedCalls } from './bridge-retained-call.ts';
 import { isRoutineStartReport, needsPrivateExit } from './bridge-report-kind.ts';
 import { resumeBridgeReports } from './bridge-resume.ts';
 import type { ChatOptions } from './routes.ts';
@@ -41,7 +42,8 @@ type ReportOptions = BridgeOptions & { routineStart: RoutineStart;
   starts: ReturnType<typeof pendingRoutineStarts>;
   recall: ReturnType<typeof recallBridge>;
   output: ReturnType<typeof privateOutput>; memory: ReturnType<typeof memoryBridge>;
-  routines: ReturnType<typeof routineBridge> };
+  routines: ReturnType<typeof routineBridge>;
+  retained: ReturnType<typeof bridgeRetainedCalls> };
 type BridgeInput = { url: string; computerId: string; assistantId: string;
   bearer: string; generation?: number };
 type ReportBatch = { values: unknown[]; sequences: number[]; textLength: number;
@@ -176,6 +178,7 @@ function reportReceiver(options: ReportOptions, input: BridgeInput,
   let legacyPending = Promise.resolve();
   const queues = new Map<string, ReportQueue>();
   function receiveReceipt(value: unknown) {
+    if (options.retained.receive(value)) return true;
     if (options.recall.receive(value)) {
       return true;
     }
@@ -264,6 +267,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   }
   socket.once('close', closed);
   const starts = pendingRoutineStarts(socket);
+  const retained = bridgeRetainedCalls(socket, input.computerId, input.generation);
   const routineStart = starts.check;
   const output = privateOutput(options, input, socket);
   const memory = memoryBridge(options, input, socket, output.clearBinding);
@@ -272,7 +276,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   // Keep offered identities on this connection; a reconnect cannot reuse a pending load.
   const sentTurns = new Map<string, TurnDelivery>();
   const recall = recallBridge(options, input, socket, sentTurns);
-  const reportOptions = { ...options, routineStart, starts,
+  const reportOptions = { ...options, routineStart, starts, retained,
     memory, routines, output, recall };
   const reports = reportReceiver(reportOptions, input, tokens, socket, refuse, approvals, control);
   socket.on('message', reports.receiveReport);
@@ -299,7 +303,8 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     return reportsDone;
   }
   return {
-    socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting, control, memory, routines,
+    socket, deliver, delivered, sentTurns, sentStops, approvals, approvalWaiting, control, memory,
+    routines, retainedCall: retained.read,
     bindRoutineStart: starts.bind, computerId: input.computerId, assistantId: input.assistantId,
     prepareRoutineThread: prepareRoutineThread.bind(undefined, socket),
     get rejection() { return rejection; },
@@ -320,6 +325,14 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   const refused = new Set<string>();
   type Link = Awaited<ReturnType<typeof connectBridge>> & { connectionId: number };
   const links = new Map<string, Link>();
+  async function readRetainedCall(approvalId: string, assistantId: string,
+    computerId: string) {
+    const link = links.get(computerId);
+    if (!link || link.assistantId !== assistantId ||
+        link.socket.readyState !== WebSocket.OPEN) return undefined;
+    return link.retainedCall(approvalId);
+  }
+  options.installRetainedCall?.(readRetainedCall);
   function closeConnections() {
     // Let computers cancel private work before shutdown waits for unfinished reads.
     for (const link of links.values()) link.socket.terminate();

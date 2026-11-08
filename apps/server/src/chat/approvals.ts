@@ -34,6 +34,28 @@ function originalCallFailure(reply: FastifyReply, error: unknown) {
   return reply.code(503).send(unavailableStatus);
 }
 
+async function updateLiveStatus(result: Awaited<ReturnType<typeof readOriginalCallStatus>>,
+  options: ChatOptions, logicalRequestId: string) {
+  let retained: RetainedCall | undefined;
+  if (result.status.retry === 'unknown' && result.retainedComputerId) {
+    try {
+      retained = await options.retainedCall?.(logicalRequestId, result.assistantId,
+        result.retainedComputerId);
+    } catch {
+      // A missing live reply cannot prove that the original call still waits.
+    }
+    result.status.retry = result.retryWithRetained(retained, new Date());
+  }
+  if (result.status.retry === 'eligible' &&
+      Date.parse(result.status.expiresAt) <= Date.now()) {
+    result.status.retry = 'ended';
+  }
+  if (result.status.retry === 'eligible' &&
+      (!retained || Date.parse(retained.expiresAt) <= Date.now())) {
+    result.status.retry = 'unknown';
+  }
+}
+
 function registerOriginalCallStatusRoute(app: FastifyInstance,
   config: AuthConfig, options?: ChatOptions) {
   app.get('/api/conversations/:conversationId/tool-requests/:logicalRequestId',
@@ -49,13 +71,11 @@ function registerOriginalCallStatusRoute(app: FastifyInstance,
       }
       if (!options) throw new Error('Chat unavailable');
       const deadline = performance.now() + 10_000;
-      let retained: RetainedCall | undefined;
       let result: Awaited<ReturnType<typeof readOriginalCallStatus>> | undefined;
       let readFailure: unknown;
       try {
-        retained = await options.retainedCall?.(logicalRequestId);
         result = await readOriginalCallStatus(options.store, options.silo,
-          logicalRequestId, retained, deadline);
+          logicalRequestId, undefined, deadline);
       } catch (error) {
         readFailure = error;
       }
@@ -70,10 +90,7 @@ function registerOriginalCallStatusRoute(app: FastifyInstance,
           otherChildRequester) {
         return reply.code(403).send(refusedStatus);
       }
-      if (result.status.retry === 'eligible' &&
-          (!retained || Date.parse(retained.expiresAt) <= Date.now())) {
-        result.status.retry = 'unknown';
-      }
+      await updateLiveStatus(result, options, logicalRequestId);
       return reply.send(result.status);
     } catch (error) {
       return originalCallFailure(reply, error);

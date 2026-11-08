@@ -1,5 +1,15 @@
 # Computer image — P2-1
 
+## Retained Ask call limits
+
+The proxy keeps at most 16 original Ask requests and 8 MiB of their request bytes.
+An approved send that receives HTTP 503 cannot keep its bytes when either limit is
+full. It answers that call with the existing unconfirmed result. Closing one held
+response releases only its own bytes, even when another response used the same
+approval id. Closing a turn answers its holds and releases their bytes.
+
+`test/mcp-proxy.test.ts` checks both limits, release and duplicate holds.
+
 ## Private process exit after Stop
 
 The private supervisor keeps the socket half open after the bridge closes its writing
@@ -1056,6 +1066,15 @@ signals and identical calls sharing an id produce one retry; every held request
 receives an answer. Other states renew and return a plain tool error that explains the result.
 A used approval says the tool may have received the action. Stop, release,
 `/drop` and client disconnection end holds before any later wake can send them.
+
+After a first approved send receives HTTP 503, the
+proxy leaves the original native response open. It keeps the exact request bytes
+only in private memory. A read over the authenticated bridge returns the approval,
+native call id, turn, computer generation, tool binding and a five-second signal expiry.
+It never returns the bytes. The saved approval expiry still controls eligibility.
+The bridge reports no signal after Stop, disconnection, hold expiry or process restart.
+The status reader needs matching saved non-dispatch proof; a 503 alone proves nothing.
+Replacement sending is disabled until a separate command can check authority again.
 
 `APPROVAL_WAIT_LIMIT_MS` is 900000. The decision service also expires approvals
 opened with `x-opencrane-tool-mode: ask` after 900000 ms. Its clock starts before

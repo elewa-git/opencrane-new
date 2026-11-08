@@ -26,7 +26,10 @@ export async function startBridges(options: ChatOptions & {
   });
   const stop = new AbortController();
   const keyDirectory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
-  const bridgeOptions = { ...options, ...(keyDirectory ? { keyDirectory } : {}) };
+  const bridgeOptions = { ...options, ...(keyDirectory ? { keyDirectory } : {}),
+    installRetainedCall(read: NonNullable<ChatOptions['retainedCall']>) {
+      options.retainedCall = read;
+    } };
   const work = watchBridges(bridgeOptions, tokens, new SandboxClient(kubeconfig, namespace), url, stop.signal);
   function watcherFailed(error: unknown) {
     const logger = createLogger('bridge');

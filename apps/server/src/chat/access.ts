@@ -20,7 +20,8 @@ export interface ChatOptions {
   binding: Binding;
   feed: Pick<Awaited<ReturnType<typeof connectMemberFeed>>, 'memberId'>;
   dispatcherReady?: () => Promise<boolean>;
-  retainedCall?: (approvalId: string) => Promise<RetainedCall | undefined>;
+  retainedCall?: (approvalId: string, assistantId: string,
+    computerId: string) => Promise<RetainedCall | undefined>;
 }
 
 export class ChatRefused extends Error {}

@@ -120,7 +120,8 @@ let computerCredential = '';
 function grantCredential() {
   const path = '/run/executor/credentials/computer.json';
   const saved = record(JSON.parse(readFileSync(path, 'utf8')));
-  return { computer: computerCredential, generation: saved['generation'] };
+  return { computer: computerCredential, computerId: saved['computer'],
+    generation: saved['generation'] };
 }
 const grant = proxyGrants(control, grantCredential);
 const channel = bridgeChannel(server, {
@@ -157,6 +158,7 @@ const channel = bridgeChannel(server, {
     // Retain the authenticated server's pass only in memory for gateway requests.
     computerCredential = value;
   },
+  retainedCall: runtimeProxy.retainedCall,
   rpc: persistent.rpc,
   privateSession,
   catalogue(loadKey, conversation, tools, thread, turnId, generations) {

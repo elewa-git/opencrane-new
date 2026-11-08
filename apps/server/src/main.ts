@@ -90,10 +90,10 @@ if (chat && process.env['MINIO_CREDENTIALS_FILE']) {
   files = { ...chat, objects, scan };
 }
 const budgetDecisionUrl = process.env['MODEL_DECISION_URL'] ?? (process.env['NODE_ENV'] === 'development' ? 'http://127.0.0.1:43001' : undefined);
-const bridgeOptions = chat ? { ...chat,
+const bridgeOptions = chat ? Object.assign(chat, {
   ...(files ? { objects: files.objects, files } : {}),
   ...(catalogue ? { catalogue } : {}),
-  ...(budgetDecisionUrl ? { childStartUrl: budgetDecisionUrl } : {}) } : undefined;
+  ...(budgetDecisionUrl ? { childStartUrl: budgetDecisionUrl } : {}) }) : undefined;
 const closeBridges = bridgeOptions ? await startBridges(bridgeOptions,
   process.env['KUBECONFIG']!, process.env['KUBE_NAMESPACE']!,
   process.env['TOKEN_SIGNING_KEY_FILE']!, process.env['TOKEN_ISSUER']!) : undefined;
