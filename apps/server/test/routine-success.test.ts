@@ -1,10 +1,11 @@
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import type { AppendCommand } from '@opencrane/event-store';
 import { event, lostReplyStore } from '@opencrane/event-store/testing';
 import { foldRoutineHistory } from '@opencrane/authz';
 import { getEventDefinition, foldRoutine, type EventEnvelope,
   type RoutineState } from '@opencrane/events';
-import { history } from '@opencrane/models';
+import { BudgetActor, envelope, history, priceTableId } from '@opencrane/models';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow } from './support/duplicate-window.ts';
 import { finishRoutine } from '../src/routine-finish.ts';
 
@@ -43,6 +44,8 @@ const release = {
   approvalId: 'f'.repeat(64), rootId: root.rootId, destinationDigest: '0'.repeat(64),
 };
 let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
+let actor: BudgetActor;
+let reservationId: string;
 let serial: number;
 let terminalEvidence: { eventId: string; position: number };
 let resultReference: { eventId: string; position: number };
@@ -62,8 +65,10 @@ function record(subject: string, type: string, data: unknown): EventEnvelope {
   }
   return { ...event(id, subject, type), commandId: id, source, principal, data };
 }
-async function save(subject: string, type: string, data: unknown) {
+async function save(subject: string, type: string, data: unknown,
+  correlation: EventEnvelope['correlation'] = {}) {
   const saved = record(subject, type, data);
+  saved.correlation = correlation;
   await nats.seed([saved]);
   return { eventId: saved.id, position: await nats.store.head(subject) };
 }
@@ -71,17 +76,21 @@ async function setup() {
   serial = 0;
   nats = await shortDuplicateWindowFixture();
   await nats.seed([created, due]);
+  actor = new BudgetActor(nats.store, 'test');
   terminalEvidence = { eventId: 'missing', position: 1 };
   resultReference = { eventId: 'missing', position: 1 };
 }
 async function cleanup() {
+  vi.restoreAllMocks();
   await nats?.close();
 }
 beforeEach(setup);
 afterEach(cleanup);
 async function evidence(changes: { release?: Record<string, unknown>; outcome?: string;
-  settled?: boolean; stop?: boolean; closed?: boolean; reason?: string } = {}) {
+  settled?: boolean; stop?: boolean; closed?: boolean; reason?: string;
+  approvalCorrelation?: string } = {}) {
   await save('budget-test', 'budget.root_allowance_set', root);
+  await actor.start(10_000, 10_000);
   await save(computerSubject, 'computer.ready', { assistantId: root.assistantId,
     computerId: root.computerId, generation: 1 });
   const started = { ...root, task: 'chat_turn', messageId: run.messageId,
@@ -92,20 +101,23 @@ async function evidence(changes: { release?: Record<string, unknown>; outcome?: 
   await save(`decision-${requestId}`, 'decision.recorded', {
     ...call, requestId, requesterId: root.requesterId, assistantId: root.assistantId,
     permitId: release.permitId, route: 'mcp', outcome: 'allow',
-    reason: changes.reason ?? 'policy_allow',
-    contextDigest: '1'.repeat(64), release: boundRelease });
+    reason: changes.reason ?? 'approval_used',
+    contextDigest: '1'.repeat(64), release: boundRelease },
+  { approval: changes.approvalCorrelation ?? release.approvalId });
   await save(`decision-${requestId}`, 'tool.dispatch_recorded', {
     ...call, requestId, logicalRequestId: '2'.repeat(64),
     startedAt: '2026-10-09T00:00:00.000Z', durationMs: 3,
     outcome: changes.outcome ?? 'responded', evidence: 'response_received' });
   resultReference = await save(`conversation-${run.conversationId}`,
     'agent.tool_call_finished', { ...call, status: 'completed' });
-  await save('budget-test', 'budget.reserved', {
-    reservationId: 'hold-1', permitId: release.permitId, amountCents: 210,
-    rootId: root.rootId, payingGroupId: root.payingGroupId, assistantId: root.assistantId });
+  const modelCall = { model: 'gpt-6-luna', priceTableId, requestId: 'model-request',
+    computerId: root.computerId, generation: root.generation,
+    requesterId: root.requesterId, assistantId: root.assistantId,
+    conversationId: root.conversationId, turnId: root.turnId, threadId: root.threadId,
+    payingGroupId: root.payingGroupId, contextDigest: '1'.repeat(64) };
+  reservationId = await actor.reserve(modelCall, 500, undefined, undefined, root.rootId);
   if (changes.settled !== false) {
-    await save('budget-test', 'budget.settled', {
-      reservationId: 'hold-1', permitId: release.permitId, settledCents: 260 });
+    await settle(260);
   }
   if (changes.stop) {
     await save('budget-test', 'budget.root_stopped', { rootId: root.rootId,
@@ -117,15 +129,23 @@ async function evidence(changes: { release?: Record<string, unknown>; outcome?: 
     terminalEvidence = await save(computerSubject, 'computer.turn_closed', {
       ...identity, status: 'completed', nativeTermination: 'turn_completed' });
     if (!changes.stop) {
-      await save('budget-test', 'budget.root_stopped', { rootId: root.rootId,
-        reason: 'turn_ended', sourceSubject: computerSubject,
-        sourcePosition: terminalEvidence.position, sourceEventId: terminalEvidence.eventId });
+      await actor.stopRoot(root.rootId, 'turn_ended', computerSubject,
+        terminalEvidence.position);
     }
   }
 }
+async function settle(settledCents: number) {
+  const resolution = envelope('test', `effect-${reservationId}`, 'effect.resolved', {
+    reservationId, permitId: reservationId, settledCents, outcome: 'settled',
+    resolvedBy: 'owner', evidence: [{ kind: 'provider_receipt', reference: 'receipt',
+      digest: '0'.repeat(64), amountCents: settledCents }],
+  });
+  resolution.principal = { kind: 'human', id: 'owner' };
+  await actor.settle(resolution);
+}
 function finish(store = nats.store) {
   const input = { routineId: 'orders', occurrenceId: run.occurrenceId, terminalEvidence,
-    successEvidence: { requestId, resultReference, reservationId: 'hold-1' } };
+    successEvidence: { requestId, resultReference, reservationId } };
   return finishRoutine(store, 'test', input, { enabled: true });
 }
 async function folded() {
@@ -150,7 +170,7 @@ async function successfulFinish() {
   function isFinish(row: typeof rows[number]) { return row.event.type === 'routine.run_finished'; }
   expect(rows.filter(isFinish)).toHaveLength(1);
   expect((await folded()).lastRun).toMatchObject({ outcome: 'succeeded',
-    resultReference, terminalEvidence });
+    resultReference, terminalEvidence, settledCents: 260, heldCents: 0 });
   expect((await folded()).activeRun).toBeNull();
 }
 it('saves one successful result after confirmed company response and settlement',
@@ -163,7 +183,7 @@ async function refusesUnproven(changes: Parameters<typeof evidence>[0]) {
   expect((await folded()).activeRun).not.toBeNull();
 }
 it.each([{ settled: false }, { closed: false }, { outcome: 'outcome_unknown' },
-  { stop: true }, { reason: 'approval_used' },
+  { stop: true }, { reason: 'policy_allow' }, { approvalCorrelation: 'foreign' },
   { release: { companyAccountId: 'foreign' } },
   { release: { ownerId: 'foreign' } }, { release: { rootId: 'foreign' } },
   { release: { turnId: 'foreign' } }, { release: { profileRevision: 2 } }])(
@@ -171,10 +191,28 @@ it.each([{ settled: false }, { closed: false }, { outcome: 'outcome_unknown' },
 async function lateSettlement() {
   await evidence({ settled: false });
   await expect(finish()).rejects.toThrow(/^Routine finish refused$/u);
-  await save('budget-test', 'budget.settled', {
-    reservationId: 'hold-1', permitId: release.permitId, settledCents: 1234 });
+  await settle(900);
   await finish();
   expect((await folded()).lastRun).toMatchObject({ outcome: 'succeeded',
-    heldCents: 0, settledCents: 1234 });
+    heldCents: 0, settledCents: 900 });
 }
 it('waits for late settlement and records the full actual overrun', lateSettlement);
+
+async function correctedSettlementDuringPublication() {
+  await evidence();
+  const append = nats.store.append.bind(nats.store);
+  async function correctAfterCheck(command: AppendCommand) {
+    async function checkThenCorrect() {
+      await command.checkAccess!();
+      await settle(500);
+    }
+    return append({ ...command, checkAccess: checkThenCorrect });
+  }
+  vi.spyOn(nats.store, 'append').mockImplementationOnce(correctAfterCheck);
+  const before = await nats.store.head('routine-orders');
+  await expect(finish()).rejects.toThrow(/^Routine finish refused$/u);
+  expect(await nats.store.head('routine-orders')).toBe(before);
+  expect((await folded()).activeRun).not.toBeNull();
+}
+it('refuses a larger settlement saved during the final publication check',
+  correctedSettlementDuringPublication);
