@@ -31,14 +31,17 @@ export function workspaceTitle(
 ): string {
   if (denied) return 'Unavailable';
   if (!selected) return 'New session';
+  let savedTitle = '';
   for (const conversation of conversations) {
     if (conversation.conversationId === selected && conversation.title
-      && conversation.title !== 'New session') return conversation.title;
+      && conversation.title !== 'New session') savedTitle = conversation.title;
   }
+  // Show a long saved title in full; short session names still follow the first message.
+  if (savedTitle.length > 24) return savedTitle;
   for (const turn of turns) {
     if (turn.author === 'you' && turn.text) return sessionSlug(turn.text);
   }
-  return 'New session';
+  return savedTitle || 'New session';
 }
 
 export function selectedSessionPayingGroupId(
