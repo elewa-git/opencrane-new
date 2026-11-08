@@ -4,10 +4,12 @@ import { PassThrough } from 'node:stream';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { collectDeployment } from './deployment.ts';
+import { proveComputerBridge } from './bridge-proof.ts';
 import { protectionMessages, type ProtectionFailure } from './protection-failure.ts';
 
 vi.mock('node:child_process', { spy: true });
 vi.mock('node:fs', { spy: true });
+vi.mock('./bridge-proof.ts', { spy: true });
 const containerId = 'c'.repeat(64);
 const imageDigest = `sha256:${'b'.repeat(64)}`;
 const sourceSha = 'a'.repeat(40);
@@ -58,6 +60,7 @@ function docker(_file: unknown, args: unknown, options: unknown): string {
 }
 
 function prepare(): void {
+  vi.mocked(proveComputerBridge).mockResolvedValue(true);
   vi.mocked(execFileSync).mockReset();
   vi.mocked(spawn).mockImplementation(spawnDocker);
   vi.mocked(openSync).mockReturnValue(42);
@@ -100,6 +103,24 @@ function responseName(response: Record<string, unknown>): unknown {
 }
 it('qualifies the fixture deployment only after all eleven observed runs',
   qualifiesObservedDeployment);
+
+async function savesOnlyFixedComputerRefusal(): Promise<void> {
+  const computerContainerId = 'a'.repeat(64);
+  const target = { containerId, computerContainerId, siloId: 'fixture-silo' };
+  vi.mocked(readFileSync).mockReturnValue(JSON.stringify(target));
+  vi.mocked(proveComputerBridge).mockResolvedValue('private_process_unreadable');
+  const result = await collectDeployment();
+  expect(proveComputerBridge).toHaveBeenCalledWith(computerContainerId,
+    expect.stringMatching(/^sha256:[a-f0-9]{64}$/u));
+  expect(result).toEqual({ result: 'FAIL', reason: 'host_refused', complete: false,
+    protectionFailure: 'private_process_unreadable',
+    message: protectionMessages.private_process_unreadable });
+  expect(responses).toHaveLength(0);
+  expect(writeFileSync).toHaveBeenLastCalledWith(expect.any(String), JSON.stringify(result),
+    { flag: 'wx', mode: 0o600 });
+}
+it('saves only a fixed refusal when the separate computer bridge cannot be proved',
+  savesOnlyFixedComputerRefusal);
 
 async function refusesInventedBundle(): Promise<void> {
   const invented = JSON.stringify({ result: 'PASS', sourceSha, imageDigest, checks: names });
