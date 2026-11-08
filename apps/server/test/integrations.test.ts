@@ -798,19 +798,19 @@ it('refuses detail when membership ends while its records load', async () => {
   const held = new Promise<void>(resolve => { resumeLoad = resolve; });
   const blockedDatabase: Query = {
     async query<Row extends Record<string, unknown>>(sql: string, parameters?: unknown[]) {
-      const result = await database.query<Row>(sql, parameters);
-      if (sql.startsWith('SELECT * FROM audit_entries WHERE silo = $1 AND event_id = $2')) {
+      if (sql.startsWith('SELECT e.* FROM audit_entries e WHERE e.silo = $1')) {
         reportLoad();
         await held;
       }
-      return result;
+      return database.query<Row>(sql, parameters);
     },
   };
   const detailServer = buildServer(config, { audit: { silo: 'test', store: nats.store,
     db: blockedDatabase, feed, binding: authorisation.binding } });
   try {
-    const pending = detailServer.inject({ url: `/api/org/history/${event.id}`,
-      headers: headers('oidc-alice') });
+    // Start the request before waiting for its record query to begin.
+    const pending = Promise.resolve(detailServer.inject({ url: `/api/org/history/${event.id}`,
+      headers: headers('oidc-alice') }));
     await loading;
     await append(fixture('member.removed', 'member-alice', { memberId: 'alice' }));
     resumeLoad();
