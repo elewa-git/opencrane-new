@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { computerSummary, type ComputerControl, type ComputerSummary } from '@opencrane/auth';
 import { readEventAt, readStreamSummary, type EventStore } from '@opencrane/event-store';
 import { takeoverStartedLeaseDataSchema, takeoverRenewedDataSchema,
-  takeoverReturnRequestedDataSchema } from '@opencrane/events';
+  takeoverReturnRequestedDataSchema, takeoverEndedWithProofDataSchema,
+  takeoverClosureUnknownDataSchema, takeoverEndReasonSchema } from '@opencrane/events';
 import { envelope } from '@opencrane/models';
 
 const id = z.string().regex(/^[\w-]{1,200}$/u);
@@ -18,11 +20,14 @@ const grantSchema = common.extend({ proxyInstanceId: id, expiresAt: z.iso.dateti
   originalExpiresAt: z.iso.datetime() }).strict();
 const renewSchema = grantSchema.strict();
 const returnSchema = common.strict();
+const endSchema = common.extend({ reason: takeoverEndReasonSchema }).strict();
 type Grant = z.infer<typeof grantSchema>;
 type Renew = z.infer<typeof renewSchema>;
 type Return = z.infer<typeof returnSchema>;
+type End = z.infer<typeof endSchema>;
 type AccessCheck = () => Promise<void>;
 const MAX_LEASE_MS = 120_000;
+const CLOSURE_WAIT_MS = 2_000;
 // A new server process cannot reopen a writer lease issued by its predecessor.
 export const writerProxyInstanceId = randomUUID();
 
@@ -39,7 +44,9 @@ function checkedControl(control: ComputerControl | undefined):
   if (!control || control.phase === 'unverified') throw new Error('Control conflict');
   return control;
 }
-function sameOwner(control: Exclude<ComputerControl, { phase: 'unverified' }>, input: Return) {
+function sameOwner(control: Pick<Return, 'assistantId' | 'computerId' | 'generation' |
+  'podUid' | 'conversationId' | 'requesterId' | 'requesterEventId' | 'takeoverId' |
+  'leaseId'>, input: Return) {
   return control.assistantId === input.assistantId && control.computerId === input.computerId
     && control.generation === input.generation && control.podUid === input.podUid
     && control.conversationId === input.conversationId
@@ -54,12 +61,16 @@ function commandId(eventId: string, subject: string) {
 }
 async function append(store: EventStore, silo: string, subject: string,
   type: string, data: Record<string, unknown>, input: Return,
-  sequence: number, checkAccess: AccessCheck) {
+  sequence: number, checkAccess: AccessCheck, system = false) {
   const event = envelope(silo, subject, type, data);
   event.id = commandId(input.commandId, subject);
   event.commandId = input.commandId;
   event.source = 'opencrane-server';
-  event.principal = { kind: 'human', id: input.requesterId };
+  if (system) {
+    event.principal = { kind: 'system', id: 'writer-closure' };
+  } else {
+    event.principal = { kind: 'human', id: input.requesterId };
+  }
   const command = { event, expectedSequence: sequence, checkAccess };
   const result = await store.append(command);
   if (result.status === 'unavailable') throw new Error('Control unavailable');
@@ -78,6 +89,13 @@ function repeated(control: ComputerControl | undefined, input: Return | Grant, p
     || control.originalExpiresAt !== input.originalExpiresAt
     || control.proxyInstanceId !== input.proxyInstanceId)) return undefined;
   return control;
+}
+function repeatedEnd(control: ComputerControl, input: End) {
+  if (control.phase !== 'ended' && control.phase !== 'closure_unknown') return undefined;
+  const retry = repeated(control, input, control.phase);
+  const savedReason = control.phase === 'ended' ? control.reason : control.requestedEndReason;
+  if (retry && savedReason === input.reason) return retry;
+  return undefined;
 }
 function validReady(facts: Awaited<ReturnType<typeof current>>, input: Return) {
   const ready = facts.lifecycle;
@@ -149,14 +167,14 @@ export async function renewWriter(store: EventStore, silo: string, raw: unknown,
 export async function returnWriter(store: EventStore, silo: string, raw: unknown,
   checkAccess: AccessCheck) {
   const input: Return = returnSchema.parse(raw);
+  // Close immediately. A slow computer read must not keep the old input slot open.
+  WriterSlot.closeCurrent(store, silo, input);
   const facts = await current(store, silo, input.assistantId);
   const control = checkedControl(facts.control);
   const retry = repeated(control, input, 'returning');
   if (retry) return retry;
   if (!sameOwner(control, input) || !['started', 'renewed'].includes(control.phase)
     || control.writerSessionId !== input.writerSessionId) throw new Error('Control conflict');
-  // Stop local input before attempting the saved Return. A failed append keeps it closed.
-  WriterSlot.closeCurrent(silo, input.assistantId, input.writerSessionId);
   const { commandId: _commandId, ...returnedData } = input;
   const data = takeoverReturnRequestedDataSchema.parse(returnedData);
   const saved = await append(store, silo, `computer-${input.assistantId}`,
@@ -164,22 +182,73 @@ export async function returnWriter(store: EventStore, silo: string, raw: unknown
   return checkedControl(saved.control);
 }
 
+export async function endWriter(store: EventStore, silo: string, raw: unknown,
+  proveInputDrained: () => Promise<string | undefined>, checkAccess: AccessCheck) {
+  const input: End = endSchema.parse(raw);
+  const slot = WriterSlot.closeCurrent(store, silo, input);
+  const facts = await current(store, silo, input.assistantId);
+  const control = checkedControl(facts.control);
+  const retry = repeatedEnd(control, input);
+  if (retry) return retry;
+  if (!sameOwner(control, input) || !['started', 'renewed', 'returning'].includes(control.phase)
+    || control.writerSessionId !== input.writerSessionId
+    || (input.reason === 'returned' && control.phase !== 'returning')) {
+    throw new Error('Control conflict');
+  }
+  const locallyDrained = slot
+    ? await Promise.race([slot.drain(), delay(CLOSURE_WAIT_MS, false, { ref: false })]) : false;
+  let closureReceiptId: string | undefined;
+  if (locallyDrained) {
+    try {
+      closureReceiptId = await Promise.race([
+        proveInputDrained(), delay(CLOSURE_WAIT_MS, undefined, { ref: false }),
+      ]);
+    } catch {
+      // A missing Pod receipt cannot turn socket closure into proof of delivery.
+    }
+  }
+  const { commandId: _commandId, reason: _reason, ...binding } = input;
+  const subject = `computer-${input.assistantId}`;
+  const system = input.reason !== 'returned';
+  const closureAccess = system ? accessNotRequired : checkAccess;
+  if (!closureReceiptId) {
+    const data = takeoverClosureUnknownDataSchema.parse({ ...binding,
+      requestedEndReason: input.reason });
+    const saved = await append(store, silo, subject, 'takeover.closure_unknown',
+      data, input, facts.sequence, closureAccess, system);
+    return checkedControl(saved.control);
+  }
+  const data = takeoverEndedWithProofDataSchema.parse({ ...binding, reason: input.reason,
+    closureReceiptId, startedAt: control.startedAt, endedAt: new Date().toISOString(),
+    canStartNewWork: input.reason === 'returned' });
+  const saved = await append(store, silo, subject, 'takeover.ended',
+    data, input, facts.sequence, closureAccess, system);
+  return checkedControl(saved.control);
+}
+function accessNotRequired() { return Promise.resolve(); }
+
 export class WriterSlot {
   private static active = new Map<string, WriterSlot>();
   private static consumed = new WeakMap<EventStore, Set<string>>();
+  private static closed = new WeakMap<EventStore, Map<string, WriterSlot>>();
   private readonly key: string;
   private readonly input: Grant;
   private readonly store: EventStore;
   private readonly silo: string;
   private readonly checkAccess: AccessCheck;
   private owner = false;
+  private claimed = false;
   private closed = false;
   private checking = false;
   private permissionUntil = 0;
   private leaseUntil = 0;
   private originalUntil = 0;
   private savedExpiresAt: string | undefined;
-  private timer: ReturnType<typeof setInterval> | undefined;
+  private refreshTimer: ReturnType<typeof setInterval> | undefined;
+  private deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  private pendingSends = new Set<Promise<void>>();
+  private inputFailed = false;
+  private readonly inputAbort = new AbortController();
 
   constructor(store: EventStore, silo: string, raw: unknown, checkAccess: AccessCheck) {
     this.input = grantSchema.parse(raw);
@@ -201,6 +270,7 @@ export class WriterSlot {
     const savedExpiry = this.savedControl(second);
     this.updateDeadlines(savedExpiry.expiresAt, savedExpiry.originalExpiresAt);
     this.permissionUntil = permissionUntil;
+    this.scheduleDeadline();
   }
 
   private savedControl(facts: Awaited<ReturnType<typeof current>>) {
@@ -238,6 +308,16 @@ export class WriterSlot {
     }
   }
 
+  private scheduleDeadline() {
+    if (this.closed) return;
+    if (this.deadlineTimer) clearTimeout(this.deadlineTimer);
+    // Close queued input at the earliest deadline even while a refresh read is blocked.
+    const deadline = Math.min(this.permissionUntil, this.leaseUntil, this.originalUntil);
+    const remaining = Math.max(0, Math.ceil(deadline - performance.now()));
+    this.deadlineTimer = setTimeout(this.close.bind(this), remaining);
+    this.deadlineTimer.unref();
+  }
+
   async claim() {
     if (this.input.proxyInstanceId !== writerProxyInstanceId) return false;
     if (this.closed || this.owner || this.checking || WriterSlot.active.has(this.key)) return false;
@@ -262,8 +342,9 @@ export class WriterSlot {
     // Consume once permission is proved and before any input is admitted.
     consumed.add(leaseKey);
     this.owner = true;
-    this.timer = setInterval(this.scheduleRefresh.bind(this), 250);
-    this.timer.unref();
+    this.claimed = true;
+    this.refreshTimer = setInterval(this.scheduleRefresh.bind(this), 250);
+    this.refreshTimer.unref();
     return true;
   }
   private async refresh() {
@@ -286,16 +367,53 @@ export class WriterSlot {
       && now < this.leaseUntil && leaseId === this.input.leaseId
       && writerSessionId === this.input.writerSessionId;
   }
+  send(bytes: Buffer, forward: (bytes: Buffer, signal: AbortSignal) => void | Promise<void>) {
+    if (!this.allows(this.input.leaseId, this.input.writerSessionId)) return false;
+    try {
+      const delivery = Promise.resolve(forward(bytes, this.inputAbort.signal));
+      this.pendingSends.add(delivery);
+      const complete = () => { this.pendingSends.delete(delivery); };
+      const failed = () => { this.inputFailed = true; this.close(); complete(); };
+      void delivery.then(complete, failed);
+      return true;
+    } catch {
+      this.inputFailed = true;
+      this.close();
+      return false;
+    }
+  }
+  async drain() {
+    const pending = [...this.pendingSends];
+    await Promise.allSettled(pending);
+    return !this.inputFailed && this.pendingSends.size === 0;
+  }
   close() {
     this.closed = true;
     this.owner = false;
-    if (this.timer) clearInterval(this.timer);
+    this.inputAbort.abort();
+    if (this.refreshTimer) clearInterval(this.refreshTimer);
+    if (this.deadlineTimer) clearTimeout(this.deadlineTimer);
     if (WriterSlot.active.get(this.key) === this) WriterSlot.active.delete(this.key);
+    if (!this.claimed) return;
+    let closed = WriterSlot.closed.get(this.store);
+    if (!closed) {
+      closed = new Map();
+      WriterSlot.closed.set(this.store, closed);
+    }
+    closed.set(this.key, this);
   }
-  static closeCurrent(silo: string, assistantId: string, writerSessionId: string) {
-    const key = JSON.stringify([silo, assistantId]);
+  static closeCurrent(store: EventStore, silo: string, input: Return) {
+    const key = JSON.stringify([silo, input.assistantId]);
     const active = WriterSlot.active.get(key);
-    if (active?.input.writerSessionId === writerSessionId) active.close();
+    if (active?.store === store && active.input.writerSessionId === input.writerSessionId
+      && sameOwner(active.input, input)) {
+      active.close();
+      return active;
+    }
+    const closed = WriterSlot.closed.get(store)?.get(key);
+    if (closed?.input.writerSessionId === input.writerSessionId
+      && sameOwner(closed.input, input)) return closed;
+    return undefined;
   }
   static hasCurrent(silo: string, assistantId: string, writerSessionId: string) {
     const key = JSON.stringify([silo, assistantId]);

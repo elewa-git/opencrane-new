@@ -14,7 +14,8 @@ import { routineEvents, modernRoutineExamples } from './routine-events.ts';
 import * as routines from './routines.ts';
 import { egressEvents } from './egress.ts';
 
-import { takeoverEvents, takeoverStartedLeaseDataSchema } from './takeover.ts';
+import { takeoverEvents, takeoverStartedLeaseDataSchema,
+  takeoverEndedWithProofDataSchema } from './takeover.ts';
 import { conversationArchiveSetDataSchema, conversationReadAdvancedDataSchema }
   from './conversation.ts';
 import {
@@ -165,7 +166,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     'takeover.ended',
     'computer',
     'A live-view takeover ended and control returned to the agent.',
-    data.takeoverEndedDataSchema,
+    data.takeoverEndedDataSchema.or(takeoverEndedWithProofDataSchema),
     { assistantId: 'asst_1', computerId: 'computer_1', endedBy: 'mem_1' },
   ),
   event(

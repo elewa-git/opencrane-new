@@ -992,3 +992,10 @@ proxy instance, quiet receipt id and two bounded expiry times. The old start sha
 remains readable but cannot grant control. `takeover.renewed` keeps the owner and
 original expiry. `takeover.return_requested` names the same owner and writer session.
 All three use the computer stream. They carry no input, clipboard or screen bytes.
+
+`takeover.ended` accepts the old historical shape for reading, plus a new strict
+shape with the matching writer binding, reason, saved start time, end time, drain
+receipt id and checked-start eligibility. `takeover.closure_unknown` carries the
+writer binding and requested end reason for identical command retries. It does not
+save an exact end reason when final input delivery is unproved. Neither event
+contains input, clipboard, tokens or screen data.

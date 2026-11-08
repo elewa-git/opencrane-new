@@ -24,6 +24,9 @@ Control refusals record the attempt, the person who made it, its conversation, a
 fingerprint of the checked request and a fixed reason. They contain no computer or private turn details.
 Writer lease records name one requester, computer generation and writer session.
 Return records close that lease without allowing new assistant work.
+Closure records distinguish a proved end from an unknown final input state.
+An unknown closure keeps the requested end reason for identical command retries.
+They carry no keys, clipboard or screen content.
 
 Approval cancellation can record takeover as its fixed cause. It ends unused
 consent for a matching saved control request and carries no private review details.
@@ -56,7 +59,7 @@ Allow, Ask or Block choice for a tool.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions, including persona approvals and private persona revisions"]
-  server["apps/server<br/>back end"] -.->|checks assistant file lists and records, private exit, native termination, routine turn identities, allowance fingerprints, owner, approval and unconfirmed delivery Stop intent, owner-removal pauses and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
+  server["apps/server<br/>back end"] -.->|checks assistant file lists and records, private exit, native termination, routine turn identities, result references and settled cents, allowance fingerprints, owner, approval and unconfirmed delivery Stop intent, owner-removal pauses and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries, activation refusals, writer closure and refusal records| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events

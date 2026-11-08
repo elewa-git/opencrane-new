@@ -265,7 +265,8 @@ The dev stack retains its explicit invitation/join bootstrap for the privately c
 | `takeover.started` | internal requester lease command; old live-view records | computer control summary, audit | A new record requires saved quiet proof, the same requester and computer generation, one writer session, and an expiry no later than the original two-minute deadline. Old shapes remain unverified and cannot grant a writer. |
 | `takeover.renewed` | internal requester lease command | computer control summary, audit | Extend only the current writer session after fresh access checks, never beyond its original deadline. A returned or expired lease cannot renew. |
 | `takeover.return_requested` | internal requester command | computer control summary, audit | Close local writer input before the conditional append. Keep AI work paused; a lost reply is resolved by reading status. |
-| `takeover.ended` | historical live-view record | computer control summary, audit | Read old shapes as unverified and paused. They cannot resume work. |
+| `takeover.closure_unknown` | internal server closure command | computer control summary, audit | Local writer input is closed, but final delivery has no Pod drain proof. Keep work paused. Save the requested end reason to check identical retries, without treating it as a proved end reason. |
+| `takeover.ended` | internal server closure command; historical live-view record | computer control summary, audit | Save the exact end reason only with a Pod input-drain receipt. A returned lease may permit a separate checked start; abnormal ends keep work paused. Old shapes stay unverified. |
 | `toolset.changed` | admin command (publishes a computer profile) | toolsets | notify admins for review; computers adopt it at their next claim or resume |
 
 Computer credentials are short-lived signed tokens. `computer.claimed` and
