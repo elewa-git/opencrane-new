@@ -5017,6 +5017,12 @@ permission to run. No allowance or uncertain hold is released by this check.
 
 ## Explicit company selection (P3-8 PR 4s; Part of #49)
 
+The server can reuse `companySelectionFacts` with a trusted profile reader for a
+routine's post-wake company check. It reads the exact saved company profile, MCP
+server, opt-in and OAuth configuration. The server also checks the owner's selected
+profile and frozen account and scopes. This exported helper does not release a
+credential or grant a tool call. No production company verification reader is wired.
+
 `changeConnectionSelection` accepts optional `ownerKind: personal | company`. Omission
 keeps personal behaviour. Company selection requires current requester membership and
 tool rights, current opt-in and a reviewed personal-mode installation. The pure trusted

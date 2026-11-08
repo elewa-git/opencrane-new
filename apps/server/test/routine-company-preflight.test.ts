@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import type { StoredEvent } from '@opencrane/event-store';
-import { routine } from '../../../libs/authz/test/routine-fixture.ts';
+import { modernRoutineExamples } from '../../../libs/events/src/routine-events.ts';
 import { envelope, history } from '../../../libs/models/src/actor.ts';
 import { connectionOperationId } from '../../../libs/models/src/bearer-connections.ts';
 import { oauthConfigurationDigest } from '../../../libs/models/src/oauth-attempt.ts';
@@ -10,19 +10,17 @@ import { oauthSelectionFixture } from '../../../libs/models/test/support/oauth-s
 import { checkRoutineCompanyPreflight } from '../src/routine-company-preflight.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
-let counter = 0;
-beforeAll(async function startStore() {
+beforeEach(async function startStore() {
   nats = await natsFixture();
 });
-afterAll(async function closeStore() {
+afterEach(async function closeStore() {
   await nats?.close();
 });
 
 async function fixture() {
-  counter += 1;
-  const serverId = `server${counter}`;
-  const profileId = `profile${counter}`;
-  const ownerId = `owner${counter}`;
+  const serverId = 'installed';
+  const profileId = 'profile';
+  const ownerId = 'owner';
   const selected = await oauthSelectionFixture(nats, ownerId, serverId, profileId);
   const serverRows = await history(nats.store, `mcp-${serverId}`, 'test');
   const registrationRevision = serverRows[0]!.sequence;
@@ -74,9 +72,8 @@ async function fixture() {
   selection.commandId = 'choice';
   selection.principal = { kind: 'human', id: ownerId };
   await nats.seed([selection]);
-  const due = routine('routine.due').data as { occurrenceId: string; rootId: string;
-    definition: Record<string, unknown> };
-  const definition = { ...due.definition, ownerId, connectionId: 'installed', profileId,
+  const due = modernRoutineExamples.due;
+  const definition = { ...due.definition, ownerId, serverId, connectionId: 'installed', profileId,
     profileRevision, connectionRevision: profileRevision, companyAccountId: accountId,
     scopes: ['read'] };
   const run = { ...due, definition };
@@ -92,18 +89,33 @@ it('checks one current company binding for the saved occurrence without sending'
   const current = await fixture();
   const append = vi.spyOn(nats.store, 'append');
   const result = await current.preflight();
-  expect(result).toMatchObject({ occurrenceId: expect.any(String),
-    rootId: expect.any(String), computerGeneration: 1 });
+  expect(result.occurrenceId).toBe(modernRoutineExamples.due.occurrenceId);
+  expect(result.rootId).toBe(modernRoutineExamples.due.rootId);
+  expect(result.computerGeneration).toBe(1);
   expect(append).not.toHaveBeenCalled();
   append.mockRestore();
 });
 
-it.each(['account', 'scopes', 'custody', 'revision', 'choice', 'opt-in', 'publication'])(
+it('refuses a preflight kept across a later connection change', async function stale() {
+  const current = await fixture();
+  const binding = await current.preflight();
+  const changed = envelope('test', current.optInSubject,
+    'connection.company_opt_in_set', { serverId: current.serverId,
+      connectionId: 'installed', registrationRevision: 1, enabled: false,
+      changedBy: 'admin', expectedSequence: await nats.store.head(current.optInSubject) });
+  await nats.seed([changed]);
+  await expect(binding.confirmCurrent()).rejects.toThrow('Routine company unavailable');
+});
+
+it.each(['account', 'scopes', 'custody', 'revision', 'generation', 'missing-server',
+  'choice', 'opt-in', 'publication'])(
   'refuses changed company %s before any allowance', async function changed(kind) {
     const current = await fixture();
     if (kind === 'account') current.evidence.accountId = 'different';
     if (kind === 'scopes') current.evidence.scopes = ['openid'];
     if (kind === 'revision') current.evidence.profileRevision += 1;
+    if (kind === 'generation') current.evidence.generation += 1;
+    if (kind === 'missing-server') Object.assign(current.definition, { serverId: undefined });
     if (kind === 'choice') {
       const changed = envelope('test', current.selectionSubject, 'connection.selected', {
         action: 'clear', userId: current.ownerId, serverId: current.serverId,
@@ -123,7 +135,7 @@ it.each(['account', 'scopes', 'custody', 'revision', 'choice', 'opt-in', 'public
         'mcp.server_unpublished', { serverId: current.serverId, unpublishedBy: 'admin' });
       await nats.seed([changed]);
     }
-    function unavailable() {
+    function unavailable(): never {
       throw new Error('Custody unavailable');
     }
     const reader = kind === 'custody' ? unavailable : undefined;

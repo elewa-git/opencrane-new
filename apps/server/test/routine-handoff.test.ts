@@ -420,12 +420,21 @@ type Lease = Parameters<Parameters<typeof withRoutineLeadership>[1]>[0];
 type Options = Parameters<typeof createRoutineComposition>[0];
 type Handoff = NonNullable<Parameters<typeof dispatchRoutineCandidates>[3]>;
 let leaseSignal: AbortSignal;
+function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+  computerGeneration: number) {
+  function confirmCurrent() {
+    return Promise.resolve();
+  }
+  return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
+    computerGeneration, confirmCurrent });
+}
 async function dispatch(options: Options = { enabled: true }, continuation = false) {
   await runner.run(routines);
   let progress;
   const identity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
+  const companyPreflight = options.companyPreflight ?? syntheticCompanyPreflight;
   const production = createRoutineDelivery(nats.store, keys, identity, actor, wake,
-    budgetOwner);
+    budgetOwner, companyPreflight);
   const receive: Handoff = async function receive(due, lease) {
     expect(lease.signal).toBe(leaseSignal);
     if (options.enabled === true && options.replay !== true) {
@@ -441,7 +450,8 @@ async function dispatch(options: Options = { enabled: true }, continuation = fal
     const worker = { silo: 'test', binding, workerId: 'routine-worker',
       checkCurrent, signal: lease.signal, now: clock };
     const input = { routineId: due.routineId, occurrenceId: due.occurrenceId };
-    const invocation = createRoutineComposition(options, nats.store, keys, worker, input,
+    const invocation = createRoutineComposition({ ...options, companyPreflight },
+      nats.store, keys, worker, input,
       actor, due.turnId);
     return invocation.send(wake);
   };
@@ -519,7 +529,7 @@ async function productionDeliveryUsesCheckedDue() {
   await runner.run(routines);
   const workerIdentity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
   const handoff = createRoutineDelivery(nats.store, keys, workerIdentity, actor, wake,
-    budgetOwner);
+    budgetOwner, syntheticCompanyPreflight);
   async function work(lease: Lease) {
     const worker = { ...lease, silo: 'test', binding, now: clock };
     const delivery = { db: storage.db, store: nats.store, worker, handoff };
@@ -571,6 +581,40 @@ async function refusesBudgetLeaderLostDuringWake() {
 }
 it('refuses root allocation when the budget leader is lost during wake',
   refusesBudgetLeaderLostDuringWake);
+
+async function refusesChangedCompanyAfterWake() {
+  let woke = false;
+  async function recordedWake(assistantId: string) {
+    const ready = await preparedComputer.wake(assistantId);
+    woke = true;
+    return ready;
+  }
+  wake = recordedWake;
+  function unavailable(): Promise<never> {
+    expect(woke).toBe(true);
+    return Promise.reject(new Error('Company binding changed'));
+  }
+  const companyPreflight = vi.fn(unavailable);
+  await expect(dispatch({ enabled: true, companyPreflight }))
+    .rejects.toThrow('Routine leadership unavailable');
+  expect(companyPreflight).toHaveBeenCalledTimes(1);
+  expect(actor.state.roots).toEqual([]);
+  expect(preparedComputer.executedThreads).toEqual([]);
+}
+it('checks the company after wake and refuses changed binding before allocation',
+  refusesChangedCompanyAfterWake);
+
+async function disabledWorkHasNoCompanyRead(replay: boolean) {
+  const companyPreflight = vi.fn(syntheticCompanyPreflight);
+  wake = vi.fn(forbidden);
+  await expect(dispatch({ enabled: false, replay, companyPreflight }))
+    .rejects.toThrow('Routine leadership unavailable');
+  expect(companyPreflight).not.toHaveBeenCalled();
+  expect(wake).not.toHaveBeenCalled();
+  expect(actor.state.roots).toEqual([]);
+}
+it.each([false, true])('does not inspect company binding during disabled/replayed work, replay=%s',
+  disabledWorkHasNoCompanyRead);
 async function recoversLostReply() {
   const append = nats.store.append.bind(nats.store);
   async function loseReply(...args: Parameters<typeof append>): Promise<never> {

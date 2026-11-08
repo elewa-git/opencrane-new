@@ -887,6 +887,12 @@ installation. No reaction subscribes; replay grants nothing and releases no cred
 
 ## Private routine session creation
 
+Modern routine definitions may include `serverId` for the exact MCP server used by
+their company connection. Older saved definitions omit it and still replay. Company
+preparation refuses them because the connection id alone cannot identify the server.
+The current example includes both ids. This field carries no credential or account
+label.
+
 The assistant variant of `conversation.created` accepts optional strict `routinePreparation`
 with routineId, occurrenceId, claimId, positive integer claimPosition and workerId.
 Old conversations remain readable but cannot be recovered as worker preparations.

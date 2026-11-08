@@ -7147,6 +7147,23 @@ generation on the authenticated bridge. The function is available to checked
 preparation, but no deployed scheduler callback calls it. Automatic company calls
 and the public execution switch remain disabled.
 
+`routine-company-preflight.ts` runs after authenticated wake and before private thread
+preparation or root allocation. It requires the frozen routine's `serverId`, owner,
+connection, profile revisions, verified account id and scopes to match one explicit
+company choice. It reuses `companySelectionFacts` for installation, opt-in, OAuth
+configuration, account evidence and available tools. The trusted profile reader must
+confirm credential custody; no production reader is installed. A returned local
+binding names the same occurrence, root and computer generation. Its current-position
+check runs again before the existing sender. Missing evidence refuses with a fixed
+error. There is no credential release, company send or public execution switch.
+Existing records without `serverId` remain readable but cannot pass this check.
+
+`test/routine-company-preflight.test.ts` covers the valid choice, a stale preflight
+and changes to account, scopes, custody, profile revision, owner choice, opt-in and publication.
+`test/routine-handoff.test.ts` checks post-wake refusal before allowance and no
+preflight during disabled or replayed work. These tests use synthetic account evidence.
+The governed company send and fresh-install journey remain NOT RUN.
+
 The private models library has a company audit check, but this server does not
 register its synthetic profile reader or a company sender. No public route, routine
 composition switch or browser path can invoke it. See the
