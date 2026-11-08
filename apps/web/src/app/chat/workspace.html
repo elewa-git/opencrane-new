@@ -1,5 +1,5 @@
 <!-- Copied from OpenCrane 1; commit 10abd0ef6. -->
-<div class="workspace" [class.panel-open]="panel()">
+<div class="workspace" [class.panel-open]="panelExpanded()">
   <nav class="rail" aria-label="Sessions">
     <div class="brand"><oc-brand-mark /><strong>Open<span>Crane</span></strong><button type="button" aria-label="Find a session" (click)="searchDialog.showModal()"><kbd>⌘K</kbd></button></div>
     <span class="sr-only" role="status" aria-live="polite">{{ chat.railLoading() ? 'Loading sessions' : chat.railUnavailable() ? 'Sessions unavailable' : 'Sessions loaded' }}</span>
@@ -14,7 +14,7 @@
       <div class="header-title">
         <div class="header-main">
           @if (chat.selected()) { <span class="hash" aria-hidden="true">#</span> }
-          <h1 tabindex="-1" [class.draft-title]="!chat.selected()">
+          <h1 tabindex="-1" [class.draft-title]="!chat.selected()" [title]="title()">
             {{ chat.denied() || chat.requestedUnavailable() || chat.requestedLookupFailed() ? 'Unavailable' : title() }}
           </h1>
         </div>
@@ -30,16 +30,20 @@
         </span>
       </div>
       @if (teamSession()) { <span class="private-session-label">Private session</span> }
-      @if (!chat.selected() && !chat.denied()) { <span class="draft-label">Draft</span> }
+      @if (!chat.selected() && !chat.denied() && !chat.requestedUnavailable()
+        && !chat.requestedLookupFailed()) { <span class="draft-label">Draft</span> }
       @if (chat.selected() && !chat.denied() && !chat.requestedUnavailable()) {
         <oc-close-review-dialog [row]="chat.selectedConversation()" [title]="title()"
           [closed]="isClosedConversation()" [review]="closeReview" />
       }
+      @if (!chat.requestedUnavailable() && !chat.requestedLookupFailed()) {
       <span class="avatar agent"
         [attr.aria-label]="teamSession() ? 'Shared assistant' : 'Personal agent'">
         <oc-icon name="agent" />
       </span>
+      }
       <button id="panel-toggle" type="button" aria-label="Session panel"
+        [disabled]="chat.requestedUnavailable() || chat.requestedLookupFailed()"
         [attr.aria-expanded]="panelExpanded()" (click)="togglePanel()">
         <oc-icon name="panel" />
       </button>
@@ -51,7 +55,8 @@
       [ocFileDrop]="!isClosedConversation() && !reason() && !teamSession() && !chat.busy() && !chat.queued()
         && !chat.uploadBatch.uploading() && !chat.uploadPending() && !chat.requestedUnavailable()
         && !chat.requestedLookupFailed()" (filesDropped)="chat.uploadBatch.send($event)">
-    <section class="transcript" #transcript tabindex="0" aria-label="Conversation messages" [attr.aria-busy]="chat.loading()">
+    <section class="transcript" #transcript tabindex="0" aria-label="Conversation messages"
+      [attr.aria-busy]="chat.loading()" (scroll)="transcriptScrolled()">
       <div class="transcript-inner">
         @if (isClosedConversation()) {
           <p class="closed-session-notice" role="status">🔒 Closed · Read only.
@@ -80,7 +85,22 @@
           <oc-shared-state kind="checking" message="Loading conversation…" />
           <oc-grain-loader width="80%" />
         </div> }
-        @if (chat.error() && !chat.queued()) { <div class="error" role="alert">{{ chat.error() }} @if (!chat.queued()) { <button type="button" (click)="chat.load()">Retry</button> } @if (chat.denied()) { <a href="/">Sign in</a> }</div> }
+        @if (chat.historyFailure() && !chat.denied()) {
+          <div class="history-warning" role="status" aria-live="polite">
+            <h2>Couldn't load newer messages</h2>
+            @if (chat.rows().at(-1); as lastRow) {
+              <p>Showing what we loaded at {{ time(lastRow.time) }}.</p>
+            } @else {
+              <p>No messages were loaded. Try again.</p>
+            }
+            <button type="button" (click)="chat.retryRead()">Try again</button>
+          </div>
+        }
+        @if (chat.error() && !chat.queued() && !chat.historyFailure()) {
+          <div class="error" role="alert">{{ chat.error() }}
+            <button type="button" (click)="chat.retryRead()">Retry</button>
+          </div>
+        }
         @if (chat.denied()) {
           <div class="access-lock" #accessNotice tabindex="-1">
           <oc-shared-state kind="access_changed" message="You no longer have access"
@@ -90,8 +110,12 @@
           </div>
         }
         @if (chat.requestedUnavailable()) {
-          <oc-shared-state kind="failed" message="Conversation not found or unavailable"
-            detail="Choose a conversation from the list to continue." [showAction]="false" />
+          <div class="unavailable-link" #unavailableLink tabindex="-1" role="status"
+            aria-live="polite">
+            <h2>This conversation isn't available</h2>
+            <p>It may not exist or you may not have access. No details are shown.</p>
+            <a href="/workspace/conversations">Back to conversations</a>
+          </div>
         }
         @if (!chat.selected() && !chat.loading() && !chat.railUnavailable()
           && !chat.denied() && !chat.requestedUnavailable()
@@ -334,7 +358,7 @@
     }
     </div>
   </main>
-  @if (desktop() && panel()) {
+  @if (desktop() && panelExpanded()) {
     <aside class="session-panel desktop-panel" aria-label="Session panel">
       <ng-container [ngTemplateOutlet]="panelContent" />
     </aside>
@@ -350,7 +374,7 @@
     }
   </oc-navigation-menu>
   @if (!desktop()) {
-    <oc-hinge-drawer [open]="panelOverlay()" title="Session"
+    <oc-hinge-drawer [open]="panelExpanded()" title="Session"
       (closed)="sessionPanelClosed()">
       <ng-container [ngTemplateOutlet]="panelContent" />
     </oc-hinge-drawer>

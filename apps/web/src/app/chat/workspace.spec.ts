@@ -27,6 +27,7 @@ async function createCaptureWorkspace(
   computerState = 'ready',
   listPlacement?: 'recent-page-two' | 'archived' | 'missing' | 'changed-twice',
   dispatcherReady = true,
+  readMetadata = false,
 ): Promise<CaptureWorkspace> {
   history.replaceState({}, '', '/workspace?conversation=chat');
   const rows = [...initialRows];
@@ -39,7 +40,9 @@ async function createCaptureWorkspace(
   let stopResponse: Promise<Response> | undefined;
   const initialConversation = { conversationId: 'chat', assistantId: 'assistant', assistantKind,
     payingGroupId: assistantKind === 'team' ? 'opaque-sales' : undefined,
-    createdBy: 'me', createdAt: '2026-10-03T10:00:00Z', status: 'open', mode: 'agent_session' };
+    createdBy: 'me', createdAt: '2026-10-03T10:00:00Z', status: 'open', mode: 'agent_session',
+    joinEventId: readMetadata ? 'join-chat' : undefined,
+    throughPosition: readMetadata ? 0 : undefined };
   const conversations = [initialConversation];
   vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
     const path = input instanceof Request ? input.url : String(input);
@@ -84,6 +87,9 @@ async function createCaptureWorkspace(
       const conversation = { ...initialConversation, conversationId: command.conversationId };
       conversations.push(conversation);
       return Promise.resolve(new Response('{"status":"appended","sequence":1}'));
+    }
+    if (pathname.endsWith('/state') && init?.method === 'POST') {
+      return Promise.resolve(new Response('{"status":"appended","sequence":2}'));
     }
     if (pathname.endsWith('/screenshots')) {
       if (replyStatus === 0) return Promise.reject(new TypeError('Network lost'));
@@ -427,7 +433,7 @@ it('does not say Files were read after a failed status read', async () => {
   await context.fixture.componentInstance['checkCaptureStatus']();
   context.fixture.detectChanges();
 
-  expect(context.root.textContent).toContain('Could not load the conversation');
+  expect(context.root.textContent).toContain("Couldn't load newer messages");
   expect(context.root.textContent).toContain('Could not read Files at');
   expect(context.root.textContent).toContain('Check status again when the connection returns');
   expect(context.root.textContent).not.toContain('Files read again');
@@ -435,7 +441,7 @@ it('does not say Files were read after a failed status read', async () => {
   context.fixture.destroy();
 });
 
-it('keeps a previous load error after a successful refresh on a healthy list', async () => {
+it('clears a previous load error after a successful refresh on a healthy list', async () => {
   const context = await createCaptureWorkspace([screenshotRow(1)]);
   const chat = context.fixture.componentInstance['chat'];
   context.setMessageStatus(500);
@@ -447,8 +453,8 @@ it('keeps a previous load error after a successful refresh on a healthy list', a
   expect(await chat.refresh()).toBe(true);
   context.fixture.detectChanges();
   await context.fixture.whenStable();
-  expect(chat.error()).toContain('Could not load the conversation');
-  expect(context.root.textContent).toContain('Could not load the conversation');
+  expect(chat.error()).toBe('');
+  expect(context.root.textContent).not.toContain("Couldn't load newer messages");
   context.fixture.destroy();
 });
 
@@ -590,7 +596,8 @@ it('resets the capture state when the conversation changes', async () => {
   context.fixture.destroy();
 });
 
-it.each([500, 503, 403])('does not show empty states after a %s conversation read', async status => {
+it.each([500, 503, 401, 403])(
+  'does not show empty states after a %s conversation read', async status => {
   history.replaceState({}, '', '/workspace?conversation=chat');
   vi.spyOn(globalThis, 'fetch').mockImplementation(input => {
     const path = input instanceof Request ? input.url : String(input);
@@ -622,8 +629,8 @@ it.each([500, 503, 403])('does not show empty states after a %s conversation rea
 
   const root: unknown = fixture.nativeElement;
   if (!(root instanceof HTMLElement)) throw new Error('No workspace root');
-  const expectedMessage = status === 403 ? 'You no longer have access'
-    : 'Could not load the conversation';
+  const expectedMessage = status === 401 || status === 403 ? 'You no longer have access'
+    : "Couldn't load newer messages";
   await vi.waitFor(() => expect(root.textContent).toContain(expectedMessage));
   expect(root.textContent).not.toContain('No messages yet');
   root.querySelector<HTMLButtonElement>('#panel-toggle')?.click();
@@ -1843,7 +1850,7 @@ it.each(['recent-page-two', 'archived'] as const)(
 it('shows the generic unavailable state for an inaccessible saved session', async () => {
   const capture = await createCaptureWorkspace([], [], undefined, 'ready', 'missing');
   try {
-    expect(capture.root.textContent).toContain('Conversation not found or unavailable');
+    expect(capture.root.textContent).toContain("This conversation isn't available");
     expect(capture.root.textContent).not.toContain('Access unavailable');
     expect(capture.root.querySelector('.composer-dock')).toBeNull();
     expect(capture.calls.some(call => call.includes('section=archived'))).toBe(true);
@@ -2431,12 +2438,13 @@ function savedPosition(row: ChatRow): number {
 it('applies three history pages and an overlapping socket row once in order', async () => {
   const capture = await createCaptureWorkspace([postedRow(1)]);
   const chat = capture.fixture.componentInstance['chat'];
+  expect(chat.railLoading()).toBe(false);
   const originalFetch = vi.mocked(fetch).getMockImplementation();
   if (!originalFetch) throw new Error('Missing HTTP fixture');
   let releasePage: (reply: Response) => void = () => undefined;
   const delayedPage = new Promise<Response>(resolve => { releasePage = resolve; });
   function pagedRead(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    const path = String(input);
+    const path = input instanceof Request ? input.url : String(input);
     if (!path.includes('/messages?since=')) return originalFetch!(input, init);
     const since = Number(new URL(path, location.origin).searchParams.get('since'));
     if (since === 1) return delayedPage;
@@ -2460,15 +2468,17 @@ it('waits for the reconnect gap to drain before announcing caught up', async () 
   const capture = await createCaptureWorkspace([postedRow(1)]);
   const chat = capture.fixture.componentInstance['chat'];
   capture.socket.onopen?.(new Event('open'));
+  const originalOpen = capture.socket.onopen;
   capture.socket.onclose?.(new CloseEvent('close'));
-  await vi.waitFor(() => expect(capture.socket.onopen).not.toBeNull());
+  await vi.waitFor(() => expect(capture.socket.onopen).not.toBe(originalOpen));
   capture.socket.onopen?.(new Event('open'));
   const originalFetch = vi.mocked(fetch).getMockImplementation();
   if (!originalFetch) throw new Error('Missing HTTP fixture');
   let releaseGap: (reply: Response) => void = () => undefined;
   const delayedGap = new Promise<Response>(resolve => { releaseGap = resolve; });
   function heldGap(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    if (String(input).includes('/messages?since=1')) return delayedGap;
+    const path = input instanceof Request ? input.url : String(input);
+    if (path.includes('/messages?since=1')) return delayedGap;
     return originalFetch!(input, init);
   }
   vi.mocked(fetch).mockImplementation(heldGap);
@@ -2482,6 +2492,152 @@ it('waits for the reconnect gap to drain before announcing caught up', async () 
   await refresh;
   expect(chat.rows().map(savedPosition)).toEqual([1, 2]);
   expect(chat.announcement()).toContain("You're caught up");
+  capture.fixture.destroy();
+});
+
+it('marks only the newest rendered session message after paging and while visible', async () => {
+  const capture = await createCaptureWorkspace([postedRow(1), postedRow(2)], [],
+    undefined, 'ready', undefined, true, true);
+  const chat = capture.fixture.componentInstance['chat'];
+  capture.socket.onopen?.(new Event('open'));
+  const ready = { version: 1, topic: 'conversation', conversationId: 'chat',
+    type: 'ready', position: 2, generation: 1, computerState: 'ready' };
+  capture.socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify(ready) }));
+  capture.fixture.detectChanges();
+  await chat.markRendered(true);
+  await vi.waitFor(() => expect(chat['readMarker']['running']).toBe(false));
+  expect(capture.postBodies).toMatchObject([{ action: 'read', throughPosition: 2,
+    throughEventId: 'message-2', joinEventId: 'join-chat' }]);
+
+  const originalFetch = vi.mocked(fetch).getMockImplementation();
+  if (!originalFetch) throw new Error('Missing HTTP fixture');
+  let releasePage: (reply: Response) => void = () => undefined;
+  const delayedPage = new Promise<Response>(resolve => { releasePage = resolve; });
+  function holdPage(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const path = input instanceof Request ? input.url : String(input);
+    if (path.includes('/messages?since=2')) return delayedPage;
+    return originalFetch!(input, init);
+  }
+  vi.mocked(fetch).mockImplementation(holdPage);
+  const refresh = chat.refresh();
+  sendConversationRow(capture.socket, postedRow(3));
+  await chat.markRendered(true);
+  expect(capture.postBodies).toHaveLength(1);
+  const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+  releasePage(new Response(JSON.stringify({ rows: [postedRow(3)], position: 3,
+    generation: 1, computerState: 'ready' })));
+  await refresh;
+  capture.fixture.detectChanges();
+  await chat.markRendered(true);
+  expect(capture.postBodies).toHaveLength(1);
+  visibility.mockReturnValue('visible');
+  await chat.markRendered(true);
+  expect(capture.postBodies).toMatchObject([{}, { action: 'read', throughPosition: 3,
+    throughEventId: 'message-3' }]);
+  visibility.mockRestore();
+  capture.fixture.destroy();
+});
+
+it('drops an earlier join before marking messages from a new join', async () => {
+  const capture = await createCaptureWorkspace([postedRow(1)], [],
+    undefined, 'ready', undefined, true, true);
+  const chat = capture.fixture.componentInstance['chat'];
+  capture.socket.onopen?.(new Event('open'));
+  const ready = { version: 1, topic: 'conversation', conversationId: 'chat',
+    type: 'ready', position: 1, generation: 1, computerState: 'ready' };
+  capture.socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify(ready) }));
+  await chat.markRendered(true);
+  await vi.waitFor(() => expect(chat['readMarker']['running']).toBe(false));
+  const originalFetch = vi.mocked(fetch).getMockImplementation();
+  if (!originalFetch) throw new Error('Missing HTTP fixture');
+  function afterRejoin(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const path = input instanceof Request ? input.url : String(input);
+    const url = new URL(path, location.origin);
+    if (url.pathname === '/api/conversations') {
+      const row = { ...chat.selectedConversation(), joinEventId: 'join-again',
+        throughPosition: 0 };
+      return Promise.resolve(new Response(JSON.stringify({ rows: [row] })));
+    }
+    if (url.pathname.endsWith('/messages')) {
+      return Promise.resolve(new Response(JSON.stringify({ rows: [postedRow(3)],
+        position: 3, generation: 1, computerState: 'ready' })));
+    }
+    return originalFetch!(input, init);
+  }
+  vi.mocked(fetch).mockImplementation(afterRejoin);
+  await chat['reloadReadRow']();
+  expect(chat.rows().map(savedPosition)).toEqual([3]);
+  expect(chat.caughtUp()).toBe(false);
+  expect(capture.postBodies).toHaveLength(1);
+  capture.socket.onopen?.(new Event('open'));
+  capture.socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify({
+    ...ready, position: 3 }) }));
+  capture.fixture.detectChanges();
+  await chat.markRendered(true);
+  expect(capture.postBodies).toMatchObject([{}, { action: 'read', joinEventId: 'join-again',
+    throughPosition: 3, throughEventId: 'message-3' }]);
+  capture.fixture.destroy();
+});
+
+it('ignores a list reply that arrives after socket access loss', async () => {
+  const capture = await createCaptureWorkspace([screenshotRow(1)]);
+  const chat = capture.fixture.componentInstance['chat'];
+  const oldConversation = chat.selectedConversation();
+  const originalFetch = vi.mocked(fetch).getMockImplementation();
+  if (!originalFetch) throw new Error('Missing HTTP fixture');
+  let releaseList: (reply: Response) => void = () => undefined;
+  let listRequested = false;
+  const delayedList = new Promise<Response>(resolve => { releaseList = resolve; });
+  function holdList(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const path = input instanceof Request ? input.url : String(input);
+    if (path === '/api/conversations' && !init?.method) {
+      listRequested = true;
+      return delayedList;
+    }
+    return originalFetch!(input, init);
+  }
+  vi.mocked(fetch).mockImplementation(holdList);
+  const loading = chat.load();
+  await vi.waitFor(() => expect(listRequested).toBe(true));
+  capture.socket.onopen?.(new Event('open'));
+  capture.socket.onclose?.(new CloseEvent('close', { code: 1008 }));
+  releaseList(new Response(JSON.stringify({ rows: [oldConversation] })));
+  await loading;
+  expect(chat.conversations()).toEqual([]);
+  expect(chat.rows()).toEqual([]);
+  expect(chat.selected()).toBe('');
+  capture.fixture.destroy();
+});
+
+it('ignores a saved-message status reply after socket access loss', async () => {
+  const capture = await createCaptureWorkspace();
+  const chat = capture.fixture.componentInstance['chat'];
+  capture.setMessageStatus(0);
+  expect(await chat.send('Private waiting message')).toBe(false);
+  capture.setMessageStatus(200);
+  const originalFetch = vi.mocked(fetch).getMockImplementation();
+  if (!originalFetch) throw new Error('Missing HTTP fixture');
+  let releaseStatus: (reply: Response) => void = () => undefined;
+  let statusId = '';
+  const delayedStatus = new Promise<Response>(resolve => { releaseStatus = resolve; });
+  function holdStatus(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const path = input instanceof Request ? input.url : String(input);
+    if (path.includes('/changes/') && !init?.method) {
+      statusId = path.split('/').at(-1) ?? '';
+      return delayedStatus;
+    }
+    return originalFetch!(input, init);
+  }
+  vi.mocked(fetch).mockImplementation(holdStatus);
+  const retry = chat.send('Private waiting message');
+  await vi.waitFor(() => expect(statusId).not.toBe(''));
+  capture.socket.onopen?.(new Event('open'));
+  capture.socket.onclose?.(new CloseEvent('close', { code: 1008 }));
+  releaseStatus(new Response(JSON.stringify({ status: 'appended', commandId: statusId })));
+  await retry;
+  expect(chat.rows()).toEqual([]);
+  expect(chat.selected()).toBe('');
+  expect(chat['pending']).toBeUndefined();
   capture.fixture.destroy();
 });
 
