@@ -29,6 +29,7 @@ import * as routineSession from '../src/routine-session.ts';
 import { stopUnconfirmedRoutine } from '../src/routine-delivery-stop.ts';
 import { createRoutineComposition, createRoutineDelivery } from '../src/routine-composition.ts';
 import { bindRoutineBudgetOwner } from '../src/routine-delivery-owner.ts';
+import { createRoutineWake } from '../src/chat/routine-wake.ts';
 
 let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
 let storage: Awaited<ReturnType<typeof database>>;
@@ -226,7 +227,7 @@ async function startComputer() {
   function executed() {
     return executedThreads.length === 1;
   }
-  return { link, wake, close, executed, executedThreads, frames, send: track,
+  return { link, wake, close, executed, executedThreads, frames, send: track, tokens,
     get nativeStarts() {
       return nativeStarts;
     } };
@@ -244,6 +245,79 @@ async function cleanup() {
 }
 beforeEach(setup);
 afterEach(cleanup);
+
+async function recordedWake() {
+  const suspended = record('suspended', 'computer-sales-assistant',
+    'computer.suspended', { assistantId: 'sales-assistant', computerId: 'computer' });
+  await nats.seed([suspended]);
+  let connections = 0;
+  async function connection(computerId: string, assistantId: string) {
+    expect(computerId).toBe('computer');
+    expect(assistantId).toBe('sales-assistant');
+    connections++;
+    return preparedComputer.link;
+  }
+  const service = createRoutineWake(nats.store, 'test', preparedComputer.tokens,
+    stop.signal, connection);
+  wake = service;
+  const delivery = dispatch();
+  async function resumed() {
+    const rows = await history(nats.store, 'computer-sales-assistant', 'test');
+    return rows.some(row => row.event.type === 'computer.resumed');
+  }
+  await until(resumed);
+  const ready = record('ready-after-resume', 'computer-sales-assistant', 'computer.ready',
+    { assistantId: 'sales-assistant', computerId: 'computer', generation: 1 });
+  await nats.seed([ready]);
+  await delivery;
+  expect(connections).toBe(1);
+  await until(preparedComputer.executed);
+  expect(preparedComputer.nativeStarts).toBe(1);
+}
+it('wakes the recorded cold computer through the authenticated bridge once', recordedWake);
+
+async function replacementDuringWake() {
+  const suspended = record('suspended', 'computer-sales-assistant',
+    'computer.suspended', { assistantId: 'sales-assistant', computerId: 'computer' });
+  await nats.seed([suspended]);
+  const connection = vi.fn(preparedComputer.wake);
+  const service = createRoutineWake(nats.store, 'test', preparedComputer.tokens,
+    stop.signal, connection);
+  const waiting = service('sales-assistant');
+  async function resumed() {
+    const rows = await history(nats.store, 'computer-sales-assistant', 'test');
+    return rows.some(row => row.event.type === 'computer.resumed');
+  }
+  await until(resumed);
+  const replacement = record('replacement', 'computer-sales-assistant', 'computer.claimed',
+    { assistantId: 'sales-assistant', computerId: 'replacement', generation: 2,
+      tokenId: 'token:replacement' });
+  const ready = record('replacement-ready', 'computer-sales-assistant', 'computer.ready',
+    { assistantId: 'sales-assistant', computerId: 'replacement', generation: 2 });
+  await nats.seed([replacement, ready]);
+  await expect(waiting).rejects.toThrow('Routine computer unavailable');
+  expect(connection).not.toHaveBeenCalled();
+}
+it('never connects a replacement generation after a cold wake', replacementDuringWake);
+
+async function cancelledWake() {
+  const suspended = record('suspended', 'computer-sales-assistant',
+    'computer.suspended', { assistantId: 'sales-assistant', computerId: 'computer' });
+  await nats.seed([suspended]);
+  const connection = vi.fn(preparedComputer.wake);
+  const service = createRoutineWake(nats.store, 'test', preparedComputer.tokens,
+    stop.signal, connection);
+  const waiting = service('sales-assistant');
+  async function resumed() {
+    const rows = await history(nats.store, 'computer-sales-assistant', 'test');
+    return rows.some(row => row.event.type === 'computer.resumed');
+  }
+  await until(resumed);
+  stop.abort();
+  await expect(waiting).rejects.toThrow('Routine computer unavailable');
+  expect(connection).not.toHaveBeenCalled();
+}
+it('refuses cancellation during wake without opening a bridge', cancelledWake);
 
 type Lease = Parameters<Parameters<typeof withRoutineLeadership>[1]>[0];
 type Options = Parameters<typeof createRoutineComposition>[0];
