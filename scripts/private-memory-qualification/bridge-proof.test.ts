@@ -16,12 +16,13 @@ let observedContainerId = containerId;
 let observedStart = startedAt;
 let observedImage = imageDigest;
 let reply: Record<string, unknown>;
+let mounts: { Destination: string }[];
 
 function inspectContainer(_file: string, args?: readonly string[]): string {
   expect(args).toContain(containerId);
   const observation = [{ Id: observedContainerId, Image: observedImage,
     State: { Running: true, StartedAt: observedStart, Pid: 4321 },
-    HostConfig: { ReadonlyRootfs: true }, Mounts: [] }];
+    HostConfig: { ReadonlyRootfs: true }, Mounts: mounts }];
   return JSON.stringify(observation);
 }
 
@@ -39,6 +40,7 @@ function reset(): void {
   observedStart = startedAt;
   observedImage = imageDigest;
   reply = {};
+  mounts = [];
   vi.mocked(execFileSync).mockImplementation(inspectContainer);
   vi.mocked(runInContainer).mockImplementation(answerProbe);
 }
@@ -51,6 +53,24 @@ async function acceptsOnlyTheBoundContainer(): Promise<void> {
   expect(argumentsList).toContain('/scripts/private-memory-qualification/bridge-check.ts');
 }
 it('checks the bridge in the measured computer container', acceptsOnlyTheBoundContainer);
+
+async function acceptsComputerDataMounts(): Promise<void> {
+  function destination(path: string): { Destination: string } {
+    return { Destination: path };
+  }
+  mounts = ['/home/agent', '/home/codex', '/home/desktop', '/home/private',
+    '/home/tool', '/tmp', '/run/executor', '/run/codex'].map(destination);
+  expect(await proveComputerBridge(containerId, installationId)).toBe(true);
+}
+it('accepts the computer template data mounts', acceptsComputerDataMounts);
+
+async function refusesExecutableMount(): Promise<void> {
+  mounts = [{ Destination: '/app/src' }];
+  expect(await proveComputerBridge(containerId, installationId))
+    .toBe('private_process_identity_changed');
+  expect(runInContainer).not.toHaveBeenCalled();
+}
+it('refuses an executable mount', refusesExecutableMount);
 
 async function refusesForeignResponse(): Promise<void> {
   reply = { containerId: otherContainerId };

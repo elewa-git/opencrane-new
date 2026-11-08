@@ -4,10 +4,12 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
+import { uploadComputer } from '../../apps/server/test/support/upload-computer.ts';
 import { proveComputerBridge } from './bridge-proof.ts';
 
 const helperImage = `bridge-helper:${randomUUID()}`;
 const fixtureImage = `bridge-fixture:${randomUUID()}`;
+const packagedImage = `bridge-packaged:${randomUUID()}`;
 const installationId = `sha256:${'e'.repeat(64)}`;
 const containers: string[] = [];
 
@@ -47,6 +49,8 @@ setInterval(() => {}, 1000);
     writeFileSync(join(context, 'entrypoint.ts'), entrypoint);
     writeFileSync(join(context, 'bridge.ts'), bridge);
     docker(['build', '-q', '--network=none', '-t', fixtureImage, context]);
+    docker(['buildx', 'bake', '-f', 'apps/computer/test/upload-bake.hcl',
+      '--set', `computer.tags=${packagedImage}`]);
   } finally {
     rmSync(context, { recursive: true, force: true });
   }
@@ -66,7 +70,7 @@ function cleanup(): void {
   for (const container of containers) {
     docker(['rm', '-f', '-v', container]);
   }
-  docker(['image', 'rm', '-f', fixtureImage, helperImage]);
+  docker(['image', 'rm', '-f', fixtureImage, helperImage, packagedImage]);
 }
 beforeAll(build, 310_000);
 afterAll(cleanup, 60_000);
@@ -112,3 +116,17 @@ async function refusesCoreAllowance(): Promise<void> {
   expect(await proveComputerBridge(container, installationId)).not.toBe(true);
 }
 it('refuses nonzero bridge core dump allowance', refusesCoreAllowance, 60_000);
+
+async function provesPackagedBridge(): Promise<void> {
+  const computer = await uploadComputer(true, '',
+    { image: packagedImage, protected: true });
+  try {
+    expect(await proveComputerBridge(computer.containerId, installationId)).toBe(true);
+    expect(await computer.read('/run/executor/supervisor/bridge-identity'))
+      .toMatch(/^[1-9][0-9]* [1-9][0-9]*\n$/u);
+  } finally {
+    await computer.close();
+  }
+}
+it('proves the packaged bridge launched by the root computer entrypoint',
+  provesPackagedBridge, 120_000);
