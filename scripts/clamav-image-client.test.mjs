@@ -9,7 +9,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { sharedCertificates } from '../libs/event-store/test/certificates.ts';
 import { createScannerService } from '../infra/clamav/service.mjs';
 import { scanImagePart } from '../infra/clamav/image-client.mjs';
-import { runHostedImageScan } from '../infra/clamav/image-worker.mjs';
+import { runHostedImageScan, runAndWriteHostedImageCheck } from '../infra/clamav/image-worker.mjs';
 import { envelope } from '../libs/models/src/actor.ts';
 
 async function filesystem(importOriginal) {
@@ -250,6 +250,111 @@ async function twoSilos() {
   expect(stopped.verdict).toBe('unavailable');
 }
 test('production worker interleaves saved attempts from two trusted silos', twoSilos);
+
+function writableImageStore(image) {
+  const store = savedImageStore(image);
+  store.appendCount = 0;
+  store.loseReply = false;
+  store.append = async function append(input) {
+    store.appendCount += 1;
+    if (input.expectedSequence !== store.rows.at(-1).sequence) {
+      return { status: 'conflict' };
+    }
+    const sequence = store.rows.length + 1;
+    store.rows.push({ event: input.event, sequence });
+    if (store.loseReply) {
+      store.loseReply = false;
+      throw new Error('reply lost');
+    }
+    return { status: 'appended', sequence };
+  };
+  store.readEvent = async function readEvent(sequence) {
+    return store.rows[sequence - 1];
+  };
+  return store;
+}
+
+function independentChecks(verdict = 'pass') {
+  const checkedAt = new Date(Date.now() - 1000).toISOString();
+  const expiresAt = new Date(Date.now() + 60000).toISOString();
+  const common = { verdict, checkedAt, expiresAt, engineVersion: '1',
+    reportDigest: 'e'.repeat(64) };
+  if (verdict === 'fail') common.reasonCodes = ['refused'];
+  const vulnerability = { ...common, databaseDigest: 'f'.repeat(64),
+    databaseUpdatedAt: checkedAt };
+  return { signature: common, licence: common, vulnerability };
+}
+
+async function checkedService(scan) {
+  await close();
+  const scannerIdentity = { service: 'image-worker', silo: settings.silo };
+  const issuer = await tokenIssuer({ ...settings, scannerIdentity });
+  const trust = [{ issuer: settings.issuer, jwks: issuer.jwks,
+    services: { 'image-worker': settings.silo } }];
+  const scanner = { scan, signal: new AbortController().signal,
+    databaseUpdatedAt: new Date(updated).toISOString() };
+  server = createScannerService({ scanner, tls, trust });
+  await listen();
+}
+
+async function writesCleanAndRecoversOriginalEvent() {
+  async function scan(input) {
+    received.push(Buffer.from(input.bytes));
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  store.loseReply = true;
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() { return independentChecks(); }
+  const args = [store, image.silo, image.serverId, prepare, readSettings, readChecks];
+  expect((await runAndWriteHostedImageCheck(...args)).status).toBe('appended');
+  expect(store.rows).toHaveLength(2);
+  expect(store.rows[1].event.type).toBe('mcp.image_checked');
+  expect(store.rows[1].event.data.checks.malware.verdict).toBe('pass');
+  const originalId = store.rows[1].event.id;
+  expect((await runAndWriteHostedImageCheck(...args)).status).toBe('appended');
+  expect(store.rows[1].event.id).toBe(originalId);
+  expect(store.appendCount).toBe(1);
+  expect(received).toHaveLength(1);
+}
+test('clean scan writes one event and a lost reply recovers without scanning again',
+  writesCleanAndRecoversOriginalEvent);
+
+async function refusesIncompleteAndIndependentFailures(kind) {
+  async function scan(input) {
+    received.push(Buffer.from(input.bytes));
+    const result = facts({ sha256: input.sha256, byteCount: input.byteCount });
+    if (kind === 'infected') result.verdict = 'infected';
+    return result;
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(kind === 'infected' ? eicar : bytes, binding);
+  const store = writableImageStore(image);
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() {
+    const checks = independentChecks();
+    if (kind === 'signature' || kind === 'licence' || kind === 'vulnerability') {
+      checks[kind] = independentChecks('fail')[kind];
+    }
+    if (kind === 'missing') delete checks.licence;
+    return checks;
+  }
+  const outcome = await runAndWriteHostedImageCheck(store, image.silo, image.serverId,
+    prepare, readSettings, readChecks);
+  if (kind === 'missing' || kind === 'infected') {
+    expect(outcome.status).toBe('unavailable');
+    expect(store.rows).toHaveLength(1);
+  } else {
+    expect(outcome.status).toBe('appended');
+    expect(store.rows[1].event.data.checks[kind].verdict).toBe('fail');
+  }
+}
+test.each(['infected', 'missing', 'signature', 'licence', 'vulnerability'])(
+  '%s cannot admit an image after a part scan', refusesIncompleteAndIndependentFailures);
 
 function respond(request, reply) {
   requests.push(request.headers['x-scan-request-id']);
