@@ -15,7 +15,7 @@
         <div class="header-main">
           @if (chat.selected()) { <span class="hash" aria-hidden="true">#</span> }
           <h1 tabindex="-1" [class.draft-title]="!chat.selected()" [title]="title()">
-            {{ chat.denied() || chat.requestedUnavailable() || chat.requestedLookupFailed() ? 'Unavailable' : title() }}
+            {{ title() }}
           </h1>
         </div>
         <span class="header-status" [class.waiting-status]="approvalWaiting() && chat.selected() && !chat.denied()"
@@ -75,11 +75,7 @@
         }
         @if (teamSession() && chat.selected() && !chat.loading() && !chat.denied()
           && !isClosedConversation()) {
-          <p class="payer-id-note">
-            Paying group ID:
-            <code>{{ chat.selectedPayingGroupId() || 'Not available' }}</code>.
-            The group's name is not available to members yet.
-          </p>
+          <p class="payer-id-note">Paying group: {{ payingGroup.name() || 'Not available' }}.</p>
         }
         @if (chat.loading()) { <div class="skeleton" aria-hidden="true">
           <oc-shared-state kind="checking" message="Loading conversation…" />

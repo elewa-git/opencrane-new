@@ -58,6 +58,7 @@ For everyone, the website:
 - Lists recent and archived conversations and opens saved chat links.
 - Catches up saved assistant chats before saying they are current. A failed read keeps the
   messages already shown and offers another try. Missing chat links show no chat details.
+  Private shared sessions show the checked paying group name without exposing its id.
 - Lets people the server authorises close a conversation after a review. Closed chats keep
   their saved messages and files for people who can still read them. A closed group keeps
   its participant list readable without offering changes or showing a removed person's id.

@@ -1,6 +1,6 @@
 // Workspace grid and messages follow OpenCrane 1, commit 10abd0ef6 (AGPL-3.0-or-later).
 // The bridge supplies all state; the screen follows the owner's Workspace Live design.
-/* eslint max-lines: ["error", { max: 540, skipBlankLines: true, skipComments: true }] */
+/* eslint max-lines: ["error", { max: 550, skipBlankLines: true, skipComments: true }] */
 import { HingeDrawer } from '../ui/hinge-drawer';
 import { NavigationMenu } from '../ui/navigation-menu';
 import { PaperSurface, DogEar } from '../ui/paper';
@@ -28,6 +28,7 @@ import { BrandMark } from '../ui/brand-mark';
 import type { ChatConversation } from '@opencrane/protocol';
 import { workspaceTitle } from './conversations-data';
 import { ChatSession } from './chat-session';
+import { PayingGroupName } from './paying-group-name';
 import { ScreenshotCapture, captureView } from './screenshot-capture';
 import {
   budgetStoppedTurnIds, findToolRecord, hasHighlightedTool, rejectedScreenshotIds,
@@ -109,6 +110,8 @@ export class Workspace implements OnInit {
   protected readonly files = computed(() => [...new Set(this.chat.turns().filter(turn => turn.author === 'agent').flatMap(turn => turn.files))]);
   protected readonly readableFiles = computed(this.publishedFiles.bind(this));
   protected readonly title = computed(this.currentTitle.bind(this));
+  protected readonly payingGroup = new PayingGroupName(
+    this.chat.clearAfterAccessChange.bind(this.chat));
   protected readonly teamConversations = computed(this.listTeamConversations.bind(this));
   protected readonly personalConversations = computed(this.listPersonalConversations.bind(this));
   protected readonly reason = computed(this.composerReason.bind(this));
@@ -132,9 +135,14 @@ export class Workspace implements OnInit {
     effect(this.resetCaptureWhenSessionChanges.bind(this));
     effect(this.clearCloseAfterDenial.bind(this));
     effect(this.followOpenToolDetails.bind(this));
+    effect(this.checkPayingGroupName.bind(this));
     afterEveryRender(this.afterRender.bind(this));
   }
   ngOnInit(): void { void this.chat.load(); }
+
+  private checkPayingGroupName(): void {
+    this.payingGroup.update(this.chat.selectedPayingGroupId(), this.chat.denied());
+  }
 
   private clearCloseAfterDenial(): void {
     if (this.chat.denied()) this.closeReview.clear();
@@ -467,7 +475,9 @@ export class Workspace implements OnInit {
     return this.panelOverlay();
   }
   private currentTitle(): string {
-    return workspaceTitle(this.chat.denied(), this.chat.selected(),
+    const unavailable = this.chat.denied() || this.chat.requestedUnavailable()
+      || this.chat.requestedLookupFailed();
+    return workspaceTitle(unavailable, this.chat.selected(),
       this.chat.turns(), this.chat.conversations());
   }
   protected duration(start: string, end: string): number { return Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / 1000)); }

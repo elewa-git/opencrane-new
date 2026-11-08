@@ -30,6 +30,7 @@ async function createCaptureWorkspace(
   dispatcherReady = true,
   readMetadata = false,
   requestedId = 'chat',
+  listDeniedStatus: 401 | 403 = 403,
 ): Promise<CaptureWorkspace> {
   history.replaceState({}, '', `/workspace?conversation=${requestedId}`);
   const rows = [...initialRows];
@@ -75,7 +76,7 @@ async function createCaptureWorkspace(
       if (listPlacement) {
         if (listPlacement === 'denied-page-two') {
           const cursor = new URL(path, location.origin).searchParams.get('cursor');
-          if (cursor) return Promise.resolve(new Response('{}', { status: 403 }));
+          if (cursor) return Promise.resolve(new Response('{}', { status: listDeniedStatus }));
           return Promise.resolve(new Response(JSON.stringify({
             rows: conversations, nextCursor: 'next',
           })));
@@ -1876,19 +1877,20 @@ it('shows the generic unavailable state for an inaccessible saved session', asyn
   }
 });
 
-it('clears earlier session names when a later saved-link page is refused', async () => {
-  const capture = await createCaptureWorkspace(
-    [], [], undefined, 'ready', 'denied-page-two', true, false, 'missing');
-  try {
-    const chat = capture.fixture.componentInstance['chat'];
-    expect(chat.denied()).toBe(true);
-    expect(chat.conversations()).toEqual([]);
-    expect(capture.root.textContent).not.toContain('Private client notes');
-    expect(capture.root.textContent).toContain('You no longer have access');
-  } finally {
-    capture.fixture.destroy();
-  }
-});
+it.each([401, 403] as const)(
+  'clears earlier session names when a later saved-link page returns %i', async status => {
+    const capture = await createCaptureWorkspace(
+      [], [], undefined, 'ready', 'denied-page-two', true, false, 'missing', status);
+    try {
+      const chat = capture.fixture.componentInstance['chat'];
+      expect(chat.denied()).toBe(true);
+      expect(chat.conversations()).toEqual([]);
+      expect(capture.root.textContent).not.toContain('Private client notes');
+      expect(capture.root.textContent).toContain('You no longer have access');
+    } finally {
+      capture.fixture.destroy();
+    }
+  });
 
 it('keeps saved rows when a socket resync read temporarily fails', async () => {
   const savedRow = { id: 'saved', position: 1, type: 'message.posted',
@@ -1905,6 +1907,14 @@ it('keeps saved rows when a socket resync read temporarily fails', async () => {
     expect(capture.root.textContent).toContain('Keep this message');
     expect(capture.root.textContent).toContain('Showing what we loaded at');
     expect(capture.root.textContent).not.toContain('No messages were loaded');
+    capture.rows.splice(0, 1, { ...savedRow, id: 'replacement',
+      data: { text: 'Replacement message', authorId: 'me' } });
+    capture.setMessageStatus(200);
+    await capture.fixture.componentInstance['chat'].retryRead();
+    capture.fixture.detectChanges();
+    expect(capture.root.textContent).toContain('Replacement message');
+    expect(capture.root.textContent).not.toContain('Keep this message');
+    expect(capture.fixture.componentInstance['chat'].rows()).toHaveLength(1);
   } finally {
     capture.fixture.destroy();
   }

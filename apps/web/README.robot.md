@@ -1499,6 +1499,11 @@ it sends no message. The workspace uses the existing `ReadMarker` for assistant
 sessions. It sends the newest eligible rendered message only when the tab is visible,
 the transcript is near its end, and catch-up is complete. A changed join uses its own
 saved read position. A refused read or socket policy close clears the chat and pending
-work. A missing or foreign saved link shows the same neutral unavailable screen.
+work. A refused later saved-link page also clears names loaded on earlier pages.
+A missing or foreign saved link shows the same neutral unavailable screen.
+A socket resync keeps the checked transcript through a failed replacement read. Only a
+successful complete replacement changes those rows. A private shared session reads the
+paying group detail by id and displays its checked name, or a neutral label if it cannot
+be checked. The id is never printed in the session.
 The display receipt under `docs/process/screen-p4-6-catchup` records intercepted
 read failure, reconnect and unavailable-link screens at 1280 and 390 pixels.

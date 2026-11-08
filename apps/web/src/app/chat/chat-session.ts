@@ -1,4 +1,4 @@
-/* eslint max-lines: ["error", { max: 675, skipBlankLines: true, skipComments: true }] */
+/* eslint max-lines: ["error", { max: 690, skipBlankLines: true, skipComments: true }] */
 import { PrivateReplyState } from './private-reply';
 import { sendUpload } from './upload';
 import { UploadBatch } from './upload-batch';
@@ -15,6 +15,7 @@ import { shortTime } from './file-presentation';
 import { ChatSessionStop, type StopScreen } from './chat-session-stop';
 import { ReadFailure, requestChat, savedChatChange } from './chat-session-http';
 import { ReadMarker } from './read-marker';
+import { readReplacementHistory, type ReplacementHistory } from './chat-replacement-history';
 import { displayAgentSessions, includeRequestedConversation, isTeamConversation,
   createPendingMessage, resumeAgentSession, selectedSessionPayingGroupId,
   updateSessionSummaries, selectedSessionAssistant }
@@ -87,6 +88,7 @@ export class ChatSession implements OnDestroy {
   private conversationReady = false;
   private historyLoading = false;
   private historyRun = 0;
+  private needsReplacement = false;
   private bufferedRows: ChatRow[] = [];
   private readonly readMarker = new ReadMarker(
     this.selected.bind(this), this.readAllowed.bind(this),
@@ -161,7 +163,7 @@ export class ChatSession implements OnDestroy {
     const requested = await resumeAgentSession(id, this.conversations());
     if (revision !== this.revision) return;
     if (requested.kind === 'denied') {
-      this.requestedUnavailable.set(true);
+      this.clearDenied();
       return;
     }
     if (requested.kind === 'unavailable') {
@@ -192,6 +194,7 @@ export class ChatSession implements OnDestroy {
     this.conversationReady = false;
     this.caughtUp.set(false);
     this.historyFailure.set(false);
+    this.needsReplacement = false;
     this.bufferedRows = [];
     this.stopState.reset();
     this.reconnectCount = 0;
@@ -232,6 +235,7 @@ export class ChatSession implements OnDestroy {
     this.readMarker.clear();
     this.caughtUp.set(false);
     this.bufferedRows = [];
+    this.needsReplacement = false;
     this.requestedUnavailable.set(false);
     this.requestedLookupFailed.set(false);
     this.position = 0; this.generation = 0; this.computer.set('ready'); this.loading.set(false);
@@ -479,21 +483,28 @@ export class ChatSession implements OnDestroy {
     const run = ++this.historyRun;
     this.historyLoading = true;
     this.caughtUp.set(false);
-    let more = true;
     try {
-      while (more) {
-        const feed = chatFeedSchema.parse(await requestChat(
-          `/api/conversations/${id}/messages?since=${this.position}`));
-        if (revision !== this.revision || run !== this.historyRun) return;
-        this.privateState.checkProjection(feed.generation);
-        if (this.resetChangedGeneration(feed.generation)) continue;
-        this.generation = feed.generation;
-        this.setComputerState(feed.computerState);
-        this.dispatcherReady.set(feed.dispatcherReady ?? true);
-        this.computerRecovered.set(feed.computerRecovered ?? false);
-        this.computerLostAt.set(feed.computerLostAt ?? '');
-        for (const row of feed.rows) this.apply(row);
-        more = feed.rows.length > 0 && this.position < feed.position;
+      if (this.needsReplacement) {
+        const isCurrent = this.isCurrentHistoryRun.bind(this, revision, run);
+        const replacement = await readReplacementHistory(id, isCurrent);
+        if (!replacement) return;
+        this.applyReplacement(replacement);
+      } else {
+        let more = true;
+        while (more) {
+          const feed = chatFeedSchema.parse(await requestChat(
+            `/api/conversations/${id}/messages?since=${this.position}`));
+          if (!this.isCurrentHistoryRun(revision, run)) return;
+          this.privateState.checkProjection(feed.generation);
+          if (this.resetChangedGeneration(feed.generation)) continue;
+          this.generation = feed.generation;
+          this.setComputerState(feed.computerState);
+          this.dispatcherReady.set(feed.dispatcherReady ?? true);
+          this.computerRecovered.set(feed.computerRecovered ?? false);
+          this.computerLostAt.set(feed.computerLostAt ?? '');
+          for (const row of feed.rows) this.apply(row);
+          more = feed.rows.length > 0 && this.position < feed.position;
+        }
       }
       this.historyFailure.set(false);
     } catch (error) {
@@ -502,6 +513,24 @@ export class ChatSession implements OnDestroy {
     } finally {
       this.endHistoryRun(run, revision);
     }
+  }
+  private isCurrentHistoryRun(revision: number, run: number): boolean {
+    return revision === this.revision && run === this.historyRun;
+  }
+  private applyReplacement(replacement: ReplacementHistory): void {
+    const { rows, position, feed } = replacement;
+    this.privateState.checkProjection(feed.generation);
+    this.rows.set(rows);
+    this.position = position;
+    this.generation = feed.generation;
+    this.setComputerState(feed.computerState);
+    this.dispatcherReady.set(feed.dispatcherReady ?? true);
+    this.computerRecovered.set(feed.computerRecovered ?? false);
+    this.computerLostAt.set(feed.computerLostAt ?? '');
+    this.needsReplacement = false;
+    const summaries = updateSessionSummaries(
+      this.conversations(), this.selected(), this.rows(), this.turns());
+    this.conversations.set(summaries);
   }
   private endHistoryRun(run: number, revision: number): void {
     if (revision !== this.revision || run !== this.historyRun) return;
@@ -537,9 +566,8 @@ export class ChatSession implements OnDestroy {
     if (message.type === 'resync') {
       this.conversationReady = false;
       this.caughtUp.set(false);
-      this.position = 0;
-      this.generation = message.generation;
-      this.rows.set([]);
+      // Keep the checked transcript until every replacement page has arrived.
+      this.needsReplacement = true;
       this.bufferedRows = [];
       this.sawReconnecting = true;
       this.socket.disconnect();
@@ -647,6 +675,7 @@ export class ChatSession implements OnDestroy {
     this.generation = 0;
     this.historyRun += 1;
     this.historyLoading = false;
+    this.needsReplacement = false;
     this.bufferedRows = [];
     this.caughtUp.set(false);
     this.historyFailure.set(false);
