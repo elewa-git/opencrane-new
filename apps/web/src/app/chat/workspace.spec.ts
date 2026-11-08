@@ -25,11 +25,13 @@ async function createCaptureWorkspace(
   approvalCards: Record<string, unknown>[] | ((path: string) => Record<string, unknown>[]) = [],
   assistantKind?: 'team',
   computerState = 'ready',
-  listPlacement?: 'recent-page-two' | 'archived' | 'missing' | 'changed-twice',
+  listPlacement?: 'recent-page-two' | 'archived' | 'missing' | 'changed-twice'
+    | 'denied-page-two',
   dispatcherReady = true,
   readMetadata = false,
+  requestedId = 'chat',
 ): Promise<CaptureWorkspace> {
-  history.replaceState({}, '', '/workspace?conversation=chat');
+  history.replaceState({}, '', `/workspace?conversation=${requestedId}`);
   const rows = [...initialRows];
   const calls: string[] = [];
   const postBodies: unknown[] = [];
@@ -41,6 +43,7 @@ async function createCaptureWorkspace(
   const initialConversation = { conversationId: 'chat', assistantId: 'assistant', assistantKind,
     payingGroupId: assistantKind === 'team' ? 'opaque-sales' : undefined,
     createdBy: 'me', createdAt: '2026-10-03T10:00:00Z', status: 'open', mode: 'agent_session',
+    title: 'Private client notes',
     joinEventId: readMetadata ? 'join-chat' : undefined,
     throughPosition: readMetadata ? 0 : undefined };
   const conversations = [initialConversation];
@@ -57,6 +60,11 @@ async function createCaptureWorkspace(
     if (pathname === '/api/chat') {
       return Promise.resolve(new Response('{"memberId":"me","assistantId":"assistant"}'));
     }
+    if (pathname === '/api/chat/groups/opaque-sales') {
+      return Promise.resolve(new Response(JSON.stringify({
+        groupId: 'opaque-sales', name: 'Sales team', position: 1, members: [],
+      })));
+    }
     if (pathname.endsWith('/approvals')) {
       const currentCards = typeof approvalCards === 'function'
         ? approvalCards(path)
@@ -65,6 +73,13 @@ async function createCaptureWorkspace(
     }
     if (pathname === '/api/conversations' && init?.method !== 'POST') {
       if (listPlacement) {
+        if (listPlacement === 'denied-page-two') {
+          const cursor = new URL(path, location.origin).searchParams.get('cursor');
+          if (cursor) return Promise.resolve(new Response('{}', { status: 403 }));
+          return Promise.resolve(new Response(JSON.stringify({
+            rows: conversations, nextCursor: 'next',
+          })));
+        }
         if (listPlacement === 'changed-twice' && path.includes('?')) {
           return Promise.resolve(new Response('{"status":"list_changed"}', { status: 409 }));
         }
@@ -144,6 +159,7 @@ async function createCaptureWorkspace(
   const fixture = TestBed.createComponent(Workspace);
   await fixture.whenStable();
   const expectedSelection = listPlacement === 'missing' || listPlacement === 'changed-twice'
+    || listPlacement === 'denied-page-two'
     ? '' : 'chat';
   await vi.waitFor(() => expect(fixture.componentInstance['chat'].selected())
     .toBe(expectedSelection));
@@ -1796,11 +1812,12 @@ it('keeps a memory-free choice in the draft and does not send it', async () => {
   }
 });
 
-it('shows the saved paying group id in a private team session', async () => {
+it('shows the checked paying group name in a private team session', async () => {
   const capture = await createCaptureWorkspace([], [], 'team');
   try {
-    expect(capture.root.textContent).toContain('Paying group ID: opaque-sales');
-    expect(capture.root.textContent).toContain("The group's name is not available to members yet.");
+    await vi.waitFor(() => expect(capture.root.textContent).toContain('Sales team'));
+    expect(capture.root.textContent).not.toContain('opaque-sales');
+    expect(capture.calls).toContain('GET /api/chat/groups/opaque-sales');
     expect(capture.root.querySelector('.avatar.agent')?.getAttribute('aria-label'))
       .toBe('Shared assistant');
   } finally {
@@ -1854,6 +1871,54 @@ it('shows the generic unavailable state for an inaccessible saved session', asyn
     expect(capture.root.textContent).not.toContain('Access unavailable');
     expect(capture.root.querySelector('.composer-dock')).toBeNull();
     expect(capture.calls.some(call => call.includes('section=archived'))).toBe(true);
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('clears earlier session names when a later saved-link page is refused', async () => {
+  const capture = await createCaptureWorkspace(
+    [], [], undefined, 'ready', 'denied-page-two', true, false, 'missing');
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    expect(chat.denied()).toBe(true);
+    expect(chat.conversations()).toEqual([]);
+    expect(capture.root.textContent).not.toContain('Private client notes');
+    expect(capture.root.textContent).toContain('You no longer have access');
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('keeps saved rows when a socket resync read temporarily fails', async () => {
+  const savedRow = { id: 'saved', position: 1, type: 'message.posted',
+    time: '2026-10-04T10:00:00Z', data: { text: 'Keep this message', authorId: 'me' } };
+  const capture = await createCaptureWorkspace([savedRow]);
+  try {
+    capture.setMessageStatus(503);
+    const resync = { version: 1, topic: 'conversation', type: 'resync',
+      conversationId: 'chat', position: 1, generation: 1 };
+    capture.socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify(resync) }));
+    await vi.waitFor(() => expect(capture.fixture.componentInstance['chat'].historyFailure())
+      .toBe(true));
+    capture.fixture.detectChanges();
+    expect(capture.root.textContent).toContain('Keep this message');
+    expect(capture.root.textContent).toContain('Showing what we loaded at');
+    expect(capture.root.textContent).not.toContain('No messages were loaded');
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('hides the saved title from the unavailable heading tooltip', async () => {
+  const capture = await createCaptureWorkspace();
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    chat.requestedLookupFailed.set(true);
+    capture.fixture.detectChanges();
+    const heading = capture.root.querySelector('h1');
+    expect(heading?.textContent).toContain('Unavailable');
+    expect(heading?.getAttribute('title')).toBe('Unavailable');
   } finally {
     capture.fixture.destroy();
   }
