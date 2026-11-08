@@ -10,7 +10,7 @@ import { isAuditEventType } from '../src/audit.ts';
 import { database } from './database.ts';
 
 const canary = 'private-approval-bearer-arguments-canary';
-function auditAllowListIncludesOwnership(): void {
+function auditAllowListIncludesSafeFamilies(): void {
   const previousPattern = [
     '^(silo\\.owner_bootstrapped|decision\\.|budget\\.(reserved|settled|ceiling_set|exhausted)|',
     'effect\\.|approval\\.|tool\\.approval_requested|credential\\.released|mcp\\.|connection\\.|',
@@ -32,12 +32,14 @@ function auditAllowListIncludesOwnership(): void {
     const ownershipEvidence = ownershipTypes.includes(event.type);
     const invitationEvidence = ['member.invited', 'member.command_refused'].includes(event.type);
     const dispatchEvidence = ['tool.dispatch_started', 'tool.dispatch_recorded'].includes(event.type);
-    const expected = previouslyAllowed || ownershipEvidence || invitationEvidence || dispatchEvidence;
+    const publicationEvidence = event.type === 'conversation.child_result_published';
+    const expected = previouslyAllowed || ownershipEvidence || invitationEvidence ||
+      dispatchEvidence || publicationEvidence;
     expect(isAuditEventType(event.type), event.type).toBe(expected);
   }
 }
-it('preserves the existing audit allow-list and includes ownership evidence',
-  auditAllowListIncludesOwnership);
+it('preserves the audit allow-list and includes ownership and publication evidence',
+  auditAllowListIncludesSafeFamilies);
 
 function fixture(type: string, id: string, data: Record<string, unknown> = {}, correlated = true): EventEnvelope {
   const definition = getEventDefinition(type);

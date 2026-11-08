@@ -42,3 +42,21 @@ it.each(['private fields', 'private reason'])('renders change history with only 
   await vi.waitFor(() => expect(root.textContent).toContain('History unavailable'));
   expect(root.textContent).toContain('Change history'); expect(root.textContent).not.toContain('canary');
 });
+
+it('shows only supplied child publication facts and a permitted parent link', async () => {
+  const publication = { id: 'published-entry', decision: 'not_recorded', outcome: 'recorded',
+    records: [{ eventId: 'published-entry', type: 'conversation.child_result_published',
+      position: 7, source: 'authoritative', status: 'recorded',
+      parentConversationId: 'parent', publicationKind: 'interim',
+      taskHref: '/workspace?conversation=parent' }] };
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(200, { rows: [publication] }));
+  const fixture = TestBed.createComponent(AuditScreen);
+  fixture.detectChanges();
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('Expected screen');
+  await vi.waitFor(() => expect(root.textContent).toContain('Interim publication'));
+  const link = root.querySelector<HTMLAnchorElement>('article a');
+  expect(link?.getAttribute('href')).toBe('/workspace?conversation=parent');
+  expect(root.textContent).not.toContain('child-result');
+  expect(root.textContent).not.toContain('private-report-canary');
+});

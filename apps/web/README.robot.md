@@ -1343,6 +1343,9 @@ a saved message keeps the current subscription instead of opening it twice.
 6. **An admin checks an integration.** The website shows registered MCP servers and the facts it can read for each one. An admin reviews changed tools, saves publication and checks its progress before calls resume. Refresh keeps the current page and keyboard focus in place while it reads again. A tool access explanation shows the two grants and account check from a dated server reply. It does not say that a call can run.
 7. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation. The transcript and Files panel show its name and capture facts. The preview shows the image and offers a download. Failed saves, scan refusals and access changes have separate messages. If the reply is lost, the website checks Files before it offers another action. The same status appears in the viewer and chat, and keeps keyboard focus while Files are checked.
 8. **An admin checks a change.** The website shows organisation history to people with access.
+   Child publication entries show only the chat ids returned by the server's current
+   access checks. A parent chat link never opens the child or its files. The shared
+   audit schema rejects extra private fields before the view renders them.
 9. **An Owner or Admin opens People & groups.** The website checks group reads,
    shows members and grants, creates groups, adds a member to a local group and removes
    a member after review.
