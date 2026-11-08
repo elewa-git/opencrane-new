@@ -45,6 +45,9 @@ type MaintenanceRun = ReturnType<typeof memoryMaintenanceRecordedDataSchema.pars
 
 function visibleMaintenanceStatus(run: MaintenanceRun | undefined,
   calculated: string): string {
+  if (run?.action === 'prepared') {
+    return 'preparing';
+  }
   if (run?.action === 'refused' && run.reason !== 'qualification_blocked') {
     return 'refused';
   }

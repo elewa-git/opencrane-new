@@ -6,6 +6,11 @@ export const budgetRootAllowanceSetDataSchema = z.object({
   assistantId: id, computerId: id, generation: z.int().nonnegative(), payingGroupId: id,
   allowanceCents: z.int().min(1).max(1000),
   preparationDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
+  maintenance: z.object({
+    scopeId: id, nightId: id, batchKey: id, inputRevision: id,
+    task: z.literal('frequent_automation'), model: id, providerId: id,
+    bindingSequence: z.int().positive(), priceTableId: id,
+  }).strict().optional(),
 }).strict();
 const sourceStopSchema = z.object({
   rootId: id, reason: z.enum(['requester_stop', 'turn_ended', 'access_revoked', 'routine_stop']),

@@ -71,6 +71,9 @@ export async function setRootAllowance(state: BudgetState, silo: string, now: Da
     throw new Error('Invalid root allowance');
   }
   const binding = parsed.data;
+  if (binding.maintenance && binding.allowanceCents !== 100) {
+    throw new Error('Invalid maintenance allowance');
+  }
   const rootId = rootIdentity(silo, binding.conversationId, binding.turnId);
   const payload = { ...binding, rootId };
   function matches(root: Root) {

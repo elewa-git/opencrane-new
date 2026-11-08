@@ -52,6 +52,7 @@ export { MemoryToolRefused, memoryRights, loadedMemoryRights, verifyMemoryContex
 export { conversationParticipation, conversationHistoryPosition } from './conversation.ts';
 export { memoryReferences } from './memory-lineage.ts';
 export { providerTurnAdmission, managedProviderCallsEnabled } from './provider-turns.ts';
+export { decisionProvider } from './decision-provider.ts';
 
 export { providerDrainCommand, providerDrainStatus } from './provider-drain.ts';
 

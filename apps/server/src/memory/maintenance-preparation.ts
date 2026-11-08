@@ -5,11 +5,14 @@ import { memoryMaintenanceBoundDataSchema, memoryMaintenanceRecordedDataSchema,
   parseEventByType } from '@opencrane/events';
 import { history, providerTurnAdmission } from '@opencrane/models';
 import type { MemoryOptions } from './access.ts';
+import { admitMaintenanceRoot, MaintenanceRootRefused,
+  type MaintenanceAdmission } from './maintenance-root.ts';
 
 type Run = ReturnType<typeof memoryMaintenanceRecordedDataSchema.parse>;
 type Binding = ReturnType<typeof memoryMaintenanceBoundDataSchema.parse>;
 type Reason = 'binding_changed' | 'input_changed' | 'provider_unavailable' |
-  'scope_occupied' | 'window_missed';
+  'scope_occupied' | 'window_missed' | 'access_denied' | 'access_unavailable' |
+  'budget_unavailable' | 'price_unavailable';
 
 function digest(value: unknown): string {
   const hash = createHash('sha256');
@@ -18,6 +21,11 @@ function digest(value: unknown): string {
 }
 
 function savedReceipt(run: Run) {
+  if (run.action === 'prepared') {
+    return { outcome: 'prepared' as const, nightId: run.nightId, rootId: run.rootId,
+      model: run.model, providerId: run.providerId,
+      allowanceCents: run.acceptedCapCents, dispatch: 'disabled' as const };
+  }
   return { outcome: 'refused' as const, nightId: run.nightId, reason: run.reason,
     dispatch: 'disabled' as const };
 }
@@ -99,14 +107,12 @@ function preflightReason(state: ReturnType<typeof originalNight>, rows: StoredEv
   return null;
 }
 
-async function saveRefusal(options: MemoryOptions, rows: StoredEvent[], intent: Run,
-  reason: Reason, clock: () => Date) {
+async function saveResult(options: MemoryOptions, rows: StoredEvent[], intent: Run,
+  outcome: Partial<Run>, clock: () => Date) {
   const time = clock().toISOString();
-  const action = reason === 'window_missed' ? 'missed' : 'refused';
-  const data = memoryMaintenanceRecordedDataSchema.parse({
-    ...intent, action, reason, selectedAt: time,
-  });
-  const id = digest([intent.nightId, 'preflight']);
+  const data = memoryMaintenanceRecordedDataSchema.parse({ ...intent, ...outcome,
+    selectedAt: time });
+  const id = digest([options.silo, intent.scopeId, intent.nightId, 'preflight']);
   const event = { id, commandId: id, subject: `scope-${intent.scopeId}`,
     silo: options.silo, source: 'opencrane-server', time,
     type: 'memory.maintenance_recorded',
@@ -125,8 +131,15 @@ async function saveRefusal(options: MemoryOptions, rows: StoredEvent[], intent: 
     dispatch: 'disabled' as const };
 }
 
+function saveRefusal(options: MemoryOptions, rows: StoredEvent[], intent: Run,
+  reason: Reason, clock: () => Date) {
+  const action = reason === 'window_missed' ? 'missed' as const : 'refused' as const;
+  return saveResult(options, rows, intent, { action, reason }, clock);
+}
+
 export async function prepareNightlyMaintenance(options: MemoryOptions, scopeId: string,
-  nightId: string, clock: () => Date = () => new Date()) {
+  nightId: string, clock: () => Date = () => new Date(),
+  admission?: MaintenanceAdmission) {
   // Read the growing scope history before any later short access check is added.
   const rows = await history(options.store, `scope-${scopeId}`, options.silo,
     performance.now() + 10_000);
@@ -147,9 +160,21 @@ export async function prepareNightlyMaintenance(options: MemoryOptions, scopeId:
   } catch {
     return { outcome: 'unknown' as const, nightId, dispatch: 'disabled' as const };
   }
-  // Wait for checked root admission. A provider choice alone cannot allocate capacity.
-  return { outcome: 'pending' as const, nightId, reason: 'qualification_blocked' as const,
-    dispatch: 'disabled' as const };
+  if (!admission) {
+    return { outcome: 'pending' as const, nightId, reason: 'qualification_blocked' as const,
+      dispatch: 'disabled' as const };
+  }
+  try {
+    const root = await admitMaintenanceRoot(options, intent, state.binding!,
+      rows.at(-1)?.sequence ?? 0, admission);
+    return saveResult(options, rows, intent, { action: 'prepared', reason: null,
+      rootId: root.rootId, model: root.model, providerId: root.providerId }, clock);
+  } catch (error) {
+    if (error instanceof MaintenanceRootRefused) {
+      return saveRefusal(options, rows, intent, error.reason, clock);
+    }
+    return { outcome: 'unknown' as const, nightId, dispatch: 'disabled' as const };
+  }
 }
 
 function validIntent(intent: Run, scopeId: string, nightId: string): boolean {

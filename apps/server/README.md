@@ -232,7 +232,7 @@ flowchart LR
   server -->|waits briefly for Forget locks| postgres
   server <-->|chat work, checked routine turns, private routine preparation and delivery, retained call status, Stops, checked reports and publication files| computer["apps/computer<br/>assistant computers"]
   server -->|wakes the original held Ask call| computer
-  server -->|checks child starts and root allowances with the models process's shared budget actor| runtime
+  server -->|checks child starts and nightly and child allowances with the shared budget actor| runtime
   computer -.->|records private thread for memory discovery| server
   server -.->|prepares up to four private memory tools| computer
   computer -->|AI and tool calls| runtime["Private services<br/>models process, AI gateway, tools and virus scanner"]
@@ -554,7 +554,8 @@ latest current configuration; a Ready read is not built yet.
 The person who set up nightly memory upkeep can read its blocked and missed history.
 These reads contain dates and fact references, with no saved memory text or new work.
 The same status shows whether the scope is clean or has facts waiting for a future
-night. It shows the next 02:00 UTC boundary for waiting facts.
+night. It shows the next 02:00 UTC boundary for waiting facts. One checked personal
+night can hold a 100-cent allowance without starting work.
 
 1. **A person signs in.** The server sends the browser to Zitadel and checks the returned identity. It keeps the session in an encrypted cookie. If the sign-in details are too large
    for a browser cookie, it shows a clear error.

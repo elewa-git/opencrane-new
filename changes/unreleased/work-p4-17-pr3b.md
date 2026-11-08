@@ -1,0 +1,1 @@
+An eligible personal nightly memory scope can now receive one checked 100-cent spending allowance. Duplicate delivery and lost replies recover the same root without starting a model, tool or computer.
