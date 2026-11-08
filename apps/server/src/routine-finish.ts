@@ -183,14 +183,21 @@ async function load(store: EventStore, subject: string, silo: string, deadline: 
   return rows;
 }
 
-function requireUnchangedAllocation(row: StoredEvent, root: Root, success: boolean) {
-  if (success && row.event.type === 'budget.root_stopped') {
+function requireUnchangedAllocation(row: StoredEvent, root: Root,
+  successReservationId: string | undefined) {
+  if (successReservationId && row.event.type === 'budget.root_stopped') {
     const stop = budgetRootStoppedDataSchema.parse(row.event.data);
     if (stop.rootId === root.rootId) throw new Error('Root stop changed');
   }
-  if (success && row.event.type === 'budget.reserved') {
+  if (successReservationId && row.event.type === 'budget.reserved') {
     const hold = z.object({ rootId: z.string().optional() }).parse(row.event.data);
     if (hold.rootId === root.rootId) throw new Error('Root spending changed');
+  }
+  if (successReservationId && row.event.type === 'budget.settled') {
+    const settlement = z.object({ reservationId: z.string() }).parse(row.event.data);
+    if (settlement.reservationId === successReservationId) {
+      throw new Error('Root settlement changed');
+    }
   }
   if (row.event.type !== 'budget.root_allowance_set') {
     return;
@@ -233,7 +240,7 @@ async function changesSince(store: EventStore, subject: string, silo: string,
 }
 function executionCheck(store: EventStore, silo: string, root: Root,
   budgetRows: StoredEvent[], computerRows: StoredEvent[], deadline: number,
-  success: boolean) {
+  successReservationId: string | undefined) {
   let budgetPosition = budgetRows.at(-1)!.sequence;
   let computerPosition = computerRows.at(-1)!.sequence;
   async function check() {
@@ -241,7 +248,7 @@ function executionCheck(store: EventStore, silo: string, root: Root,
     const budgetChanges = await changesSince(store, `budget-${silo}`, silo,
       budgetPosition, deadline);
     for (const row of budgetChanges) {
-      requireUnchangedAllocation(row, root, success);
+      requireUnchangedAllocation(row, root, successReservationId);
       budgetPosition = row.sequence;
     }
     const computerChanges = await changesSince(store, `computer-${root.assistantId}`, silo,
@@ -334,8 +341,9 @@ async function publishFinish(context: FinishContext) {
     computerRows, historyDeadline, success, requireCurrent } = context;
   const event = finishEvent(silo, subject, input, run, success);
   const writeDeadline = performance.now() + 2000;
+  const successReservationId = success ? input.successEvidence?.reservationId : undefined;
   const checkExecution = executionCheck(store, silo, root,
-    budgetRows, computerRows, writeDeadline, success !== undefined);
+    budgetRows, computerRows, writeDeadline, successReservationId);
   async function checkCurrentExecution() {
     await checkExecution();
     await requireCurrent?.();

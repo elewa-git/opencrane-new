@@ -2,12 +2,13 @@
 
 Part of #106. These are local checks on the saved success-finish path.
 
-- PASS: failing-first test commit showed normal completion refused before the source change.
-- PASS: both changed finish suites passed twice on the final source, 67 tests each time.
-- PASS: 460 unchanged event security tests passed once, including field-name checks.
-- PASS: workspace typecheck and final server typecheck, scoped ESLint, Markdown lint,
-  Knip, event catalogue and changelog checks.
-- PARTIAL: the internal finish path is checked with disposable event records. A live
+- PASS: the failing-first test commit showed an approved call refused before the source
+  change. After the first fixes, the settlement correction test caught a false success.
+- PASS: the three changed suites passed twice on the final source, 120 tests each time.
+  They use the company release audit, a real budget actor hold, and a final write race.
+- PASS: workspace typecheck, final server and models typecheck, scoped ESLint, Markdown
+  lint, Knip, event catalogue and changelog checks.
+- PARTIAL: the internal finish path is checked with disposable services. A live
   company sender and owner-only result links are outside this bounded part.
 - NOT RUN: local root suite, fresh-install journey or paid model call.
 

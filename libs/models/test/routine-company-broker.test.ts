@@ -17,6 +17,7 @@ import { oauthSelectionFixture } from './support/oauth-selection.ts';
 import { event } from '@opencrane/event-store/testing';
 import { authorityFence } from '../src/authority.ts';
 import { routineCompanyAskFacts } from '../src/routine-company-release.ts';
+import { proveRoutineSuccess } from '../../../apps/server/src/routine-success.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let storage: Awaited<ReturnType<typeof databases>>;
@@ -38,6 +39,7 @@ type FixtureOptions = {
   missingFields?: boolean;
   wrongDecision?: boolean;
   decisionActor?: 'other-member' | 'admin' | 'successor';
+  successRequestId?: string;
 };
 beforeAll(async function start() {
   nats = await natsFixture();
@@ -173,7 +175,7 @@ async function fixture(options: FixtureOptions = {}) {
   const userId = `owner${serial}`;
   const serverId = `server${serial}`;
   const profileId = `profile${serial}`;
-  const requestId = `request${serial}`;
+  const requestId = options.successRequestId ?? `request${serial}`;
   const decisionId = `decision${serial}`;
   const routineId = `routine${serial}`;
   const occurrenceId = `occurrence${serial}`;
@@ -269,6 +271,7 @@ async function fixture(options: FixtureOptions = {}) {
     requestId, requesterId: userId, assistantId: 'assistant', conversationId: 'conversation',
     turnId: 'turn', permitId: requestId, serverId, toolName: options.toolName ?? 'read', route: 'mcp',
     outcome: 'allow', reason: options.wrongDecision ? 'policy_allow' : 'approval_used',
+    ...(options.successRequestId ? { callId: 'company-call' } : {}),
     contextDigest: 'e'.repeat(64), release,
   }, decisionId);
   decision.correlation.approval = approvalId;
@@ -437,6 +440,59 @@ it('audits one bound company request without releasing material', async function
   expect(rows[0]!.event.data).toMatchObject({ userId: test.userId,
     companyAccountId: 'company-bot', ownerKind: 'company' });
 });
+
+it('accepts a successful call after the existing company release audit',
+  async function auditedSuccess() {
+    const test = await fixture({
+      successRequestId: `00000000-0000-4000-8000-${String(serial + 1).padStart(12, '0')}`,
+    });
+    await expect(test.confirm()).resolves.toMatchObject({ status: 'confirmed' });
+    const release = test.release;
+    const call = { conversationId: release.conversationId, turnId: release.turnId,
+      callId: 'company-call', serverId: release.serverId, toolName: release.toolName };
+    const upstream = envelope('test', `decision-${release.requestId}`, 'tool.dispatch_recorded', {
+      ...call, requestId: release.requestId, logicalRequestId: '2'.repeat(64),
+      startedAt: new Date().toISOString(), durationMs: 3, outcome: 'responded',
+      evidence: 'response_received',
+    });
+    await nats.seed([upstream]);
+    const privateResult = envelope('test', `conversation-${release.conversationId}`,
+      'agent.tool_call_finished', { ...call, status: 'completed' });
+    privateResult.source = 'computer-bridge';
+    privateResult.principal = { kind: 'agent', id: release.assistantId };
+    await nats.seed([privateResult]);
+    const resultReference = { eventId: privateResult.id,
+      position: await nats.store.head(privateResult.subject) };
+    const reservationId = `model-hold-${release.requestId}`;
+    const modelCall = { model: 'gpt-6-luna', priceTableId: 'openai-2026-10-02-all-eur95',
+      computerId: release.computerId, generation: release.computerGeneration,
+      requesterId: release.userId, assistantId: release.assistantId,
+      conversationId: release.conversationId, turnId: release.turnId,
+      threadId: release.threadId, payingGroupId: release.payingGroupId,
+      contextDigest: '1'.repeat(64) };
+    const hold = envelope('test', 'budget-test', 'budget.reserved', {
+      reservationId, permitId: reservationId, amountCents: 500,
+      rootId: release.rootId, payingGroupId: release.payingGroupId,
+      assistantId: release.assistantId, modelCall,
+    });
+    const settlement = envelope('test', 'budget-test', 'budget.settled', {
+      reservationId, permitId: reservationId, settledCents: 260,
+    });
+    await nats.seed([hold, settlement]);
+    const root = { rootId: release.rootId, requesterId: release.userId,
+      assistantId: release.assistantId, computerId: release.computerId,
+      generation: release.computerGeneration, conversationId: release.conversationId,
+      turnId: release.turnId, threadId: release.threadId,
+      payingGroupId: release.payingGroupId };
+    const definition = { connectionId: release.connectionId, profileId: release.profileId,
+      profileRevision: release.profileRevision, connectionRevision: release.connectionRevision,
+      companyAccountId: release.companyAccountId, ownerId: release.ownerId };
+    const budgetRows = await history(nats.store, 'budget-test', 'test');
+    const evidence = { requestId: release.requestId, resultReference, reservationId };
+    const outcome = await proveRoutineSuccess(nats.store, 'test', evidence, root, definition,
+      release.routineId, release.occurrenceId, budgetRows, performance.now() + 10_000);
+    expect(outcome).toEqual({ resultReference, heldCents: 0, settledCents: 260 });
+  });
 
 it('audits a requested tool covered by verified and frozen scopes',
   async function coveredWriteTool() {

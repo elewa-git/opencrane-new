@@ -1,1 +1,1 @@
-Confirmed company routine calls can save one successful run with a private result reference and the full settled cost in euro cents.
+Confirmed company routine calls can complete with a private result reference and the full settled model cost in euro cents after owner approval. A changed settlement during publication keeps the run occupied.

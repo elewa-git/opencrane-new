@@ -6836,11 +6836,15 @@ result reference and reservation id. It needs the exact native closure and one
 `turn_ended` root Stop naming that closure, with no routine Stop or pause.
 
 The command reads exact decision and private conversation histories before the
-two-second write check. A models Allow decision binds the frozen owner, company
-account, profile, root, turn and payer. A received upstream response and completed
-private tool record must name that call. One rooted hold needs a later settlement
-for the same permit. The finish saves only a result reference, zero held cents and
-full settled cents. Uncertain work or money keeps the slot occupied.
+two-second write check. A models Allow decision with reason `approval_used` binds
+the frozen owner, company account, profile, root, turn and payer. Its approval
+correlation must match the credential release. A received upstream response and
+completed private tool record must name that call. The company tool permit has no
+spending hold. One rooted model reservation must match the frozen turn and payer,
+and its own permit must settle. The finish saves only a result reference, zero held
+cents and full settled cents. A correction to that reservation's settlement during
+publication refuses success. Unrelated settlements do not prevent publication.
+Uncertain work or money keeps the slot occupied.
 
 There is no production success caller or company sender. The public run list stays
 metadata-only. Replay never calls this command.

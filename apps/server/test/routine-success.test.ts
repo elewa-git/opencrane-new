@@ -216,3 +216,23 @@ async function correctedSettlementDuringPublication() {
 }
 it('refuses a larger settlement saved during the final publication check',
   correctedSettlementDuringPublication);
+
+async function unrelatedSettlementDuringPublication() {
+  await evidence();
+  const append = nats.store.append.bind(nats.store);
+  async function settleNeighbourAfterCheck(command: AppendCommand) {
+    async function checkThenSettleNeighbour() {
+      await command.checkAccess!();
+      await save('budget-test', 'budget.settled', {
+        reservationId: 'neighbour-hold', permitId: 'neighbour-hold', settledCents: 42,
+      });
+    }
+    return append({ ...command, checkAccess: checkThenSettleNeighbour });
+  }
+  vi.spyOn(nats.store, 'append').mockImplementationOnce(settleNeighbourAfterCheck);
+  await expect(finish()).resolves.toMatchObject({ status: 'confirmed' });
+  expect((await folded()).lastRun).toMatchObject({ outcome: 'succeeded',
+    heldCents: 0, settledCents: 260 });
+}
+it('ignores a different reservation settling during publication',
+  unrelatedSettlementDuringPublication);

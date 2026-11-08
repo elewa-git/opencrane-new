@@ -45,7 +45,7 @@ function requireSource(row: StoredEvent, source: string, principalKind: string,
 function requireDecisionIdentity(decision: Decision, release: Release, evidence: Evidence,
   root: Root) {
   if (decision.outcome !== 'allow' || decision.route !== 'mcp' ||
-      decision.reason !== 'policy_allow' || decision.requestId !== evidence.requestId ||
+      decision.reason !== 'approval_used' || decision.requestId !== evidence.requestId ||
       decision.requesterId !== root.requesterId ||
       decision.assistantId !== root.assistantId ||
       decision.conversationId !== root.conversationId || decision.turnId !== root.turnId ||
@@ -84,6 +84,9 @@ function requireCompanyDecision(rows: StoredEvent[], evidence: Evidence, root: R
   requireSource(decisions[0]!, 'models', 'system', 'models');
   const decision = decisionRecordedDataSchema.parse(decisions[0]!.event.data);
   const release = companyCredentialReleaseSchema.parse(decision.release);
+  if (decisions[0]!.event.correlation.approval !== release.approvalId) {
+    throw new Error('Company approval changed');
+  }
   requireDecisionIdentity(decision, release, evidence, root);
   requireReleaseRun(release, root, routineId, occurrenceId);
   requireReleaseAccount(release, definition, decision);
@@ -117,8 +120,8 @@ function requirePrivateResult(rows: StoredEvent[], evidence: Evidence,
     throw new Error('Private result does not match');
   }
 }
-function requireSettlement(rows: StoredEvent[], root: Root, evidence: Evidence,
-  permitId: string) {
+function requireRootedHold(rows: StoredEvent[], root: Root, evidence: Evidence,
+  toolPermitId: string) {
   function isReservation(row: StoredEvent) { return row.event.type === 'budget.reserved'; }
   function belongsToRoot(row: StoredEvent) {
     const data = z.object({ rootId: z.string().optional() }).parse(row.event.data);
@@ -129,12 +132,33 @@ function requireSettlement(rows: StoredEvent[], root: Root, evidence: Evidence,
   if (rooted.length !== 1) throw new Error('Other rooted spending remains');
   requireSource(rooted[0]!, 'models', 'system', 'models');
   const hold = z.object({ reservationId: z.string(), permitId: z.string(),
-    amountCents: z.int().nonnegative(), payingGroupId: z.string(),
-    assistantId: z.string() }).parse(rooted[0]!.event.data);
-  if (hold.reservationId !== evidence.reservationId || hold.permitId !== permitId ||
+    amountCents: z.int().positive(), payingGroupId: z.string(),
+    assistantId: z.string(), modelCall: z.object({ requesterId: z.string(),
+      assistantId: z.string(), computerId: z.string(), generation: z.int(),
+      conversationId: z.string(), turnId: z.string(), threadId: z.string(),
+      payingGroupId: z.string() }) }).parse(rooted[0]!.event.data);
+  const call = hold.modelCall;
+  if (hold.reservationId !== evidence.reservationId || hold.permitId === toolPermitId ||
+      hold.permitId !== hold.reservationId ||
       hold.payingGroupId !== root.payingGroupId || hold.assistantId !== root.assistantId) {
     throw new Error('Hold attribution changed');
   }
+  requireModelCall(call, root);
+  return { hold, position: rooted[0]!.sequence };
+}
+function requireModelCall(call: { requesterId: string; assistantId: string;
+  computerId: string; generation: number; conversationId: string; turnId: string;
+  threadId: string; payingGroupId: string }, root: Root) {
+  if (call.requesterId !== root.requesterId || call.assistantId !== root.assistantId ||
+      call.computerId !== root.computerId || call.generation !== root.generation ||
+      call.conversationId !== root.conversationId || call.turnId !== root.turnId ||
+      call.threadId !== root.threadId || call.payingGroupId !== root.payingGroupId) {
+    throw new Error('Model spending changed');
+  }
+}
+function requireSettlement(rows: StoredEvent[], root: Root, evidence: Evidence,
+  toolPermitId: string) {
+  const { hold, position } = requireRootedHold(rows, root, evidence, toolPermitId);
   function isSettlement(row: StoredEvent) { return row.event.type === 'budget.settled'; }
   function settlesReservation(row: StoredEvent) {
     const data = z.object({ reservationId: z.string() }).parse(row.event.data);
@@ -142,13 +166,13 @@ function requireSettlement(rows: StoredEvent[], root: Root, evidence: Evidence,
   }
   const settlements = rows.filter(isSettlement);
   const matching = settlements.filter(settlesReservation);
-  if (matching.length !== 1 || matching[0]!.sequence <= rooted[0]!.sequence) {
+  if (matching.length !== 1 || matching[0]!.sequence <= position) {
     throw new Error('Missing settlement');
   }
   requireSource(matching[0]!, 'models', 'system', 'models');
   const settled = z.object({ permitId: z.string(), settledCents: z.int().nonnegative(),
     outcome: z.string().optional() }).parse(matching[0]!.event.data);
-  if (settled.permitId !== permitId || settled.outcome !== undefined) {
+  if (settled.permitId !== hold.permitId || settled.outcome !== undefined) {
     throw new Error('Settlement is uncertain');
   }
   return { heldCents: 0, settledCents: settled.settledCents };
