@@ -2,11 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import { budgetCallDispatchAdmittedDataSchema, computerTurnStartedDataSchema, computerTurnClosedDataSchema,
-  providerBindingSchema, providerDrainSchema, providerIdSchema, parseEventByType,
+  providerBindingSchema, providerDrainSchema, providerRetiredSchema,
+  providerIdSchema, parseEventByType,
   type EventEnvelope } from '@opencrane/events';
 import { readEventAt, readStreamSummary, type EventStore, type StoredEvent,
   type SummaryKind } from '@opencrane/event-store';
-import { applyProvider, type ProviderState } from '@opencrane/projections';
+import { applyProvider, retirementBinding, type ProviderState } from '@opencrane/projections';
 import { data, models } from './state.ts';
 import { appendCheckedState } from './append-checked-state.ts';
 import { ProviderConflict, ProviderRefused, providerAuthority, providerPermission,
@@ -44,6 +45,14 @@ function addConfiguration(summary: Configuration, row: StoredEvent) {
     const identity = JSON.stringify([data.kind, data.dependantId]);
     const choice = { ...data, automatic: event.commandId === 'system:seed-provider-default' };
     summary.choices.set(identity, choice);
+  }
+  if (event.type === 'provider.retired') {
+    const retirement = providerRetiredSchema.parse(event.data);
+    for (const reviewed of retirement.choices) {
+      const identity = JSON.stringify([reviewed.kind, reviewed.dependantId]);
+      const binding = retirementBinding(retirement, reviewed, row.sequence);
+      summary.choices.set(identity, { ...binding, automatic: false });
+    }
   }
 }
 const configuration: SummaryKind<Configuration> = {
@@ -167,7 +176,8 @@ function validChoices(current: Configuration, silo: string, providerId: string) 
     function supported(model: (typeof models)[number]) {
       return model.id === choice.model && !model.retired;
     }
-    if (!connection || connection.provider !== 'openai' || !connection.saved ||
+    if (!connection || connection.retired || connection.provider !== 'openai' ||
+      !connection.saved ||
       !connection.secretRef || !connection.lastReachable ||
       !connection.enabledModels.includes(choice.model) || !models.some(supported)) {
       return false;

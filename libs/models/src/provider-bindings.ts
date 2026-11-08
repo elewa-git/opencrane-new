@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { registerHandler } from '@opencrane/handlers';
 import {
-  assistantCreatedDataSchema, providerBindingSchema, providerIdSchema,
+  assistantCreatedDataSchema, providerBindingSchema, providerRetiredSchema, providerIdSchema,
   providerModelIdSchema, type EventEnvelope,
 } from '@opencrane/events';
 import type { Binding } from '@opencrane/authz';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
-import { applyProvider, type ProviderState, type Query } from '@opencrane/projections';
+import { applyProvider, retirementBinding, type ProviderState, type Query } from '@opencrane/projections';
 import { history } from './actor.ts';
 import { readActiveMember } from './member-authority.ts';
 import { modelForTask } from './routing.ts';
@@ -51,12 +51,19 @@ export async function inventory(store: EventStore, silo: string) {
     const providerId = row.event.subject.slice('provider-'.length);
     const state = applyProvider(providers.get(providerId), row.event, row.sequence);
     providers.set(providerId, state);
-    if (!firstVerified && state.lastReachable?.changeId === row.event.id) {
+    if (!firstVerified && !state.retired && state.lastReachable?.changeId === row.event.id) {
       firstVerified = providerId;
     }
     if (row.event.type === 'provider.model_binding_set') {
       const choice = { ...providerBindingSchema.parse(row.event.data), position: row.sequence };
       bindings.set(choiceKey(choice), choice);
+    }
+    if (row.event.type === 'provider.retired') {
+      const retirement = providerRetiredSchema.parse(row.event.data);
+      for (const reviewed of retirement.choices) {
+        const choice = retirementBinding(retirement, reviewed, row.sequence);
+        bindings.set(choiceKey(choice), choice);
+      }
     }
   }
   return { rows, providers, bindings, firstVerified, position: rows.at(-1)?.sequence ?? 0 };
@@ -73,8 +80,13 @@ function requireSelectable(state: ProviderState | undefined, model: string) {
   function supported(candidate: (typeof models)[number]) {
     return candidate.id === model && !candidate.retired;
   }
-  if (!state || state.provider !== 'openai' || !state.secretRef ||
+  if (!state || state.retired || state.provider !== 'openai' || !state.secretRef ||
     !state.lastReachable || !state.enabledModels.includes(model) || !models.some(supported)) {
+    throw new ProviderRefused();
+  }
+}
+function requireOpenTarget(state: ProviderState | undefined) {
+  if (state?.retired) {
     throw new ProviderRefused();
   }
 }
@@ -186,6 +198,7 @@ async function checkBinding(current: Inventory, input: BindingInput, providerId:
     (previous?.position ?? 0) !== input.expectedBindingSequence) {
     throw new ProviderConflict();
   }
+  requireOpenTarget(target);
   if (previous && previous.providerId !== providerId) {
     await providerPermission(binding, memberId, connectionRows(current.rows, previous.providerId));
     if (current.providers.get(previous.providerId)?.revision !== input.expectedSourceRevision) {
@@ -320,7 +333,7 @@ export function providerDefaultHandler(store: EventStore, binding: Binding) {
     }
     const target = current.providers.get(current.firstVerified);
     const model = modelForTask('chat_turn');
-    if (!target?.enabledModels.includes(model)) {
+    if (target?.retired || !target?.enabledModels.includes(model)) {
       return;
     }
     const actorSchema = z.object({ changedBy: providerIdSchema });

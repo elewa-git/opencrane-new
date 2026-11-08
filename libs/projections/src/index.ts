@@ -39,7 +39,8 @@ export { files, listFiles } from './files.ts';
 export { groups, readGroups } from './groups.ts';
 export { rebuildGroupProjection } from './group-rebuild.ts';
 
-export { providers, readProviders, applyProvider, type ProviderState } from './providers.ts';
+export { providers, readProviders, applyProvider, retirementBinding,
+  type ProviderState } from './providers.ts';
 export { rebuildProviderProjection } from './provider-rebuild.ts';
 export { modelAccess, readModelGrantRows, readModelAccessCandidates, readToolGrantReferences,
   type ModelGrantState } from './model-access.ts';

@@ -28,6 +28,9 @@ routines still mean that complete dependency information is unsupported. A faile
 cannot report an empty result, and current permissions are checked before returning it.
 The retirement preview also shows safe routine names and saved positions. It cannot
 confirm retirement because routine model bindings and the retirement command are not built.
+Provider details show a saved retirement and its reviewed choices, even if a late
+connection check succeeds. A retired connection keeps its key in custody and cannot
+take a new key, model selection or check. Confirming retirement is still unavailable.
 
 ## Main files
 
@@ -43,7 +46,7 @@ The [server](../../README.md) registers these requests for the [website](../../.
 ```mermaid
 flowchart LR
   web["apps/web<br/>provider pages"] -->|requests| routes["providers<br/>server routes"]
-  routes -.-> models["libs/models<br/>provider rules"]
+  routes -.-> models["libs/models<br/>provider and retirement rules"]
   models -->|reads provider, payer and spending changes| store["event log<br/>saved changes"]
   routes -->|reads progress| tables["read tables<br/>routine view"]
 ```

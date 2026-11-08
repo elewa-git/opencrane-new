@@ -1,5 +1,5 @@
 import { applyBudget, budgetStopId, emptyBudget, type BudgetState } from './state.ts';
-import { providerBindingSchema, providerDrainSchema } from '@opencrane/events';
+import { providerBindingSchema, providerDrainSchema, providerRetiredSchema } from '@opencrane/events';
 import { readStreamSummary, type EventStore, type StoredEvent,
   type SummaryKind } from '@opencrane/event-store';
 
@@ -22,6 +22,17 @@ function addRouting(summary: Routing, row: StoredEvent) {
   if (row.event.type === 'provider.managed_calls_drain_set') {
     const data = providerDrainSchema.parse(row.event.data);
     summary.draining = data.draining;
+  }
+  if (row.event.type === 'provider.retired') {
+    const data = providerRetiredSchema.parse(row.event.data);
+    for (const reviewed of data.choices) {
+      const key = choiceKey(reviewed.kind, reviewed.dependantId);
+      const providerId = reviewed.next.state === 'active'
+        ? reviewed.next.providerId : reviewed.old.providerId;
+      summary.choices.set(key, { providerId, bindingSequence: row.sequence,
+        model: reviewed.next.model, state: reviewed.next.state });
+    }
+    return;
   }
   if (row.event.type !== 'provider.model_binding_set') {
     return;

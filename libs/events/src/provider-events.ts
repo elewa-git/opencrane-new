@@ -31,6 +31,39 @@ export const providerDrainSchema = z.object({ ...base,
   expectedProviderSequence: z.int().nonnegative(), expectedDrainSequence: z.int().nonnegative(),
   draining: z.boolean(),
 }).strict();
+const retirementChoice = z.object({
+  kind: z.enum(['assistant', 'silo_default']), dependantId: id, task: z.literal('chat_turn'),
+  old: z.object({ providerId: id, model: modelId, state: z.enum(['active', 'paused']),
+    bindingSequence: z.int().positive() }).strict(),
+  next: z.discriminatedUnion('state', [
+    z.object({ state: z.literal('paused'), model: modelId }).strict(),
+    z.object({ state: z.literal('active'), providerId: id, model: modelId,
+      revision }).strict(),
+  ]),
+}).strict();
+const providerRetiredFieldsSchema = z.object({ ...base,
+  expectedProviderSequence: z.int().nonnegative(),
+  choices: z.array(retirementChoice).max(200),
+}).strict();
+function validateRetirementChoices(payload: z.infer<typeof providerRetiredFieldsSchema>,
+  context: z.RefinementCtx) {
+  const seen = new Set<string>();
+  for (const [index, choice] of payload.choices.entries()) {
+    const key = JSON.stringify([choice.kind, choice.dependantId, choice.task]);
+    const invalidSource = choice.old.providerId !== payload.providerId;
+    const invalidPause = choice.next.state === 'paused' &&
+      choice.next.model !== choice.old.model;
+    const invalidReplacement = choice.next.state === 'active' &&
+      choice.next.providerId === payload.providerId;
+    if (seen.has(key) || invalidSource || invalidPause || invalidReplacement) {
+      context.addIssue({ code: 'custom', path: ['choices', index],
+        message: 'Invalid retirement choice' });
+    }
+    seen.add(key);
+  }
+}
+export const providerRetiredSchema = providerRetiredFieldsSchema.superRefine(
+  validateRetirementChoices);
 const verification = { ...base, attemptId: id, kind: z.enum(['reachability', 'model']),
   model: modelId.optional(), reservedCents: centsSchema.optional() };
 export const providerRequestedSchema = z.object(verification).strict();
@@ -63,6 +96,8 @@ export const providerEvents = [
       expectedDrainSequence: 0, draining: true }),
   event('provider.managed_calls_enabled', 'budget', 'Managed provider calls were switched on.',
     managedCallsSchema, { ...baseExample(), expectedProviderSequence: 0 }),
+  event('provider.retired', 'provider', 'An admin retired a connection with reviewed choices.',
+    providerRetiredSchema, { ...baseExample(), expectedProviderSequence: 0, choices: [] }),
   event('provider.verification_requested', 'provider', 'An admin requested a revision-bound check.',
     providerRequestedSchema, verificationExample),
   event('provider.verification_dispatched', 'provider', 'A check consumed its single dispatch.',

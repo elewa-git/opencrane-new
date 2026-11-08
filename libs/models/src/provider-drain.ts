@@ -87,6 +87,9 @@ export async function providerDrainCommand(store: EventStore, binding: Binding,
     await fresh();
     return providerReceipt(original);
   }
+  if (current.state?.retired) {
+    throw new ProviderRefused();
+  }
   // Keep cancellation from ever undoing switch-on or selecting a fallback key.
   if (current.enabled) {
     throw new ProviderRefused('Managed calls have already been switched on');

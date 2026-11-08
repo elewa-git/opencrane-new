@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { parseEventByType, providerBindingSchema, providerDrainSchema,
+import { parseEventByType, providerBindingSchema, providerDrainSchema, providerRetiredSchema,
   type EventEnvelope } from '@opencrane/events';
 import type { Projection } from './runner.ts';
 import type { Query } from './db.ts';
@@ -31,6 +31,7 @@ export interface ProviderState {
   modelsChanged?: ProviderFact;
   managedCallsEnabled?: true;
   managedCallsDraining?: boolean;
+  retired?: ProviderFact & { choices: z.infer<typeof providerRetiredSchema>['choices'] };
 }
 export function applyProvider(state: ProviderState | undefined,
   event: EventEnvelope, position: number): ProviderState {
@@ -50,6 +51,10 @@ export function applyProvider(state: ProviderState | undefined,
   }
   if (!state || state.providerId !== providerId) {
     throw new Error('Missing provider');
+  }
+  requireOpenForChange(state, event);
+  if (event.type === 'provider.retired') {
+    return retireProvider(state, event, revision, position);
   }
   if (applyRoutingChange(state, event, revision, position)) {
     return state;
@@ -76,6 +81,22 @@ export function applyProvider(state: ProviderState | undefined,
   } else {
     applyVerification(state, data, fact);
   }
+  state.position = position;
+  return state;
+}
+function requireOpenForChange(state: ProviderState, event: EventEnvelope) {
+  if (state.retired && event.type !== 'provider.verification_recorded') {
+    throw new Error('Retired provider cannot change');
+  }
+}
+function retireProvider(state: ProviderState, event: EventEnvelope,
+  revision: number, position: number) {
+  const retirement = providerRetiredSchema.parse(event.data);
+  if (revision !== state.revision) {
+    throw new Error('Invalid retirement revision');
+  }
+  state.retired = { changeId: event.id, time: event.time, revision,
+    outcome: 'recorded', choices: retirement.choices };
   state.position = position;
   return state;
 }
@@ -149,6 +170,24 @@ function providerProjection(name: string): Projection {
         ON CONFLICT (silo, kind, dependant_id, task) DO UPDATE SET state = EXCLUDED.state`,
       [event.silo, choice.kind, choice.dependantId, choice.task, JSON.stringify(saved)]);
     }
+    if (event.type === 'provider.retired') {
+      const retirement = providerRetiredSchema.parse(event.data);
+      for (const choice of retirement.choices) {
+        const key = [event.silo, choice.kind, choice.dependantId, choice.task];
+        const previous = await db.query<{ state: { providerId: string; model: string;
+          state: string; position: number } }>(`SELECT state FROM ${bindings} WHERE silo = $1 AND kind = $2
+          AND dependant_id = $3 AND task = $4`, key);
+        const binding = previous.rows[0]?.state;
+        if (!binding || binding.providerId !== choice.old.providerId ||
+          binding.model !== choice.old.model || binding.state !== choice.old.state ||
+          binding.position !== choice.old.bindingSequence) {
+          throw new Error('Retirement binding changed');
+        }
+        const saved = retirementBinding(retirement, choice, position);
+        await db.query(`UPDATE ${bindings} SET state = $5 WHERE silo = $1 AND kind = $2
+          AND dependant_id = $3 AND task = $4`, [...key, JSON.stringify(saved)]);
+      }
+    }
     await db.query(`INSERT INTO ${name} VALUES ($1, $2, $3)
       ON CONFLICT (silo, provider_id) DO UPDATE SET state = EXCLUDED.state`,
     [...values, JSON.stringify(state)]);
@@ -156,6 +195,19 @@ function providerProjection(name: string): Projection {
 }
 export const providers = providerProjection('providers');
 export const replayProviders = providerProjection('providers_replay');
+export function retirementBinding(retirement: z.infer<typeof providerRetiredSchema>,
+  choice: z.infer<typeof providerRetiredSchema>['choices'][number], position: number) {
+  const next = choice.next;
+  const providerId = next.state === 'active' ? next.providerId : choice.old.providerId;
+  const revision = next.state === 'active' ? next.revision : retirement.revision;
+  const reason = next.state === 'paused'
+    ? { reason: 'Paused by an administrator' as const } : {};
+  return { providerId, revision, changedBy: retirement.changedBy,
+    kind: choice.kind, dependantId: choice.dependantId, task: choice.task,
+    expectedProviderSequence: retirement.expectedProviderSequence,
+    previousBindingSequence: choice.old.bindingSequence, state: next.state,
+    model: next.model, position, ...reason };
+}
 export async function readProviders(db: Query, silo: string, providerId?: string) {
   let sql = 'SELECT state FROM providers WHERE silo = $1';
   const parameters = [silo];

@@ -138,6 +138,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   const mcpPrecondition = { revision: undefined as string | undefined, generation: 'instance-1' };
   let mcpResponse = { status: 200, marker: false, body: '{"jsonrpc":"2.0","id":1,"result":{"content":[]}}' };
   let received = 0, hold = false, rejection = 0, providerHeaders: string[] = [], providerAuthHash = '';
+  let heldResponse: ServerResponse | undefined;
   const providerRequests: {
     time: string;
     path: string;
@@ -146,6 +147,17 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     bodyDigest: string;
     mcpName: string | string[] | undefined;
   }[] = [];
+  function completeResponse(response: ServerResponse) {
+    const completed = {
+      type: 'response.completed',
+      response: {
+        id: 'resp_stub', object: 'response', status: 'completed',
+        model: 'gpt-6-luna', output: [], usage,
+      },
+    };
+    const event = `event: response.completed\ndata: ${JSON.stringify(completed)}\n\n`;
+    response.end(event);
+  }
   // S0.1c's scripted Responses stream, reduced to the final usage-bearing event.
   const stub = createServer((req, res) => {
     if (req.url?.startsWith('/mcp/')) {
@@ -187,9 +199,11 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     }
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     res.write('event: response.created\ndata: {"type":"response.created","response":{"id":"resp_stub","object":"response","status":"in_progress"}}\n\n');
-    if (hold) return;
-    res.end(`event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: { id: 'resp_stub', object: 'response', status: 'completed', model: 'gpt-6-luna',
-      output: [], usage } })}\n\n`);
+    if (hold) {
+      heldResponse = res;
+      return;
+    }
+    completeResponse(res);
   });
   stub.listen(0, '127.0.0.1'); await once(stub, 'listening');
   const address = stub.address(); if (!address || typeof address === 'string') throw new Error('No stub');
@@ -303,7 +317,16 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
       mcpResponse = { status, marker, body };
     },
     reject: (status: number) => { rejection = status; },
-    admitted, received: () => received, providerRequests: () => providerRequests, providerHeaders: () => providerHeaders, hold: () => { hold = true; }, advance: (ms = 181_000) => { clock += ms; },
+    admitted, received: () => received, providerRequests: () => providerRequests, providerHeaders: () => providerHeaders, hold: () => { hold = true; },
+    release() {
+      if (heldResponse === undefined) {
+        throw new Error('No held provider response');
+      }
+      completeResponse(heldResponse);
+      heldResponse = undefined;
+      hold = false;
+    },
+    advance: (ms = 181_000) => { clock += ms; },
     async call(extra = {}, patch: Record<string, unknown> = {}, path = '/v1/responses') {
       let requestBody = patch;
       if (path === '/v1/responses') {

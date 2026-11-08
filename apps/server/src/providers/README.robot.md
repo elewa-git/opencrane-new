@@ -4,6 +4,12 @@ For people, read [README.md](README.md) first.
 
 ## Retirement preview
 
+`provider.retired` is readable through provider detail and change status. Detail
+reports `status: retired` before considering any late check result. The event's
+reviewed choices are safe metadata; the key reference and value stay out of the
+reply. The POST retirement route remains absent. Existing preview routes still
+append nothing and keep their late routine and payer checks.
+
 `GET /api/org/providers/:providerId/dependencies` reads saved provider and
 assistant events, then indexed routine progress. It checks current admin and
 provider permission after loading. The `no-store` reply has at most 50 bindings

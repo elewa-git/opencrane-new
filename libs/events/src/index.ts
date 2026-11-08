@@ -46,7 +46,8 @@ export { legacyMemberRole, siloOwnerBootstrappedDataSchema, memberCommandRefused
 
 export { ownershipSeededSchema, ownershipTransferredSchema,
   ownershipConfirmedSchema, ownershipSteppedDownSchema } from './ownership-events.ts';
-export { providerDrainSchema, providerBindingSchema, providerIdSchema, providerModelIdSchema, providerKeySchema,
+export { providerDrainSchema, providerBindingSchema, providerRetiredSchema,
+  providerIdSchema, providerModelIdSchema, providerKeySchema,
   providerModelsSchema, providerRequestedSchema,
   providerDispatchedSchema, providerResultSchema } from './provider-events.ts';
 

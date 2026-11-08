@@ -110,6 +110,9 @@ function checkConfiguration(input: z.infer<typeof providerCommandSchema>,
   if (!state) {
     throw new ProviderConflict();
   }
+  if (state.retired) {
+    throw new ProviderRefused();
+  }
   if (input.action === 'key') {
     const expected = providerSecretRef(silo, input.providerId, input.commandId);
     if (input.secretRef !== expected) {

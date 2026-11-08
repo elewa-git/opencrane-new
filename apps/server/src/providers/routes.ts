@@ -239,6 +239,9 @@ async function saveKey(options: ProviderOptions, memberId: string, params: unkno
   const command = { action: 'key', providerId, commandId: input.commandId,
     expectedRevision: input.expectedRevision, secretRef };
   await providerPermission(options.binding, memberId, rows);
+  if (state?.retired && !previous) {
+    throw new ProviderRefused();
+  }
   if (!previous) {
     if (!state || state.revision !== input.expectedRevision) {
       await cleanProviderSecrets(options, providerId, secretRef, input.expectedRevision);
@@ -288,6 +291,9 @@ async function cleanProviderSecrets(options: ProviderOptions, providerId: string
   }
 }
 function providerRow(state: Awaited<ReturnType<typeof readProviders>>[number]) {
+  if (state.retired) {
+    return { ...state, status: 'retired' };
+  }
   let status = 'needs_key';
   if (state.saved) {
     status = 'saved_unverified';

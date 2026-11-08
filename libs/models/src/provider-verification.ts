@@ -62,7 +62,8 @@ export function providerTestQuote(state: ProviderState, modelId: string) {
   function matches(model: (typeof models)[number]) {
     return model.id === modelId && !model.retired;
   }
-  if (state.provider !== 'openai' || !state.secretRef || !models.some(matches)) {
+  if (state.retired || state.provider !== 'openai' ||
+    !state.secretRef || !models.some(matches)) {
     throw new ProviderUnpriced('Unknown or unpriced model');
   }
   const body = testBody(modelId);
@@ -83,7 +84,8 @@ async function checkRevision(store: EventStore, binding: Binding,
   const fresh = await providerAuthority(store, binding, memberId);
   fresh.include(`provider-${input.providerId}`);
   const current = await providerHistory(store, binding.silo, input.providerId, fresh.deadline);
-  if (!current.state?.secretRef || current.state.revision !== input.expectedRevision) {
+  if (!current.state?.secretRef || current.state.retired ||
+    current.state.revision !== input.expectedRevision) {
     throw new ProviderConflict('Configuration changed');
   }
   await providerPermission(binding, memberId, current.rows);
