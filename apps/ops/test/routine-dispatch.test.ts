@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { createEventStore } from '@opencrane/event-store';
 import { createStore, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { foldRoutine, handlerSubscriptions, routineMissedSchema, type EventEnvelope, type RoutineState } from '@opencrane/events';
@@ -155,12 +157,69 @@ it('keeps the production entry read only by default and during replay',
 async function enabledProductionNeedsDelivery() {
   await save([creation()]);
   const before = await nats.store.head('routine-orders');
-  await expect(production({ enabled: true })).rejects.toThrow('Routine leadership unavailable');
+  await expect(runRoutineScheduler({ enabled: true }))
+    .rejects.toThrow(/^Routine delivery unavailable$/u);
   expect(await nats.store.head('routine-orders')).toBe(before);
   expect((await state()).activeRun).toBeNull();
 }
 it('refuses an enabled host without a checked delivery callback before claiming a slot',
   enabledProductionNeedsDelivery);
+
+async function workerSetting(setting: string | undefined) {
+  await nats.seed([creation()]);
+  const before = await nats.store.head('routine-orders');
+  const env: NodeJS.ProcessEnv = { ...process.env, ...nats.env('projection'),
+    DATABASE_URL: databaseUrl, LOG_LEVEL: 'info' };
+  delete env['ROUTINE_EXECUTION_ENABLED'];
+  if (setting !== undefined) {
+    env['ROUTINE_EXECUTION_ENABLED'] = setting;
+  }
+  const args = ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'routines'];
+  const child = spawn(process.execPath, args, { env });
+  let output = '';
+  function collect(chunk: Buffer) {
+    output += chunk.toString();
+  }
+  child.stdout?.on('data', collect);
+  child.stderr?.on('data', collect);
+  const exited = once(child, 'exit');
+  try {
+    if (setting === undefined || setting === 'false') {
+      async function projected() {
+        if (child.exitCode !== null) {
+          throw new Error(output);
+        }
+        const saved = await storage.db.query<{ sequence: string }>(
+          "SELECT sequence FROM projection_checkpoints WHERE name='routines'");
+        return Number(saved.rows[0]?.sequence) === await nats.store.head();
+      }
+      await expect.poll(projected, { timeout: 20_000, interval: 100 }).toBe(true);
+      expect(child.exitCode).toBeNull();
+      child.kill('SIGTERM');
+      await exited;
+      expect(child.exitCode).toBe(0);
+    } else {
+      await exited;
+      expect(child.exitCode).toBe(1);
+      if (setting === 'true') {
+        expect(output).toContain('Routine delivery unavailable');
+      } else {
+        expect(output).toContain('ROUTINE_EXECUTION_ENABLED must be true or false');
+      }
+    }
+    expect(await nats.store.head('routine-orders')).toBe(before);
+    expect((await state()).activeRun).toBeNull();
+    expect(await nats.store.head('budget-test')).toBe(0);
+    expect(forbidden).not.toHaveBeenCalled();
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGTERM');
+      await exited;
+    }
+  }
+}
+it.each([undefined, 'false', 'true', 'invalid'])(
+  'starts the routines worker with execution setting %s', workerSetting);
 
 async function enabledProductionHandsOffSavedDue() {
   await save([creation()]);
