@@ -76,7 +76,8 @@ It holds one private turn with a local response server, without a paid model cal
 During that turn it checks both process identities, their parent and child link, their
 protected launch record, zero core limits, dumpability after each executable starts,
 and the container's zero swap allowance. A closed model response ends the held-turn
-proof. Executed processes that remain dumpable refuse the check, even when their core
+proof. A later wait needs a new request; the closed response cannot satisfy it.
+Executed processes that remain dumpable refuse the check, even when their core
 limits are zero.
 It closes the first process and checks that its home is gone while the second still
 answers with its original identity. It then closes and checks the second before returning

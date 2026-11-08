@@ -265,7 +265,6 @@ export async function heldModel(): Promise<{ bind(caller: string, thread: string
   let expectedCaller: string | undefined;
   let expectedThread: string | undefined;
   let activeResponse: ServerResponse | undefined;
-  let closedResponse = false;
   function markReady(resolve: () => void): void {
     received = resolve;
   }
@@ -282,13 +281,11 @@ export async function heldModel(): Promise<{ bind(caller: string, thread: string
     function responseClosed(): void {
       if (activeResponse === response) {
         activeResponse = undefined;
-        closedResponse = true;
         requestReceived = new Promise<void>(markReady);
       }
     }
     response.once('close', responseClosed);
     activeResponse = response;
-    closedResponse = false;
     request.resume();
     response.writeHead(200, { 'content-type': 'text/event-stream' });
     response.flushHeaders();
@@ -318,9 +315,6 @@ export async function heldModel(): Promise<{ bind(caller: string, thread: string
   }
   async function wait(): Promise<void> {
     if (activeResponse === undefined) {
-      if (closedResponse) {
-        throw new Error('native_turn_not_held');
-      }
       await waitForRequest();
     }
     assertHeld();

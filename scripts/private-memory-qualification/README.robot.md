@@ -440,8 +440,9 @@ launcher does not set dumpability again after exec, so the real native check ref
 until that executable path can protect both processes. The disposable image's other
 fault cases substitute protected ownership only to exercise their own checks; its
 real-process case expects refusal. Zero core limits do not protect a dumpable process
-from a pipe-based kernel collector. The local model server also clears its held-request
-state when the response closes and checks that state around awaited measurements.
+from a pipe-based kernel collector. The local model server clears its held-request
+state when the response closes. A later wait stays pending until a new request arrives.
+The runner also checks the open response around awaited measurements.
 Only the test loader substitutes bad observations or faults. The ordinary package
 now carries the native runtime and production launch helpers, but remains unqualified.
 Those shipped files and safe host settings remain prerequisites for a deployment run.
