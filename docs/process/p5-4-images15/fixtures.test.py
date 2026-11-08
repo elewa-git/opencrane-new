@@ -139,34 +139,31 @@ class DifferenceTests(unittest.TestCase):
         changed = copy.deepcopy(self.record)
         changed["candidateSha256"] = "0" * 64
         self.assert_refusal(record=changed)
-        checker = self.checker
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(patch.object(checker, "read_record", return_value=self.record))
-            stack.enter_context(patch.object(checker.npm, "read_inventory",
-                                             return_value=self.inventory))
-            stack.enter_context(patch.object(checker.npm.pcre, "check_upstream"))
-            stack.enter_context(patch.object(checker.npm.pcre, "run_checked"))
-            stack.enter_context(patch.object(checker.npm, "check_sources"))
-            stack.enter_context(patch.object(checker.npm.pcre, "check_candidate"))
-            stack.enter_context(patch.object(checker, "scan_layers", return_value=self.layers))
-            stack.enter_context(patch.object(checker, "read_recipe", return_value=self.recipe))
-            checked = stack.enter_context(patch.object(checker.npm, "checked_bytes",
-                                                       side_effect=ValueError("private path")))
-            self.assert_fixed_cli_refusal()
-            self.assertEqual(checked.call_args.args[0].name, "candidate.tar")
+        for archive_name in ("candidate.tar", "source.tar"):
+            with self.subTest(archive_name=archive_name):
+                calls = self.run_mocked_evidence("checked_bytes", archive_name)
+                self.assertEqual([call.args[0].name for call in calls["checked_bytes"].call_args_list],
+                                 ["candidate.tar", "source.tar"][:1 if archive_name == "candidate.tar" else 2])
+                calls["read_recipe"].assert_called_once()
 
     def test_changed_signed_source_and_malformed_archive_refuse(self):
-        with patch.object(self.checker.npm.pcre, "check_upstream",
-                          side_effect=ValueError("private source")):
-            self.assert_fixed_cli_refusal()
+        for stage in ("check_upstream", "check_sources", "check_candidate",
+                      "scan_layers", "read_recipe"):
+            with self.subTest(stage=stage):
+                calls = self.run_mocked_evidence(stage)
+                calls[stage].assert_called_once()
         with tempfile.TemporaryDirectory() as temporary:
             malformed = Path(temporary) / "candidate.tar"
             malformed.write_bytes(b"not a tar archive")
             with self.assertRaises(tarfile.ReadError):
                 self.checker.scan_layers(malformed)
-        with patch.object(self.checker, "scan_layers",
-                          side_effect=tarfile.ReadError("private archive")):
-            self.assert_fixed_cli_refusal()
+
+    def test_complete_mocked_evidence_succeeds(self):
+        calls = self.run_mocked_evidence()
+        for stage in ("check_upstream", "check_sources", "check_candidate",
+                      "scan_layers", "read_recipe"):
+            calls[stage].assert_called_once()
+        self.assertEqual(len(calls["checked_bytes"].call_args_list), 2)
 
     def test_missing_import_has_one_fixed_error(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -185,6 +182,47 @@ class DifferenceTests(unittest.TestCase):
             result = self.checker.main(["candidate", "upstream"])
         self.assertEqual((result, output.getvalue(), error.getvalue()),
                          (1, "", self.checker.REFUSAL + "\n"))
+
+    def run_mocked_evidence(self, failing_stage=None, failing_archive=None):
+        checker = self.checker
+        calls = {}
+        npm_record = checker.npm.read_record()
+
+        def checked_bytes(path, digest):
+            if path.name == failing_archive:
+                raise ValueError("private archive path")
+            return b"saved archive"
+
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(checker, "read_record", return_value=self.record))
+            stack.enter_context(patch.object(checker.npm, "read_inventory",
+                                             return_value=self.inventory))
+            stack.enter_context(patch.object(checker.npm, "read_record",
+                                             return_value=npm_record))
+            stages = {
+                "check_upstream": (checker.npm.pcre, "check_upstream", None),
+                "run_checked": (checker.npm.pcre, "run_checked", b"git archive"),
+                "check_sources": (checker.npm, "check_sources", None),
+                "check_candidate": (checker.npm.pcre, "check_candidate", None),
+                "scan_layers": (checker, "scan_layers", self.layers),
+                "read_recipe": (checker, "read_recipe", self.recipe),
+            }
+            for name, (owner, attribute, value) in stages.items():
+                effect = ValueError("private evidence path") if name == failing_stage else None
+                calls[name] = stack.enter_context(patch.object(
+                    owner, attribute, return_value=value, side_effect=effect))
+            stack.enter_context(patch.object(checker.npm.pcre.candidate.checker,
+                                             "read_json", return_value={"files": {
+                                                 "candidate.tar": "candidate digest",
+                                                 "source.tar": "source digest"}}))
+            calls["checked_bytes"] = stack.enter_context(patch.object(
+                checker.npm, "checked_bytes", side_effect=checked_bytes))
+            if failing_stage or failing_archive:
+                self.assert_fixed_cli_refusal()
+            else:
+                result = checker.check_evidence(Path("candidate"), Path("upstream"))
+                self.assertEqual(result, checker.RESULTS)
+        return calls
 
 
 if __name__ == "__main__":
