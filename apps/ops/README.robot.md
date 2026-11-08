@@ -408,6 +408,10 @@ requires a longer wait.
 `resumeComputer` accepts an optional expected computer id and generation for
 routine wake. It checks both before saving a resume and before returning a
 computer pass. A replacement cannot inherit the old request.
+Routine wake also passes its cancellation signal and absolute deadline. The
+resume history, conditional append and pass issuance all stop at that bound.
+Cancellation after a history read is checked before saving a resume or issuing
+a pass.
 
 Idle checks run at most once every 30 seconds, including during Kubernetes retries.
 They read any new events after the Pod check so a newly posted message prevents

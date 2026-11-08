@@ -1,5 +1,5 @@
 export { connectNats, isEventStoreUnavailable } from "./nats-connection.ts";
-export { createEventStore, connectEventStore, EventStore } from "./jetstream.ts";
+export { createEventStore, connectEventStore, EventStore, readBeforeDeadline } from "./jetstream.ts";
 export {
   wireSubject,
   sameCommand,

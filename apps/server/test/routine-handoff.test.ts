@@ -30,6 +30,7 @@ import { stopUnconfirmedRoutine } from '../src/routine-delivery-stop.ts';
 import { createRoutineComposition, createRoutineDelivery } from '../src/routine-composition.ts';
 import { bindRoutineBudgetOwner } from '../src/routine-delivery-owner.ts';
 import { createRoutineWake } from '../src/chat/routine-wake.ts';
+import { resumeComputer } from '../../ops/src/lifecycle.ts';
 
 let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
 let storage: Awaited<ReturnType<typeof database>>;
@@ -361,6 +362,35 @@ async function cancellationInsideResume() {
 }
 it('does not save a resume or issue a pass after cancellation during history',
   cancellationInsideResume);
+
+async function resumeHistoryHasDeadline() {
+  const subject = 'computer-sales-assistant';
+  const suspended = record('suspended-for-deadline', subject, 'computer.suspended',
+    { assistantId: 'sales-assistant', computerId: 'computer' });
+  await nats.seed([suspended]);
+  const originalRead = nats.store.readStream.bind(nats.store);
+  const releaseRead = Promise.withResolvers<void>();
+  async function* heldRead(stream: string, fromSequence = 1, deadline = Infinity,
+    includeConversationCloses = false) {
+    if (stream === subject) await releaseRead.promise;
+    yield* originalRead(stream, fromSequence, deadline, includeConversationCloses);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(heldRead);
+  const append = vi.spyOn(nats.store, 'append');
+  const issuePass = vi.spyOn(preparedComputer.tokens, 'computer');
+  const control = { signal: AbortSignal.timeout(100), deadline: performance.now() + 100 };
+  const expected = { computerId: 'computer', generation: 1 };
+  try {
+    await expect(resumeComputer(nats.store, preparedComputer.tokens, 'test',
+      'sales-assistant', expected, control)).rejects.toThrow();
+    expect(append).not.toHaveBeenCalled();
+    expect(issuePass).not.toHaveBeenCalled();
+  } finally {
+    releaseRead.resolve();
+  }
+}
+it('ends a held resume history read at its deadline without saving or issuing',
+  resumeHistoryHasDeadline);
 
 async function connectionWaitHasWakeDeadline() {
   const connectionStarted = Promise.withResolvers<void>();

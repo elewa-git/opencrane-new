@@ -49,11 +49,11 @@ export class SandboxClient {
     return (await execFile('kubectl', this.args(args), { timeout: 30_000, maxBuffer: 2_000_000 })).stdout.trim();
   }
 
-  private input(args: string[], object: Resource): Promise<void> {
+  private input(args: string[], object: Resource, signal?: AbortSignal): Promise<void> {
     const commandArgs = this.args(args);
     function sendInput(resolve: () => void, reject: (error: Error) => void) {
       const stdio: ['pipe', 'ignore', 'pipe'] = ['pipe', 'ignore', 'pipe'];
-      const options = { stdio,
+      const options = { stdio, signal,
         timeout: 30_000, killSignal: 'SIGKILL' as const };
       const child = spawn('kubectl', commandArgs, options);
       let error = '';
@@ -203,14 +203,15 @@ export class SandboxClient {
       ...(typeof podUid === 'string' ? { podUid } : {}) };
   }
 
-  async credentials(name: string, token: IssuedToken, verifier?: object, force = false): Promise<void> {
+  async credentials(name: string, token: IssuedToken, verifier?: object, force = false,
+    signal?: AbortSignal): Promise<void> {
     const previous = this.delivered.get(name);
     if (!force && previous?.id === token.id && previous.expiresAt > Date.now() + 60_000) return;
     const command = ['exec', '-i', name, '-c', 'computer', '--',
       '/usr/bin/env', '-u', 'NODE_OPTIONS', '/usr/local/bin/node', '--disable-sigusr1',
       '--experimental-strip-types', '/app/src/install-credential.ts'];
     const delivery = { ...token, verifier };
-    await this.input(command, delivery);
+    await this.input(command, delivery, signal);
     this.delivered.set(name, token);
   }
 

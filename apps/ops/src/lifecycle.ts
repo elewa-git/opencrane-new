@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { IssuedToken, tokenIssuer } from '@opencrane/auth';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import { readBeforeDeadline, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { conversationCreatedDataSchema, memberJoinedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import { readEvents } from '@opencrane/projections';
@@ -23,10 +23,15 @@ export function field(data: unknown, name: string): string {
 function stable(prefix: string, ...parts: string[]) {
   return `${prefix}-${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 32)}`;
 }
-export async function history(store: Pick<EventStore, 'readStream'>, subject: string) {
-  const result: StoredEvent[] = [];
-  for await (const item of store.readStream(subject)) result.push(item);
-  return result;
+export async function history(store: Pick<EventStore, 'readStream'>, subject: string,
+  deadline = Infinity, signal?: AbortSignal) {
+  async function collect() {
+    const result: StoredEvent[] = [];
+    for await (const item of store.readStream(subject, 1, deadline)) result.push(item);
+    return result;
+  }
+  if (deadline === Infinity) return collect();
+  return readBeforeDeadline(collect, deadline, signal);
 }
 function changesMembership(row: StoredEvent): boolean {
   return ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed',
@@ -48,17 +53,18 @@ function generation(events: StoredEvent[]): number {
   return value;
 }
 async function append(store: Store, trigger: EventEnvelope, events: StoredEvent[],
-  type: string, subject: string, data: Record<string, unknown>) {
+  type: string, subject: string, data: Record<string, unknown>,
+  control?: { deadline: number; signal: AbortSignal }) {
   const result = await store.append({ expectedSequence: events.at(-1)?.sequence ?? 0, event: {
     id: randomUUID(), commandId: `${trigger.id}:${type}`, type, subject, silo: trigger.silo,
     source: 'opencrane-lifecycle', time: new Date().toISOString(),
     principal: { kind: 'system', id: 'computer-lifecycle' }, data,
-  } });
+  }, ...(control ? { deadline: control.deadline, signal: control.signal } : {}) });
   if (result.status === 'unavailable') throw new Error('Lifecycle append unavailable', { cause: result.cause });
   if (result.status === 'rejected') throw new Error('Lifecycle append rejected');
   // Read the newest stored event. A repeated command or a competing append may have kept
   // another event instead of the one this handler tried to write.
-  return (await history(store, subject)).at(-1)!.event;
+  return (await history(store, subject, control?.deadline, control?.signal)).at(-1)!.event;
 }
 
 export function lifecycleHandlers(store: Store) {
@@ -222,34 +228,73 @@ export async function suspendComputer(store: Store, state: ComputerState): Promi
     { assistantId: state.assistantId, computerId: state.computerId });
 }
 
-export async function resumeComputer(store: Store, tokens: Tokens,
-  silo: string, assistantId: string,
-  expected?: { computerId: string; generation: number }): Promise<IssuedToken> {
-  const subject = `computer-${assistantId}`;
-  let events = await history(store, subject);
-  const current = events.findLast(r => isLifecycleEvent(r.event))?.event;
-  if (!current || current.silo !== silo) throw new Error('Computer not found');
+type ResumeControl = { deadline: number; signal: AbortSignal };
+type ExpectedComputer = { computerId: string; generation: number };
+
+function requireResumeLive(control?: ResumeControl) {
+  if (control?.signal.aborted || performance.now() >= (control?.deadline ?? Infinity)) {
+    throw new Error('Computer wake cancelled');
+  }
+}
+
+async function issueResumePass(tokens: Tokens,
+  details: Parameters<Tokens['computer']>[0], control?: ResumeControl) {
+  function issuePass() {
+    return tokens.computer(details);
+  }
+  if (!control) return issuePass();
+  const pass = await readBeforeDeadline(issuePass, control.deadline, control.signal);
+  requireResumeLive(control);
+  return pass;
+}
+
+function requireExpectedResume(current: EventEnvelope, events: StoredEvent[],
+  expected?: ExpectedComputer) {
   if (expected && (field(current.data, 'computerId') !== expected.computerId ||
       generation(events) !== expected.generation)) {
     throw new Error('Computer identity changed');
   }
+}
+
+function requireExpectedPass(latest: EventEnvelope, computerId: string, generation: number,
+  expected?: ExpectedComputer) {
+  if (expected && (computerId !== expected.computerId ||
+      generation !== expected.generation ||
+      field(latest.data, 'computerId') !== expected.computerId)) {
+    throw new Error('Computer identity changed');
+  }
+}
+
+export async function resumeComputer(store: Store, tokens: Tokens,
+  silo: string, assistantId: string,
+  expected?: ExpectedComputer,
+  control?: ResumeControl): Promise<IssuedToken> {
+  const subject = `computer-${assistantId}`;
+  requireResumeLive(control);
+  let events = await history(store, subject, control?.deadline, control?.signal);
+  requireResumeLive(control);
+  const current = events.findLast(r => isLifecycleEvent(r.event))?.event;
+  if (!current || current.silo !== silo) throw new Error('Computer not found');
+  requireExpectedResume(current, events, expected);
   if (current.type === 'computer.suspended') {
+    requireResumeLive(control);
     await append(store, current, events, 'computer.resumed', subject,
-      { assistantId, computerId: field(current.data, 'computerId'), generation: generation(events), tokenId: `token:${randomUUID()}` });
-    events = await history(store, subject);
+      { assistantId, computerId: field(current.data, 'computerId'), generation: generation(events),
+        tokenId: `token:${randomUUID()}` }, control);
+    requireResumeLive(control);
+    events = await history(store, subject, control?.deadline, control?.signal);
+    requireResumeLive(control);
   }
   const latest = events.findLast(r => isLifecycleEvent(r.event))!.event;
   if (!['computer.resumed', 'computer.ready'].includes(latest.type)) throw new Error('Computer is not running');
   const grant = events.findLast(({ event }) => ['computer.claimed', 'computer.resumed'].includes(event.type))!.event;
   const currentComputerId = field(grant.data, 'computerId');
   const currentGeneration = generation(events);
-  if (expected && (currentComputerId !== expected.computerId ||
-      currentGeneration !== expected.generation ||
-      field(latest.data, 'computerId') !== expected.computerId)) {
-    throw new Error('Computer identity changed');
-  }
-  return tokens.computer({ generation: currentGeneration, silo, computerId: currentComputerId, assistantId,
-    tokenId: field(grant.data, 'tokenId') });
+  requireExpectedPass(latest, currentComputerId, currentGeneration, expected);
+  requireResumeLive(control);
+  const details = { generation: currentGeneration, silo, computerId: currentComputerId,
+    assistantId, tokenId: field(grant.data, 'tokenId') };
+  return issueResumePass(tokens, details, control);
 }
 
 async function suspendSandbox(kube: SandboxClient, state: ComputerState,
