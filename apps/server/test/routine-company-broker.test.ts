@@ -8,16 +8,16 @@ import { decisionRecordedDataSchema, getEventDefinition,
   routineActivationSchema, routineDefinitionSchema }
   from '@opencrane/events';
 import { z } from 'zod';
-import { confirmCredentialRelease } from '../src/credential-release.ts';
-import { connectionOperationId } from '../src/bearer-connections.ts';
-import { oauthConfigurationDigest } from '../src/oauth-attempt.ts';
-import { toolPolicyFromRows } from '../src/tool-policy.ts';
-import { envelope, history } from '../src/actor.ts';
-import { oauthSelectionFixture } from './support/oauth-selection.ts';
+import { confirmCredentialRelease } from '../../../libs/models/src/credential-release.ts';
+import { connectionOperationId } from '../../../libs/models/src/bearer-connections.ts';
+import { oauthConfigurationDigest } from '../../../libs/models/src/oauth-attempt.ts';
+import { toolPolicyFromRows } from '../../../libs/models/src/tool-policy.ts';
+import { envelope, history } from '../../../libs/models/src/actor.ts';
+import { oauthSelectionFixture } from '../../../libs/models/test/support/oauth-selection.ts';
 import { event } from '@opencrane/event-store/testing';
-import { authorityFence } from '../src/authority.ts';
-import { routineCompanyAskFacts } from '../src/routine-company-release.ts';
-import { proveRoutineSuccess } from '../../../apps/server/src/routine-success.ts';
+import { authorityFence } from '../../../libs/models/src/authority.ts';
+import { routineCompanyAskFacts } from '../../../libs/models/src/routine-company-release.ts';
+import { proveRoutineSuccess } from '../src/routine-success.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let storage: Awaited<ReturnType<typeof databases>>;

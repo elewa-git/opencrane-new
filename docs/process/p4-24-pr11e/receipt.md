@@ -6,6 +6,9 @@ Part of #106. These are local checks on the saved success-finish path.
   change. After the first fixes, the settlement correction test caught a false success.
 - PASS: the three changed suites passed twice on the final source, 120 tests each time.
   They use the company release audit, a real budget actor hold, and a final write race.
+- PASS: the company broker test now lives under the server app. It keeps its assertions
+  and no library test imports server code. The three affected suites passed twice again,
+  with 120 tests on each run.
 - PASS: workspace typecheck, final server and models typecheck, scoped ESLint, Markdown
   lint, Knip, event catalogue and changelog checks.
 - PARTIAL: the internal finish path is checked with disposable services. A live
