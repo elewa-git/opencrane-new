@@ -209,6 +209,8 @@ class DifferenceTests(unittest.TestCase):
             }
             for name, (owner, attribute, value) in stages.items():
                 effect = ValueError("private evidence path") if name == failing_stage else None
+                if name == failing_stage == "scan_layers":
+                    effect = tarfile.ReadError("private archive path")
                 calls[name] = stack.enter_context(patch.object(
                     owner, attribute, return_value=value, side_effect=effect))
             stack.enter_context(patch.object(checker.npm.pcre.candidate.checker,
