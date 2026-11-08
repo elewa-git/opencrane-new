@@ -15,6 +15,8 @@ import { DirectChatSending } from './direct-chat-sending';
 import { ChildReview } from './child-review';
 import { DirectChatParticipants } from './direct-chat-participants';
 import { DirectChatArchive } from './direct-chat-archive';
+import { CloseReview } from './close-review';
+import { CloseReviewDialog } from './close-review-dialog';
 import { DirectChatColleagues } from './direct-chat-colleagues';
 import { ReadMarker } from './read-marker';
 import { RecipientPicker, type Colleague, type ReviewedSnapshot } from './recipient-picker';
@@ -46,7 +48,8 @@ type ReadState = 'idle' | 'loading' | 'ready' | 'failed';
 
 @Component({
   selector: 'oc-direct-chat',
-  imports: [SharedState, ChatComposer, PaperSurface, NavigationMenu, RecipientPicker, ModalSheet],
+  imports: [SharedState, ChatComposer, PaperSurface, NavigationMenu, RecipientPicker,
+    ModalSheet, CloseReviewDialog],
   templateUrl: './direct-chat.html',
   styleUrl: './direct-chat.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -96,6 +99,8 @@ export class DirectChat implements OnInit, OnDestroy {
   protected readonly archive = new DirectChatArchive(
     this.selectedConversationId.bind(this), this.canReadPage.bind(this),
     this.reloadArchiveRow.bind(this), this.clearAfterAccessChange.bind(this));
+  protected readonly closeReview = new CloseReview(
+    this.load.bind(this), this.clearAfterAccessChange.bind(this));
   private readonly readMarker = new ReadMarker(
     this.selectedConversationId.bind(this), this.canReadPage.bind(this),
     this.reloadArchiveRow.bind(this), this.clearAfterAccessChange.bind(this));
@@ -347,6 +352,7 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   protected async submitMessage(text: string): Promise<void> {
+    if (this.closeReview.isClosed(this.selectedConversation(), this.messages())) return;
     const conversationId = this.selectedConversationId() || newDirectCommandId('direct');
     const existingMode = directConversationMode(this.selectedConversation());
     const recipientSend = {
@@ -384,7 +390,7 @@ export class DirectChat implements OnInit, OnDestroy {
 
   protected pendingNavigationBlocked(): boolean {
     return this.composerBusy() || Boolean(this.participantManager.commandId())
-      || Boolean(this.archive.commandId());
+      || Boolean(this.archive.commandId()) || this.closeReview.sending();
   }
 
   private async refreshParticipantColleagues(): Promise<void> {
@@ -499,6 +505,7 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   private clearAfterAccessChange(): void {
+    this.closeReview.clear();
     this.historyNeedsCatchUp = false;
     this.people.clear();
     this.historyRequest?.abort();

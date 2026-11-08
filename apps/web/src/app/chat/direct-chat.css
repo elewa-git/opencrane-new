@@ -38,6 +38,9 @@
 .archive-notice button { min-height: 44px; min-width: 44px; }
 .archive-transcript-note { margin: 18px auto; text-align: center; color: #4f575a;
   font-size: 13px; }
+.closed-chat-notice,.closed-composer-notice { padding: 14px 20px; border: 1px solid #d9dfe0;
+  background: #eef1f2; color: #2b3133; line-height: 1.5; overflow-wrap: anywhere; }
+.closed-composer-notice { min-height: 56px; }
 .participant-open,.participant-back,.participant-action,.participant-leave {
   min-width: 44px; min-height: 44px; padding: 8px 12px; border: 1px solid #cdd4d5;
   border-radius: 6px; background: #fff; color: #2b3133; cursor: pointer;

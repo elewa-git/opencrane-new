@@ -1475,3 +1475,14 @@ to the transcript. Restriction notices follow saved `restricted_tool_refused` fa
 No personal memory-free action is offered: that command choice is not implemented here.
 `npm run visual:p4-15-pr3l` uses intercepted HTTP/WebSocket fixtures at 1280 and 390 px.
 Native admission stays disabled. See the [display receipt](../../docs/process/p4-15-pr3l/display-receipt.md).
+
+The direct, group and assistant workspace headers show Close only when the authorised
+list row includes `canClose: true`. Review opens a native dialog with focus on its title.
+Cancel and Escape return focus to the opener. One `{id}` command goes to
+`POST /api/conversations/:id/close`. Its pending id and body contain no title or message
+and stay in session storage across navigation. Check status reads the original id.
+A 409 reloads server facts; 401 or 403 clears protected content. A saved close or its
+verified status makes the current transcript read only immediately. The first close
+event supplies who closed it and when. History and permitted file reads remain available.
+`npm run visual:screen-p4-6-close` captures both pages at 1280 and 390 pixels with
+intercepted replies; it does not qualify a fresh installation.

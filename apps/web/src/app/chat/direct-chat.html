@@ -75,6 +75,10 @@
           <button class="archive-button" type="button" [disabled]="!archive.canChange()"
             (click)="archive.change()">{{ archive.row()?.archived ? 'Unarchive' : 'Archive' }}</button>
         }
+        <oc-close-review-dialog [row]="selectedConversation()"
+          [closed]="closeReview.isClosed(selectedConversation(), messages())"
+          [title]="headerTitle(selectedConversation(), currentMemberId, knownColleagues(), colleague())"
+          [review]="closeReview" />
         @if (selectedConversation()?.mode === 'group') {
           <button #participantOpener class="participant-open" type="button"
             (click)="openParticipants()">Participants</button>
@@ -133,7 +137,8 @@
                   </li>
                 }
               </ul>
-              @if (participantManager.canManage()) {
+              @if (participantManager.canManage()
+                && !closeReview.isClosed(selectedConversation(), messages())) {
                 <label class="participant-search">Add a colleague
                   <input type="search" [value]="participantManager.query()"
                     (input)="editParticipantQuery($event)" placeholder="Search colleagues">
@@ -247,6 +252,15 @@
               You archived this conversation. Only your list changed.
             </p>
           }
+          @if (closeReview.isClosed(selectedConversation(), messages())) {
+            <p class="closed-chat-notice" role="status">🔒 Closed · Read only.
+              @if (closeReview.firstClose(messages()); as close) {
+                Closed by {{ closeReview.closedByName(close.data.closedBy, currentMemberId,
+                  knownColleagues()) }} on {{ closeReview.closedAt(close.time) }}.
+              }
+              Saved messages remain available to people with access.
+            </p>
+          }
           @if (historyState() === 'loading') {
             <p class="empty-transcript">Loading messages…</p>
           } @else if (historyState() === 'failed') {
@@ -275,7 +289,8 @@
                     </strong><time>{{ directTime(row.time) }}</time></header>
                   }
                   <p>{{ directDisplayText(row) }}</p>
-                  @if (childReview.canOpen(row, selectedConversation(), currentMemberId)) {
+                  @if (!closeReview.isClosed(selectedConversation(), messages())
+                    && childReview.canOpen(row, selectedConversation(), currentMemberId)) {
                     <button class="child-review-action" type="button"
                       (click)="childReview.open(row, selectedConversation()!, messages(),
                         $event.currentTarget)">
@@ -369,7 +384,8 @@
     @if (pageState() === 'ready' && participantManager.state() === 'closed'
       && (colleague() || selectedConversation()?.mode === 'group'
       || selectedPeople().length > 1
-      || groupSnapshot() || pending())) {
+      || groupSnapshot() || pending())
+      && !closeReview.isClosed(selectedConversation(), messages())) {
       <footer class="composer-dock">
         <div class="send-feedback">
           @if (sendState() === 'applying') {
@@ -418,6 +434,12 @@
             }
           </div>
         }
+      </footer>
+    }
+    @if (pageState() === 'ready'
+      && closeReview.isClosed(selectedConversation(), messages())) {
+      <footer class="closed-composer-notice" role="status">
+        🔒 This conversation is closed. You can read saved messages, but you cannot send or add files.
       </footer>
     }
   </main>

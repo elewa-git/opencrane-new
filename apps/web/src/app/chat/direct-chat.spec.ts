@@ -2312,7 +2312,7 @@ async function doesNotAnnounceOtherEvents(): Promise<void> {
   await openExisting(fixture);
   const before = root(fixture).querySelector('[role="status"]')?.textContent;
   const row = { id: 'closed', position: 3, type: 'conversation.closed',
-    time: '2026-10-06T09:00:00Z', data: { closedBy: 'bob' } };
+    time: '2026-10-06T09:00:00Z', data: { conversationId: 'existing', closedBy: 'bob' } };
   const incoming = { version: 1, topic: 'conversation', type: 'event', conversationId: 'existing',
     position: 3, generation: 1, row };
   const socket = api.sockets.at(-1);

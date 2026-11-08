@@ -50,6 +50,11 @@ export function isActiveTurn(turn: Turn): boolean {
   return turn.author === 'agent' && (turn.state === 'working' || turn.state === 'stopping');
 }
 
+export function hasSavedClose(conversation: ChatConversation | undefined, rows: ChatRow[]): boolean {
+  return conversation?.status === 'closed'
+    || rows.some(row => row.type === 'conversation.closed');
+}
+
 export function budgetStoppedTurnIds(turns: Turn[]): string[] {
   const stopped: string[] = [];
   for (const turn of turns) {

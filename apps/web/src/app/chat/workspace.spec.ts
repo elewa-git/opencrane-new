@@ -300,7 +300,7 @@ const downloadScenarios: DownloadScenario[] = [
       },
       {
         id: 'closed', position: 2, type: 'conversation.closed',
-        time: '2026-10-03T10:00:01Z', data: {},
+        time: '2026-10-03T10:00:01Z', data: { conversationId: 'chat', closedBy: 'me' },
       },
     ],
   },
@@ -477,12 +477,19 @@ it('clears the preview, screenshot rows and counts when access is denied', async
   context.setReply(503);
   await context.fixture.componentInstance['capture'].start('chat', []);
   context.fixture.componentInstance['preview'].set('uploads/chat/screen/screen.png');
+  const closeReview = context.fixture.componentInstance['closeReview'];
+  const selected = context.fixture.componentInstance['chat'].selectedConversation();
+  if (!selected) throw new Error('Expected a selected session');
+  expect(closeReview.open({ ...selected, canClose: true })).toBe(true);
+  await closeReview.confirm();
+  expect(closeReview.pendingId()).not.toBe('');
   context.fixture.detectChanges();
   expect(context.root.querySelector('oc-file-preview dialog')?.hasAttribute('open')).toBe(true);
   context.denyFeedRead();
   await context.fixture.componentInstance['chat'].refresh();
   await vi.waitFor(() => expect(context.fixture.componentInstance['chat'].denied()).toBe(true));
   context.fixture.detectChanges();
+  expect(closeReview.pendingId()).toBe('');
   expect(context.fixture.componentInstance['capture'].state()).toEqual({ phase: 'idle' });
   expect(context.fixture.componentInstance['preview']()).toBe('');
   expect(context.root.textContent).toContain('Files unavailable');
@@ -1568,7 +1575,7 @@ it('removes a used approval and its open drawer on closure despite a late approv
       drawer?.querySelector<HTMLButtonElement>('.state-action')!.click();
       expect(releaseRead).toBeDefined();
       const closedRow = { id: 'closed', position: 1, type: 'conversation.closed',
-        time: '2026-10-04T10:20:00Z', data: {} };
+        time: '2026-10-04T10:20:00Z', data: { conversationId: 'chat', closedBy: 'me' } };
       sendConversationRow(capture.socket, closedRow);
       capture.fixture.detectChanges();
       expect(capture.root.textContent).toContain('This session is closed');

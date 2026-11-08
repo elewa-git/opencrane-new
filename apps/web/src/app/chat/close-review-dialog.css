@@ -1,0 +1,18 @@
+.close-opener,.close-status button,.close-actions button { min-width: 44px; min-height: 44px;
+  padding: 8px 12px; border: 1px solid #879294; border-radius: 6px;
+  background: #fff; color: #2b3133; font: inherit; cursor: pointer; }
+.close-opener,.close-actions .close-confirm { border-color: #9c2c22; color: #9c2c22; }
+.close-actions .close-confirm { background: #9c2c22; color: #fff; }
+.close-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 16px; background: #fff5ec; overflow-wrap: anywhere; }
+.close-explanation { line-height: 1.5; overflow-wrap: anywhere; }
+.close-explanation p { margin: 0 0 18px; }
+.close-title { font-weight: 700; }
+.close-actions { display: flex; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+@media (max-width: 700px) {
+  .close-actions { flex-direction: column; }
+  .close-actions button { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .close-opener { animation: none !important; transition: none !important; }
+}

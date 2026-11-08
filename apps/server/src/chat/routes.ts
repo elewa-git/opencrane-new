@@ -211,6 +211,20 @@ async function read(
 type ListQuery = z.infer<typeof conversationListQuery>;
 type ListCandidate = Awaited<ReturnType<typeof conversationListCandidates>>[number];
 
+async function listCanClose(options: ChatOptions, memberId: string,
+  candidate: ListCandidate, participantIds: string[], status: string,
+  sharedChild: boolean): Promise<boolean> {
+  const row = candidate.conversation;
+  if (status === 'closed') return false;
+  if (row.mode === 'direct') return participantIds.includes(memberId);
+  if (row.createdBy !== memberId) return false;
+  if (row.mode === 'agent_session' && !sharedChild) return true;
+  const auth = memberAuthorisation(options.binding);
+  const permission = await auth.conversation(memberId, row.conversationId,
+    'manage_participants');
+  return permission.status !== 'unavailable' && permission.allowed;
+}
+
 async function visibleListMatches(options: ChatOptions, memberId: string,
   query: ListQuery, candidates: ListCandidate[]) {
   const visibleCandidates: typeof candidates = [];
@@ -233,7 +247,11 @@ async function visibleListMatches(options: ChatOptions, memberId: string,
       const archived = preference.archived;
       if (archived !== (query.section === 'archived')) return undefined;
       const display = await summary(options, row.conversationId, row.mode, access.historyPosition);
-      const details = { ...display, ...preference };
+      const sharedChild = 'contextKind' in access.created
+        && access.created.contextKind === 'shared_child';
+      const canClose = await listCanClose(options, memberId, candidate,
+        access.participantIds, display.status, sharedChild);
+      const details = { ...display, ...preference, canClose };
       const normalisedSearch = query.q.normalize('NFC');
       const search = normalisedSearch.toLowerCase();
       const normalisedTitle = display.title.normalize('NFC');
