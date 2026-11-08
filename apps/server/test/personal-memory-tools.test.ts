@@ -491,6 +491,8 @@ function rememberOffer() {
   tools[0]!.modes['remember'] = 'allow';
   tools[0]!.definitions.push(...privateToolOffer('correct')[0]!.definitions);
   tools[0]!.modes['correct'] = 'allow';
+  tools[0]!.definitions.push(...privateToolOffer('forget')[0]!.definitions);
+  tools[0]!.modes['forget'] = 'allow';
   return tools;
 }
 
