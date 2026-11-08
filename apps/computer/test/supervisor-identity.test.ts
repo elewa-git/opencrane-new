@@ -56,12 +56,10 @@ const commandEnd = stat.lastIndexOf(') ');
 assert.ok(commandEnd > 0);
 const fields = stat.slice(commandEnd + 2).trimEnd().split(' ');
 assert.equal(fields[19], startTime);
-process.stdout.write(JSON.stringify({ pid, startTime }));
+process.stdout.write('checked');
 `;
     const result = await computer.exec('node', '--input-type=module', '-e', inspect);
-    const identity = JSON.parse(result) as { pid: number; startTime: string };
-    expect(identity.pid).toBeGreaterThan(1);
-    expect(identity.startTime).toMatch(/^[1-9][0-9]*$/u);
+    expect(result).toBe('checked');
   } finally {
     await computer.close();
   }

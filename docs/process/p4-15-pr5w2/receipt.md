@@ -33,8 +33,9 @@ complete qualification was run or marked PASS.
 | --- | --- |
 | Failing-first discovery and socket tests | FAIL before implementation, as expected |
 | Failing-first replacement test | FAIL before implementation, as expected |
-| Changed qualification tests, first run | PASS: 236 tests in seven files |
-| Changed qualification tests, second run | PASS: 236 tests in seven files |
+| Changed tests, first run | PASS: 166 tests in seven files |
+| Changed tests, second run | PASS: 166 tests in seven files |
+| Root entrypoint launch record removal check | PASS: test failed when the write call was removed; call restored |
 | Scoped ESLint, repository typecheck and Knip | PASS |
 | Qualification TypeScript check | PASS |
 | Event catalogue | PASS |
