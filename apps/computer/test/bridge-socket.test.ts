@@ -1,4 +1,5 @@
 import { once } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { WebSocket } from 'ws';
 import { expect, it } from 'vitest';
@@ -12,7 +13,7 @@ function report(sequence: number, text = 'partial'): BridgeReport {
     type: 'agent.message_delta', messageId: 'reply', text };
 }
 
-async function fixture() {
+async function fixture(retainedCall?: TurnDriver['retainedCall']) {
   const server = createServer();
   const state: BridgeSocketState = { resumed: false };
   const reports: BridgeReport[] = [];
@@ -20,7 +21,8 @@ async function fixture() {
   function credential() { return { value: 'test', expiresAt: Date.now() + 60_000 }; }
   function rpc() { return Promise.resolve({}); }
   function grant() { return Promise.resolve(); }
-  const driver: TurnDriver = { credential, rpc, grant, journal: 'unused' };
+  const driver: TurnDriver = { credential, rpc, grant, journal: 'unused',
+    ...(retainedCall ? { retainedCall } : {}) };
   function start() { return Promise.resolve(); }
   function interrupt() { return Promise.resolve(); }
   function stopBridge() { return Promise.resolve({}); }
@@ -65,8 +67,36 @@ async function fixture() {
     await bridge.close();
     server.close();
   }
-  return { bridge, reports, connect, flush, close };
+  return { bridge, reports, connect, flush, close, url };
 }
+
+async function answersOnlyAuthenticatedRetainedCallReads() {
+  const approvalId = 'a'.repeat(64);
+  const signal = { approvalId, callId: 'native-call', turnId: 'turn',
+    conversationId: 'conversation', computerId: 'computer', generation: 1,
+    serverId: 'server', connectionId: 'connection', toolName: 'write',
+    expiresAt: new Date(Date.now() + 5_000).toISOString() };
+  function retainedCall(requestedId: string) {
+    return requestedId === approvalId ? signal : undefined;
+  }
+  const computer = await fixture(retainedCall);
+  try {
+    const refused = new WebSocket(computer.url, { headers: { 'x-bridge-token': 'wrong' } });
+    await once(refused, 'error');
+    const connection = await computer.connect(0);
+    const readId = randomUUID();
+    connection.socket.send(JSON.stringify({ type: 'retained_call_read', readId, approvalId }));
+    await computer.flush(connection.socket);
+    const receipt = connection.received.find(value => value['type'] === 'retained_call_status');
+    expect(receipt).toEqual({ type: 'retained_call_status', readId, signal });
+    expect(JSON.stringify(receipt)).not.toContain('arguments');
+    expect(JSON.stringify(receipt)).not.toContain('bridge-secret');
+  } finally {
+    await computer.close();
+  }
+}
+it('answers retained-call reads only on the authenticated computer bridge',
+  answersOnlyAuthenticatedRetainedCallReads);
 
 async function doesNotSendAnInFlightSequenceTwice() {
   const computer = await fixture();
