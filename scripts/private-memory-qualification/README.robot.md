@@ -12,8 +12,9 @@ The collector uses `/usr/bin/docker` and the local `/var/run/docker.sock` only.
 The deployment owner controls Docker, the image build and the collector process.
 Browser, model and application users must have no access to these. Infrastructure
 operators remain outside the application privacy promise. The collector accepts no arguments. Any supplied argument refuses before Docker runs.
-The fixed `/etc/opencrane/private-memory-qualification.json` file contains exactly
+The fixed `/etc/opencrane/private-memory-qualification.json` file contains
 `containerId` (64 lowercase hex characters) and `siloId` (the expected raw `SILO_ID`).
+It may also contain `computerContainerId` for the separate bridge check.
 It must be a root-owned regular file, at most 1 KiB, with no group or world write
 permission. Final symlinks are refused. Root must also own and protect its parent
 directories. The deployment owner installs this file; neither its path nor target
@@ -213,9 +214,21 @@ including an executable hidden by Linux dump protection, refuse. A disposable
 fixture with the required proc access proves the two service checks; it does not
 grant that access to a deployment.
 
-The server-container runner cannot see the bridge in its separate computer
-container. Cross-container bridge proof is NOT RUN. The runner refuses with
-`complete: false` before any journey begins, even when its server check passes.
+The protected target file may also name `computerContainerId`, the exact Docker
+container id for the separate computer. Before the first server journey, the
+collector measures its running container, image, start time and host PID. It
+executes `bridge-check.ts` inside that container with a fresh challenge, the
+server installation id and a digest of the computer installation. The checker
+uses the root entrypoint's launch record and the live bridge socket. It reads
+swap and dump protection and checks process identity again after the exchange.
+The collector checks the exact computer container once more before accepting
+the narrow response. A wrong container, changed installation, missing record,
+unreadable process or changed bridge returns only a fixed failure category.
+Without `computerContainerId`, this group has no cross-container proof.
+
+The server-container runner still cannot see the bridge in its separate computer
+container. It refuses with `complete: false` before any journey begins, even if
+the separate bridge check succeeds and its server check passes.
 The supervisor forwards a fixed host refusal after cleanup. Both the supervisor
 and collector reject `private_process_missing` without `complete: false`. The
 collector saves an accepted refusal with the fixed message. An unreadable runner

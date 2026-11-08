@@ -28,6 +28,7 @@ flowchart LR
   computer -->|runs| desktop["Codex, browser and desktop"]
   computer -->|checks callers and passes for AI and MCP calls| gateway["agentgateway<br/>AI gateway"]
   computer -->|checks private callers and catalogue loads| models["libs/models<br/>AI access checks"]
+  collector["private memory collector<br/>checks processes"] -->|checks live bridge| computer
 ```
 
 ## What it is responsible for
@@ -47,6 +48,8 @@ The computer saves that confirmation without private reply text.
 - Disables bridge process dumps before it receives private work. The bridge answers
   a local protection check inside its computer container. The root entrypoint records
   the bridge process it started so later checks can reject a replacement child.
+  A protected test runner checks that record and the live process from inside the
+  computer container. This does not qualify private memory on its own.
 - Keeps the assistant's files when its computer pauses and starts again.
 - Runs the assistant, file tools and desktop as separate Linux users to limit their access.
 - Sends AI model calls and reviewed [tool server](../../GLOSSARY.md#mcp-server-tool-server)
