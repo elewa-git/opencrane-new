@@ -112,7 +112,7 @@ if (mode.startsWith("upgrade")) {
   const names = ['update-openfga', 'seed-ownership', 'confirm-ownership', 'seed-model-grants',
     'seed-provider-default', 'create-assistant', 'claim-computer', 'cleanup-departure',
     'stop-budget-turns', 'prepare-gateway-configuration', 'settle-budget',
-    'dream-memory'] as const;
+    'dream-memory', 'complete-welcome'] as const;
   async function guardedEffect(...args: Parameters<typeof effect>) {
     const effectUrl = process.env['CRASH_EFFECT_URL'];
     if (effectUrl) {
