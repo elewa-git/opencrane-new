@@ -761,3 +761,42 @@ async function slowApprovalHistory() {
   }
 }
 it('loads approval history before the short member access check', slowApprovalHistory);
+
+function welcome(payload: object) {
+  return app.inject({ method: 'POST', url: '/api/onboarding/welcome', headers, payload });
+}
+
+async function welcomeStartAndAnswer() {
+  const surveyPosition = await completeSurvey();
+  const premature = await welcome({ operation: 'start', commandId: 'early', generation: 1,
+    expectedPosition: surveyPosition, scriptVersion: 'welcome-v1', variant: 'assistant',
+    revision: 1, revisionId: 'missing' });
+  expect(premature.statusCode).not.toBe(200);
+  const started = await welcome({ operation: 'start', commandId: 'start-welcome', generation: 1,
+    expectedPosition: surveyPosition, scriptVersion: 'welcome-v1', variant: 'no_assistant' });
+  expect(started.statusCode).toBe(200);
+  const start = started.json<{ position: number; welcomeId: string }>();
+  const read = await app.inject({ url: '/api/onboarding/welcome', headers });
+  expect(read.json()).toMatchObject({ status: 'welcome_active',
+    welcomeId: start.welcomeId, nextStep: 'continue_to_workspace', answered: 0 });
+  const answer = { operation: 'answer', commandId: 'welcome-answer', generation: 1,
+    expectedPosition: start.position, welcomeId: start.welcomeId,
+    scriptVersion: 'welcome-v1', stepId: 'continue_to_workspace', stepNumber: 1,
+    answer: 'Continue to workspace' };
+  expect((await welcome({ ...answer, stepNumber: 2 })).statusCode).toBe(409);
+  const accepted = await welcome(answer);
+  expect(accepted.statusCode).toBe(200);
+  expect(accepted.json()).toMatchObject({ status: 'completion_pending' });
+  expect((await welcome({ ...answer, answer: 'Changed' })).statusCode).toBe(409);
+  const again = await welcome(answer);
+  expect(again.json()).toEqual(accepted.json());
+  const pending = await app.inject({ url: '/api/onboarding/welcome', headers });
+  expect(pending.json()).toMatchObject({ status: 'completion_pending',
+    nextStep: null, answered: 1 });
+  await runner.rebuild(personalSettings);
+  const projected = await readSurvey(pgDb(dbs.queue), 'test', 'alice');
+  expect(projected).toMatchObject({ welcome: { answered: 1,
+    status: 'completion_pending' } });
+}
+it('starts the frozen no-assistant welcome and saves its final answer as pending',
+  welcomeStartAndAnswer, 60_000);
