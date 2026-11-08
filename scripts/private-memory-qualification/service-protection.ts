@@ -30,8 +30,12 @@ function serve(socket: Socket): void {
   function timedOut(): void {
     socket.destroy();
   }
+  function disconnected(): void {
+    socket.destroy();
+  }
   socket.setTimeout(2_000);
   socket.on('data', receive);
+  socket.on('error', disconnected);
   socket.once('timeout', timedOut);
 }
 

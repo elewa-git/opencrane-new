@@ -60,7 +60,10 @@ function checksLiveServices(): void {
   const source = `
     import assert from 'node:assert/strict';
     import { spawn } from 'node:child_process';
+    import { randomUUID } from 'node:crypto';
     import { once } from 'node:events';
+    import { createConnection } from 'node:net';
+    import { setTimeout as delay } from 'node:timers/promises';
     import { readProcessIdentity, checkLiveService } from
       '${directory}/private-processes.ts';
     const services = [];
@@ -79,9 +82,21 @@ function checksLiveServices(): void {
       await once(child.stdout, 'data');
       return child;
     }
+    async function disconnectEarly(name) {
+      const socket = createConnection({ path: '\\0opencrane-private-' + name });
+      socket.on('error', function ignoreClosedClient() {});
+      await once(socket, 'connect');
+      socket.write(randomUUID() + '\\n');
+      socket.destroy();
+      await delay(25);
+    }
     try {
       const server = await start('serverDelivery');
       const bridge = await start('bridge');
+      await disconnectEarly('serverDelivery');
+      await disconnectEarly('bridge');
+      assert.equal(server.exitCode, null);
+      assert.equal(bridge.exitCode, null);
       const serverIdentity = readProcessIdentity(server.pid);
       const bridgeIdentity = readProcessIdentity(bridge.pid);
       assert.equal(checkLiveService('serverDelivery', serverIdentity), true);

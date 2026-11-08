@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { expect, it, vi } from 'vitest';
+import { readFileSync, readlinkSync } from 'node:fs';
+import { beforeEach, expect, it, vi } from 'vitest';
 import {
   checkLiveService, privateProcessNames, probePrivateProcessInventory, readProcessIdentity,
   sameProcessIdentity,
@@ -8,6 +8,20 @@ import { runnerProtected } from './runner-protection.ts';
 
 vi.mock('./runner-protection.ts', { spy: true });
 vi.mock('node:fs', { spy: true });
+
+async function allowTheHostEntrypointSnapshot(): Promise<void> {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  vi.mocked(readlinkSync).mockImplementation(function readLink(path, options) {
+    if (path === '/proc/1/exe') {
+      return '/usr/lib/systemd/systemd';
+    }
+    if (path === '/proc/1/ns/pid') {
+      return actual.readlinkSync(`/proc/${process.pid}/ns/pid`);
+    }
+    return actual.readlinkSync(path, options);
+  });
+}
+beforeEach(allowTheHostEntrypointSnapshot);
 
 function readsCurrentProcess(): void {
   const identity = readProcessIdentity(process.pid);

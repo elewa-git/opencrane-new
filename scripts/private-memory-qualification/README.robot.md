@@ -187,7 +187,7 @@ The current container inventory names the runner, server delivery, bridge,
 supervisor, proxy, native Codex wrapper, native child and any helper that receives
 a private test value. `private-processes.ts` is the first bounded part. It reads
 the runner's PID and start time from `/proc/<pid>/stat`, executable from `exe`, UID
-from `status`, cgroup membership and PID namespace. The namespace and the
+from `status`, cgroup membership, PID namespace and command arguments. The namespace and the
 collector's existing container and installation checks bind the observation to
 the measured deployment. A second read around the runner's actual dumpability
 check refuses PID reuse, exec, UID, cgroup and namespace changes. The cgroup's
@@ -195,21 +195,25 @@ effective finite memory and zero swap controls, and the actual runner's zero
 core limits and non-dumpable state, are still measured by the existing probes.
 
 The server delivery process is PID 1 in the package container. The computer
-entrypoint's kernel child list identifies its bridge child by the fixed command.
+entrypoint's kernel child list gives possible bridge children. The inventory
+reads each candidate's identity before checking its fixed command. It includes
+the command arguments in both identity reads, so an exec into another Node script
+between discovery and the live check refuses even when PID and start time stay the same.
 Both processes call the existing native helper before handling private work. A
 local abstract Unix socket answers a fresh challenge with the helper's current
 core-limit and dumpability result. The helper's socket probe obtains the peer PID
 from Linux, rather than trusting a PID in the answer. The inventory rereads PID,
-start time, executable, UID, cgroup and PID namespace around that live check. It
+start time, executable, UID, cgroup, PID namespace and command arguments around that
+live check. A client that closes early cannot take down either service's socket server. It
 requires the same cgroup and PID namespace as the runner. Unreadable proc files,
 including an executable hidden by Linux dump protection, refuse. A disposable
 fixture with the required proc access proves the two service checks; it does not
 grant that access to a deployment.
 
 The server-container runner cannot see the bridge in its separate computer
-container. It therefore returns `host_refused / private_process_missing` with
+container. Cross-container bridge proof is NOT RUN. The runner refuses with
 `complete: false` before any journey begins, even when its server check passes.
-The supervisor forwards that exact refusal after cleanup. Both the supervisor
+The supervisor forwards a fixed host refusal after cleanup. Both the supervisor
 and collector reject `private_process_missing` without `complete: false`. The
 collector saves an accepted refusal with the fixed message. An unreadable runner
 identity and an identity change have separate fixed categories. Caller-supplied

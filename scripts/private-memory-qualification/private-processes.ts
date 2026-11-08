@@ -20,6 +20,7 @@ export type ProcessIdentity = {
   uid: number;
   cgroup: string;
   containerIdentity: string;
+  commandLine: string;
 };
 
 function startTime(stat: string): string {
@@ -61,11 +62,15 @@ export function readProcessIdentity(pid: number): ProcessIdentity {
     const cgroup = readFileSync(`${prefix}/cgroup`, 'utf8');
     const executable = readlinkSync(`${prefix}/exe`);
     const containerIdentity = readlinkSync(`${prefix}/ns/pid`);
+    // Read the arguments in this first snapshot so an exec into another script
+    // cannot pass a later command check with the same PID and start time.
+    const commandLine = readFileSync(`${prefix}/cmdline`, 'utf8');
     const observedStart = startTime(stat);
     const observedUid = processUid(status);
     if (!/^0::\/[^\n]*\n$/u.test(cgroup) || !executable.startsWith('/') ||
         executable.endsWith(' (deleted)') ||
-        !/^pid:\[[1-9][0-9]*\]$/u.test(containerIdentity)) {
+        !/^pid:\[[1-9][0-9]*\]$/u.test(containerIdentity) ||
+        !commandLine.endsWith('\0') || commandLine.length < 2) {
       throw new Error('private_process_unreadable');
     }
     // Refuse a reused PID while its separate proc files are being read.
@@ -74,7 +79,7 @@ export function readProcessIdentity(pid: number): ProcessIdentity {
       throw new Error('private_process_identity_changed');
     }
     return { pid, startTime: observedStart, executable, uid: observedUid,
-      cgroup, containerIdentity };
+      cgroup, containerIdentity, commandLine };
   } catch (error) {
     if (error instanceof Error && error.message === 'private_process_identity_changed') {
       throw error;
@@ -87,7 +92,8 @@ export function sameProcessIdentity(first: ProcessIdentity, second: ProcessIdent
   return first.pid === second.pid && first.startTime === second.startTime &&
     first.executable === second.executable && first.uid === second.uid &&
     first.cgroup === second.cgroup &&
-    first.containerIdentity === second.containerIdentity;
+    first.containerIdentity === second.containerIdentity &&
+    first.commandLine === second.commandLine;
 }
 
 type PeerReply = { pid: number; reply: string };
@@ -163,32 +169,29 @@ export function checkLiveService(role: ServiceRole,
   return 'private_process_unreadable';
 }
 
-function commandLine(pid: number): string[] {
-  const bytes = readFileSync(`/proc/${pid}/cmdline`, 'utf8');
-  if (!bytes.endsWith('\0')) {
-    throw new Error('private_process_unreadable');
-  }
-  const argumentsText = bytes.slice(0, -1);
+function commandArguments(identity: ProcessIdentity): string[] {
+  const argumentsText = identity.commandLine.slice(0, -1);
   return argumentsText.split('\0');
 }
 
-function serverPid(): number | undefined {
-  const args = commandLine(1);
+function serverIdentity(): ProcessIdentity | undefined {
+  const identity = readProcessIdentity(1);
+  const args = commandArguments(identity);
   const script = args[2];
   if (args.length !== 3 || args[1] !== '--experimental-strip-types' ||
       (script !== 'apps/server/src/main.ts' && script !== '/app/apps/server/src/main.ts')) {
     return undefined;
   }
-  return 1;
+  return identity;
 }
 
-function bridgePid(): number | undefined {
+function bridgeIdentity(): ProcessIdentity | undefined {
   const childList = readFileSync('/proc/1/task/1/children', 'utf8');
   const children = childList.trim();
   if (!/^(?:[1-9][0-9]* ?)*$/u.test(children)) {
     throw new Error('private_process_unreadable');
   }
-  let found: number | undefined;
+  let found: ProcessIdentity | undefined;
   for (const entry of children.split(' ')) {
     if (!entry) {
       continue;
@@ -197,12 +200,13 @@ function bridgePid(): number | undefined {
     if (!Number.isSafeInteger(pid)) {
       throw new Error('private_process_unreadable');
     }
-    let args: string[];
+    let identity: ProcessIdentity;
     try {
-      args = commandLine(pid);
+      identity = readProcessIdentity(pid);
     } catch {
       return undefined;
     }
+    const args = commandArguments(identity);
     if (args.length !== 4 || args[1] !== '--disable-sigusr1' ||
         args[2] !== '--experimental-strip-types' || args[3] !== '/app/src/bridge.ts') {
       continue;
@@ -210,26 +214,20 @@ function bridgePid(): number | undefined {
     if (found !== undefined) {
       return undefined;
     }
-    found = pid;
+    found = identity;
   }
   return found;
 }
 
 function probeService(role: ServiceRole): true | ProtectionFailure {
-  let pid: number | undefined;
+  let identity: ProcessIdentity | undefined;
   try {
-    pid = role === 'serverDelivery' ? serverPid() : bridgePid();
+    identity = role === 'serverDelivery' ? serverIdentity() : bridgeIdentity();
   } catch {
     return 'private_process_unreadable';
   }
-  if (pid === undefined) {
+  if (identity === undefined) {
     return 'private_process_missing';
-  }
-  let identity: ProcessIdentity;
-  try {
-    identity = readProcessIdentity(pid);
-  } catch {
-    return 'private_process_unreadable';
   }
   if (identity.uid !== 1000) {
     return 'private_process_identity_changed';

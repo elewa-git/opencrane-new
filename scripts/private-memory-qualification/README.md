@@ -24,7 +24,7 @@ flowchart LR
   collector -.->|checks memory, Stop and reply loss| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
   collector -->|measures, starts checks and checks refusal format| docker["Docker<br/>running image and host"]
-  docker -->|checks protection and pinned Codex| deployment["deployment<br/>service processes and journey runner"]
+  docker -->|checks service processes and pinned Codex| deployment["deployment<br/>service processes and journey runner"]
 ```
 
 ## What it is responsible for
@@ -102,7 +102,9 @@ and `fs.suid_dumpable`. It refuses a crash dump helper unless `fs.suid_dumpable`
 Unreadable settings refuse too. It never changes host settings.
 It reads the runner's process identity before and after the helper check. The
 server and computer bridge each protect their own process and answer a local live
-check. The runner checks the process identity before and after that answer. The
+check. The runner records their command arguments with their process identity before
+checking which script they run. It checks that record again after their answer. An
+early client disconnect closes only that client's protection socket. The
 computer bridge lives in another container, so the current server-container runner
 cannot see it. The collector still refuses the container path before a journey:
 the bridge, supervisor, proxy, native wrapper, native child and canary helpers lack
