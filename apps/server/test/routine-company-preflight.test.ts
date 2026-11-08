@@ -1,0 +1,134 @@
+import { createHash } from 'node:crypto';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { natsFixture } from '@opencrane/event-store/testing';
+import type { StoredEvent } from '@opencrane/event-store';
+import { routine } from '../../../libs/authz/test/routine-fixture.ts';
+import { envelope, history } from '../../../libs/models/src/actor.ts';
+import { connectionOperationId } from '../../../libs/models/src/bearer-connections.ts';
+import { oauthConfigurationDigest } from '../../../libs/models/src/oauth-attempt.ts';
+import { oauthSelectionFixture } from '../../../libs/models/test/support/oauth-selection.ts';
+import { checkRoutineCompanyPreflight } from '../src/routine-company-preflight.ts';
+
+let nats: Awaited<ReturnType<typeof natsFixture>>;
+let counter = 0;
+beforeAll(async function startStore() {
+  nats = await natsFixture();
+});
+afterAll(async function closeStore() {
+  await nats?.close();
+});
+
+async function fixture() {
+  counter += 1;
+  const serverId = `server${counter}`;
+  const profileId = `profile${counter}`;
+  const ownerId = `owner${counter}`;
+  const selected = await oauthSelectionFixture(nats, ownerId, serverId, profileId);
+  const serverRows = await history(nats.store, `mcp-${serverId}`, 'test');
+  const registrationRevision = serverRows[0]!.sequence;
+  const optInSubject = `connection-company-${serverId}`;
+  const optIn = envelope('test', optInSubject, 'connection.company_opt_in_set', {
+    serverId, connectionId: 'installed', registrationRevision, enabled: true,
+    changedBy: 'admin', expectedSequence: 0,
+  }, connectionOperationId('test', optInSubject, 'enable'));
+  optIn.source = 'opencrane-server';
+  optIn.commandId = 'enable';
+  optIn.principal = { kind: 'human', id: 'admin' };
+  await nats.seed([optIn]);
+  const profileSubject = `connection-company:${serverId}:${profileId}`;
+  const operationId = connectionOperationId('test', profileSubject, 'save');
+  const activation = { connectionId: 'installed', ownerKind: 'company', purpose: 'company',
+    generation: 1, uid: 'uid', resourceVersion: '1',
+    endpointDigest: selected.configuration.endpointDigest, operationId,
+    changedBy: 'admin', expectedSequence: 0, appendUntil: Date.now() + 60_000,
+    reason: 'bearer_create', registrationRevision,
+    optInRevision: await nats.store.head(optInSubject) };
+  const profile = envelope('test', profileSubject, 'connection.created', {
+    siloId: 'test', custodianId: 'admin', serverId, profile: profileId,
+    secretRef: 'secret:synthetic', activation,
+  }, operationId);
+  profile.source = 'opencrane-server';
+  profile.commandId = 'save';
+  profile.principal = { kind: 'human', id: 'admin' };
+  await nats.seed([profile]);
+  const profileRevision = await nats.store.head(profileSubject);
+  const accountDigest = 'a'.repeat(64);
+  const accountId = 'verified-bot';
+  const evidence = { status: 'verified', siloId: 'test', serverId, profileId,
+    ownerKind: 'company', connectionId: 'installed', profileRevision,
+    generation: 1, accountDigest,
+    configurationDigest: oauthConfigurationDigest(selected.configuration),
+    accountId, scopes: ['openid', 'read'], expiresAt: Date.now() + 120_000 };
+  function readProfile(_rows: StoredEvent[]) {
+    return evidence;
+  }
+  const selectionSubject = `connection-selection-${ownerId}-${serverId}`;
+  const choice = { action: 'select', userId: ownerId, serverId,
+    connectionId: 'installed', profileId, profileRevision, expectedSequence: 0,
+    ownerKind: 'company', siloId: 'test', generation: 1, accountDigest };
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(['test', selectionSubject, 'choice']));
+  const selection = envelope('test', selectionSubject, 'connection.selected', choice,
+    hash.digest('hex'));
+  selection.source = 'opencrane-server';
+  selection.commandId = 'choice';
+  selection.principal = { kind: 'human', id: ownerId };
+  await nats.seed([selection]);
+  const due = routine('routine.due').data as { occurrenceId: string; rootId: string;
+    definition: Record<string, unknown> };
+  const definition = { ...due.definition, ownerId, connectionId: 'installed', profileId,
+    profileRevision, connectionRevision: profileRevision, companyAccountId: accountId,
+    scopes: ['read'] };
+  const run = { ...due, definition };
+  async function preflight(reader = readProfile) {
+    return checkRoutineCompanyPreflight(nats.store, 'test', run, 1,
+      selected.loadConfiguration, reader);
+  }
+  return { preflight, evidence, definition, profileSubject, optInSubject,
+    serverId, ownerId, selectionSubject };
+}
+
+it('checks one current company binding for the saved occurrence without sending', async function valid() {
+  const current = await fixture();
+  const append = vi.spyOn(nats.store, 'append');
+  const result = await current.preflight();
+  expect(result).toMatchObject({ occurrenceId: expect.any(String),
+    rootId: expect.any(String), computerGeneration: 1 });
+  expect(append).not.toHaveBeenCalled();
+  append.mockRestore();
+});
+
+it.each(['account', 'scopes', 'custody', 'revision', 'choice', 'opt-in', 'publication'])(
+  'refuses changed company %s before any allowance', async function changed(kind) {
+    const current = await fixture();
+    if (kind === 'account') current.evidence.accountId = 'different';
+    if (kind === 'scopes') current.evidence.scopes = ['openid'];
+    if (kind === 'revision') current.evidence.profileRevision += 1;
+    if (kind === 'choice') {
+      const changed = envelope('test', current.selectionSubject, 'connection.selected', {
+        action: 'clear', userId: current.ownerId, serverId: current.serverId,
+        connectionId: 'installed', expectedSequence: await nats.store.head(current.selectionSubject),
+      });
+      await nats.seed([changed]);
+    }
+    if (kind === 'opt-in') {
+      const changed = envelope('test', current.optInSubject,
+        'connection.company_opt_in_set', { serverId: current.serverId,
+          connectionId: 'installed', registrationRevision: 1, enabled: false,
+          changedBy: 'admin', expectedSequence: await nats.store.head(current.optInSubject) });
+      await nats.seed([changed]);
+    }
+    if (kind === 'publication') {
+      const changed = envelope('test', `mcp-${current.serverId}`,
+        'mcp.server_unpublished', { serverId: current.serverId, unpublishedBy: 'admin' });
+      await nats.seed([changed]);
+    }
+    function unavailable() {
+      throw new Error('Custody unavailable');
+    }
+    const reader = kind === 'custody' ? unavailable : undefined;
+    const append = vi.spyOn(nats.store, 'append');
+    await expect(current.preflight(reader)).rejects.toThrow('Routine company unavailable');
+    expect(append).not.toHaveBeenCalled();
+    append.mockRestore();
+  });
