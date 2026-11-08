@@ -24,6 +24,10 @@ The history table also keeps the parent and child identifiers from a saved publi
 It keeps the publication kind and recorded result reference when present. It never
 copies the published text or a file key. The server checks who may see each identifier.
 Each publication stays on its own history entry, even when another chat reuses its turn id.
+Modern child task outcomes also get one history entry. The table keeps a small set of
+saved task references and the execution result. It keeps the financial state unavailable
+until a spending record can be joined. A missing parent or child record stays unavailable.
+It copies no task text, result or file reference.
 
 Saved spending resolutions keep the original person, date and chosen amount,
 plus a reference to the saved change. They do not prove an external action finished or that held money was released.
@@ -44,7 +48,7 @@ flowchart LR
   models["libs/models<br/>model and replay tests"] -.->|uses database locks and the test helper| projections
   ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and checks saved changes| projections["libs/projections<br/>read tables, change history, routines, memory, surveys, personas and welcomes"]
   server["apps/server<br/>back end"] -->|reads tables, own and admin routine lists, run pages and spending choices| pg["PostgreSQL<br/>database"]
-  projections -->|saves history, isolated child publication facts and spending; keeps private audits and process exits outside chat feeds| pg
+  projections -->|saves history, isolated child publication and task outcomes, and spending; keeps private audits and process exits outside chat feeds| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections
   server -.->|reads member references, tool readiness, nightly memory inputs and child requests awaiting activation| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]

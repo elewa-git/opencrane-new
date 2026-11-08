@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { EventEnvelope } from '@opencrane/events';
+import type { AuditRecord } from '@opencrane/protocol';
 
 export const auditIdentifier = z.string().regex(/^[\w:.-]{1,300}$/u);
 
@@ -16,7 +17,22 @@ export function isDispatchEvent(type: string): boolean {
   return type === 'tool.dispatch_started' || type === 'tool.dispatch_recorded';
 }
 
+export function dispatchStatus(outcome: unknown): AuditRecord['status'] {
+  if (outcome === 'outcome_unknown') {
+    return 'unknown';
+  }
+  if (outcome === 'not_dispatched') {
+    return 'not_dispatched';
+  }
+  return 'recorded';
+}
+
 export function auditLinks(event: EventEnvelope, data: Record<string, unknown>) {
+  if (event.type.startsWith('delegation.')) {
+    // Keep child work separate from every matching chat turn and envelope link.
+    return { request: undefined, permit: undefined, approval: undefined,
+      conversationId: undefined, turnId: undefined, requesterId: undefined };
+  }
   if (event.type === 'conversation.child_result_published') {
     // Use only the reviewed publication payload; envelope links may name private work.
     return { request: undefined, permit: undefined, approval: undefined,

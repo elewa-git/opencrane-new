@@ -7152,6 +7152,18 @@ the requester. No company verification reader is wired into this route, so compa
 choices return unavailable. Successful receipts still contain only status, sequence and
 changeRef. No browser UI, credential release or live company activation is added.
 
+## Delegation history
+
+Modern delegation outcomes in organisation history are read from the bounded audit
+projection. The server checks the child conversation's current read right before
+showing its task id, execution outcome, evidence or task link. Parent references
+need that parent's current read right as well. A reader without the child right
+gets one neutral entry with no identity, result, private count or link. Missing
+joins report unavailable; money stays unavailable even after execution ends.
+The list and detail routes load history before the current organisation access
+check, and GET does not append or start work. The publication collision test
+continues to protect parent conversation history from child references.
+
 ## Organisation overview read
 
 `GET /api/org/overview` accepts optional `limit` (1–50, default 20) and `cursor`.

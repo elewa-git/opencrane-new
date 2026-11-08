@@ -210,6 +210,20 @@ The server removes each id unless the reader has current rights to that chat.
 Replaying the audit table restores the same facts without publishing again. A human
 interim entry has no result reference; the table does not invent one or an asset count.
 
+Modern `delegation.started` records supply only checked task, root, assistant,
+generation, conversation and parent references. The strict server event check
+rejects altered sources, subjects and payloads with a fixed error. A modern
+`delegation.completed` becomes one audit anchor with its saved execution result,
+safe reason code and terminal evidence position. Permitted readers also see the original start
+event reference and position. A missing start or mismatched parent join stays
+unavailable. The row's public id is the SHA-256 digest of its event id, so a
+restricted child id is not copied to a reader. Starts and completions cannot
+attach to an unrelated chat turn or publication row. The projection copies no
+result, scope list, file reference or private text. Financial status is
+`unavailable` until the separately owned spend join exists. Replay and duplicate
+delivery restore the same entry without starting work. Run `npm run replay -- audit`
+on existing installations, then `npm run replay -- audit --verify`.
+
 Run `node --experimental-strip-types apps/ops/src/worker.ts audit` with the usual
 projection settings. `npm run replay -- audit --verify` replays metadata under the
 runner's lock in one transaction, preserving table grants and rolling back on

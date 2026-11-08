@@ -8,6 +8,7 @@ This folder lets people see why OpenCrane allowed, refused or charged for work. 
 - Returns details of one organisation history entry to a current owner or admin.
 - Checks parent and child chat rights separately before showing publication references.
 - Checks those rights for every publication record returned with another history entry.
+- Checks a child task's own chat rights before showing its outcome, identity or link.
 - Checks the exact read-table and permission receipts for admissions, removals, role and ownership changes.
 - Limits conversation history to the reader's own requests in a conversation they may read.
 - Loads the history before checking current access, so a slow read cannot return private information to someone removed during loading.
@@ -16,6 +17,8 @@ This folder lets people see why OpenCrane allowed, refused or charged for work. 
 
 These requests only read history. They save no changes and start no assistant work. Missing setup or an unavailable permission check returns an unavailable result rather than history.
 The parent link opens only that chat. It gives no access to the child or its files.
+Task history shows execution separately from spending. Spending stays unavailable
+without a saved join. Restricted task entries use one neutral placeholder.
 Each admission keeps its own receipts, even when the same person returns later.
 Invitation progress is not included. Removal receipts do not report whether departure cleanup has finished.
 

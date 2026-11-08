@@ -373,6 +373,7 @@ async function delegation(id: string, conversationId: string, parentDelegationId
 
 async function finishDelegation(id: string, outcome: 'completed' | 'failed' | 'cancelled') {
   const data = { version: 1, delegationId: id, outcome,
+    ...(outcome === 'cancelled' ? { reason: 'root_stopped' } : {}),
     terminalEvidence: { eventId: `${id}-terminal`, position: 3 },
     resultReference: { eventId: `${id}-private-result`, position: 4 } };
   await append(`delegation-${id}`, 'delegation.completed', data, `${id}-outcome`);
@@ -387,7 +388,12 @@ it('keeps execution and unresolved money separate across terminal outcomes', asy
   expect(first.statusCode, first.body).toBe(200);
   const completed = auditResponseSchema.parse(first.json()).rows[0]!.records[0]!;
   expect(completed).toMatchObject({ executionOutcome: 'completed', moneyStatus: 'unavailable',
-    joinStatus: 'current', delegationId: 'child-task', taskHref: '/workspace?conversation=child' });
+    effectStatus: 'unavailable',
+    joinStatus: 'current', delegationId: 'child-task', startEventId: 'child-task-start',
+    taskHref: '/workspace?conversation=child' });
+  expect(completed.startPosition).toBeGreaterThan(0);
+  const linkedDetail = await detail('admin', auditResponseSchema.parse(first.json()).rows[0]!.id);
+  expect(linkedDetail.statusCode, linkedDetail.body).toBe(200);
   expect(first.body).not.toContain(privateText);
   expect(first.body).not.toContain('private-result');
   for (const [id, outcome] of [['failed-task', 'failed'], ['stopped-task', 'cancelled']] as const) {
@@ -396,6 +402,7 @@ it('keeps execution and unresolved money separate across terminal outcomes', asy
     const response = await detail('admin', `${id}-outcome`);
     const record = auditDetailSchema.parse(response.json()).records[0]!;
     expect(record.executionOutcome).toBe(outcome);
+    if (outcome === 'cancelled') expect(record.executionReason).toBe('root_stopped');
     expect(record.moneyStatus).toBe('unavailable');
   }
 });
@@ -405,8 +412,12 @@ it('shows one neutral child placeholder unless its own conversation is readable'
   await delegation('child-task', 'child', 'parent-task');
   await finishDelegation('child-task', 'failed');
   const parentOnly = await detail('owner', 'child-task-outcome');
+  const parentList = await list('owner', '?type=delegation');
+  expect(parentList.body).not.toContain('"delegationId":"child-task"');
+  expect(parentList.body).not.toContain('private-assistant');
   const parentRecord = auditDetailSchema.parse(parentOnly.json()).records[0]!;
   expect(parentRecord.delegationAccess).toBe('restricted');
+  expect(parentRecord.startEventId).toBeUndefined();
   expect(parentOnly.body).not.toContain('"delegationId":"child-task"');
   expect(parentOnly.body).not.toContain('private-assistant');
   const childOnly = await detail('admin', 'child-task-outcome');
@@ -419,6 +430,7 @@ it('shows one neutral child placeholder unless its own conversation is readable'
   const neitherRecord = auditDetailSchema.parse(neither.json()).records[0]!;
   expect(neitherRecord.delegationAccess).toBe('restricted');
   expect(neither.body).not.toContain('"delegationId":"child-task"');
+  expect(JSON.stringify(logArguments)).not.toContain(privateText);
 });
 
 it('keeps missing delegation joins unavailable and two equal-time outcomes stable', async () => {
@@ -449,4 +461,39 @@ it('deduplicates delegation delivery and replays without work or extra appends',
     createLogger('delegation-replay', { level: 'silent' }), { verify: true });
   expect((await list('admin', '?type=delegation')).json()).toEqual(before.json());
   expect(appendSpy).not.toHaveBeenCalled();
+});
+
+it('refuses a removed admin on delegation pages and details', async () => {
+  await delegation('child-task', 'child');
+  await finishDelegation('child-task', 'failed');
+  const page = auditResponseSchema.parse((await list('admin', '?type=delegation')).json());
+  await append('member-admin', 'member.removed', {
+    memberId: 'admin', removedBy: 'owner', reason: 'access_removed',
+  }, 'remove-admin-delegation');
+  const detailResponse = await detail('admin', page.rows[0]!.id);
+  const continuation = await list('admin', `?type=delegation&before=${page.rows[0]!.records[0]!.position}`);
+  expect(detailResponse.statusCode).toBe(403);
+  expect(continuation.statusCode).toBe(403);
+  expect(detailResponse.body).not.toContain(privateText);
+});
+
+it('rejects altered delegation evidence without echoing private fields', async () => {
+  await delegation('child-task', 'child');
+  const saved = (await nats.store.readEvent(await nats.store.head())).event;
+  const changed = { ...saved, data: { ...z.record(z.string(), z.unknown()).parse(saved.data),
+    resultText: privateText } };
+  await expect(auditTrail.apply(db, changed, 999))
+    .rejects.toThrow('Invalid delegation audit event');
+  expect(JSON.stringify(logArguments)).not.toContain(privateText);
+  expect((await list('admin', '?type=delegation')).body).not.toContain(privateText);
+});
+
+it('leaves older delegation formats out of modern history', async () => {
+  const legacy = envelope('test', 'delegation-old', 'delegation.started', {
+    delegationId: 'old', parentComputerId: 'parent', childComputerId: 'child',
+    rootBudgetId: 'budget',
+  });
+  await auditTrail.apply(db, legacy, 999);
+  const response = await list('admin', '?type=delegation');
+  expect(auditResponseSchema.parse(response.json()).rows).toHaveLength(0);
 });
