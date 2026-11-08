@@ -103,14 +103,19 @@
               ‹ Back to conversation
             </button>
             <h2 #participantHeading tabindex="-1" id="participantHeading">Participants</h2>
-            <p class="participant-help">Only the creator manages participants. New people see
-              messages from when they are added.</p>
+            @if (closeReview.isClosed(selectedConversation(), messages())) {
+              <p class="participant-help">This conversation is closed. Participants cannot be
+                changed.</p>
+            } @else {
+              <p class="participant-help">Only the creator manages participants. New people see
+                messages from when they are added.</p>
+            }
             @if (participantManager.notice()) {
               <p class="participant-notice" role="status">{{ participantManager.notice() }}</p>
             }
             @if (participantManager.stale(); as stale) {
               <div class="stale-participant" role="status">
-                <strong>{{ stale.displayName || stale.memberId }} is removed</strong>
+                <strong>{{ stale.displayName || 'A colleague' }} is removed</strong>
                 <span>The colleague is no longer in the company. The stale choice was removed.</span>
               </div>
             }
@@ -123,12 +128,13 @@
               <ul class="participant-list">
                 @for (person of participantManager.rows(); track person.memberId) {
                   <li>
-                    <span>{{ person.displayName || person.memberId }}
+                    <span>{{ person.displayName || 'Former colleague' }}
                       @if (person.memberId === selectedConversation()?.createdBy) {
                         <small>Creator · cannot leave</small>
                       } @else if (!person.displayName) { <small>Removed from company</small> }
                     </span>
                     @if (participantManager.canManage()
+                        && !closeReview.isClosed(selectedConversation(), messages())
                         && person.memberId !== selectedConversation()?.createdBy) {
                       <button class="participant-action" type="button"
                         [disabled]="participantManager.state() !== 'ready'"
@@ -151,7 +157,7 @@
                 }
                 <ul class="participant-list eligible-list">
                   @for (person of participantManager.eligible(); track person.memberId) {
-                    <li><span>{{ person.displayName || person.memberId }}</span>
+                    <li><span>{{ person.displayName || 'Former colleague' }}</span>
                       <button class="participant-action" type="button"
                         [disabled]="participantManager.state() !== 'ready'"
                         (click)="participantManager.add(person.memberId)">Add</button>
@@ -170,7 +176,8 @@
                       ? 'Searching…' : 'Load more colleagues' }}
                   </button>
                 }
-              } @else if (participantManager.canLeave()) {
+              } @else if (participantManager.canLeave()
+                && !closeReview.isClosed(selectedConversation(), messages())) {
                 <button class="participant-leave" type="button"
                   [disabled]="participantManager.state() !== 'ready'"
                   (click)="participantManager.leave()">Leave conversation</button>

@@ -1484,5 +1484,8 @@ and stay in session storage across navigation. Check status reads the original i
 A 409 reloads server facts; 401 or 403 clears protected content. A saved close or its
 verified status makes the current transcript read only immediately. The first close
 event supplies who closed it and when. History and permitted file reads remain available.
+The closed group still offers Participants for reading. Missing names use “Former
+colleague”, and its panel offers no add, remove or leave action. A stale choice
+with no name uses “A colleague” in its notice.
 `npm run visual:screen-p4-6-close` captures both pages at 1280 and 390 pixels with
 intercepted replies; it does not qualify a fresh installation.

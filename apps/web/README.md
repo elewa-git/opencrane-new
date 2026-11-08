@@ -57,7 +57,8 @@ For everyone, the website:
 - Expands saved command and tool details under their activity lines in chat.
 - Lists recent and archived conversations and opens saved chat links.
 - Lets people the server authorises close a conversation after a review. Closed chats keep
-  their saved messages and files for people who can still read them.
+  their saved messages and files for people who can still read them. A closed group keeps
+  its participant list readable without offering changes or showing a removed person's id.
 - Shows tool actions for review and lets the requester approve or deny them.
   A saved takeover cancellation names its cause and end time.
   Approval details say when the tool replied, while an uncertain result stays unconfirmed.

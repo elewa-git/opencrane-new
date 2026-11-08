@@ -46,6 +46,13 @@ async function serve(kind, closed, commands, checks, route) {
       next: null } });
     return;
   }
+  if (url.pathname === '/api/conversations/group-chat/participants') {
+    await route.fulfill({ json: { rows: [
+      { memberId: 'me', displayName: 'Alex' },
+      { memberId: 'removed-member', displayName: null },
+    ], joinPosition: 1, accessPosition: 2, canManage: true, canLeave: false } });
+    return;
+  }
   if (url.pathname === '/api/assistants') {
     await route.fulfill({ json: { rows: [] } });
     return;
@@ -100,7 +107,8 @@ function clippedCloseContent(elements) {
   const clipped = [];
   for (const element of elements) {
     const bounds = element.getBoundingClientRect();
-    const container = element.closest('.transcript, .workspace-header, .composer-dock, .main');
+    const container = element.closest('dialog, .transcript, .workspace-header, '
+      + '.composer-dock, .main');
     if (!container) continue;
     const containerBounds = container.getBoundingClientRect();
     const overflows = element.scrollWidth > element.clientWidth + 1
@@ -151,13 +159,17 @@ async function capture(browser, width, kind, closed) {
     }
     await page.evaluate(waitForFonts);
     assert(await page.evaluate(pageHasNoOverflow), `No overflow at ${width}px`);
-    if (width === 390) {
-      const closeAreas = kind === 'group'
-        ? '.workspace-header h1, .closed-chat-notice, .closed-composer-notice'
-        : '.closed-session-notice, .closed-session-composer';
-      const clipped = await page.locator(closeAreas).evaluateAll(clippedCloseContent);
-      assert.deepEqual(clipped, [], 'The title and close notices fit the phone');
+    let closeAreas = 'oc-close-review-dialog dialog h2';
+    if (kind === 'group') {
+      if (width === 390) {
+        closeAreas += ', .workspace-header h1';
+      }
+      closeAreas += ', .closed-chat-notice, .closed-composer-notice';
+    } else {
+      closeAreas += ', .closed-session-notice, .closed-session-composer';
     }
+    const clipped = await page.locator(closeAreas).evaluateAll(clippedCloseContent);
+    assert.deepEqual(clipped, [], `The title and close notices fit at ${width}px`);
     const small = await page.locator('oc-close-review-dialog dialog button:visible, '
       + '.close-opener:visible, .closed-session-composer:visible, '
       + '.closed-composer-notice:visible').evaluateAll(countSmallControls);
@@ -169,6 +181,19 @@ async function capture(browser, width, kind, closed) {
     }
     const filename = `${kind}-${closed ? 'THR-15' : 'THR-14'}-${width}.png`;
     await page.screenshot({ path: `${output}/${filename}`, fullPage: true });
+    const files = [filename];
+    if (kind === 'group' && closed) {
+      await page.getByRole('button', { name: 'Participants' }).click();
+      const panel = page.locator('.participant-panel');
+      await panel.getByText('Former colleague').waitFor();
+      assert.equal(await panel.getByText('removed-member').count(), 0,
+        'The panel does not show a removed member id');
+      assert.equal(await panel.locator('.participant-action').count(), 0,
+        'The closed group has no participant change controls');
+      const panelFilename = `group-participants-THR-15-${width}.png`;
+      await page.screenshot({ path: `${output}/${panelFilename}`, fullPage: true });
+      files.push(panelFilename);
+    }
     if (!closed) {
       await page.keyboard.press('Escape');
       assert(await page.getByRole('button', { name: 'Close conversation' }).evaluate(
@@ -190,7 +215,7 @@ async function capture(browser, width, kind, closed) {
         'Check status keeps the original command id');
       assert.equal(commands.length, 1, 'Checking status sends no close command');
     }
-    return filename;
+    return files;
   } finally {
     await page.close();
   }
@@ -218,8 +243,9 @@ try {
   const captures = [];
   for (const width of [1280, 390]) {
     for (const kind of ['group', 'session']) {
-      captures.push(await capture(browser, width, kind, false));
-      captures.push(await capture(browser, width, kind, true));
+      const reviewFiles = await capture(browser, width, kind, false);
+      const closedFiles = await capture(browser, width, kind, true);
+      captures.push(...reviewFiles, ...closedFiles);
     }
   }
   await checkForeign(browser, 'group');
@@ -233,7 +259,8 @@ try {
     `Reduced motion stopped dialog decoration. Escape and Cancel returned focus. ` +
     `A double click sent one command, and reload checked its original id. Foreign ` +
     `chats revealed no title or close action. Closed screens kept saved history ` +
-    `and had no composer after reload.\n\n` +
+    `and had no composer after reload. The closed group participant panel used a ` +
+    `neutral name and offered no change controls.\n\n` +
     `Files: ${captures.join(', ')}.\n\n` +
     `Fresh-install live journey: NOT RUN.\n`);
   console.log(`Captured ${captures.length} close review screens.`);

@@ -82,6 +82,8 @@ members for recipient review. If membership changes before the first send, the p
 must choose the group again and review its members. A group message shows its saved
 author, using a colleague name when the current colleague list supplies one.
 Participant lists mark colleagues who have left the company as removed.
+When a closed group has a participant without a current name, the list says
+“Former colleague” and offers no participant changes.
 Phones show the participant list with a Back button.
 
 The first send keeps recovery information on screen until its result is known.
