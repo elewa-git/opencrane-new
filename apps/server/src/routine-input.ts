@@ -76,20 +76,26 @@ async function saveRoutineInput(...args: Parameters<typeof loadRoutinePreparatio
   const conversationId = run.conversationId;
   let position: number;
   if (previous) {
-    await preparation.checkAccess();
     verify(previous);
+    await preparation.checkAccess();
+    // Check custody after the first access read, then renew access before replying.
+    verify(previous);
+    await preparation.checkAccess();
     position = previous.sequence;
   } else {
     const data = encrypt();
+    checkCustody(data);
     const event = { id: run.messageId, commandId: run.messageId, type: 'message.posted',
       subject: `conversation-${conversationId}`, silo: worker.silo,
       source: 'opencrane-server', time: new Date().toISOString(),
       principal: { kind: 'system' as const, id: worker.workerId }, data };
-    // Finish history and custody reads before starting the short publication check.
+    // A key can disappear during the first access read. Recheck it before the final
+    // short publication check, which reads no key file.
+    await preparation.checkAccess();
+    checkCustody(data);
     const deadline = await preparation.checkAccess();
     async function checkAccess() {
       await preparation.checkCurrent();
-      checkCustody(data);
     }
     const command = { event, expectedSequence: rows.at(-1)!.sequence, historyChecked: true as const,
       deadline, checkAccess };

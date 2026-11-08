@@ -61,6 +61,8 @@ The desktop writer is not live yet.
 An internal helper can save one encrypted routine input in its prepared private session.
 It uses the recorded owner's instructions as user data. The bridge leaves these sessions
 idle: saving the input does not wake a computer, start a turn or reserve money.
+The helper reads the private keys before its short permission check, so a slow key store
+cannot use up the time allowed for that check.
 Public chat subscriptions refuse these sessions. History, display and chat lists keep
 the prepared input private without decrypting it.
 An internal preparation check can recover the original routine admission and sender

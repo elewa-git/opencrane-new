@@ -5566,13 +5566,15 @@ the worker principal and the recorded owner as author. The encrypted text begins
 position without re-encrypting or appending. Receipts keep `executionAvailable: false`.
 The shared session checks enforce current worker ownership, owner admission, unchanged
 definition, Stop, access and `startBy`. History and custody reads precede the short write
-check. No growing conversation stream is watched for receipt access.
+check. The append access callback reads no key file; it checks only current work and
+small access streams. No growing conversation stream is watched for receipt access.
 The bridge checks `routinePreparation` before pending work, lifecycle recovery, wake or
 delivery. The exclusion applies regardless of message author kind, including replayed
 history. Memory delivery wiring is unchanged. Root/budget admission, Stop and required
 Ask must be connected before any later enablement.
 `test/routine-session.test.ts` exercises both helpers, crash/retry recovery, custody and
-access loss, the actual bridge path and offline replay with effects forbidden.
+access loss, the actual bridge path and offline replay with effects forbidden. It also
+reads a saved encrypted input after restarting custody with the configured wrap key.
 Public WebSocket subscriptions share the HTTP reserved-id rule and send `refused`
 with close code 1008 for `routine-session-` ids, before loading or decrypting content.
 History checks the saved creation separately from the requested page, so a cursor

@@ -1148,14 +1148,23 @@ With `enabled` absent or false, or `replay` true, it returns disabled without
 reading or saving any routine. With `enabled: true`, it refuses before a due claim
 if the callback and its checked dependencies are missing. The routines projection
 worker calls this entry at startup with the single `ROUTINE_EXECUTION_ENABLED`
-setting, which defaults off. Setting it to true currently refuses startup because
-the worker has no delivery callback. The same enabled option can be passed to the
+setting, which defaults off. With literal `true`, it first opens the same
+`CONVERSATION_KEYS_DIR` and `CONVERSATION_WRAP_KEY_FILE` used by server chat.
+The key directory and 32-byte wrap-key file must be present. The loader binds
+all key operations to `SILO_ID` and masks file and key errors. Missing custody
+refuses before the scheduler can claim a due slot. The worker does not read
+custody in disabled or replay mode. It still refuses enabled startup because
+the budget actor, computer wake and company dispatch are absent. The same enabled option can be passed to the
 server composition when the budget actor and bridge share a checked production
 hand-off. `createRoutineDelivery` now carries the scheduler's checked due receipt,
 leadership cancellation and original turn id into that composition. The test runs
 this callback through `runRoutineScheduler`; the worker still supplies none of its
 runtime dependencies. Public routine reads still report `executionAvailable: false`. See
 [the build record](../../docs/process/p4-24-pr10i/README.robot.md).
+`test/routine-custody.test.ts` checks restart decryption with the existing key
+format, wrong-silo refusal and missing files. `test/routine-dispatch.test.ts`
+checks that an enabled worker refuses missing custody and still makes no claim,
+hold or send when custody is present.
 `test/routine-dispatch.test.ts` starts the real worker with absent, false, true
 and invalid settings. It checks continued projection work when off and startup
 refusal without claims when on or invalid. It also checks the helper's exact
