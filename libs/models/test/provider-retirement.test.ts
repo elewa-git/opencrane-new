@@ -5,6 +5,7 @@ import { decisionProvider } from '../src/decision-provider.ts';
 import { envelope } from '../src/actor.ts';
 import { managedFixture, provider, credential } from './managed-fixture.ts';
 import { data } from '../src/state.ts';
+import { until } from '@opencrane/authz/testing';
 
 const choice = { kind: 'assistant', dependantId: 'assistant', task: 'chat_turn',
   old: { providerId: 'primary', model: 'gpt-6-luna', state: 'active', bindingSequence: 42 },
@@ -95,10 +96,22 @@ it('refuses retirement saved after allow audit and releases an unsent hold', asy
   expect(setup.actor.state.reservations[0]?.settledCents).toBe(0);
 });
 
-it('keeps the actual outcome and charge for a call admitted before retirement', async () => {
+it('finishes a streaming response admitted before retirement and keeps its charge', async function inFlightRetirement() {
   const setup = await managedFixture();
-  expect((await setup.call()).status).toBe(200);
-  await setup.append('provider-primary', 'provider.retired', retirement);
+  setup.hold();
+  const pendingCall = setup.call();
+  await until(() => setup.received() === 1);
+  await until(() => setup.admitted.length === 1);
+  expect(setup.actor.state.reservations[0]?.settledCents).toBeUndefined();
+  try {
+    await setup.append('provider-primary', 'provider.retired', retirement);
+    expect(setup.actor.state.reservations[0]?.settledCents).toBeUndefined();
+  } finally {
+    setup.release();
+  }
+  const response = await pendingCall;
+  expect(response.status).toBe(200);
+  expect(response.text).toContain('response.completed');
   await setup.settled();
   expect(setup.received()).toBe(1);
   expect(setup.actor.state.reservations[0]?.settledCents).toBe(1);
