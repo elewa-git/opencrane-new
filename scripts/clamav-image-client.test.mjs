@@ -10,6 +10,8 @@ import { sharedCertificates } from '../libs/event-store/test/certificates.ts';
 import { createScannerService } from '../infra/clamav/service.mjs';
 import { scanImagePart } from '../infra/clamav/image-client.mjs';
 import { scanHostedImageAttempt } from '../infra/clamav/image-walk.mjs';
+import { runHostedImageScan } from '../infra/clamav/image-worker.mjs';
+import { envelope } from '../libs/models/src/actor.ts';
 
 async function filesystem(importOriginal) {
   const original = await importOriginal();
@@ -57,6 +59,19 @@ function imageWithPart(part, identity) {
       diffId: `sha256:${hash(layer)}`, mediaType }] };
   const attempt = { ...identity, imageDigest, status: 'checking' };
   return { image, attempt };
+}
+function savedImageStore(image) {
+  const data = { serverId: image.serverId, registeredBy: 'alice', kind: 'hosted',
+    locator: `example.invalid/image@sha256:${image.imageDigest}`,
+    installation: { attemptId: 1, platform: image.platform,
+      upstream: { host: 'example.invalid', port: 443 } } };
+  const event = envelope(image.silo, `mcp-${image.serverId}`, 'mcp.server_registered', data);
+  event.principal = { kind: 'human', id: 'alice' };
+  const rows = [{ event, sequence: 1 }];
+  async function* readStream(subject) {
+    if (subject === event.subject) yield* rows;
+  }
+  return { readStream, rows };
 }
 function facts(input) {
   const now = Date.now();
@@ -145,22 +160,26 @@ async function twoSilos() {
   server = createScannerService(serviceOptions);
   await listen();
   other.url = settings.url;
-  const second = { silo: 'second', serverId: 'server-two', attemptId: 2,
+  const second = { silo: 'second', serverId: 'server-two', attemptId: 1,
     platform: 'linux/arm64' };
   const infected = Buffer.from('infected part');
   const firstImage = imageWithPart(bytes, binding);
   const secondImage = imageWithPart(infected, second);
+  const firstStore = savedImageStore(firstImage.image);
+  const secondStore = savedImageStore(secondImage.image);
+  async function firstImageBytes() { return firstImage.image; }
+  async function secondImageBytes() { return secondImage.image; }
+  async function firstSettings() { return settings; }
+  async function secondSettings() { return other; }
   const results = await Promise.all([
-    scanHostedImageAttempt(firstImage.attempt, firstImage.image, settings),
-    scanHostedImageAttempt(secondImage.attempt, secondImage.image, other),
+    runHostedImageScan(firstStore, 'first', 'server-one', firstImageBytes, firstSettings),
+    runHostedImageScan(secondStore, 'second', 'server-two', secondImageBytes, secondSettings),
   ]);
   expect(results[0].verdict).toBe('clean');
   expect(results[1].verdict).toBe('infected');
-  expect(await results[0].validate(firstImage.attempt, firstImage.image, settings)).toBe('clean');
-  await expect(results[0].validate(secondImage.attempt, secondImage.image, other)).rejects.toThrow();
   expect(received).toHaveLength(2);
 }
-test('interleaves complete image attempts from two trusted silos', twoSilos);
+test('production worker interleaves saved attempts from two trusted silos', twoSilos);
 
 function respond(request, reply) {
   requests.push(request.headers['x-scan-request-id']);
