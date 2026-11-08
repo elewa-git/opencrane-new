@@ -3229,13 +3229,14 @@ replies return unknown; the original `/changes/:commandId` GET checks saved hist
 
 `GET /api/memory/:scopeId/maintenance` checks scope read access once and requires
 caught-up memory tables and an unchanged table generation. It returns the current
-binding and `not_configured`, `disabled`, `clean` or `qualification_blocked`.
+binding and `not_configured`, `disabled`, `clean`, `qualification_blocked` or
+`preparing` after a saved root admission.
 Dirty status includes `waitingCount` and the first 02:00 UTC after both now and
 the binding save time. Clean status has `nextAt: null`. Dispatch is always disabled.
 All responses use no-store. There is no run,
 retry or scheduler endpoint. The nightly worker records blocked, missed and empty nights,
-and the GET includes their bounded history as described below. No allowance is
-allocated and nothing can spend. The cap records consent.
+and the GET includes their bounded history as described below. A checked
+personal night may allocate one 100-cent root; no call is reserved or sent.
 
 `test/memory.test.ts` covers HTTP consent, scope/assistant/payer refusal, retries,
 conflicts, status privacy and equal binding tables after offline replay without
@@ -3610,7 +3611,8 @@ The existing maintenance GET now includes up to 20 payload-free run records,
 newest first, capped at 16 KiB. The current binding member alone can read this
 status; scope read permission remains required. Other members receive 404.
 Checkpoint and generation checks reject stale or rebuilding tables. Reads still
-check access once. The 100-cent cap is recorded only; dispatch stays disabled.
+check access once. A prepared result names its 100-cent root, model and provider;
+dispatch stays disabled.
 
 ## Effective shared child reads (#90, PR 2)
 

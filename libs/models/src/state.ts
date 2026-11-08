@@ -192,6 +192,9 @@ export function applyBudget(state: BudgetState, event: EventEnvelope, sequence =
 function applyRoot(state: BudgetState, event: EventEnvelope, sequence: number) {
   if (event.type === 'budget.root_allowance_set') {
     const allowance = budgetRootAllowanceSetDataSchema.parse(event.data);
+    if (allowance.maintenance && allowance.allowanceCents !== 100) {
+      throw new Error('Invalid maintenance allowance');
+    }
     const root = { ...allowance, position: sequence };
     state.roots.push(root);
   } else if (event.type === 'budget.root_stopped') {

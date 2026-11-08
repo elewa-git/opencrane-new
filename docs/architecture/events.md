@@ -454,6 +454,9 @@ counts process starts for that fixed identity.
 A root is one turn's fixed allowance. `budget.root_allowance_set` binds rootId,
 requesterId, conversationId, turnId, threadId, assistantId, computerId, generation,
 payingGroupId and allowanceCents (1–1,000). Allocation holds no money.
+For a personal nightly scope, its maintenance binding names the saved night,
+scope, input key, frequent automation task, model, provider, tariff and binding position.
+The allowance is exactly 100 cents and starts no call or computer.
 Optional preparationDigest binds routine preparation to its frozen occurrence, exact saved
 creation/input and provider/model/tariff choice. It is an immutable SHA-256 fingerprint;
 older roots and child roots omit it. Allocation starts no execution.
@@ -700,7 +703,7 @@ It never creates or deletes keys or runs reactions. Public access is not impleme
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `memory.maintenance_recorded` | Native nightly scheduler or server preflight | Payload-free scope night history; `no_changes` reviews exact input revisions and a content position; `refused` records a safe reason | `dream-memory` checks only an original nightly intent; no root, dispatch or charge |
+| `memory.maintenance_recorded` | Native nightly scheduler or server preflight | Payload-free scope night history; `no_changes` reviews exact input revisions and a content position; `refused` records a safe reason; `prepared` names one checked root, model and provider | `dream-memory` checks only an original nightly intent; prepared records do not dispatch or charge |
 | `memory.maintenance_bound` | Authenticated consenting member | Current memory maintenance binding | Native scheduling records intent only; no dispatch or spending |
 | `memory.written` | OpenCrane memory MCP (remember) | Postgres memory projection for that scope | mark that scope for nightly dreaming |
 | `memory.corrected` | Person-scope HTTP correction; governed personal memory MCP; nightly dreaming job (planned) | Publishes the new revision and hides superseded content and dependent facts | `cleanup-memory` destroys superseded and dependent keys and verifies search removal |

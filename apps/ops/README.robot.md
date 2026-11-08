@@ -586,7 +586,8 @@ are retained without an expiry and recovered before the new scan. Each keeps its
 original UTC night, even after retries are exhausted or the dispatcher restarts.
 A trigger is removed only after every scope has been checked successfully.
 Selection reads the current clock after preparing each scope. Reading history
-cannot extend the original fifteen-minute window. An unresolved `due` record skips a later night as overlap.
+cannot extend the original fifteen-minute window. An unresolved `due` record,
+`qualification_blocked` intent or prepared root skips a later night as overlap.
 No model, tool, computer or budget port is available to the scan.
 
 Tests: `apps/ops/test/nightly-memory.test.ts` uses real PostgreSQL and NATS,
@@ -605,6 +606,8 @@ original night. Seeing the event alone does not mean queue cleanup has finished.
 With `MODEL_DECISION_URL`, `dream-memory` sends only a saved scope and night
 identifier to the loopback decision process. It ignores server results and
 retries unavailable preparation. It sends no memory text.
+The worker registers `memoryPrepareHandler` from `libs/handlers` so the same
+HTTP preparation path is used by the server admission test.
 
 ### Nightly recovery test evidence
 

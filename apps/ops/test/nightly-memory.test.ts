@@ -292,7 +292,8 @@ async function overlap() {
   await scan('2026-10-12T02:00:00Z');
   const [first] = await records();
   const recorded = memoryMaintenanceRecordedDataSchema.parse(first);
-  const unresolved = { ...recorded, action: 'due', reason: null };
+  const unresolved = { ...recorded, action: 'prepared', reason: null,
+    rootId: 'a'.repeat(64), model: 'gpt-6-luna', providerId: 'primary' };
   await append('memory.maintenance_recorded', unresolved, '2026-10-12T02:01:00Z');
   await scan('2026-10-13T02:00:00Z');
   const expected = { action: 'missed', reason: 'overlap' };
@@ -301,8 +302,21 @@ async function overlap() {
   const saved = await records();
   expect(saved).toEqual(expectedHistory);
 }
-it('records overlap and retains the dirty backlog',
+it('records overlap after preparation and retains the dirty backlog',
   overlap, 30_000);
+
+async function overlapBeforePreparedResult() {
+  await setup();
+  await scan('2026-10-12T02:00:00Z');
+  const first = await records();
+  expect(first).toMatchObject([{ action: 'refused', reason: 'qualification_blocked' }]);
+  await scan('2026-10-13T02:00:00Z');
+  const saved = await records();
+  expect(saved).toHaveLength(2);
+  expect(saved[1]).toMatchObject({ action: 'missed', reason: 'overlap' });
+}
+it('holds the next night while a prepared result is missing',
+  overlapBeforePreparedResult, 30_000);
 
 async function processes() {
   await setup();

@@ -1,0 +1,1 @@
+An eligible personal nightly memory scope can now receive one checked 100-cent spending allowance. Duplicate delivery and lost replies recover the same root, even after the window or binding changes. Unfinished preparation blocks another night's root. No model, tool or computer starts.

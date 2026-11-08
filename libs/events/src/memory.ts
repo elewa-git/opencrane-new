@@ -202,12 +202,44 @@ const maintenanceRecord = z.strictObject({
   acceptedCapCents: acceptedNightlyCap, intendedAt: z.iso.datetime(), selectedAt: z.iso.datetime(),
   inputRefs: z.array(maintenanceReference).max(32),
   reviewedPosition: z.int().nonnegative().optional(),
-  action: z.enum(['due', 'refused', 'missed', 'no_changes']),
+  action: z.enum(['due', 'prepared', 'refused', 'missed', 'no_changes']),
   reason: z.enum(['qualification_blocked', 'window_missed', 'overlap',
-    'binding_changed', 'input_changed', 'provider_unavailable', 'scope_occupied']).nullable(),
+    'binding_changed', 'input_changed', 'provider_unavailable', 'scope_occupied',
+    'access_unavailable', 'access_denied', 'budget_unavailable',
+    'price_unavailable']).nullable(),
+  rootId: digest.optional(),
+  model: identifier.optional(),
+  providerId: identifier.optional(),
 });
-function validRun(data: z.infer<typeof maintenanceRecord>) {
+type MaintenanceRecord = z.infer<typeof maintenanceRecord>;
+
+function hasPreparedFields(data: MaintenanceRecord) {
+  return data.rootId !== undefined && data.model !== undefined &&
+    data.providerId !== undefined;
+}
+
+function hasAnyPreparedField(data: MaintenanceRecord) {
+  return data.rootId !== undefined || data.model !== undefined ||
+    data.providerId !== undefined;
+}
+
+function validNoChanges(data: MaintenanceRecord) {
+  if (data.reason !== null || data.reviewedPosition === undefined) {
+    return false;
+  }
+  for (const reference of data.inputRefs) {
+    if (reference.position > data.reviewedPosition) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function validRun(data: MaintenanceRecord) {
   if (data.intendedAt !== `${data.date}T02:00:00.000Z`) {
+    return false;
+  }
+  if (data.action !== 'prepared' && hasAnyPreparedField(data)) {
     return false;
   }
   if (data.action !== 'no_changes' && data.reviewedPosition !== undefined) {
@@ -216,16 +248,11 @@ function validRun(data: z.infer<typeof maintenanceRecord>) {
   if (data.action === 'due') {
     return data.reason === null;
   }
+  if (data.action === 'prepared') {
+    return data.reason === null && hasPreparedFields(data);
+  }
   if (data.action === 'no_changes') {
-    if (data.reason !== null || data.reviewedPosition === undefined) {
-      return false;
-    }
-    for (const reference of data.inputRefs) {
-      if (reference.position > data.reviewedPosition) {
-        return false;
-      }
-    }
-    return true;
+    return validNoChanges(data);
   }
   if (data.action === 'refused') {
     return data.reason !== null && data.reason !== 'window_missed' &&

@@ -4,10 +4,17 @@ Nightly preflight reads the saved scope history before any later short access ch
 Only the original scope and date claim can receive a result. A changed binding or
 fact revision, occupied scope, expired window or unavailable managed route records
 a safe refusal. A lost append reply is checked through the original night and result
-id. A still eligible night remains qualification blocked until root admission is
-implemented. This path never starts a turn, model call, tool call or computer and
-never allocates an allowance. The status read returns only saved references and
-safe reasons.
+id. A personal night can receive one 100-cent root through the models process's
+existing budget actor. Admission reads member, assistant, payer and direct model,
+memory MCP, memory-read and memory-write grants before a two-second access check.
+It also checks a published, reviewed, free Allow for Correct, the current
+provider key, price, computer identity and deployment
+qualification. The budget actor checks all three spending ceilings in its serial
+queue. The prepared scope record names the root, model and provider. Before new-admission
+checks, recovery reads the original budget event in case the root was saved but the
+scope result was not. It uses the saved root even after the window or binding changes.
+An unresolved earlier night blocks another night's preparation. No step starts a turn,
+model call, tool call or computer.
 
 The [server contract](../../README.robot.md) describes the existing memory commands.
 The [initial personal load contract](../../../../docs/process/p4-15-pr5d/README.robot.md)

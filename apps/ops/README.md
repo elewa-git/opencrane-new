@@ -18,7 +18,7 @@ under `apps`. [apps/server](../server/README.md) saves changes as
 flowchart LR
   apps["apps<br/>applications"] --> ops["apps/ops<br/>workers, recovery and readiness"]
   apps --> server["apps/server<br/>back end"]
-  ops -.->|checked claim when supplied| server
+  ops -.->|checked claim and saved nightly preparation| server
   server -->|saves changes| nats["NATS<br/>event log"]
   ops -->|reads events and checks unfinished welcomes at startup| nats
   ops -->|saves checked results, welcome completion and routine records| nats
@@ -170,6 +170,8 @@ It reads candidate scopes and their progress from the content database using a r
 account. If those tables are behind or unavailable, it keeps the trigger for recovery.
 It records why a dirty scope is blocked or missed. Failed triggers keep their original night
 until startup or a later night can record the missed result. It sends no memory task to a computer.
+An earlier night that still awaits preparation, or has a prepared root, blocks a new
+night for that scope.
 It records `no_changes` when a forgotten fact leaves nothing eligible. Later nights skip
 that reviewed change. It takes at most 32 whole facts in saved order and stops when
 the next fact would exceed the 16 KiB input limit. It excludes facts that depend on

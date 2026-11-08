@@ -141,7 +141,7 @@ built-in functions.
 
 ```mermaid
 flowchart LR
-  models -.->|reads saved provider retirement before model calls; replay tests use the database helper| store
+  models -.->|checks provider retirement and nightly allowances before any call| store
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks owner Ask and release bindings and company tool scopes, public tool addresses, reads, hosted image status and check requests, original call status, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, fixed positions before private replies, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal bearer and verified OAuth choices with current access and owner revocation from HTTP, admin company opt-in, explicit company choices, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature, licence and bound vulnerability checks, control, provider choice and spending"]
   server -->|asks for the saved first child start| models
   models -->|tests private sign-in, refresh and revocation requests, revokes refresh and access tokens; checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains reply withdrawal after expiry or access loss; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
@@ -303,7 +303,8 @@ including retired and older records, still blocks a complete dependency result.
 ## What it is responsible for
 
 The local decision service accepts a saved nightly memory identifier for safe
-preflight checks. It cannot start memory work or allocate an allowance from this path.
+preflight checks. Its shared budget actor can allocate one 100-cent root after
+current access, provider and spending checks. This path starts no computer or call.
 
 A requester can record an explicit company account choice when trusted verification
 evidence is available. The choice names one exact profile revision and gives no tool

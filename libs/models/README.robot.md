@@ -1224,7 +1224,11 @@ No stack or paid provider call proves this route yet.
   verified context when available; gateway JWT failures occur before ext_authz.
   The loopback `/maintenance/prepare` endpoint accepts a saved scope and night
   identifier. It returns only whether metadata preparation is available and
-  grants no send permission.
+  grants no send permission. An eligible personal scope can allocate one root
+  through this process's existing budget actor. The actor checks the 100-cent
+  allowance and current global, group and assistant capacity in its serial queue.
+  The saved scope result points to that root. Lost replies recover the same root;
+  no preparation response permits a model or tool call.
 - `budgets` is a PostgreSQL projection using the existing runner. The worker
   upgrades older projections to version 5 by replaying budget, call and effect rows before resuming.
   Rebuild online with `npm run replay -- budgets --verify`; a repair changes

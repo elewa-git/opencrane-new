@@ -5,6 +5,7 @@ import { remoteCatalogueWatch } from './integrations/remote-catalogue-watch.ts';
 import { conversationKeys } from './chat/keys.ts';
 import { startRecordedChild } from './chat/child-start.ts';
 import { prepareNightlyMaintenance } from './memory/maintenance-preparation.ts';
+import { readDeploymentQualification } from '../../../scripts/private-memory-qualification/deployment.ts';
 // The lease chooses which process runs this worker. Budget decisions still only
 // append events to NATS.
 import { readFile, mkdir } from 'node:fs/promises';
@@ -144,7 +145,9 @@ try {
       }
       const options = { silo, store: events.store, db: db.db, binding,
         feed: { memberId: unavailableMemberId } };
-      return prepareNightlyMaintenance(options, scopeId, nightId);
+      return prepareNightlyMaintenance(options, scopeId, nightId,
+        undefined, { actor, secrets: verification?.secrets, managedCalls,
+          qualification: readDeploymentQualification });
     }
     const dispatchOptions = { acknowledged, routes: mcpRoutes, requireLeader: requireDispatchLeader,
       requireCatalogue: watch.requireCurrent, childStart };

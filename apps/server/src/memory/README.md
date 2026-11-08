@@ -11,7 +11,10 @@ This folder lets people review, save, correct and forget information the assista
 - Allows an assistant to save or correct a personal fact only when all loaded facts are recorded.
 - Previews eligible facts for a saved private turn without sending text to a computer.
 - Records initial personal references in two checked steps and supplies the selected text once.
-- Records choices and safe refusal status for one saved nightly scope. Upkeep remains disabled.
+- Records choices, safe refusals and one checked spending allowance for a saved
+  personal nightly scope. It does not start a computer or send a call.
+  If a root was saved but its reply was lost, preparation finds that same root
+  before checking whether a new night could start.
 
 When a loaded fact changes, expires or loses access, the saved withdrawal stops the
 computer and asks the original browser to clear its completed reply. The reply identity
@@ -81,7 +84,7 @@ is never sent again automatically.
 | [mcp.ts](mcp.ts), [recall-delivery.ts](recall-delivery.ts), [recall-proof.ts](recall-proof.ts), [agent-lineage.ts](agent-lineage.ts) | Serve assistant recall, remember and personal correction tools with proof of loaded facts. |
 | [invalidation.ts](invalidation.ts), [access-loss.ts](access-loss.ts), [stop.ts](stop.ts) | Record withdrawn memory context and stop its matching connected turn. |
 | [initial-delivery.ts](initial-delivery.ts), [initial-access.ts](initial-access.ts) | Check deployment results and saved membership before recording initial personal references. |
-| [turn-preview.ts](turn-preview.ts), [maintenance.ts](maintenance.ts), [maintenance-preparation.ts](maintenance-preparation.ts) | Preview private-turn memories and record nightly choices, refusal and history. |
+| [turn-preview.ts](turn-preview.ts), [maintenance.ts](maintenance.ts), [maintenance-preparation.ts](maintenance-preparation.ts), [maintenance-root.ts](maintenance-root.ts) | Preview private-turn memories and check one nightly allowance. |
 
 ## How it connects
 
@@ -91,7 +94,7 @@ flowchart LR
   chat["Chat"] -->|supplies saved turn facts| memory
   gateway["AI gateway"] -->|passes checked recall, remember, correct and forget calls| memory
   memory -->|clears withdrawn or stopped private replies| chat
-  memory -->|checks access and facts before saving and replying| models["Models library"]
+  memory -->|checks access, facts and nightly allowance| models["Models library"]
   memory -->|supplies initial input once| computer["Computer input renderer"]
 ```
 
