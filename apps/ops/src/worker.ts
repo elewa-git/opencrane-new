@@ -1,6 +1,7 @@
 import { scanConnections, connectionCleanupHandler, connectionCustodyFromFile,
   budgets, ownershipSeedHandler, ownershipConfirmationHandler, settlementHandler, modelGrantHandler,
-  providerDefaultHandler, initialiseBudgetProjection, budgetStopHandler } from '@opencrane/models';
+  providerDefaultHandler, initialiseBudgetProjection, budgetStopHandler,
+  welcomeCompletionHandler } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
 import { rm, writeFile } from 'node:fs/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
@@ -20,7 +21,6 @@ import { memoryPrepareHandler } from './memory-prepare.ts';
 import { SandboxClient } from './kubernetes.ts';
 import { lifecycleHandlers, watchComputers } from './lifecycle.ts';
 import { personalKeyHandler } from './personal-keys.ts';
-import { welcomeCompletionHandler } from './welcome-completion.ts';
 import { departureCleanupHandler } from './departure-cleanup.ts';
 import { memoryCleanupHandler, recoverMemoryCleanup } from './memory-cleanup.ts';
 import { McpKubernetes } from './mcp-kubernetes.ts';

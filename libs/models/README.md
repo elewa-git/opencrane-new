@@ -27,6 +27,9 @@ settlement; paid tests and other sends still do.
 
 The AI access and spending library for OpenCrane. Its running part is the models process, a separate program whose start file lives in `apps/server` (`src/models-main.ts`). It runs beside [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), which forwards AI requests. The library also picks the model for each task, keeps the price list and [budgets](../../GLOSSARY.md#budget), holds the [tool rules](../../GLOSSARY.md#tool-rule-allow-ask-block) and the one-time approvals for Ask tools, and records who owns the silo.
 
+The background worker also uses this library to finish a saved welcome after a
+member's final answer. That check starts no assistant work.
+
 A saved takeover ends unused approvals for the same computer generation and turn.
 Reading saves each cancellation once. HTTP decisions defer that save until the server
 checks ownership and current write access. Used approvals keep their dispatch evidence,
@@ -148,7 +151,7 @@ flowchart LR
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   models -->|checks one held Ask replacement permit| gateway
   gateway -->|usage and tool dispatch records| models
-  models -->|saves events, local account revocations, remote starts and unsent proof; recovers budgets in order and applies saved routine Stops, pauses with saved admin authority, verified owner removal or assistant deactivation, Ask denial or expiry, unconfirmed delivery and retirements; reads payer, spending limits and bounded routine presence for providers and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
+  models -->|saves checked events, including welcome completion; recovers budgets and routine Stops; reads payer, spending limits and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also

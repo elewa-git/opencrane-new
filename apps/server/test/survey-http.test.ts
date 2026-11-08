@@ -13,7 +13,7 @@ import { conversationKeys, pgDb, personalSettings, readSurvey, ProjectionRunner 
   from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { buildServer } from '../src/server.ts';
-import { welcomeCompletionHandler } from '../../ops/src/welcome-completion.ts';
+import { welcomeCompletionHandler } from '@opencrane/models';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;

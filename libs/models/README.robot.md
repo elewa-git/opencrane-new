@@ -2,6 +2,17 @@
 
 For people, read [README.md](README.md) first.
 
+## Saved welcome completion
+
+`welcomeCompletionHandler` lives here so the ops worker and its HTTP fixture
+share one typed completion rule. It reads the personal stream before the
+two-second access check, verifies the frozen script and exact saved answer,
+then checks current membership and the assigned assistant stream. A stable
+system command id makes one conditional append of `onboarding.completed`.
+Retries read the original outcome. The no-assistant variant uses its verified
+saved start; later provisioning does not change its completion. Projection
+replay never calls this handler.
+
 ## Original Ask call status
 
 `readOriginalCallStatus` reads saved approval, decision, dispatch and computer

@@ -5,7 +5,8 @@ import { assistantCreatedDataSchema, onboardingCompletedDataSchema,
   parseEventByType, welcomeAnswerRecordedDataSchema, welcomeStartedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import { registerHandler } from '@opencrane/handlers';
-import { authorityFence, currentMembership } from '@opencrane/models';
+import { authorityFence } from './authority.ts';
+import { currentMembership } from './ownership.ts';
 
 type Store = Pick<EventStore, 'readStream' | 'head' | 'append'>;
 
