@@ -54,6 +54,8 @@ function refusesChangedStart(): void {
     ...bridge, startTime: '201',
   });
   expect(checkBridge()).toEqual({ result: 'private_process_identity_changed' });
+  expect(bridgeIdentity).toHaveBeenCalledTimes(2);
+  expect(checkLiveService).toHaveBeenCalledWith('bridge', bridge);
 }
 it('refuses a reused bridge PID after the live exchange', refusesChangedStart);
 
@@ -61,6 +63,8 @@ function refusesChangedFinalIdentity(change: Partial<ProcessIdentity>): void {
   vi.mocked(bridgeIdentity).mockReturnValueOnce(bridge).mockReturnValueOnce(bridge)
     .mockReturnValueOnce({ ...bridge, ...change });
   expect(checkBridge()).toEqual({ result: 'private_process_identity_changed' });
+  expect(bridgeIdentity).toHaveBeenCalledTimes(3);
+  expect(probeContainer).toHaveBeenCalledTimes(2);
 }
 it.each([
   { executable: '/other/node' }, { uid: 1002 }, { cgroup: '0::/other\n' },
@@ -71,6 +75,8 @@ function refusesChangedRunner(): void {
   vi.mocked(readProcessIdentity).mockReturnValueOnce(runner)
     .mockReturnValueOnce({ ...runner, startTime: '101' });
   expect(checkBridge()).toEqual({ result: 'private_process_identity_changed' });
+  expect(readProcessIdentity).toHaveBeenCalledTimes(2);
+  expect(bridgeIdentity).toHaveBeenCalledTimes(3);
 }
 it('refuses a replaced probe process', refusesChangedRunner);
 
@@ -85,6 +91,8 @@ it('keeps a raw proc error out of the response', refusesDeniedProc);
 function refusesSwapOrDump(failure: 'swap_not_disabled' | 'core_limit_not_zero'): void {
   vi.mocked(probeContainer).mockReturnValueOnce(true).mockReturnValueOnce(failure);
   expect(checkBridge()).toEqual({ result: failure });
+  expect(probeContainer).toHaveBeenCalledTimes(2);
+  expect(checkLiveService).toHaveBeenCalledWith('bridge', bridge);
 }
 it.each(['swap_not_disabled', 'core_limit_not_zero'] as const)(
   'refuses changed container protection: %s', refusesSwapOrDump);
