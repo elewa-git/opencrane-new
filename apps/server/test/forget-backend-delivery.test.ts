@@ -84,7 +84,7 @@ async function retriesMissedTurnDelivery() {
   const forgotten = Promise.withResolvers<void>();
   async function observeForget(command: Parameters<typeof append>[0]) {
     const result = await append(command);
-    if (result.status === 'appended' && command.event.type === 'memory.forgotten') {
+    if (result.status === 'appended' && memoryForgottenEventSchema.safeParse(command.event).success) {
       forgotten.resolve();
     }
     return result;

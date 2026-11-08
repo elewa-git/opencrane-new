@@ -1,4 +1,4 @@
-import { once } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import * as net from 'node:net';
@@ -117,9 +117,10 @@ function createDiscoveryControls(remember: boolean | MemoryNames) {
     names = remember;
   }
   const received: string[] = [];
+  const events = new EventEmitter();
   const resume = Promise.withResolvers<void>();
   const calls = new Map<string, NativeMemoryCall>();
-  return { received, resume, calls, names, holdDiscovery: false, loseReload: false };
+  return { received, events, resume, calls, names, holdDiscovery: false, loseReload: false };
 }
 
 type DiscoveryControls = ReturnType<typeof createDiscoveryControls>;
@@ -142,6 +143,7 @@ function handleNativeProtocol(
     }
     const method = String(request['method']);
     discovery.received.push(method);
+    discovery.events.emit(method);
     let result: unknown = {};
     if (method === 'thread/start') {
       const params = record(request['params']);
@@ -398,7 +400,19 @@ export async function preflightFixture(gateway = 'http://127.0.0.1:1',
     callId: string = randomUUID()) {
     return call(thread, 'recall', args, headers, callId);
   }
-  return { call, recall, open: sessions.open, openCurrent, prepare, received: discovery.received,
+  async function waitForTurnStarts(expected: number) {
+    function turnStartsReceived() {
+      return discovery.received.filter(isTurnStart).length;
+    }
+    while (turnStartsReceived() < expected) {
+      await once(discovery.events, 'turn/start');
+    }
+  }
+  function isTurnStart(method: string) {
+    return method === 'turn/start';
+  }
+  return { call, recall, waitForTurnStarts, open: sessions.open, openCurrent, prepare,
+    received: discovery.received,
     callers: proxy.callers, loads, driver, mcp: proxy.mcp, close, pauseDiscovery,
     resume: discovery.resume.resolve, dropReloadReply };
 }

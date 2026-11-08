@@ -188,23 +188,23 @@ async function prepareChat(setup: Setup, memory: MemoryOptions,
       const connected = { ...link, connectionId: 1 };
       return Promise.resolve(connected);
     }
-    async function dispatched() {
+    async function dispatch(refuseComputer: boolean) {
       dispatchAttempts += 1;
       const refused = new Set<string>();
-      if (missFirstDispatch && dispatchAttempts === 1) {
+      if (refuseComputer) {
         refused.add('computer');
       }
       await processConversation(options, setup.tokens, conversation, assistant,
         refused, connectedComputer);
       expect(link.rejection).toBeUndefined();
-      if (missFirstDispatch && dispatchAttempts === 1) {
-        expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts - 1);
-      }
-      expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts);
     }
-    // Retry pending delivery as the bridge watcher does on a busy host.
-    const wait = { timeout: 30_000 };
-    await vi.waitFor(dispatched, wait);
+    if (missFirstDispatch) {
+      await dispatch(true);
+      expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts - 1);
+    }
+    await dispatch(false);
+    await native.waitForTurnStarts(expectedStarts);
+    expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts);
     await link.settled();
     return dispatchAttempts;
   }
