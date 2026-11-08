@@ -5,12 +5,13 @@ import { createHash, createHmac } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import type { AuthConfig, SessionData } from '@opencrane/auth';
-import { approvalCards, readApproval, decideApproval, currentAuthority, approvalActivity,
+import { approvalCards, readApproval, decideApproval, ApprovalNotFound,
+  currentAuthority, approvalActivity,
   readOriginalCallStatus, type RetainedCall }
   from '@opencrane/models';
 import { readEvents } from '@opencrane/projections';
 import { writeChatAccess, isChatRefused, conversationParticipation, ChatAccessApplying } from './access.ts';
-import { requireMember, MemberRefusal, idSchema } from '../members/guard.ts';
+import { requireMember, MemberRefusal, idSchema, sameOrigin } from '../members/guard.ts';
 import { sessionFor } from '../members/routes.ts';
 import type { ChatOptions } from './routes.ts';
 
@@ -82,12 +83,14 @@ function registerOriginalCallStatusRoute(app: FastifyInstance,
       // Check access even when history is missing, so callers cannot probe for saved calls.
       const checks = { write: false, conversationId };
       const access = await requireMember(req, reply, config, options, checks);
+      if (readFailure instanceof ApprovalNotFound) {
+        return reply.code(403).send(refusedStatus);
+      }
       if (!result) throw readFailure;
       const outsideParticipation = result.requestPosition < access.access.historyPosition;
-      const otherChildRequester = access.access.contextKind === 'shared_child' &&
-        result.status.requesterId !== access.memberId;
+      const otherRequester = result.status.requesterId !== access.memberId;
       if (result.conversationId !== conversationId || outsideParticipation ||
-          otherChildRequester) {
+          otherRequester) {
         return reply.code(403).send(refusedStatus);
       }
       await updateLiveStatus(result, options, logicalRequestId);
@@ -112,6 +115,9 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
       const context = await requireMember(req, reply, config, options, checks);
       const { session, memberId, access } = context;
       const configured = context.options;
+      if (req.method === 'POST' && !sameOrigin(req, config)) {
+        return reply.code(403).send(refusedStatus);
+      }
       // The token covers the whole Cookie header and conversation, blocking reuse across either.
       const csrf = createHmac('sha256', config.cookieSecret)
         .update(JSON.stringify(['approval', req.headers.cookie, conversationId]))
@@ -277,7 +283,7 @@ async function readDecisionApproval(options: ChatOptions, approvalId: string) {
     return await readApproval(options.store, options.silo, approvalId, readOptions);
   } catch (error) {
     // Hide missing approval records in the same way as another person's approval.
-    if (error instanceof z.ZodError) {
+    if (error instanceof z.ZodError || error instanceof ApprovalNotFound) {
       throw new MemberRefusal(403, 'refused', { cause: error });
     }
     throw error;

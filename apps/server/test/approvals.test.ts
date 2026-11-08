@@ -963,8 +963,8 @@ async function hidesCallPresenceAfterAccessLoss() {
     const missingForMember = await setup.app.inject({
       url: missingUrl, headers: setup.headers(),
     });
-    expect(missingForMember.statusCode).toBe(503);
-    expect(missingForMember.json()).toEqual({ status: 'unavailable' });
+    expect(missingForMember.statusCode).toBe(403);
+    expect(missingForMember.json()).toEqual({ status: 'refused' });
     const removed = await setup.append('participation-conversation', 'participant.removed', {
       conversationId: 'conversation', participantId: 'alice', removedBy: 'owner',
     });

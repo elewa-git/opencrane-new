@@ -110,7 +110,11 @@ export function bridgeApprovals(store: EventStore, silo: string, assistantId: st
       sendSettlement(entry.approvalId, 'outcome_unknown');
       entry.outcomeSent = true;
     }
-    // Keep watching this saved call until its original deadline or retry decision.
+    // Release the watch at its original deadline. Unknown dispatch stays saved.
+    if (Date.parse(expiresAt) <= Date.now()) {
+      waiting.delete(entry.approvalId);
+      return;
+    }
     rememberPositions(entry, positions, expiresAt);
   }
 

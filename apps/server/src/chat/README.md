@@ -31,8 +31,9 @@ connected yet.
 - Includes the assistant service's ready or waiting state in authorised chat history and live updates.
 - Starts assistant turns, delivers files and work, and checks reports before saving replies.
 - Handles a person stopping a reply, spending stops and tool approvals.
-- Checks saved non-dispatch proof against a private signal from the original computer
-  before showing that the same Ask call is still waiting.
+- Shows saved Ask call status only to its requester. It checks saved non-dispatch
+  proof against a private signal from the original computer before showing whether
+  that call is still waiting.
 - Lets the original requester authorise one replacement while that call is still waiting.
   The computer keeps the request bytes; the server passes only the saved decision.
 - Keeps private sessions separate when people share an assistant's computer.

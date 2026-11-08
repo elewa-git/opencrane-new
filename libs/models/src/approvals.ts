@@ -118,6 +118,12 @@ async function askApproval(store: EventStore, silo: string, bound: Binding,
   return current;
 }
 
+export class ApprovalNotFound extends Error {
+  constructor() {
+    super('Approval not found');
+  }
+}
+
 export async function readApproval(store: EventStore, silo: string, approvalId: string,
   options: ApprovalReadOptions = {}):
   Promise<{ request: Request; state: ApprovalCard['state']; sequence: number;
@@ -128,6 +134,7 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
   const now = options.now ?? new Date();
   const deadline = options.deadline ?? Infinity;
   const rows = await history(store, `approval-${approvalId}`, silo, deadline);
+  if (rows.length === 0) throw new ApprovalNotFound();
   const request = toolApprovalRequestedDataSchema.parse(rows[0]?.event.data);
   const record = approvalRecord(rows);
   const { state, permitId } = record;
