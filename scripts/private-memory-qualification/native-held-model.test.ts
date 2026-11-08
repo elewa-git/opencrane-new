@@ -34,8 +34,28 @@ async function closedResponseCannotProveHeldTurn(): Promise<void> {
       await delay(10);
     }
     expect(serverSawClosure).toBe(true);
-    await expect(model.wait()).rejects.toThrow('native_turn_not_held');
+    const nextWait = model.wait();
+    function settled(): string {
+      return 'settled';
+    }
+    const waitOutcome = nextWait.then(settled, settled);
+    const outcome = await Promise.race([waitOutcome, delay(50, 'pending')]);
+    expect(outcome).toBe('pending');
     expect(() => model.assertHeld()).toThrow('native_turn_not_held');
+
+    const nextClient = request(options);
+    try {
+      const nextResponse = await new Promise<import('node:http').IncomingMessage>(
+        function receivedNext(resolve): void {
+          nextClient.once('response', resolve);
+          nextClient.end();
+        },
+      );
+      await expect(nextWait).resolves.toBeUndefined();
+      nextResponse.destroy();
+    } finally {
+      nextClient.destroy();
+    }
   } finally {
     client.destroy();
     await model.close();
