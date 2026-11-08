@@ -1,10 +1,11 @@
 import { spawn } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, rmdirSync,
-  statfsSync } from 'node:fs';
+  statfsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const lock = '/run/opencrane-memory-qualification.lock';
+const helperRecord = `${lock}/helper-identity`;
 const protectionFailures = JSON.parse(process.argv[1]);
 const args = JSON.parse(process.argv[2]);
 let child;
@@ -17,6 +18,7 @@ const output = [];
 let recordsBefore = new Set();
 let snapshotsReady = false;
 let journeyChallenge;
+let journeyRequest;
 const deadline = setTimeout(cancel, 120_000);
 
 function killGroup() {
@@ -54,6 +56,35 @@ function groupIsRunning() {
     }
   }
   return false;
+}
+
+function processStart(pid) {
+  const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+  const end = stat.lastIndexOf(') ');
+  if (end < 0) {
+    throw new Error('process_unreadable');
+  }
+  const fields = stat.slice(end + 2).trimEnd().split(' ');
+  const start = fields[19];
+  if (!start || !/^[1-9][0-9]*$/u.test(start)) {
+    throw new Error('process_unreadable');
+  }
+  return start;
+}
+
+function saveHelperIdentity() {
+  if (!journeyRequest?.imageDigest || !journeyRequest?.installationId) {
+    return;
+  }
+  if (!/^[0-9a-f-]{36}$/u.test(journeyChallenge) ||
+      !/^sha256:[a-f0-9]{64}$/u.test(journeyRequest.imageDigest) ||
+      !/^sha256:[a-f0-9]{64}$/u.test(journeyRequest.installationId)) {
+    throw new Error('journey_identity_invalid');
+  }
+  const contents = `${journeyChallenge} ${child.pid} ${processStart(child.pid)} ` +
+    `${process.pid} ${processStart(process.pid)} ` +
+    `${journeyRequest.imageDigest} ${journeyRequest.installationId}\n`;
+  writeFileSync(helperRecord, contents, { flag: 'wx', mode: 0o600 });
 }
 
 function isHostRefusal() {
@@ -136,6 +167,7 @@ async function finish(code) {
       clearTransientFiles();
     }
     if (locked) {
+      rmSync(helperRecord, { force: true });
       rmdirSync(lock);
     }
     // Forward only the fixed host refusal from a failed runner, after cleanup succeeds.
@@ -193,6 +225,7 @@ function receive(buffer) {
       const request = JSON.parse(input);
       if (typeof request?.challengeId === 'string') {
         journeyChallenge = request.challengeId;
+        journeyRequest = request;
       }
     }
     const lockOptions = { mode: 0o700 };
@@ -204,6 +237,7 @@ function receive(buffer) {
     // Put the journey and its children in one process group, outside this supervisor.
     const childOptions = { detached: true, stdio: 'pipe' };
     child = spawn(args[0], args.slice(1), childOptions);
+    saveHelperIdentity();
     function waitForClose(resolve) {
       child.on('close', resolve);
     }

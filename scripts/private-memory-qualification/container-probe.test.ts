@@ -4,10 +4,12 @@ import { probeContainer } from './container-probe.ts';
 import { runnerProtected } from './runner-protection.ts';
 import { probePrivateProcessInventory } from './private-processes.ts';
 import { runJourney } from './journey.ts';
+import { proveCanaryHelper, readCanaryHelperBinding } from './canary-helper-proof.ts';
 
 vi.mock('node:fs', { spy: true });
 vi.mock('./runner-protection.ts', { spy: true });
 vi.mock('./private-processes.ts', { spy: true });
+vi.mock('./canary-helper-proof.ts', { spy: true });
 let files: Map<string, string>;
 const mount = '29 23 0:26 / /sys/fs/cgroup ro - cgroup2 cgroup rw\n';
 const requestData = {
@@ -29,6 +31,14 @@ function unchangedPath(path: unknown): string {
   return String(path);
 }
 function prepare(): void {
+  const identity = { pid: process.pid, startTime: '123', executable: '/usr/local/bin/node',
+    uid: 0, cgroup: '0::/test\n', containerIdentity: 'pid:[123]',
+    commandLine: '/usr/local/bin/node\0journey.mjs\0' };
+  vi.mocked(readCanaryHelperBinding).mockReturnValue({
+    helper: identity, supervisor: identity,
+    imageDigest: requestData.imageDigest, installationId: requestData.installationId,
+  });
+  vi.mocked(proveCanaryHelper).mockReturnValue(true);
   files = new Map([
     ['/proc/swaps', 'Filename Type Size Used Priority\n/private/swap file 1 0 -2\n'],
     ['/proc/sys/kernel/core_pattern', '|/private/collector %p\n'],

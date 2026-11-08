@@ -5,14 +5,18 @@ import { probeHost } from './host-probe.ts';
 import { runJourney } from './journey.ts';
 import { probeContainer } from './container-probe.ts';
 import { checkNative } from './native-checks.ts';
-import { proveCanaryHelper } from './canary-helper-proof.ts';
-import { probePrivateProcessInventory } from './private-processes.ts';
+import { proveCanaryHelper, readCanaryHelperBinding } from './canary-helper-proof.ts';
+import { probePrivateProcessInventory, type ProcessIdentity } from './private-processes.ts';
 
 vi.mock('./host-probe.ts', { spy: true });
 vi.mock('./container-probe.ts', { spy: true });
 vi.mock('./native-checks.ts', { spy: true });
 vi.mock('./canary-helper-proof.ts', { spy: true });
 vi.mock('./private-processes.ts', { spy: true });
+const exampleIdentity: ProcessIdentity = {
+  pid: process.pid, startTime: '123', executable: '/usr/local/bin/node', uid: 0,
+  cgroup: '0::/test\n', containerIdentity: 'pid:[123]', commandLine: 'node\0',
+};
 const request = {
   sourceSha: 'a'.repeat(40), imageDigest: `sha256:${'b'.repeat(64)}`,
   environmentId: 'c'.repeat(64), siloId: `sha256:${'d'.repeat(64)}`,
@@ -23,6 +27,11 @@ const request = {
 function prepare(): void {
   vi.mocked(proveCanaryHelper).mockReset();
   vi.mocked(proveCanaryHelper).mockReturnValue(true);
+  vi.mocked(readCanaryHelperBinding).mockReset();
+  vi.mocked(readCanaryHelperBinding).mockReturnValue({
+    helper: exampleIdentity, supervisor: exampleIdentity,
+    imageDigest: request.imageDigest, installationId: request.installationId,
+  });
   vi.mocked(probeHost).mockReset();
   vi.mocked(probeHost).mockReturnValue(true);
   vi.mocked(probeContainer).mockReturnValue('swap_measurement_failed');

@@ -1,9 +1,11 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { initialQualificationFixture } from '../../apps/server/test/support/initial-qualification.ts';
 import { readDeploymentQualification } from './deployment.ts';
+import { proveCanaryHelper } from './canary-helper-proof.ts';
 
 vi.mock('node:fs', { spy: true });
 vi.mock('node:child_process', { spy: true });
+vi.mock('./canary-helper-proof.ts', { spy: true });
 afterEach(vi.restoreAllMocks);
 
 async function collectorOutput() {
@@ -13,6 +15,7 @@ async function collectorOutput() {
     throw new Error('Fixture collection failed');
   }
   const proof = await readDeploymentQualification('test');
+  expect(proveCanaryHelper).not.toHaveBeenCalled();
   expect(proof.runId).toBe(deployment.result.runId);
   expect(proof.confirm).not.toThrow();
   deployment.remove();

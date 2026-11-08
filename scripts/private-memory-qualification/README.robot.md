@@ -692,3 +692,23 @@ checks them directly. The only setting is the protected target file described ab
 No events or public API fields are added. All JSON field names were checked against
 the unchanged `RISKY_FIELD_NAME` rule. Receipt digests contain no private text hashes.
 Own results and outstanding live work: [receipt](../../docs/process/p4-15-pr5c/receipt.md).
+
+## Canary journey helper process
+
+The supervisor writes one root-owned `helper-identity` record in its tmpfs lock
+directory after starting the journey child and before sending its input. The record
+binds the challenge, child and supervisor PIDs and Linux start times to the image
+and installation ids supplied by the measured collector. The journey reads the
+record with custody checks. It requires the expected Node command, owner, cgroup
+and PID namespace, then rereads both process identities around protection checks.
+The collector still checks the installation before and after each journey.
+
+The journey measures swap and crash-dump controls through the existing host or
+container probe. It reads its own core limits and `CoreDumping` status and asks the
+native helper for its actual dumpability after exec. It repeats protection before
+returning a result. A missing record, changed process or failed read returns only
+a fixed protection category with `complete: false`. The supervisor removes the
+record during cleanup. Replay and status reads do not run the journey helper.
+
+This check covers the supervised canary journey process. The joined inventory and
+complete live private journey remain unfinished. Admission stays disabled.

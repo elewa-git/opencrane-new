@@ -1,12 +1,16 @@
-import { readFileSync } from 'node:fs';
+import { lstatSync, readFileSync, statfsSync } from 'node:fs';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { probeContainer } from './container-probe.ts';
+import { probeHost } from './host-probe.ts';
 import { readProcessIdentity, type ProcessIdentity } from './private-processes.ts';
 import { runnerProtected } from './runner-protection.ts';
-import { proveCanaryHelper, type CanaryHelperBinding } from './canary-helper-proof.ts';
+import {
+  proveCanaryHelper, readCanaryHelperBinding, type CanaryHelperBinding,
+} from './canary-helper-proof.ts';
 
 vi.mock('node:fs', { spy: true });
 vi.mock('./container-probe.ts', { spy: true });
+vi.mock('./host-probe.ts', { spy: true });
 vi.mock('./private-processes.ts', { spy: true });
 vi.mock('./runner-protection.ts', { spy: true });
 
@@ -51,9 +55,13 @@ function prepare(): void {
   vi.mocked(readProcessIdentity).mockReset();
   vi.mocked(readProcessIdentity).mockImplementation(readIdentity);
   vi.mocked(readFileSync).mockReset();
-  vi.mocked(readFileSync).mockImplementation(readProc as typeof readFileSync);
+  vi.mocked(readFileSync).mockImplementation(readProc);
+  vi.mocked(lstatSync).mockReset();
+  vi.mocked(statfsSync).mockReset();
   vi.mocked(probeContainer).mockReset();
   vi.mocked(probeContainer).mockReturnValue(true);
+  vi.mocked(probeHost).mockReset();
+  vi.mocked(probeHost).mockReturnValue(false);
   vi.mocked(runnerProtected).mockReset();
   vi.mocked(runnerProtected).mockReturnValue(true);
 }
@@ -97,7 +105,7 @@ function badProtection(result: 'process_dumpable' | 'core_limit_not_zero' |
         return 'Max core file size        1        1        bytes\n';
       }
       return readProc(path);
-    } as typeof readFileSync);
+    });
   } else {
     vi.mocked(runnerProtected).mockReturnValue(result);
   }
@@ -144,3 +152,60 @@ function thrownHelperCall(): void {
   expect(proveCanaryHelper(binding, currentInstallation)).toBe('private_process_unreadable');
 }
 it('does not expose a thrown helper call', thrownHelperCall);
+
+function malformedProcValue(): void {
+  vi.mocked(readFileSync).mockImplementation(function malformed(path): string {
+    if (path === `/proc/${helper.pid}/status`) {
+      return 'CoreDumping:\tprivate arguments and canary bytes\n';
+    }
+    return readProc(path);
+  });
+  expect(proveCanaryHelper(binding, currentInstallation)).toBe('process_dumpable');
+}
+it('does not expose an unreadable core-dump value', malformedProcValue);
+
+function changedAtFinalProtection(): void {
+  vi.mocked(probeContainer).mockReturnValueOnce(true).mockReturnValue('swap_not_disabled');
+  expect(proveCanaryHelper(binding, currentInstallation)).toBe('swap_not_disabled');
+}
+it('refuses swap allowance or use found on the final check', changedAtFinalProtection);
+
+async function savedLaunchRecord(): Promise<void> {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  const directory = '/run/opencrane-memory-qualification.lock';
+  const recordPath = `${directory}/helper-identity`;
+  const challengeId = '11111111-1111-4111-8111-111111111111';
+  const contents = `${challengeId} ${helper.pid} ${helper.startTime} ` +
+    `${supervisor.pid} ${supervisor.startTime} ${imageDigest} ${installationId}\n`;
+  const request = { challengeId, imageDigest, installationId };
+  let unsafeRecord = false;
+  vi.mocked(lstatSync).mockImplementation(function recordStat(path) {
+    const info = actual.lstatSync('/proc/self/stat');
+    info.uid = unsafeRecord && path === recordPath ? 1000 : 0;
+    info.mode = path === directory ? 0o040700 : 0o100600;
+    info.size = contents.length;
+    info.isDirectory = function directoryType(): boolean {
+      return path === directory;
+    };
+    info.isFile = function fileType(): boolean {
+      return path === recordPath;
+    };
+    return info;
+  });
+  vi.mocked(statfsSync).mockImplementation(function tmpfs() {
+    const info = actual.statfsSync('/run');
+    info.type = 0x01021994;
+    return info;
+  });
+  vi.mocked(readFileSync).mockImplementation(function recordFile(path): string {
+    if (path === recordPath) {
+      return contents;
+    }
+    return readProc(path);
+  });
+  expect(readCanaryHelperBinding(request)).toEqual(binding);
+  unsafeRecord = true;
+  expect(() => readCanaryHelperBinding(request)).toThrow('private_process_unreadable');
+}
+it('accepts the saved launch identity and refuses an untrusted record owner',
+  savedLaunchRecord);

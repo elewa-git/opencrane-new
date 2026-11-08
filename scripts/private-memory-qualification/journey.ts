@@ -2,6 +2,9 @@ import { z } from 'zod';
 import { probeHost } from './host-probe.ts';
 import { probeContainer } from './container-probe.ts';
 import { probePrivateProcessInventory } from './private-processes.ts';
+import {
+  proveCanaryHelper, readCanaryHelperBinding, type CanaryHelperBinding,
+} from './canary-helper-proof.ts';
 import type { ProtectionFailure } from './protection-failure.ts';
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
@@ -32,6 +35,15 @@ function containerRefusal(protectionFailure: ProtectionFailure): Refusal {
   return { result: 'FAIL', reason: 'host_refused', protectionFailure };
 }
 
+function checkCanaryHelper(binding: CanaryHelperBinding,
+  request: Request): true | ProtectionFailure {
+  function currentInstallation(): { imageDigest: string; installationId: string } {
+    const current = readCanaryHelperBinding(request);
+    return { imageDigest: current.imageDigest, installationId: current.installationId };
+  }
+  return proveCanaryHelper(binding, currentInstallation);
+}
+
 export async function runJourney(input: string): Promise<Refusal | Receipt> {
   let request: Request;
   try {
@@ -42,16 +54,36 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
   } catch {
     return { result: 'FAIL', reason: 'input_invalid' };
   }
+  let helperBinding: CanaryHelperBinding;
+  try {
+    helperBinding = readCanaryHelperBinding(request);
+  } catch {
+    return { result: 'FAIL', reason: 'host_refused',
+      protectionFailure: 'private_process_unreadable', complete: false };
+  }
+  const helperBefore = checkCanaryHelper(helperBinding, request);
+  if (helperBefore !== true) {
+    return { result: 'FAIL', reason: 'host_refused', protectionFailure: helperBefore,
+      complete: false };
+  }
+  function finish(result: Refusal | Receipt): Refusal | Receipt {
+    const helperAfter = checkCanaryHelper(helperBinding, request);
+    if (helperAfter !== true) {
+      return { result: 'FAIL', reason: 'host_refused', protectionFailure: helperAfter,
+        complete: false };
+    }
+    return result;
+  }
   const safeHost = probeHost();
   if (!safeHost) {
     const protection = probeContainer();
     if (protection !== true) {
-      return containerRefusal(protection);
+      return finish(containerRefusal(protection));
     }
     const inventory = probePrivateProcessInventory();
     if (inventory !== true) {
-      return { result: 'FAIL', reason: 'host_refused', protectionFailure: inventory,
-        complete: false };
+      return finish({ result: 'FAIL', reason: 'host_refused', protectionFailure: inventory,
+        complete: false });
     }
   }
   let result: Receipt['result'] = 'NOT RUN';
@@ -60,7 +92,7 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
       const { checkNative } = await import('./native-checks.ts');
       const { checkRecallPrerequisites } = await import('./native-recall-checks.ts');
       if (!probeHost()) {
-        return { result: 'FAIL', reason: 'host_refused' };
+        return finish({ result: 'FAIL', reason: 'host_refused' });
       }
       if (request.name === 'privateTurns') {
         await checkNative(request.challengeId);
@@ -70,7 +102,7 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
       }
     } catch {
       const reason = probeHost() ? 'journey_failed' : 'host_refused';
-      return { result: 'FAIL', reason };
+      return finish({ result: 'FAIL', reason });
     }
   }
   if (safeHost && (request.name === 'invalidation' || request.name === 'unrelatedActivity' ||
@@ -79,30 +111,30 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
     try {
       const { checkMemory } = await import('./memory-checks.ts');
       if (!probeHost()) {
-        return { result: 'FAIL', reason: 'host_refused' };
+        return finish({ result: 'FAIL', reason: 'host_refused' });
       }
       await checkMemory(request.name, request.siloId);
       result = 'PARTIAL';
     } catch {
       const reason = probeHost() ? 'journey_failed' : 'host_refused';
-      return { result: 'FAIL', reason };
+      return finish({ result: 'FAIL', reason });
     }
   }
   if (safeHost) {
     if (!probeHost()) {
-      return { result: 'FAIL', reason: 'host_refused' };
+      return finish({ result: 'FAIL', reason: 'host_refused' });
     }
   } else {
     const protection = probeContainer();
     if (protection !== true) {
-      return containerRefusal(protection);
+      return finish(containerRefusal(protection));
     }
     const inventory = probePrivateProcessInventory();
     if (inventory !== true) {
-      return { result: 'FAIL', reason: 'host_refused', protectionFailure: inventory,
-        complete: false };
+      return finish({ result: 'FAIL', reason: 'host_refused', protectionFailure: inventory,
+        complete: false });
     }
   }
   // These assertions cannot qualify isolation, persistence or private output delivery.
-  return { ...request, observedAt: Date.now(), result, complete: false };
+  return finish({ ...request, observedAt: Date.now(), result, complete: false });
 }
