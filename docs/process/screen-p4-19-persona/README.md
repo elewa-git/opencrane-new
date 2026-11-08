@@ -23,8 +23,10 @@ They do not prove a live onboarding journey or server integration.
 ## Local checks
 
 - PASS: 52 focused welcome tests in each of two final runs.
+- PASS: 47 app route tests in each of two runs after updating the Assistant link.
 - PASS: scoped ESLint, event catalogue check, Knip and changelog lint twice.
 - PASS: the repository typecheck twice.
+- PASS: the web typecheck twice after the app route test changed.
 - PASS: two web builds and the intercepted browser captures at both widths.
 - PASS: browser captures found no horizontal overflow or controls below 44 pixels.
 - PASS: the review button shows keyboard focus and reduced motion is requested.
