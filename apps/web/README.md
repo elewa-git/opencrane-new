@@ -18,11 +18,11 @@ flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages and file drops where Attach is available"] -->|requests and tab sign-out| web
   web -->|messages, child reviews and group names| server["apps/server<br/>the back end"]
-  server -->|saved updates, service readiness, file cards and private reply clearance| web
+  server -->|saved updates, permitted publication history, file cards and private reply clearance| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
   web -->|saved and private replies| capture["Chat workspace<br/>reply details and isolated diagrams"]
-  web -->|settings| admin["Admin pages<br/>provider, tool, people and memory"]
+  web -->|settings and change history| admin["Admin pages<br/>provider, tool, people and memory"]
 ```
 
 Sign-in goes through the server to [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service).
@@ -79,6 +79,7 @@ For owners and admins, it:
   changes are saved between review and publication. A paused check is labelled as a
   tool change only when the saved catalogue shows a change.
 - Shows organisation change history.
+- Shows a reviewed child publication's permitted parent link in change history.
 
 A shared assistant belongs to a group; members can start private sessions with it.
 Its paying group is the group whose budget pays for that work.

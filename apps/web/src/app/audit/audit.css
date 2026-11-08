@@ -11,4 +11,5 @@ article { margin: 20px 0; padding: 20px; border: 1px solid #ccd6db; border-radiu
 dl { margin: 16px 0; } dl div { display: grid; grid-template-columns: 130px 1fr; padding: 5px 0; gap: 10px; }
 dt { color: #52646c; } dd { margin: 0; overflow-wrap: anywhere; } ol { padding-left: 20px; } li { padding: 8px; overflow-wrap: anywhere; } li span { display: block; } li p { margin: 6px 0; }
 :focus-visible { outline: 3px solid #087d94; outline-offset: 3px; }
+.task-link { display: inline-flex; align-items: center; min-height: 44px; }
 @media (max-width: 600px) { .history { padding: 16px; } article { padding: 14px; } dl div { grid-template-columns: 1fr; gap: 2px; } form button, header button { width: 100%; } }

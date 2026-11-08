@@ -8,6 +8,7 @@ This folder shows what OpenCrane decided and what happened afterwards. Admins se
 - Filters by Allow, Ask or Deny, request reference and chat turn reference. A turn is one message and the assistant's reply.
 - Loads older history and shows amounts set aside or charged in whole euro cents.
 - Clears history when access is refused and offers refresh when a read fails.
+- Shows a saved child publication's permitted chat references and a parent chat link.
 
 ## Main files
 

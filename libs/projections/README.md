@@ -20,6 +20,9 @@ Admission records keep the saved role and invitation reference when one exists.
 They do not copy sign-in identities or treat them as verified people.
 It keeps appointment requests separate from confirmations and step-downs.
 Removal records include a safe recorded reason when one exists, without private details.
+The history table also keeps the parent and child identifiers from a saved publication.
+It keeps the publication kind and recorded result reference when present. It never
+copies the published text or a file key. The server checks who may see each identifier.
 
 Saved spending resolutions keep the original person, date and chosen amount,
 plus a reference to the saved change. They do not prove an external action finished or that held money was released.
@@ -40,7 +43,7 @@ flowchart LR
   models["libs/models<br/>model and replay tests"] -.->|uses database locks and the test helper| projections
   ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and checks saved changes| projections["libs/projections<br/>read tables, change history, routines, memory, surveys and personas"]
   server["apps/server<br/>back end"] -->|reads tables, own and admin routine lists, run pages and spending choices| pg["PostgreSQL<br/>database"]
-  projections -->|saves history and spending; keeps private audits and process exits outside chat feeds| pg
+  projections -->|saves history, child publication facts and spending; keeps private audits and process exits outside chat feeds| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections
   server -.->|reads member references, tool readiness, nightly memory inputs and child requests awaiting activation| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]

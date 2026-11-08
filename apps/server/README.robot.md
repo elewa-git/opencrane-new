@@ -1711,6 +1711,13 @@ Conversation filters remain `requestId`, `turnId`, `decision` and `before`, with
 at most 50). Detail accepts `before` and `limit` (20 by default, at most 50).
 Both cursors are exclusive event positions. List rows carry no more than 20
 related records and mark further evidence; detail pages can read all of it.
+The `conversation` family includes each saved child publication once. Its event id
+is the parent entry id. After the bounded page loads, the route checks current
+parent and child read rights separately. The parent id and parent chat link require
+parent rights; the child id and recorded result id require child rights. A removed
+member cannot use an old cursor or entry id to recover these fields. No history GET
+decrypts the published text, reads a file, appends an event or starts a turn. The
+event has no file receipt, so this read offers no asset count or asset link.
 Saved tool starts and observations use these same list and detail routes and metadata
 fields. The [audit projection contract](../../libs/projections/README.robot.md) explains
 their status meanings and the required replay for existing installations.

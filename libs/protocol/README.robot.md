@@ -88,6 +88,11 @@ family, actor id, outcome and event/request/permit reference. The list defaults
 to 20 anchors and the detail defaults to 20 records; both stop at 50.
 The Angular history views use this same contract; no event payload is passed to
 browser rendering. See the [HTTP contract](../../apps/server/README.robot.md#permission-scoped-audit-p3-19).
+Publication records may carry `parentConversationId`, `childConversationId`,
+`publicationKind`, `resultEventId` and `taskHref`. The server removes each chat id
+unless the current reader may read that chat. Only a parent reader gets `taskHref`.
+The event id is the saved parent entry. There is no asset count or file link because
+the publication event has no file receipt. A missing result reference remains absent.
 
 The People & groups screen uses `groupRowSchema`, `groupsResponseSchema`,
 `groupReceiptSchema`, `groupChangeSchema` and `createGroupCommandSchema` for its

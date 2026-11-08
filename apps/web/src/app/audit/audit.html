@@ -24,7 +24,34 @@
       <dl>@if (row.permitId) { <div><dt>Permit</dt><dd>{{ row.permitId }}</dd></div> } @if (row.conversationId) { <div><dt>Conversation</dt><dd>{{ row.conversationId }}</dd></div> } @if (row.turnId) { <div><dt>Turn</dt><dd>{{ row.turnId }}</dd></div> }
         @if (row.contextDigest) { <div><dt>Context digest</dt><dd>{{ row.contextDigest }}</dd></div> }
         @if (row.reservedCents !== undefined) { <div><dt>Reserved</dt><dd>{{ row.reservedCents }} euro cents</dd></div> } @if (row.settledCents !== undefined) { <div><dt>Settled</dt><dd>{{ row.settledCents }} euro cents</dd></div> }</dl>
-      <ol aria-label="Audit evidence">@for (record of row.records; track record.eventId) { <li><strong>{{ record.type }}</strong><span>{{ record.source }} · {{ record.status }}</span>@if (record.reason) { <p>{{ record.reason }}</p> }</li> }</ol>
+      <ol aria-label="Audit evidence">
+        @for (record of row.records; track record.eventId) {
+          <li>
+            <strong>{{ record.type }}</strong>
+            <span>{{ record.source }} · {{ record.status }}</span>
+            @if (record.reason) { <p>{{ record.reason }}</p> }
+            @if (record.publicationKind) {
+              <p>{{ record.publicationKind === 'interim' ? 'Interim publication' : 'Final publication' }}</p>
+            }
+            @if (record.parentConversationId || record.childConversationId || record.resultEventId) {
+              <dl>
+                @if (record.parentConversationId) {
+                  <div><dt>Parent chat</dt><dd>{{ record.parentConversationId }}</dd></div>
+                }
+                @if (record.childConversationId) {
+                  <div><dt>Child chat</dt><dd>{{ record.childConversationId }}</dd></div>
+                }
+                @if (record.resultEventId) {
+                  <div><dt>Saved result</dt><dd>{{ record.resultEventId }}</dd></div>
+                }
+              </dl>
+            }
+            @if (record.taskHref) {
+              <a class="task-link" [href]="record.taskHref">Open parent chat</a>
+            }
+          </li>
+        }
+      </ol>
     </article>
   }
   @if (nextBefore()) { <button type="button" (click)="load(nextBefore())">Older history</button> }

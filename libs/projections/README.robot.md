@@ -197,6 +197,17 @@ including the anchor. Neither read opens the event store. Decisions and observed
 outcomes stay separate. Private text, approval details, connection material,
 raw arguments, destinations and gateway timestamps never enter this table.
 
+`conversation.child_result_published` starts one audit row, keyed by its saved event id.
+The projection checks the server source, parent stream and human publisher against
+the strict saved event before selecting the parent id, child id, publication kind and
+optional result id. It copies no ciphertext, review digest, title or file key. This
+row has only its own saved event as evidence; unrelated chat records cannot attach.
+It ignores envelope correlation ids so a private work reference cannot become a
+request, permit or chat link on this row.
+The server removes each id unless the reader has current rights to that chat.
+Replaying the audit table restores the same facts without publishing again. A human
+interim entry has no result reference; the table does not invent one or an asset count.
+
 Run `node --experimental-strip-types apps/ops/src/worker.ts audit` with the usual
 projection settings. `npm run replay -- audit --verify` replays metadata under the
 runner's lock in one transaction, preserving table grants and rolling back on

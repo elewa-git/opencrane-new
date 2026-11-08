@@ -51,6 +51,9 @@ const currentAccounting = z.discriminatedUnion('status', [
   z.object({ status: z.literal('unavailable'), checkedAt: utc }).strict(),
 ]);
 export const auditRecordSchema = z.object({
+  parentConversationId: id.optional(), childConversationId: id.optional(),
+  resultEventId: id.optional(), publicationKind: z.enum(['final', 'interim']).optional(),
+  taskHref: z.string().regex(/^\/workspace\?conversation=[\w:.-]{1,300}$/u).optional(),
   currentAccounting: currentAccounting.optional(),
   computerId: id.optional(), generation: z.int().positive().optional(),
   takeoverId: id.optional(), leaseId: id.optional(),
@@ -92,7 +95,8 @@ export const auditFilterSchema = z.object({
   from: utc.optional(), to: utc.optional(),
   type: z.enum(['decision', 'effect', 'approval', 'mcp', 'connection', 'egress',
     'takeover', 'team', 'ownership', 'assistant', 'grant', 'budget', 'tool',
-    'credential', 'security', 'gateway', 'agent', 'member', 'computer', 'silo']).optional(),
+    'credential', 'security', 'gateway', 'agent', 'member', 'computer', 'silo',
+    'conversation']).optional(),
   actorId: id.optional(),
   outcome: z.enum(['success', 'error', 'unknown', 'not_dispatched', 'recorded']).optional(),
   reference: id.optional(),

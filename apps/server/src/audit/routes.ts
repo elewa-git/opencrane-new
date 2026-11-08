@@ -4,12 +4,13 @@ import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
 import { auditFilterSchema, auditDetailFilterSchema, type AuditDetailFilter,
-  type AuditRow } from '@opencrane/protocol';
+  type AuditRow, type AuditRecord } from '@opencrane/protocol';
 import { readAudit, readAuditDetail, type Query, type connectMemberFeed } from '@opencrane/projections';
 import { currentMembership } from '@opencrane/models';
 import { readAccountingProgress } from './accounting-progress.ts';
 import { readMembershipProgress } from './membership-progress.ts';
 import { sessionFor } from '../members/routes.ts';
+import { chatAccess, isChatRefused } from '../chat/access.ts';
 
 export interface AuditOptions {
   silo: string; store: EventStore; db: Query; binding: Binding;
@@ -47,7 +48,8 @@ export function registerAuditRoutes(app: FastifyInstance, config: AuthConfig, op
         const rows = loaded.value.rows.map(conversationRow);
         return reply.send({ ...loaded.value, rows });
       }
-      return reply.send(loaded.value);
+      const rows = await visibleRows(options, memberId, loaded.value.rows);
+      return reply.send({ ...loaded.value, rows });
     } catch (error) {
       if (error instanceof z.ZodError) return reply.code(400).send({ status: 'invalid_request' });
       request.log.error({ operation: 'audit.read' }, 'Audit history unavailable');
@@ -77,7 +79,12 @@ export function registerAuditRoutes(app: FastifyInstance, config: AuthConfig, op
       if (loaded.status === 'rejected') throw loaded.reason;
       const result = loaded.value;
       if (!result) return reply.code(404).send({ status: 'not_found' });
-      return reply.send(result);
+      const rights = new Map<string, boolean>();
+      const records: AuditRecord[] = [];
+      for (const record of result.records) {
+        records.push(await visiblePublication(options, memberId, record, rights));
+      }
+      return reply.send({ ...result, records });
     } catch (error) {
       if (error instanceof z.ZodError) return reply.code(400).send({ status: 'invalid_request' });
       request.log.error({ operation: 'audit.detail' }, 'Audit detail unavailable');
@@ -102,6 +109,75 @@ function conversationRow(row: AuditRow): AuditRow {
     result.records.push(visible);
   }
   return result;
+}
+async function visibleRows(options: AuditOptions, memberId: string,
+  rows: AuditRow[]): Promise<AuditRow[]> {
+  const rights = new Map<string, boolean>();
+  const visible: AuditRow[] = [];
+  for (const row of rows) {
+    const records: AuditRecord[] = [];
+    for (const record of row.records) {
+      records.push(await visiblePublication(options, memberId, record, rights));
+    }
+    const publication = row.records.find(isChildPublication);
+    if (!publication) {
+      visible.push({ ...row, records });
+      continue;
+    }
+    const parentAllowed = publication.parentConversationId
+      ? rights.get(publication.parentConversationId) : false;
+    const childAllowed = publication.childConversationId
+      ? rights.get(publication.childConversationId) : false;
+    visible.push({ ...row, records,
+      conversationId: parentAllowed ? row.conversationId : undefined,
+      turnId: childAllowed ? row.turnId : undefined });
+  }
+  return visible;
+}
+function isChildPublication(record: AuditRecord): boolean {
+  return record.type === 'conversation.child_result_published';
+}
+async function visiblePublication(options: AuditOptions, memberId: string,
+  record: AuditRecord, rights: Map<string, boolean>): Promise<AuditRecord> {
+  if (!isChildPublication(record)) return record;
+  const visible: AuditRecord = { ...record };
+  delete visible.parentConversationId;
+  delete visible.childConversationId;
+  delete visible.resultEventId;
+  delete visible.taskHref;
+  const parentId = record.parentConversationId;
+  const childId = record.childConversationId;
+  const parentAllowed = parentId
+    ? await conversationRight(options, memberId, parentId, rights) : false;
+  const childAllowed = childId
+    ? await conversationRight(options, memberId, childId, rights) : false;
+  if (parentId && parentAllowed) {
+    visible.parentConversationId = parentId;
+    visible.taskHref = `/workspace?conversation=${parentId}`;
+  }
+  if (childId && childAllowed) {
+    visible.childConversationId = childId;
+    visible.resultEventId = record.resultEventId;
+  }
+  if (!parentAllowed && !childAllowed) {
+    delete visible.publicationKind;
+    delete visible.actor;
+  }
+  return visible;
+}
+async function conversationRight(options: AuditOptions, memberId: string,
+  conversationId: string, rights: Map<string, boolean>): Promise<boolean> {
+  const previous = rights.get(conversationId);
+  if (previous !== undefined) return previous;
+  try {
+    await chatAccess(options, { memberId, conversationId });
+    rights.set(conversationId, true);
+    return true;
+  } catch (error) {
+    if (!isChatRefused(error)) throw error;
+    rights.set(conversationId, false);
+    return false;
+  }
 }
 async function loadDetail(options: AuditOptions, auditId: string, filter: AuditDetailFilter) {
   const result = await readAuditDetail(options.db, options.silo, auditId, filter);
