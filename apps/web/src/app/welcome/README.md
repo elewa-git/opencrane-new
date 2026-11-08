@@ -38,8 +38,8 @@ flowchart LR
 ## How to run or test it
 
 Run `npm test -w apps/web -- --watch=false --include='**/persona-review.spec.ts'`
-for the focused review tests. Run `npm run visual:screen-p4-19-persona` for
-intercepted browser captures at desktop and phone widths.
+for the focused review tests. Run `npm run build -w apps/web` to build the site.
+The exact capture command is in [README.robot.md](README.robot.md).
 
 ## Where to read more
 

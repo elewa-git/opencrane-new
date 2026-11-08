@@ -21,3 +21,6 @@ keep private text out of addresses, storage and error messages.
 Editing, replacement and restart are unavailable on this screen. The server
 supports those commands, but their browser review and confirmation states
 belong to the next part. The Assistant settings page remains unavailable.
+
+Run `npm run visual:screen-p4-19-persona` for intercepted captures at both
+desktop and phone widths.
