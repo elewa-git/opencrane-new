@@ -11,7 +11,7 @@ import { envelope } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { auditResponseSchema, auditDetailSchema } from '@opencrane/protocol';
 import { auditTrail, connectMemberFeed, conversations, members, pgDb, ProjectionRunner,
-  readAudit, readAuditDetail, rebuildAuditProjection } from '@opencrane/projections';
+  readAudit, readAuditDetail, rebuildAuditProjection, memoryScopeId } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -561,4 +561,51 @@ it('leaves older delegation formats out of modern history', async () => {
   await auditTrail.apply(db, legacy, 999);
   const response = await list('admin', '?type=delegation');
   expect(auditResponseSchema.parse(response.json()).rows).toHaveLength(0);
+});
+
+const scopeId = memoryScopeId('test', 'person', 'owner');
+
+async function maintenance(id: string, action: 'due' | 'prepared' | 'refused' | 'missed') {
+  const reason = action === 'refused' ? 'access_denied' :
+    action === 'missed' ? 'window_missed' : null;
+  const data = {
+    scopeId, nightId: 'a'.repeat(64), batchKey: 'b'.repeat(64),
+    inputRevision: 'c'.repeat(64), date: '2026-10-15', bindingRevision: 1,
+    memberId: 'owner', acceptedCapCents: 100,
+    intendedAt: '2026-10-15T02:00:00.000Z', selectedAt: '2026-10-15T02:01:00.000Z',
+    inputRefs: [], action, reason,
+    ...(action === 'prepared' ? { rootId: 'd'.repeat(64), model: 'model',
+      providerId: 'provider' } : {}),
+  };
+  await append(`scope-${scopeId}`, 'memory.maintenance_recorded', data, id);
+  await runner.run(auditTrail);
+}
+
+it('shows one safe nightly row and checks the personal task link', async () => {
+  await maintenance('night-one', 'prepared');
+  const owner = await list('owner', '?type=memory');
+  const admin = await list('admin', '?type=memory');
+  expect(owner.statusCode).toBe(200);
+  expect(admin.statusCode).toBe(200);
+  expect(owner.body).not.toContain(privateText);
+  expect(admin.body).not.toContain(privateText);
+  const ownerRow = auditResponseSchema.parse(owner.json()).rows[0]!;
+  const adminRow = auditResponseSchema.parse(admin.json()).rows[0]!;
+  expect(ownerRow.records[0]?.taskHref).toBe(`/api/memory/${scopeId}/maintenance`);
+  expect(adminRow.records[0]?.taskHref).toBeUndefined();
+  expect(admin.body).not.toContain(scopeId);
+  expect(admin.body).not.toContain('owner');
+  expect(ownerRow.outcome).toBe('unknown');
+  expect(ownerRow.records[0]?.amountCents).toBeUndefined();
+  expect(ownerRow.records[0]?.maintenanceAllowanceCents).toBe(100);
+  expect((await detail('admin', ownerRow.id)).body).not.toContain(scopeId);
+  const saved = (await nats.store.readEvent(await nats.store.head())).event;
+  await auditTrail.apply(db, saved, await nats.store.head());
+  expect(auditResponseSchema.parse((await list('owner', '?type=memory')).json()).rows)
+    .toHaveLength(1);
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  await rebuildAuditProjection(db, nats.store,
+    createLogger('maintenance-replay', { level: 'silent' }), { verify: true });
+  expect((await list('owner', '?type=memory')).json()).toEqual(owner.json());
+  expect(appendSpy).not.toHaveBeenCalled();
 });
