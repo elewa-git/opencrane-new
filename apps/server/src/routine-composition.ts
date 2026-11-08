@@ -1,6 +1,8 @@
 import { loadRoutinePreparation } from './routine-session.ts';
 import { prepareRoutineComputer } from './routine-computer.ts';
 import { createRoutineSender } from './routine-sender.ts';
+import { bindRoutineBudgetOwner, routineBudgetOwnerMatches }
+  from './routine-delivery-owner.ts';
 
 type Preparation = Parameters<typeof prepareRoutineComputer>;
 type Ready = { link: Preparation[5]; generation: number };
@@ -11,16 +13,24 @@ type CheckedDue = { status: 'confirmed'; executionAvailable: false; routineId: s
 
 /** Carry the claimed occurrence into the saved preparation and one sender attempt. */
 export function createRoutineDelivery(store: Preparation[0], keys: Preparation[1],
-  identity: DeliveryWorker, actor: Preparation[4], wake: (assistantId: string) => Promise<Ready>) {
+  identity: DeliveryWorker, actor: Preparation[4], wake: (assistantId: string) => Promise<Ready>,
+  owner: ReturnType<typeof bindRoutineBudgetOwner>) {
   async function receive(due: CheckedDue, leadership: Leadership) {
     if (due.status !== 'confirmed' || due.executionAvailable !== false ||
-        leadership.signal.aborted || identity.silo !== identity.binding.silo) {
+        leadership.signal.aborted || identity.silo !== identity.binding.silo ||
+        !routineBudgetOwnerMatches(owner, actor, store, identity.silo)) {
       return { status: 'unknown' as const };
     }
     async function checkCurrent(deadline: number) {
       if (leadership.signal.aborted) return false;
-      const current = await leadership.checkCurrent(deadline);
-      return current && !leadership.signal.aborted;
+      const budgetCurrent = await owner.checkCurrent(deadline);
+      if (!budgetCurrent || leadership.signal.aborted) return false;
+      const schedulerCurrent = await leadership.checkCurrent(deadline);
+      if (!schedulerCurrent || leadership.signal.aborted) return false;
+      return owner.checkCurrent(deadline);
+    }
+    if (!await checkCurrent(performance.now() + 2000)) {
+      return { status: 'unknown' as const };
     }
     const worker = { ...identity, signal: leadership.signal, checkCurrent };
     const input = { routineId: due.routineId, occurrenceId: due.occurrenceId };

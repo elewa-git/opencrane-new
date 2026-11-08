@@ -1407,6 +1407,14 @@ receipt. That adapter carries the saved occurrence and turn id into the existing
 composition, checks that the leader is still current, and waits for sender acknowledgement.
 The deployed routines worker has no budget actor, computer wake, key custody or company
 sender callback. Its explicit enabled setting therefore still refuses at startup.
+`routine-delivery-owner.ts` registers the already started actor for one event-store
+connection and silo while the budget leader is alive. A second actor for that pair
+cannot register. The models process creates this registration under its budget lock
+and uses its current-leader check for routine Stop cleanup. The delivery adapter
+accepts only that exact actor and store. It checks both budget and scheduler leaders
+before preparation and during the existing checks after wake and before sender use.
+The enabled routines worker remains closed because it has no authenticated path to
+this owner or computer wake. This registration grants no scheduler claim or delivery.
 [Own load checks](../../docs/process/evidence/ci-flakes-29.md).
 See the [invitation contract](../../docs/architecture/events.md#organisation-members-and-teams)
 for identity/expiry requirements, retries and the missing bootstrap policy.

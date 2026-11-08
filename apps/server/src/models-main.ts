@@ -1,4 +1,5 @@
 import { routineLifecycle } from './routine-lifecycle.ts';
+import { bindRoutineBudgetOwner } from './routine-delivery-owner.ts';
 import type { ChildProcess } from 'node:child_process';
 import { remoteCatalogueWatch } from './integrations/remote-catalogue-watch.ts';
 import { conversationKeys } from './chat/keys.ts';
@@ -107,12 +108,21 @@ try {
     const mcpRoutes = z.array(mcpDispatchRouteSchema).parse([]);
     const controlPort = Number(required('MODEL_GATEWAY_CONTROL_PORT'));
     const gatewayBinary = required('AGENTGATEWAY_BINARY');
-    async function requireDispatchLeader() {
+    async function requireDispatchLeader(deadline?: number) {
       if (stop.signal.aborted) throw new Error('Models process stopped');
-      await locked.query('SELECT 1');
+      if (deadline === undefined) {
+        await locked.query('SELECT 1');
+      } else {
+        await locked.query('SELECT 1', [], { deadline });
+      }
     }
+    const routineBudgetOwner = bindRoutineBudgetOwner(actor, events.store, silo,
+      stop.signal, requireDispatchLeader);
     const routineOptions = { enabled: true };
-    const routines = routineLifecycle(actor, requireDispatchLeader, routineOptions);
+    const routines = routineLifecycle(actor, requireRoutineBudgetLeader, routineOptions);
+    async function requireRoutineBudgetLeader() {
+      await routineBudgetOwner.requireCurrent(performance.now() + 2000);
+    }
     const watch = remoteCatalogueWatch(db.db, events.store, silo, requireDispatchLeader);
     function watchFailed() {
       logger.error('MCP catalogue watch unavailable; calls remain held');
