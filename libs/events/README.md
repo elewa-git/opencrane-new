@@ -4,6 +4,7 @@
 
 The list of every kind of event OpenCrane records, and the exact data each one carries.
 Private persona revisions carry encrypted bytes and a checked digest, never plain text.
+An approval records the exact saved version a member chose, without copying its text.
 
 A routine Stop can name the exact saved denial or expiry of its held tool approval.
 A system routine pause names the exact saved removal of its recorded owner.
@@ -54,8 +55,8 @@ Allow, Ask or Block choice for a tool.
 
 ```mermaid
 flowchart LR
-  parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions, including private persona revisions"]
-  server["apps/server<br/>back end"] -.->|checks assistant file lists and records, private exit, native termination, routine turn identities, result references and settled cents, allowance fingerprints, owner, approval and unconfirmed delivery Stop intent, owner-removal pauses and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
+  parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions, including persona approvals and private persona revisions"]
+  server["apps/server<br/>back end"] -.->|checks assistant file lists and records, private exit, native termination, routine turn identities, allowance fingerprints, owner, approval and unconfirmed delivery Stop intent, owner-removal pauses and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries and activation refusals| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events

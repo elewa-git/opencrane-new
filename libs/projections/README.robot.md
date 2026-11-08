@@ -624,6 +624,10 @@ current candidate's number and event id. `persona_revisions` keeps encrypted rec
 `(silo, member_id, revision)` and never updates an earlier row. Editing survey
 answers or restarting clears the candidate but preserves the count and history.
 Rebuild reads event bytes only; it cannot prepare a key, call a model or wake a computer.
+`onboarding.persona_approved` requires the current revision number and event id
+in the same survey generation. It records the chosen revision and event time in
+`personal_settings.survey`. Later edits and restarts leave that approval intact.
+Rebuild uses the event time and needs no key or model call.
 
 ## Exact tool review
 

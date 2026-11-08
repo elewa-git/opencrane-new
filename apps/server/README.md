@@ -337,7 +337,7 @@ can be used now is checked separately. Missing evidence never means it is safe t
 | [members](src/members/README.md) | Manages invitations, membership, groups, roles and ownership. |
 | [memory](src/memory/README.md) | Reads, saves, corrects and forgets permitted remembered facts. |
 | [models](src/models/README.md) | Manages access to AI models for people, groups and assistants. |
-| [onboarding](src/onboarding/README.md) | Saves the private welcome survey and persona revisions. |
+| [onboarding](src/onboarding/README.md) | Saves the private welcome survey, persona revisions and approval. |
 | [providers](src/providers/README.md) | Connects model providers and manages keys, checks and provider choices. |
 
 The server checks files the assistant creates through the same type checks, virus
@@ -615,7 +615,8 @@ night. It shows the next 02:00 UTC boundary for waiting facts.
 11. **A member continues the welcome survey.** The server checks their current
     membership and saves one step. Reloading returns confirmed answers. Editing
     an earlier answer clears later current steps. Restarting keeps encrypted history.
-    The member can save a persona from complete answers, edit it and read older versions.
+    The member can save a persona from complete answers, edit it, read older versions
+    and approve the exact current version. Its approval remains after a later edit.
     Each version stays encrypted until an authorised detail read.
 12. **A person opens their conversation list.** The server returns a small page ordered
     by activity they can see. Recent and Archived follow the person's saved choice.

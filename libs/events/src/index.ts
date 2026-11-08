@@ -87,6 +87,7 @@ export { takeoverRefusedDataSchema, takeoverRequestedDataSchema, takeoverPausing
   takeoverPausedDataSchema, takeoverFailedDataSchema, takeoverStartedLeaseDataSchema,
   takeoverRenewedDataSchema, takeoverReturnRequestedDataSchema } from './takeover.ts';
 export { surveyAnswersSchema, surveyStepSavedDataSchema, surveyRestartedDataSchema,
+  personaApprovedDataSchema,
   personaRevisedDataSchema }
   from './survey.ts';
 export { routineDefinitionSchema, routineRecordIdentitySchema, routineMissedSchema,

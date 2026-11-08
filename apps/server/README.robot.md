@@ -640,7 +640,9 @@ No model call, computer wake or spending path is used.
 replay, edited progress, strict fields, lost replies, same-id races, two-device
 restart, slow history, unrelated activity, missing keys and removal during reads.
 Run it with the supplied `PG_TEST_URL`, `nice -n 10` and one Vitest worker.
-Persona approval is not yet implemented. The survey append retains all earlier
+Persona approval selects the exact current revision with its number, id,
+generation and expected personal position. It uses the same conditional append
+and original-command status route. The survey append retains all earlier
 personal events. Fresh-install qualification has not run for these routes.
 
 ### Persona revisions
@@ -657,12 +659,15 @@ default and at most 50. `limit` and `before` page by revision number. Detail
 `GET /api/onboarding/persona/revisions/:revisionId` accepts the returned event id
 or revision number and opens only one own version. It loads that version's encrypted
 record before checking current membership, then decrypts only when access still holds.
-The shared member guard runs before every read. Content history loads before the
+The shared member guard runs before every read. Approval is a separate `approve`
+operation on the same POST route. It never decrypts persona text. Progress, revision
+list and detail show the approved revision and its saved time separately from the
+current candidate. A later edit or restart retains the approval. Content history loads before the
 short write authority check; the personal stream is the content CAS, not an
 authority stream. Changed retries return 409. The original receipt comes from
 `GET /api/personal/changes/:commandId` and includes the revision number/id.
 Earlier versions remain after edits or survey restart. A restart clears the
-current candidate, not history. Approval and turn use are separate later work.
+current candidate, not history. Turn use is separate later work.
 
 ## Shared member guard
 

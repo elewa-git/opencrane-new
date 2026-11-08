@@ -38,7 +38,7 @@ PostgreSQL, the database for the read tables.
 ```mermaid
 flowchart LR
   models["libs/models<br/>model and replay tests"] -.->|uses database locks and the test helper| projections
-  ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and checks saved changes| projections["libs/projections<br/>read tables, change history, routines, memory, surveys and personas"]
+  ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and checks saved changes| projections["libs/projections<br/>read tables, change history, routines, memory, surveys and approved personas"]
   server["apps/server<br/>back end"] -->|reads tables, own and admin routine lists, run pages and spending choices| pg["PostgreSQL<br/>database"]
   projections -->|saves history and spending; keeps private audits and process exits outside chat feeds| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections
@@ -251,6 +251,7 @@ without reading or creating a key. The server serves authorised survey progress.
 
 A saved persona revision adds an encrypted, immutable version and updates the
 current revision number. Rebuilding restores both without opening text or creating keys.
+An approval keeps the chosen version and time after another edit or restart.
 
 A Member or Admin role change that reaches an Owner keeps the owner role. The worker
 records its position and continues with later events.
