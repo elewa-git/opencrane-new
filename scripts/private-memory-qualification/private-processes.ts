@@ -185,7 +185,7 @@ function serverIdentity(): ProcessIdentity | undefined {
   return identity;
 }
 
-function bridgeIdentity(): ProcessIdentity | undefined {
+export function bridgeIdentity(): ProcessIdentity | undefined {
   const childList = readFileSync('/proc/1/task/1/children', 'utf8');
   const children = childList.trim();
   if (!/^(?:[1-9][0-9]* ?)*$/u.test(children)) {
