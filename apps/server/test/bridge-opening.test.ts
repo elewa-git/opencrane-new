@@ -94,19 +94,25 @@ async function cancelledReportRecoveryDoesNotSaveBudgetRefusal() {
     const input = { url: `ws://127.0.0.1:${address.port}/bridge`,
       computerId: 'computer', assistantId: 'assistant', bearer: 'fixture' };
     const options = { silo: 'test', store: nats.store, keys: conversationKeys('/tmp') };
-    const wake = { signal: control.signal, deadline: performance.now() + 300 };
+    const wake = { signal: control.signal, deadline: performance.now() + 30_000 };
+    async function decisionSaved() {
+      const decisions = nats.store.readStream('decision-*');
+      for await (const row of decisions) {
+        if (row.event.type === 'decision.recorded') return true;
+      }
+      return false;
+    }
     const pending = connectBridge(options, input, undefined, wake);
     await readStarted.promise;
     control.abort();
     await expect(pending).rejects.toThrow();
     releaseRead.resolve();
     await readFinished.promise;
-    await new Promise<void>(resolve => setImmediate(resolve));
     expect(readFailure).toBeUndefined();
-    const decisions = nats.store.readStream('decision-*');
-    const saved = [];
-    for await (const row of decisions) saved.push(row);
-    expect(saved).toEqual([]);
+    await expect(until(decisionSaved, 500)).rejects.toThrow('Timed out waiting for service outcome');
+    const recovered = await connectBridge(options, input);
+    await until(decisionSaved, 1_000);
+    recovered.socket.terminate();
   } finally {
     control.abort();
     releaseRead.resolve();
