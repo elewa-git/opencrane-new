@@ -3,12 +3,14 @@ import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   chownSync, existsSync, mkdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statfsSync,
-  writeFileSync,
+  statSync, writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { createServer, type Server, type ServerResponse } from 'node:http';
 import type { Readable, Writable } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
+import { proveNativePair } from './native-process-proof.ts';
 
 // Pin the Linux x64 executable from the integrity-checked Codex 0.159.2 npm release.
 const nativeDigest = '1748767b230ebfc3d4ab7e4e254920d0c0ad9691fd8c11f190e7d44511a4a92e';
@@ -31,11 +33,13 @@ function pinnedBinary(): string {
 function processIdentity(nativePid: number): string {
   const base = `/proc/${nativePid}`;
   const stat = readFileSync(`${base}/stat`, 'utf8');
-  const fieldsText = stat.slice(stat.lastIndexOf(')') + 2);
+  const delimiter = stat.lastIndexOf(')');
+  const fieldsText = stat.slice(delimiter + 2);
   const fields = fieldsText.split(' ');
   assert.match(fields[19] ?? '', /^[0-9]+$/u);
   const runnerStat = readFileSync('/proc/self/stat', 'utf8');
-  const runnerText = runnerStat.slice(runnerStat.lastIndexOf(')') + 2);
+  const runnerDelimiter = runnerStat.lastIndexOf(')');
+  const runnerText = runnerStat.slice(runnerDelimiter + 2);
   const runnerFields = runnerText.split(' ');
   assert.equal(fields[2], runnerFields[2]);
   const limits = readFileSync(`${base}/limits`, 'utf8');
@@ -60,7 +64,10 @@ function nativeChild(
   const nativePid = Number(trimmed);
   const base = `/proc/${nativePid}`;
   assert.equal(readlinkSync(`${base}/exe`), binary);
-  assert.equal(binaryDigest(`${base}/exe`), nativeDigest);
+  const pinned = statSync(binary);
+  const running = statSync(`${base}/exe`);
+  assert.equal(running.dev, pinned.dev);
+  assert.equal(running.ino, pinned.ino);
   assert.equal(readlinkSync(`${base}/cwd`), `${home}/work`);
   const environment = readFileSync(`${base}/environ`, 'utf8');
   const entries = environment.split('\0');
@@ -130,6 +137,8 @@ function superviseChild(
   codexConnection: typeof import('../../apps/computer/src/codex-connection.ts').codexConnection,
   home: string,
   childId: string,
+  challengeId: string,
+  recordPath: string,
 ) {
   let size = 0;
   const state = {
@@ -137,6 +146,7 @@ function superviseChild(
     nativePid: undefined as number | undefined,
     nativeStart: undefined as string | undefined,
     wrapperStart: undefined as string | undefined,
+    recordPath,
     cleanup: undefined as Promise<void> | undefined,
   };
   function fail(): void {
@@ -163,10 +173,30 @@ function superviseChild(
   }
   const handlers = { message, failed: fail };
   const connection = codexConnection(child.stdin, child.stdout, handlers);
-  return { child, state, stopped, connection, home, childId };
+  return { child, state, stopped, connection, home, childId, challengeId };
 }
 
 type SupervisedChild = ReturnType<typeof superviseChild>;
+
+function checkPairProtection(supervised: SupervisedChild, binary: string): void {
+  const { child, state } = supervised;
+  assert(child.pid && state.nativePid && state.recordPath);
+  const binding = { challengeId: supervised.challengeId,
+    wrapperPid: child.pid, childPid: state.nativePid,
+    recordPath: state.recordPath, childBinary: binary };
+  assert.equal(proveNativePair(binding), true);
+}
+
+function recordNativeLaunch(supervised: SupervisedChild): void {
+  const { child, state } = supervised;
+  assert(child.pid && state.nativePid);
+  const wrapperStart = processStart(child.pid)?.split(':')[1];
+  const nativeStart = processStart(state.nativePid)?.split(':')[1];
+  assert(wrapperStart && nativeStart);
+  const contents = `${supervised.challengeId} ${child.pid} ${wrapperStart} ` +
+    `${state.nativePid} ${nativeStart}\n`;
+  writeFileSync(state.recordPath, contents, { flag: 'w' });
+}
 
 async function checkNativeRpc(
   supervised: SupervisedChild,
@@ -175,7 +205,7 @@ async function checkNativeRpc(
   const { child, state, connection, home, childId } = supervised;
   assert.equal(state.failed, false);
   const initialise = {
-    clientInfo: { name: 'qualification', version: childId },
+    clientInfo: { name: 'qualification', version: `${supervised.challengeId}.${childId}` },
     capabilities: { experimentalApi: true },
   };
   await connection.rpc('initialize', initialise);
@@ -185,16 +215,20 @@ async function checkNativeRpc(
   const nativePid = nativeChild(child.pid, binary, home, childId);
   state.nativePid = nativePid;
   state.nativeStart = processStart(nativePid);
+  recordNativeLaunch(supervised);
+  checkPairProtection(supervised, binary);
   const wrapperIdentity = processIdentity(child.pid);
   const identity = processIdentity(nativePid);
   const configParams = { includeLayers: false };
   const configResponse = await connection.rpc('config/read', configParams);
+  checkPairProtection(supervised, binary);
   checkConfiguration(configResponse);
   const startParams = {
     model: 'gpt-6.1-sol', ephemeral: true, environments: [],
     approvalPolicy: 'never', sandbox: 'read-only',
   };
   const startResponse = await connection.rpc('thread/start', startParams);
+  checkPairProtection(supervised, binary);
   const threadId = checkThread(startResponse);
   const observation = { nativePid, identity, wrapperIdentity, threadId };
   await checkStillRunning(supervised, binary, observation);
@@ -203,6 +237,100 @@ async function checkNativeRpc(
 
 type NativeObservation = Awaited<ReturnType<typeof checkNativeRpc>>;
 
+function listenServer(server: Server): Promise<void> {
+  function start(resolve: () => void, reject: (reason: Error) => void): void {
+    function listening(): void {
+      server.off('error', reject);
+      resolve();
+    }
+    server.once('error', reject);
+    server.listen(8080, '127.0.0.1', listening);
+  }
+  return new Promise<void>(start);
+}
+
+function closeServer(server: Server): Promise<void> {
+  function stop(resolve: () => void): void {
+    function closed(): void {
+      resolve();
+    }
+    server.close(closed);
+  }
+  return new Promise<void>(stop);
+}
+
+export async function heldModel(): Promise<{ bind(caller: string, thread: string): void;
+  wait(): Promise<void>; assertHeld(): void; close(): Promise<void> }> {
+  let received: (() => void) | undefined;
+  let expectedCaller: string | undefined;
+  let expectedThread: string | undefined;
+  let activeResponse: ServerResponse | undefined;
+  function markReady(resolve: () => void): void {
+    received = resolve;
+  }
+  let requestReceived = new Promise<void>(markReady);
+  function accept(request: import('node:http').IncomingMessage,
+    response: ServerResponse): void {
+    if (!expectedCaller || !expectedThread || request.method !== 'POST' ||
+        request.url !== '/v1/responses' ||
+        request.headers.authorization !== `Bearer ${expectedCaller}` ||
+        request.headers['session-id'] !== expectedThread) {
+      response.destroy();
+      return;
+    }
+    function responseClosed(): void {
+      if (activeResponse === response) {
+        activeResponse = undefined;
+        requestReceived = new Promise<void>(markReady);
+      }
+    }
+    response.once('close', responseClosed);
+    activeResponse = response;
+    request.resume();
+    response.writeHead(200, { 'content-type': 'text/event-stream' });
+    response.flushHeaders();
+    received?.();
+  }
+  const server: Server = createServer(accept);
+  await listenServer(server);
+  function assertHeld(): void {
+    if (activeResponse === undefined || activeResponse.destroyed ||
+        activeResponse.writableEnded) {
+      throw new Error('native_turn_not_held');
+    }
+  }
+  function waitForRequest(): Promise<void> {
+    function held(resolve: () => void, reject: (reason: Error) => void): void {
+      function expired(): void {
+        reject(new Error('native_turn_not_held'));
+      }
+      const timer = setTimeout(expired, 10_000);
+      function ready(): void {
+        clearTimeout(timer);
+        resolve();
+      }
+      requestReceived.then(ready, reject);
+    }
+    return new Promise<void>(held);
+  }
+  async function wait(): Promise<void> {
+    if (activeResponse === undefined) {
+      await waitForRequest();
+    }
+    assertHeld();
+  }
+  async function close(): Promise<void> {
+    server.closeAllConnections();
+    await closeServer(server);
+  }
+  function bind(caller: string, thread: string): void {
+    assert(!expectedCaller && !expectedThread);
+    expectedCaller = caller;
+    expectedThread = thread;
+  }
+  return { bind, wait, assertHeld, close };
+}
+
 async function checkStillRunning(
   supervised: SupervisedChild, binary: string, observation: NativeObservation,
 ): Promise<void> {
@@ -210,7 +338,9 @@ async function checkStillRunning(
   const { nativePid, identity, wrapperIdentity, threadId } = observation;
   // Read live metadata; fetching saved turns would require a rollout on disk.
   const readParams = { threadId, includeTurns: false };
+  checkPairProtection(supervised, binary);
   const readResponse = await connection.rpc('thread/read', readParams);
+  checkPairProtection(supervised, binary);
   assert.equal(checkThread(readResponse), threadId);
   assert(child.pid);
   assert.equal(nativeChild(child.pid, binary, home, childId), nativePid);
@@ -223,7 +353,8 @@ async function checkStillRunning(
 function processStart(pid: number): string | undefined {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-    const fieldsText = stat.slice(stat.lastIndexOf(')') + 2);
+    const delimiter = stat.lastIndexOf(')');
+    const fieldsText = stat.slice(delimiter + 2);
     const fields = fieldsText.split(' ');
     const start = fields[19];
     assert.match(start ?? '', /^[0-9]+$/u);
@@ -264,7 +395,8 @@ function signalProcess(pid: number, signal: NodeJS.Signals): void {
 function processState(pid: number): string | undefined {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-    return stat[stat.lastIndexOf(')') + 2];
+    const delimiter = stat.lastIndexOf(')');
+    return stat[delimiter + 2];
   } catch (error) {
     if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') {
       throw error;
@@ -365,9 +497,9 @@ function removeHome(home: string): void {
 
 async function checkPair(
   first: SupervisedChild, second: SupervisedChild, binary: string,
+  model: Awaited<ReturnType<typeof heldModel>>,
+  firstObservation: NativeObservation, secondObservation: NativeObservation,
 ): Promise<void> {
-  const firstObservation = await checkNativeRpc(first, binary);
-  const secondObservation = await checkNativeRpc(second, binary);
   assert.notEqual(first.home, second.home);
   assert.notEqual(first.childId, second.childId);
   assert.notEqual(first.child.pid, second.child.pid);
@@ -375,7 +507,18 @@ async function checkPair(
   assert.notEqual(firstObservation.identity, secondObservation.identity);
   assert.notEqual(firstObservation.wrapperIdentity, secondObservation.wrapperIdentity);
   assert.notEqual(firstObservation.threadId, secondObservation.threadId);
+  model.bind(first.childId, firstObservation.threadId);
+  const input = [{ type: 'text', text: 'qualification', text_elements: [] }];
+  const turn = { threadId: firstObservation.threadId, input };
+  await first.connection.rpc('turn/start', turn);
+  await model.wait();
+  model.assertHeld();
+  checkPairProtection(first, binary);
+  model.assertHeld();
+  checkPairProtection(second, binary);
+  model.assertHeld();
   await checkStillRunning(first, binary, firstObservation);
+  model.assertHeld();
   await stopChild(first);
   removeHome(first.home);
   await checkStillRunning(second, binary, secondObservation);
@@ -383,7 +526,8 @@ async function checkPair(
   removeHome(second.home);
 }
 
-async function cleanup(children: SupervisedChild[], homes: string[]): Promise<void> {
+async function cleanup(children: SupervisedChild[], homes: string[],
+  records: string[]): Promise<void> {
   const stops = children.map(stopChild);
   const results = await Promise.allSettled(stops);
   for (const result of results) {
@@ -393,6 +537,9 @@ async function cleanup(children: SupervisedChild[], homes: string[]): Promise<vo
   }
   for (const home of homes) {
     removeHome(home);
+  }
+  for (const record of records) {
+    rmSync(record, { force: true });
   }
 }
 
@@ -408,10 +555,17 @@ export async function checkNative(challengeId: string): Promise<void> {
   assert.equal(statfsSync('/home/private').type, 0x01021994);
   const children: SupervisedChild[] = [];
   const homes: string[] = [];
+  const records: string[] = [];
+  const observations: NativeObservation[] = [];
+  const model = await heldModel();
   try {
     for (let index = 0; index < 2; index++) {
       const childId = randomUUID();
       const home = `/home/private/turn-${childId}`;
+      const recordPath = `/run/opencrane-native-${childId}.identity`;
+      // Record ownership before a crash can interrupt home creation.
+      writeFileSync(recordPath, `${challengeId}\n`, { flag: 'wx', mode: 0o600 });
+      records.push(recordPath);
       const directoryOptions = { mode: 0o700 };
       // Refuse an existing home before cleanup can remove it.
       mkdirSync(home, directoryOptions);
@@ -420,16 +574,25 @@ export async function checkNative(challengeId: string): Promise<void> {
       const launch = privateCodexLaunch(home, childId);
       // Keep native children in the supervisor's process group for collector-loss cleanup.
       const child = spawn(launch.command, launch.args, launch.options);
-      const supervised = superviseChild(child, codexConnection, home, childId);
+      const supervised = superviseChild(
+        child, codexConnection, home, childId, challengeId, recordPath,
+      );
       children.push(supervised);
       if (child.pid !== undefined) {
         supervised.state.wrapperStart = processStart(child.pid);
       }
+      // Measure each native child before starting another wrapper, so cleanup knows what to stop.
+      observations.push(await checkNativeRpc(supervised, binary));
     }
     const [first, second] = children;
-    assert(first && second);
-    await checkPair(first, second, binary);
+    const [firstObservation, secondObservation] = observations;
+    assert(first && second && firstObservation && secondObservation);
+    await checkPair(first, second, binary, model, firstObservation, secondObservation);
   } finally {
-    await cleanup(children, homes);
+    try {
+      await cleanup(children, homes, records);
+    } finally {
+      await model.close();
+    }
   }
 }
