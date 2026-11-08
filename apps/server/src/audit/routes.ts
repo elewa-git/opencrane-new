@@ -140,10 +140,28 @@ function isChildPublication(record: AuditRecord): boolean {
 }
 async function visibleRecord(options: AuditOptions, memberId: string,
   record: AuditRecord, rights: Map<string, boolean>): Promise<AuditRecord> {
+  if (record.type === 'memory.maintenance_recorded') {
+    return visibleMaintenance(record, memberId);
+  }
   if (record.type === 'delegation.completed') {
     return visibleDelegation(options, memberId, record, rights);
   }
   return visiblePublication(options, memberId, record, rights);
+}
+
+function visibleMaintenance(record: AuditRecord, memberId: string): AuditRecord {
+  const visible: AuditRecord = { ...record };
+  const scopeId = record.maintenanceScopeId;
+  if (record.maintenanceMemberId === memberId && scopeId) {
+    // The memory route checks the owner's rights again when the link opens.
+    visible.taskHref = `/api/memory/${scopeId}/maintenance`;
+    return visible;
+  }
+  delete visible.maintenanceScopeId;
+  delete visible.maintenanceMemberId;
+  delete visible.maintenanceRootId;
+  delete visible.taskHref;
+  return visible;
 }
 async function visibleDelegation(options: AuditOptions, memberId: string,
   record: AuditRecord, rights: Map<string, boolean>): Promise<AuditRecord> {

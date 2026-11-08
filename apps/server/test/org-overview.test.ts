@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { Query } from '@opencrane/projections';
 import { buildOverview, type OverviewRow, type OverviewSource } from '../src/overview/rows.ts';
-import { providerRow } from '../src/overview/routes.ts';
+import { loadSource, memoryRow, providerRow } from '../src/overview/routes.ts';
 
 function row(source: OverviewRow['source'], id: string, priority: OverviewRow['priority'],
   time: string): OverviewRow {
@@ -30,6 +31,40 @@ function providerWithChecks(reachable?: ReturnType<typeof providerFact>,
 }
 
 describe('organisation overview rows', () => {
+  it('keeps a saved night pending until a result and never calls a root Ready', () => {
+    function savedNight(action: string) {
+      return memoryRow({ event_id: 'night-one', position: '5', recorded_at: recent,
+        metadata: { maintenanceAction: action } });
+    }
+    expect(savedNight('due')?.priority).toBe('unknown');
+    expect(savedNight('prepared')?.priority).toBe('unknown');
+    expect(savedNight('refused')?.priority).toBe('failure');
+    expect(savedNight('missed')?.priority).toBe('failure');
+    expect(savedNight('no_changes')).toBeNull();
+    expect(memoryRow({ event_id: 'night-two', position: '6',
+      recorded_at: new Date(recent), metadata: { maintenanceAction: 'prepared' } })?.eventAt)
+      .toBe(recent);
+  });
+
+  it('reports a late or timed-out memory source while keeping other rows', async () => {
+    const saved = { event_id: 'night-one', position: '5', recorded_at: recent,
+      metadata: { maintenanceAction: 'prepared' } };
+    const query = vi.fn().mockResolvedValueOnce({ rows: [{ sequence: '5' }] })
+      .mockResolvedValueOnce({ rows: [saved] });
+    const db: Query = { query };
+    const late = await loadSource('memory', db, 'test', 6, 100, 'SELECT saved', memoryRow);
+    expect(late.status).toBe('applying');
+    expect(late.rows[0]?.priority).toBe('unknown');
+
+    const timeout = vi.fn().mockRejectedValue(new Error('timeout'));
+    const unavailable = await loadSource('memory', { query: timeout },
+      'test', 6, 100, 'SELECT saved', memoryRow);
+    expect(unavailable.status).toBe('unavailable');
+    const overview = buildOverview([source('people', [row('people', 'invite', 'needs_input', old)]),
+      unavailable]);
+    expect(overview.rows.map(item => item.id)).toEqual(['invite']);
+    expect(overview.allClear).toBe(false);
+  });
   it('requires current passing reachability and model checks before Ready', () => {
     const pass = providerFact('pass', old);
     const laterPass = providerFact('pass', recent);

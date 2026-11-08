@@ -17,10 +17,11 @@ const querySchema = z.object({
 }).strict();
 
 type ReadOptions = GroupOptions & { modelDb: Query | undefined };
-type AvailableName = 'people' | 'providers' | 'integrations' | 'spending';
+type AvailableName = 'people' | 'providers' | 'integrations' | 'spending' | 'memory';
 const checkpointNames: Record<AvailableName, string> = {
   people: 'members', providers: 'providers', integrations: 'mcp catalogue',
   spending: 'model-budgets',
+  memory: 'audit',
 };
 type SavedProvider = { providerId: string; revision: number; position: number;
   reachable?: { outcome: string; time: string; changeId: string; revision: number };
@@ -113,6 +114,22 @@ function spendingRow(record: { permit_id: string; position: string;
     `/api/org/effects/${encodeURIComponent(record.permit_id)}`);
 }
 
+export function memoryRow(record: { event_id: string; position: string;
+  recorded_at: string | Date; metadata: unknown }): OverviewRow | null {
+  const metadata = z.object({ maintenanceAction: z.enum([
+    'due', 'prepared', 'refused', 'missed', 'no_changes',
+  ]) }).safeParse(record.metadata);
+  if (!metadata.success || metadata.data.maintenanceAction === 'no_changes') return null;
+  const action = metadata.data.maintenanceAction;
+  let priority: OverviewPriority = 'unknown';
+  if (action === 'refused' || action === 'missed') priority = 'failure';
+  const eventAt = record.recorded_at instanceof Date
+    ? record.recorded_at.toISOString() : record.recorded_at;
+  return overviewRow('memory', record.event_id, `memory:${record.event_id}`,
+    priority, eventAt, Number(record.position), 'view_evidence',
+    `/api/org/history/${encodeURIComponent(record.event_id)}`);
+}
+
 export async function loadSource<T extends Record<string, unknown>>(name: AvailableName, db: Query,
   silo: string, head: number, deadline: number, sql: string,
   convert: (record: T) => OverviewRow | null): Promise<OverviewSource> {
@@ -153,6 +170,10 @@ async function loadOverview(options: ReadOptions, deadline: number): Promise<Ove
   const integrations = loadSource('integrations', options.db, silo, head, deadline,
     `SELECT server_id, lifecycle, changed_at, position, policy FROM mcp_catalogue
       WHERE silo = $1 ORDER BY server_id LIMIT 51`, integrationRow);
+  const memory = loadSource('memory', options.db, silo, head, deadline,
+    `SELECT event_id, position, recorded_at, metadata FROM audit_entries
+      WHERE silo = $1 AND event_type = 'memory.maintenance_recorded'
+      ORDER BY position DESC LIMIT 51`, memoryRow);
   let spending: Promise<OverviewSource>;
   if (options.modelDb) {
     spending = loadSource('spending', options.modelDb, silo, head, deadline,
@@ -163,9 +184,9 @@ async function loadOverview(options: ReadOptions, deadline: number): Promise<Ove
     spending = Promise.resolve({ name: 'spending', status: 'unavailable', checkpoint: null,
       checkedAt: new Date().toISOString(), rows: [] });
   }
-  const loaded = await Promise.all([people, providers, integrations, spending]);
+  const loaded = await Promise.all([people, providers, integrations, spending, memory]);
   const checkedAt = new Date().toISOString();
-  for (const name of ['publication', 'memory', 'routines'] as const) {
+  for (const name of ['publication', 'routines'] as const) {
     loaded.push({ name, status: 'unavailable', checkpoint: null, checkedAt, rows: [] });
   }
   return loaded;

@@ -9,8 +9,9 @@ stays visible as unavailable.
 ## Where it fits
 
 The server handles the request. The overview reads saved results from the same
-read tables used by people, providers, integrations and spending. A provider is
+read tables used by people, providers, integrations, spending and memory. A provider is
 Ready only when both its connection and model checks passed for its current settings.
+An admitted memory root stays unknown until a saved result exists.
 
 ```mermaid
 graph LR
@@ -19,6 +20,7 @@ graph LR
   Overview --> Providers
   Overview --> Integrations
   Overview --> Spending
+  Overview --> Memory
 ```
 
 ## What it is responsible for

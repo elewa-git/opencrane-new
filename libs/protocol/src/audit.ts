@@ -51,6 +51,11 @@ const currentAccounting = z.discriminatedUnion('status', [
   z.object({ status: z.literal('unavailable'), checkedAt: utc }).strict(),
 ]);
 export const auditRecordSchema = z.object({
+  maintenanceAction: z.enum(['due', 'prepared', 'refused', 'missed', 'no_changes']).optional(),
+  maintenanceScopeKind: z.literal('person').optional(),
+  maintenanceScopeId: digest.optional(), maintenanceMemberId: id.optional(),
+  maintenanceNightId: digest.optional(), maintenanceRootId: digest.optional(),
+  maintenanceAllowanceCents: z.int().nonnegative().safe().optional(),
   delegationAccess: z.enum(['visible', 'restricted']).optional(),
   delegationId: id.optional(), parentDelegationId: id.optional(), rootId: id.optional(),
   assistantId: id.optional(), delegationGeneration: z.int().positive().optional(),
@@ -63,7 +68,10 @@ export const auditRecordSchema = z.object({
   terminalEventId: id.optional(), terminalPosition: z.int().positive().optional(),
   parentConversationId: id.optional(), childConversationId: id.optional(),
   resultEventId: id.optional(), publicationKind: z.enum(['final', 'interim']).optional(),
-  taskHref: z.string().regex(/^\/workspace\?conversation=[\w:.-]{1,300}$/u).optional(),
+  taskHref: z.union([
+    z.string().regex(/^\/workspace\?conversation=[\w:.-]{1,300}$/u),
+    z.string().regex(/^\/api\/memory\/[a-f0-9]{64}\/maintenance$/u),
+  ]).optional(),
   currentAccounting: currentAccounting.optional(),
   computerId: id.optional(), generation: z.int().positive().optional(),
   takeoverId: id.optional(), leaseId: id.optional(),
@@ -106,7 +114,7 @@ export const auditFilterSchema = z.object({
   type: z.enum(['decision', 'effect', 'approval', 'mcp', 'connection', 'egress',
     'takeover', 'team', 'ownership', 'assistant', 'grant', 'budget', 'tool',
     'credential', 'security', 'gateway', 'agent', 'member', 'computer', 'silo',
-    'conversation', 'delegation']).optional(),
+    'conversation', 'delegation', 'memory']).optional(),
   actorId: id.optional(),
   outcome: z.enum(['success', 'error', 'unknown', 'not_dispatched', 'recorded']).optional(),
   reference: id.optional(),

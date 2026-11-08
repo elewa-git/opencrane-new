@@ -121,6 +121,12 @@ separate server field. Suspended and resumed computers use the starting state.
 
 ## Tool fields in chat rows
 
+Organisation audit replies accept validated nightly memory action, personal scope kind,
+night and optional root allowance metadata. Only the personal owner receives the
+scope and member ids and a link to the existing maintenance status read. A prepared
+record does not mean a run completed. The 100-cent allowance has its own field; it
+does not use the charge field.
+
 `chatRowSchema.data` allows optional strings `callId`, `serverId`, `toolName`,
 `requestId` and `approvalId`. Tool rows check `status` as completed/failed;
 decision rows check `outcome` as allow/ask/deny. Other rows keep their own string

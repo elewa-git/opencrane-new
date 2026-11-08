@@ -28,6 +28,11 @@ export function dispatchStatus(outcome: unknown): AuditRecord['status'] {
 }
 
 export function auditLinks(event: EventEnvelope, data: Record<string, unknown>) {
+  if (event.type === 'memory.maintenance_recorded') {
+    // Keep a private night separate from any caller-supplied chat links.
+    return { request: undefined, permit: undefined, approval: undefined,
+      conversationId: undefined, turnId: undefined, requesterId: undefined };
+  }
   if (event.type.startsWith('delegation.')) {
     // Keep child work separate from every matching chat turn and envelope link.
     return { request: undefined, permit: undefined, approval: undefined,

@@ -11,7 +11,8 @@ import { envelope } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { auditResponseSchema, auditDetailSchema } from '@opencrane/protocol';
 import { auditTrail, connectMemberFeed, conversations, members, pgDb, ProjectionRunner,
-  readAudit, readAuditDetail, rebuildAuditProjection, memoryScopeId } from '@opencrane/projections';
+  readAudit, readAuditDetail, rebuildAuditProjection, memoryScopeId,
+  memoryProjection } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -33,9 +34,14 @@ let fga: Awaited<ReturnType<typeof openfga>>;
 let feed: Awaited<ReturnType<typeof connectMemberFeed>>;
 let app: ReturnType<typeof buildServer>;
 let runner: ProjectionRunner;
+const memory = memoryProjection({ decrypt: refuseDecrypt });
 let db: ReturnType<typeof pgDb>;
 let auth: ReturnType<typeof memberAuthorisation>;
 let logArguments: unknown[];
+
+function refuseDecrypt(): never {
+  throw new Error('Audit reads must not decrypt memory');
+}
 
 function headers(memberId: string) {
   const now = Math.floor(Date.now() / 1000);
@@ -58,6 +64,13 @@ async function append(subject: string, type: string, data: object, id: string) {
   event.id = id;
   event.time = '2026-10-15T12:00:00Z';
   if (!type.startsWith('delegation.')) event.principal = { kind: 'human', id: 'owner' };
+  if (type === 'memory.maintenance_recorded') {
+    const action = z.object({ action: z.string() }).parse(data).action;
+    const scheduler = action === 'due' || action === 'missed';
+    event.source = scheduler ? 'opencrane-nightly' : 'opencrane-server';
+    event.principal = scheduler ? { kind: 'system', id: 'nightly-memory' } :
+      { kind: 'system', id: 'opencrane-server' };
+  }
   if (type === 'member.joined') event.principal = { kind: 'human', id: subject.slice(7) };
   if (type === 'conversation.child_result_published') {
     event.source = 'opencrane-server';
@@ -85,6 +98,7 @@ async function setup() {
   await runner.initialise(members);
   await runner.initialise(conversations);
   await runner.initialise(auditTrail);
+  await runner.initialise(memory);
   for (const memberId of ['owner', 'admin', 'reviewer', 'guest', 'child_reader']) {
     const role = memberId === 'owner' ? 'owner' : memberId === 'guest' ? 'member' : 'admin';
     await append(`member-${memberId}`, 'member.invited', {
@@ -114,6 +128,7 @@ async function setup() {
   await runner.run(members);
   await runner.run(conversations);
   await runner.run(auditTrail);
+  await runner.run(memory);
   feed = await connectMemberFeed(String(dbs.queue.options.connectionString));
   expect(await feed.memberId('test', config.issuerUrl, 'owner')).toBe('owner');
   expect((await auth.check('owner', 'admin')).allowed).toBe(true);
@@ -123,7 +138,8 @@ async function setup() {
   }
   const shared = { silo: 'test', store: nats.store, db, feed, binding: auth.binding };
   const objects = new Client({ endPoint: '127.0.0.1' });
-  app = buildServer(config, { audit: shared, files: { ...shared, objects, scan: unusedScan } });
+  app = buildServer(config, { audit: shared, memory: shared,
+    files: { ...shared, objects, scan: unusedScan } });
   function captureErrors(request: FastifyRequest) {
     function recordError(...args: unknown[]) {
       logArguments.push(args);
@@ -565,20 +581,25 @@ it('leaves older delegation formats out of modern history', async () => {
 
 const scopeId = memoryScopeId('test', 'person', 'owner');
 
-async function maintenance(id: string, action: 'due' | 'prepared' | 'refused' | 'missed') {
+async function maintenance(id: string, action: 'due' | 'prepared' | 'refused' | 'missed',
+  date = '2026-10-15') {
   const reason = action === 'refused' ? 'access_denied' :
     action === 'missed' ? 'window_missed' : null;
   const data = {
-    scopeId, nightId: 'a'.repeat(64), batchKey: 'b'.repeat(64),
-    inputRevision: 'c'.repeat(64), date: '2026-10-15', bindingRevision: 1,
+    scopeId, nightId: date === '2026-10-15' ? 'a'.repeat(64) : 'e'.repeat(64),
+    batchKey: 'b'.repeat(64), inputRevision: 'c'.repeat(64), date, bindingRevision: 1,
     memberId: 'owner', acceptedCapCents: 100,
-    intendedAt: '2026-10-15T02:00:00.000Z', selectedAt: '2026-10-15T02:01:00.000Z',
-    inputRefs: [], action, reason,
+    intendedAt: `${date}T02:00:00.000Z`, selectedAt: `${date}T02:01:00.000Z`,
+    inputRefs: [
+      { memoryId: `corrected-${privateText}`, revision: 2, expiresAt: null, position: 1 },
+      { memoryId: `forgotten-${privateText}`, revision: 3, expiresAt: null, position: 2 },
+    ], action, reason,
     ...(action === 'prepared' ? { rootId: 'd'.repeat(64), model: 'model',
       providerId: 'provider' } : {}),
   };
   await append(`scope-${scopeId}`, 'memory.maintenance_recorded', data, id);
   await runner.run(auditTrail);
+  await runner.run(memory);
 }
 
 it('shows one safe nightly row and checks the personal task link', async () => {
@@ -591,7 +612,11 @@ it('shows one safe nightly row and checks the personal task link', async () => {
   expect(admin.body).not.toContain(privateText);
   const ownerRow = auditResponseSchema.parse(owner.json()).rows[0]!;
   const adminRow = auditResponseSchema.parse(admin.json()).rows[0]!;
+  expect(ownerRow.id).toBe('night-one');
   expect(ownerRow.records[0]?.taskHref).toBe(`/api/memory/${scopeId}/maintenance`);
+  const ownStatus = await app.inject({ url: ownerRow.records[0]!.taskHref!,
+    headers: headers('owner') });
+  expect(ownStatus.statusCode, ownStatus.body).toBe(200);
   expect(adminRow.records[0]?.taskHref).toBeUndefined();
   expect(admin.body).not.toContain(scopeId);
   expect(admin.body).not.toContain('owner');
@@ -599,6 +624,7 @@ it('shows one safe nightly row and checks the personal task link', async () => {
   expect(ownerRow.records[0]?.amountCents).toBeUndefined();
   expect(ownerRow.records[0]?.maintenanceAllowanceCents).toBe(100);
   expect((await detail('admin', ownerRow.id)).body).not.toContain(scopeId);
+  expect((await detail('owner', ownerRow.id)).body).not.toContain(privateText);
   const saved = (await nats.store.readEvent(await nats.store.head())).event;
   await auditTrail.apply(db, saved, await nats.store.head());
   expect(auditResponseSchema.parse((await list('owner', '?type=memory')).json()).rows)
@@ -608,4 +634,52 @@ it('shows one safe nightly row and checks the personal task link', async () => {
     createLogger('maintenance-replay', { level: 'silent' }), { verify: true });
   expect((await list('owner', '?type=memory')).json()).toEqual(owner.json());
   expect(appendSpy).not.toHaveBeenCalled();
+  expect(JSON.stringify(logArguments)).not.toContain(privateText);
+});
+
+it('keeps equal-time memory pages in saved order after rebuilding', async () => {
+  await maintenance('night-old', 'missed');
+  await maintenance('night-new', 'prepared', '2026-10-16');
+  const first = auditResponseSchema.parse((await list('owner', '?type=memory&limit=1')).json());
+  const second = auditResponseSchema.parse((await list('owner',
+    `?type=memory&limit=1&before=${first.nextBefore}`)).json());
+  const ids = [first.rows[0]?.id, second.rows[0]?.id];
+  expect(ids).toEqual(['night-new', 'night-old']);
+  await rebuildAuditProjection(db, nats.store,
+    createLogger('maintenance-page-replay', { level: 'silent' }), { verify: true });
+  const rebuilt = auditResponseSchema.parse((await list('owner', '?type=memory&limit=2')).json());
+  expect(rebuilt.rows.map(record => record.id)).toEqual(ids);
+});
+
+it('rejects a spoofed nightly actor without logging its private references', async () => {
+  await maintenance('valid-night', 'due');
+  const saved = (await nats.store.readEvent(await nats.store.head())).event;
+  const spoofed = { ...saved, id: 'spoofed-night',
+    principal: { kind: 'human' as const, id: 'admin' } };
+  await expect(auditTrail.apply(db, spoofed, 999))
+    .rejects.toThrow('Invalid maintenance audit event');
+  expect((await list('admin', '?type=memory')).body).not.toContain(privateText);
+  expect(JSON.stringify(logArguments)).not.toContain(privateText);
+});
+
+it('keeps one row for a pending night and its result, without granting a reader access', async () => {
+  await maintenance('night-due', 'due');
+  await maintenance('night-refused', 'refused');
+  const owner = auditResponseSchema.parse((await list('owner', '?type=memory')).json());
+  expect(owner.rows).toHaveLength(1);
+  expect(owner.rows[0]?.id).toBe('night-refused');
+  expect(owner.rows[0]?.records[0]?.maintenanceAction).toBe('refused');
+  expect(owner.rows[0]?.outcome).toBe('not_dispatched');
+  const foreign = await list('guest', '?type=memory');
+  expect(foreign.statusCode).toBe(403);
+  const link = owner.rows[0]?.records[0]?.taskHref;
+  expect(link).toBeTruthy();
+  const inaccessible = await app.inject({ url: link!, headers: headers('admin') });
+  expect(inaccessible.statusCode).not.toBe(200);
+  expect(inaccessible.body).not.toContain(privateText);
+  await append('member-admin', 'member.removed', {
+    memberId: 'admin', removedBy: 'owner', reason: 'access_removed',
+  }, 'remove-admin-after-night');
+  expect((await list('admin', '?type=memory')).statusCode).toBe(403);
+  expect((await detail('admin', 'night-refused')).statusCode).toBe(403);
 });
