@@ -229,7 +229,7 @@ flowchart LR
   server -->|waits briefly for Forget locks| postgres
   server <-->|chat work, checked routine turns, private routine preparation and delivery, retained call status, Stops, checked reports and publication files| computer["apps/computer<br/>assistant computers"]
   server -->|wakes the original held Ask call| computer
-  server -->|checks an activated child start and its root allowance| runtime
+  server -->|checks child starts and root allowances with the models process's shared budget actor| runtime
   computer -.->|records private thread for memory discovery| server
   server -.->|prepares up to four private memory tools| computer
   computer -->|AI and tool calls| runtime["Private services<br/>models process, AI gateway, tools and virus scanner"]
@@ -433,8 +433,9 @@ become a routine session. Public chat routes reserve these session ids for the w
 A stopped, changed or expired occurrence cannot prepare a session.
 The server can pass a checked routine claim through private input, a fixed spending
 allowance and one computer turn. It checks access again after waking the computer.
-The routines worker still has no deployed delivery connection, so automatic runs
-remain unavailable.
+The models process now binds this path to the same budget actor that handles ordinary
+calls. A lost budget leader or a second actor refuses routine delivery. The routines
+worker still has no deployed delivery connection, so automatic runs remain unavailable.
 
 1. **A person joins.** [Auth](src/auth/README.md) checks their sign-in.
    [Members](src/members/README.md) handles the first owner's claim or a later invitation.

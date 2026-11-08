@@ -122,8 +122,9 @@ async function setup() {
   actor = new BudgetActor(nats.store, 'test');
   await actor.start(10_000, 10_000, 'sales');
   budgetOwned = true;
-  async function requireBudgetLeader() {
-    if (!budgetOwned) throw new Error('Budget leader lost');
+  function requireBudgetLeader() {
+    if (!budgetOwned) return Promise.reject(new Error('Budget leader lost'));
+    return Promise.resolve();
   }
   budgetOwner = bindRoutineBudgetOwner(actor, nats.store, 'test', stop.signal,
     requireBudgetLeader);
@@ -365,7 +366,9 @@ it('connects the production scheduler entry to one guarded routine delivery',
 async function refusesSeparateBudgetActor() {
   const separate = new BudgetActor(nats.store, 'test');
   await separate.start(10_000, 10_000, 'sales');
-  async function requireLeader() {}
+  function requireLeader() {
+    return Promise.resolve();
+  }
   expect(() => bindRoutineBudgetOwner(separate, nats.store, 'test', stop.signal,
     requireLeader)).toThrow('Routine budget owner unavailable');
   expect(separate.state.roots).toEqual([]);
