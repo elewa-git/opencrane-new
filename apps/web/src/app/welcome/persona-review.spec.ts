@@ -202,7 +202,7 @@ describe('saved persona review', () => {
   it('generates the first revision after four saved steps and reads its saved text', async () => {
     let currentRevision: number | null = null;
     let commandBody: unknown;
-    const screen = open((url, init) => {
+    function read(url: string, init?: RequestInit): Promise<Response> {
       if (url === '/api/onboarding') return reply(progress(currentRevision, currentRevision ? 7 : 6));
       if (url === '/api/onboarding/persona' && init?.method === 'POST') {
         if (typeof init.body !== 'string') throw new Error('Missing generation body');
@@ -221,7 +221,8 @@ describe('saved persona review', () => {
           replacement: 'Generated private persona' });
       }
       return reply({ status: 'unavailable' }, 503);
-    });
+    }
+    const screen = open(read);
     await show(screen, 'Generated private persona');
     expect(commandBody).toMatchObject({ operation: 'revise', mode: 'generate',
       generation: 1, expectedPosition: 6 });
@@ -233,7 +234,7 @@ describe('saved persona review', () => {
   it('checks an uncertain first revision without sending another command', async () => {
     let currentRevision: number | null = null;
     let commandId = '';
-    const screen = open((url, init) => {
+    function read(url: string, init?: RequestInit): Promise<Response> {
       if (url === '/api/onboarding') return reply(progress(currentRevision));
       if (url === '/api/onboarding/persona' && init?.method === 'POST') {
         if (typeof init.body !== 'string') throw new Error('Missing generation body');
@@ -254,7 +255,8 @@ describe('saved persona review', () => {
         return reply({ ...revision, revision: 1, revisionId: 'revision-one' });
       }
       return reply({ status: 'unavailable' }, 503);
-    });
+    }
+    const screen = open(read);
     await show(screen, 'Creation status unknown');
     expect(screen.root.querySelector('button.approve')).toBeNull();
     button(screen.root, 'Check status').click();
@@ -265,7 +267,7 @@ describe('saved persona review', () => {
 
   it('reloads after a first revision conflict without posting another revision', async () => {
     let currentRevision: number | null = null;
-    const screen = open((url, init) => {
+    function read(url: string, init?: RequestInit): Promise<Response> {
       if (url === '/api/onboarding') return reply(progress(currentRevision));
       if (url === '/api/onboarding/persona' && init?.method === 'POST') {
         currentRevision = 1;
@@ -280,7 +282,8 @@ describe('saved persona review', () => {
           replacement: 'Other device persona' });
       }
       return reply({ status: 'unavailable' }, 503);
-    });
+    }
+    const screen = open(read);
     await show(screen, 'Other device persona');
     expect(screen.root.textContent).toContain('Proposal changed');
     expect(screen.fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/persona'))
@@ -290,13 +293,14 @@ describe('saved persona review', () => {
   it('shows the saved approval time when opening an approved revision', async () => {
     const approved = { ...progress(), approval: { revision: 2,
       revisionId: revision.revisionId, time: '2026-10-14T09:35:00.000Z' } };
-    const screen = open((url) => {
+    function read(url: string): Promise<Response> {
       if (url === '/api/onboarding') return reply(approved);
       if (url === '/api/onboarding/persona/revisions') {
         return reply({ currentRevision: 2, revisions: [revision] });
       }
       return reply(revision);
-    });
+    }
+    const screen = open(read);
     await show(screen, 'Approved revision r2');
     expect(screen.root.querySelector('time')?.dateTime).toBe(approved.approval.time);
     expect(screen.root.textContent).toContain('14 Oct 2026, 09:35 UTC');

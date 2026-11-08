@@ -41,6 +41,14 @@ function matchesCurrentRevision(detail: Detail, revisionId: string, progress: Pr
     detail.revisionId === revisionId && detail.generation === progress.survey.generation;
 }
 
+async function readBodyOrNull(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
 @Component({
   selector: 'oc-persona-review',
   templateUrl: './persona-review.html',
@@ -180,7 +188,7 @@ export class PersonaReview implements OnDestroy {
       } else if (response.ok) {
         await this.confirmGeneration(response, request);
       } else {
-        const body: unknown = await response.json().catch(() => null);
+        const body = await readBodyOrNull(response);
         if (!this.active(request)) return;
         const unknown = z.object({ status: z.literal('unknown') }).safeParse(body);
         if (unknown.success) {
@@ -248,7 +256,7 @@ export class PersonaReview implements OnDestroy {
       } else if (response.ok) {
         await this.confirm(response, request);
       } else {
-        const body: unknown = await response.json().catch(() => null);
+        const body = await readBodyOrNull(response);
         if (!this.active(request)) return;
         const unknown = z.object({ status: z.literal('unknown') }).safeParse(body);
         this.state.set(unknown.success ? 'unknown' : 'unavailable');
