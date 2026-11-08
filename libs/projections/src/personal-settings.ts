@@ -1,6 +1,6 @@
 import { parseEventByType, surveyStepSavedDataSchema, surveyRestartedDataSchema,
   personaRevisedDataSchema, personaApprovedDataSchema,
-  welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema,
+  welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema, onboardingCompletedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import type { Query } from './db.ts';
 import type { Projection } from './runner.ts';
@@ -15,7 +15,8 @@ type Survey = { generation: number; steps: SavedStep[]; nextStep: number | null;
     assignmentStatus: 'assigned' | 'not_requested' | 'provisioning';
     generation: number; revision: number | null; revisionId: string | null;
     assistantId: string | null; startedAt: string; answered: number;
-    status: 'welcome_active' | 'completion_pending';
+    status: 'welcome_active' | 'completion_pending' | 'completed';
+    completedAt?: string; finalAnswerId?: string;
     answers: { eventId: string; commandId: string; position: number;
       encrypted: string; encryptedDigest: string; keyRef: string }[] } };
 
@@ -44,7 +45,7 @@ function restartSurvey(survey: Survey, event: EventEnvelope) {
   survey.generation = data.generation;
   survey.steps = [];
   survey.nextStep = 1;
-  delete survey.welcome;
+  if (survey.welcome?.status !== 'completed') delete survey.welcome;
   delete survey.currentRevision;
   delete survey.currentRevisionId;
 }
@@ -110,6 +111,19 @@ function recordWelcomeAnswer(survey: Survey, event: EventEnvelope, position: num
   welcome.answered = 1;
   welcome.status = 'completion_pending';
 }
+function completeWelcome(survey: Survey, event: EventEnvelope) {
+  const data = onboardingCompletedDataSchema.parse(event.data);
+  const welcome = survey.welcome;
+  if (!welcome || welcome.status !== 'completion_pending' ||
+      welcome.answers[0]?.eventId !== data.finalAnswerId ||
+      welcome.welcomeId !== data.welcomeId || welcome.generation !== data.generation ||
+      welcome.scriptVersion !== data.scriptVersion || welcome.variant !== data.variant) {
+    throw new Error('Invalid welcome completion');
+  }
+  welcome.status = 'completed';
+  welcome.completedAt = event.time;
+  welcome.finalAnswerId = data.finalAnswerId;
+}
 function saveStep(survey: Survey, event: EventEnvelope, position: number, commandId: string) {
   const data = surveyStepSavedDataSchema.parse(event.data);
   if (data.generation !== survey.generation || data.step > survey.steps.length + 1) {
@@ -124,14 +138,16 @@ function saveStep(survey: Survey, event: EventEnvelope, position: number, comman
   survey.nextStep = data.step === 4 ? null : data.step + 1;
   delete survey.currentRevision;
   delete survey.currentRevisionId;
+  if (survey.welcome?.status !== 'completed') delete survey.welcome;
 }
+const personalTypes = new Set([
+  'onboarding.survey_step_saved', 'onboarding.survey_restarted',
+  'onboarding.persona_revised', 'onboarding.persona_approved',
+  'onboarding.welcome_started', 'onboarding.welcome_answer_recorded',
+  'onboarding.completed',
+]);
 async function apply(db: Query, event: EventEnvelope, position: number): Promise<void> {
-  if (event.type !== 'onboarding.survey_step_saved' &&
-      event.type !== 'onboarding.survey_restarted' &&
-      event.type !== 'onboarding.persona_revised' &&
-      event.type !== 'onboarding.persona_approved' &&
-      event.type !== 'onboarding.welcome_started' &&
-      event.type !== 'onboarding.welcome_answer_recorded') {
+  if (!personalTypes.has(event.type)) {
     return;
   }
   if (!parseEventByType(event).success || !event.commandId) {
@@ -139,7 +155,8 @@ async function apply(db: Query, event: EventEnvelope, position: number): Promise
   }
   const dataSchema = surveyStepSavedDataSchema.or(surveyRestartedDataSchema)
     .or(personaRevisedDataSchema).or(personaApprovedDataSchema)
-    .or(welcomeStartedDataSchema).or(welcomeAnswerRecordedDataSchema);
+    .or(welcomeStartedDataSchema).or(welcomeAnswerRecordedDataSchema)
+    .or(onboardingCompletedDataSchema);
   const data = dataSchema.parse(event.data);
   const current = await readSurvey(db, event.silo, data.memberId);
   const survey: Survey = current ?? { generation: 1, steps: [], nextStep: 1, position: 0 };
@@ -153,6 +170,8 @@ async function apply(db: Query, event: EventEnvelope, position: number): Promise
     startWelcome(survey, event);
   } else if (event.type === 'onboarding.welcome_answer_recorded') {
     recordWelcomeAnswer(survey, event, position);
+  } else if (event.type === 'onboarding.completed') {
+    completeWelcome(survey, event);
   } else {
     saveStep(survey, event, position, event.commandId);
   }

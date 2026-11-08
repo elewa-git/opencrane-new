@@ -249,6 +249,15 @@ export class HandlerRuntime {
       }
       return;
     }
+    if (handler.name === 'complete-welcome') {
+      // Keep the personal stream id and any private failure out of logs and failed jobs.
+      try {
+        await perform();
+      } catch {
+        throw new Error('Welcome completion attempt failed');
+      }
+      return;
+    }
     const run = { handler: handler.name, eventId: event.id, eventType: event.type,
       stream: event.subject, attempt: job.retryCount + 1 };
     await runHandler(this.options.logger, run, perform);

@@ -471,6 +471,16 @@ subscriptions through the existing handler upgrade procedure. Missing configurat
 leaves the reaction disabled; future survey commands must refuse unavailable custody.
 Offline survey replay uses ProjectionRunner with reactions off; no replay CLI is added.
 
+`complete-welcome` subscribes to `onboarding.welcome_answer_recorded`. It reads
+personal history with a ten-second limit before the two-second access check.
+That check watches the member stream and the exact assigned assistant stream.
+The system command uses a stable id from the saved final answer. It makes one
+conditional append of `onboarding.completed`. Duplicate deliveries and a lost
+append reply read the original completion. A survey restart or membership
+removal before completion leaves the old answer unfinished. The handler queue
+recovers unfinished delivery after a worker restart; handler upgrade can add
+jobs for already saved answers. Projection replay does not run the handler.
+
 Local source evidence: the tests first failed on 11 October 2026 at `1f55453e`.
 Focused tests use disposable NATS/PostgreSQL and retained private key files.
 Fresh-install survey journeys and customer secret-store qualification are NOT RUN.

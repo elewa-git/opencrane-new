@@ -62,7 +62,8 @@ export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, o
       if (history.position === 0) state = 'not_started';
       if (steps.length === 4) state = 'review';
       if (history.welcome) {
-        state = history.welcome.answers.length ? 'completion_pending' : 'welcome_active';
+        if (history.welcome.completion) state = 'completed';
+        else state = history.welcome.answers.length ? 'completion_pending' : 'welcome_active';
       }
       let nextStep: number | null = steps.length + 1;
       if (steps.length === 4) nextStep = null;
@@ -120,12 +121,14 @@ function readWelcome(options: ChatOptions, memberId: string, history: History) {
     savedAnswer = options.keys.decrypt(options.silo, `personal:${memberId}`,
       { ciphertext: data.encrypted, keyId: data.keyRef });
   }
-  const status = answer ? 'completion_pending' : 'welcome_active';
+  let status = answer ? 'completion_pending' : 'welcome_active';
+  if (welcome.completion) status = 'completed';
   const nextStep = answer ? null : question.stepId;
   return { status, welcomeId: welcome.start.event.id, scriptVersion: start.scriptVersion,
     variant: start.variant, revision: start.revision, revisionId: start.revisionId,
     assistantId: start.assistantId, assignmentStatus: start.assignmentStatus,
     startedAt: welcome.start.event.time,
+    completedAt: welcome.completion?.event.time ?? null,
     position: history.position, answered: welcome.answers.length, nextStep,
     question: answer ? null : question.question, answer: savedAnswer };
 }

@@ -20,6 +20,7 @@ import { memoryPrepareHandler } from './memory-prepare.ts';
 import { SandboxClient } from './kubernetes.ts';
 import { lifecycleHandlers, watchComputers } from './lifecycle.ts';
 import { personalKeyHandler } from './personal-keys.ts';
+import { welcomeCompletionHandler } from './welcome-completion.ts';
 import { departureCleanupHandler } from './departure-cleanup.ts';
 import { memoryCleanupHandler, recoverMemoryCleanup } from './memory-cleanup.ts';
 import { McpKubernetes } from './mcp-kubernetes.ts';
@@ -193,7 +194,8 @@ try {
       authorisation.handler, ownershipSeedHandler(commands.store),
       ownershipConfirmationHandler(commands.store), budgetStopHandler(commands.store),
       providerDefaultHandler(commands.store, binding), modelGrantHandler(commands.store),
-      ...lifecycleHandlers(commands.store), departureCleanupHandler(commands.store, authorisation)];
+      ...lifecycleHandlers(commands.store), departureCleanupHandler(commands.store, authorisation),
+      welcomeCompletionHandler(commands.store)];
     const mcpNamespace = process.env['MCP_KUBE_NAMESPACE']?.trim();
     if (mcpNamespace) {
       const mcpKube = new McpKubernetes(mcpNamespace);

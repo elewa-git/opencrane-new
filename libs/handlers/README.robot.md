@@ -30,6 +30,8 @@ and DML rights. Run `npm run provision` with command credentials first (R3 by
 default; `NATS_REPLICAS=1` for local tests). Start
 telemetry in the host for real trace ids; every valid handler attempt uses
 observability's `runHandler` (name, event id, stream, attempt), except memory and connection cleanup.
+Welcome completion also omits this attempt log because its stream id identifies
+the member. A failed attempt stores a fixed error without its private cause.
 Its attempt errors may contain private custody details, so the runtime replaces them with
 a fixed error before pg-boss stores the failed attempt. It does not log the raw error.
 Queue errors

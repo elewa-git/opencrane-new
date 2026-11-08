@@ -1,6 +1,6 @@
 import { parseEventByType, surveyRestartedDataSchema, surveyStepSavedDataSchema,
   personaRevisedDataSchema, personaApprovedDataSchema,
-  welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema,
+  welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema, onboardingCompletedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import { readStreamSummary, readEventAt, type StoredEvent, type SummaryKind }
   from '@opencrane/event-store';
@@ -15,7 +15,7 @@ type Survey = { generation: number; position: number; steps: StoredEvent[];
   commands: Map<string, Reference>; revisions: PersonaReference[];
   currentRevision: number | null;
   approval: { revision: number; revisionId: string; time: string } | null;
-  welcome: { start: StoredEvent; answers: StoredEvent[] } | null };
+  welcome: { start: StoredEvent; answers: StoredEvent[]; completion: StoredEvent | null } | null };
 function empty(): Survey {
   return { generation: 1, position: 0, steps: [], commands: new Map(),
     revisions: [], currentRevision: null, approval: null, welcome: null };
@@ -37,12 +37,13 @@ function addWelcomeStart(survey: Survey, row: StoredEvent) {
       !validWelcomeVariant(survey, data)) {
     throw new Error('Invalid welcome start');
   }
-  survey.welcome = { start: row, answers: [] };
+  survey.welcome = { start: row, answers: [], completion: null };
 }
 function addWelcomeAnswer(survey: Survey, row: StoredEvent) {
   const data = welcomeAnswerRecordedDataSchema.parse(row.event.data);
   const welcome = survey.welcome;
-  if (!welcome || welcome.answers.length || data.generation !== survey.generation ||
+  if (!welcome || welcome.answers.length || welcome.completion ||
+      data.generation !== survey.generation ||
       data.welcomeId !== welcome.start.event.id ||
       data.scriptVersion !== 'welcome-v1' ||
       data.stepId !== (welcomeStartedDataSchema.parse(welcome.start.event.data)
@@ -50,6 +51,19 @@ function addWelcomeAnswer(survey: Survey, row: StoredEvent) {
     throw new Error('Invalid welcome answer');
   }
   welcome.answers.push(row);
+}
+function addCompletion(survey: Survey, row: StoredEvent) {
+  const data = onboardingCompletedDataSchema.parse(row.event.data);
+  const welcome = survey.welcome;
+  const answer = welcome?.answers[0];
+  const start = welcome && welcomeStartedDataSchema.parse(welcome.start.event.data);
+  if (!welcome || !answer || !start || welcome.completion ||
+      data.generation !== start.generation || data.welcomeId !== start.welcomeId ||
+      data.scriptVersion !== start.scriptVersion || data.variant !== start.variant ||
+      data.finalAnswerId !== answer.event.id) {
+    throw new Error('Invalid welcome completion');
+  }
+  welcome.completion = row;
 }
 function addApproval(survey: Survey, row: StoredEvent) {
   const data = personaApprovedDataSchema.parse(row.event.data);
@@ -73,7 +87,8 @@ function addRevision(survey: Survey, row: StoredEvent) {
 }
 const personalTypes = new Set(['onboarding.survey_step_saved', 'onboarding.survey_restarted',
   'onboarding.persona_revised', 'onboarding.persona_approved',
-  'onboarding.welcome_started', 'onboarding.welcome_answer_recorded']);
+  'onboarding.welcome_started', 'onboarding.welcome_answer_recorded',
+  'onboarding.completed']);
 function applyChange(survey: Survey, row: StoredEvent) {
   const event = row.event;
   if (event.type === 'onboarding.survey_restarted') {
@@ -82,11 +97,13 @@ function applyChange(survey: Survey, row: StoredEvent) {
     survey.generation = data.generation;
     survey.steps = [];
     survey.currentRevision = null;
-    survey.welcome = null;
+    if (!survey.welcome?.completion) survey.welcome = null;
   } else if (event.type === 'onboarding.welcome_started') {
     addWelcomeStart(survey, row);
   } else if (event.type === 'onboarding.welcome_answer_recorded') {
     addWelcomeAnswer(survey, row);
+  } else if (event.type === 'onboarding.completed') {
+    addCompletion(survey, row);
   } else if (event.type === 'onboarding.persona_approved') {
     addApproval(survey, row);
   } else if (event.type === 'onboarding.persona_revised') {
@@ -99,6 +116,7 @@ function applyChange(survey: Survey, row: StoredEvent) {
     survey.steps = survey.steps.slice(0, data.step - 1);
     survey.steps.push(row);
     survey.currentRevision = null;
+    if (!survey.welcome?.completion) survey.welcome = null;
   }
 }
 function add(survey: Survey, row: StoredEvent) {
@@ -110,7 +128,7 @@ function add(survey: Survey, row: StoredEvent) {
   const reference = { ...surveyReceipt(row), sequence: row.sequence,
     previousPosition: survey.position, generation: survey.generation };
   applyChange(survey, row);
-  survey.commands.set(event.commandId, reference);
+  if (event.type !== 'onboarding.completed') survey.commands.set(event.commandId, reference);
   survey.position = row.sequence;
 }
 function size(survey: Survey) {
@@ -124,7 +142,8 @@ export function surveyHistory(options: ChatOptions, memberId: string) {
     return { ...survey, steps: [...survey.steps], commands: new Map(survey.commands),
       revisions: [...survey.revisions],
       welcome: survey.welcome ? { start: survey.welcome.start,
-        answers: [...survey.welcome.answers] } : null, sequence };
+        answers: [...survey.welcome.answers], completion: survey.welcome.completion } : null,
+      sequence };
   }
   return readStreamSummary(options.store, options.silo, `personal-${memberId}`,
     kind, performance.now() + 10_000, take);

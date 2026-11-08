@@ -492,6 +492,10 @@ persona reference when assigned. `onboarding.welcome_answer_recorded` stores
 one ordered step id and encrypted answer. The schema checks the encrypted-byte
 digest without opening a key. Both events require the matching member, personal
 subject, human principal, server source and command id. Neither means completion.
+`onboarding.completed` uses the `onboarding-completion` system principal and
+`opencrane-ops` source. It stores the original final answer id, frozen welcome
+reference, script version, variant and fixed confirmation reference. It carries
+no answer text or key. `complete-welcome` subscribes to the answer event.
 
 ## Exact tool review
 
