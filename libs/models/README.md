@@ -138,7 +138,7 @@ built-in functions.
 
 ```mermaid
 flowchart LR
-  models -.->|replay tests use the database helper| store
+  models -.->|reads saved provider retirement before model calls; replay tests use the database helper| store
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks owner Ask and release bindings and company tool scopes, public tool addresses, reads, hosted image status and check requests, original call status, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, fixed positions before private replies, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal bearer and verified OAuth choices with current access and owner revocation from HTTP, admin company opt-in, explicit company choices, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature, licence and bound vulnerability checks, control, provider choice and spending"]
   server -->|asks for the saved first child start| models
   models -->|tests private sign-in, refresh and revocation requests, revokes refresh and access tokens; checks remote HTTPS addresses, certificates, current revision promises and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains reply withdrawal after expiry or access loss; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
@@ -431,6 +431,8 @@ Retrying an unchanged model call can recover its original unsent hold and saved 
   of possible replacements stays incomplete until it can be reviewed safely.
   Existing routines block a complete review
   because they have no saved model binding yet.
+- Refuses new managed model calls as soon as a provider retirement is saved.
+  Calls already admitted keep their recorded outcome and charge.
 - Signs short passes for memory calls through the gateway.
   A thread can read the person's own facts, its assistant's notes and that assistant's group facts.
   It can save facts only in the requester’s own memory, with a separate write grant.

@@ -217,7 +217,8 @@ async function replacements(store: EventStore, current: Inventory, binding: Bind
 }
 
 function readyTarget(state: ProviderState) {
-  return Boolean(state.secretRef && state.saved && state.provider === 'openai' &&
+  return Boolean(!state.retired && state.secretRef && state.saved &&
+    state.provider === 'openai' &&
     state.reachable?.outcome === 'pass' && state.reachable.revision === state.revision);
 }
 

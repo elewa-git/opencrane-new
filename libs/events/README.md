@@ -61,13 +61,16 @@ flowchart LR
   parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions, including persona and scripted welcome records"]
   server["apps/server<br/>back end"] -.->|checks assistant file lists and records, private exit, native termination, routine turn identities, result references and settled cents, allowance fingerprints, owner, approval and unconfirmed delivery Stop intent, owner-removal pauses and admission receipts, session creation, pauses, conversation control refusals, child answers, requests, activations, retries, activation refusals, writer closure and refusal records| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
-  projections["libs/projections<br/>read tables"] -.-> events
+  projections["libs/projections<br/>read tables and retired choices"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, private tool stops, publication and connection cleanup, nightly memory reviews, results and routine permissions| events
   models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks Ask and release bindings, consent starts, callback and refresh claims, refresh starts, account confirmations and replacement generations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal, company and saved tool choices, company opt-in, company credential replacements, and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
 ```
 
 ## What it is responsible for
+
+Provider retirement records carry the reviewed old binding and one explicit
+pause or replacement for each dependant. They contain no key value.
 
 The nightly memory record can hold a safe refusal for one saved scope and date.
 It never contains a memory fact or a provider key.

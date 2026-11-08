@@ -17,6 +17,15 @@ message cannot consume that permit, even if its reviewed arguments match.
 
 ## Provider retirement preview
 
+`provider.retired` now stops new managed decisions at initial provider history
+and at the final provider-stream check. The latter reads saved events directly,
+so a lagging provider projection cannot admit a call. An already admitted call
+keeps its original reservation and settlement. Routing summaries apply reviewed
+pauses and replacements for future turns. Provider configuration and new checks
+refuse retired connections; late check results still record their actual outcome.
+The retirement POST remains closed. The preview still checks late routine and
+payer changes and appends nothing.
+
 `providerRetirementPreview` reuses provider event inventory, checked assistant
 history and indexed routine presence. It appends nothing. Old routine records
 have no model binding, so they keep the review incomplete. Replacements need

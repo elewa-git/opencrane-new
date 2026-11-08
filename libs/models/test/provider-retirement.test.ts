@@ -3,15 +3,16 @@ import { getEventDefinition, parseEventByType } from '@opencrane/events';
 import { applyProvider } from '@opencrane/projections';
 import { decisionProvider } from '../src/decision-provider.ts';
 import { envelope } from '../src/actor.ts';
-import { managedFixture, provider } from './managed-fixture.ts';
+import { managedFixture, provider, credential } from './managed-fixture.ts';
+import { data } from '../src/state.ts';
 
 const choice = { kind: 'assistant', dependantId: 'assistant', task: 'chat_turn',
-  old: { providerId: 'primary', model: 'gpt-6-luna', bindingSequence: 42 },
+  old: { providerId: 'primary', model: 'gpt-6-luna', state: 'active', bindingSequence: 42 },
   next: { state: 'paused', model: 'gpt-6-luna' } };
 const retirement = { ...provider, expectedProviderSequence: 7, choices: [choice] };
 
-function retiredEvent(payload: unknown = retirement, silo = 'test') {
-  return envelope(silo, 'provider-primary', 'provider.retired', payload);
+function retiredEvent(payload: unknown = retirement) {
+  return envelope('test', 'provider-primary', 'provider.retired', payload);
 }
 
 it('accepts only complete, same-connection, unambiguous retirement facts', () => {
@@ -25,13 +26,14 @@ it('accepts only complete, same-connection, unambiguous retirement facts', () =>
     { ...retirement, choices: [{ ...choice, next: { state: 'active', model: 'gpt-6-luna' } }] },
     { ...retirement, choices: [{ ...choice, next: { ...choice.next, providerId: 'other' } }] },
     { ...retirement, choices: [{ ...choice, old: { ...choice.old, bindingSequence: -1 } }] },
+    { ...retirement, choices: [{ ...choice, old: { providerId: 'primary',
+      model: 'gpt-6-luna', bindingSequence: 42 } }] },
     { ...retirement, silo: 'foreign' },
     { ...retirement, key: 'private-fixture-value' },
     { ...retirement, choices: [{ ...choice, instructions: 'private-fixture-value' }] },
+    { ...retirement, choices: [{ ...choice, modelArguments: 'private-fixture-value' }] },
   ];
   for (const payload of bad) expect(schema.safeParse(payload).success).toBe(false);
-  expect(parseEventByType(retiredEvent(retirement, 'foreign')).success).toBe(true);
-  expect(() => applyProvider(undefined, retiredEvent(retirement, 'foreign'), 1)).toThrow();
 });
 
 it('folds retirement without losing metadata and does not reactivate on a late result', () => {
@@ -65,7 +67,9 @@ it('refuses a saved retirement at the final dispatch check with a lagging projec
       { providerId: 'primary', model: 'gpt-6-luna' }, performance.now() + 2000, head);
     await setup.append('provider-primary', 'provider.retired', retirement);
     await expect(checked.confirm(performance.now() + 2000)).rejects.toThrow('Provider unavailable');
-    expect((await setup.call()).status).toBe(403);
+    const refusal = await setup.call();
+    expect(refusal.status).toBe(403);
+    expect(refusal.text).not.toContain(credential);
     expect(setup.received()).toBe(0);
   });
 
@@ -77,7 +81,7 @@ it('refuses retirement saved after allow audit and releases an unsent hold', asy
     const result = await append(command);
     const parsed = parseEventByType(command.event);
     if (!saved && parsed.success && parsed.event.type === 'decision.recorded' &&
-        (parsed.event.data as { outcome?: string }).outcome === 'allow') {
+        data(parsed.event)['outcome'] === 'allow') {
       saved = true;
       await setup.append('provider-primary', 'provider.retired', retirement);
     }

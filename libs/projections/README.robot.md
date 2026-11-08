@@ -8,6 +8,12 @@ adapters, the checkpoint runner, the members read model and the MCP catalogue.
 Authorisation and reactions belong elsewhere; replay never sends mail,
 changes OpenFGA or performs other external effects.
 
+The provider projection marks `provider.retired` with its saved time and choices.
+It checks each old binding before replacing that read row with the reviewed pause
+or target. The choice updates and provider metadata commit in the same runner
+transaction. A late check result may update dated evidence but cannot reopen the
+connection. Replay reads no key and makes no provider or model request.
+
 The conversation table has an index on `silo` and event `type`. The server uses
 it to read created and closed chats in one query when it polls for work. Two partial
 indexes support source-message lookups by message id within one silo and conversation.

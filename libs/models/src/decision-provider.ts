@@ -33,7 +33,8 @@ export async function decisionProvider(store: EventStore, silo: string,
   const current = await readStreamSummary(store, silo, subject,
     providerSummary, historyDeadline, takeProvider);
   const state = current.state;
-  if (!state || state.providerId !== choice.providerId || state.provider !== 'openai' ||
+  if (!state || state.retired || state.providerId !== choice.providerId ||
+      state.provider !== 'openai' ||
       !state.secretRef || !current.savedCommandId || !state.enabledModels.includes(choice.model)) {
     throw new Error('Provider unavailable');
   }

@@ -8,6 +8,9 @@ screens can load data quickly. The package keeps tables for members, groups,
 model providers, conversations, files, computers, memory, tool servers and a history of
 who did what. The saved event log
 remains the record of what happened, so these tables can be rebuilt.
+Provider read tables keep a retired connection's safe details and apply its
+reviewed binding choices in one database transaction. Rebuilding them reads only
+saved events and does not contact a model provider.
 Workers save adjacent pieces of a streamed reply together. This keeps live
 text and the final Stop result from waiting behind hundreds of separate commits.
 
@@ -46,7 +49,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  models["libs/models<br/>model and replay tests"] -.->|uses database locks and the test helper| projections
+  models["libs/models<br/>model choices and replay tests"] -.->|uses database locks and the test helper| projections
   ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and checks saved changes| projections["libs/projections<br/>read tables, change history, routines, memory, surveys, personas and welcomes"]
   server["apps/server<br/>back end"] -->|reads tables, own and admin routine lists, run pages and spending choices| pg["PostgreSQL<br/>database"]
   projections -->|saves history, child publication, searchable task outcomes and spending; keeps private audits and process exits outside chat feeds| pg

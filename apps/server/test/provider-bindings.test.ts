@@ -6,7 +6,8 @@ import { event, natsFixture } from '@opencrane/event-store/testing';
 import { pgDb, providers, routines, ProjectionRunner, rebuildProviderProjection, readProviders } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import type { EventEnvelope } from '@opencrane/events';
-import { providerDefaultHandler, providerSecretRef } from '@opencrane/models';
+import { providerDefaultHandler, providerSecretRef,
+  providerTurnAdmission } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 const config = testAuthConfig({ expectedOrgId: 'org-acme' });
@@ -512,10 +513,18 @@ async function replaysRetiredBindings() {
   });
   const bindingPosition = await nats.store.head(`provider-${source}`);
   const choices = [{ kind: 'assistant', dependantId: 'one', task: 'chat_turn',
-    old: { providerId: source, model: 'gpt-6.1-sol', bindingSequence: bindingPosition },
+    old: { providerId: source, model: 'gpt-6.1-sol', state: 'active',
+      bindingSequence: bindingPosition },
     next: { state: 'active', providerId: 'secondary', model: 'gpt-6.1-sol', revision: 3 } }];
   await append(`provider-${source}`, 'provider.retired', {
     ...common, revision: 3, expectedProviderSequence: bindingPosition, choices,
+  });
+  const admission = await providerTurnAdmission(nats.store, 'acme', 'one',
+    performance.now() + 10_000);
+  expect(admission.choice).toMatchObject({ providerId: 'secondary',
+    model: 'gpt-6.1-sol', state: 'active' });
+  await append(`provider-${source}`, 'provider.verification_recorded', {
+    ...common, revision: 3, kind: 'reachability', attemptId: 'late-check', outcome: 'pass',
   });
   await runner.run(providers);
   const before = await dbs.queue.query('SELECT * FROM model_bindings WHERE silo = $1 AND '
@@ -526,10 +535,23 @@ async function replaysRetiredBindings() {
     retired: { revision: 3, choices },
   });
   const logger = createLogger('retirement-replay', { level: 'silent' });
-  await rebuildProviderProjection(pgDb(dbs.queue), nats.reader, logger, { verify: true });
+  const providerCall = vi.spyOn(globalThis, 'fetch');
+  try {
+    await rebuildProviderProjection(pgDb(dbs.queue), nats.reader, logger, { verify: true });
+    expect(providerCall).not.toHaveBeenCalled();
+  } finally {
+    providerCall.mockRestore();
+  }
   const after = await dbs.queue.query('SELECT * FROM model_bindings WHERE silo = $1 AND '
     + 'dependant_id = $2', ['acme', 'one']);
   expect(after.rows).toEqual(before.rows);
+  const session = { sub: 'owner', orgId: 'org-acme', roles: ['owner'],
+    authTime: 1, exp: 2000000000 };
+  const detail = await app.inject({ method: 'GET', url: `/api/org/providers/${source}`,
+    headers: { cookie: `${config.cookieName}=${encodeSession(config, session)}` } });
+  expect(detail.json()).toMatchObject({ rows: [{ name: 'Retirement source', status: 'retired',
+    retired: { choices } }] });
+  expect(detail.body).not.toContain('secret:provider-');
   expect((await request('POST', source, {}, 'owner', undefined, undefined, 'retire'))
     .statusCode).toBe(404);
 }

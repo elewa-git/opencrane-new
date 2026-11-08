@@ -6,6 +6,12 @@ This package is the typed event catalogue used by server validation and the even
 core. It defines envelopes, per-type data schemas and examples; it does not
 append, project or dispatch events. Its routine fold rebuilds facts in memory.
 
+`provider.retired` is strict. It stores the connection revision and category
+position, each reviewed old binding position, and one explicit pause or replacement.
+Duplicate dependants, a source other than the retired connection, and a replacement
+on that same connection are invalid. No key, private instruction or model argument
+field is accepted. Old provider events keep their original schemas.
+
 `connection.refresh_started` strictly binds userId, serverId, connectionId, profile,
 attemptId, configurationDigest, generation, expectedSequence and actual scopes.
 The envelope carries the original change reference and human actor. Replay retains
