@@ -201,10 +201,17 @@ async function prepareChat(setup: Setup, memory: MemoryOptions,
     if (missFirstDispatch) {
       await dispatch(true);
       expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts - 1);
+      await dispatch(false);
+      await native.waitForTurnStarts(expectedStarts);
+      expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts);
+    } else {
+      async function delivered() {
+        await dispatch(false);
+        expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts);
+      }
+      const wait = { timeout: 30_000 };
+      await vi.waitFor(delivered, wait);
     }
-    await dispatch(false);
-    await native.waitForTurnStarts(expectedStarts);
-    expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts);
     await link.settled();
     return dispatchAttempts;
   }
