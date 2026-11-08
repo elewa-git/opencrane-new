@@ -243,6 +243,35 @@ it('keeps a child publication out of a parent reader’s matching turn', async (
   expect(detailPage.records.map(record => record.eventId)).toEqual(['parent-decision']);
 });
 
+it('hides child references when a publication reaches parent conversation history', async () => {
+  await publish('publication');
+  // Model an older projection that linked the publication to the parent reader.
+  await db.query(`UPDATE audit_entries SET requester_id = $1
+    WHERE silo = $2 AND event_id = $3`, ['guest', 'test', 'publication']);
+  const projected = await readAudit(db, 'test', {
+    conversationId: 'parent', requesterId: 'guest',
+  });
+  expect(projected.rows).toHaveLength(1);
+  expect(projected.rows[0]?.records[0]).toMatchObject({
+    childConversationId: 'child', resultEventId: 'child-result',
+  });
+  expect((await auth.conversation('guest', 'parent', 'read')).allowed).toBe(true);
+  expect((await auth.conversation('guest', 'child', 'read')).allowed).toBe(false);
+
+  const response = await app.inject({
+    url: '/api/conversations/parent/history', headers: headers('guest'),
+  });
+  expect(response.statusCode, response.body).toBe(200);
+  expect(response.body).not.toContain('"childConversationId":"child"');
+  expect(response.body).not.toContain('child-result');
+  const page = auditResponseSchema.parse(response.json());
+  expect(page.rows).toHaveLength(1);
+  expect(page.rows[0]?.id).toBe('publication');
+  expect(page.rows[0]?.records[0]).toMatchObject({ parentConversationId: 'parent' });
+  expect(page.rows[0]?.records[0]?.childConversationId).toBeUndefined();
+  expect(page.rows[0]?.records[0]?.resultEventId).toBeUndefined();
+});
+
 it('returns a fixed error and logs no private publication text after a failed read', async () => {
   await publish('publication');
   vi.spyOn(db, 'query').mockRejectedValueOnce(new Error(privateText));
