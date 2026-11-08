@@ -156,8 +156,19 @@ export async function readHostedImageScanAttempt(store: EventStore, silo: string
     status: 'checking' as const };
 }
 
+async function currentMalwareEvidence(result: Result, validateEvidence: () => Promise<boolean>) {
+  // Check the private scan after reading history, immediately before this append.
+  if (!await validateEvidence()) return;
+  const now = new Date();
+  const malware = result.checks.malware;
+  if (!validDates(result, now.getTime()) || malware.verdict !== 'pass') return;
+  if (now.getTime() >= Date.parse(malware.expiresAt) ||
+      now.getTime() >= Date.parse(malware.databaseUpdatedAt) + day) return;
+  return now;
+}
+
 export async function writeHostedAdmission(store: EventStore, silo: string, raw: unknown,
-  now?: Date) {
+  now?: Date, validateEvidence?: () => Promise<boolean>) {
   const parsed = hostedImageCheckedSchema.safeParse(raw);
   const conflict = { status: 'conflict' as const };
   if (!parsed.success) return conflict;
@@ -171,6 +182,11 @@ export async function writeHostedAdmission(store: EventStore, silo: string, raw:
     return conflict;
   }
   if (!validDates(result, now.getTime())) return conflict;
+  if (validateEvidence) {
+    const checkedNow = await currentMalwareEvidence(result, validateEvidence);
+    if (!checkedNow) return conflict;
+    now = checkedNow;
+  }
   const subject = `mcp-${result.serverId}`;
   const hash = createHash('sha256');
   hash.update(JSON.stringify([silo, subject, 'mcp.image_checked', result.attemptId]));

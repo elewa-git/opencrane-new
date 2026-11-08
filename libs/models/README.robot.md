@@ -3084,8 +3084,9 @@ journey: NOT RUN. Fixtures use the pinned gateway and disposable NATS, with no p
 ## Hosted image admission receipts
 
 `writeHostedAdmission` records one `mcp.image_checked` per installation attempt.
-It is private to the models package and absent from the public exports. Server code
-and server tests do not import it. Package exports refuse private subpaths; the
+It is absent from the main models export. The private image worker imports only
+`@opencrane/models/image-admission-writer`, which exposes this writer. Server code
+and server tests do not import it. Other private subpaths remain closed; the
 existing dependency check refuses relative imports into private model files.
 `hosted-admission-boundary.test.ts` checks public and private package imports.
 Append validation refuses any principal other than system/models. The fold keeps
@@ -3537,8 +3538,9 @@ admission fold. It returns the exact silo, server, attempt, platform and image
 digest only while that attempt is checking and has no saved result. It does not
 call the scanner, write an event or turn a partial scan into admission. The
 private image walk consumes this value separately from supplied image bytes.
-The production worker and its independent signature, vulnerability and licence
-checks remain disconnected.
+The private worker has a checked event adapter. A production scheduler, image
+source and independent signature, vulnerability and licence check composition
+remain disconnected.
 
 `requestHostedCheck` reuses saveToolCommand for current admin access and one conditional
 append. The helper reuses already-read history and supplies an access check to the

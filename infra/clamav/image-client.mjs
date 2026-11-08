@@ -39,7 +39,7 @@ function sameBinding(actual, expected) {
 }
 function validation(result, input, timing, passExpiry, signal) {
   // Retain only facts. The caller supplies its current bytes and binding again at use.
-  return function validate(bytes, binding) {
+  function validate(bytes, binding) {
     const now = Date.now();
     const checked = Date.parse(result.checkedAt);
     const updated = Date.parse(result.databaseUpdatedAt);
@@ -58,7 +58,13 @@ function validation(result, input, timing, passExpiry, signal) {
     }
     requireScan(names.size === 3);
     return result.verdict;
-  };
+  }
+  // Keep only authenticated scan facts needed for the private image event.
+  validate.evidence = Object.freeze({ sha256: result.sha256, verdict: result.verdict,
+    imageDigest: result.imageDigest, manifestDigest: result.manifestDigest,
+    databaseUpdatedAt: result.databaseUpdatedAt, checkedAt: result.checkedAt,
+    expiresAt: result.expiresAt });
+  return validate;
 }
 
 export async function scanImagePart(settings, bytes, binding, signal) {

@@ -84,6 +84,31 @@ function bindingFor(image) {
   return { silo: image.silo, serverId: image.serverId, attemptId: image.attemptId,
     platform: image.platform, targetImageDigest: image.imageDigest };
 }
+function malwareReceipt(parts) {
+  if (parts.length === 0) return;
+  const first = parts[0].validate.evidence;
+  if (!first) return;
+  const facts = [];
+  let checkedAt = first.checkedAt;
+  let expiresAt = first.expiresAt;
+  let databaseUpdatedAt = first.databaseUpdatedAt;
+  for (const part of parts) {
+    const fact = part.validate.evidence;
+    if (!fact || fact.verdict !== 'clean' ||
+        fact.imageDigest !== first.imageDigest ||
+        fact.manifestDigest !== first.manifestDigest) return;
+    facts.push(fact);
+    if (fact.checkedAt > checkedAt) checkedAt = fact.checkedAt;
+    if (fact.expiresAt < expiresAt) expiresAt = fact.expiresAt;
+    if (fact.databaseUpdatedAt < databaseUpdatedAt) {
+      databaseUpdatedAt = fact.databaseUpdatedAt;
+    }
+  }
+  if (Date.parse(expiresAt) <= Date.parse(checkedAt)) return;
+  return { verdict: 'pass', checkedAt, expiresAt, databaseUpdatedAt,
+    engineVersion: first.imageDigest, databaseDigest: first.manifestDigest.slice(7),
+    reportDigest: hash(Buffer.from(JSON.stringify(facts))) };
+}
 async function stage(directory, image, layers, signal) {
   await writeFile(join(directory, 'layers.json'), JSON.stringify(layers), privateFile);
   for (let index = 0; index < image.layers.length; index++) {
@@ -182,6 +207,7 @@ export async function scanHostedImage(image, settings, scanPart = scanImagePart,
       validations.push({ validate, bytes });
     }
     requireImage(validations.length === requiredPartCount);
+    const malware = malwareReceipt(validations);
     async function validate(currentImage, currentSettings) {
       try {
         requireImage(!signal?.aborted);
@@ -202,7 +228,7 @@ export async function scanHostedImage(image, settings, scanPart = scanImagePart,
     await validate(image, settings);
     return { verdict: infected ? 'infected' : 'clean', imageDigest: image.imageDigest,
       platform: image.platform, fileCount: files.length,
-      layerDigests: image.layers.map(layer => layer.digest), validate };
+      layerDigests: image.layers.map(layer => layer.digest), malware, validate };
   } catch {
     // Discard candidate paths, bytes and scanner diagnostics at the result boundary.
     return unavailable;
