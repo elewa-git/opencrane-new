@@ -194,26 +194,28 @@ async function prepareChat(setup: Setup, memory: MemoryOptions,
       if (refuseComputer) {
         refused.add('computer');
       }
-      await processConversation(options, setup.tokens, conversation, assistant,
+      const progress = await processConversation(options, setup.tokens, conversation, assistant,
         refused, connectedComputer);
       expect(link.rejection).toBeUndefined();
+      return progress;
     }
+    let firstProgress: Awaited<ReturnType<typeof processConversation>> | undefined;
+    let retryProgress: Awaited<ReturnType<typeof processConversation>> | undefined;
     if (missFirstDispatch) {
-      await dispatch(true);
-      expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts - 1);
-      await dispatch(false);
+      firstProgress = await dispatch(true);
+      retryProgress = await dispatch(false);
       await native.waitForTurnStarts(expectedStarts);
       expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts);
     } else {
       async function delivered() {
-        await dispatch(false);
+        retryProgress = await dispatch(false);
         expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts);
       }
       const wait = { timeout: 30_000 };
       await vi.waitFor(delivered, wait);
     }
     await link.settled();
-    return dispatchAttempts;
+    return { dispatchAttempts, firstProgress, retryProgress };
   }
   return { start, turnId };
 }

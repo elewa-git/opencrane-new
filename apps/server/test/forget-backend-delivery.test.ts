@@ -59,9 +59,9 @@ async function forgetFixture(missFirstDispatch = false) {
   await test.setup.runner.run(test.projection);
   // Keep fixture turn delivery within its access deadline on a busy host.
   const clock = memoryClock();
-  let dispatchAttempts: number;
+  let dispatch: Awaited<ReturnType<typeof test.start>>;
   try {
-    dispatchAttempts = await test.start(missFirstDispatch);
+    dispatch = await test.start(missFirstDispatch);
   } finally {
     clock.restore();
   }
@@ -71,12 +71,15 @@ async function forgetFixture(missFirstDispatch = false) {
   const recallProof = parsed.result.structuredContent.recallProof;
   const args = { scopeId, commandId: 'native-forget', memoryId: 'garden', expectedRevision: 1,
     recallProof };
-  return { ...test, args, dispatchAttempts };
+  return { ...test, args, dispatchAttempts: dispatch.dispatchAttempts,
+    firstDispatchProgress: dispatch.firstProgress, retryDispatchProgress: dispatch.retryProgress };
 }
 
 async function retriesMissedTurnDelivery() {
   const test = await forgetFixture(true);
   expect(test.dispatchAttempts).toBeGreaterThan(1);
+  expect(test.firstDispatchProgress?.connectionId).toBeUndefined();
+  expect(test.retryDispatchProgress?.connectionId).toBe(1);
   await test.native.waitForTurnStarts(1);
   memoryClock();
   const store = test.setup.nats.store;
