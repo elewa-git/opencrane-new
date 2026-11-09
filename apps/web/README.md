@@ -93,7 +93,7 @@ Its paying group is the group whose budget pays for that work.
 If the reply to a save is lost, the website asks the server what was saved before
 it offers another action. An unknown result stays visible with its original reference.
 
-Not built yet: organisation Overview and Routines; personal Preferences and My tools;
+Not built yet: organisation Routines; personal Preferences and My tools;
 some profile details and the Invitations list. The relevant
 pages explain these limits instead of showing invented data.
 

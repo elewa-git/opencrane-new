@@ -150,7 +150,14 @@ export class OverviewScreen implements OnInit {
   }
 
   protected allClear(): boolean {
-    return this.rows().length === 0 && this.next() === null && this.checkedAt() !== null;
+    return this.state() === 'ready' && this.rows().length === 0 &&
+      this.next() === null && this.checkedAt() !== null;
+  }
+
+  protected needsProvider(): boolean {
+    const providerSource = this.sources().find((source) => source.name === 'providers');
+    return this.state() === 'ready' && this.rows().length === 0 &&
+      this.next() === null && providerSource?.status === 'current';
   }
 
   protected unavailableSources(): OverviewSource[] {
@@ -168,7 +175,6 @@ export class OverviewScreen implements OnInit {
 
   protected async refresh(): Promise<void> {
     if (this.loading || this.revoked) return;
-    this.next.set(null);
     await this.loadPage(undefined, false);
   }
 

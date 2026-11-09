@@ -49,7 +49,7 @@
         <strong>Nothing needs your attention</strong>
         <p>Last checked {{ readableTime(checkedAt()) }}.</p>
       </div>
-    } @else if (rows().length === 0 && state() === 'ready') {
+    } @else if (needsProvider()) {
       <div class="overview-notice" role="status">
         <strong>Connect a model provider first</strong>
         <p>Start with Models & providers to make your organisation ready for work.</p>
