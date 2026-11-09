@@ -72,6 +72,27 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "prebundle": {
+              "exclude": [
+                "@opencrane/auth",
+                "@opencrane/authz",
+                "@opencrane/computer",
+                "@opencrane/demo-mcp",
+                "@opencrane/event-store",
+                "@opencrane/events",
+                "@opencrane/handlers",
+                "@opencrane/models",
+                "@opencrane/observability",
+                "@opencrane/odoo-mcp",
+                "@opencrane/ops",
+                "@opencrane/projections",
+                "@opencrane/protocol",
+                "@opencrane/server",
+                "@opencrane/web"
+              ]
+            }
+          },
           "configurations": {
             "production": {
               "buildTarget": "web:build:production"
