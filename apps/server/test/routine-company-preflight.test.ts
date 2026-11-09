@@ -300,15 +300,30 @@ async function changedToolBeforeSender() {
 }
 it('refuses a tool policy change between preflight and sender', changedToolBeforeSender);
 
-function holdPositionRead(subjectToHold: string) {
+function holdRaceClocks() {
+  const wallClock = vi.spyOn(Date, 'now').mockReturnValue(Date.now());
+  const monotonicClock = vi.spyOn(performance, 'now').mockReturnValue(1);
+  function restore() {
+    monotonicClock.mockRestore();
+    wallClock.mockRestore();
+  }
+  return { restore };
+}
+
+function holdPositionRead(subjectToHold: string,
+  phase: 'before-read' | 'after-read' = 'after-read') {
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const readPosition = nats.store.readStream.bind(nats.store);
   async function* heldPosition(...args: Parameters<typeof nats.store.readStream>) {
     const [subject] = args;
+    if (subject === subjectToHold && phase === 'before-read') {
+      entered.resolve();
+      await release.promise;
+    }
     const rows = readPosition(...args);
     const first = await rows.next();
-    if (subject === subjectToHold) {
+    if (subject === subjectToHold && phase === 'after-read') {
       entered.resolve();
       await release.promise;
     }
@@ -328,6 +343,7 @@ async function policyChangedDuringLaterRead() {
   const current = await fixture();
   const company = await current.preflight();
   const grantSubject = grantStream('mcp_server', current.serverId);
+  const clock = holdRaceClocks();
   const held = holdPositionRead(grantSubject);
   try {
     const confirmation = company.confirmCurrent();
@@ -342,6 +358,7 @@ async function policyChangedDuringLaterRead() {
   } finally {
     held.release();
     held.spy.mockRestore();
+    clock.restore();
   }
 }
 it('refuses a policy Block saved during a later grant position read',
@@ -372,6 +389,7 @@ async function teamGrantRevokedDuringLaterRead() {
   const current = await fixture();
   const team = await addTeamGrant(current);
   const company = await current.preflight();
+  const clock = holdRaceClocks();
   const held = holdPositionRead(team.teamSubject);
   try {
     const confirmation = company.confirmCurrent();
@@ -385,60 +403,64 @@ async function teamGrantRevokedDuringLaterRead() {
   } finally {
     held.release();
     held.spy.mockRestore();
+    clock.restore();
   }
 }
 it('refuses a team grant revoked during a later team position read',
   teamGrantRevokedDuringLaterRead);
 
 async function changedCompanyStreamDuringRead() {
-  for (let readIndex = 0; readIndex < 12; readIndex += 1) {
-    for (let streamIndex = 0; streamIndex < 7; streamIndex += 1) {
-      const current = await fixture();
-      const team = await addTeamGrant(current);
-      const company = await current.preflight();
-      const subjects = [current.profileSubject, `mcp-${current.serverId}`,
-        current.optInSubject, current.selectionSubject,
-        grantStream('mcp_server', current.serverId), team.teamSubject];
-      const changedSubject = subjects[streamIndex];
-      let change: ReturnType<typeof envelope> | undefined;
-      if (changedSubject) {
-        const rows = await history(nats.store, changedSubject, 'test');
-        const previous = rows.at(-1)!.event;
-        change = envelope('test', changedSubject, previous.type, previous.data);
-      }
-      async function changeCompany() {
-        if (change) {
-          await nats.seed([change]);
-        } else {
-          current.configuration.toolScopes.read = ['write'];
+  const clock = holdRaceClocks();
+  try {
+    for (let readIndex = 0; readIndex < 12; readIndex += 1) {
+      for (let streamIndex = 0; streamIndex < 7; streamIndex += 1) {
+        const current = await fixture();
+        const team = await addTeamGrant(current);
+        const company = await current.preflight();
+        const subjects = [current.profileSubject, `mcp-${current.serverId}`,
+          current.optInSubject, current.selectionSubject,
+          grantStream('mcp_server', current.serverId), team.teamSubject];
+        const changedSubject = subjects[streamIndex];
+        let change: ReturnType<typeof envelope> | undefined;
+        if (changedSubject) {
+          const rows = await history(nats.store, changedSubject, 'test');
+          const previous = rows.at(-1)!.event;
+          change = envelope('test', changedSubject, previous.type, previous.data);
         }
+        async function changeCompany() {
+          if (change) {
+            await nats.seed([change]);
+          } else {
+            current.configuration.toolScopes.read = ['write'];
+          }
+        }
+        const phase = readIndex < subjects.length ? 'before-read' : 'after-read';
+        const subjectToHold = subjects[readIndex % subjects.length];
+        if (!subjectToHold) throw new Error('Missing company position subject');
+        const held = holdPositionRead(subjectToHold, phase);
+        let refused: boolean;
+        try {
+          const confirmation = company.confirmCurrent();
+          await held.entered;
+          await changeCompany();
+          held.release();
+          try {
+            await confirmation;
+            refused = false;
+          } catch (error) {
+            if (!(error instanceof Error)) throw error;
+            expect(error.message).toBe('Routine company unavailable');
+            refused = true;
+          }
+        } finally {
+          held.release();
+          held.spy.mockRestore();
+        }
+        expect(refused, `stream ${streamIndex}, read ${readIndex}`).toBe(true);
       }
-      const originalRead = nats.store.readStream.bind(nats.store);
-      let reads = 0;
-      async function* changedDuringRead(...args: Parameters<typeof nats.store.readStream>) {
-        const currentRead = reads;
-        reads += 1;
-        if (currentRead === readIndex) await changeCompany();
-        const rows = originalRead(...args);
-        const first = await rows.next();
-        if (currentRead + 6 === readIndex) await changeCompany();
-        if (!first.done) yield first.value;
-      }
-      const spy = vi.spyOn(nats.store, 'readStream');
-      spy.mockImplementation(changedDuringRead);
-      let refused: boolean;
-      try {
-        await company.confirmCurrent();
-        refused = false;
-      } catch (error) {
-        if (!(error instanceof Error)) throw error;
-        expect(error.message).toBe('Routine company unavailable');
-        refused = true;
-      } finally {
-        spy.mockRestore();
-      }
-      expect(refused, `stream ${streamIndex}, read ${readIndex}`).toBe(true);
     }
+  } finally {
+    clock.restore();
   }
 }
 it('refuses all 84 company and OAuth changes during position reads',
