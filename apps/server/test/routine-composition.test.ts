@@ -229,8 +229,12 @@ function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyP
   function confirmCurrent() {
     return Promise.resolve();
   }
+  function confirmCredentialUse(_authorisedVersion: string) {
+    return Promise.resolve();
+  }
   const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
-    computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent };
+    computerGeneration, configurationDigest: 'a'.repeat(64),
+    credentialResourceVersion: '1', confirmCurrent, confirmCredentialUse };
   return Promise.resolve(company);
 }
 function compose(options: Options = { enabled: true }) {
@@ -255,6 +259,7 @@ async function assertCounts(threadId = 'native-1') {
   expect(sendAuthorisations).toHaveLength(1);
   expect(sendAuthorisations[0]!.event.data).toMatchObject({
     configurationDigest: 'a'.repeat(64),
+    credentialResourceVersion: '1',
   });
   const root = actor.state.roots[0]!;
   expect(root).toMatchObject({ payingGroupId: 'sales', allowanceCents: 1000, threadId });
@@ -509,6 +514,60 @@ async function refusesUnfinishedOAuthEditInsideSendAuthorisation() {
 }
 it('refuses an unfinished OAuth edit during the guarded send authorisation',
   refusesUnfinishedOAuthEditInsideSendAuthorisation);
+
+async function refusesCredentialChangeAfterFinalRead(kind: 'deleted' | 'changed') {
+  let resourceVersion: string | undefined = '1';
+  let changedAfterRead = false;
+  let toolCalls = 0;
+  function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+    computerGeneration: number) {
+    async function confirmCurrent() {
+      if (resourceVersion !== '1') throw new Error('Credential changed');
+    }
+    async function confirmCredentialUse(authorisedVersion: string) {
+      if (resourceVersion !== authorisedVersion) throw new Error('Credential changed');
+      toolCalls += 1;
+    }
+    return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
+      computerGeneration, configurationDigest: 'a'.repeat(64),
+      credentialResourceVersion: '1', confirmCurrent, confirmCredentialUse });
+  }
+  const append = nats.store.append.bind(nats.store);
+  async function changeBetweenReadAndPublication(...supplied: Parameters<typeof append>) {
+    const command = supplied[0];
+    if (command.event.type !== 'routine.run_send_authorised' || !command.checkAccess) {
+      return append(...supplied);
+    }
+    const checkAccess = command.checkAccess;
+    async function checkThenChange() {
+      await checkAccess();
+      resourceVersion = kind === 'deleted' ? undefined : '2';
+      changedAfterRead = true;
+    }
+    return append({ ...command, checkAccess: checkThenChange });
+  }
+  const spy = vi.spyOn(nats.store, 'append');
+  spy.mockImplementation(changeBetweenReadAndPublication);
+  try {
+    const composition = compose({ enabled: true, companyPreflight });
+    expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+    expect(changedAfterRead).toBe(true);
+    expect(await saved('routine.run_send_authorised', 'routine-orders')).toHaveLength(1);
+    const stops = await saved('routine.run_stop_requested', 'routine-orders');
+    expect(stops).toHaveLength(1);
+    expect(stops[0]!.event.data).toMatchObject({ reason: 'credential_changed' });
+    expect(toolCalls).toBe(0);
+    function isTurn(frame: Record<string, unknown>) {
+      return frame['type'] === 'turn';
+    }
+    expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
+  } finally {
+    spy.mockRestore();
+  }
+}
+it.each(['deleted', 'changed'] as const)(
+  'refuses a credential %s after the final read and before publication',
+  refusesCredentialChangeAfterFinalRead);
 
 async function inert(options: { enabled?: boolean; replay?: boolean }) {
   const before = await nats.store.head();
