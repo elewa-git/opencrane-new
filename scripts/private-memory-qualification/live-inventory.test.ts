@@ -113,26 +113,28 @@ function readsBoundContainers(): void {
   const observed: string[] = [];
   function docker(_binary: unknown, args: unknown): string {
     const command = z.array(z.string()).parse(args);
-    observed.push(`${command[11]}:${command.at(-1)}`);
-    const group = command.at(-1);
+    observed.push(`${command[11]}:${command[15]}`);
+    const group = command[15];
     const pid = group === 'supervisor' ? 1 : 123;
     return JSON.stringify({ pid, startTime: '456',
       pidNamespace: group === 'serverDelivery' ? 'pid:[4026531836]' : 'pid:[4026531837]',
-      protected: true });
+      executable: '/usr/local/bin/node', uid: 1000, cgroup: '0::/test\n', protected: true });
   }
   vi.mocked(execFileSync).mockImplementation(docker);
   const first = readCurrentInventory(context, { serverId, computerId });
   const final = readCurrentInventory(context, { serverId, computerId });
-  expect(first.records).toHaveLength(4);
-  expect(final.records).toHaveLength(4);
+  expect(first.records).toHaveLength(7);
+  expect(final.records).toHaveLength(7);
   expect(joinInventory(context, first, final)).toEqual({ ok: false, group: 'nativeWrapper' });
   expect(observed).toEqual([
     `${serverId}:serverDelivery`, `${computerId}:supervisor`, `${computerId}:bridge`,
-    `${computerId}:proxy`, `${serverId}:serverDelivery`, `${computerId}:supervisor`,
-    `${computerId}:bridge`, `${computerId}:proxy`,
+    `${computerId}:proxy`, `${computerId}:nativeWrapper`, `${computerId}:nativeChild`,
+    `${serverId}:canaryHelper`, `${serverId}:serverDelivery`, `${computerId}:supervisor`,
+    `${computerId}:bridge`, `${computerId}:proxy`, `${computerId}:nativeWrapper`,
+    `${computerId}:nativeChild`, `${serverId}:canaryHelper`,
   ]);
 }
-it('reads the four live services twice from the bound installation', readsBoundContainers);
+it('reads every private process from the bound installation', readsBoundContainers);
 
 function runsProbeAtInstalledComputerPath(): void {
   const dockerfile = readFileSync(new URL('../../apps/computer/Dockerfile', import.meta.url), 'utf8');
@@ -140,16 +142,24 @@ function runsProbeAtInstalledComputerPath(): void {
   const installedPath = '/scripts/private-memory-qualification/live-inventory-probe.ts';
   const copyInstruction = [`COPY --from=project ${source} \\`, `  ${installedPath}`].join('\n');
   expect(dockerfile).toContain(copyInstruction);
+  for (const filename of ['native-process-proof.ts']) {
+    const copied = `COPY --from=project scripts/private-memory-qualification/${filename}`;
+    expect(dockerfile).toContain(copied);
+  }
+  const packageDockerfile = readFileSync(
+    new URL('../../infra/package/Dockerfile', import.meta.url), 'utf8');
+  expect(packageDockerfile).toContain('COPY --from=build /app /app');
   function docker(_binary: unknown, args: unknown): string {
     const command = z.array(z.string()).parse(args);
-    const group = command.at(-1);
-    if (group === 'serverDelivery') {
+    const group = command[15];
+    if (group === 'serverDelivery' || group === 'canaryHelper') {
       expect(command).toContain('/app/scripts/private-memory-qualification/live-inventory-probe.ts');
     } else {
       expect(command).toContain(installedPath);
     }
     return JSON.stringify({ pid: 123, startTime: '456',
-      pidNamespace: 'pid:[4026531836]', protected: true });
+      pidNamespace: 'pid:[4026531836]', executable: '/usr/local/bin/node',
+      uid: 1000, cgroup: '0::/test\n', protected: true });
   }
   vi.mocked(execFileSync).mockImplementation(docker);
   readCurrentInventory(context, { serverId, computerId });

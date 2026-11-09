@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi, type MockInstance } from 'vitest';
-import { checkBridge } from './bridge-check.ts';
+import { checkBridge, checkProxy } from './bridge-check.ts';
 import { probeContainer } from './container-probe.ts';
 import { bridgeIdentity, checkLiveService, readProcessIdentity,
   type ProcessIdentity } from './private-processes.ts';
@@ -42,6 +42,25 @@ function acceptsOnlyLiveBridge(): void {
 }
 it('checks the launch record and live bridge around swap and dump measurements',
   acceptsOnlyLiveBridge);
+
+function deliversMeasuredIdentity(role: 'bridge' | 'proxy'): void {
+  let protectedIdentity: ProcessIdentity | undefined;
+  let deliveredIdentity: ProcessIdentity | undefined;
+  function measured(_role: string, identity: ProcessIdentity): true {
+    protectedIdentity = identity;
+    return true;
+  }
+  function delivered(identity: ProcessIdentity): void {
+    deliveredIdentity = identity;
+  }
+  vi.mocked(checkLiveService).mockImplementation(measured);
+  const result = role === 'bridge' ? checkBridge(delivered) : checkProxy(delivered);
+  expect(result.result).toBe(true);
+  expect(protectedIdentity).toEqual(bridge);
+  expect(deliveredIdentity).toEqual(protectedIdentity);
+}
+it.each(['bridge', 'proxy'] as const)(
+  'delivers the %s identity measured by its protection check', deliversMeasuredIdentity);
 
 function refusesUntrustedCaller(): void {
   uid.mockReturnValue(1000);

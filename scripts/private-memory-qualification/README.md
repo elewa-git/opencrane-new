@@ -96,8 +96,9 @@ and live storage checks are still pending. The live inventory reader asks the
 server delivery, computer supervisor, bridge and proxy for process identity and
 protection results in their measured containers. It checks the full process identity
 seen during protection, including the executable, before reporting a protected process.
-The joined check still stops the journey because the
-canary helper and native processes are not held through both inventory reads.
+The reader also checks the native pair and canary helper against their launch records.
+The joined check still stops the journey because these processes are not held through
+both inventory reads.
 The server package image does not contain Codex or its launch helpers, so its native
 check refuses. Tests put the qualification scripts into a disposable copy of the
 packaged computer image. They do not change the deployment image.

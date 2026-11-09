@@ -7,8 +7,7 @@ export const inventoryGroups = [
 ] as const;
 
 type InventoryGroup = typeof inventoryGroups[number];
-type LiveServiceGroup = Extract<InventoryGroup,
-  'serverDelivery' | 'supervisor' | 'bridge' | 'proxy'>;
+type LiveServiceGroup = InventoryGroup;
 export type InventoryCode = InventoryGroup | 'inventory';
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
@@ -26,6 +25,9 @@ const processIdentity = {
   pid: z.number().int().positive(),
   startTime: z.string().regex(/^[1-9][0-9]*$/u),
   pidNamespace: z.string().regex(/^pid:\[[1-9][0-9]*\]$/u),
+  executable: z.string().startsWith('/').max(512),
+  uid: z.number().int().nonnegative(),
+  cgroup: z.string().regex(/^0::\/[^\n]*\n$/u).max(512),
 };
 const launchSchema = z.strictObject({
   group: z.enum(inventoryGroups),
@@ -104,7 +106,9 @@ function validHelperId(record: { group: InventoryGroup; helperId?: string | unde
 
 function sameLaunch(record: CheckedRecord, launch: CheckedLaunch): boolean {
   return record.pid === launch.pid && record.startTime === launch.startTime &&
-    record.pidNamespace === launch.pidNamespace;
+    record.pidNamespace === launch.pidNamespace &&
+    record.executable === launch.executable && record.uid === launch.uid &&
+    record.cgroup === launch.cgroup;
 }
 
 function processKey(record: CheckedRecord): string {
@@ -190,7 +194,9 @@ function isFailure(value: Map<string, CheckedRecord> | JoinResult): value is Joi
 
 function sameProcess(first: CheckedRecord, final: CheckedRecord): boolean {
   return first.pid === final.pid && first.startTime === final.startTime &&
-    first.pidNamespace === final.pidNamespace;
+    first.pidNamespace === final.pidNamespace &&
+    first.executable === final.executable && first.uid === final.uid &&
+    first.cgroup === final.cgroup;
 }
 
 // Compare every required group twice. A PASS can only follow the second live read.
@@ -224,19 +230,19 @@ export function joinInventory(contextInput: unknown, firstInput: unknown,
 type InventoryContainers = { serverId: string; computerId: string };
 const containerId = z.string().regex(/^[a-f0-9]{64}$/u);
 const liveProcessSchema = z.strictObject({
-  pid: processIdentity.pid,
-  startTime: processIdentity.startTime,
-  pidNamespace: processIdentity.pidNamespace,
+  ...processIdentity,
   protected: z.literal(true),
 });
 const liveGroups: readonly LiveServiceGroup[] = [
-  'serverDelivery', 'supervisor', 'bridge', 'proxy',
+  'serverDelivery', 'supervisor', 'bridge', 'proxy', 'nativeWrapper', 'nativeChild',
+  'canaryHelper',
 ];
 
-function liveProcess(container: string, group: LiveServiceGroup):
+function liveProcess(container: string, group: LiveServiceGroup, context: InventoryContext,
+  helperId?: string):
   z.output<typeof liveProcessSchema> {
   let probePath: string;
-  if (group === 'serverDelivery') {
+  if (group === 'serverDelivery' || group === 'canaryHelper') {
     probePath = '/app/scripts/private-memory-qualification/live-inventory-probe.ts';
   } else {
     probePath = '/scripts/private-memory-qualification/live-inventory-probe.ts';
@@ -245,6 +251,12 @@ function liveProcess(container: string, group: LiveServiceGroup):
     '--env', 'NODE_OPTIONS=', '--env', 'NODE_PATH=', '--env', 'LD_PRELOAD=',
     container, '/usr/local/bin/node', '--experimental-strip-types',
     probePath, group];
+  if (group === 'nativeWrapper' || group === 'nativeChild') {
+    command.push(context.challengeId);
+  }
+  if (group === 'canaryHelper' && helperId) {
+    command.push(helperId, context.serverImageDigest, context.serverInstallationId);
+  }
   const options = { timeout: 10_000, maxBuffer: 4096, stdio: 'pipe' as const };
   const output = execFileSync('/usr/bin/docker', command, options);
   const parsed: unknown = JSON.parse(output.toString('utf8'));
@@ -260,13 +272,16 @@ export function readCurrentInventory(context: InventoryContext,
   const records: ProtectionRecord[] = [];
   const launches: TrustedLaunch[] = [];
   for (const group of liveGroups) {
+    const helperIds = group === 'canaryHelper' ? context.helperIds : [undefined];
+    for (const helperId of helperIds) {
     const location = expectedLocation(group);
     const currentContainer = location === 'server' ? containers.serverId : containers.computerId;
-    const process = liveProcess(currentContainer, group);
+    const process = liveProcess(currentContainer, group, context, helperId);
     const imageDigest = location === 'server' ? context.serverImageDigest :
       context.computerImageDigest;
     const identity = { pid: process.pid, startTime: process.startTime,
-      pidNamespace: process.pidNamespace, dumpable: false as const };
+      pidNamespace: process.pidNamespace, executable: process.executable,
+      uid: process.uid, cgroup: process.cgroup, dumpable: false as const };
     const record: ProtectionRecord = {
       serverInstallationId: context.serverInstallationId,
       computerInstallationId: context.computerInstallationId,
@@ -274,10 +289,11 @@ export function readCurrentInventory(context: InventoryContext,
       computerImageDigest: context.computerImageDigest,
       challengeId: context.challengeId,
       generationId: context.generationId,
-      group, imageDigest, ...identity, safe: process.protected,
+      group, helperId, imageDigest, ...identity, safe: process.protected,
     };
     records.push(record);
-    launches.push({ group, location, ...identity });
+    launches.push({ group, helperId, location, ...identity });
+    }
   }
   return { records, launches };
 }

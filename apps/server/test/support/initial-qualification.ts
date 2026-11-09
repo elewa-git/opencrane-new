@@ -27,15 +27,18 @@ function matchingInventory(context: InventoryContext): InventorySnapshot {
       const pid = 100 + index;
       const startTime = String(1000 + index);
       const pidNamespace = location === 'server' ? 'pid:[4026531836]' : 'pid:[4026531837]';
+      const executable = '/usr/local/bin/node';
+      const uid = 1000;
+      const cgroup = '0::/test\n';
       records.push({ group, helperId, imageDigest: image,
         serverInstallationId: context.serverInstallationId,
         computerInstallationId: context.computerInstallationId,
         serverImageDigest: context.serverImageDigest,
         computerImageDigest: context.computerImageDigest,
         challengeId: context.challengeId, generationId: context.generationId,
-        pid, startTime, pidNamespace, dumpable: false, safe: true });
+        pid, startTime, pidNamespace, executable, uid, cgroup, dumpable: false, safe: true });
       launches.push({ group, helperId, location, pid, startTime, pidNamespace,
-        dumpable: false });
+        executable, uid, cgroup, dumpable: false });
     }
   }
   return { records, launches };

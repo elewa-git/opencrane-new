@@ -1,7 +1,8 @@
 import { createServer, type Socket } from 'node:net';
 import { runnerProtected } from './runner-protection.ts';
 
-export type ServiceRole = 'serverDelivery' | 'bridge' | 'supervisor' | 'proxy';
+export type ServiceRole = 'serverDelivery' | 'bridge' | 'supervisor' | 'proxy' |
+  'canaryHelper';
 
 function answer(socket: Socket, bytes: Buffer, ready: () => boolean): void {
   const request = bytes.toString('utf8');
