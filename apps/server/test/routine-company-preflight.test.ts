@@ -436,6 +436,26 @@ async function changedCompanyStreamBeforeWrite() {
 it('refuses a change to every company stream between check and write',
   changedCompanyStreamBeforeWrite, 30_000);
 
+async function oauthChangedAfterLastRead(kind: 'scopes' | 'client') {
+  const current = await fixture();
+  const company = await current.preflight();
+  const event = independentWrite(current);
+  async function checkThenChangeConfiguration() {
+    await company.confirmCurrent();
+    if (kind === 'scopes') {
+      current.configuration.toolScopes.read = ['write'];
+    } else {
+      current.configuration.clientId = 'replacement';
+    }
+  }
+  const result = await nats.store.append({ event, expectedSequence: 0,
+    checkAccess: checkThenChangeConfiguration });
+  expect(result.status).toBe('conflict');
+}
+it.each(['scopes', 'client'] as const)(
+  'refuses an OAuth %s change after the final read and before publication',
+  oauthChangedAfterLastRead);
+
 async function staleGrant() {
   const current = await fixture();
   const company = await current.preflight();
