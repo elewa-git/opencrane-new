@@ -74,7 +74,8 @@ export async function chatFixture(page, scenario = 'live', options = {}) {
         screenshot: { computerId: 'computer', generation: 1, capturedAt: '2026-10-02T10:42:00Z',
           width: 1440, height: 900 } });
     } else if (scenario !== 'folding') {
-      add('agent.command_ran', { turnId: human.id, exitCode: scenario === 'tools' ? 1 : 0, commandDigest: 'a'.repeat(64) });
+      add('agent.command_ran', { turnId: human.id, exitCode: scenario === 'tools' ? 1 : 0,
+        commandDigest: 'a'.repeat(64), ...(scenario === 'tools' ? { activityLabel: 'Listed files' } : {}) });
       const text = scenario === 'a2ui' ? 'Here is the overview.\n\n```a2ui\n{"type":"summary"}\n```'
         : 'I’ve pulled the numbers from Finance and the notes from the last review.\n\n**Revenue is up 18% quarter on quarter**, with the strongest growth in the enterprise segment. The main risk is the timing of two renewals. [1]\n\nThe draft is ready for your review. I’ve highlighted the assumptions that still need a decision.';
       add('agent.message_delta', { turnId: human.id, messageId: 'reply', text });
@@ -83,7 +84,8 @@ export async function chatFixture(page, scenario = 'live', options = {}) {
         add('agent.turn_completed', { turnId: human.id });
       }
       if (scenario === 'tools') {
-        add('agent.command_ran', { turnId: human.id, exitCode: 0, commandDigest: 'b'.repeat(64) });
+        add('agent.command_ran', { turnId: human.id, exitCode: 0,
+          commandDigest: 'b'.repeat(64), activityLabel: 'Read a PDF' });
       }
       if (scenario === 'closed') {
         add('conversation.closed', { conversationId: 'chat', closedBy: 'me' });

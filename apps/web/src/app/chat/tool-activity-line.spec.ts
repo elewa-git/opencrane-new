@@ -58,6 +58,11 @@ it('shows a command label and plain failure reason on the transcript line', () =
   if (!(root instanceof HTMLElement)) throw new Error('No tool activity line');
   expect(root.querySelector('.tool-line')?.textContent)
     .toContain('Ran a Python script · The program is not installed on the computer');
+  const button = root.querySelector<HTMLButtonElement>('.tool-line');
+  button?.click();
+  fixture.detectChanges();
+  expect(root.querySelector('.tool-details')?.textContent)
+    .toContain('The program is not installed on the computer');
   fixture.destroy();
 });
 

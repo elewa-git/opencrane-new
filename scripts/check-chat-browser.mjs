@@ -141,7 +141,8 @@ try {
   assert.equal(await toolDetails.isVisible(), false);
   await toolLine.click();
   await waitForToolLineState(activity.page, toolLine, 'true');
-  await toolDetails.getByText('Failed · Exit code 1').waitFor();
+  assert((await toolLine.innerText()).includes('Listed files · Failed (exit code 1)'));
+  await toolDetails.getByText('Failed (exit code 1)', { exact: true }).waitFor();
   assert((await toolDetails.innerText()).includes('Sanitised'));
   assert(!(await toolDetails.innerText()).includes('a'.repeat(64)),
     'Inline details never expose a raw digest');
@@ -169,6 +170,9 @@ try {
   await activity.page.getByRole('tab', { name: /Activity/ }).click();
   await activity.page.locator('.desktop-panel .activity-row').first().waitFor();
   assert.equal(await activity.page.locator('.desktop-panel .activity-row').count(), 2);
+  const activityRows = await activity.page.locator('.desktop-panel .activity-row').allInnerTexts();
+  assert(activityRows[0].includes('Read a PDF'));
+  assert(activityRows[1].includes('Listed files'));
   await activity.page.locator('.desktop-panel .activity-row').first().click();
   assert(await toolLine.evaluate(node => node.ownerDocument.activeElement === node));
   activity.fixture.add('agent.turn_failed', { turnId: 'event-2', reason: 'provider failed' });
@@ -268,7 +272,7 @@ try {
         const commandLine = page.locator('.tool-line').first();
         await commandLine.click();
         const inlineDetails = page.locator('.tool-details').first();
-        await inlineDetails.getByText('Failed · Exit code 1').waitFor();
+        await inlineDetails.getByText('Failed (exit code 1)', { exact: true }).waitFor();
       }
       if (scenario === 'assets') { await page.locator('.file-card').getByRole('button', { name: /^Open (?!session files)/ }).click(); await page.getByText('Preview unavailable.', { exact: false }).waitFor(); }
       if (scenario === 'a2ui') {
