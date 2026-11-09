@@ -341,6 +341,49 @@ async function teamGrantRevokedDuringLaterRead() {
 it('refuses a team grant revoked during a later team position read',
   teamGrantRevokedDuringLaterRead);
 
+async function changedCompanyStreamDuringRead() {
+  for (let readIndex = 0; readIndex < 12; readIndex += 1) {
+    for (let streamIndex = 0; streamIndex < 6; streamIndex += 1) {
+      const current = await fixture();
+      const team = await addTeamGrant(current);
+      const company = await current.preflight();
+      const subjects = [current.profileSubject, `mcp-${current.serverId}`,
+        current.optInSubject, current.selectionSubject,
+        grantStream('mcp_server', current.serverId), team.teamSubject];
+      const changedSubject = subjects[streamIndex]!;
+      const rows = await history(nats.store, changedSubject, 'test');
+      const previous = rows.at(-1)!.event;
+      const change = envelope('test', changedSubject, previous.type, previous.data);
+      const originalHead = nats.store.head.bind(nats.store);
+      let reads = 0;
+      async function changedDuringHead(subject?: string, deadline?: number,
+        includeConversationCloses?: boolean) {
+        const position = await originalHead(subject, deadline, includeConversationCloses);
+        if (subject && subjects.includes(subject)) {
+          if (reads === readIndex) await nats.seed([change]);
+          reads += 1;
+        }
+        return position;
+      }
+      const spy = vi.spyOn(nats.store, 'head');
+      spy.mockImplementation(changedDuringHead);
+      let refused = false;
+      try {
+        await company.confirmCurrent();
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Routine company unavailable');
+        refused = true;
+      } finally {
+        spy.mockRestore();
+      }
+      expect(refused, `stream ${streamIndex}, read ${readIndex}`).toBe(true);
+    }
+  }
+}
+it('refuses all 72 company stream changes during position reads',
+  changedCompanyStreamDuringRead, 120_000);
+
 async function staleGrant() {
   const current = await fixture();
   const company = await current.preflight();
