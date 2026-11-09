@@ -391,10 +391,14 @@ number and three separate check receipts from its trusted caller. It requires a
 complete clean part scan and all
 three receipts. Immediately before one conditional append, it reads the saved
 attempt and scanner settings again and checks every ordered part's proof. It sends
-only the dated malware summary and the separate receipts to the existing
-`mcp.image_checked` writer. A duplicate or lost append reply reads the saved
-result using the original attempt and event id. The worker does not scan again
-when that result is present. Infected, missing, changed and expired proof cannot
+the private proof from the authenticated image walk, the current clean verdict,
+exact dated malware summary and separate receipts to the existing
+`mcp.image_checked` writer. Test scanner callbacks cannot issue that proof.
+Concurrent deliveries for the same saved
+attempt share one scan. If an append reply is lost before its commit is visible,
+the worker keeps that attempt unresolved and checks for the original saved result
+on later deliveries. It does not scan again while the write is unresolved.
+Infected, missing, changed and expired proof cannot
 write a clean result. A failed separate check records rejection rather than
 admission. No production scheduler, image source or separate-check composition
 calls this adapter yet. The production enable switch and image promotion remain

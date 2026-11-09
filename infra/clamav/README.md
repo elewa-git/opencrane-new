@@ -23,7 +23,7 @@ flowchart LR
   stack -->|builds and starts the Linux amd64 image| clamav
   server["apps/server<br/>file uploads"] -->|sends file bytes over HTTPS| launcher
   worker["private image worker"] -->|checks bounded files through HTTPS| launcher
-  worker -->|sends a complete check to the event writer| models["libs/models<br/>image result writer"]
+  worker -->|sends scanner proof and a complete check| models["libs/models<br/>image result writer"]
   launcher["separate HTTPS service"] -->|limits requests and checks caller passes| clamav
 ```
 
@@ -71,7 +71,9 @@ flowchart LR
 9. **The private worker saves a complete result.** It checks the saved attempt,
    scanner list and every part again before asking the models library to save one
    image result. The result also needs separate signature, vulnerability and licence
-   checks. No scheduled image scan or image use is enabled yet.
+   checks. Two deliveries for the same attempt share one scan. A lost save reply
+   must be resolved before another scan starts. No scheduled image scan or image use
+   is enabled yet.
 
 ## How to run or test it
 

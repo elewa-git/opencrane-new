@@ -35,8 +35,11 @@ async function writeTestAdmission(store: typeof nats.store, silo: string, raw: u
   at?: Date) {
   const parsed = hostedImageCheckedSchema.safeParse(raw);
   const fallback = hostedImageCheckedSchema.parse(result('fallback'));
-  const malware = parsed.success ? parsed.data.checks.malware : fallback.checks.malware;
-  const scanEvidence = retainAuthenticatedImageEvidence({ malware });
+  const checked = parsed.success ? parsed.data : fallback;
+  const malware = checked.checks.malware;
+  const scanEvidence = retainAuthenticatedImageEvidence({ silo,
+    serverId: checked.serverId, attemptId: checked.attemptId,
+    imageDigest: checked.imageDigest, platform: checked.platform, malware });
   function evidence() {
     return Promise.resolve({ verdict: 'clean' as const, malware });
   }
@@ -65,7 +68,9 @@ async function refusesIncompleteEvidence() {
   const serverId = await installed();
   const invented = hostedImageCheckedSchema.parse(result(serverId));
   const wrongMalware = { ...invented.checks.malware, reportDigest: 'b'.repeat(64) };
-  const scanEvidence = retainAuthenticatedImageEvidence({ malware: invented.checks.malware });
+  const scanEvidence = retainAuthenticatedImageEvidence({ silo: 'test',
+    serverId, attemptId: 1, imageDigest: digest, platform: 'linux/amd64',
+    malware: invented.checks.malware });
   function mismatchedEvidence() {
     return Promise.resolve({ verdict: 'clean' as const, malware: wrongMalware });
   }
@@ -79,7 +84,9 @@ it('refuses validation of a different malware result', refusesIncompleteEvidence
 async function acceptsMatchingEvidence() {
   const serverId = await installed();
   const checked = hostedImageCheckedSchema.parse(result(serverId));
-  const scanEvidence = retainAuthenticatedImageEvidence({ malware: checked.checks.malware });
+  const scanEvidence = retainAuthenticatedImageEvidence({ silo: 'test',
+    serverId, attemptId: 1, imageDigest: digest, platform: 'linux/amd64',
+    malware: checked.checks.malware });
   function matchingEvidence() {
     return Promise.resolve({ verdict: 'clean' as const, malware: checked.checks.malware });
   }
@@ -143,7 +150,9 @@ async function refusesMalwareBoundary(kind: string) {
   }
   const edited = { ...payload, checks: { ...payload.checks, malware } };
   const checked = hostedImageCheckedSchema.parse(edited);
-  const scanEvidence = retainAuthenticatedImageEvidence({ malware: checked.checks.malware });
+  const scanEvidence = retainAuthenticatedImageEvidence({ silo: 'test',
+    serverId, attemptId: 1, imageDigest: digest, platform: 'linux/amd64',
+    malware: checked.checks.malware });
   function evidence() {
     return Promise.resolve({ verdict: 'clean' as const, malware: checked.checks.malware });
   }

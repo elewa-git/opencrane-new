@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { scanImagePart } from './image-client.mjs';
+import { retainAuthenticatedImageEvidence }
+  from '../../libs/models/src/image-scan-evidence.ts';
 
 const execute = promisify(execFile);
 const walker = fileURLToPath(new URL('./image-walk.py', import.meta.url));
@@ -84,7 +86,7 @@ function bindingFor(image) {
   return { silo: image.silo, serverId: image.serverId, attemptId: image.attemptId,
     platform: image.platform, targetImageDigest: image.imageDigest };
 }
-function malwareReceipt(parts) {
+export function malwareReceipt(parts) {
   if (parts.length === 0) return;
   const first = parts[0].validate.evidence;
   if (!first) return;
@@ -168,7 +170,12 @@ export async function scanHostedImageAttempt(attempt, image, settings,
         throw new Error('Image scan unavailable');
       }
     }
-    return { ...result, validate };
+    const checkedResult = { ...result, silo: attempt.silo, serverId: attempt.serverId,
+      attemptId: attempt.attemptId, validate };
+    if (scanPart === scanImagePart && result.verdict === 'clean' && result.malware) {
+      return retainAuthenticatedImageEvidence(checkedResult);
+    }
+    return checkedResult;
   } catch {
     return unavailable;
   }

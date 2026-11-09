@@ -8,9 +8,12 @@ import { z } from 'zod';
 import { envelope } from './actor.ts';
 import type { Binding } from '@opencrane/authz';
 import { saveToolCommand } from './tool-policy.ts';
+import { hasAuthenticatedImageEvidence } from './image-scan-evidence.ts';
 
 type Result = z.infer<typeof hostedImageCheckedSchema>;
 type Admission = z.infer<typeof hostedAdmissionSchema>;
+type MalwareEvidence = Result['checks']['malware'];
+type ValidatedMalwareEvidence = { verdict: 'clean'; malware: MalwareEvidence };
 const day = 86_400_000;
 
 function validDates(result: Result, at: number) {
@@ -156,9 +159,28 @@ export async function readHostedImageScanAttempt(store: EventStore, silo: string
     status: 'checking' as const };
 }
 
-async function currentMalwareEvidence(result: Result, validateEvidence: () => Promise<boolean>) {
+function matchesScanEvidence(scanEvidence: unknown, result: Result, silo: string) {
+  if (!hasAuthenticatedImageEvidence(scanEvidence)) return false;
+  return scanEvidence.silo === silo && scanEvidence.serverId === result.serverId &&
+    scanEvidence.attemptId === result.attemptId &&
+    scanEvidence.imageDigest === result.imageDigest &&
+    scanEvidence.platform === result.platform &&
+    same(scanEvidence.malware, result.checks.malware);
+}
+
+async function currentMalwareEvidence(result: Result, silo: string, scanEvidence: unknown,
+  validateEvidence: () => Promise<ValidatedMalwareEvidence>) {
   // Check the private scan after reading history, immediately before this append.
-  if (!await validateEvidence()) return;
+  if (!matchesScanEvidence(scanEvidence, result, silo)) return;
+  let evidence: ValidatedMalwareEvidence;
+  try {
+    evidence = await validateEvidence();
+    if (!evidence || evidence.verdict !== 'clean' || !evidence.malware ||
+        !same(evidence.malware, result.checks.malware)) return;
+  } catch {
+    // Refuse a failed proof check before append; no event-store reply is uncertain.
+    return;
+  }
   const now = new Date();
   const malware = result.checks.malware;
   if (!validDates(result, now.getTime()) || malware.verdict !== 'pass') return;
@@ -168,10 +190,12 @@ async function currentMalwareEvidence(result: Result, validateEvidence: () => Pr
 }
 
 export async function writeHostedAdmission(store: EventStore, silo: string, raw: unknown,
-  now?: Date, validateEvidence?: () => Promise<boolean>) {
+  now: Date | undefined, scanEvidence: unknown,
+  validateEvidence: () => Promise<ValidatedMalwareEvidence>) {
   const parsed = hostedImageCheckedSchema.safeParse(raw);
   const conflict = { status: 'conflict' as const };
-  if (!parsed.success) return conflict;
+  if (!parsed.success || !hasAuthenticatedImageEvidence(scanEvidence) ||
+      typeof validateEvidence !== 'function') return conflict;
   const result = parsed.data;
   const rows = await rowsFor(store, result.serverId);
   now ??= new Date();
@@ -182,11 +206,8 @@ export async function writeHostedAdmission(store: EventStore, silo: string, raw:
     return conflict;
   }
   if (!validDates(result, now.getTime())) return conflict;
-  if (validateEvidence) {
-    const checkedNow = await currentMalwareEvidence(result, validateEvidence);
-    if (!checkedNow) return conflict;
-    now = checkedNow;
-  }
+  const checkedNow = await currentMalwareEvidence(result, silo, scanEvidence, validateEvidence);
+  if (!checkedNow) return conflict;
   const subject = `mcp-${result.serverId}`;
   const hash = createHash('sha256');
   hash.update(JSON.stringify([silo, subject, 'mcp.image_checked', result.attemptId]));
