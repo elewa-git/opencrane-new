@@ -108,6 +108,19 @@ async function ownerReadiness() {
   assert.match(result.operations, /health .*\/healthz\/ready/u);
 }
 
+async function ownerBuildsProductionWebsite() {
+  const result = await ownerStart();
+  assert.equal(result.status, 0, result.output + result.failure);
+  const build = result.operations.indexOf('exec nice -n 10 npm run build -w apps/web');
+  const serve = result.operations.indexOf('web-server.mjs');
+  assert.ok(build >= 0, result.operations);
+  assert.ok(serve > build, result.operations);
+  assert.doesNotMatch(result.operations, /ng\.js serve/u);
+  assert.match(result.operations, /website-ready|health .*\/org\/integrations/u);
+}
+
+test('owner start builds and serves the production website', ownerBuildsProductionWebsite);
+
 async function repeatStopsOldMemoryWorker() {
   const result = await ownerStart({ repeat: true, previousMemory: true });
   assert.equal(result.status, 0, result.output + result.failure);
@@ -281,7 +294,7 @@ async function slowWebsiteBecomesReady() {
   assert.match(result.operations, /website-ready 208500/u);
 }
 
-test('startup waits for a cold website build that takes longer than two minutes',
+test('startup waits for a slow website response after the production build',
   slowWebsiteBecomesReady);
 
 async function websiteNeverBecomesReady() {
@@ -305,7 +318,7 @@ async function websiteExitsDuringBuild() {
   assertRestored(result);
 }
 
-test('startup fails promptly when the website exits during its build', websiteExitsDuringBuild);
+test('startup fails promptly when the website exits before readiness', websiteExitsDuringBuild);
 
 const listenerCases: Array<{ address: string; accepted: boolean; process?: string }> = [
   { address: '100.121.102.47%tailscale0:443', accepted: true },

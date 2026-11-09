@@ -168,6 +168,12 @@ are in the operator notes.
 The server reads the same private readiness marker. Chat can explain a long wait
 without showing members the operator's maintenance steps.
 
+The owner stack builds the website for production when its website process starts.
+To show a new website change on the owner stack, stop it with
+`infra/dev-stack/down.sh`, then start it with `infra/dev-stack/up.sh --owner-run`.
+The start builds the website again and keeps the owner stack's saved data.
+Spare stacks continue to build the website while they run.
+
 ## Folders
 
 | Folder | What it does |
