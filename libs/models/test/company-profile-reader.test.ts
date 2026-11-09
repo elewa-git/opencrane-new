@@ -62,6 +62,33 @@ async function refusesChangedCustody() {
 it('refuses a company account whose saved credential is no longer in custody',
   refusesChangedCustody);
 
+async function refusesConflictWithOldIdentity() {
+  const recover = vi.fn().mockResolvedValue({ status: 'conflict', identity: {
+    reference: 'reference', uid: 'uid', resourceVersion: '1' } });
+  const reader = readCurrentCompanyProfile({ recover });
+  await expect(reader(savedRows())).rejects.toThrow('Company profile unavailable');
+}
+it('refuses a custody conflict even when it returns the old matching identity',
+  refusesConflictWithOldIdentity);
+
+async function sendsSavedCustodianToCustody() {
+  const recover = vi.fn().mockResolvedValue({ status: 'recovered', identity: {
+    reference: 'reference', uid: 'uid', resourceVersion: '1' } });
+  const reader = readCurrentCompanyProfile({ recover });
+  await reader(savedRows());
+  expect(recover.mock.calls[0]?.[0]).toMatchObject({ custodianId: 'admin' });
+}
+it('uses the saved company custodian when checking private credential custody',
+  sendsSavedCustodianToCustody);
+
+async function refusesRecoveredResultWithoutIdentity() {
+  const recover = vi.fn().mockResolvedValue({ status: 'recovered' });
+  const reader = readCurrentCompanyProfile({ recover });
+  await expect(reader(savedRows())).rejects.toThrow('Company profile unavailable');
+}
+it('refuses a recovered custody result without its returned identity',
+  refusesRecoveredResultWithoutIdentity);
+
 async function refusesChangedCustodyIdentity(field: 'reference' | 'uid' | 'resourceVersion') {
   const identity = { reference: 'reference', uid: 'uid', resourceVersion: '1' };
   identity[field] = 'changed';
