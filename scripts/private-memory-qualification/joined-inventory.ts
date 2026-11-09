@@ -235,10 +235,16 @@ const liveGroups: readonly LiveServiceGroup[] = [
 
 function liveProcess(container: string, group: LiveServiceGroup):
   z.output<typeof liveProcessSchema> {
+  let probePath: string;
+  if (group === 'serverDelivery') {
+    probePath = '/app/scripts/private-memory-qualification/live-inventory-probe.ts';
+  } else {
+    probePath = '/scripts/private-memory-qualification/live-inventory-probe.ts';
+  }
   const command = ['--host', 'unix:///var/run/docker.sock', 'exec', '--workdir', '/app',
     '--env', 'NODE_OPTIONS=', '--env', 'NODE_PATH=', '--env', 'LD_PRELOAD=',
     container, '/usr/local/bin/node', '--experimental-strip-types',
-    '/app/scripts/private-memory-qualification/live-inventory-probe.ts', group];
+    probePath, group];
   const options = { timeout: 10_000, maxBuffer: 4096, stdio: 'pipe' as const };
   const output = execFileSync('/usr/bin/docker', command, options);
   const parsed: unknown = JSON.parse(output.toString('utf8'));

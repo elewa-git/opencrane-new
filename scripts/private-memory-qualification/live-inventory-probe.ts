@@ -21,24 +21,34 @@ function serverProcess(): ProcessIdentity | undefined {
   return identity;
 }
 
-function serviceProof(group: Exclude<LiveServiceGroup, 'serverDelivery'>): ProcessProof {
+function serviceProof(group: Exclude<LiveServiceGroup, 'serverDelivery'>,
+  observeIdentity: (identity: ProcessIdentity) => void): ProcessProof {
   if (group === 'supervisor') {
-    return checkSupervisor();
+    return checkSupervisor(observeIdentity);
   }
   if (group === 'bridge') {
-    return checkBridge();
+    return checkBridge(observeIdentity);
   }
-  return checkProxy();
+  return checkProxy(observeIdentity);
 }
 
 function serviceProcess(group: Exclude<LiveServiceGroup, 'serverDelivery'>):
   ProcessIdentity | undefined {
-  const proof = serviceProof(group);
+  // Keep the identity checked with dump protection; exec can retain PID and start time.
+  let checkedIdentity: ProcessIdentity | undefined;
+  function holdCheckedIdentity(identity: ProcessIdentity): void {
+    checkedIdentity = identity;
+  }
+  const proof = serviceProof(group, holdCheckedIdentity);
   if (proof.result !== true || proof.pid === undefined || proof.startTime === undefined) {
     return undefined;
   }
+  if (!checkedIdentity || checkedIdentity.pid !== proof.pid ||
+      checkedIdentity.startTime !== proof.startTime) {
+    return undefined;
+  }
   const identity = readProcessIdentity(proof.pid);
-  if (identity.startTime !== proof.startTime) {
+  if (!sameProcessIdentity(checkedIdentity, identity)) {
     return undefined;
   }
   return identity;

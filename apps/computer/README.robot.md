@@ -1,5 +1,11 @@
 # Computer image — P2-1
 
+The image installs `live-inventory-probe.ts` under
+`/scripts/private-memory-qualification/`. The collector executes that path in the
+computer container. The probe compares the full identity returned by each successful
+protection check with a new read, including the executable and command line. A changed
+process refuses even when its PID and Linux start time stay the same.
+
 ## Retained Ask call limits
 
 The proxy keeps at most 16 original Ask requests and 8 MiB of their request bytes.

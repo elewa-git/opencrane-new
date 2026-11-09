@@ -741,7 +741,11 @@ Admission stays disabled.
 The collector now runs the existing live protection probes for server delivery,
 the computer supervisor, bridge and proxy inside their measured containers.
 It records each process PID, Linux start time and PID namespace only after the
-probe succeeds. Each read uses the configured container ids, image digests,
+probe succeeds. The computer probes keep the full identity checked during
+protection and compare it with a new read before returning a result. This
+refuses an exec with the same PID and start time. The computer image installs
+the probe under `/scripts/private-memory-qualification/`, where the collector
+executes it. Each read uses the configured container ids, image digests,
 installation ids, challenge and computer generation. The joined validator
 checks the image for the process's actual container. The canary helper belongs
 to the server image because its supervisor launches there.

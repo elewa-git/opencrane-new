@@ -52,7 +52,8 @@ function liveBridge(role: ServiceRole):
   return { identity: second, result: true };
 }
 
-function checkComputerService(role: ServiceRole): { pid?: number; startTime?: string;
+function checkComputerService(role: ServiceRole,
+  observeIdentity?: (identity: ProcessIdentity) => void): { pid?: number; startTime?: string;
   result: true | ProtectionFailure } {
   if (process.getuid?.() !== 0) {
     return { result: 'private_process_unreadable' };
@@ -78,20 +79,23 @@ function checkComputerService(role: ServiceRole): { pid?: number; startTime?: st
         !sameProcessIdentity(before, after)) {
       return { result: 'private_process_identity_changed' };
     }
+    observeIdentity?.(finalBridge);
     return { result: true, pid: finalBridge.pid, startTime: finalBridge.startTime };
   } catch {
     return { result: 'private_process_unreadable' };
   }
 }
 
-export function checkBridge(): { pid?: number; startTime?: string;
+export function checkBridge(observeIdentity?: (identity: ProcessIdentity) => void):
+  { pid?: number; startTime?: string;
   result: true | ProtectionFailure } {
-  return checkComputerService('bridge');
+  return checkComputerService('bridge', observeIdentity);
 }
 
-export function checkProxy(): { pid?: number; startTime?: string;
+export function checkProxy(observeIdentity?: (identity: ProcessIdentity) => void):
+  { pid?: number; startTime?: string;
   result: true | ProtectionFailure } {
-  return checkComputerService('proxy');
+  return checkComputerService('proxy', observeIdentity);
 }
 
 export async function runServiceCheck(role: 'bridge' | 'proxy'): Promise<void> {
