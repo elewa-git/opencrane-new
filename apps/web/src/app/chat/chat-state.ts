@@ -160,7 +160,7 @@ export function toolActivityResult(record: ToolActivityRecord): string {
   if (record.nativeRequestId) {
     return 'Unsupported native consent · No gateway permission was granted.';
   }
-  if (record.command && !record.failed) return 'Completed';
+  if (record.command) return record.detail;
   if (record.status === 'running') return 'Running · The call has not finished.';
   if (record.status === 'unconfirmed') {
     return 'No finish report was received before the turn ended.';

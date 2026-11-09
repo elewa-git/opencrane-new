@@ -174,21 +174,25 @@ function readExecutionLines(path: string) {
   return lines;
 }
 
+function loadJournal(driver: JournalDriver, reports: BridgeReport[], executions: Set<string>): void {
+  const reportLines = readReportLines(driver.journal);
+  for (const line of reportLines) {
+    const report = parseStoredReport(line);
+    reports.push(report);
+  }
+
+  const executionLines = readExecutionLines(`${driver.journal}.executions`);
+  for (const turnId of executionLines) {
+    executions.add(turnId);
+  }
+}
+
 export function reportJournal(driver: JournalDriver) {
   const reports: BridgeReport[] = [];
   const executions = new Set<string>();
 
   function load() {
-    const reportLines = readReportLines(driver.journal);
-    for (const line of reportLines) {
-      const report = parseStoredReport(line);
-      reports.push(report);
-    }
-
-    const executionLines = readExecutionLines(`${driver.journal}.executions`);
-    for (const turnId of executionLines) {
-      executions.add(turnId);
-    }
+    loadJournal(driver, reports, executions);
   }
 
   function findLast(predicate: (report: BridgeReport) => boolean) {

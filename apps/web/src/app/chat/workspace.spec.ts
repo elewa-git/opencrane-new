@@ -946,7 +946,7 @@ it('expands tool details from the line and focuses the line from Activity', asyn
   const details = capture.root.querySelector('.tool-details');
   expect(toolLine.getAttribute('aria-expanded')).toBe('true');
   expect(details?.id).toBe(toolLine.getAttribute('aria-controls'));
-  expect(details?.textContent).toContain('Failed · Failed (exit code 1)');
+  expect(details?.querySelector('dd')?.textContent).toBe('Failed (exit code 1)');
   expect(details?.textContent).toContain('4 Oct 2026, 10:01 UTC');
   expect(details?.textContent).toContain('Technical reference');
   expect(details?.textContent).toContain('Not available yet');

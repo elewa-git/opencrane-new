@@ -173,7 +173,8 @@ try {
   const activityRows = await activity.page.locator('.desktop-panel .activity-row').allInnerTexts();
   assert(activityRows[0].includes('Read a PDF'));
   assert(activityRows[1].includes('Listed files'));
-  await activity.page.locator('.desktop-panel .activity-row').first().click();
+  await activity.page.locator('.desktop-panel .activity-row')
+    .filter({ hasText: 'Listed files' }).click();
   assert(await toolLine.evaluate(node => node.ownerDocument.activeElement === node));
   activity.fixture.add('agent.turn_failed', { turnId: 'event-2', reason: 'provider failed' });
   await activity.page.locator('.desktop-panel .activity-row').filter({ hasText: 'Reply failed' }).waitFor();
