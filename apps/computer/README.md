@@ -46,13 +46,14 @@ The computer saves that confirmation without private reply text.
 - Runs the [bridge](../../GLOSSARY.md#bridge) that receives messages and reports progress.
 - Gives recognised command activity a short plain label before reporting it. Unknown
   or uncertain commands get a neutral label. Arguments and output stay out of activity reports.
-- Can prepare a simple command for a future private view. It shows a reviewed program
+- Prepares a simple command for a member's private view. It shows a reviewed program
   name and a few reviewed command words. It hides every other word, including flags,
-  their values and all file paths. Commands with unusual whitespace or control
+  their values and all file paths. Long views end with an ellipsis so the report fits
+  the server's limit. Commands with unusual whitespace or control
   characters produce no text. A shell function can reuse a program name and treat a
   normally safe command word as a secret. The computer cannot tell this from the
-  command text alone, so that word may remain visible. This text is not yet sent or
-  shown to members.
+  command text alone, so that word may remain visible. The server saves the view in
+  encrypted form and shows it only to current conversation members.
 - Disables bridge process dumps before it receives private work. The bridge answers
   a local protection check inside its computer container. The root entrypoint records
   the bridge process it started so later checks can reject a replacement child.

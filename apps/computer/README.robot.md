@@ -1069,6 +1069,10 @@ pip and pip3 show `install`. Every other word becomes `•••`, including all
 flags, Python module names and paths under `/workspace`. A path-shaped argument
 may be a search pattern or another private value, so its position alone does
 not make it safe to show.
+The preview shows at most 1,024 masked words, followed by `…` when more words
+remain. If assignment words would hide the program beyond that limit, the bridge
+sends only the fixed label. This keeps every preview below the server's 16,384
+character limit, even when many short arguments grow as they are masked.
 Only ASCII spaces and tabs separate words. Other whitespace, a byte order mark
 or a control character anywhere in the command gives no command text.
 The visible text is checked with Secretlint's MIT-licensed recommended rules and

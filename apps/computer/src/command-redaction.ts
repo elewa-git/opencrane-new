@@ -2,6 +2,7 @@ import { lintSource } from '@secretlint/core';
 import { creator as recommendedRules } from '@secretlint/secretlint-rule-preset-recommend';
 
 const hidden = '•••';
+const maximumPreviewTokens = 1024;
 const knownPrograms = new Set([
   'cat', 'curl', 'dot', 'echo', 'env', 'find', 'git', 'grep', 'ls', 'mmdc', 'npm',
   'pdftotext', 'pdfinfo', 'pip', 'pip3', 'python', 'python3', 'rg', 'wget',
@@ -121,6 +122,7 @@ function maskArguments(words: string[]): string | null {
 
   const program = words[programIndex];
   if (!program || !knownPrograms.has(program)) return null;
+  if (programIndex >= maximumPreviewTokens) return null;
 
   const argumentsAfterProgram = words.slice(programIndex + 1);
   const subcommandLength = matchingSubcommandLength(program, argumentsAfterProgram);
@@ -141,6 +143,11 @@ function maskArguments(words: string[]): string | null {
     masked.push(hidden);
   }
 
+  if (masked.length > maximumPreviewTokens) {
+    const visibleTokens = masked.slice(0, maximumPreviewTokens);
+    visibleTokens.push('…');
+    return visibleTokens.join(' ');
+  }
   return masked.join(' ');
 }
 
