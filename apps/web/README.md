@@ -63,8 +63,6 @@ For everyone, the website:
 - Shows the organisation task list in server order and opens its existing evidence pages.
 - Opens assistant chats at their newest messages and loads older messages as people scroll up.
   The visible message stays in place while an older page arrives.
-- Opens assistant chats at their newest messages and loads older messages as people scroll up.
-  The visible message stays in place while an older page arrives.
 - Catches up saved assistant chats before saying they are current. A failed read keeps the
   messages already shown and offers another try. Missing chat links show no chat details.
   Private shared sessions show the checked paying group name without exposing its id.
