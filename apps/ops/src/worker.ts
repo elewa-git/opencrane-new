@@ -196,11 +196,7 @@ try {
     const tokens = await tokenIssuer({ privateKeyPath: required('TOKEN_SIGNING_KEY_FILE'),
       issuer: required('TOKEN_ISSUER') });
     async function readHostedInputs(event: import('@opencrane/events').EventEnvelope) {
-      try {
-        return await trustedHostedImageInputs(commands!.store, silo, event);
-      } catch {
-        throw new Error('Trusted image inputs unavailable');
-      }
+      return trustedHostedImageInputs(commands!.store, silo, event);
     }
     const available = [prepareGatewayConfigurationHandler(commands.store, silo, content!.db),
       hostedImageCheckHandler(commands.store, silo, runAndWriteHostedImageCheck,

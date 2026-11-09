@@ -433,10 +433,18 @@ function scannerFacts(input: { sha256: string; byteCount: number }, updated: str
     databaseUpdatedAt: updated, checkedAt, expiresAt };
 }
 
-async function queuedRealRefusal(refusedCheck: 'signature' | 'licence' | 'vulnerability') {
+type QueuedOutcome = 'signature' | 'licence' | 'vulnerability' |
+  'signature-outage' | 'licence-outage' | 'vulnerability-outage' |
+  'missing-receipt' | 'forged-receipt' | 'malformed-result' | 'lost-reply';
+
+async function queuedRealRefusal(refusedCheck: QueuedOutcome) {
+  const canaries = ['credential-canary', 'filesystem-path-canary', 'content-canary'];
   const bundle = imageBundle();
   const registration = await saveRegistration(bundle.imageDigest);
   const custody = await realCustody(bundle);
+  if (refusedCheck === 'lost-reply') {
+    custody.settings.scanner.issuer += `/${canaries.join('/')}`;
+  }
   const previous = process.env['HOSTED_IMAGE_CUSTODY_FILE'];
   const scannerIdentity = { service: 'image-worker' as const, silo };
   const issuer = await tokenIssuer({ ...custody.settings.scanner, scannerIdentity });
@@ -448,6 +456,9 @@ async function queuedRealRefusal(refusedCheck: 'signature' | 'licence' | 'vulner
   const updated = new Date(Date.now() - 1_000).toISOString();
   function scan(input: { sha256: string; byteCount: number }) {
     scanCalls += 1;
+    if (refusedCheck === 'lost-reply') {
+      service.closeAllConnections();
+    }
     const factsInput = { sha256: input.sha256, byteCount: input.byteCount };
     return Promise.resolve(scannerFacts(factsInput, updated));
   }
@@ -464,22 +475,52 @@ async function queuedRealRefusal(refusedCheck: 'signature' | 'licence' | 'vulner
   const signature = vi.mocked(verifyHostedImage);
   const licence = vi.mocked(inspectHostedLicences);
   const vulnerability = vi.mocked(inspectHostedVulnerabilities);
-  const signatureOutcome = refusedCheck === 'signature'
-    ? { verdict: 'fail' as const, reasonCode: 'signature_refused' }
-    : toolOutcome(false);
+  let signatureOutcome;
+  if (refusedCheck === 'signature') {
+    signatureOutcome = { verdict: 'fail' as const, reasonCode: 'signature_refused' };
+  } else if (refusedCheck === 'signature-outage') {
+    signatureOutcome = { verdict: 'unavailable' as const,
+      reasonCode: 'signature_unavailable' };
+  } else {
+    signatureOutcome = toolOutcome(false);
+  }
   signature.mockResolvedValue(signatureOutcome);
-  licence.mockResolvedValue(toolOutcome(refusedCheck === 'licence'));
+  if (refusedCheck === 'licence-outage') {
+    licence.mockResolvedValue({ verdict: 'unavailable', reasonCode: 'licence_unavailable' });
+  } else {
+    licence.mockResolvedValue(toolOutcome(refusedCheck === 'licence'));
+  }
   const checkedAt = new Date(Date.now() - 1_000).toISOString();
   const receipt = { verdict: 'fail' as const, checkedAt,
     expiresAt: new Date(Date.now() + 60_000).toISOString(), engineVersion: '0.121.0',
     databaseDigest: digest, databaseUpdatedAt: checkedAt, reportDigest: digest,
     reasonCodes: ['vulnerability_refused'] };
-  vulnerability.mockResolvedValue({ verdict: 'fail',
-    reasonCode: 'vulnerability_refused', receipt });
+  if (refusedCheck === 'vulnerability-outage') {
+    vulnerability.mockResolvedValue({ verdict: 'unavailable',
+      reasonCode: 'vulnerability_unavailable',
+      receipt: { ...receipt, verdict: 'unavailable' } });
+  } else if (refusedCheck === 'missing-receipt') {
+    vulnerability.mockResolvedValue({ verdict: 'fail',
+      reasonCode: 'vulnerability_refused' });
+  } else if (refusedCheck === 'forged-receipt') {
+    vulnerability.mockResolvedValue({ verdict: 'fail',
+      reasonCode: 'vulnerability_refused',
+      receipt: { ...receipt, verdict: 'pass' } });
+  } else if (refusedCheck === 'malformed-result') {
+    vulnerability.mockResolvedValue({ verdict: 'pass',
+      receipt: { ...receipt, verdict: 'pass', reportDigest: canaries.join('/') } });
+  } else {
+    vulnerability.mockResolvedValue({ verdict: 'fail',
+      reasonCode: 'vulnerability_refused', receipt });
+  }
   const storage = await databases();
   function failed() { throw new Error('Fixture database unavailable'); }
   const db = connectProjectionDb(storage.queue.options.connectionString!, failed);
-  const logger = createLogger('image-refusal-test', { level: 'silent' });
+  const previousLogLevel = process.env['LOG_LEVEL'];
+  process.env['LOG_LEVEL'] = 'info';
+  const logLines: string[] = [];
+  const destination = { write(line: string) { logLines.push(line); } };
+  const logger = createLogger('image-refusal-test', { destination });
   async function readInputs(event: EventEnvelope) {
     return trustedHostedImageInputs(fixture.store, silo, event);
   }
@@ -490,15 +531,34 @@ async function queuedRealRefusal(refusedCheck: 'signature' | 'licence' | 'vulner
   try {
     expect(await recoverHostedImageChecks(runtime, fixture.reader, fixture.store)).toBe(1);
     await runtime.work(1);
-    async function saved() {
-      const admission = await readHostedAdmission(fixture.store, silo, serverId);
-      return admission?.status === 'rejected';
+    const isFailure = refusedCheck === 'signature' || refusedCheck === 'licence' ||
+      refusedCheck === 'vulnerability';
+    if (isFailure) {
+      async function saved() {
+        const admission = await readHostedAdmission(fixture.store, silo, serverId);
+        return admission?.status === 'rejected';
+      }
+      await until(saved);
+    } else {
+      async function attempted() {
+        const jobs = await storage.queue.query<{ state: string }>(
+          "SELECT state FROM pgboss.job WHERE name='check-hosted-image'");
+        return jobs.rows.some(isRetryableOrFailedJob);
+      }
+      await until(attempted);
     }
-    await until(saved);
     const admission = await readHostedAdmission(fixture.store, silo, serverId);
-    expect(admission?.status).toBe('rejected');
     expect(admission?.attemptId).toBe(1);
-    expect(admission?.checks?.[refusedCheck].verdict).toBe('fail');
+    if (isFailure) {
+      expect(admission?.status).toBe('rejected');
+      if (refusedCheck === 'signature' || refusedCheck === 'licence' ||
+          refusedCheck === 'vulnerability') {
+        expect(admission?.checks?.[refusedCheck].verdict).toBe('fail');
+      }
+    } else {
+      expect(admission?.status).toBe('checking');
+      expect(admission?.checks).toBeUndefined();
+    }
     if (refusedCheck === 'signature') {
       expect(admission?.checks?.licence).toEqual({ verdict: 'not_run' });
       expect(admission?.checks?.vulnerability).toEqual({ verdict: 'not_run' });
@@ -509,10 +569,31 @@ async function queuedRealRefusal(refusedCheck: 'signature' | 'licence' | 'vulner
     const events = [];
     for await (const row of fixture.store.readStream(`mcp-${serverId}`, 1,
       performance.now() + 10_000)) events.push(row.event);
-    expect(events.map(event => event.type)).toEqual([
-      'mcp.server_registered', 'mcp.image_scan_claimed', 'mcp.image_checked',
-    ]);
-    await handler.handle(registration, transaction);
+    const expectedEvents = ['mcp.server_registered', 'mcp.image_scan_claimed'];
+    if (isFailure) expectedEvents.push('mcp.image_checked');
+    expect(events.map(event => event.type)).toEqual(expectedEvents);
+    if (!isFailure) {
+      const jobs = await storage.queue.query<{ output: unknown }>(
+        "SELECT output FROM pgboss.job WHERE name='check-hosted-image'");
+      const parsedLogLines = logLines.map(parseLogLine);
+      const handlerFailureLogs = parsedLogLines.filter(hasHandlerFailureMessage);
+      expect(handlerFailureLogs.length).toBeGreaterThan(0);
+      const eventData = events.map(readEventData);
+      const publicOutputs = [JSON.stringify(handlerFailureLogs),
+        JSON.stringify(jobs.rows[0]?.output), JSON.stringify(eventData)];
+      for (const canary of canaries) {
+        for (const publicOutput of publicOutputs) expect(publicOutput).not.toContain(canary);
+      }
+    }
+    if (refusedCheck.endsWith('outage') || refusedCheck === 'missing-receipt' ||
+        refusedCheck === 'forged-receipt') {
+      // Check the adapter too: the writer can independently refuse an invalid receipt.
+      const adapter = await trustedHostedImageInputs(fixture.store, silo, registration);
+      const attempt = { silo, serverId, attemptId: 1,
+        imageDigest: bundle.imageDigest, platform: 'linux/amd64' };
+      expect(await adapter.readIndependentChecks(attempt)).toBeUndefined();
+    }
+    if (isFailure) await handler.handle(registration, transaction);
     expect(scanCalls).toBe(1);
     expect(await readHostedAdmission(fixture.store, silo, serverId)).toEqual(admission);
     const afterRedelivery = [];
@@ -527,9 +608,111 @@ async function queuedRealRefusal(refusedCheck: 'signature' | 'licence' | 'vulner
     service.close();
     await once(service, 'close');
     await rm(custody.directory, { recursive: true, force: true });
+    if (previousLogLevel === undefined) delete process.env['LOG_LEVEL'];
+    else process.env['LOG_LEVEL'] = previousLogLevel;
     if (previous) process.env['HOSTED_IMAGE_CUSTODY_FILE'] = previous;
     else delete process.env['HOSTED_IMAGE_CUSTODY_FILE'];
   }
 }
 it.each(['signature', 'licence', 'vulnerability'] as const)(
   'saves one real queued %s refusal and returns it on redelivery', queuedRealRefusal);
+it.each(['signature-outage', 'licence-outage', 'vulnerability-outage',
+  'missing-receipt', 'forged-receipt', 'malformed-result', 'lost-reply'] as const)(
+  'keeps a real queued %s without admission or a saved refusal', queuedRealRefusal);
+
+async function privateInputErrorStaysPrivate() {
+  const registration = await saveRegistration();
+  const directory = await mkdtemp(join(tmpdir(), 'image-private-error-'));
+  const canaries = ['credential-canary', 'filesystem-path-canary', 'content-canary'];
+  const previous = process.env['HOSTED_IMAGE_CUSTODY_FILE'];
+  process.env['HOSTED_IMAGE_CUSTODY_FILE'] = join(directory, ...canaries, 'missing.json');
+  const previousLogLevel = process.env['LOG_LEVEL'];
+  process.env['LOG_LEVEL'] = 'info';
+  const logLines: string[] = [];
+  const destination = { write(line: string) { logLines.push(line); } };
+  const logger = createLogger('image-private-test', { destination });
+  const storage = await databases();
+  function failed() { throw new Error('Fixture database unavailable'); }
+  const db = connectProjectionDb(storage.queue.options.connectionString!, failed);
+  async function readInputs(event: EventEnvelope) {
+    return trustedHostedImageInputs(fixture.store, silo, event);
+  }
+  const handler = hostedImageCheckHandler(fixture.store, silo,
+    runAndWriteHostedImageCheck, readInputs);
+  const runtime = new HandlerRuntime({ db: db.db, logger, silo, handlers: [handler],
+    retryLimit: 0 });
+  await runtime.start();
+  try {
+    expect(await recoverHostedImageChecks(runtime, fixture.reader, fixture.store)).toBe(1);
+    await runtime.work(1);
+    async function failedJob() {
+      const jobs = await storage.queue.query<{ state: string }>(
+        "SELECT state FROM pgboss.job WHERE name='check-hosted-image'");
+      return jobs.rows.some(isFailedJob);
+    }
+    await until(failedJob);
+    const jobs = await storage.queue.query<{ state: string; output: unknown }>(
+      "SELECT state, output FROM pgboss.job WHERE name='check-hosted-image'");
+    expect(jobs.rows).toHaveLength(1);
+    expect(jobs.rows[0]?.state).toBe('failed');
+    let publicError: unknown;
+    try {
+      await handler.handle(registration, transaction);
+    } catch (error) {
+      publicError = error;
+    }
+    expect(publicError).toEqual(new Error('Trusted image inputs unavailable'));
+    const admission = await readHostedAdmission(fixture.store, silo, serverId);
+    expect(admission?.status).toBe('checking');
+    const events = [];
+    for await (const row of fixture.store.readStream(`mcp-${serverId}`, 1,
+      performance.now() + 10_000)) events.push(row.event);
+    expect(events.map(event => event.type)).toEqual(['mcp.server_registered']);
+    const eventData = events.map(readEventData);
+    const publicOutput = JSON.stringify({ logs: logLines, savedErrors: jobs.rows[0]?.output,
+      eventData, publicError });
+    expect(publicOutput).toContain('Trusted image inputs unavailable');
+    const parsedLogLines = logLines.map(parseLogLine);
+    const handlerFailureLogs = parsedLogLines.filter(hasHandlerFailureMessage);
+    expect(handlerFailureLogs.length).toBeGreaterThan(0);
+    const privateOutputs = [JSON.stringify(handlerFailureLogs), JSON.stringify(jobs.rows[0]?.output),
+      JSON.stringify(eventData), JSON.stringify(publicError)];
+    for (const canary of canaries) expect(publicOutput).not.toContain(canary);
+    for (const canary of canaries) {
+      for (const output of privateOutputs) expect(output).not.toContain(canary);
+    }
+  } finally {
+    await runtime.stop();
+    await db.close();
+    await storage.close();
+    await rm(directory, { recursive: true, force: true });
+    if (previousLogLevel === undefined) delete process.env['LOG_LEVEL'];
+    else process.env['LOG_LEVEL'] = previousLogLevel;
+    if (previous) process.env['HOSTED_IMAGE_CUSTODY_FILE'] = previous;
+    else delete process.env['HOSTED_IMAGE_CUSTODY_FILE'];
+  }
+}
+
+function isRetryableOrFailedJob(job: { state: string }) {
+  return job.state === 'retry' || job.state === 'failed';
+}
+
+function isFailedJob(job: { state: string }) {
+  return job.state === 'failed';
+}
+
+function hasHandlerFailureMessage(record: { msg?: string }) {
+  return record.msg === 'handler.failed';
+}
+
+function readEventData(event: EventEnvelope) {
+  return event.data;
+}
+
+function parseLogLine(line: string) {
+  const parsed: unknown = JSON.parse(line);
+  if (typeof parsed !== 'object' || parsed === null || !('msg' in parsed) ||
+      typeof parsed.msg !== 'string') return {};
+  return { msg: parsed.msg };
+}
+it('keeps a private input error out of the queue and public result', privateInputErrorStaysPrivate);
