@@ -1,1 +1,1 @@
-The computer can now mask command arguments and check the remaining text for secrets before a future private command view uses it. Unclear flags hide all later words, and unsupported shell syntax gives no command text.
+The computer can now prepare a private command view that shows only reviewed program and command words and plain file paths under `/workspace`. All other words are hidden, and commands it cannot read give no command text.

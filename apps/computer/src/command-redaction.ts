@@ -6,12 +6,14 @@ const knownPrograms = new Set([
   'cat', 'curl', 'dot', 'echo', 'env', 'find', 'git', 'grep', 'ls', 'mmdc', 'npm',
   'pdftotext', 'pdfinfo', 'pip', 'pip3', 'python', 'python3', 'rg', 'wget',
 ]);
-const safeFlags = new Set([
-  '-H', '-p', '-u', '--api-key', '--header', '--pass', '--password',
-  '--secret', '--token', '--user',
+const reviewedSubcommands = new Map<string, readonly (readonly string[])[]>([
+  ['git', [['clone'], ['status'], ['log']]],
+  ['npm', [['install'], ['run'], ['test']]],
+  ['pip', [['install']]],
+  ['pip3', [['install']]],
+  ['python3', [['-m', 'pip'], ['-m', 'venv'], ['-m', 'pytest'], ['-m', 'unittest']]],
 ]);
 const assignmentName = /^[A-Za-z_][A-Za-z_0-9]*=/u;
-const flagWithValue = /^(-{1,2}[A-Za-z][A-Za-z0-9-]*)=/u;
 const unsafeShellSyntax = /[;&|<>$`\\\r\n\0]/u;
 const ruleConfig = {
   rules: [{ id: '@secretlint/secretlint-rule-preset-recommend', rule: recommendedRules }],
@@ -78,86 +80,104 @@ function parseSimpleWords(command: string): string[] | null {
   return completeWords(words, word, started, quote);
 }
 
-function maskFlagWithEquals(word: string): string | null {
-  const flag = flagWithValue.exec(word);
-  if (!flag) return null;
+function matchingSubcommandLength(program: string, argumentsAfterProgram: string[]): number {
+  const allowedSequences = reviewedSubcommands.get(program) ?? [];
+  let longestMatch = 0;
 
-  const name = flag[1];
-  if (name && safeFlags.has(name)) return `${name}=${hidden}`;
-  return hidden;
+  for (const sequence of allowedSequences) {
+    if (sequence.length <= longestMatch) continue;
+
+    let matches = true;
+    for (let index = 0; index < sequence.length; index += 1) {
+      if (argumentsAfterProgram[index] !== sequence[index]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) longestMatch = sequence.length;
+  }
+
+  return longestMatch;
+}
+
+function isPlainWorkspacePath(word: string): boolean {
+  if (!word.startsWith('/workspace/')) return false;
+  if (word.includes('=') || word.includes(':')) return false;
+
+  const pathParts = word.split('/');
+  for (const part of pathParts) {
+    if (part === '.' || part === '..') return false;
+  }
+  return true;
 }
 
 function maskArguments(words: string[]): string | null {
-  const masked: string[] = [];
-  let programFound = false;
-  let maskNextValue = false;
-  let maskRemainingWords = false;
+  let programIndex = 0;
+  while (programIndex < words.length) {
+    const word = words[programIndex];
+    if (!word || !assignmentName.test(word)) break;
+    programIndex += 1;
+  }
 
-  for (const word of words) {
-    if (!programFound && assignmentName.test(word)) {
-      masked.push(`${hidden}=${hidden}`);
-      continue;
-    }
-    if (!programFound) {
-      if (!knownPrograms.has(word)) return null;
-      masked.push(word);
-      programFound = true;
-      continue;
-    }
+  const program = words[programIndex];
+  if (!program || !knownPrograms.has(program)) return null;
+
+  const argumentsAfterProgram = words.slice(programIndex + 1);
+  const subcommandLength = matchingSubcommandLength(program, argumentsAfterProgram);
+  const masked: string[] = [];
+  for (let index = 0; index < programIndex; index += 1) {
+    masked.push(hidden);
+  }
+  masked.push(program);
+
+  let unreviewedFlagSeen = false;
+  for (const [index, word] of argumentsAfterProgram.entries()) {
     if (word.startsWith('#')) return null;
-    if (maskRemainingWords) {
-      masked.push(hidden);
-      continue;
-    }
-    if (maskNextValue) {
-      masked.push(hidden);
-      maskNextValue = false;
-      continue;
-    }
-    if (assignmentName.test(word)) {
-      masked.push(`${hidden}=${hidden}`);
-      continue;
-    }
-    const equalsForm = maskFlagWithEquals(word);
-    if (equalsForm !== null) {
-      masked.push(equalsForm);
-      continue;
-    }
-    if (safeFlags.has(word)) {
+
+    if (index < subcommandLength) {
       masked.push(word);
-      maskNextValue = true;
       continue;
     }
-    if (word.startsWith('-')) {
-      // Mask the rest because an unknown flag may be a switch or take a value.
-      // Its next word could be another flag or private text that looks like one.
-      masked.push(hidden);
-      maskRemainingWords = true;
+
+    // Hide later paths because an unreviewed flag may use one as its value.
+    if (word.startsWith('-')) unreviewedFlagSeen = true;
+    if (!unreviewedFlagSeen && isPlainWorkspacePath(word)) {
+      masked.push(word);
       continue;
     }
     masked.push(hidden);
   }
 
-  if (!programFound) return null;
   return masked.join(' ');
 }
 
 function hasHighEntropyWord(command: string): boolean {
-  const words = command.match(/[A-Za-z0-9_+/=-]{20,}/gu) ?? [];
-  for (const word of words) {
-    const counts = new Map<string, number>();
-    for (const character of word) {
-      const count = counts.get(character) ?? 0;
-      counts.set(character, count + 1);
+  const visibleWords = command.split(/\s+/u);
+  for (const visibleWord of visibleWords) {
+    // Separate path parts so ordinary folder names do not add up to a false secret.
+    const parts = isPlainWorkspacePath(visibleWord) ? visibleWord.split('/') : [visibleWord];
+    for (const part of parts) {
+      const candidates = part.match(/[A-Za-z0-9_+/=-]{20,}/gu) ?? [];
+      for (const candidate of candidates) {
+        if (hasHighEntropy(candidate)) return true;
+      }
     }
-    let entropy = 0;
-    for (const count of counts.values()) {
-      const frequency = count / word.length;
-      entropy -= frequency * Math.log2(frequency);
-    }
-    if (entropy >= 3.5) return true;
   }
   return false;
+}
+
+function hasHighEntropy(word: string): boolean {
+  const counts = new Map<string, number>();
+  for (const character of word) {
+    const count = counts.get(character) ?? 0;
+    counts.set(character, count + 1);
+  }
+  let entropy = 0;
+  for (const count of counts.values()) {
+    const frequency = count / word.length;
+    entropy -= frequency * Math.log2(frequency);
+  }
+  return entropy >= 3.5;
 }
 
 async function passesRuleScan(command: string): Promise<boolean> {
@@ -168,8 +188,8 @@ async function passesRuleScan(command: string): Promise<boolean> {
   return result.messages.length === 0;
 }
 
-// Keep unsupported shell forms out of view. Only a fixed command shape survives
-// argument masking, followed by the maintained rules and an entropy check.
+// Show only reviewed command words and plain workspace paths. Scan that small
+// result once more before it can leave the computer.
 export async function redactCommand(command: string): Promise<string | null> {
   const words = parseSimpleWords(command);
   if (!words) return null;
