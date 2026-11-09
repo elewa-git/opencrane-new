@@ -692,3 +692,17 @@ checks them directly. The only setting is the protected target file described ab
 No events or public API fields are added. All JSON field names were checked against
 the unchanged `RISKY_FIELD_NAME` rule. Receipt digests contain no private text hashes.
 Own results and outstanding live work: [receipt](../../docs/process/p4-15-pr5c/receipt.md).
+
+## Canary journey helper process
+
+The supervisor writes a root-owned tmpfs record before sending journey input.
+It binds the challenge, image, installation and both process PIDs and Linux
+start times. The journey checks the record's owner and file type.
+
+The helper checks its command, owner, cgroup and PID namespace. It measures
+swap, crash dumps, core limits, `CoreDumping` and its own dumpability after
+exec. It rechecks both process identities and protection before every result.
+Missing or changed proof returns a fixed reason and `complete: false`.
+The collector checks the installation around each journey. Replay and status
+reads start no helper. The joined inventory and live journey remain unfinished.
+Admission stays disabled.

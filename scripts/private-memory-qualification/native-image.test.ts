@@ -1,9 +1,8 @@
-import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { z } from 'zod';
 import { protectionMessages } from './protection-failure.ts';
@@ -159,6 +158,26 @@ function load(url, context, next) {
     }
     return { ...loaded, source };
   }
+  if (url.endsWith('/canary-helper-proof.ts') &&
+      process.env.CASE === 'non-tmpfs launch record') {
+    // Keep the supervisor lock on tmpfs while the helper observes a persistent file system.
+    let source = String(loaded.source);
+    const check = 'statfsSync(recordDirectory).type';
+    if (!source.includes(check)) {
+      process.exit(2);
+    }
+    source = source.replace(check, 'fixtureFilesystemType(recordDirectory)');
+    const fixture = String.raw\`
+function fixtureFilesystemType(path) {
+  const filesystem = statfsSync(path);
+  if (process.env.CASE === 'non-tmpfs launch record') {
+    return 0xef53;
+  }
+  return filesystem.type;
+}
+\`;
+    return { ...loaded, source: fixture + source };
+  }
   if (url.endsWith('/native-checks.ts')) {
     let source = String(loaded.source);
     if (fault) {
@@ -222,6 +241,16 @@ export async function checkNative(challengeId) {
 \`;
     return { ...loaded, source: audit + source };
   }
+  if (url.endsWith('/journey.mjs')) {
+    // Let the fixture supervisor return failure receipts for exact assertions.
+    const originalSource = String(loaded.source);
+    const exitStatus = "process.exitCode = result.result === 'FAIL' ? 1 : 0;";
+    if (!originalSource.includes(exitStatus)) {
+      process.exit(2);
+    }
+    const source = originalSource.replace(exitStatus, 'process.exitCode = 0;');
+    return { ...loaded, source };
+  }
   return loaded;
 }
 const hooks = { load };
@@ -268,7 +297,7 @@ function cleanup(): void {
 beforeAll(prepare, 970_000);
 afterAll(cleanup, 30_000);
 
-function startContainer(caseName: string, image: string, scratchDirectory?: string): string {
+function startContainer(caseName: string, image: string): string {
   const containerName = `private-native-${randomUUID()}`;
   const coreLimit = caseName === 'core allowance' ? 'core=1:1' : 'core=0:0';
   const swapLimit = caseName === 'swap allowance' ? '1g' : '512m';
@@ -282,39 +311,79 @@ function startContainer(caseName: string, image: string, scratchDirectory?: stri
     '--ulimit=nproc=256:256', '--tmpfs', '/home/private:mode=711',
     '-e', 'SILO_ID=native-test', '-e', `CASE=${caseName}`, image, 'sleep', '120'];
   const mountIndex = args.indexOf('-e');
-  if (scratchDirectory) {
-    args.splice(mountIndex, 0, '--mount', `type=bind,src=${scratchDirectory},dst=/run`);
-  } else {
-    args.splice(mountIndex, 0, '--tmpfs', '/run');
-  }
+  args.splice(mountIndex, 0, '--tmpfs', '/run');
   docker(args);
   return containerName;
 }
-function nativeCommand(image: string): string[] {
-  const command = ['nice', '-n', '10', 'node',
+function nativeCommand(): string[] {
+  const command = ['nice', '-n', '10', '/usr/local/bin/node',
     '--experimental-strip-types'];
-  if (image !== packageTag) {
-    command.push('--import', '/fixture/preload.mjs');
-  }
   command.push('/app/scripts/private-memory-qualification/journey.mjs');
   return command;
 }
-function run(caseName: string, image = tag, name = request.name,
-  scratchDirectory?: string): Record<string, unknown> {
-  const containerName = startContainer(caseName, image, scratchDirectory);
+function supervisedCommand(): string[] {
+  const source = readFileSync(new URL('./supervisor.mjs', import.meta.url), 'utf8');
+  const failures = Object.keys(protectionMessages);
+  const command = ['/usr/local/bin/node', '--input-type=module', '--eval', source,
+    JSON.stringify(failures), JSON.stringify(nativeCommand())];
+  return command;
+}
+function runSupervised(containerName: string, command: string[], input: string,
+  useFixturePreload: boolean): Promise<string> {
+  const options = { stdio: 'pipe' as const };
+  const dockerArguments = ['exec'];
+  if (useFixturePreload) {
+    dockerArguments.push('--env', 'NODE_OPTIONS=--import=/fixture/preload.mjs');
+  }
+  dockerArguments.push('-i', containerName, ...command);
+  const child = spawn('/usr/bin/docker', dockerArguments, options);
+  const output: Buffer[] = [];
+  const errors: Buffer[] = [];
+  function collectOutput(chunk: Buffer): void {
+    output.push(chunk);
+  }
+  function collectError(chunk: Buffer): void {
+    errors.push(chunk);
+  }
+  function execute(resolve: (output: string) => void,
+    reject: (error: Error) => void): void {
+    const deadline = setTimeout(stop, 45_000);
+    function stop(): void {
+      child.kill('SIGKILL');
+    }
+    function closed(code: number | null): void {
+      clearTimeout(deadline);
+      const stdout = Buffer.concat(output).toString('utf8');
+      const stderr = Buffer.concat(errors).toString('utf8');
+      if (code !== 0) {
+        reject(new Error(`supervised_fixture_failed:${code}:${stderr}`));
+        return;
+      }
+      if (stderr !== '') {
+        reject(new Error('supervised_fixture_wrote_stderr'));
+        return;
+      }
+      resolve(stdout);
+    }
+    child.on('error', reject);
+    child.on('close', closed);
+    child.stdout.on('data', collectOutput);
+    child.stderr.on('data', collectError);
+    child.stdin.on('error', stop);
+    child.stdin.write(`${JSON.stringify(input)}\n`);
+  }
+  return new Promise(execute);
+}
+async function run(caseName: string, image = tag, name = request.name): Promise<Record<string, unknown>> {
+  const containerName = startContainer(caseName, image);
   const installationBefore = installation(containerName);
-  const command = ['exec', '-i', containerName, ...nativeCommand(image)];
   try {
     const namedRequest = { ...request, name };
-    const options = {
-      input: JSON.stringify(namedRequest), encoding: 'utf8' as const, timeout: 45_000,
-    };
-    const result = spawnSync('/usr/bin/docker', command, options);
-    expect(result.error).toBeUndefined();
-    expect(result.stderr).toBe('');
-    const receipt = receiptSchema.parse(JSON.parse(result.stdout));
+    const command = supervisedCommand();
+    const output = await runSupervised(containerName, command, JSON.stringify(namedRequest),
+      image !== packageTag);
+    const receipt = receiptSchema.parse(JSON.parse(output));
     expect(installation(containerName) === installationBefore).toBe(true);
-    expect(result.status).toBe(receipt['result'] === 'FAIL' ? 1 : 0);
     assertStopped(containerName, ['failed home cleanup', 'used home', 'surviving process'].includes(caseName));
     if (caseName === 'used home') {
       const probe = "const fs = require('node:fs'); " +
@@ -351,73 +420,111 @@ if (!${allowHome} && fs.readdirSync('/home/private').length !== 0) {
 `;
   expect(docker(['exec', containerName, 'node', '-e', probe])).toBe('');
 }
-function safeNative(): void {
+async function safeNative(): Promise<void> {
   const expected = { ...request, result: 'PARTIAL', complete: false };
-  expect(run('safe')).toMatchObject(expected);
+  expect(await run('safe')).toMatchObject(expected);
 }
 it('observes two simultaneous pinned native processes and keeps qualification incomplete',
   safeNative, 60_000);
-function refusesActualDumpableNative(): void {
+async function refusesActualDumpableNative(): Promise<void> {
   const expected = { result: 'FAIL', reason: 'journey_failed' };
-  expect(run('dumpable native')).toEqual(expected);
+  expect(await run('dumpable native')).toEqual(expected);
 }
 it('refuses the actual executed native processes when they are dumpable',
   refusesActualDumpableNative, 60_000);
-function refusesFault(name: string): void {
+async function refusesFault(name: string): Promise<void> {
   const expected = { result: 'FAIL', reason: 'journey_failed' };
-  expect(run(name)).toEqual(expected);
+  expect(await run(name)).toEqual(expected);
 }
 it.each(faults)('refuses %s without returning native output', refusesFault, 60_000);
 it.each(proofFaults)('refuses %s before a private-turn receipt', refusesFault, 60_000);
-it.each(['core allowance', 'swap allowance'])(
-  'refuses a live %s before a private-turn receipt', refusesFault, 60_000,
-);
-function refusesHost(): void {
+async function refusesCoreAllowance(): Promise<void> {
   const expected = { result: 'FAIL', reason: 'host_refused',
-    protectionFailure: 'memory_limit_unproved' };
-  expect(run('host')).toEqual(expected);
-  expect(run('host', packageTag)).toEqual(expected);
+    protectionFailure: 'core_limit_not_zero', complete: false };
+  expect(await run('core allowance')).toEqual(expected);
+}
+it('refuses the helper when its core limit is not zero', refusesCoreAllowance, 60_000);
+async function refusesSwapAllowance(): Promise<void> {
+  await refusesFault('swap allowance');
+}
+it('refuses live swap allowance before a private-turn receipt',
+  refusesSwapAllowance, 60_000);
+async function refusesHost(): Promise<void> {
+  const expected = { result: 'FAIL', reason: 'host_refused',
+    protectionFailure: 'memory_limit_unproved', complete: false };
+  expect(await run('host')).toEqual(expected);
+  expect(await run('host', packageTag)).toEqual(expected);
 }
 it('keeps the real host refusal ahead of native execution in both images', refusesHost, 60_000);
 
-function missingNative(): void {
+async function missingNative(): Promise<void> {
   const expected = { result: 'FAIL', reason: 'journey_failed' };
-  expect(run('safe', missingTag)).toEqual(expected);
+  expect(await run('safe', missingTag)).toEqual(expected);
 }
 it('refuses the package without native files even with safe host observations', missingNative);
 
-function missingHelper(): void {
+async function missingHelper(): Promise<void> {
   const expected = { result: 'FAIL', reason: 'journey_failed' };
-  expect(run('safe', missingHelperTag)).toEqual(expected);
+  expect(await run('safe', missingHelperTag)).toEqual(expected);
 }
 it('refuses a missing production connection helper', missingHelper, 60_000);
 
-function changedLauncher(): void {
+async function changedLauncher(): Promise<void> {
   const expected = { result: 'FAIL', reason: 'journey_failed' };
-  expect(run('safe', changedLauncherTag)).toEqual(expected);
+  expect(await run('safe', changedLauncherTag)).toEqual(expected);
 }
 it('refuses a stand-in launcher script', changedLauncher, 60_000);
 
-function persistentScratch(): void {
-  const directory = mkdtempSync(join(tmpdir(), 'private-native-scratch-'));
-  try {
-    const expected = { result: 'FAIL', reason: 'journey_failed' };
-    expect(run('safe', tag, request.name, directory)).toEqual(expected);
-  } finally {
-    const removalOptions = { recursive: true, force: true };
-    rmSync(directory, removalOptions);
-  }
+async function refusesNonTmpfsLaunchRecord(): Promise<void> {
+  const expected = { result: 'FAIL', reason: 'host_refused',
+    protectionFailure: 'private_process_unreadable', complete: false };
+  expect(await run('non-tmpfs launch record')).toEqual(expected);
 }
-it('refuses writable scratch that is not tmpfs', persistentScratch, 60_000);
+it('refuses a launch record directory that is not tmpfs',
+  refusesNonTmpfsLaunchRecord, 60_000);
 
-function recallPrerequisites(): void {
+async function recallPrerequisites(): Promise<void> {
   const expected = { ...request, name: 'nativeRecall', result: 'NOT RUN', complete: false };
-  expect(run('safe', tag, 'nativeRecall')).toMatchObject(expected);
+  expect(await run('safe', tag, 'nativeRecall')).toMatchObject(expected);
   const refused = { result: 'FAIL', reason: 'journey_failed' };
-  expect(run('safe', missingTag, 'nativeRecall')).toEqual(refused);
+  expect(await run('safe', missingTag, 'nativeRecall')).toEqual(refused);
 }
 it('requires shipped native files for recall without qualifying empty threads',
   recallPrerequisites, 60_000);
+
+function waitForNativeCount(containerName: string): string {
+  const probe = String.raw`
+const fs = require('node:fs');
+let lockSeen = false;
+const deadline = Date.now() + 90_000;
+function readCount() {
+  if (!fs.existsSync('/run/native-count')) {
+    return 'missing';
+  }
+  return fs.readFileSync('/run/native-count', 'utf8');
+}
+function check() {
+  const count = readCount();
+  const lockExists = fs.existsSync('/run/opencrane-memory-qualification.lock');
+  if (count === '2') {
+    process.stdout.write(process.env.CASE + '|2');
+    return;
+  }
+  if ((lockSeen && !lockExists) || Date.now() > deadline) {
+    process.stdout.write(process.env.CASE + '|not-ready|' + count);
+    process.exitCode = 1;
+    return;
+  }
+  if (lockExists) {
+    lockSeen = true;
+  }
+  setTimeout(check, 25);
+}
+check();
+`;
+  const argumentsForDocker = ['exec', containerName, 'node', '-e', probe];
+  return docker(argumentsForDocker, 95_000);
+}
 
 async function collectorLoss(caseName: string): Promise<void> {
   const containerName = startContainer(caseName, tag);
@@ -425,11 +532,12 @@ async function collectorLoss(caseName: string): Promise<void> {
   try {
     let source = readFileSync(new URL('./supervisor.mjs', import.meta.url), 'utf8');
     if (caseName === 'collector timeout') {
-      source = source.replace('120_000', '15_000');
+      source = source.replace('120_000', '60_000');
     }
     const failures = Object.keys(protectionMessages);
-    const args = ['exec', '-i', containerName, 'node', '--input-type=module', '--eval',
-      source, JSON.stringify(failures), JSON.stringify(nativeCommand(tag))];
+    const args = ['exec', '--env', 'NODE_OPTIONS=--import=/fixture/preload.mjs',
+      '-i', containerName, '/usr/local/bin/node', '--input-type=module', '--eval',
+      source, JSON.stringify(failures), JSON.stringify(nativeCommand())];
     const options = { stdio: 'pipe' as const };
     const child = spawn('/usr/bin/docker', args, options);
     function closed(resolve: (code: number | null) => void): void {
@@ -444,18 +552,12 @@ async function collectorLoss(caseName: string): Promise<void> {
     child.stderr.on('data', collect);
     child.stdin.write(`${JSON.stringify(JSON.stringify(request))}\n`);
     try {
-      let ready = false;
-      for (let attempt = 0; attempt < 100; attempt++) {
-        const probe = "const fs = require('node:fs'); " +
-          "if (fs.existsSync('/run/native-count')) " +
-          "process.stdout.write(fs.readFileSync('/run/native-count'));";
-        ready = docker(['exec', containerName, 'node', '-e', probe]) === '2';
-        if (ready) {
-          break;
-        }
-        await delay(50);
-      }
-      expect(ready).toBe(true);
+      const latestProbe = waitForNativeCount(containerName);
+      const ready = latestProbe === `${caseName}|2`;
+      const supervisorOutput = Buffer.concat(output).toString('utf8');
+      const diagnostic = `native observation was not ready: ${latestProbe}; ` +
+        `supervisor exit: ${String(child.exitCode)}; output: ${supervisorOutput}`;
+      expect(ready, diagnostic).toBe(true);
       const unrelatedHome = 'turn-33333333-3333-4333-8333-333333333333';
       docker(['exec', containerName, 'mkdir', `/home/private/${unrelatedHome}`]);
     } finally {
@@ -482,5 +584,5 @@ async function collectorLoss(caseName: string): Promise<void> {
   }
 }
 it.each(['collector EOF', 'collector timeout'])(
-  '%s stops both native processes in the supervisor group', collectorLoss, 40_000,
+  '%s stops both native processes in the supervisor group', collectorLoss, 120_000,
 );

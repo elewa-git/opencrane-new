@@ -1,15 +1,29 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { probeHost } from './host-probe.ts';
 import { runJourney } from './journey.ts';
+import { proveCanaryHelper, readCanaryHelperBinding } from './canary-helper-proof.ts';
 import { stopInvalidatedMemory } from '../../apps/server/src/memory/stop.ts';
 import { privateOutput } from '../../apps/server/src/chat/private-output.ts';
 import { memoryAdmission } from '../../apps/server/src/chat/memory-admission.ts';
 
 vi.mock('../../apps/server/src/chat/private-output.ts', { spy: true });
 vi.mock('./host-probe.ts', { spy: true });
+vi.mock('./canary-helper-proof.ts', { spy: true });
+function protectedHelper(): void {
+  const identity = { pid: process.pid, startTime: '123', executable: '/usr/local/bin/node',
+    uid: 0, cgroup: '0::/test\n', containerIdentity: 'pid:[123]',
+    commandLine: '/usr/local/bin/node\0journey.mjs\0' };
+  const helperBinding = {
+    helper: identity, supervisor: identity,
+    imageDigest: request.imageDigest, installationId: request.installationId,
+  };
+  vi.mocked(readCanaryHelperBinding).mockReturnValue(helperBinding);
+  vi.mocked(proveCanaryHelper).mockReturnValue(true);
+}
+beforeEach(protectedHelper);
 vi.mock('../../apps/server/src/memory/stop.ts', { spy: true });
 afterEach(vi.restoreAllMocks);
 afterEach(vi.unstubAllEnvs);

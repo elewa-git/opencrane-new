@@ -468,16 +468,11 @@ async function withdrawsPassForPartialRunner(): Promise<void> {
     expect(child.status).toBe(1);
     expect(child.stderr).toBe('');
     const refusal: unknown = JSON.parse(child.stdout);
-    const observed = z.object({ protectionFailure: z.string() }).parse(refusal);
-    function matchesFailure(entry: string[]): boolean {
-      return entry[0] === observed.protectionFailure;
-    }
-    const knownFailure = protectionCases.find(matchesFailure);
-    expect(knownFailure).toBeDefined();
     const expectedRefusal = { result: 'FAIL', reason: 'host_refused',
-      protectionFailure: knownFailure![0] };
+      protectionFailure: 'private_process_unreadable', complete: false };
     expect(refusal).toEqual(expectedRefusal);
-    expectedFailure = { ...expectedRefusal, message: knownFailure![1] };
+    expectedFailure = { ...expectedRefusal,
+      message: protectionMessages.private_process_unreadable };
     for (const key of Object.keys(response)) delete response[key];
     Object.assign(response, refusal);
   }

@@ -48,18 +48,13 @@ async function refusesRealHost(): Promise<void> {
   const direct = spawnSync('/usr/bin/docker', ['exec', '-i', containerId, ...args], options);
   expect(direct.stderr).toBe('');
   const result: unknown = JSON.parse(direct.stdout);
-  if (direct.status === 0) {
-    expect(result).toMatchObject({ ...request, result: 'NOT RUN', complete: false });
-    const repeated = await runInContainer(containerId, args, JSON.stringify(request));
-    expect(repeated).toMatchObject({ ...request, result: 'NOT RUN', complete: false });
-  } else {
-    expect(direct.status).toBe(1);
-    const expected = { result: 'FAIL', reason: 'host_refused',
-      protectionFailure: 'helper_unavailable' };
-    expect(result).toEqual(expected);
-    await expect(runInContainer(containerId, args, JSON.stringify(request))).resolves.toEqual(expected);
-    await expect(runInContainer(containerId, args, JSON.stringify(request))).resolves.toEqual(expected);
-  }
+  expect(direct.status).toBe(1);
+  expect(result).toEqual({ result: 'FAIL', reason: 'host_refused',
+    protectionFailure: 'private_process_unreadable', complete: false });
+  const expected = { result: 'FAIL', reason: 'host_refused',
+    protectionFailure: 'helper_unavailable', complete: false };
+  await expect(runInContainer(containerId, args, JSON.stringify(request))).resolves.toEqual(expected);
+  await expect(runInContainer(containerId, args, JSON.stringify(request))).resolves.toEqual(expected);
   docker(['exec', containerId, 'test', '!', '-e', '/run/opencrane-memory-qualification.lock']);
   const processes = docker(['top', containerId, '-eo', 'pid,args']);
   expect(processes).not.toContain('/usr/local/bin/node');

@@ -4,10 +4,12 @@ import { probeContainer } from './container-probe.ts';
 import { probeHost } from './host-probe.ts';
 import { runJourney } from './journey.ts';
 import { checkNative } from './native-checks.ts';
+import { proveCanaryHelper, readCanaryHelperBinding } from './canary-helper-proof.ts';
 
 vi.mock('./host-probe.ts', { spy: true });
 vi.mock('./container-probe.ts', { spy: true });
 vi.mock('./native-checks.ts', { spy: true });
+vi.mock('./canary-helper-proof.ts', { spy: true });
 
 const silo = 'recall-test-silo';
 const hash = createHash('sha256');
@@ -21,6 +23,14 @@ const request = {
 };
 
 function prepare() {
+  const identity = { pid: process.pid, startTime: '123', executable: '/usr/local/bin/node',
+    uid: 0, cgroup: '0::/test\n', containerIdentity: 'pid:[123]',
+    commandLine: '/usr/local/bin/node\0journey.mjs\0' };
+  vi.mocked(readCanaryHelperBinding).mockReturnValue({
+    helper: identity, supervisor: identity,
+    imageDigest: request.imageDigest, installationId: request.installationId,
+  });
+  vi.mocked(proveCanaryHelper).mockReturnValue(true);
   vi.mocked(checkNative).mockReset();
   vi.mocked(checkNative).mockResolvedValue(undefined);
   vi.mocked(probeHost).mockReset();
@@ -99,8 +109,9 @@ it('rechecks host protection after loading the recall helper', refusesHostBefore
 async function runnerOnlyProtection() {
   vi.mocked(probeHost).mockReturnValue(false);
   const receipt = await runJourney(JSON.stringify(request));
-  expect(receipt).toMatchObject({ result: 'NOT RUN', complete: false });
+  expect(receipt).toMatchObject({ result: 'FAIL', reason: 'host_refused',
+    complete: false });
   expect(checkNative).not.toHaveBeenCalled();
-  expect(probeContainer).toHaveBeenCalledTimes(2);
+  expect(probeContainer).toHaveBeenCalledTimes(1);
 }
-it('starts no native work when protection covers only the container runner', runnerOnlyProtection);
+it('refuses native work when protection covers only the container runner', runnerOnlyProtection);

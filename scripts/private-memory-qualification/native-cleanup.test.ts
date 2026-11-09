@@ -80,7 +80,7 @@ function cleanupFixture() {
   const source = readFileSync(new URL('./native-checks.ts', import.meta.url), 'utf8');
   // Execute the real private functions against a simulated Linux process table.
   const withoutImports = source.replace(/^import[\s\S]*?from '[^']+';\n/gmu, '');
-  const withoutExports = withoutImports.replace('export async function', 'async function');
+  const withoutExports = withoutImports.replace(/^export\s+/gmu, '');
   const javascript = stripTypeScriptTypes(withoutExports);
   let stopChild: ((value: typeof supervised) => Promise<void>) | undefined;
   function captureStop(candidate: (value: typeof supervised) => Promise<void>): void {

@@ -4,12 +4,15 @@ import * as asyncFiles from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { proveCanaryHelper, readCanaryHelperBinding } from
+  '../../scripts/private-memory-qualification/canary-helper-proof.ts';
 
 vi.mock('node:fs', { spy: true });
 vi.mock('node:fs/promises', { spy: true });
 vi.mock('node:child_process', { spy: true });
 vi.mock('../../scripts/private-memory-qualification/bridge-proof.ts', { spy: true });
 vi.mock('../../scripts/private-memory-qualification/supervisor-proof.ts', { spy: true });
+vi.mock('../../scripts/private-memory-qualification/canary-helper-proof.ts', { spy: true });
 const root = new URL('../../', import.meta.url).pathname.slice(0, -1);
 const directory = `${homedir()}/.config/opencrane/dev-stack-1`;
 const targetPath = '/etc/opencrane/private-memory-qualification.json';
@@ -364,6 +367,11 @@ async function explainsUnsafeHost(setting: string): Promise<void> {
     runId: '11111111-1111-4111-8111-111111111111',
     challengeId: '22222222-2222-4222-8222-222222222222',
   };
+  const identity = { pid: process.pid, startTime: '123', executable: '/usr/local/bin/node',
+    uid: 0, cgroup: '0::/test\n', containerIdentity: 'pid:[123]', commandLine: 'node\0' };
+  vi.mocked(readCanaryHelperBinding).mockReturnValue({ helper: identity,
+    supervisor: identity, imageDigest, installationId: request.installationId });
+  vi.mocked(proveCanaryHelper).mockReturnValue(true);
   const { runJourney } = await import('../../scripts/private-memory-qualification/journey.ts');
   const refusal = await runJourney(JSON.stringify(request));
   const expectedRefusal = { result: 'FAIL', reason: 'host_refused',
