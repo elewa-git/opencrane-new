@@ -367,7 +367,15 @@ async function missingCompanyConfirmation() {
   const append = vi.spyOn(nats.store, 'append');
   expect(await authority.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
   function isSendAuthorisationAppend(call: typeof append.mock.calls[number]) {
-    return call[0].event.type === 'routine.run_send_authorised';
+    const command = call[0];
+    if (typeof command !== 'object' || command === null || !('event' in command)) {
+      return false;
+    }
+    const event = command.event;
+    if (typeof event !== 'object' || event === null || !('type' in event)) {
+      return false;
+    }
+    return event.type === 'routine.run_send_authorised';
   }
   expect(append.mock.calls.some(isSendAuthorisationAppend)).toBe(false);
   const rows = await history(nats.store, 'routine-orders', 'test');
