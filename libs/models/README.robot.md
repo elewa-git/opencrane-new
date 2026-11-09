@@ -5057,8 +5057,9 @@ Only accountDigest, siloId, generation and ownerKind extend the saved choice.
 `readCurrentCompanyProfile` reads only a saved `oauth_confirmed` company record and
 checks its exact credential reference, UID and resource version through connection
 custody. It returns the saved issuer/subject digest, actual scopes, configuration
-digest and expiry. A missing, changed or failed custody read refuses without exposing
-private details. The routine preflight repeats this read in its guarded check.
+digest, expiry and checked credential resource version. A missing, changed or failed
+custody read refuses without exposing private details. The routine preflight repeats
+this read in its guarded check.
 No production company OAuth confirmation writer is installed. Bearer saves remain
 `saved_unverified` and cannot use this reader. The synthetic reader in
 `test/company-selection.test.ts` is test evidence only, not live company activation.

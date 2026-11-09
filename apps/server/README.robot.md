@@ -7305,3 +7305,16 @@ projection generation, computer state and dispatcher state. Limits are 1 to 100.
 The route loads participation and rows before checking current access once. It
 decrypts text only after that check. It never uses a conversation stream in the
 two-second write check.
+
+## Credential custody in routine send authorisation
+
+The custody-backed profile reader includes the Kubernetes credential resource version
+in its captured evidence. The conditional append reads custody again after the stream
+and OAuth checks and requires the same evidence. Deletion or a changed version at that
+read refuses the send authorisation. The preflight test changes custody after `recover`
+returns and checks that the append saves nothing.
+
+The composition fixture holds its monotonic clock during the unrelated-thread and late
+worker-loss injections and around saved-stage recovery sends. Scheduling delays cannot
+spend the production access period before the intended race or retry. Assertions and
+production deadlines remain unchanged.

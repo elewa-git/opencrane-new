@@ -524,6 +524,15 @@ it.each([{}, { enabled: false }, { enabled: true, replay: true }])(
 
 const stages = ['conversation.created', 'message.posted', 'budget.root_allowance_set',
   'routine.run_activation_admitted', 'computer.turn_started'];
+async function sendWithHeldFixtureClock() {
+  // Keep fixture scheduling delays from spending the access period before the fault.
+  const clockSpy = holdFixtureClock();
+  try {
+    return await compose().send(preparedComputer.wake);
+  } finally {
+    clockSpy.mockRestore();
+  }
+}
 async function savedStageFault(stage: string, after: boolean) {
   const append = nats.store.append.bind(nats.store);
   let injected = false;
@@ -544,7 +553,7 @@ async function savedStageFault(stage: string, after: boolean) {
   }
   const fault = vi.spyOn(nats.store, 'append');
   fault.mockImplementation(failStage);
-  await compose().send(preparedComputer.wake);
+  await sendWithHeldFixtureClock();
   function reachedFault() {
     return injected;
   }
@@ -561,18 +570,18 @@ async function savedStageFault(stage: string, after: boolean) {
   if (beforeAllocation) {
     expect(preparedComputer.executedThreads).toEqual([]);
     expect(await saved('routine.run_activation_admitted', 'routine-orders')).toEqual([]);
-    expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'sent' });
+    expect(await sendWithHeldFixtureClock()).toEqual({ status: 'sent' });
     await until(preparedComputer.executed);
     expect(preparedComputer.executedThreads).toEqual(['native-2']);
     expect(preparedComputer.nativeStarts).toBe(2);
     await assertCounts('native-2');
     const recoveredPosition = await nats.store.head();
-    expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+    expect(await sendWithHeldFixtureClock()).toEqual({ status: 'unknown' });
     expect(await nats.store.head()).toBe(recoveredPosition);
     expect(preparedComputer.executedThreads).toEqual(['native-2']);
     expect(preparedComputer.nativeStarts).toBe(2);
   } else {
-    expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+    expect(await sendWithHeldFixtureClock()).toEqual({ status: 'unknown' });
     expect(await nats.store.head()).toBe(before);
     expect(preparedComputer.executedThreads).toEqual([]);
   }
@@ -618,7 +627,17 @@ function advanceWake() {
   const clockSpy = vi.spyOn(performance, 'now');
   clockSpy.mockImplementation(afterWake);
 }
+function holdFixtureClock() {
+  const started = performance.now();
+  function fixedTime() {
+    return started;
+  }
+  const clockSpy = vi.spyOn(performance, 'now');
+  clockSpy.mockImplementation(fixedTime);
+  return clockSpy;
+}
 async function refusesChangedAccess(kind: string, late: boolean) {
+  if (kind === 'worker' && late) holdFixtureClock();
   const append = nats.store.append.bind(nats.store);
   let injected = false;
   async function afterStart(...supplied: Parameters<typeof append>) {
@@ -721,6 +740,7 @@ it.each(['missing', 'computer', 'thread'])('refuses %s preparation without closi
   refusesPreparation);
 
 async function anotherThread() {
+  holdFixtureClock();
   const append = nats.store.append.bind(nats.store);
   let injected = false;
   async function startOther(...supplied: Parameters<typeof append>) {

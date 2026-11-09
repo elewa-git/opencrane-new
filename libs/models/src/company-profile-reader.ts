@@ -52,6 +52,7 @@ export function readCurrentCompanyProfile(custody: Custody) {
         connectionId: activation.connectionId, profileRevision: profile.sequence,
         generation: activation.generation, accountId: account.subject,
         accountDigest: accountDigest(account),
+        credentialResourceVersion: result.identity.resourceVersion,
         configurationDigest: activation.configurationDigest,
         scopes: account.scopes, expiresAt: account.expiresAt };
     } catch {

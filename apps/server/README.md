@@ -237,7 +237,7 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|sign-out, messages with file references, Office uploads, survey, persona and scripted welcome reads, Memory setup reads, own and admin routine lists, approval replies and original call status, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks saved membership, verified company profile custody, company choices and routine admission; prepares allowances; applies Stop, Pause and Retire; verifies termination and settled cost; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
+  server -.->|checks saved membership, the current company credential version, company choices and routine admission; prepares allowances; applies Stop, Pause and Retire; verifies termination and settled cost; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
   server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, writer closure and retries, routine sessions, inputs, send authorisations with OAuth digests, cancellations, confirmed results, checked finishes and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
@@ -305,6 +305,8 @@ Account choices belong to the signed-in requester. The selection route accepts a
 explicit personal or company owner kind, but company choices remain unavailable until
 verified company profiles have a live reader. The internal routine check can use that
 reader, while automatic sending remains closed. An admin cannot choose for another member.
+The internal send check reads the same company credential version again during its
+conditional save. A deleted or changed credential stops that save.
 
 - Signs people in and keeps their browser session.
 - Checks current membership and permissions before returning private information or saving a change.

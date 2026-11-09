@@ -240,6 +240,9 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
         const snapshot = await snapshotPositions(store, positions, currentDeadline);
         if (!await facts.oauth.configurationCurrent()) refuse();
         if (Date.now() >= facts.expiresAt) refuse();
+        // Read the credential again inside the conditional append. Its captured resource
+        // version must still match after the other awaited company checks.
+        if (!isDeepStrictEqual(await readProfile(profileRows), profileEvidence)) refuse();
         return snapshot;
       } catch {
         refuse();
