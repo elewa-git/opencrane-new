@@ -34,9 +34,9 @@ async function writeTestAdmission(store: typeof nats.store, silo: string, raw: u
   at?: Date) {
   const parsed = hostedImageCheckedSchema.safeParse(raw);
   const fallback = hostedImageCheckedSchema.parse(result('fallback'));
-  async function evidence() {
-    return { verdict: 'clean' as const,
-      malware: parsed.success ? parsed.data.checks.malware : fallback.checks.malware };
+  function evidence() {
+    return Promise.resolve({ verdict: 'clean' as const,
+      malware: parsed.success ? parsed.data.checks.malware : fallback.checks.malware });
   }
   return rawWriter(store, silo, raw, at, evidence);
 }
@@ -44,13 +44,15 @@ async function writeTestAdmission(store: typeof nats.store, silo: string, raw: u
 async function refusesUnvalidatedExport() {
   const serverId = await installed();
   const invented = result(serverId);
-  const unchecked = await exportedWriter(nats.store, 'test', invented, now,
-    undefined as unknown as Parameters<typeof exportedWriter>[4]);
+  // @ts-expect-error Check callers that omit the required private validator.
+  const unchecked = await exportedWriter(nats.store, 'test', invented, now);
   expect(unchecked.status).toBe('conflict');
   expect(await registrations()).toHaveLength(1);
-  async function invalidEvidence() { return false; }
-  const refused = await exportedWriter(nats.store, 'test', invented, now,
-    invalidEvidence as unknown as Parameters<typeof exportedWriter>[4]);
+  function invalidEvidence() {
+    return Promise.resolve(false);
+  }
+  // @ts-expect-error Check runtime rejection of an incomplete validator result.
+  const refused = await exportedWriter(nats.store, 'test', invented, now, invalidEvidence);
   expect(refused.status).toBe('conflict');
   expect(await registrations()).toHaveLength(1);
 }
@@ -61,8 +63,8 @@ async function refusesIncompleteEvidence() {
   const serverId = await installed();
   const invented = hostedImageCheckedSchema.parse(result(serverId));
   const wrongMalware = { ...invented.checks.malware, reportDigest: 'b'.repeat(64) };
-  async function mismatchedEvidence() {
-    return { verdict: 'clean' as const, malware: wrongMalware };
+  function mismatchedEvidence() {
+    return Promise.resolve({ verdict: 'clean' as const, malware: wrongMalware });
   }
   const outcome = await exportedWriter(nats.store, 'test', invented, now,
     mismatchedEvidence);
@@ -74,8 +76,8 @@ it('refuses validation of a different malware result', refusesIncompleteEvidence
 async function acceptsMatchingEvidence() {
   const serverId = await installed();
   const checked = hostedImageCheckedSchema.parse(result(serverId));
-  async function matchingEvidence() {
-    return { verdict: 'clean' as const, malware: checked.checks.malware };
+  function matchingEvidence() {
+    return Promise.resolve({ verdict: 'clean' as const, malware: checked.checks.malware });
   }
   const outcome = await exportedWriter(nats.store, 'test', checked, now,
     matchingEvidence);
@@ -84,26 +86,41 @@ async function acceptsMatchingEvidence() {
 }
 it('requires the validated malware result to match the event', acceptsMatchingEvidence);
 
+async function refusesFabricatedMatchingEvidence() {
+  const serverId = await installed();
+  const invented = hostedImageCheckedSchema.parse(result(serverId));
+  function inventedEvidence() {
+    return Promise.resolve({ verdict: 'clean' as const, malware: invented.checks.malware });
+  }
+  const outcome = await exportedWriter(nats.store, 'test', invented, now,
+    inventedEvidence);
+  expect(outcome.status).toBe('conflict');
+  expect(await registrations()).toHaveLength(1);
+}
+it('refuses a caller-invented matching validator at the package export',
+  refusesFabricatedMatchingEvidence);
+
 async function refusesMalwareBoundary(kind: string) {
   const serverId = await installed();
   const eventTime = new Date(Date.now() - 5_000);
   const payload = hostedImageCheckedSchema.parse(result(serverId));
-  const malware = { ...payload.checks.malware };
+  const malware: Record<string, unknown> = { ...payload.checks.malware };
   if (kind === 'verdict') {
-    malware.verdict = 'fail';
-    malware.reasonCodes = ['infected'];
+    malware['verdict'] = 'fail';
+    malware['reasonCodes'] = ['infected'];
   }
   if (kind === 'expiry') {
-    malware.expiresAt = new Date(Date.now() - 1_000).toISOString();
+    malware['expiresAt'] = new Date(Date.now() - 1_000).toISOString();
   }
   if (kind === 'database age') {
-    malware.databaseUpdatedAt = new Date(Date.now() - 86_401_000).toISOString();
+    malware['databaseUpdatedAt'] = new Date(Date.now() - 86_401_000).toISOString();
   }
-  payload.checks.malware = malware;
-  async function evidence() {
-    return { verdict: 'clean' as const, malware };
+  const edited = { ...payload, checks: { ...payload.checks, malware } };
+  const checked = hostedImageCheckedSchema.parse(edited);
+  function evidence() {
+    return Promise.resolve({ verdict: 'clean' as const, malware: checked.checks.malware });
   }
-  const written = await exportedWriter(nats.store, 'test', payload, eventTime, evidence);
+  const written = await exportedWriter(nats.store, 'test', checked, eventTime, evidence);
   expect(written.status).toBe('conflict');
   expect(await registrations()).toHaveLength(1);
 }
