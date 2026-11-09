@@ -5,6 +5,8 @@ import { envelope, history } from '../src/actor.ts';
 import { writeHostedAdmission, readHostedAdmission, readHostedImageScanAttempt,
   foldHostedAdmission }
   from '../src/hosted-admission.ts';
+import { writeHostedAdmission as exportedWriter } from
+  '@opencrane/models/image-admission-writer';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 async function setup() {
@@ -27,6 +29,23 @@ function result(serverId: string) {
   return { serverId, attemptId: 1, imageDigest: digest, platform: 'linux/amd64',
     checks: { signature: dated, licence: dated, vulnerability: scanned, malware: scanned } };
 }
+async function checkedEvidence() {
+  return true;
+}
+
+async function refusesUnvalidatedExport() {
+  const serverId = await installed();
+  const invented = result(serverId);
+  const unchecked = await exportedWriter(nats.store, 'test', invented, now);
+  expect(unchecked.status).toBe('conflict');
+  expect(await registrations()).toHaveLength(1);
+  const refused = await exportedWriter(nats.store, 'test', invented, now,
+    async function invalidEvidence() { return false; });
+  expect(refused.status).toBe('conflict');
+  expect(await registrations()).toHaveLength(1);
+}
+it('refuses caller-authored malware facts without checked evidence at the package export',
+  refusesUnvalidatedExport);
 
 async function installed() {
   const serverId = 'hosted-test';

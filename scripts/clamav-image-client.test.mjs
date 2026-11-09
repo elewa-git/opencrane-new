@@ -357,6 +357,78 @@ async function writesCleanAndRecoversOriginalEvent() {
 test('clean scan writes one event and a lost reply recovers without scanning again',
   writesCleanAndRecoversOriginalEvent);
 
+function deferred() {
+  let resolve;
+  const promise = new Promise(complete => { resolve = complete; });
+  return { promise, resolve };
+}
+
+async function coordinatesConcurrentDeliveries() {
+  const releaseScan = deferred();
+  const enteredScan = deferred();
+  let scanCount = 0;
+  async function scan(input) {
+    scanCount += 1;
+    enteredScan.resolve();
+    await releaseScan.promise;
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() { return independentChecks(); }
+  const args = [store, image.silo, image.serverId, 1, prepare, readSettings, readChecks];
+  const first = runAndWriteHostedImageCheck(...args);
+  const second = runAndWriteHostedImageCheck(...args);
+  await enteredScan.promise;
+  await new Promise(resolve => setTimeout(resolve, 50));
+  expect(scanCount).toBe(1);
+  releaseScan.resolve();
+  expect(await Promise.all([first, second])).toEqual([
+    { status: 'appended' }, { status: 'appended' },
+  ]);
+  expect(scanCount).toBe(1);
+  expect(store.appendCount).toBe(1);
+}
+test('concurrent deliveries share one scan for the original attempt',
+  coordinatesConcurrentDeliveries);
+
+async function waitsForPendingLostAppend() {
+  let scanCount = 0;
+  async function scan(input) {
+    scanCount += 1;
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  const originalAppend = store.append;
+  let pendingInput;
+  store.append = async function delayedLostReply(input) {
+    store.appendCount += 1;
+    pendingInput = input;
+    throw new Error('reply lost before commit became visible');
+  };
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() { return independentChecks(); }
+  const args = [store, image.silo, image.serverId, 1, prepare, readSettings, readChecks];
+  expect((await runAndWriteHostedImageCheck(...args)).status).toBe('unavailable');
+  expect(store.rows).toHaveLength(1);
+  expect(scanCount).toBe(1);
+  expect((await runAndWriteHostedImageCheck(...args)).status).toBe('unavailable');
+  expect(scanCount).toBe(1);
+  expect(store.appendCount).toBe(1);
+  store.append = originalAppend;
+  store.rows.push({ event: pendingInput.event, sequence: 2 });
+  expect((await runAndWriteHostedImageCheck(...args)).status).toBe('appended');
+  expect(scanCount).toBe(1);
+}
+test('lost append reply blocks another scan until its pending commit is visible',
+  waitsForPendingLostAppend);
+
 async function refusesIncompleteAndIndependentFailures(kind) {
   async function scan(input) {
     received.push(Buffer.from(input.bytes));
