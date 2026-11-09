@@ -14,12 +14,13 @@ This folder holds files the browser can load directly from the website. They pro
 | File | What it does |
 | --- | --- |
 | `mermaid-renderer.html`, `mermaid-renderer.js` | Load the diagram library, block network access and draw replies. |
-| `favicon.ico` | Provides the icon requested by the browser for its tab. |
+| `favicon.svg`, `favicon.ico` | Show the OpenCrane mark in browser tabs, with an SVG icon and ICO fallback. |
+| `apple-touch-icon.png` | Shows the OpenCrane mark when the site is saved to an Apple device's home screen. |
 | [chat](chat/README.md) | Holds the rice-paper background image. |
 
 ## How it connects
 
 [The Angular build settings](../angular.json) copy this folder into the built website.
-[The opening page](../src/index.html) loads `/favicon.ico`, and
-[shared website styles](../src/styles.css) load the chat image.
+[The opening page](../src/index.html) offers the SVG and ICO files for browser tabs and
+the PNG file for Apple home screens. [Shared website styles](../src/styles.css) load the chat image.
 These are public assets, so they contain no private chat data or credentials.
