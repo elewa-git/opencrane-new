@@ -1060,6 +1060,14 @@ Command labels use only reviewed program names and simple argument shapes. A hel
 version flag anywhere in the command gives the neutral label. Python gets the script
 label only when its first argument is a `.py` file target, not an option ending in `.py`.
 `test/command-label.test.ts` covers these uncertain shapes.
+`src/command-redaction.ts` prepares a private command shape inside the computer.
+It keeps only reviewed program names and flag names. It replaces all argument and
+environment values with `•••`, then checks the remainder with Secretlint's MIT-licensed
+recommended rules and an entropy limit. Unbalanced quotes, shell operators, pipes,
+here-documents and unknown programs give no command text. The leak corpus and an
+OSI licence check cover this preparation. No report, event or screen uses its output
+yet; a later change must encrypt it with the conversation message key before it
+leaves the computer and apply conversation member rights when it is read.
 The bridge channel test checks that bad tool fields leave the socket open and
 later reports still arrive in order.
 

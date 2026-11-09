@@ -15,7 +15,7 @@ workers, starts and pauses computers in [Kubernetes](../../GLOSSARY.md#kubernete
 
 ```mermaid
 flowchart LR
-  apps["apps<br/>applications"] --> computer["apps/computer<br/>bridge and worker preparation"]
+  apps["apps<br/>applications"] --> computer["apps/computer<br/>bridge and local command masking"]
   apps --> ops["apps/ops<br/>background workers"]
   apps --> server["apps/server<br/>back end"]
   ops -->|starts and pauses| computer
@@ -28,8 +28,6 @@ flowchart LR
   computer -->|checks commands and command ownership| executor["socket-denied executor"]
   computer -->|runs with file sharing guidance| desktop["Codex, browser and desktop"]
   computer -->|checks callers and passes for AI and MCP calls| gateway["agentgateway<br/>AI gateway"]
-  computer -->|checks private callers and catalogue loads| models["libs/models<br/>AI access checks"]
-  collector["private memory collector<br/>checks processes"] -->|checks live bridge, supervisor and proxy| computer
 ```
 
 ## What it is responsible for
@@ -48,6 +46,8 @@ The computer saves that confirmation without private reply text.
 - Runs the [bridge](../../GLOSSARY.md#bridge) that receives messages and reports progress.
 - Gives recognised command activity a short plain label before reporting it. Unknown
   or uncertain commands get a neutral label. Arguments and output stay out of activity reports.
+- Can mask a simple command's arguments inside the computer. It checks the remaining
+  text for secrets. This masked text is not yet sent or shown to members.
 - Disables bridge process dumps before it receives private work. The bridge answers
   a local protection check inside its computer container. The root entrypoint records
   the bridge process it started so later checks can reject a replacement child.
