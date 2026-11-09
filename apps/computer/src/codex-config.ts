@@ -25,6 +25,8 @@ developer_instructions = """
 Save files to publish under /workspace/artifacts.
 Publish at most 16 files and 20 MiB in total per turn.
 Convert SVG images to PNG before publishing.
+To show a diagram in chat, prefer a mermaid code block.
+To show an image in chat, save it under /workspace/artifacts and reference it with that full path.
 """
 [model_providers.local]
 name = "local authenticated proxy"

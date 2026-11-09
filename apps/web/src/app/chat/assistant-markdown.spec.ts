@@ -15,6 +15,7 @@ const renderMermaid = vi.fn(render);
 function mount(text: string) {
   const fixture = TestBed.createComponent(AssistantMarkdown);
   fixture.componentRef.setInput('text', text);
+  fixture.componentRef.setInput('conversationId', 'chat');
   fixture.detectChanges();
   const root: unknown = fixture.nativeElement;
   if (!(root instanceof HTMLElement)) throw new Error('No reply element');
@@ -39,7 +40,8 @@ it('opens a published workspace link without exposing its path', opensPublishedW
 
 function showsUnavailableWorkspaceFile() {
   const { root } = mount('[Private plan](/workspace/artifacts/private.svg)');
-  expect(root.textContent).toContain('File not available');
+  expect(root.textContent).toContain('private.svg');
+  expect(root.textContent).toContain('not shared');
   expect(root.textContent).not.toContain('/workspace/artifacts');
   expect(root.querySelector('a, button')).toBeNull();
 }
@@ -53,11 +55,56 @@ function hidesUnpublishedLocalFileLinks() {
     const { fixture, root } = mount(`[Open file](${destination})`);
     fixture.componentRef.setInput('availableFiles', ['uploads/chat/file/drawing.svg']);
     fixture.detectChanges();
-    expect(root.textContent).toBe('File not available');
+    expect(root.textContent).toContain('drawing.svg');
+    expect(root.textContent).toContain('not shared');
     expect(root.textContent).not.toContain(destination);
     expect(root.querySelector('a, button')).toBeNull();
   }
 }
+
+function rendersPublishedImagesThroughFileRoute() {
+  for (const extension of ['png', 'jpg', 'jpeg', 'webp', 'gif']) {
+    const name = `drawing.${extension}`;
+    const { fixture, root } = mount(`![Architecture](/workspace/artifacts/${name})`);
+    fixture.componentRef.setInput('availableFiles', [`published/${name}`]);
+    fixture.detectChanges();
+    const image = root.querySelector<HTMLImageElement>('img');
+    expect(image?.alt).toBe('Architecture');
+    expect(image?.getAttribute('src')).toBe(
+      `/api/conversations/chat/files/view?path=published%2F${name}&preview=true`,
+    );
+    expect(root.textContent).not.toContain('!');
+  }
+}
+
+it('renders published image formats inline through the checked file route',
+  rendersPublishedImagesThroughFileRoute);
+
+function handlesOtherImageSyntaxWithoutUnsafeImages() {
+  const nonImage = mount('![Report](/workspace/artifacts/report.pdf)');
+  nonImage.fixture.componentRef.setInput('availableFiles', ['published/report.pdf']);
+  nonImage.fixture.detectChanges();
+  expect(nonImage.root.querySelector('img')).toBeNull();
+  expect(nonImage.root.querySelector('button.workspace-file-link')?.textContent?.trim())
+    .toBe('Report');
+  expect(nonImage.root.textContent).not.toContain('!');
+
+  const unpublished = mount('![Sketch](/workspace/notes/sketch.png)');
+  expect(unpublished.root.querySelector('img, a, button')).toBeNull();
+  expect(unpublished.root.textContent).toContain('sketch.png');
+  expect(unpublished.root.textContent).toContain('not shared');
+  expect(unpublished.root.textContent).not.toContain('/workspace/notes');
+
+  const encodedPath = mount('![Hidden](/workspace/notes%2Fsecret.png)');
+  expect(encodedPath.root.textContent).toContain('secret.png');
+  expect(encodedPath.root.textContent).not.toContain('notes/');
+
+  const remote = mount('![Remote](https://example.test/remote.png)');
+  expect(remote.root.querySelector('img, a')).toBeNull();
+}
+
+it('links published non-images and explains unpublished or remote image syntax',
+  handlesOtherImageSyntaxWithoutUnsafeImages);
 
 it('hides local file destinations that do not name a published file',
   hidesUnpublishedLocalFileLinks);
@@ -116,8 +163,10 @@ function keepsHostileText() {
     + '[relative](/settings) [file](file:///example) [encoded](java&#x73;cript:alert)';
   const { root } = mount(hostile);
   expect(root.querySelector('img, script, a')).toBeNull();
-  const withoutRelativePath = hostile.replace('[relative](/settings)', 'File not available');
-  const expected = withoutRelativePath.replace('[file](file:///example)', 'File not available');
+  const withoutRelativePath = hostile.replace(
+    '[relative](/settings)', 'settings — not shared by the agent.');
+  const expected = withoutRelativePath.replace(
+    '[file](file:///example)', 'example — not shared by the agent.');
   expect(root.textContent).toBe(expected);
 }
 

@@ -2759,9 +2759,11 @@ async function opensPublishedImageLink() {
   const capture = await createCaptureWorkspace(rows);
   const card = capture.root.querySelector('oc-conversation-file-card');
   expect(card?.querySelector('button img')?.getAttribute('src')).toContain('preview=true');
-  expect(capture.root.textContent).toContain('File not available');
+  const reply = capture.root.querySelector('oc-assistant-markdown');
+  expect(reply?.textContent).toContain('private.svg — not shared by the agent.');
+  expect(reply?.querySelectorAll('.workspace-file-link')).toHaveLength(1);
   expect(capture.root.textContent).not.toContain('/workspace/artifacts/');
-  capture.root.querySelector<HTMLButtonElement>('.workspace-file-link')?.click();
+  reply?.querySelector<HTMLButtonElement>('.workspace-file-link')?.click();
   capture.fixture.detectChanges();
   expect(capture.fixture.componentInstance['preview']())
     .toBe('uploads/chat/drawing/drawing.svg');

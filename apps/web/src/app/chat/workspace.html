@@ -179,7 +179,8 @@
               }
               @if (turn.text && turn.author === 'agent') {
                 <div class="prose ink">
-                  <oc-assistant-markdown [text]="turn.text" [availableFiles]="readableFiles()"
+                  <oc-assistant-markdown [text]="turn.text" [conversationId]="chat.selected()"
+                    [availableFiles]="readableFiles()"
                     (citationOpened)="preview.set($event)" (fileOpened)="preview.set($event)" />
                   @if (turn.state === 'working' && !isClosedConversation()) {
                     <span class="caret" aria-hidden="true"></span>

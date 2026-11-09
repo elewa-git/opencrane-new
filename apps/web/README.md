@@ -21,7 +21,7 @@ flowchart LR
   server -->|saved chats, persona versions, files and live updates| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
-  web -->|saved and private replies| capture["Chat workspace<br/>reply details and isolated diagrams"]
+  web -->|saved and private replies| capture["Chat workspace<br/>reply details, shared images and diagrams"]
   web -->|settings and change history| admin["Admin pages<br/>overview, provider, tool, people and memory"]
 ```
 
@@ -42,9 +42,10 @@ For everyone, the website:
   A long computer start explains when the assistant service is waiting for maintenance.
   The saved message runs once the service and computer are ready.
   Assistant replies show headings, lists, quotes, code and safe links.
-  Links to published workspace files open their previews. Local file links that
-  cannot be opened show a plain note without their paths. Uploaded and assistant
-  images appear in the chat and open the same file preview.
+  Links to published workspace files open their previews. Published PNG, JPEG,
+  WebP and GIF images in assistant replies appear in the text. Local file links
+  that cannot be opened show their file name and say the agent has not shared them.
+  Uploaded and assistant images also appear as file cards in the chat.
   Code blocks have a copy button. Mermaid diagrams appear as images in live and
   saved replies, including after reload or returning to a chat. Their source
   shows as code until the block closes or when a diagram cannot be drawn.
