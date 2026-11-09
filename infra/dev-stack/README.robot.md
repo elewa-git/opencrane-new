@@ -454,12 +454,19 @@ Run at most three stacks per host: the stable owner and secondary ids `1` and `2
 Operations use a separate `flock` per id; different stacks run concurrently.
 Service readiness waits allow two minutes on secondary stacks and one minute on the owner.
 Website readiness has its own five-minute deadline, measured with a monotonic clock.
-It still requires a successful HTTP response from `/org/integrations` on the Angular
-server, started with the generated proxy configuration. If the recorded website process
+It still requires a successful HTTP response from `/org/integrations`. Secondary stacks
+use Angular's development server. The owner builds the production bundle before starting
+`web-server.mjs`, which reads the generated proxy configuration. If the recorded website process
 stops, startup fails promptly and points to the private `web.log`, without printing
 its contents. A successful check prints
 `PASS website readiness: <milliseconds>ms`, measured from the request to start or reuse
-the website process.
+the website process, including the owner's production build when it starts a new process.
+The owner server listens on the same loopback web port and accepts only the owner
+origin's host or `127.0.0.1`. It forwards `/api`, `/auth`, `/ws` and `/members` to the
+server, including upgrades on `/ws`. It sends gzip when requested, keeps hashed files
+for one year, and asks browsers to recheck the index and unhashed files. The index has
+a fresh style nonce and a Content-Security-Policy. The Mermaid renderer keeps its own
+stricter policy and all three renderer files are served from the production build.
 The origin check and browser journeys run afterwards. Fresh starts still clear the cache.
 
 The retained 22 October provider-start run built the website in 208.291 seconds, then
@@ -471,9 +478,12 @@ No new web dependency was introduced by that change. Keep the cold-build allowan
 separate from the other services' deadlines.
 
 `nice -n 10 node --experimental-strip-types --test infra/dev-stack/stack-start.test.ts`
-checks a simulated 208.291-second build, a website that never becomes ready and an exited
+checks a simulated 208.291-second website wait, a website that never becomes ready and an exited
 website process. It also checks owner rollback with synthetic processes; it never starts
 or changes the live owner stack.
+`nice -n 10 node --test infra/dev-stack/web-server.test.mjs` builds the production
+website and checks compression, caching, proxy routes, security headers and a Mermaid
+diagram in Chromium. It starts only temporary HTTP servers.
 
 Repeated startup stops the secondary model container before migration and starts
 it again afterwards, alongside the restarted server and dispatcher. Fresh secondary

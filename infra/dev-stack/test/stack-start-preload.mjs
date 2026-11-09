@@ -112,6 +112,7 @@ function execFixture() { throw new Error('Use the asynchronous command fixture')
 execFixture[promisify.custom] = execute;
 childProcess.execFile = execFixture;
 function spawnFixture(_command, args, options) {
+  record(`spawn ${args.join(' ')}`);
   if (args.includes('dispatcher')) {
     assert.equal(options.env.CONTENT_DATABASE_URL, 'postgres://fixture.invalid/server');
     assert.equal(options.env.DATABASE_URL, 'postgres://fixture.invalid/dispatcher');
@@ -128,7 +129,9 @@ function spawnFixture(_command, args, options) {
       process.env.START_MARKER_MISSING !== '1') {
     writeFileSync(options.env.DEV_DISPATCHER_READY_FILE, String(child.pid));
   }
-  if (args.includes('serve')) webPid = child.pid;
+  if (args.includes('serve') || args.some((argument) => argument.endsWith('/web-server.mjs'))) {
+    webPid = child.pid;
+  }
   if (args.includes('routines')) routinesPid = child.pid;
   snapshot();
   function spawned() { child.emit('spawn'); }
