@@ -101,7 +101,7 @@ function validHelperId(record: { group: InventoryGroup; helperId?: string | unde
 
 function sameLaunch(record: CheckedRecord, launch: CheckedLaunch): boolean {
   return record.pid === launch.pid && record.startTime === launch.startTime &&
-    record.pidNamespace === launch.pidNamespace && record.dumpable === launch.dumpable;
+    record.pidNamespace === launch.pidNamespace;
 }
 
 function processKey(record: CheckedRecord): string {
