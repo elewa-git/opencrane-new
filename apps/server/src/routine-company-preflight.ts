@@ -201,7 +201,7 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     const selectionRows = await history(store, selectionSubject, silo, deadline);
     const selected = requireChoice(selectionRows, run);
     let savedProfile: ReturnType<typeof requireSavedProfile> | undefined;
-    let profileRows: StoredEvent[] | undefined;
+    let profileRows: StoredEvent[] = [];
     let profileEvidence: unknown;
     async function checkedReader(rows: StoredEvent[]) {
       savedProfile = requireSavedProfile(rows, run);
@@ -236,7 +236,7 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     async function confirmCurrent() {
       try {
         const currentDeadline = performance.now() + 2_000;
-        if (!profileRows || !isDeepStrictEqual(await readProfile(profileRows), profileEvidence) ||
+        if (!isDeepStrictEqual(await readProfile(profileRows), profileEvidence) ||
             Date.now() >= facts.expiresAt || !await facts.oauth.configurationCurrent()) {
           refuse();
         }
@@ -255,7 +255,7 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     }
     async function confirmCredentialUse(authorisedVersion: string) {
       try {
-        if (!profileRows || authorisedVersion !== custodyRecordVersion) refuse();
+        if (authorisedVersion !== custodyRecordVersion) refuse();
         // Check custody again when the sender is ready to use the credential.
         const current = await readProfile(profileRows);
         if (!isDeepStrictEqual(current, profileEvidence)) refuse();

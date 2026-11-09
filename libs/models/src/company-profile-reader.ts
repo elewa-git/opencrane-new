@@ -21,8 +21,7 @@ export function readCurrentCompanyProfile(custody: Custody) {
     try {
       const profile = foldCompanyConnection(rows);
       const saved = profile.data;
-      if (profile.status !== 'verified' || !saved ||
-          saved.activation.reason !== 'oauth_confirmed') {
+      if (!saved || saved.activation.reason !== 'oauth_confirmed') {
         refuse();
       }
       const activation = saved.activation;
