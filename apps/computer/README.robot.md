@@ -1060,6 +1060,27 @@ Command labels use only reviewed program names and simple argument shapes. A hel
 version flag anywhere in the command gives the neutral label. Python gets the script
 label only when its first argument is a `.py` file target, not an option ending in `.py`.
 `test/command-label.test.ts` covers these uncertain shapes.
+`src/command-redaction.ts` prepares a private command shape inside the computer.
+It shows a reviewed program name and reviewed subcommand words at the start.
+Git shows `clone`, `status` or `log`; npm shows `install`, `run` or `test`;
+pip and pip3 show `install`. Every other word becomes `•••`, including all
+flags, Python module names and paths under `/workspace`. A path-shaped argument
+may be a search pattern or another private value, so its position alone does
+not make it safe to show.
+Only ASCII spaces and tabs separate words. Other whitespace, a byte order mark
+or a control character anywhere in the command gives no command text.
+The visible text is checked with Secretlint's MIT-licensed recommended rules and
+a high-entropy check on each visible word. Unbalanced quotes, shell operators,
+pipes, parentheses, here-documents and unknown programs give no command text.
+The program name alone does not prove what its arguments mean. A shell function
+called `npm`, for example, may treat `test` as a credential. The redactor would
+show `npm test` because it cannot see the function definition. This is an accepted
+residual risk for the future member-only command view; the output is not used by
+any report, event or screen today.
+The leak corpus and an OSI licence check cover this preparation. No report, event or
+screen uses its output
+yet; a later change must encrypt it with the conversation message key before it
+leaves the computer and apply conversation member rights when it is read.
 The bridge channel test checks that bad tool fields leave the socket open and
 later reports still arrive in order.
 

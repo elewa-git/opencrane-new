@@ -1,0 +1,1 @@
+The computer can now prepare a private command view that shows only reviewed program and subcommand words. It hides every flag, value and file path, and shows no command text when whitespace or control characters make a command unsafe to read.
