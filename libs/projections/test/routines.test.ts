@@ -76,11 +76,14 @@ async function rebuildsEncryptedFacts() {
   const due = record('routine.due');
   await save(due);
   await save(record('routine.run_activation_admitted'));
+  await save(record('routine.run_send_authorised'));
   const otherAttempt = { senderAttemptId: 'other-attempt' };
   const changedActivation = record('routine.run_activation_admitted', otherAttempt);
   await expect(routines.apply(storage.db, changedActivation, 99)).rejects.toThrow();
   const finished = record('routine.run_finished');
   await save(finished);
+  const lateSend = record('routine.run_send_authorised');
+  await expect(routines.apply(storage.db, lateSend, 100)).rejects.toThrow();
   await save(record('routine.paused'));
   if (!created.data || typeof created.data !== 'object') throw new Error('Missing definition');
   const savedDefinition: unknown = Reflect.get(created.data, 'definition');
@@ -127,7 +130,7 @@ async function rebuildsEncryptedFacts() {
     assistantId: 'sales-assistant', payingGroupId: 'sales',
     instructions: definition.instructions } },
   activation: { senderAttemptId: 'attempt' }, terminal: { outcome: 'cancelled' },
-  terminalReference: { eventId: finished.id, position: 5 } };
+  terminalReference: { eventId: finished.id, position: 6 } };
   const run = before.occurrences.find(isRun);
   expect(run?.['data']).toMatchObject(frozen);
   const missed = before.occurrences.find(isMissed);

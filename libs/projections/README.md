@@ -53,18 +53,21 @@ PostgreSQL, the database for the read tables.
 ```mermaid
 flowchart LR
   models["libs/models<br/>model choices and replay tests"] -.->|uses database locks and the test helper| projections
-  ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and checks saved changes| projections["libs/projections<br/>read tables, change history, routines, memory, surveys, personas and completed welcomes"]
+  ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and send authorisations, and checks saved changes| projections["libs/projections<br/>read tables, change history, routines, memory, surveys, personas and completed welcomes"]
   server["apps/server<br/>back end"] -->|reads tables, own and admin routine lists, run pages and spending choices| pg["PostgreSQL<br/>database"]
   projections -->|saves history, child publication, searchable task outcomes and spending; keeps private audits and process exits outside chat feeds| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections
   server -.->|reads member references, tool readiness, nightly memory inputs and child requests awaiting activation| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
   projections -->|checks memory key identities; stores wrapped chat keys; repairs correction keys| keys["Server files<br/>private key store and package Secret"]
+  store -->|OAuth settings change positions| projections
 ```
 
 ## What it is responsible for
 
 Tool checks keep an acknowledged publication while its definitions stay unchanged.
+OAuth settings change records move the saved tool server position. They leave its
+review, tool modes and publication state as they were.
 Failed checks pause calls until fresh evidence arrives. Changed tools still need review.
 A new gateway receipt confirms an unchanged publication after restart. Status still
 requires the current process and exact configuration to match. Rebuilding the tables
@@ -222,6 +225,8 @@ check as chat. People and assistants still need their own access grants. Rebuild
 the catalogue restores these saved decisions without sending tool calls.
 
 The routines worker copies saved definitions and runs into read tables.
+It checks a saved send authorisation against the admitted run. That record does
+not prove the turn reached a computer.
 An owner index lets the server read small pages of one person’s routines.
 The routine scanner reads up to fifty references in their original event order for
 one silo. Edits keep that order, and newly added routines follow the existing ones.

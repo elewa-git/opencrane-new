@@ -230,7 +230,7 @@ function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyP
     return Promise.resolve();
   }
   const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
-    computerGeneration, confirmCurrent };
+    computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent };
   return Promise.resolve(company);
 }
 function compose(options: Options = { enabled: true }) {
@@ -251,6 +251,11 @@ async function assertCounts(threadId = 'native-1') {
   expect(await saved('message.posted', `conversation-${conversationId}`)).toHaveLength(1);
   expect(await saved('budget.root_allowance_set', 'budget-test')).toHaveLength(1);
   expect(await saved('routine.run_activation_admitted', 'routine-orders')).toHaveLength(1);
+  const sendAuthorisations = await saved('routine.run_send_authorised', 'routine-orders');
+  expect(sendAuthorisations).toHaveLength(1);
+  expect(sendAuthorisations[0]!.event.data).toMatchObject({
+    configurationDigest: 'a'.repeat(64),
+  });
   const root = actor.state.roots[0]!;
   expect(root).toMatchObject({ payingGroupId: 'sales', allowanceCents: 1000, threadId });
   expect(rootTotals(actor.state, root.rootId)).toEqual({
@@ -309,7 +314,7 @@ async function changedCompanyDuringPreparation(kind: 'profile' | 'opt-in') {
       return Promise.resolve();
     }
     const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, confirmCurrent };
+      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent };
     return Promise.resolve(company);
   }
   const composition = compose({ enabled: true, companyPreflight });
@@ -350,7 +355,7 @@ async function refusesCompanyChangeAfterAllowance(kind: 'profile' | 'opt-in') {
       return Promise.resolve();
     }
     const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, confirmCurrent };
+      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent };
     return Promise.resolve(company);
   }
   const composition = compose({ enabled: true, companyPreflight });
@@ -365,6 +370,98 @@ async function refusesCompanyChangeAfterAllowance(kind: 'profile' | 'opt-in') {
 it.each(['profile', 'opt-in'] as const)(
   'refuses %s change after allowance and before sending',
   refusesCompanyChangeAfterAllowance);
+
+async function refusesToolPolicyChangeDuringAdmission() {
+  const serverSubject = 'mcp-company-routine';
+  const initial = record('initial-policy', serverSubject, 'mcp.tool_mode_set', {
+    serverId: 'company-routine', connectionId: 'installed', toolName: 'read',
+    toolRevision: 'a'.repeat(64), mode: 'allow', setBy: 'admin',
+  });
+  await nats.seed([initial]);
+  const initialPosition = await nats.store.head(serverSubject);
+  const append = nats.store.append.bind(nats.store);
+  let changedDuringAdmission = false;
+  async function changePolicyAfterAdmission(...supplied: Parameters<typeof append>) {
+    const result = await append(...supplied);
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_activation_admitted' &&
+        result.status === 'appended') {
+      const blocked = record('blocked-policy', serverSubject, 'mcp.tool_mode_set', {
+        serverId: 'company-routine', connectionId: 'installed', toolName: 'read',
+        toolRevision: 'a'.repeat(64), mode: 'block', setBy: 'admin',
+      });
+      await nats.seed([blocked]);
+      changedDuringAdmission = true;
+    }
+    return result;
+  }
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  appendSpy.mockImplementation(changePolicyAfterAdmission);
+  function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+    computerGeneration: number) {
+    async function confirmCurrent() {
+      const position = await nats.store.head(serverSubject);
+      if (position !== initialPosition) throw new Error('Tool policy changed');
+    }
+    return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
+      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent });
+  }
+  const composition = compose({ enabled: true, companyPreflight });
+  expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  expect(changedDuringAdmission).toBe(true);
+  function isTurn(frame: Record<string, unknown>) {
+    return frame['type'] === 'turn';
+  }
+  expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
+  expect(preparedComputer.executedThreads).toEqual([]);
+}
+it('refuses a tool policy blocked while activation admission is saved',
+  refusesToolPolicyChangeDuringAdmission);
+
+async function refusesCompanyChangeInsideSendAuthorisation() {
+  const append = nats.store.append.bind(nats.store);
+  let authorisingSend = false;
+  let changed = false;
+  async function trackSendAuthorisation(...supplied: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_send_authorised') authorisingSend = true;
+    try {
+      return await append(...supplied);
+    } finally {
+      authorisingSend = false;
+    }
+  }
+  const spy = vi.spyOn(nats.store, 'append');
+  spy.mockImplementation(trackSendAuthorisation);
+  function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+    computerGeneration: number) {
+    async function confirmCurrent() {
+      if (!authorisingSend || changed) return;
+      const blocked = record('send-policy-blocked', 'mcp-send-policy', 'mcp.tool_mode_set', {
+        serverId: 'send-policy', connectionId: 'installed', toolName: 'read',
+        toolRevision: 'a'.repeat(64), mode: 'block', setBy: 'admin',
+      });
+      await nats.seed([blocked]);
+      changed = true;
+    }
+    return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
+      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent });
+  }
+  try {
+    const composition = compose({ enabled: true, companyPreflight });
+    expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+    expect(changed).toBe(true);
+    expect(await saved('routine.run_send_authorised', 'routine-orders')).toEqual([]);
+    function isTurn(frame: Record<string, unknown>) {
+      return frame['type'] === 'turn';
+    }
+    expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
+  } finally {
+    spy.mockRestore();
+  }
+}
+it('refuses a company change inside the conditional send authorisation',
+  refusesCompanyChangeInsideSendAuthorisation);
 
 async function inert(options: { enabled?: boolean; replay?: boolean }) {
   const before = await nats.store.head();

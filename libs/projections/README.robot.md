@@ -994,6 +994,8 @@ No table data migration or new event is needed.
 `routine_occurrences` stores each due with its frozen definition, activation, Stop
 request and first terminal result. It retains the due event id/position and terminal
 reference. Late records must match the original run even after later runs finish.
+The send-authorisation record must match the saved activation and precede a terminal
+result. It advances the routine's event position but does not mark delivery as proved.
 `routine_occurrences_position` indexes `(silo, routine_id, position)` for bounded
 run pages. Terminal updates change data only, preserving the original paging position.
 Skipped dates and missed ranges are single rows. A missed range is identified within
@@ -1122,3 +1124,10 @@ Replay opens no key, starts no turn and appends no completion event.
 time. A later survey step or restart keeps that completed welcome and its
 encrypted answer. Rebuilding the table repeats the same fold without running
 the completion worker.
+
+## OAuth settings change position
+
+`mcp.oauth_configuration_recorded` advances the saved tool policy sequence only.
+It does not change its review revision, policy revision, tool modes, published
+state or catalogue expiry. The MCP catalogue projection saves the new policy
+sequence and leaves the displayed lifecycle and tool list intact.

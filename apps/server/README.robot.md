@@ -7153,23 +7153,50 @@ connection, profile revisions, verified account id and scopes to match one expli
 company choice. It reuses `companySelectionFacts` for installation, opt-in, OAuth
 configuration, account evidence and available tools. The trusted profile reader must
 confirm credential custody; no production reader is installed. It also reads the
+saved tool name, revision, catalogue digest, destination digest, policy revision and
+zero-cent price. The current published review must still allow that exact tool, with
+the same installation and required scopes. Missing tool or price facts refuse.
+The destination digest covers the remote server origin. It also reads the
 saved MCP-server grants for the owner and assistant, checks their applied receipts
 and current permissions, and watches the grant stream. An owner can use a team grant
 only with current team membership. A returned local
 binding names the same occurrence, root and computer generation. Its current-position
 check runs inside the root allowance decision after private thread preparation, then
-again before the existing sender. Missing evidence refuses with a fixed
-error. There is no credential release, company send or public execution switch.
+again during activation admission, immediately before sending, and during start
+authorisation and acknowledgement. The company check also follows the other awaited
+start and admission checks. Missing evidence refuses with a fixed
+error. The check takes one global event position and checks every company stream
+as it stood at that position. The allowance, activation and turn-start appends
+sample the global position before their access callbacks and require it at publish.
+A company change during a stream read therefore conflicts with the guarded append.
+This can also refuse an unrelated concurrent event. The check reads the OAuth
+configuration again after the stream checks. It returns the digest of the loaded
+configuration. There is no credential release,
+company send or public execution switch.
+Before its internal socket send, the sender saves `routine.run_send_authorised` on
+the routine stream. The append checks current routine state and company facts inside
+the event store's conditional publish. It saves the OAuth configuration digest and
+re-reads the configuration inside that same conditional append. A changed digest,
+conflict or uncertain result prevents a
+send. The record is an authorisation point, not proof of delivery. Production
+company sending stays disabled.
 Existing records without `serverId` remain readable but cannot pass this check.
 
-`test/routine-company-preflight.test.ts` covers the valid choice, a stale preflight,
+`test/routine-company-preflight.test.ts` covers the valid choice, changed or missing
+tool facts, current Block and Ask modes, unknown current tariff, missing exact-tool
+scopes, a stale preflight,
 owner and assistant grant revocations, and changes to account, scopes, custody,
-profile revision, owner choice, opt-in and publication.
+profile revision, owner choice, opt-in and publication. It also covers a policy
+Block and a team grant revocation saved while a later position read is pending.
+It also checks all 84 combinations of six streams or the OAuth configuration and
+twelve read points, plus changes to each one between the company check and a
+conditional append.
 `test/routine-handoff.test.ts` checks post-wake refusal before allowance and no
 preflight during disabled or replayed work. These tests use synthetic account evidence.
 `test/routine-composition.test.ts` supplies a synthetic preflight for its existing
 delivery and recovery tests. It also refuses profile and opt-in changes during native
-preparation without saving an allowance. It cannot prove live company custody.
+preparation without saving an allowance, and a policy change during activation
+admission before turn delivery. It cannot prove live company custody.
 The governed company send and fresh-install journey remain NOT RUN.
 
 The private models library has a company audit check, but this server does not
@@ -7237,3 +7264,14 @@ and cannot reopen its predecessor's lease. RFB client input permits only standar
 pointer messages alongside display setup; clipboard and extensions are refused.
 The production HTTP switch and desktop writer relay remain disabled. Live keyboard,
 hardening and fresh-install qualification are NOT RUN.
+
+## OAuth change position for routine sends
+
+`routine-company-preflight.ts` requires the latest `mcp.oauth_configuration_recorded`
+record on the tool server stream to be `ready`. Its digest must match the current
+loaded OAuth settings. The preflight keeps that stream's position in its company
+check. `routine-sender.ts` calls that check inside the conditional send-authorisation
+append, which samples the global event position before the callback. A settings
+change saved after the callback's last OAuth read therefore conflicts with the
+append. An unfinished change refuses preflight. No production settings editor or
+company sender is registered, so company sending remains disabled.

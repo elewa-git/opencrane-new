@@ -72,6 +72,15 @@ An optional `checkAccess` runs the caller's existing access check inside each ap
 attempt. The store samples the global log position before this check and uses the
 existing conditional publish headers to require that position and the expected subject
 position together. A supplied `expectedGlobalSequence` stays stricter and is not replaced.
+`snapshotPositions(store, positions, deadline)` captures one global log position. It then
+asks for the first event after each supplied subject position. Only an event at or
+before the captured global position means that subject changed in the snapshot.
+The log never deletes events, so later replies cannot change this answer. A final
+global position read refuses any change while these subject reads were in progress.
+A caller that acts on the check
+must use that global position in a conditional append. The append can also use
+`checkAccess`, which samples a global position before calling the check and makes
+the publish conditional on it. This refuses unrelated concurrent writes too.
 An event saved between this check and publication produces a conflict. The caller must
 reload and revalidate; this conflict is not retried internally. A failed access check
 returns `unavailable` with its cause. It cannot prove whether an earlier publish with a

@@ -64,7 +64,7 @@ export async function companySelectionFacts(store: EventStore, silo: string, cho
   if (Date.now() >= expiresAt) {
     throw new Error('Selection unavailable');
   }
-  const oauth = { profileRevision: sequence, configurationCurrent };
+  const oauth = { profileRevision: sequence, configurationDigest, configurationCurrent };
   return { binding, positions, expiresAt, connectionId: choice.connectionId, available: true,
     accountId: account.accountId, scopes: account.scopes, toolScopes: configuration.toolScopes,
     oauth };

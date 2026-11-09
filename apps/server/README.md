@@ -79,6 +79,8 @@ After the computer wakes, routine preparation checks the owner's saved company c
 against a current verified account and the exact saved profile. A changed account,
 profile or scope stops preparation before it reserves money. The check uses the usual
 MCP connection rules. Automatic company calls are still unavailable.
+It also requires a finished OAuth settings change with a matching digest in the saved
+tool server history. A later change stops the routine send before publication.
 It checks access after wake, just before sending, and after saving the turn start.
 A lost reply never permits another send. An internal preparation step starts an empty
 private thread first, then records its real id with the routine's spending allowance.
@@ -229,13 +231,14 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|sign-out, requests, Office uploads, survey, persona and scripted welcome reads, Memory setup reads, own and admin routine lists, approval replies and original call status, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks saved membership, company choices and routine admission; prepares allowances; applies Stop, Pause and Retire; verifies termination and settled cost; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
-  server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, writer closure and retries, routine sessions, inputs, cancellations, confirmed results, checked finishes and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, writer closure and retries, routine sessions, inputs, send authorisations with OAuth digests, cancellations, confirmed results, checked finishes and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, checked publication and task history, current accounting and exact membership receipts| postgres
   server -->|waits briefly for Forget locks| postgres
   server <-->|chat work, checked routine turns, private routine preparation and delivery, retained call status, Stops, checked reports and publication files| computer["apps/computer<br/>assistant computers"]
   server -->|wakes the original held Ask call| computer
+  server -->|checks saved OAuth settings changes before routine sends| nats
   server -->|checks child starts and nightly and child allowances with the shared budget actor| runtime
   computer -.->|records private thread for memory discovery| server
   server -.->|prepares up to four private memory tools| computer
@@ -441,7 +444,14 @@ A stopped, changed or expired occurrence cannot prepare a session.
 The server can pass a checked routine claim through private input, a fixed spending
 allowance and one computer turn. It checks access again after waking the computer.
 For a company connection, it checks the owner's and assistant's current server grants.
+It checks the company streams at one point in the saved event log before a guarded write.
 It checks the company choice again after preparing the private thread, before allowing money.
+It checks the same company choice during admission, just before sending the turn,
+and while authorising the computer's start report.
+The internal sender saves one conditional authorisation before it sends the turn.
+That record includes the checked OAuth configuration digest. The sender reads the
+configuration again during the conditional save. The record does not prove the
+computer received the turn.
 The wake uses the computer already recorded for that assistant and its existing
 authenticated bridge. A replacement or cancelled wake cannot prepare the turn.
 The models process now binds this path to the same budget actor that handles ordinary
@@ -684,6 +694,11 @@ Desktop and Codex processes cannot replace these passes through HTTP.
 
 The server checks whether each computer can wait for approval before offering Ask
 tools. Older computers receive Allow tools only, so either update order is safe.
+
+Before a saved company routine prepares work, the server checks its chosen tool
+against the installed server's current review. A changed tool, destination, price
+or permission stops preparation. Company routine sending is still unavailable.
+The internal sender checks those facts again before sending and accepting a start.
 
 Signing out closes the matching browser connections on the server handling logout.
 This stops private reply delivery before the sign-in service is contacted.

@@ -895,6 +895,10 @@ installation. No reaction subscribes; replay grants nothing and releases no cred
 Modern routine definitions may include `serverId` for the exact MCP server used by
 their company connection. Older saved definitions omit it and still replay. Company
 preparation refuses them because the connection id alone cannot identify the server.
+They may also include a strict `tool` with name, tool revision, catalogue digest,
+destination digest, policy revision and zero-cent cost. Old records still replay,
+but company preparation refuses a missing tool or changed review. This adds no event
+type or reaction.
 The current example includes both ids. This field carries no credential or account
 label.
 
@@ -913,6 +917,11 @@ its preparation digest binds the frozen run and prepared input. `rootId` remains
 record's routine reference, while the allocation contains the actual budget root id.
 A saved `senderAttemptId` can recover only the same receipt. No reaction or replay sends
 work. See the [catalogue](../../docs/architecture/events.md#routines-and-delegation).
+`routine.run_send_authorised` uses the same strict run and admission fields, plus the
+digest of the checked OAuth configuration. Its fold
+requires the active run, matching activation, active status and no saved Stop. The
+record permits one live sender attempt but never proves that bytes reached the computer.
+No handler subscribes to it, and replay never sends the turn.
 
 ## Company bearer creation (P3-8 PR 4d)
 
@@ -1029,3 +1038,11 @@ receipt id and checked-start eligibility. `takeover.closure_unknown` carries the
 writer binding and requested end reason for identical command retries. It does not
 save an exact end reason when final input delivery is unproved. Neither event
 contains input, clipboard, tokens or screen data.
+
+## OAuth settings change records
+
+`mcp.oauth_configuration_recorded` belongs to `mcp-<serverId>`. It names one
+change id and either `changing` or `ready`. A ready record from the trusted
+settings editor carries the SHA-256 digest of the strict loaded OAuth settings.
+It carries no credential. The company preflight rejects a missing, changing or
+non-matching latest record. It has no background reaction.

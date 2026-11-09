@@ -14,6 +14,10 @@ export const routineScheduleSchema = z.discriminatedUnion('frequency', [daily, w
 const slot = z.object({ localDate: z.iso.date(), localTime, zone, at: instant,
   offsetMinutes: z.int().min(-840).max(840) }).strict();
 const reference = z.object({ eventId: id, position: revision }).strict();
+const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const companyTool = z.object({ name: id, revision: digest, schemaDigest: digest,
+  destinationDigest: digest, policyRevision: revision,
+  costCents: z.int().nonnegative().max(0) }).strict();
 
 export const routineRecordIdentitySchema = z.object({ routineId: z.string().min(1),
   version: z.literal(1).optional() });
@@ -25,6 +29,7 @@ export const routineDefinitionSchema = z.object({
   connectionKind: z.literal('company'),
   profileId: id, profileRevision: revision, connectionRevision: revision,
   companyAccountId: id, scopes: z.array(id).max(32),
+  tool: companyTool.optional(),
   instructions: z.object({ ciphertext: ciphertextSchema, keyId: keyIdSchema }).strict(),
   schedule: routineScheduleSchema,
 }).strict().refine(hasAssistantPayer, 'The payer must equal the assistant payer');
@@ -54,6 +59,9 @@ export const routineMissedSchema = identity.extend({ firstLocalDate: z.iso.date(
   cursor: slot.nullable(), next: slot.nullable() });
 export const routineActivationSchema = identity.extend({ ...run, senderAttemptId: id,
   admission: reference });
+export const routineSendAuthorisationSchema = routineActivationSchema.extend({
+  configurationDigest: digest,
+});
 export const routineStopSchema = routineControlSchema.extend({ ...run,
   source: z.enum(['owner', 'admin', 'approval', 'delivery']) });
 export const routineFinishedSchema = identity.extend({ ...run,

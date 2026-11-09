@@ -426,7 +426,7 @@ function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyP
     return Promise.resolve();
   }
   const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
-    computerGeneration, confirmCurrent };
+    computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent };
   return Promise.resolve(company);
 }
 async function dispatch(options: Options = { enabled: true }, continuation = false) {

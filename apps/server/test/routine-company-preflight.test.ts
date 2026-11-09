@@ -8,6 +8,10 @@ import { modernRoutineExamples } from '../../../libs/events/src/routine-events.t
 import { envelope, history } from '../../../libs/models/src/actor.ts';
 import { connectionOperationId } from '../../../libs/models/src/bearer-connections.ts';
 import { oauthConfigurationDigest } from '../../../libs/models/src/oauth-attempt.ts';
+import { startOAuthConfigurationChange, finishOAuthConfigurationChange }
+  from '../../../libs/models/src/oauth-configuration-change.ts';
+import { toolPolicyFromRows } from '../../../libs/models/src/tool-policy.ts';
+import * as toolPolicy from '../../../libs/models/src/tool-policy.ts';
 import { oauthSelectionFixture } from '../../../libs/models/test/support/oauth-selection.ts';
 import { checkRoutineCompanyPreflight } from '../src/routine-company-preflight.ts';
 
@@ -37,13 +41,25 @@ async function closeStore() {
 beforeEach(startStore);
 afterEach(closeStore);
 
-async function fixture() {
+async function fixture(shouldRecordConfiguration = true) {
   serial += 1;
   const serverId = `installed${serial}`;
   const profileId = 'profile';
   const ownerId = `owner${serial}`;
   const selected = await oauthSelectionFixture(nats, ownerId, serverId, profileId);
   const serverRows = await history(nats.store, `mcp-${serverId}`, 'test');
+  const policy = toolPolicyFromRows(serverRows);
+  function isReadTool(tool: (typeof policy.tools)[number]) {
+    return tool.name === 'read';
+  }
+  const reviewedTool = policy.tools.find(isReadTool)!;
+  const destination = new URL('https://example.test/mcp').origin;
+  const destinationHash = createHash('sha256');
+  destinationHash.update(JSON.stringify(destination));
+  const destinationDigest = destinationHash.digest('hex');
+  const tool = { name: reviewedTool.name, revision: reviewedTool.revision,
+    schemaDigest: policy.catalogue!.schemaDigest, destinationDigest,
+    policyRevision: policy.policyRevision, costCents: 0 as const };
   const registrationRevision = serverRows[0]!.sequence;
   const optInSubject = `connection-company-${serverId}`;
   const optIn = envelope('test', optInSubject, 'connection.company_opt_in_set', {
@@ -96,7 +112,7 @@ async function fixture() {
   const due = modernRoutineExamples.due;
   const definition = { ...due.definition, ownerId, serverId, connectionId: 'installed', profileId,
     profileRevision, connectionRevision: profileRevision, companyAccountId: accountId,
-    scopes: ['read'] };
+    scopes: ['read'], tool };
   const run = { ...due, definition };
   const assistantId = definition.assistantId;
   for (const [granteeKind, granteeId] of [
@@ -109,12 +125,19 @@ async function fixture() {
     await nats.seed([grant]);
     await memberAuthorisation(binding, nats.store).handler.handle(grant, database);
   }
+  async function recordConfiguration() {
+    const change = await startOAuthConfigurationChange(nats.store, 'test', serverId);
+    await finishOAuthConfigurationChange(nats.store, 'test', serverId, change,
+      selected.loadConfiguration);
+  }
+  if (shouldRecordConfiguration) await recordConfiguration();
   async function preflight(reader = readProfile) {
     return checkRoutineCompanyPreflight(nats.store, binding, 'test', run, 1,
       selected.loadConfiguration, reader);
   }
-  return { preflight, evidence, definition, profileSubject, optInSubject,
-    serverId, ownerId, assistantId, selectionSubject };
+  return { preflight, evidence, definition, tool,
+    configuration: selected.configuration, loadConfiguration: selected.loadConfiguration,
+    profileSubject, optInSubject, serverId, ownerId, assistantId, selectionSubject };
 }
 
 async function valid() {
@@ -124,10 +147,134 @@ async function valid() {
   expect(result.occurrenceId).toBe(modernRoutineExamples.due.occurrenceId);
   expect(result.rootId).toBe(modernRoutineExamples.due.rootId);
   expect(result.computerGeneration).toBe(1);
+  expect(result.configurationDigest).toBe(oauthConfigurationDigest(current.configuration));
   expect(append).not.toHaveBeenCalled();
   append.mockRestore();
 }
 it('checks one current company binding for the saved occurrence without sending', valid);
+
+async function missingRecordedConfiguration() {
+  const current = await fixture(false);
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+}
+it('refuses company preflight when no OAuth configuration has been recorded',
+  missingRecordedConfiguration);
+
+async function unfinishedConfigurationEdit() {
+  const current = await fixture();
+  await startOAuthConfigurationChange(nats.store, 'test', current.serverId);
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+}
+it('refuses company preflight while an OAuth configuration edit is unfinished',
+  unfinishedConfigurationEdit);
+
+async function changedConfigurationDigest() {
+  const current = await fixture();
+  const mismatchedRecord = envelope('test', `mcp-${current.serverId}`,
+    'mcp.oauth_configuration_recorded', { serverId: current.serverId,
+      changeId: '00000000-0000-4000-8000-000000000001', status: 'ready',
+      configurationDigest: '0'.repeat(64) });
+  await nats.seed([mismatchedRecord]);
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+}
+it('refuses company preflight when loaded OAuth settings differ from the recorded digest',
+  changedConfigurationDigest);
+
+async function changedSavedTool(field: string) {
+  const current = await fixture();
+  const changed = { ...current.tool };
+  if (field === 'name') changed.name = 'write';
+  if (field === 'revision') changed.revision = 'f'.repeat(64);
+  if (field === 'schemaDigest') changed.schemaDigest = 'f'.repeat(64);
+  if (field === 'destinationDigest') changed.destinationDigest = 'f'.repeat(64);
+  if (field === 'policyRevision') changed.policyRevision += 1;
+  if (field === 'costCents') Object.assign(changed, { costCents: 1 });
+  if (field === 'missingTariff') Object.assign(changed, { costCents: undefined });
+  Object.assign(current.definition, { tool: changed });
+  const append = vi.spyOn(nats.store, 'append');
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+  expect(append).not.toHaveBeenCalled();
+  append.mockRestore();
+}
+it.each(['name', 'revision', 'schemaDigest', 'destinationDigest',
+  'policyRevision', 'costCents', 'missingTariff'])(
+  'refuses a changed saved company tool %s without sending', changedSavedTool);
+
+async function currentToolMode(mode: 'block' | 'ask') {
+  const current = await fixture();
+  current.evidence.scopes = ['openid', 'read', 'write'];
+  const changed = envelope('test', `mcp-${current.serverId}`, 'mcp.tool_mode_set', {
+    serverId: current.serverId, connectionId: 'installed', toolName: 'read',
+    toolRevision: current.tool.revision, mode, setBy: 'admin',
+  });
+  await nats.seed([changed]);
+  const rows = await history(nats.store, `mcp-${current.serverId}`, 'test');
+  const policy = toolPolicyFromRows(rows);
+  current.tool.policyRevision = policy.policyRevision;
+  const change = await startOAuthConfigurationChange(nats.store, 'test', current.serverId);
+  current.configuration.policyRevision = policy.policyRevision;
+  current.evidence.configurationDigest = oauthConfigurationDigest(current.configuration);
+  await finishOAuthConfigurationChange(nats.store, 'test', current.serverId, change,
+    current.loadConfiguration);
+  function isWriteTool(tool: (typeof policy.tools)[number]) {
+    return tool.name === 'write';
+  }
+  const writeTool = policy.tools.find(isWriteTool)!;
+  expect(policy.published).toBe(true);
+  expect(writeTool.mode).toBe('allow');
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+  current.tool.name = 'write';
+  current.tool.revision = writeTool.revision;
+  current.definition.scopes = ['write'];
+  await expect(current.preflight()).resolves.toBeDefined();
+}
+it.each(['block', 'ask'] as const)(
+  'refuses a currently %s selected tool while another tool is usable', currentToolMode);
+
+async function missingExactToolScopes() {
+  const current = await fixture();
+  current.evidence.scopes = ['openid', 'read', 'write'];
+  const change = await startOAuthConfigurationChange(nats.store, 'test', current.serverId);
+  current.configuration.toolScopes.read = ['write'];
+  current.evidence.configurationDigest = oauthConfigurationDigest(current.configuration);
+  await finishOAuthConfigurationChange(nats.store, 'test', current.serverId, change,
+    current.loadConfiguration);
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+  current.definition.scopes = ['read', 'write'];
+  await expect(current.preflight()).resolves.toBeDefined();
+}
+it('refuses missing frozen scopes for the exact tool while another tool is usable',
+  missingExactToolScopes);
+
+async function unknownCurrentTariff() {
+  const current = await fixture();
+  current.evidence.scopes = ['openid', 'read', 'write'];
+  const rows = await history(nats.store, `mcp-${current.serverId}`, 'test');
+  const policy = toolPolicyFromRows(rows);
+  function removeReadTariff(tool: (typeof policy.tools)[number]) {
+    if (tool.name !== 'read') return tool;
+    const withoutTariff = { ...tool };
+    Reflect.deleteProperty(withoutTariff, 'costCents');
+    return withoutTariff;
+  }
+  const policyWithoutReadTariff = { ...policy, tools: policy.tools.map(removeReadTariff) };
+  const policySpy = vi.spyOn(toolPolicy, 'toolPolicyFromRows');
+  policySpy.mockReturnValue(policyWithoutReadTariff);
+  try {
+    await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+  } finally {
+    policySpy.mockRestore();
+  }
+  await expect(current.preflight()).resolves.toBeDefined();
+}
+it('refuses an unknown current tariff even when another tool is usable', unknownCurrentTariff);
+
+async function missingSavedTool() {
+  const current = await fixture();
+  Object.assign(current.definition, { tool: undefined });
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+}
+it('refuses a routine without an exact saved company tool', missingSavedTool);
 
 async function stale() {
   const current = await fixture();
@@ -140,6 +287,230 @@ async function stale() {
   await expect(binding.confirmCurrent()).rejects.toThrow('Routine company unavailable');
 }
 it('refuses a preflight kept across a later connection change', stale);
+
+async function changedToolBeforeSender() {
+  const current = await fixture();
+  const company = await current.preflight();
+  const changed = envelope('test', `mcp-${current.serverId}`, 'mcp.tool_mode_set', {
+    serverId: current.serverId, connectionId: 'installed', toolName: current.tool.name,
+    toolRevision: current.tool.revision, mode: 'block', setBy: 'admin',
+  });
+  await nats.seed([changed]);
+  await expect(company.confirmCurrent()).rejects.toThrow('Routine company unavailable');
+}
+it('refuses a tool policy change between preflight and sender', changedToolBeforeSender);
+
+function holdPositionRead(subjectToHold: string) {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const readPosition = nats.store.readStream.bind(nats.store);
+  async function* heldPosition(...args: Parameters<typeof nats.store.readStream>) {
+    const [subject] = args;
+    const rows = readPosition(...args);
+    const first = await rows.next();
+    if (subject === subjectToHold) {
+      entered.resolve();
+      await release.promise;
+    }
+    if (!first.done) yield first.value;
+  }
+  const spy = vi.spyOn(nats.store, 'readStream');
+  spy.mockImplementation(heldPosition);
+  return { entered: entered.promise, release: release.resolve, spy };
+}
+
+function independentWrite(current: Awaited<ReturnType<typeof fixture>>) {
+  return envelope('test', `ownership-race${current.serverId}`, 'ownership.seeded',
+    { ownerIds: [current.ownerId] });
+}
+
+async function policyChangedDuringLaterRead() {
+  const current = await fixture();
+  const company = await current.preflight();
+  const grantSubject = grantStream('mcp_server', current.serverId);
+  const held = holdPositionRead(grantSubject);
+  try {
+    const confirmation = company.confirmCurrent();
+    await held.entered;
+    const block = envelope('test', `mcp-${current.serverId}`, 'mcp.tool_mode_set', {
+      serverId: current.serverId, connectionId: 'installed', toolName: current.tool.name,
+      toolRevision: current.tool.revision, mode: 'block', setBy: 'admin',
+    });
+    await nats.seed([block]);
+    held.release();
+    await expect(confirmation).rejects.toThrow('Routine company unavailable');
+  } finally {
+    held.release();
+    held.spy.mockRestore();
+  }
+}
+it('refuses a policy Block saved during a later grant position read',
+  policyChangedDuringLaterRead);
+
+async function addTeamGrant(current: Awaited<ReturnType<typeof fixture>>) {
+  const teamId = `group-${current.ownerId}`;
+  const teamSubject = `team-${teamId}`;
+  const created = envelope('test', teamSubject, 'team.created', {
+    teamId, name: 'Test group', createdBy: current.ownerId,
+  });
+  const added = envelope('test', teamSubject, 'team.member_added', {
+    teamId, memberId: current.ownerId, addedBy: current.ownerId,
+  });
+  const grant = envelope('test', grantStream('mcp_server', current.serverId), 'grant.given', {
+    resourceType: 'mcp_server', resourceId: current.serverId, granteeKind: 'team',
+    granteeId: teamId, grantedBy: current.ownerId,
+  });
+  const handler = memberAuthorisation(binding, nats.store).handler;
+  for (const event of [created, added, grant]) {
+    await nats.seed([event]);
+    await handler.handle(event, database);
+  }
+  return { teamId, teamSubject };
+}
+
+async function teamGrantRevokedDuringLaterRead() {
+  const current = await fixture();
+  const team = await addTeamGrant(current);
+  const company = await current.preflight();
+  const held = holdPositionRead(team.teamSubject);
+  try {
+    const confirmation = company.confirmCurrent();
+    await held.entered;
+    const revoke = envelope('test', grantStream('mcp_server', current.serverId),
+      'grant.revoked', { resourceType: 'mcp_server', resourceId: current.serverId,
+        granteeKind: 'team', granteeId: team.teamId, revokedBy: current.ownerId });
+    await nats.seed([revoke]);
+    held.release();
+    await expect(confirmation).rejects.toThrow('Routine company unavailable');
+  } finally {
+    held.release();
+    held.spy.mockRestore();
+  }
+}
+it('refuses a team grant revoked during a later team position read',
+  teamGrantRevokedDuringLaterRead);
+
+async function changedCompanyStreamDuringRead() {
+  for (let readIndex = 0; readIndex < 12; readIndex += 1) {
+    for (let streamIndex = 0; streamIndex < 7; streamIndex += 1) {
+      const current = await fixture();
+      const team = await addTeamGrant(current);
+      const company = await current.preflight();
+      const subjects = [current.profileSubject, `mcp-${current.serverId}`,
+        current.optInSubject, current.selectionSubject,
+        grantStream('mcp_server', current.serverId), team.teamSubject];
+      const changedSubject = subjects[streamIndex];
+      let change: ReturnType<typeof envelope> | undefined;
+      if (changedSubject) {
+        const rows = await history(nats.store, changedSubject, 'test');
+        const previous = rows.at(-1)!.event;
+        change = envelope('test', changedSubject, previous.type, previous.data);
+      }
+      async function changeCompany() {
+        if (change) {
+          await nats.seed([change]);
+        } else {
+          current.configuration.toolScopes.read = ['write'];
+        }
+      }
+      const originalRead = nats.store.readStream.bind(nats.store);
+      let reads = 0;
+      async function* changedDuringRead(...args: Parameters<typeof nats.store.readStream>) {
+        const currentRead = reads;
+        reads += 1;
+        if (currentRead === readIndex) await changeCompany();
+        const rows = originalRead(...args);
+        const first = await rows.next();
+        if (currentRead + 6 === readIndex) await changeCompany();
+        if (!first.done) yield first.value;
+      }
+      const spy = vi.spyOn(nats.store, 'readStream');
+      spy.mockImplementation(changedDuringRead);
+      let refused: boolean;
+      try {
+        await company.confirmCurrent();
+        refused = false;
+      } catch (error) {
+        if (!(error instanceof Error)) throw error;
+        expect(error.message).toBe('Routine company unavailable');
+        refused = true;
+      } finally {
+        spy.mockRestore();
+      }
+      expect(refused, `stream ${streamIndex}, read ${readIndex}`).toBe(true);
+    }
+  }
+}
+it('refuses all 84 company and OAuth changes during position reads',
+  changedCompanyStreamDuringRead, 120_000);
+
+async function changedCompanyStreamBeforeWrite() {
+  for (let streamIndex = 0; streamIndex < 7; streamIndex += 1) {
+    const current = await fixture();
+    const team = await addTeamGrant(current);
+    const company = await current.preflight();
+    const subjects = [current.profileSubject, `mcp-${current.serverId}`,
+      current.optInSubject, current.selectionSubject,
+      grantStream('mcp_server', current.serverId), team.teamSubject];
+    const changedSubject = subjects[streamIndex];
+    const snapshot = await company.confirmCurrent();
+    let change: ReturnType<typeof envelope> | undefined;
+    if (changedSubject) {
+      const rows = await history(nats.store, changedSubject, 'test');
+      const previous = rows.at(-1)!.event;
+      change = envelope('test', changedSubject, previous.type, previous.data);
+      await nats.seed([change]);
+    } else {
+      current.configuration.toolScopes.read = ['write'];
+    }
+    const event = independentWrite(current);
+    if (changedSubject) {
+      const result = await nats.store.append({ event, expectedSequence: 0,
+        expectedGlobalSequence: snapshot });
+      expect(result.status, `stream ${streamIndex}`).toBe('conflict');
+    } else {
+      const result = await nats.store.append({ event, expectedSequence: 0,
+        expectedGlobalSequence: snapshot, checkAccess: company.confirmCurrent });
+      expect(result.status, 'OAuth configuration').toBe('unavailable');
+    }
+  }
+}
+it('refuses a change to every company stream between check and write',
+  changedCompanyStreamBeforeWrite, 30_000);
+
+async function oauthChangedAfterLastRead(kind: 'scopes' | 'client') {
+  const current = await fixture();
+  const company = await current.preflight();
+  const event = independentWrite(current);
+  function updateConfiguration() {
+    if (kind === 'scopes') {
+      current.configuration.toolScopes.read = ['write'];
+    } else {
+      current.configuration.clientId = 'replacement';
+    }
+  }
+  async function checkThenChangeConfiguration() {
+    await company.confirmCurrent();
+    const change = await startOAuthConfigurationChange(nats.store, 'test', current.serverId);
+    updateConfiguration();
+    await finishOAuthConfigurationChange(nats.store, 'test', current.serverId, change,
+      current.loadConfiguration);
+  }
+  const command = { event, expectedSequence: 0,
+    checkAccess: checkThenChangeConfiguration };
+  const result = await nats.store.append(command);
+  expect(result.status).toBe('conflict');
+  expect(await nats.store.head(event.subject)).toBe(0);
+  const serverRows = await history(nats.store, `mcp-${current.serverId}`, 'test');
+  const lastConfiguration = serverRows.at(-1)!.event;
+  expect(lastConfiguration.type).toBe('mcp.oauth_configuration_recorded');
+  const expectedConfiguration = { status: 'ready',
+    configurationDigest: oauthConfigurationDigest(current.configuration) };
+  expect(lastConfiguration.data).toMatchObject(expectedConfiguration);
+}
+it.each(['scopes', 'client'] as const)(
+  'refuses an OAuth %s change after the final read and before publication',
+  oauthChangedAfterLastRead);
 
 async function staleGrant() {
   const current = await fixture();
@@ -171,6 +542,8 @@ async function changed(kind: string) {
   if (kind === 'revision') current.evidence.profileRevision += 1;
   if (kind === 'generation') current.evidence.generation += 1;
   if (kind === 'missing-server') Object.assign(current.definition, { serverId: undefined });
+  if (kind === 'server') Object.assign(current.definition, { serverId: 'replacement' });
+  if (kind === 'connection') Object.assign(current.definition, { connectionId: 'replacement' });
   if (kind === 'choice') {
     const changed = envelope('test', current.selectionSubject, 'connection.selected', {
       action: 'clear', userId: current.ownerId, serverId: current.serverId,
@@ -200,7 +573,7 @@ async function changed(kind: string) {
   append.mockRestore();
 }
 it.each(['account', 'scopes', 'custody', 'revision', 'generation', 'missing-server',
-  'choice', 'opt-in', 'publication'])(
+  'server', 'connection', 'choice', 'opt-in', 'publication'])(
   'refuses changed company %s before any allowance', changed);
 
 async function revokedGrant(kind: 'member' | 'assistant', applied: boolean) {

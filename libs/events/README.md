@@ -9,6 +9,8 @@ An approval records the exact saved version a member chose, without copying its 
 A routine Stop can name the exact saved denial or expiry of its held tool approval.
 A new routine definition can name the MCP server separately from its connection.
 Older records without that name remain readable but cannot pass company preparation.
+An OAuth settings change records when editing starts and the digest of the finished
+settings. It contains no OAuth client secret or token.
 A system routine pause names the exact saved removal of its recorded owner.
 The reference carries only the event id and position; readers verify the history.
 An Ask for a company routine can name its run, account and tool details with digests
@@ -61,12 +63,13 @@ Allow, Ask or Block choice for a tool.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions, including persona and scripted welcome records"]
-  server["apps/server<br/>back end"] -.->|checks assistant files, private exits, routine server and turn identities, settled cents, owner approvals, Stops and admission receipts, sessions, control refusals, child requests, activations, retries and writer closure| events
+  server["apps/server<br/>back end"] -.->|checks assistant files, private exits, routine server and turn identities, settled cents, owner approvals, Stops and admission receipts, sessions, control refusals, child requests, activations, send authorisations with OAuth digests, retries and writer closure| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables and retired choices"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, welcome completion, private tool stops, publication, nightly memory claims and routine permissions| events
   models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks Ask and release bindings, consent starts, callback, refresh and image scan claims, refresh starts, account confirmations and replacement generations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal, company and saved tool choices, company opt-in, company credential replacements, and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
+  models -.->|checks OAuth settings change records| events
 ```
 
 ## What it is responsible for
@@ -161,6 +164,9 @@ The server reuses its schema to save owner intent and check an exact retry.
 It does not describe an admin intervention as a requester Stop or start routine work.
 A finished routine can keep a private result reference and the final held and settled
 amounts in euro cents. The record never contains the result itself.
+A routine send authorisation records one checked attempt before the turn is sent.
+It includes the OAuth configuration digest checked for that attempt. It does not
+prove delivery or allow a replay to send the turn again.
 
 Budget turn stops carry only their reason kind and a reference to the saved spending
 stop. Participants can read them without seeing amounts or payer ids. Member stops
@@ -208,6 +214,7 @@ The HTTP forget command is not built yet.
    and run facts. It remembers each modern event's id and ignores that event if it
    arrives again, even after later changes. Definitions still match when a database
    returns their fields in a different order. It grants no access and starts no work.
+   A newer definition can name one reviewed company tool and its zero-cent price.
 
 4. **A caller previews a routine schedule.** It supplies the time and the last used
    local date, if there is one. The library returns future dates and clock-change
