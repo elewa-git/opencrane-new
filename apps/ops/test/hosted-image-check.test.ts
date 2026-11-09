@@ -543,7 +543,7 @@ async function queuedRealRefusal(refusedCheck: QueuedOutcome) {
       async function attempted() {
         const jobs = await storage.queue.query<{ state: string }>(
           "SELECT state FROM pgboss.job WHERE name='check-hosted-image'");
-        return jobs.rows.some(job => job.state === 'retry' || job.state === 'failed');
+        return jobs.rows.some(isRetryableOrFailedJob);
       }
       await until(attempted);
     }
@@ -576,10 +576,11 @@ async function queuedRealRefusal(refusedCheck: QueuedOutcome) {
       const jobs = await storage.queue.query<{ output: unknown }>(
         "SELECT output FROM pgboss.job WHERE name='check-hosted-image'");
       const parsedLogLines = logLines.map(parseLogLine);
-      const queueFailureLogs = parsedLogLines.filter(hasQueueFailureMessage);
-      expect(queueFailureLogs.length).toBeGreaterThan(0);
-      const publicOutputs = [JSON.stringify(queueFailureLogs),
-        JSON.stringify(jobs.rows[0]?.output), JSON.stringify(events.map(event => event.data))];
+      const handlerFailureLogs = parsedLogLines.filter(hasHandlerFailureMessage);
+      expect(handlerFailureLogs.length).toBeGreaterThan(0);
+      const eventData = events.map(readEventData);
+      const publicOutputs = [JSON.stringify(handlerFailureLogs),
+        JSON.stringify(jobs.rows[0]?.output), JSON.stringify(eventData)];
       for (const canary of canaries) {
         for (const publicOutput of publicOutputs) expect(publicOutput).not.toContain(canary);
       }
@@ -647,7 +648,7 @@ async function privateInputErrorStaysPrivate() {
     async function failedJob() {
       const jobs = await storage.queue.query<{ state: string }>(
         "SELECT state FROM pgboss.job WHERE name='check-hosted-image'");
-      return jobs.rows.some(job => job.state === 'failed');
+      return jobs.rows.some(isFailedJob);
     }
     await until(failedJob);
     const jobs = await storage.queue.query<{ state: string; output: unknown }>(
@@ -667,14 +668,15 @@ async function privateInputErrorStaysPrivate() {
     for await (const row of fixture.store.readStream(`mcp-${serverId}`, 1,
       performance.now() + 10_000)) events.push(row.event);
     expect(events.map(event => event.type)).toEqual(['mcp.server_registered']);
+    const eventData = events.map(readEventData);
     const publicOutput = JSON.stringify({ logs: logLines, savedErrors: jobs.rows[0]?.output,
-      eventData: events.map(event => event.data), publicError });
+      eventData, publicError });
     expect(publicOutput).toContain('Trusted image inputs unavailable');
     const parsedLogLines = logLines.map(parseLogLine);
-    const queueFailureLogs = parsedLogLines.filter(hasQueueFailureMessage);
-    expect(queueFailureLogs.length, JSON.stringify(logLines)).toBeGreaterThan(0);
-    const privateOutputs = [JSON.stringify(queueFailureLogs), JSON.stringify(jobs.rows[0]?.output),
-      JSON.stringify(events.map(event => event.data)), JSON.stringify(publicError)];
+    const handlerFailureLogs = parsedLogLines.filter(hasHandlerFailureMessage);
+    expect(handlerFailureLogs.length).toBeGreaterThan(0);
+    const privateOutputs = [JSON.stringify(handlerFailureLogs), JSON.stringify(jobs.rows[0]?.output),
+      JSON.stringify(eventData), JSON.stringify(publicError)];
     for (const canary of canaries) expect(publicOutput).not.toContain(canary);
     for (const canary of canaries) {
       for (const output of privateOutputs) expect(output).not.toContain(canary);
@@ -691,11 +693,26 @@ async function privateInputErrorStaysPrivate() {
   }
 }
 
-function hasQueueFailureMessage(record: { msg?: string }) {
+function isRetryableOrFailedJob(job: { state: string }) {
+  return job.state === 'retry' || job.state === 'failed';
+}
+
+function isFailedJob(job: { state: string }) {
+  return job.state === 'failed';
+}
+
+function hasHandlerFailureMessage(record: { msg?: string }) {
   return record.msg === 'handler.failed';
 }
 
+function readEventData(event: EventEnvelope) {
+  return event.data;
+}
+
 function parseLogLine(line: string) {
-  return JSON.parse(line) as { msg?: string };
+  const parsed: unknown = JSON.parse(line);
+  if (typeof parsed !== 'object' || parsed === null || !('msg' in parsed) ||
+      typeof parsed.msg !== 'string') return {};
+  return { msg: parsed.msg };
 }
 it('keeps a private input error out of the queue and public result', privateInputErrorStaysPrivate);
