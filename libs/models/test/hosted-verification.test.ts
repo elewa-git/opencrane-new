@@ -23,7 +23,7 @@ vi.mock('node:fs/promises', async function mockCosignRead(importOriginal) {
     const bytes = await original.readFile(...args);
     const path = args[0];
     if (typeof path === 'string' && path.endsWith('/cosign') &&
-      !path.includes('hosted-signature-') && path === cosignReplacement.source &&
+      path.includes('hosted-signature-') && cosignReplacement.source !== '' &&
       !cosignReplacement.replaced) {
       cosignReplacement.replaced = true;
       await original.writeFile(path, '#!/bin/sh\nexit 1\n', { mode: 0o700 });
