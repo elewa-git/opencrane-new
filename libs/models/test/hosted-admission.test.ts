@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
+import { hostedImageCheckedSchema } from '@opencrane/events';
 import { envelope, history } from '../src/actor.ts';
 import { writeHostedAdmission as rawWriter, readHostedAdmission, readHostedImageScanAttempt,
   foldHostedAdmission }
@@ -29,23 +30,27 @@ function result(serverId: string) {
   return { serverId, attemptId: 1, imageDigest: digest, platform: 'linux/amd64',
     checks: { signature: dated, licence: dated, vulnerability: scanned, malware: scanned } };
 }
-async function checkedEvidence() {
-  return true;
-}
 async function writeTestAdmission(store: typeof nats.store, silo: string, raw: unknown,
   at?: Date) {
-  return rawWriter(store, silo, raw, at, checkedEvidence);
+  const parsed = hostedImageCheckedSchema.safeParse(raw);
+  const fallback = hostedImageCheckedSchema.parse(result('fallback'));
+  async function evidence() {
+    return { verdict: 'clean' as const,
+      malware: parsed.success ? parsed.data.checks.malware : fallback.checks.malware };
+  }
+  return rawWriter(store, silo, raw, at, evidence);
 }
 
 async function refusesUnvalidatedExport() {
   const serverId = await installed();
   const invented = result(serverId);
   const unchecked = await exportedWriter(nats.store, 'test', invented, now,
-    undefined as unknown as typeof checkedEvidence);
+    undefined as unknown as Parameters<typeof exportedWriter>[4]);
   expect(unchecked.status).toBe('conflict');
   expect(await registrations()).toHaveLength(1);
+  async function invalidEvidence() { return false; }
   const refused = await exportedWriter(nats.store, 'test', invented, now,
-    async function invalidEvidence() { return false; });
+    invalidEvidence as unknown as Parameters<typeof exportedWriter>[4]);
   expect(refused.status).toBe('conflict');
   expect(await registrations()).toHaveLength(1);
 }
@@ -54,7 +59,7 @@ it('refuses caller-authored malware facts without checked evidence at the packag
 
 async function refusesIncompleteEvidence() {
   const serverId = await installed();
-  const invented = result(serverId);
+  const invented = hostedImageCheckedSchema.parse(result(serverId));
   const wrongMalware = { ...invented.checks.malware, reportDigest: 'b'.repeat(64) };
   async function mismatchedEvidence() {
     return { verdict: 'clean' as const, malware: wrongMalware };
@@ -68,7 +73,7 @@ it('refuses validation of a different malware result', refusesIncompleteEvidence
 
 async function acceptsMatchingEvidence() {
   const serverId = await installed();
-  const checked = result(serverId);
+  const checked = hostedImageCheckedSchema.parse(result(serverId));
   async function matchingEvidence() {
     return { verdict: 'clean' as const, malware: checked.checks.malware };
   }
@@ -78,6 +83,33 @@ async function acceptsMatchingEvidence() {
   expect(await registrations()).toHaveLength(2);
 }
 it('requires the validated malware result to match the event', acceptsMatchingEvidence);
+
+async function refusesMalwareBoundary(kind: string) {
+  const serverId = await installed();
+  const eventTime = new Date(Date.now() - 5_000);
+  const payload = hostedImageCheckedSchema.parse(result(serverId));
+  const malware = { ...payload.checks.malware };
+  if (kind === 'verdict') {
+    malware.verdict = 'fail';
+    malware.reasonCodes = ['infected'];
+  }
+  if (kind === 'expiry') {
+    malware.expiresAt = new Date(Date.now() - 1_000).toISOString();
+  }
+  if (kind === 'database age') {
+    malware.databaseUpdatedAt = new Date(Date.now() - 86_401_000).toISOString();
+  }
+  payload.checks.malware = malware;
+  async function evidence() {
+    return { verdict: 'clean' as const, malware };
+  }
+  const written = await exportedWriter(nats.store, 'test', payload, eventTime, evidence);
+  expect(written.status).toBe('conflict');
+  expect(await registrations()).toHaveLength(1);
+}
+it.each(['verdict', 'expiry', 'database age'])(
+  'refuses the %s malware boundary even with a matching validator',
+  refusesMalwareBoundary);
 
 async function installed() {
   const serverId = 'hosted-test';

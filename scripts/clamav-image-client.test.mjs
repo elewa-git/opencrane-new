@@ -429,6 +429,35 @@ async function waitsForPendingLostAppend() {
 test('lost append reply blocks another scan until its pending commit is visible',
   waitsForPendingLostAppend);
 
+async function retriesAfterValidationFailureBeforeAppend() {
+  let scanCount = 0;
+  async function scan(input) {
+    scanCount += 1;
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  let settingsReads = 0;
+  async function prepare() { return image; }
+  async function readSettings() {
+    settingsReads += 1;
+    if (settingsReads === 2) {
+      return { ...settings, manifestDigest: `sha256:${'c'.repeat(64)}` };
+    }
+    return settings;
+  }
+  async function readChecks() { return independentChecks(); }
+  const args = [store, image.silo, image.serverId, 1, prepare, readSettings, readChecks];
+  expect((await runAndWriteHostedImageCheck(...args)).status).toBe('unavailable');
+  expect(store.appendCount).toBe(0);
+  expect((await runAndWriteHostedImageCheck(...args)).status).toBe('appended');
+  expect(scanCount).toBe(2);
+  expect(store.appendCount).toBe(1);
+}
+test('validation failure before append allows a fresh attempt delivery',
+  retriesAfterValidationFailureBeforeAppend);
+
 async function refusesIncompleteAndIndependentFailures(kind) {
   async function scan(input) {
     received.push(Buffer.from(input.bytes));
@@ -446,12 +475,12 @@ async function refusesIncompleteAndIndependentFailures(kind) {
     if (kind === 'signature' || kind === 'licence' || kind === 'vulnerability') {
       checks[kind] = independentChecks('fail')[kind];
     }
-    if (kind === 'missing') delete checks.licence;
+    if (kind.startsWith('missing ')) delete checks[kind.slice(8)];
     return checks;
   }
   const outcome = await runAndWriteHostedImageCheck(store, image.silo, image.serverId, 1,
     prepare, readSettings, readChecks);
-  if (kind === 'missing' || kind === 'infected') {
+  if (kind.startsWith('missing ') || kind === 'infected') {
     expect(outcome.status).toBe('unavailable');
     expect(store.rows).toHaveLength(1);
   } else {
@@ -461,7 +490,8 @@ async function refusesIncompleteAndIndependentFailures(kind) {
     expect(admission.status).toBe('rejected');
   }
 }
-test.each(['infected', 'missing', 'signature', 'licence', 'vulnerability'])(
+test.each(['infected', 'missing signature', 'missing licence',
+  'missing vulnerability', 'signature', 'licence', 'vulnerability'])(
   '%s cannot admit an image after a part scan', refusesIncompleteAndIndependentFailures);
 
 async function refusesChangedFactsBeforeAppend(kind) {
@@ -815,6 +845,20 @@ async function useAgain(kind) {
   expect(use).toThrow('Image part scan refused');
 }
 test.each(['wall', 'backwards', 'monotonic', 'bytes'])('checks %s again at use', useAgain);
+async function retainsFrozenAuthenticatedEvidence() {
+  server.on('checkContinue', respond);
+  const validate = await scanImagePart(settings, bytes, binding);
+  expect(validate(bytes, binding)).toBe('clean');
+  expect(Object.isFrozen(validate.evidence)).toBe(true);
+  const originalDigest = validate.evidence.sha256;
+  function alterEvidence() {
+    validate.evidence.sha256 = 'f'.repeat(64);
+  }
+  expect(alterEvidence).toThrow(TypeError);
+  expect(validate.evidence.sha256).toBe(originalDigest);
+}
+test('the authenticated part facts remain frozen after the request',
+  retainsFrozenAuthenticatedEvidence);
 async function cancelled(kind) {
   mode = kind === 'partial' ? 'partial' : 'waiting';
   const controller = new AbortController();
