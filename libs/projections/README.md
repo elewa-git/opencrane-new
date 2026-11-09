@@ -14,6 +14,7 @@ saved events and does not contact a model provider.
 The member's welcome stays complete after later survey and assistant changes.
 Workers save adjacent pieces of a streamed reply together. This keeps live
 text and the final Stop result from waiting behind hundreds of separate commits.
+Conversation readers can request the newest messages and then read older pages.
 
 Refused control attempts appear in the requester’s conversation history with the
 verified person and a fixed reason. Rebuilding that history does not change computer control or running work.

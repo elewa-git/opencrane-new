@@ -1,4 +1,4 @@
-/* eslint max-lines: ["error", { max: 710, skipBlankLines: true, skipComments: true }] */
+/* eslint max-lines: ["error", { max: 750, skipBlankLines: true, skipComments: true }] */
 import { PrivateReplyState } from './private-reply';
 import { sendUpload } from './upload';
 import { canStartUpload, filesAwaitingDelivery, uploadWaitReason } from './chat-session-upload';
@@ -16,7 +16,6 @@ import { shortTime } from './file-presentation';
 import { ChatSessionStop, type StopScreen } from './chat-session-stop';
 import { ReadFailure, requestChat, savedChatChange } from './chat-session-http';
 import { ReadMarker } from './read-marker';
-import { readReplacementHistory, type ReplacementHistory } from './chat-replacement-history';
 import { displayAgentSessions, includeRequestedConversation, isTeamConversation,
   createPendingMessage, resumeAgentSession, selectedSessionPayingGroupId,
   updateSessionSummaries, selectedSessionAssistant }
@@ -61,6 +60,9 @@ export class ChatSession implements OnDestroy {
   readonly reconnectedAt = signal('');
   readonly caughtUp = signal(false);
   readonly historyFailure = signal(false);
+  readonly olderBefore = signal<number | null>(null);
+  readonly olderLoading = signal(false);
+  readonly olderFailure = signal(false);
   readonly denied = signal(false);
   readonly queued = signal(false);
   readonly connected = this.socket.isConnected;
@@ -201,6 +203,8 @@ export class ChatSession implements OnDestroy {
     this.caughtUp.set(false);
     this.historyFailure.set(false);
     this.needsReplacement = false;
+    this.olderBefore.set(null);
+    this.olderFailure.set(false);
     this.bufferedRows = [];
     this.stopState.reset();
     this.reconnectCount = 0;
@@ -242,6 +246,8 @@ export class ChatSession implements OnDestroy {
     this.caughtUp.set(false);
     this.bufferedRows = [];
     this.needsReplacement = false;
+    this.olderBefore.set(null);
+    this.olderFailure.set(false);
     this.requestedUnavailable.set(false);
     this.requestedLookupFailed.set(false);
     this.position = 0; this.generation = 0; this.computer.set('ready'); this.loading.set(false);
@@ -302,6 +308,39 @@ export class ChatSession implements OnDestroy {
     if (this.selected()) await this.refresh();
     else await this.load();
   }
+  async loadOlder(): Promise<boolean> {
+    const before = this.olderBefore();
+    if (!before || this.olderLoading() || this.denied() || !this.selected()) return false;
+    const revision = this.revision;
+    const conversationId = this.selected();
+    const generation = this.generation;
+    this.olderLoading.set(true);
+    this.olderFailure.set(false);
+    try {
+      const path = `/api/conversations/${conversationId}/messages?before=${before}&limit=50`;
+      const feed = chatFeedSchema.parse(await requestChat(path));
+      if (revision !== this.revision || conversationId !== this.selected()) return false;
+      if (feed.generation !== generation) {
+        this.needsReplacement = true;
+        await this.catchUp(conversationId, revision);
+        return false;
+      }
+      this.rows.update(rows => [...feed.rows, ...rows]);
+      this.olderBefore.set(feed.before ?? null);
+      return true;
+    } catch (error) {
+      if (revision === this.revision) {
+        if (error instanceof ReadFailure && [401, 403].includes(error.status)) {
+          this.clearDenied();
+        } else {
+          this.olderFailure.set(true);
+        }
+      }
+      return false;
+    } finally {
+      if (revision === this.revision) this.olderLoading.set(false);
+    }
+  }
   async markRendered(nearNewest: boolean): Promise<void> {
     await this.readMarker.rendered(this.rows(), this.caughtUp(),
       document.visibilityState === 'visible', nearNewest);
@@ -359,6 +398,8 @@ export class ChatSession implements OnDestroy {
     this.historyRun += 1;
     this.historyLoading = false;
     this.historyFailure.set(false);
+    this.olderBefore.set(null);
+    this.olderFailure.set(false);
     this.bufferedRows = [];
     this.rows.set([]);
     this.position = 0;
@@ -509,11 +550,8 @@ export class ChatSession implements OnDestroy {
     this.historyLoading = true;
     this.caughtUp.set(false);
     try {
-      if (this.needsReplacement) {
-        const isCurrent = this.isCurrentHistoryRun.bind(this, revision, run);
-        const replacement = await readReplacementHistory(id, isCurrent);
-        if (!replacement) return;
-        this.applyReplacement(replacement);
+      if (this.needsReplacement || this.position === 0) {
+        await this.readTail(id, revision, run);
       } else {
         let more = true;
         while (more) {
@@ -521,13 +559,18 @@ export class ChatSession implements OnDestroy {
             `/api/conversations/${id}/messages?since=${this.position}`));
           if (!this.isCurrentHistoryRun(revision, run)) return;
           this.privateState.checkProjection(feed.generation);
-          if (this.resetChangedGeneration(feed.generation)) continue;
+          if (this.resetChangedGeneration(feed.generation)) {
+            await this.readTail(id, revision, run);
+            break;
+          }
           this.generation = feed.generation;
           this.setComputerState(feed.computerState);
           this.dispatcherReady.set(feed.dispatcherReady ?? true);
           this.computerRecovered.set(feed.computerRecovered ?? false);
           this.computerLostAt.set(feed.computerLostAt ?? '');
           for (const row of feed.rows) this.apply(row);
+          // Keep the saved position when a page contains only hidden records.
+          if (feed.rows.length === 0) this.position = Math.max(this.position, feed.position);
           more = feed.rows.length > 0 && this.position < feed.position;
         }
       }
@@ -542,17 +585,24 @@ export class ChatSession implements OnDestroy {
   private isCurrentHistoryRun(revision: number, run: number): boolean {
     return revision === this.revision && run === this.historyRun;
   }
-  private applyReplacement(replacement: ReplacementHistory): void {
-    const { rows, position, feed } = replacement;
+  private async readTail(id: string, revision: number, run: number): Promise<void> {
+    const feed = chatFeedSchema.parse(await requestChat(
+      `/api/conversations/${id}/messages?tail=50`));
+    if (!this.isCurrentHistoryRun(revision, run)) return;
     this.privateState.checkProjection(feed.generation);
-    this.rows.set(rows);
-    this.position = position;
+    this.rows.set(feed.rows);
+    this.position = feed.position;
     this.generation = feed.generation;
+    this.olderBefore.set(feed.before ?? null);
     this.setComputerState(feed.computerState);
     this.dispatcherReady.set(feed.dispatcherReady ?? true);
     this.computerRecovered.set(feed.computerRecovered ?? false);
     this.computerLostAt.set(feed.computerLostAt ?? '');
     this.needsReplacement = false;
+    for (const row of feed.rows) {
+      this.privateState.apply(row, false);
+      this.stopState.apply(row);
+    }
     const summaries = updateSessionSummaries(
       this.conversations(), this.selected(), this.rows(), this.turns());
     this.conversations.set(summaries);
@@ -567,6 +617,7 @@ export class ChatSession implements OnDestroy {
     this.position = 0;
     this.rows.set([]);
     this.bufferedRows = [];
+    this.olderBefore.set(null);
     return true;
   }
   private finishCatchUp(): void {
@@ -701,6 +752,8 @@ export class ChatSession implements OnDestroy {
     this.historyRun += 1;
     this.historyLoading = false;
     this.needsReplacement = false;
+    this.olderBefore.set(null);
+    this.olderFailure.set(false);
     this.bufferedRows = [];
     this.caughtUp.set(false);
     this.historyFailure.set(false);

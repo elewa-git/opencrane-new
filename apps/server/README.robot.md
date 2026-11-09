@@ -7287,3 +7287,13 @@ append, which samples the global event position before the callback. A settings
 change saved after the callback's last OAuth read therefore conflicts with the
 append. An unfinished change refuses preflight. No production settings editor or
 company sender is registered, so company sending remains disabled.
+## Conversation tail pages
+
+`GET /api/conversations/:id/messages?tail=50` returns at most 50 newest visible rows
+in saved order. `before` is the oldest returned position when an earlier visible row
+exists, or `null` at the person's first visible row. `?before=<position>&limit=50`
+returns the preceding page. Both replies include the feed's newest `position`,
+projection generation, computer state and dispatcher state. Limits are 1 to 100.
+The route loads participation and rows before checking current access once. It
+decrypts text only after that check. It never uses a conversation stream in the
+two-second write check.

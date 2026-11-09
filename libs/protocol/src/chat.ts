@@ -127,6 +127,7 @@ export const chatMessageSchema = z.union([chatUpdateSchema, budgetStopNotificati
 
 export const chatFeedSchema = z.object({
   rows: z.array(chatRowSchema), position: z.int().nonnegative(), generation: z.int().nonnegative(),
+  before: z.int().positive().nullable().optional(),
   computerState: computerStateSchema, computerRecovered: z.boolean().optional(),
   computerLostAt: z.string().datetime().optional(),
   dispatcherReady: z.boolean().optional(),

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
-import { readConversation } from '@opencrane/projections';
+import { readConversation, readConversationWindow } from '@opencrane/projections';
 import { requireMember, MemberRefusal } from '../members/guard.ts';
 import { sessionFor } from '../members/routes.ts';
 import { legacyParticipation, participation } from './participation.ts';
@@ -10,6 +10,26 @@ import { chatDisplayData, hasDisplayText } from './display.ts';
 import { isPublicChatId } from './public-id.ts';
 
 type History = Awaited<ReturnType<typeof readConversation>>;
+function validHistoryPaging(value: {
+  since?: number | undefined;
+  tail?: number | undefined;
+  before?: number | undefined;
+  limit?: number | undefined;
+}): boolean {
+  if (value.tail !== undefined) {
+    return value.before === undefined && value.since === undefined
+      && value.limit === undefined;
+  }
+  if (value.before !== undefined) return value.since === undefined;
+  return value.limit === undefined;
+}
+const historyQuery = z.object({
+  since: z.coerce.number().int().nonnegative().optional(),
+  tail: z.coerce.number().int().min(1).max(100).optional(),
+  before: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+}).refine(validHistoryPaging);
+type HistoryPaging = z.infer<typeof historyQuery>;
 
 export async function chatRows(options: ChatOptions, conversationId: string,
   mode: 'agent_session' | 'direct' | 'group', since = 0, joinPosition = 0) {
@@ -76,12 +96,11 @@ export async function chatHistoryReply(request: FastifyRequest, reply: FastifyRe
   }
   const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
   if (!memberId) throw new MemberRefusal(403, 'refused');
-  const query = z.object({ since: z.coerce.number().int().nonnegative().default(0) });
-  const { since } = query.parse(request.query);
+  const paging = historyQuery.parse(request.query);
   let loaded: Awaited<ReturnType<typeof loadHistory>> | undefined;
   let loadingError: Error | undefined;
   try {
-    loaded = await loadHistory(options, conversationId, memberId, since);
+    loaded = await loadHistory(options, conversationId, memberId, paging);
   } catch (error) {
     loadingError = new Error('Conversation history unavailable', { cause: error });
   }
@@ -97,15 +116,22 @@ export async function chatHistoryReply(request: FastifyRequest, reply: FastifyRe
 }
 
 async function loadHistory(options: ChatOptions, conversationId: string,
-  memberId: string, since: number) {
+  memberId: string, paging: HistoryPaging) {
   const deadline = performance.now() + 10_000;
   // Load only the join facts here. They bound history but do not grant access.
   const legacy = await legacyParticipation(options.store, options.db, options.silo,
     conversationId, deadline);
   const facts = await participation(options.store, options.silo, conversationId,
     memberId, legacy, deadline);
-  const visibleSince = Math.max(since, facts.historyPosition - 1);
-  const result = await readConversation(options.db, options.silo, conversationId, visibleSince);
+  let result: History;
+  if (paging.tail || paging.before) {
+    const window = await readConversationWindow(options.db, options.silo, conversationId,
+      paging.tail ?? paging.limit ?? 50, paging.before, facts.historyPosition);
+    result = window;
+  } else {
+    const visibleSince = Math.max(paging.since ?? 0, facts.historyPosition - 1);
+    result = await readConversation(options.db, options.silo, conversationId, visibleSince);
+  }
   if (performance.now() >= deadline) throw new Error('Conversation history unavailable');
   return { result, joinEventId: facts.joinEventId, mode: facts.created.mode };
 }

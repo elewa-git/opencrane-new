@@ -25,7 +25,8 @@ export {
   rebuildComputersProjection,
 } from "./rebuild.ts";
 export {
-  conversations, rebuildConversationsProjection, readConversation, listConversations,
+  conversations, rebuildConversationsProjection, readConversation, readConversationWindow,
+  listConversations,
   listOpenConversations, isHiddenConversationRow,
 } from './conversations.ts';
 

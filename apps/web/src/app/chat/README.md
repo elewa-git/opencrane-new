@@ -11,6 +11,8 @@ This folder contains the workspace where people talk to their assistant, exchang
 - Reviews a permanent close in colleague chats and assistant sessions when the server
   allows it. A closed chat keeps its saved history and files, with a read only notice
   in place of the message box.
+- Opens assistant sessions at the newest messages. Scrolling up loads older messages and keeps
+  the visible message in place. Reconnecting starts after the newest saved position.
 - Keeps drafts with their conversations, resumes live updates from the last saved position and records the read place in colleague chats once new messages are visible. Lost access clears messages, drafts, names and files, including late replies.
 - Reviews recipients and participants. More than three recipients require a full review before sending. A group chat's creator manages other participants and stays in the chat; others can leave. Company group membership and chat participants are separate lists.
 - Shows tool reviews to participants while only the requester can approve or deny. Missing review fields are named. Saved decision, use and end times remain visible; closing a session clears its approval cards. Native consent refusals show their saved reference and grant no permission.

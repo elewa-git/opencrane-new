@@ -170,7 +170,37 @@ it('serves private chat commands and reads to joined members, refusing other org
     lifecycleRead.mockRestore();
     const messages = await app.inject({ url: `/api/conversations/${conversationId}/messages`, headers: headers() });
     expect(messages.statusCode).toBe(200); expect(messages.body).toContain('Hello computer');
-    expect(chatFeedSchema.parse(messages.json()).dispatcherReady).toBe(false);
+    const fullFeed = chatFeedSchema.parse(messages.json());
+    expect(fullFeed.dispatcherReady).toBe(false);
+    const latest = fullFeed.rows.at(-1);
+    const previous = fullFeed.rows.at(-2);
+    if (!latest || !previous) throw new Error('Expected conversation history');
+    const tail = await app.inject({
+      url: `/api/conversations/${conversationId}/messages?tail=1`, headers: headers(),
+    });
+    expect(tail.statusCode).toBe(200);
+    expect(tail.json()).toMatchObject({
+      rows: [latest], position: fullFeed.position, before: latest.position,
+      dispatcherReady: false,
+    });
+    const deniedTail = await app.inject({
+      url: `/api/conversations/${conversationId}/messages?tail=1`,
+      headers: headers('wrong'),
+    });
+    expect(deniedTail.statusCode).toBe(403);
+    const invalidWindow = await app.inject({
+      url: `/api/conversations/${conversationId}/messages?tail=101`, headers: headers(),
+    });
+    expect(invalidWindow.statusCode).toBe(400);
+    const older = await app.inject({
+      url: `/api/conversations/${conversationId}/messages?before=${latest.position}&limit=1`,
+      headers: headers(),
+    });
+    expect(older.statusCode).toBe(200);
+    expect(older.json()).toMatchObject({
+      rows: [previous], position: fullFeed.position, before: null,
+      dispatcherReady: false,
+    });
     const turnId = messages.json<{ rows: { id: string; type: string }[] }>().rows.find(row => row.type === 'message.posted')!.id;
     for (const outcome of ['saved', 'kept_existing'] as const) {
       const delivery = envelope('test', `conversation-${conversationId}`, 'file.delivered', {

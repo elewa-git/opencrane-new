@@ -4,7 +4,7 @@ import { PGlite } from '@electric-sql/pglite';
 import type { EventEnvelope } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { createLogger } from '@opencrane/observability';
-import { conversations, ProjectionRunner, readConversation, pgliteDb, type Db,
+import { conversations, ProjectionRunner, readConversation, readConversationWindow, pgliteDb, type Db,
   type EventSource, type Query } from '../src/index.ts';
 import { database } from './database.ts';
 
@@ -47,6 +47,28 @@ function sourceFor(events: StoredEvent[]): EventSource {
   }
   return { head, subscribe };
 }
+
+it('reads the newest conversation rows and pages back without replaying the start', async () => {
+  const engine = new PGlite();
+  const db = pgliteDb(engine);
+  const events = replyEvents().slice(0, 70);
+  const runner = new ProjectionRunner(db, sourceFor(events),
+    createLogger('window-test', { level: 'silent' }));
+  try {
+    await runner.initialise(conversations);
+    await runner.run(conversations);
+    const tail = await readConversationWindow(db, 'test', 'chat', 50);
+    expect(tail.rows.map(rowPosition)).toEqual(Array.from(
+      { length: 50 }, (_, index) => index + 21));
+    expect(tail).toMatchObject({ position: 70, before: 21 });
+    const older = await readConversationWindow(db, 'test', 'chat', 50, 21);
+    expect(older.rows.map(rowPosition)).toEqual(Array.from(
+      { length: 20 }, (_, index) => index + 1));
+    expect(older.before).toBeNull();
+  } finally {
+    await engine.close();
+  }
+});
 
 // Model the measured commit wait without a live stack or a provider call.
 function delayedCommits(db: Db): Db {

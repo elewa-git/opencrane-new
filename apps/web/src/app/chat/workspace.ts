@@ -1,6 +1,6 @@
 // Workspace grid and messages follow OpenCrane 1, commit 10abd0ef6 (AGPL-3.0-or-later).
 // The bridge supplies all state; the screen follows the owner's Workspace Live design.
-/* eslint max-lines: ["error", { max: 550, skipBlankLines: true, skipComments: true }] */
+/* eslint max-lines: ["error", { max: 580, skipBlankLines: true, skipComments: true }] */
 import { HingeDrawer } from '../ui/hinge-drawer';
 import { NavigationMenu } from '../ui/navigation-menu';
 import { PaperSurface, DogEar } from '../ui/paper';
@@ -100,6 +100,7 @@ export class Workspace implements OnInit {
   protected readonly preview = signal('');
   protected readonly search = signal('');
   protected readonly transcriptElement = viewChild<ElementRef<HTMLElement>>('transcript');
+  private olderScroll: { height: number; top: number; conversationId: string } | undefined;
   protected readonly toolDetails = signal<{
     record: ToolActivityRecord;
     opener: HTMLElement;
@@ -449,18 +450,31 @@ export class Workspace implements OnInit {
     const content = recovery + privateTurnId + renderedTurns.join('');
     if (content !== this.lastTranscript) {
       this.lastTranscript = content;
-      const element = this.transcriptElement()?.nativeElement;
-      if (element && !this.chat.denied()) {
-        requestAnimationFrame(this.scrollTranscriptToBottom.bind(this, element));
-      }
+      this.scrollAfterContentChange();
     }
     this.markReadAfterRender();
     this.focusPendingComposer();
     this.restoreRecoveryFocus();
   }
+  private scrollAfterContentChange(): void {
+    const element = this.transcriptElement()?.nativeElement;
+    if (!element || this.chat.denied()) return;
+    if (this.olderScroll?.conversationId === this.chat.selected()) {
+      requestAnimationFrame(this.restoreOlderScroll.bind(this, element));
+      return;
+    }
+    requestAnimationFrame(this.scrollTranscriptToBottom.bind(this, element));
+  }
   private scrollTranscriptToBottom(element: HTMLElement): void {
     if (this.chat.denied()) return;
     element.scrollTop = element.scrollHeight;
+    this.markReadAfterRender();
+  }
+  private restoreOlderScroll(element: HTMLElement): void {
+    const previous = this.olderScroll;
+    this.olderScroll = undefined;
+    if (!previous || previous.conversationId !== this.chat.selected()) return;
+    element.scrollTop = previous.top + element.scrollHeight - previous.height;
     this.markReadAfterRender();
   }
   private markReadAfterRender(): void {
@@ -475,6 +489,20 @@ export class Workspace implements OnInit {
   }
   protected transcriptScrolled(): void {
     this.markReadAfterRender();
+    const element = this.transcriptElement()?.nativeElement;
+    if (!element || element.scrollTop > 120 || this.chat.loading()
+      || this.chat.olderLoading() || this.chat.olderFailure()) return;
+    void this.loadOlder(element);
+  }
+  private async loadOlder(element: HTMLElement): Promise<void> {
+    this.olderScroll = { height: element.scrollHeight, top: element.scrollTop,
+      conversationId: this.chat.selected() };
+    const loaded = await this.chat.loadOlder();
+    if (!loaded) this.olderScroll = undefined;
+  }
+  protected retryOlder(): void {
+    const element = this.transcriptElement()?.nativeElement;
+    if (element) void this.loadOlder(element);
   }
   private isPanelExpanded(): boolean {
     if (this.chat.requestedUnavailable() || this.chat.requestedLookupFailed()) return false;

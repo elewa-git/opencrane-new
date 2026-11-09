@@ -137,9 +137,18 @@ async function createCaptureWorkspace(
         return Promise.resolve(new Response('{}', { status: messageStatus }));
       }
       const since = Number(new URL(path, location.origin).searchParams.get('since') ?? 0);
-      const visibleRows = rows.filter(row => Number(row['position']) > since);
+      const query = new URL(path, location.origin).searchParams;
+      const tail = Number(query.get('tail'));
+      const before = Number(query.get('before'));
+      const limit = Number(query.get('limit'));
+      let visibleRows = rows.filter(row => Number(row['position']) > since);
+      if (tail) visibleRows = rows.slice(-tail);
+      if (before) visibleRows = rows.filter(row => Number(row['position']) < before).slice(-limit);
+      const oldest = Number(visibleRows[0]?.['position']);
+      const cursor = oldest > 1 ? oldest : null;
       return Promise.resolve(new Response(JSON.stringify({ rows: visibleRows,
-        position: rows.length, generation: 1, computerState, dispatcherReady })));
+        position: rows.length, generation: 1, computerState, dispatcherReady,
+        before: cursor })));
     }
     if (pathname.endsWith('/files/view')) {
       return Promise.resolve(new Response('<svg/>', {
@@ -2555,6 +2564,33 @@ function postedRow(position: number): Record<string, unknown> {
 function savedPosition(row: ChatRow): number {
   return row.position;
 }
+
+it.each([390, 1280])('opens the newest messages and preserves scroll on older pages at %ipx',
+  async viewportWidth => {
+    vi.stubGlobal('innerWidth', viewportWidth);
+    const rows = Array.from({ length: 60 }, (_, index) => postedRow(index + 1));
+    const capture = await createCaptureWorkspace(rows);
+    const chat = capture.fixture.componentInstance['chat'];
+    const transcript = capture.root.querySelector<HTMLElement>('.transcript');
+    if (!transcript) throw new Error('Transcript is missing');
+    expect(capture.calls).toContain('GET /api/conversations/chat/messages?tail=50');
+    expect(chat.rows().map(savedPosition)).toEqual(Array.from(
+      { length: 50 }, (_, index) => index + 11));
+    let height = 3000;
+    Object.defineProperty(transcript, 'scrollHeight', { get: () => height });
+    transcript.scrollTop = 100;
+    transcript.dispatchEvent(new Event('scroll'));
+    capture.fixture.detectChanges();
+    expect(capture.root.textContent).toContain('Loading older messages');
+    height = 3300;
+    await vi.waitFor(() => expect(chat.rows()).toHaveLength(60));
+    capture.fixture.detectChanges();
+    await vi.waitFor(() => expect(transcript.scrollTop).toBe(400));
+    expect(chat.rows().map(savedPosition)).toEqual(Array.from(
+      { length: 60 }, (_, index) => index + 1));
+    expect(capture.calls).toContain('GET /api/conversations/chat/messages?before=11&limit=50');
+    capture.fixture.destroy();
+  });
 
 it('applies three history pages and an overlapping socket row once in order', async () => {
   const capture = await createCaptureWorkspace([postedRow(1)]);
