@@ -308,3 +308,46 @@ async function unavailableIndependentCheck(checkName: 'signature' | 'licence') {
 }
 it.each(['signature', 'licence'] as const)(
   'does not turn an unavailable %s tool into a failed receipt', unavailableIndependentCheck);
+
+async function grypeReceiptCannotChangeOutcome(caseName: 'unavailable' | 'missing' |
+  'false-pass' | 'false-fail') {
+  const registration = await saveRegistration();
+  const custody = await custodyFixture();
+  const previous = process.env['HOSTED_IMAGE_CUSTODY_FILE'];
+  process.env['HOSTED_IMAGE_CUSTODY_FILE'] = custody.custodyPath;
+  const signature = vi.mocked(verifyHostedImage);
+  const licence = vi.mocked(inspectHostedLicences);
+  const vulnerability = vi.mocked(inspectHostedVulnerabilities);
+  signature.mockResolvedValue(toolOutcome(false));
+  licence.mockResolvedValue(toolOutcome(false));
+  const checkedAt = new Date(Date.now() - 1_000).toISOString();
+  const expiresAt = new Date(Date.now() + 60_000).toISOString();
+  const receipt = { verdict: 'fail' as const, checkedAt, expiresAt,
+    engineVersion: '0.121.0', databaseDigest: digest, databaseUpdatedAt: checkedAt,
+    reportDigest: digest, reasonCodes: ['vulnerability_refused'] };
+  if (caseName === 'unavailable') {
+    vulnerability.mockResolvedValue({ verdict: 'unavailable',
+      reasonCode: 'vulnerability_unavailable', receipt } as never);
+  } else if (caseName === 'missing') {
+    vulnerability.mockResolvedValue({ verdict: 'fail',
+      reasonCode: 'vulnerability_refused' });
+  } else if (caseName === 'false-pass') {
+    vulnerability.mockResolvedValue({ verdict: 'fail',
+      reasonCode: 'vulnerability_refused', receipt: { ...receipt, verdict: 'pass' } } as never);
+  } else {
+    vulnerability.mockResolvedValue({ verdict: 'pass', receipt } as never);
+  }
+  try {
+    const adapter = await trustedHostedImageInputs(fixture.store, silo, registration);
+    const attempt = { silo, serverId, attemptId: 1, imageDigest: digest,
+      platform: 'linux/amd64' };
+    const checks = await adapter.readIndependentChecks(attempt);
+    expect(checks).toBeUndefined();
+  } finally {
+    await rm(custody.directory, { recursive: true, force: true });
+    if (previous) process.env['HOSTED_IMAGE_CUSTODY_FILE'] = previous;
+    else delete process.env['HOSTED_IMAGE_CUSTODY_FILE'];
+  }
+}
+it.each(['unavailable', 'missing', 'false-pass', 'false-fail'] as const)(
+  'refuses a Grype %s outcome without matching evidence', grypeReceiptCannotChangeOutcome);
