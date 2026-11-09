@@ -7313,6 +7313,10 @@ two-second write check.
 
 ## Credential custody in routine send authorisation
 
+An enabled direct sender requires `confirmCompany`, `configurationDigest`,
+`custodyRecordVersion` and `confirmCredentialUse`. Missing confirmation refuses the
+send before it reaches the socket; it cannot use the old direct send path.
+
 The custody-backed profile reader includes the Kubernetes custody record version
 in its captured evidence. The conditional append reads custody again after the stream
 and OAuth checks and requires the same evidence. Deletion or a changed version at that

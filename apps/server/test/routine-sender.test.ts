@@ -344,8 +344,17 @@ it('sustained unrelated activity does not prevent inspection', unrelatedTraffic)
 
 
 function sender(enabled = true, replay = false) {
-  return createRoutineSender({ enabled, replay }, nats.store, keys, worker(), input,
-    selection, 'sender-attempt');
+  function confirmCompany() {
+    return Promise.resolve();
+  }
+  function confirmCredentialUse(_authorisedVersion: string) {
+    return Promise.resolve();
+  }
+  const options = { enabled, replay, confirmCompany,
+    configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
+    confirmCredentialUse };
+  return createRoutineSender(options, nats.store, keys, worker(), input, selection,
+    'sender-attempt');
 }
 async function missingCompanyConfirmation() {
   const authority = createRoutineSender({ enabled: true }, nats.store, keys, worker(),
@@ -355,14 +364,30 @@ async function missingCompanyConfirmation() {
   function isAuthorisation(row: typeof rows[number]) {
     return row.event.type === 'routine.run_send_authorised';
   }
-  function isTurn(frame: Record<string, unknown>) {
-    return frame['type'] === 'turn';
-  }
   expect(rows.filter(isAuthorisation)).toEqual([]);
-  expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
+  expect(preparedComputer.sends).toBe(0);
 }
 it('refuses an enabled direct sender without company confirmation',
   missingCompanyConfirmation);
+
+async function missingCredentialUseCheck() {
+  function confirmCompany() {
+    return Promise.resolve();
+  }
+  const options = { enabled: true, confirmCompany, configurationDigest: 'a'.repeat(64),
+    custodyRecordVersion: '1' };
+  const authority = createRoutineSender(options, nats.store, keys, worker(), input,
+    selection, 'sender-attempt');
+  expect(await authority.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  function isAuthorisation(row: typeof rows[number]) {
+    return row.event.type === 'routine.run_send_authorised';
+  }
+  expect(rows.filter(isAuthorisation)).toEqual([]);
+  expect(preparedComputer.sends).toBe(0);
+}
+it('refuses a direct sender without a credential-use check before authorisation',
+  missingCredentialUseCheck);
 async function recordingComputer(computerId = 'computer') {
   if (computerId === 'computer') return preparedComputer;
   return startComputer(computerId);
@@ -531,6 +556,7 @@ async function handsOffOnce() {
   async function unrelated(target?: string, deadline?: number) {
     // Keep traffic flowing through preparation, then force one publication conflict.
     if (startAppends > 0 && (target === undefined || conflicted)) return head(target, deadline);
+    if (startAppends === 0 && activity >= 4) return head(target, deadline);
     if (startAppends > 0) conflicted = true;
     activity++;
     await nats.seed([record(`busy-${activity}`, 'conversation-other', 'agent.turn_started',

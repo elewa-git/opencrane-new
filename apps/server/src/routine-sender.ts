@@ -98,7 +98,9 @@ async function checkCompanyCredentialForSend(store: Arguments[0], worker: Argume
   checked: Awaited<ReturnType<typeof readRoutineActivation>>,
   admission: Parameters<typeof stopUnconfirmedRoutine>[2], options: SenderOptions) {
   const confirmCompany = options.confirmCompany;
-  if (!confirmCompany) return true;
+  if (!confirmCompany) {
+    throw new Error('Routine company unavailable');
+  }
   const configurationDigest = options.configurationDigest;
   const custodyRecordVersion = options.custodyRecordVersion;
   const confirmCredentialUse = options.confirmCredentialUse;

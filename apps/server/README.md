@@ -82,6 +82,7 @@ An internal preparation check can recover the original routine admission and sen
 identifiers after checking current access. It saves nothing. Delivery remains unknown;
 the check cannot wake a computer or authorise another send.
 A separate internal sender can hand a newly admitted routine to the computer once.
+It refuses to send unless a company confirmation check is supplied.
 After the computer wakes, routine preparation checks the owner's saved company choice
 against a current verified account and the exact saved profile. A changed account,
 profile or scope stops preparation before it reserves money. The check uses the usual
@@ -307,6 +308,7 @@ verified company profiles have a live reader. The internal routine check can use
 reader, while automatic sending remains closed. An admin cannot choose for another member.
 The internal send check reads the company custody record version during its conditional
 save. It records that version and checks custody again before releasing the turn.
+The sender refuses a missing company confirmation check.
 If it changes after the save, the sender records a delivery Stop.
 
 - Signs people in and keeps their browser session.

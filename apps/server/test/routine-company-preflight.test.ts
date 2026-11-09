@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { z } from 'zod';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { openfga } from '@opencrane/authz/testing';
@@ -25,6 +26,8 @@ function noSql(): never {
   throw new Error('Grant projection must not use SQL');
 }
 const database = { query: noSql };
+const oauthChangeEvent = z.object({ type: z.string(),
+  data: z.object({ status: z.string() }) });
 async function startAccess() {
   fga = await openfga();
   binding = await createStore(fga.apiUrl, 'test');
@@ -198,6 +201,95 @@ async function unfinishedConfigurationEdit() {
 }
 it('refuses company preflight while an OAuth configuration edit is unfinished',
   unfinishedConfigurationEdit);
+
+async function refusesSecondUnfinishedConfigurationEdit() {
+  const current = await fixture();
+  await startOAuthConfigurationChange(nats.store, 'test', current.serverId);
+  const before = await nats.store.head(`mcp-${current.serverId}`);
+  await expect(startOAuthConfigurationChange(nats.store, 'test', current.serverId))
+    .rejects.toThrow('OAuth configuration change unavailable');
+  expect(await nats.store.head(`mcp-${current.serverId}`)).toBe(before);
+}
+it('refuses another OAuth edit while the previous edit is unfinished',
+  refusesSecondUnfinishedConfigurationEdit);
+
+async function refusesChangedOAuthStart(field: 'silo' | 'subject' | 'type' | 'status' |
+  'serverId' | 'changeId') {
+  const current = await fixture();
+  const change = await startOAuthConfigurationChange(nats.store, 'test', current.serverId);
+  const subject = `mcp-${current.serverId}`;
+  const before = await nats.store.head(subject);
+  const readEvent = nats.store.readEvent.bind(nats.store);
+  async function changedStart(...args: Parameters<typeof readEvent>) {
+    const row = await readEvent(...args);
+    const event = { ...row.event };
+    const data: { serverId: string; changeId: string; status: string;
+      configurationDigest?: string } = { serverId: current.serverId,
+      changeId: change.changeId, status: 'changing' };
+    if (field === 'silo') event.silo = 'another-silo';
+    if (field === 'subject') event.subject = 'mcp-another-server';
+    if (field === 'type') event.type = 'mcp.server_unpublished';
+    if (field === 'status') {
+      data.status = 'ready';
+      data.configurationDigest = 'a'.repeat(64);
+    }
+    if (field === 'serverId') data.serverId = 'another-server';
+    if (field === 'changeId') data.changeId = '00000000-0000-4000-8000-000000000001';
+    event.data = data;
+    return { ...row, event };
+  }
+  const spy = vi.spyOn(nats.store, 'readEvent');
+  spy.mockImplementation(changedStart);
+  try {
+    await expect(finishOAuthConfigurationChange(nats.store, 'test', current.serverId,
+      change, current.loadConfiguration))
+      .rejects.toThrow('OAuth configuration change unavailable');
+    expect(await nats.store.head(subject)).toBe(before);
+  } finally {
+    spy.mockRestore();
+  }
+}
+it.each(['silo', 'subject', 'type', 'status', 'serverId', 'changeId'] as const)(
+  'refuses an OAuth finish with changed start %s', refusesChangedOAuthStart);
+
+async function refusesOAuthAppendConflict(stage: 'start' | 'finish') {
+  const current = await fixture();
+  const subject = `mcp-${current.serverId}`;
+  const change = stage === 'finish'
+    ? await startOAuthConfigurationChange(nats.store, 'test', current.serverId) : undefined;
+  const append = nats.store.append.bind(nats.store);
+  let injected = false;
+  async function conflictOnChange(...args: Parameters<typeof append>) {
+    const proposed = oauthChangeEvent.safeParse(args[0].event);
+    const expectedStatus = stage === 'start' ? 'changing' : 'ready';
+    if (!injected && proposed.success &&
+        proposed.data.type === 'mcp.oauth_configuration_recorded' &&
+        proposed.data.data.status === expectedStatus) {
+      injected = true;
+      const competing = envelope('test', subject, 'mcp.server_unpublished', {
+        serverId: current.serverId, unpublishedBy: 'admin' });
+      await nats.seed([competing]);
+    }
+    return append(...args);
+  }
+  const spy = vi.spyOn(nats.store, 'append');
+  spy.mockImplementation(conflictOnChange);
+  try {
+    if (stage === 'start') {
+      await expect(startOAuthConfigurationChange(nats.store, 'test', current.serverId))
+        .rejects.toThrow('OAuth configuration change unavailable');
+    } else {
+      await expect(finishOAuthConfigurationChange(nats.store, 'test', current.serverId,
+        change!, current.loadConfiguration))
+        .rejects.toThrow('OAuth configuration change unavailable');
+    }
+    expect(injected).toBe(true);
+  } finally {
+    spy.mockRestore();
+  }
+}
+it.each(['start', 'finish'] as const)(
+  'refuses an OAuth %s whose conditional save conflicts', refusesOAuthAppendConflict);
 
 async function changedConfigurationDigest() {
   const current = await fixture();
@@ -654,10 +746,12 @@ it.each(['deleted', 'changed'] as const)(
 async function changedUseEvidenceWithoutError() {
   const current = await fixture();
   let changed = false;
-  async function readProfile() {
+  function readProfile(_rows: StoredEvent[]) {
     const evidence = { ...current.evidence };
     if (changed) evidence.accountId = 'another-account';
-    return evidence;
+    const result = { ...evidence, status: 'verified' as const,
+      ownerKind: 'company' as const, generation: 1 as const };
+    return Promise.resolve(result);
   }
   const company = await current.preflight(readProfile);
   changed = true;

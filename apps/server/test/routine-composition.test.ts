@@ -253,6 +253,25 @@ async function saved(type: string, subject: string) {
   }
   return rows.filter(matches);
 }
+async function wrongCompanyPreflightIdentity(
+  field: 'occurrenceId' | 'rootId' | 'computerGeneration') {
+  async function companyPreflight(
+    run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+    computerGeneration: number) {
+    const company = await syntheticCompanyPreflight(run, computerGeneration);
+    if (field === 'occurrenceId') company.occurrenceId = 'another-occurrence';
+    if (field === 'rootId') company.rootId = 'another-root';
+    if (field === 'computerGeneration') company.computerGeneration += 1;
+    return company;
+  }
+  const composition = compose({ enabled: true, companyPreflight });
+  expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  expect(await saved('budget.root_allowance_set', 'budget-test')).toEqual([]);
+  expect(preparedComputer.executedThreads).toEqual([]);
+}
+it.each(['occurrenceId', 'rootId', 'computerGeneration'] as const)(
+  'refuses a company preflight with another %s before reserving money',
+  wrongCompanyPreflightIdentity);
 async function assertCounts(threadId = 'native-1') {
   expect(await saved('conversation.created', `conversation-${conversationId}`)).toHaveLength(1);
   expect(await saved('message.posted', `conversation-${conversationId}`)).toHaveLength(1);
