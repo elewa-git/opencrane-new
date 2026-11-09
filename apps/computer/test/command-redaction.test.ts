@@ -38,6 +38,10 @@ const plantedSecrets = [
   ['AUTH=planted-auth ls', 'planted-auth'],
   ['env SECRET=planted-secret curl example.test', 'planted-secret'],
   ['curl -d password=planted-password https://example.test', 'planted-password'],
+  ['rg /workspace/hunter2 /workspace/config.txt', 'hunter2'],
+  ['grep /workspace/hunter2 /workspace/config.txt', 'hunter2'],
+  ['python3 script.py /workspace/hunter2', 'hunter2'],
+  ['curl hello\u00a0/workspace/hunter2', 'hunter2'],
   ['python3 -c "print(\'planted-secret\')"', 'planted-secret'],
   ['echo planted-pipe-secret | curl -d @- https://example.test', 'planted-pipe-secret'],
   ['cat <<EOF\nplanted-here-secret\nEOF', 'planted-here-secret'],
@@ -47,7 +51,11 @@ async function expectNoLeak(command: string, secret: string): Promise<void> {
   const redacted = await redactCommand(command);
   expect(redacted ?? '').not.toContain(secret);
   expect(redacted ?? '').not.toContain('alice:');
-  if (!command.includes('|') && !command.includes('<<')) expect(redacted).not.toBeNull();
+  if (command.includes('\u00a0')) {
+    expect(redacted).toBeNull();
+  } else if (!command.includes('|') && !command.includes('<<')) {
+    expect(redacted).not.toBeNull();
+  }
 }
 
 it.each(plantedSecrets)('does not leak a planted secret in %s', expectNoLeak);
@@ -73,7 +81,14 @@ it('shows only reviewed subcommand words at the start of a command', async () =>
   expect(await redactCommand('pip install package'))
     .toBe('pip install •••');
   expect(await redactCommand('python3 -m pip --version'))
-    .toBe('python3 -m pip •••');
+    .toBe('python3 ••• ••• •••');
+});
+
+it('hides every Python module name after a masked module flag', async () => {
+  for (const moduleName of ['pip', 'venv', 'pytest', 'unittest']) {
+    expect(await redactCommand(`python3 -m ${moduleName}`))
+      .toBe('python3 ••• •••');
+  }
 });
 
 it('masks words that only look like subcommands after an argument', async () => {
@@ -85,14 +100,19 @@ it('masks words that only look like subcommands after an argument', async () => 
     .toBe('python3 ••• •••');
 });
 
-it('shows only plain paths beneath the workspace', async () => {
+it('hides every path, including paths beneath the workspace', async () => {
   expect(await redactCommand('cat /workspace/report.txt /workspace/notes/file.md'))
-    .toBe('cat /workspace/report.txt /workspace/notes/file.md');
+    .toBe('cat ••• •••');
   expect(await redactCommand('cat /workspace /workspace/../private /workspace/a=secret '
     + '/workspace/key:secret /tmp/report.txt'))
     .toBe('cat ••• ••• ••• ••• •••');
   expect(await redactCommand('git status /workspace/report.txt --token secret'))
-    .toBe('git status /workspace/report.txt ••• •••');
+    .toBe('git status ••• ••• •••');
+});
+
+it('splits words on ASCII spaces and tabs', async () => {
+  expect(await redactCommand('git\tstatus \t/workspace/report.txt'))
+    .toBe('git status •••');
 });
 
 it('hides workspace paths that could be flag values', async () => {
@@ -119,6 +139,13 @@ const unsupportedCommands = [
   'echo secret\rvalue',
   'echo secret\nvalue',
   'echo secret\0value',
+  'npm \u00a0install',
+  'curl hello\u00a0/workspace/hunter2',
+  'npm \uFEFFinstall',
+  'git\vstatus',
+  'git\fstatus',
+  'git\u2028status',
+  'git\u007fstatus',
   'curl -s #planted-secret',
   'curl --pass #planted-secret',
   'cat <<EOF\nsecret\nEOF',
