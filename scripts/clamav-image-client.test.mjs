@@ -495,6 +495,8 @@ async function abortsAtWorkerBoundaries(kind) {
   async function* countHistory(...args) {
     historyReads += 1;
     yield* originalRead(...args);
+    if (kind === 'after admission read' && historyReads === 1) controller.abort();
+    if (kind === 'during validation read' && historyReads === 4) controller.abort();
   }
   store.readStream = countHistory;
   async function prepare() {
@@ -514,11 +516,14 @@ async function abortsAtWorkerBoundaries(kind) {
     prepare, readSettings, readChecks, controller.signal);
   expect(outcome.status).toBe('unavailable');
   expect(store.appendCount).toBe(0);
-  if (kind === 'before history') expect(historyReads).toBe(1);
+  if (kind === 'before history') expect(historyReads).toBe(0);
+  if (kind === 'after admission read') expect(historyReads).toBe(1);
   if (kind === 'during preparation') expect(settingsReads).toBe(0);
+  if (kind === 'during validation read') expect(settingsReads).toBe(1);
   if (kind === 'after separate checks') expect(historyReads).toBe(2);
 }
-test.each(['before history', 'during preparation', 'after separate checks'])(
+test.each(['before history', 'after admission read', 'during preparation',
+  'during validation read', 'after separate checks'])(
   '%s stops worker progress', abortsAtWorkerBoundaries);
 
 async function refusesIncompleteAndIndependentFailures(kind) {

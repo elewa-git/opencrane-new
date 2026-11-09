@@ -8,8 +8,10 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gzipSync } from 'node:zlib';
 import { test, vi } from 'vitest';
-import { scanHostedImage, scanHostedImageAttempt, checkImagePartCoverage }
+import { scanHostedImage, scanHostedImageAttempt, checkImagePartCoverage, malwareReceipt }
   from '../infra/clamav/image-walk.mjs';
+import { hasAuthenticatedImageEvidence }
+  from '../libs/models/src/image-scan-evidence.ts';
 
 function createCleanupState() {
   return { active: false };
@@ -146,6 +148,7 @@ test('one checked attempt cannot authorise another silo or changed image attempt
   const result = await scanHostedImageAttempt(attempt, image, settings,
     recordingScanner(seen, 'clean', settings));
   assert.equal(result.verdict, 'clean');
+  assert.equal(hasAuthenticatedImageEvidence(result), false);
   assert.equal(await result.validate(attempt, image, { ...scanner, silo: image.silo }), 'clean');
   for (const change of [{ silo: 'other' }, { serverId: 'other' }, { attemptId: 2 },
     { platform: 'linux/arm64' }, { imageDigest: 'c'.repeat(64) },
@@ -172,6 +175,7 @@ test('part coverage refuses missing, duplicate, reordered and extra parts', () =
 });
 
 test('an empty image has no complete malware receipt', async () => {
+  assert.equal(malwareReceipt([]), undefined);
   const image = fixture([[{ name: 'directory', type: '5' }]]);
   const result = await scanHostedImage(image, scanner, recordingScanner([]));
   assert.equal(result.verdict, 'unavailable');
@@ -195,7 +199,7 @@ async function scanWithEvidence(change) {
   const evidence = [first, second];
   change(evidence);
   let index = 0;
-  async function scan(_settings, bytes) {
+  async function scan(_settings, _bytes) {
     const current = evidence[index];
     index += 1;
     function validate() { return 'clean'; }
