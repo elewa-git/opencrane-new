@@ -179,24 +179,43 @@ async function prepareChat(setup: Setup, memory: MemoryOptions,
     assistantId: 'assistant', computerId: 'computer', threadId,
     task: 'chat_turn', executionMode: 'restricted', payingGroupId: 'personal-default' };
   await setup.append('computer-assistant', 'computer.turn_started', admitted);
-  async function start() {
+  async function start(missFirstDispatch = false) {
     const expectedStarts = native.received.filter(isTurnStart).length + 1;
+    let dispatchAttempts = 0;
     const rows = await history(setup.nats.store, 'computer-assistant', 'test');
     const assistant = assistantSnapshot(rows, 'personal', 'test');
     function connectedComputer() {
       const connected = { ...link, connectionId: 1 };
       return Promise.resolve(connected);
     }
-    await processConversation(options, setup.tokens, conversation, assistant,
-      new Set(), connectedComputer);
-    function dispatched() {
+    async function dispatch(refuseComputer: boolean) {
+      dispatchAttempts += 1;
+      const refused = new Set<string>();
+      if (refuseComputer) {
+        refused.add('computer');
+      }
+      const progress = await processConversation(options, setup.tokens, conversation, assistant,
+        refused, connectedComputer);
       expect(link.rejection).toBeUndefined();
-      expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts);
+      return progress;
     }
-    // Give the scripted native peer time to receive the turn on a busy shared host.
-    const wait = { timeout: 30_000 };
-    await vi.waitFor(dispatched, wait);
+    let firstProgress: Awaited<ReturnType<typeof processConversation>> | undefined;
+    let retryProgress: Awaited<ReturnType<typeof processConversation>> | undefined;
+    if (missFirstDispatch) {
+      firstProgress = await dispatch(true);
+      retryProgress = await dispatch(false);
+      await native.waitForTurnStarts(expectedStarts);
+      expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts);
+    } else {
+      async function delivered() {
+        retryProgress = await dispatch(false);
+        expect(native.received.filter(isTurnStart)).toHaveLength(expectedStarts);
+      }
+      const wait = { timeout: 30_000 };
+      await vi.waitFor(delivered, wait);
+    }
     await link.settled();
+    return { dispatchAttempts, firstProgress, retryProgress };
   }
   return { start, turnId };
 }

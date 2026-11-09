@@ -53,14 +53,15 @@ const resultSchema = z.object(resultShape);
 const responseShape = { result: resultSchema };
 const responseSchema = z.object(responseShape);
 type Backend = Awaited<ReturnType<typeof recallBackend>>;
-async function forgetFixture() {
+async function forgetFixture(missFirstDispatch = false) {
   const test = await recallBackend(true);
   await test.write('unloaded', 'A separate fact.');
   await test.setup.runner.run(test.projection);
   // Keep fixture turn delivery within its access deadline on a busy host.
   const clock = memoryClock();
+  let dispatch: Awaited<ReturnType<typeof test.start>>;
   try {
-    await test.start();
+    dispatch = await test.start(missFirstDispatch);
   } finally {
     clock.restore();
   }
@@ -70,8 +71,39 @@ async function forgetFixture() {
   const recallProof = parsed.result.structuredContent.recallProof;
   const args = { scopeId, commandId: 'native-forget', memoryId: 'garden', expectedRevision: 1,
     recallProof };
-  return { ...test, args };
+  return { ...test, args, dispatchAttempts: dispatch.dispatchAttempts,
+    firstDispatchProgress: dispatch.firstProgress, retryDispatchProgress: dispatch.retryProgress };
 }
+
+async function retriesMissedTurnDelivery() {
+  const test = await forgetFixture(true);
+  expect(test.dispatchAttempts).toBeGreaterThan(1);
+  expect(test.firstDispatchProgress?.connectionId).toBeUndefined();
+  expect(test.retryDispatchProgress?.connectionId).toBe(1);
+  await test.native.waitForTurnStarts(1);
+  memoryClock();
+  const store = test.setup.nats.store;
+  const append = store.append.bind(store);
+  const forgotten = Promise.withResolvers<void>();
+  async function observeForget(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    if (result.status === 'appended' && memoryForgottenEventSchema.safeParse(command.event).success) {
+      forgotten.resolve();
+    }
+    return result;
+  }
+  vi.spyOn(store, 'append').mockImplementation(observeForget);
+  const pending = test.native.call(threadId, 'forget', test.args);
+  await forgotten.promise;
+  const response = await pending;
+  const rows = await tombstones(test);
+  expect(rows).toHaveLength(1);
+  const saved = memoryForgottenEventSchema.parse(rows[0]!.event);
+  const expected = expectedForgetResponse(saved);
+  expect(response).toEqual(expected);
+}
+it('retries a missed first turn dispatch before accepting the Forget receipt',
+  retriesMissedTurnDelivery, 120_000);
 
 async function tombstones(test: Backend) {
   const rows = await history(test.setup.nats.store, `scope-${scopeId}`, 'test');
