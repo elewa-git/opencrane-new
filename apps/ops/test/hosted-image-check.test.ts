@@ -328,7 +328,8 @@ async function grypeReceiptCannotChangeOutcome(caseName: 'unavailable' | 'missin
   licence.mockResolvedValue(toolOutcome(false));
   const checkedAt = new Date(Date.now() - 1_000).toISOString();
   const expiresAt = new Date(Date.now() + 60_000).toISOString();
-  const receipt = { verdict: 'fail' as const, checkedAt, expiresAt,
+  const receipt = { verdict: caseName === 'unavailable'
+    ? 'unavailable' as const : 'fail' as const, checkedAt, expiresAt,
     engineVersion: '0.121.0', databaseDigest: digest, databaseUpdatedAt: checkedAt,
     reportDigest: digest, reasonCodes: ['vulnerability_refused'] };
   if (caseName === 'unavailable') {
