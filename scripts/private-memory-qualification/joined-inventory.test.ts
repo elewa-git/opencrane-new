@@ -116,3 +116,69 @@ function refusesFinalFault(fault: Record<string, unknown>): void {
 it.each([{ safe: false }, { pid: 0 }, { startTime: '' }])(
   'refuses a group that becomes unsafe or unreadable at the final read', refusesFinalFault,
 );
+
+function refusesCopiedHelperProcess(): void {
+  const first = completeInventory();
+  const copied = first.find(function isFirstHelper(item): boolean {
+    return item.helperId === challenge;
+  })!;
+  const duplicateProcess = first.map(function copyHelper(item): ProtectionRecord {
+    if (item.helperId === otherChallenge) {
+      return { ...item, pid: copied.pid, startTime: copied.startTime };
+    }
+    return item;
+  });
+  expect(joinInventory(context, duplicateProcess, duplicateProcess)).toEqual({
+    ok: false, group: 'canaryHelper',
+  });
+}
+it('refuses two helper labels for the same PID and start time', refusesCopiedHelperProcess);
+
+function acceptsCanaryInServerImage(): void {
+  const first = completeInventory();
+  const actual = replace(first, 'canaryHelper', { imageDigest: image });
+  expect(joinInventory(context, actual, actual)).toEqual({ ok: true });
+}
+it('requires the server image for the canary launched inside the server',
+  acceptsCanaryInServerImage);
+
+function refusesRelabelledCanaryImage(): void {
+  const first = completeInventory();
+  expect(joinInventory(context, first, first)).toEqual({
+    ok: false, group: 'canaryHelper',
+  });
+}
+it('refuses a canary relabelled with the computer image', refusesRelabelledCanaryImage);
+
+function refusesIndependentRequiredGroup(group: ProtectionRecord['group']): void {
+  const first = completeInventory();
+  const missing = first.filter(function keepOther(item): boolean {
+    return item.group !== group;
+  });
+  expect(joinInventory(context, missing, first)).toEqual({ ok: false, group });
+}
+it.each(['serverDelivery', 'supervisor', 'nativeWrapper'] as const)(
+  'requires %s independently of the catalogue fixture', refusesIndependentRequiredGroup,
+);
+
+function refusesRecordWithoutMeasuredLaunch(): void {
+  const records = completeInventory();
+  const launches = records.map(function measuredLaunch(item): Record<string, unknown> {
+    const location = item.group === 'serverDelivery' || item.group === 'canaryHelper' ?
+      'server' : 'computer';
+    return { group: item.group, helperId: item.helperId, location,
+      pid: item.pid, startTime: item.startTime, pidNamespace: 'pid:[4026531836]',
+      dumpable: false };
+  });
+  const observedRecords = records.map(function observedRecord(item): Record<string, unknown> {
+    return { ...item, pidNamespace: 'pid:[4026531836]', dumpable: false };
+  });
+  const missingLaunches = launches.filter(function keepOther(item): boolean {
+    return item['group'] !== 'nativeChild';
+  });
+  const snapshot = { records: observedRecords, launches: missingLaunches };
+  expect(joinInventory(context, snapshot, snapshot)).toEqual({
+    ok: false, group: 'nativeChild',
+  });
+}
+it('refuses a process record without its measured launch', refusesRecordWithoutMeasuredLaunch);
