@@ -1,0 +1,297 @@
+import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { OverviewScreen, overviewDestination } from './overview';
+
+const checkedAt = '2026-11-08T09:40:00.000Z';
+const sources = ['people', 'providers', 'integrations', 'spending', 'memory',
+  'publication', 'routines'].map((name) => ({
+  name, status: name === 'publication' || name === 'routines' ? 'unavailable' : 'current',
+  checkpoint: 1, checkedAt,
+}));
+
+type Row = Parameters<typeof overviewDestination>[0];
+
+function row(id: string, priority: Row['priority'], source: Row['source'] = 'providers',
+  href = `/org/providers/${id}`): Row {
+  return { id, source, priority, eventAt: checkedAt, action: 'view_evidence', href };
+}
+
+function reply(rows: unknown[], next: string | null = null, status = 200,
+  sourceList = sources) {
+  const body = { rows, next, allClear: rows.length === 0, sources: sourceList,
+    viewer: { role: 'admin' }, capabilities: {} };
+  return new Response(JSON.stringify(body), { status });
+}
+
+function root(fixture: ComponentFixture<OverviewScreen>): HTMLElement {
+  const element: unknown = fixture.nativeElement;
+  if (!(element instanceof HTMLElement)) throw new Error('Expected overview element');
+  return element;
+}
+
+async function mount() {
+  TestBed.configureTestingModule({ imports: [OverviewScreen] });
+  await TestBed.compileComponents();
+  const fixture = TestBed.createComponent(OverviewScreen);
+  fixture.detectChanges();
+  await vi.waitFor(() => fixture.detectChanges());
+  return fixture;
+}
+
+beforeEach(() => globalThis.history.replaceState({}, '', '/org/overview'));
+afterEach(() => vi.restoreAllMocks());
+
+it('keeps server order and gives each task one safe action', async () => {
+  const rows = [row('opaque-1', 'unknown'), row('opaque-2', 'needs_input'),
+    row('opaque-3', 'failure'), row('opaque-4', 'ready')];
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(rows));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(4);
+  });
+  const actions = [...root(fixture).querySelectorAll<HTMLAnchorElement>('.overview-row a')];
+  expect(actions).toHaveLength(4);
+  expect(actions.map((action) => action.href)).toEqual([
+    'http://localhost:3000/org/models?provider=opaque-1',
+    'http://localhost:3000/org/models?provider=opaque-2',
+    'http://localhost:3000/org/models?provider=opaque-3',
+    'http://localhost:3000/org/models?provider=opaque-4',
+  ]);
+  expect(root(fixture).textContent).toContain('Model provider opaque-1 check');
+});
+
+it('does not call unavailable sources ready or show an undated all-clear', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply([]));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).textContent).toContain('Some tasks are unavailable');
+  });
+  expect(root(fixture).textContent).not.toContain('Nothing needs your attention');
+  expect(root(fixture).textContent).toContain('unavailable');
+});
+
+it('does not suggest provider setup when the provider source is unavailable', async () => {
+  const unavailable = sources.map(source => ({ ...source,
+    status: source.name === 'providers' ? 'unavailable' : source.status }));
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply([], null, 200, unavailable));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).textContent).toContain('Some tasks are unavailable');
+  });
+  expect(root(fixture).textContent).not.toContain('Connect a model provider first');
+});
+
+it('keeps rows from current sources when another source is unavailable', async () => {
+  const unavailable = sources.map(source => ({ ...source,
+    status: source.name === 'spending' ? 'unavailable' : source.status }));
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply([
+    row('member', 'needs_input', 'people', '/org/people')], null, 200, unavailable));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(1);
+  });
+  expect(root(fixture).textContent).toContain('Some tasks are unavailable');
+  expect(root(fixture).querySelector('.overview-row a')).not.toBeNull();
+});
+
+it('retains loaded rows after a refresh outage and clears them after access loss', async () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  fetchSpy.mockResolvedValueOnce(reply([row('private-id', 'unknown')]));
+  fetchSpy.mockResolvedValueOnce(reply([], null, 503));
+  fetchSpy.mockResolvedValueOnce(reply([], null, 403));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(1);
+  });
+  const refresh = root(fixture).querySelector('button');
+  if (!refresh) throw new Error('Missing refresh button');
+  refresh.focus();
+  refresh.click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).textContent).toContain('Showing what we loaded');
+  });
+  expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(1);
+  const staleRefresh = root(fixture).querySelector<HTMLButtonElement>(
+    '.overview-notice.stale button');
+  expect(staleRefresh).not.toBeNull();
+  await vi.waitFor(() => expect(document.activeElement).toBe(staleRefresh));
+  staleRefresh?.click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(0);
+  });
+  expect(root(fixture).querySelector('.overview-row a')).toBeNull();
+  refresh.click();
+  expect(fetchSpy).toHaveBeenCalledTimes(3);
+});
+
+it('ignores a response body that finishes after access is revoked', async () => {
+  let deliverPage: ((value: unknown) => void) | undefined;
+  function saveResolver(resolve: (value: unknown) => void): void {
+    deliverPage = resolve;
+  }
+  const delayedPage = new Promise<unknown>(saveResolver);
+  const response = reply([row('private-id', 'unknown')]);
+  vi.spyOn(response, 'json').mockReturnValue(delayedPage);
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+  const fixture = await mount();
+  fixture.componentInstance['clearAccess']();
+  deliverPage?.({ rows: [row('private-id', 'unknown')], next: null, sources });
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).textContent).toContain('Access changed');
+  });
+  expect(root(fixture).querySelector('.overview-row')).toBeNull();
+});
+
+it('uses the saved cursor and rejects duplicate rows', async () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  fetchSpy.mockResolvedValueOnce(reply([row('one', 'unknown')], 'cursor'));
+  fetchSpy.mockResolvedValueOnce(reply([row('one', 'unknown'), row('two', 'ready')]));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(1);
+  });
+  const more = root(fixture).querySelector<HTMLButtonElement>('.overview-more');
+  if (!more) throw new Error('Missing load more button');
+  more.click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(2);
+  });
+  expect(fetchSpy.mock.calls[1]?.[0]).toBe('/api/org/overview?cursor=cursor');
+});
+
+it('keeps the loaded page cursor after a failed refresh', async () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  fetchSpy.mockResolvedValueOnce(reply([row('one', 'unknown')], 'cursor'));
+  fetchSpy.mockResolvedValueOnce(reply([], null, 503));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelector('.overview-more')).not.toBeNull();
+  });
+  const refresh = root(fixture).querySelector<HTMLButtonElement>('button');
+  refresh?.click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).textContent).toContain('Showing what we loaded');
+  });
+  expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(1);
+  expect(root(fixture).querySelector('.overview-more')).not.toBeNull();
+});
+
+it('shows a dated all-clear only when every source is current', async () => {
+  const current = sources.map(source => ({ ...source, status: 'current' }));
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply([], null, 200, current));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).textContent).toContain('Nothing needs your attention');
+  });
+  expect(root(fixture).textContent).toContain('8 Nov 2026');
+  expect(root(fixture).textContent).toContain('Connect a provider');
+  expect(root(fixture).querySelector('.overview-notice.setup a')).not.toBeNull();
+});
+
+it.each(['unavailable', 'applying'])('does not show Ready from an %s source',
+  async (status) => {
+    const changedSources = sources.map(source => ({ ...source,
+      status: source.name === 'providers' ? status : source.status }));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply([
+      row('provider-one', 'ready', 'providers', '/org/providers/provider-one'),
+    ], null, 200, changedSources));
+    const fixture = await mount();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(root(fixture).textContent).toContain('Some tasks are unavailable');
+    });
+    expect(root(fixture).querySelector('.overview-ready')).toBeNull();
+    expect(root(fixture).querySelector('.overview-status .ready')).toBeNull();
+  });
+
+it('separates current Ready evidence from tasks in server order', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply([
+    row('first', 'unknown'), row('second', 'ready'), row('third', 'ready'),
+  ]));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(3);
+  });
+  expect(root(fixture).querySelectorAll('.overview-tasks .overview-row')).toHaveLength(1);
+  expect(root(fixture).querySelectorAll('.overview-ready .overview-row')).toHaveLength(2);
+});
+
+it('distinguishes two providers with the same priority and opens their evidence', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply([
+    row('first', 'needs_input', 'providers', '/org/providers/first'),
+    row('second', 'needs_input', 'providers', '/org/providers/second'),
+  ]));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(2);
+  });
+  const shownRows = [...root(fixture).querySelectorAll<HTMLElement>('.overview-row')];
+  expect(shownRows[0]?.textContent).toContain('first');
+  expect(shownRows[1]?.textContent).toContain('second');
+  expect(shownRows.map(shownRow => shownRow.querySelector('a')?.getAttribute('href'))).toEqual([
+    '/org/models?provider=first', '/org/models?provider=second',
+  ]);
+});
+
+it('places Refresh inside the stale notice', async () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  fetchSpy.mockResolvedValueOnce(reply([row('first', 'unknown')]));
+  fetchSpy.mockResolvedValueOnce(reply([], null, 503));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelector('.overview-row')).not.toBeNull();
+  });
+  root(fixture).querySelector<HTMLButtonElement>('.overview-heading button')?.click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelector('.overview-notice.stale button')).not.toBeNull();
+  });
+});
+
+it('maps evidence to browser pages and refuses direct API or unsafe links', () => {
+  expect(overviewDestination(row('memory', 'unknown', 'memory',
+    `/api/org/history/${'a'.repeat(32)}`))).toBe(`/org/history?reference=${'a'.repeat(32)}`);
+  expect(overviewDestination(row('permit', 'unknown', 'spending',
+    '/api/org/effects/permit-one'))).toBe('/org/spending?effect=permit-one');
+  expect(overviewDestination(row('secret', 'unknown', 'memory',
+    '/api/org/history/raw-event-id'))).toBeUndefined();
+  expect(overviewDestination(row('unsafe', 'unknown', 'integrations',
+    '/api/org/integrations/secret'))).toBeUndefined();
+});
+
+it('restarts at page one once when a saved cursor has changed', async () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  fetchSpy.mockResolvedValueOnce(reply([row('one', 'unknown')], 'old'));
+  fetchSpy.mockResolvedValueOnce(reply([], null, 400));
+  fetchSpy.mockResolvedValueOnce(reply([row('new', 'ready')]));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelector('.overview-more')).not.toBeNull();
+  });
+  const more = root(fixture).querySelector<HTMLButtonElement>('.overview-more');
+  more?.click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+  expect(fetchSpy.mock.calls[1]?.[0]).toBe('/api/org/overview?cursor=old');
+  expect(fetchSpy.mock.calls[2]?.[0]).toBe('/api/org/overview');
+  expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(1);
+});

@@ -15,16 +15,15 @@ import { BudgetLimitEditor } from './budget-limit-editor';
 import type { BudgetEditorSaveState } from './budget-limit-editor';
 import { MoneyCard } from './money-card';
 import {
-  monthPeriod, resolutionView, utcClockTime,
+  monthPeriod, resolutionView, utcClockTime, type PendingResolution, type ResolutionCommand,
 } from './effect-rules';
-import type { PendingResolution, ResolutionCommand } from './effect-rules';
 import {
   readBudgetSave, readBudget, readEffect, readEffects,
 } from './spending-reads';
 import type { ReadResult, SpendingReadState } from './spending-reads';
 import {
-  findEffect, heldEffects, loadedTime, lostReplyMessage, readStateFor,
-  sendingResolutionMessage, spendingPageStatus, waitingCount,
+  findEffect, heldEffects, linkedEffectId, loadedTime, lostReplyMessage, readStateFor,
+  sendingResolutionMessage, spendingPageStatus, staleRead, waitingCount,
 } from './spending-view';
 import { money } from './spending-money';
 
@@ -94,7 +93,7 @@ export class SpendingScreen implements OnInit, OnDestroy {
     const generation = this.accessGeneration;
     if (!this.budget()) this.budgetState.set('loading');
     const result = await readBudget(controller.signal);
-    if (this.isStale(generation, controller)) return;
+    if (staleRead(generation, this.accessGeneration, controller)) return;
     if (result.state === 'access_changed') {
       this.clearProtectedData();
       return;
@@ -121,7 +120,7 @@ export class SpendingScreen implements OnInit, OnDestroy {
     const generation = this.accessGeneration;
     if (!this.effectsLoadedAt()) this.effectsState.set('loading');
     const result = await readEffects(controller.signal);
-    if (this.isStale(generation, controller)) return;
+    if (staleRead(generation, this.accessGeneration, controller)) return;
     if (result.state === 'access_changed') {
       this.clearProtectedData();
       return;
@@ -130,6 +129,10 @@ export class SpendingScreen implements OnInit, OnDestroy {
     if (result.state === 'ready') {
       this.effects.set(result.value);
       this.effectsLoadedAt.set(new Date().toISOString());
+      const linkedEffect = linkedEffectId();
+      if (linkedEffect && !this.activePermitId()) {
+        this.openEffect({ permitId: linkedEffect, opener: document.body });
+      }
     }
     this.pageStatus.set(spendingPageStatus(this.budgetState(), this.effectsState()));
   }
@@ -219,11 +222,11 @@ export class SpendingScreen implements OnInit, OnDestroy {
         signal: controller.signal,
       });
       if (this.accessChanged(response, generation)) return;
-      if (this.isStale(generation, controller)) return;
+      if (staleRead(generation, this.accessGeneration, controller)) return;
       pending.inFlight = false;
       await this.handleResolutionResponse(response, permitId, command, generation, controller);
     } catch {
-      if (this.isStale(generation, controller)) return;
+      if (staleRead(generation, this.accessGeneration, controller)) return;
       pending.inFlight = false;
       this.showLostReply(permitId, command.commandId);
       await this.rereadCommandPermit(permitId);
@@ -270,7 +273,7 @@ export class SpendingScreen implements OnInit, OnDestroy {
     controller: AbortController,
   ): Promise<void> {
     const body: unknown = await response.json();
-    if (this.isStale(generation, controller)) return;
+    if (staleRead(generation, this.accessGeneration, controller)) return;
     const status = resolutionConflictSchema.parse(body).status;
     if (status === 'held') {
       this.setActiveDrawerState(permitId, 'held',
@@ -313,9 +316,9 @@ export class SpendingScreen implements OnInit, OnDestroy {
         body: JSON.stringify(parsed.data), signal: controller.signal,
       });
       if (this.accessChanged(response, generation)) return;
-      if (this.isStale(generation, controller)) return;
+      if (staleRead(generation, this.accessGeneration, controller)) return;
       const result = await readBudgetSave(response);
-      if (this.isStale(generation, controller)) return;
+      if (staleRead(generation, this.accessGeneration, controller)) return;
       if (result.state === 'choice_unavailable') {
         this.budgetSaveState.set('choice_unavailable');
         return;
@@ -325,7 +328,7 @@ export class SpendingScreen implements OnInit, OnDestroy {
       this.budgetState.set('ready');
       this.budgetSaveState.set('confirmed');
     } catch {
-      if (this.isStale(generation, controller)) return;
+      if (staleRead(generation, this.accessGeneration, controller)) return;
       this.budgetSaveState.set('unknown');
     }
   }
@@ -338,10 +341,10 @@ export class SpendingScreen implements OnInit, OnDestroy {
     if (drawerOpen) this.drawerReadState.set('reading');
     try {
       const result = await readEffect(permitId, controller.signal);
-      if (this.isStale(generation, controller)) return;
+      if (staleRead(generation, this.accessGeneration, controller)) return;
       await this.acceptDetailRead(result, permitId, drawerOpen, generation, controller);
     } catch {
-      if (this.isStale(generation, controller)) return;
+      if (staleRead(generation, this.accessGeneration, controller)) return;
       this.showDetailReadFailure('failed', permitId, drawerOpen);
     } finally {
       if (this.detailReadControllers.get(permitId) === controller) {
@@ -369,7 +372,7 @@ export class SpendingScreen implements OnInit, OnDestroy {
     if (this.activePermitId() !== permitId && drawerOpen) return;
     this.showDetailInDrawer(detail, permitId, drawerOpen);
     await this.refreshAfterDetailRead(detail);
-    if (this.isStale(generation, controller)) return;
+    if (staleRead(generation, this.accessGeneration, controller)) return;
     this.classifyCurrentDetail(detail, permitId);
   }
 
@@ -493,10 +496,6 @@ export class SpendingScreen implements OnInit, OnDestroy {
   private acceptBudget(current: BudgetSummary): void {
     this.budget.set(current);
     if (current.periodStart) this.period.set(monthPeriod(current.periodStart));
-  }
-
-  private isStale(generation: number, controller: AbortController): boolean {
-    return controller.signal.aborted || generation !== this.accessGeneration;
   }
 
   private accessChanged(response: Response, generation: number): boolean {

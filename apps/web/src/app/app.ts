@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import { Claim } from './claim/claim';
 import { AuditScreen } from './audit/audit';
 import { McpInstall } from './mcp-install/mcp-install';
@@ -15,6 +15,7 @@ import { SignIn } from './sign-in/sign-in';
 import { SharedState } from './shared-state/shared-state';
 import { StateSpecimen } from './shared-state/state-specimen';
 import { OrganisationShell } from './organisation/organisation-shell';
+import { OverviewScreen } from './organisation/overview';
 import { assistantCreateGroupId, normalisePathname, organisationPage,
   organisationPageLabel, peopleGroupId, peopleMemberId, toolExplanationServerId }
   from './organisation/pages';
@@ -36,7 +37,7 @@ import { PersonaReview } from './welcome/persona-review';
     Claim, StateSpecimen, McpInstall, SharedState, SignIn, Workspace, DirectChat, Conversations,
     ToolPolicyScreen, ToolAccessExplanation,
     ModelsScreen, SpendingScreen, AuditScreen, IntegrationRegister, IntegrationDetail,
-    OrganisationShell,
+    OrganisationShell, OverviewScreen,
     AccountScreen, PersonalSettingsShell, PeopleScreen, GroupDetailScreen, MemberDetailScreen,
     SharedAssistantAdmin, SharedAssistantPicker, OwnershipScreen, SurveyScreen, PersonaReview,
   ],
@@ -49,6 +50,7 @@ import { PersonaReview } from './welcome/persona-review';
   },
 })
 export class App {
+  protected readonly overviewAccessLost = signal(false);
   private readonly pathname = normalisePathname(globalThis.location.pathname);
   protected readonly claimPage = this.pathname === '/claim';
   protected readonly workspacePage = this.pathname === '/workspace';

@@ -13,6 +13,18 @@ export function readStateFor<T>(result: ReadResult<T>): BudgetEditorLoadState {
   return 'failed';
 }
 
+export function staleRead(
+  generation: number, currentGeneration: number, controller: AbortController,
+): boolean {
+  return controller.signal.aborted || generation !== currentGeneration;
+}
+
+export function linkedEffectId(): string | null {
+  const effect = new URLSearchParams(globalThis.location.search).get('effect');
+  if (!effect || !/^[\w-]{1,200}$/u.test(effect)) return null;
+  return effect;
+}
+
 export function spendingPageStatus(
   budgetState: BudgetEditorLoadState,
   effectsState: BudgetEditorLoadState,

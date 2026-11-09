@@ -123,6 +123,14 @@ export class ProviderPageState implements OnInit, OnDestroy {
   protected showProviderList(): boolean {
     return this.loadedAt() !== undefined && this.providers().length > 0;
   }
+  protected visibleProviders(): ProviderRow[] {
+    const requestedId = new URLSearchParams(globalThis.location.search).get('provider');
+    if (!requestedId) return this.providers();
+    for (const provider of this.providers()) {
+      if (provider.providerId === requestedId) return [provider];
+    }
+    return this.providers();
+  }
   protected showEmptyProviders(): boolean {
     return this.loadedAt() !== undefined && this.providers().length === 0;
   }

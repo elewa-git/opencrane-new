@@ -18,6 +18,7 @@
         "scripts/capture-chat-tool-inline.mjs",
         "scripts/capture-chat-mermaid.mjs",
         "scripts/capture-p4-15-pr3l.mjs",
+        "scripts/capture-p4-27-pr14.mjs",
         "scripts/capture-uploads-reasons.mjs",
         "scripts/capture-chat-drag-drop.mjs",
         "scripts/capture-screen-p4-8-pr12a.mjs",

@@ -1,13 +1,32 @@
 # Organisation navigation
 
-This folder supplies the shared frame around organisation settings. People see the organisation name, links to admin pages and a way back to the chat workspace.
+## What this is
+
+This folder supplies the shared frame and home page for organisation settings.
+People see an ordered list of tasks, links to admin pages and a way back to chat.
+
+## Where it fits
+
+The website reads organisation tasks from the server. Each task opens an existing
+admin page or an authorised evidence view.
+
+```mermaid
+flowchart LR
+  web[Website] --> overview[Overview]
+  web --> shell[Organisation frame]
+  overview --> server[Server task read]
+  shell --> admin[Admin pages]
+```
 
 ## What it is responsible for
 
 - Lists Overview, People & groups, Models & providers, Spending, Integrations, Routines and Change history.
 - Marks the current page and recognises member, group, assistant-setup and integration addresses.
 - Shows a sidebar on larger screens and a keyboard-friendly menu on phones.
-- Opens Integrations for `/org` while Overview has no working screen.
+- Opens Overview for `/org` and `/org/overview`.
+- Keeps tasks visible after a failed refresh and clears them when access is refused.
+- Lists dated Ready evidence separately. A provider action opens that provider's row
+  on Models & providers.
 
 ## Main files
 
@@ -15,6 +34,7 @@ This folder supplies the shared frame around organisation settings. People see t
 | --- | --- |
 | `organisation-shell.*` | Draw the sidebar, phone header and shared page area. |
 | `pages.ts` | Names the pages and matches their addresses. |
+| `overview.*` | Shows the task list and safe actions. |
 
 ## How it connects
 
@@ -22,5 +42,9 @@ This folder supplies the shared frame around organisation settings. People see t
 [Models](../models/README.md), [Spending](../spending/README.md),
 [Integrations](../integrations/README.md) and [Change history](../audit/README.md)
 inside this frame. [Shared controls](../ui/README.md) supply the brand and phone menu.
-Overview and Routines currently show an unavailable message.
+Routines still shows an unavailable message.
 The menu itself grants no access; the server checks each page's requests.
+
+## Where to read more
+
+[README.robot.md](README.robot.md) records the task response and browser capture.

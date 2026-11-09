@@ -382,7 +382,7 @@ describe('MCP register', () => {
     }
   }
 
-  const unavailablePaths = ['/org/overview', '/org/routines', '/org/missing'];
+  const unavailablePaths = ['/org/routines', '/org/missing'];
   it.each(unavailablePaths)('shows truthful availability at %s', checkUnavailablePage);
 
   it.each(['/org/people', '/org/people/groups/sales-team'])(

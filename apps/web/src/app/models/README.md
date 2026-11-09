@@ -5,6 +5,7 @@ This folder shows Models & providers, where owners and admins connect companies 
 ## What it is responsible for
 
 - Lists provider connections and their dated saved facts at `/org/models`.
+- Shows one provider's row when opened from an Overview evidence link.
 - Creates connections and saves or replaces keys without reading a stored key back.
 - Separates reachability checks from a paid model-answer test. Each paid test needs fresh consent for its quoted cost; an unknown result keeps further tests locked.
 - Selects OpenAI models and shows the jobs using each model and the people, groups or assistants allowed to use it. Model selection is unavailable for Anthropic; Next continues without saving models.

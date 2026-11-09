@@ -21,6 +21,10 @@ under `docs/process/uploads-reasons/`. This does not qualify a fresh installatio
 
 ## Browser behaviour
 
+The organisation overview reads ordered tasks from `GET /api/org/overview`.
+It keeps the last page through refresh failure and clears it on access refusal.
+The intercepted screen capture is `npm run visual:p4-27-pr14`.
+
 An own saved group message shows a child review action when the current assistant list
 offers an eligible shared assistant. The server still checks authority. The review
 POST binds the source event id, assistant and requested audience. People added after

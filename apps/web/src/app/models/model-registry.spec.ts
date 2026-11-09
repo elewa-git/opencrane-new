@@ -119,6 +119,24 @@ async function waitForText(fixture: ComponentFixture<ModelsScreen>, text: string
 afterEach(() => {
   TestBed.resetTestingModule();
   vi.unstubAllGlobals();
+  globalThis.history.replaceState({}, '', '/');
+});
+
+it('opens overview evidence at the named provider', async () => {
+  globalThis.history.replaceState({}, '', '/org/models?provider=second');
+  const fixture = await mount(request => {
+    if (request.url === '/api/org/providers') {
+      return reply({ ...emptyProviderRead, rows: [
+        provider('first', 'Primary'), provider('second', 'Backup'),
+      ] });
+    }
+    if (request.url === '/api/org/models') return reply(registryRead);
+    throw new Error(`Unexpected request: ${request.url}`);
+  });
+  const rows = screenElement(fixture).querySelectorAll('.provider-row');
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.getAttribute('data-provider-id')).toBe('second');
+  expect(rows[0]?.textContent).toContain('Backup');
 });
 
 it('refreshes a healthy list without announcing a failure', async () => {
