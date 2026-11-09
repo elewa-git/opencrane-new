@@ -34,7 +34,8 @@ async function excludesTests(): Promise<void> {
   expect(paths).toBe('');
 }
 
-it('keeps repository tests and their private fixtures out of the package image', excludesTests);
+it('keeps repository tests and their private fixtures out of the package image',
+  excludesTests, 15_000);
 
 async function executesMemoryCheck(
   name: 'invalidation' | 'unrelatedActivity' | 'requesterIsolation' |

@@ -26,6 +26,11 @@ infra/dev-stack/*
 !infra/dev-stack/zitadel.json
 infra/odoo
 infra/clamav
+!infra/clamav/
+infra/clamav/*
+!infra/clamav/image-client.mjs
+!infra/clamav/image-walk.mjs
+!infra/clamav/image-walk.py
 infra/devbox
 infra/nats
 infra/package/*

@@ -27,6 +27,7 @@ flowchart LR
   package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
+  package -->|includes image scan evidence code| scanner["infra/clamav<br/>image scanner"]
 ```
 
 The install runs a fake AI model for testing and creates its first owner through
@@ -62,6 +63,7 @@ rendering cannot prove that the saved data is readable.
 - Installs the website, server, workers and core services together with [Helm](../../GLOSSARY.md#helm).
 - Uses fixed, reviewed images and checks their licences before installation.
 - Builds the server image with a fixed Codex executable for private memory checks.
+- Includes the image scanner files loaded by the server's image evidence check.
 - Checks that a proposed server and website image matches its source and all shipped layers.
 - Refuses a bootstrap image if its setup code imports a test-only file.
 - Keeps the install in the test space [claimed](../../GLOSSARY.md#claim) by this worktree.
