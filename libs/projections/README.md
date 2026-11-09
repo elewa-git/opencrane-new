@@ -53,7 +53,7 @@ PostgreSQL, the database for the read tables.
 ```mermaid
 flowchart LR
   models["libs/models<br/>model choices and replay tests"] -.->|uses database locks and the test helper| projections
-  ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and checks saved changes| projections["libs/projections<br/>read tables, change history, routines, memory, surveys, personas and completed welcomes"]
+  ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and send authorisations, and checks saved changes| projections["libs/projections<br/>read tables, change history, routines, memory, surveys, personas and completed welcomes"]
   server["apps/server<br/>back end"] -->|reads tables, own and admin routine lists, run pages and spending choices| pg["PostgreSQL<br/>database"]
   projections -->|saves history, child publication, searchable task outcomes and spending; keeps private audits and process exits outside chat feeds| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections
@@ -222,6 +222,8 @@ check as chat. People and assistants still need their own access grants. Rebuild
 the catalogue restores these saved decisions without sending tool calls.
 
 The routines worker copies saved definitions and runs into read tables.
+It checks a saved send authorisation against the admitted run. That record does
+not prove the turn reached a computer.
 An owner index lets the server read small pages of one person’s routines.
 The routine scanner reads up to fifty references in their original event order for
 one silo. Edits keep that order, and newly added routines follow the existing ones.

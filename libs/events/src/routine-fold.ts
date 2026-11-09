@@ -98,6 +98,19 @@ function saveOtherFact(state: RoutineState, event: EventEnvelope): RoutineState 
     requireActiveRun(state, activation);
     return { ...state, activation };
   }
+  if (event.type === 'routine.run_send_authorised') {
+    const authorised = schemas.routineActivationSchema.parse(event.data);
+    requireActiveRun(state, authorised);
+    const activation = state.activation;
+    // Compare the attempt and budget receipt after checking the active run above.
+    if (state.status !== 'active' || state.stopRequested ||
+        !activation || activation.senderAttemptId !== authorised.senderAttemptId ||
+        activation.admission.eventId !== authorised.admission.eventId ||
+        activation.admission.position !== authorised.admission.position) {
+      throw new Error('Send authorisation must match the active admission');
+    }
+    return state;
+  }
   if (event.type === 'routine.run_stop_requested') {
     const stop = schemas.routineStopSchema.parse(event.data);
     requireActiveRun(state, stop);

@@ -7172,6 +7172,11 @@ A company change during a stream read therefore conflicts with the guarded appen
 This can also refuse an unrelated concurrent event. The check reads the OAuth
 configuration again after the stream checks. There is no credential release,
 company send or public execution switch.
+Before its internal socket send, the sender saves `routine.run_send_authorised` on
+the routine stream. The append checks current routine state and company facts inside
+the event store's conditional publish. A conflict or uncertain result prevents a
+send. The record is an authorisation point, not proof of delivery. Production
+company sending stays disabled.
 Existing records without `serverId` remain readable but cannot pass this check.
 
 `test/routine-company-preflight.test.ts` covers the valid choice, changed or missing

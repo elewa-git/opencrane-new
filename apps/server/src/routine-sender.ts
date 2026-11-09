@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { routineActivationSchema } from '@opencrane/events';
 import { stopUnconfirmedRoutine } from './routine-delivery-stop.ts';
 import type { connectBridge } from './chat/bridge.ts';
 import { cancelRoutineThread } from './chat/routine-thread.ts';
@@ -55,6 +57,40 @@ function routineTurnBytes(checked: Awaited<ReturnType<typeof readRoutineActivati
   return JSON.stringify(frame);
 }
 
+async function authoriseRoutineSend(store: Arguments[0], worker: Arguments[2],
+  checked: Awaited<ReturnType<typeof readRoutineActivation>>,
+  confirmCompany: () => Promise<void>) {
+  const run = checked.run;
+  const subject = `routine-${run.routineId}`;
+  const activation = await store.readEvent(checked.receipt.position, checked.deadline);
+  if (activation.event.id !== checked.receipt.eventId ||
+      activation.event.type !== 'routine.run_activation_admitted' ||
+      activation.event.subject !== subject) {
+    throw new Error('Routine send unavailable');
+  }
+  const data = routineActivationSchema.parse(activation.event.data);
+  const expectedSequence = await store.head(subject, checked.deadline);
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify([worker.silo, run.occurrenceId, checked.senderAttemptId]));
+  const id = hash.digest('hex');
+  const event = { id, commandId: id, silo: worker.silo, subject, data,
+    type: 'routine.run_send_authorised', source: 'opencrane-server',
+    principal: { kind: 'system' as const, id: 'opencrane-server' },
+    time: new Date().toISOString(), correlation: {} };
+  async function checkAccess() {
+    await checked.fresh();
+    await confirmCompany();
+  }
+  // Make the saved authorisation depend on the same company facts as the send.
+  const command = { event, expectedSequence, historyChecked: true as const,
+    deadline: checked.deadline, checkAccess };
+  const result = await store.append(command);
+  if (result.status !== 'appended' || result.outcome?.kind !== 'appended') {
+    throw new Error('Routine send unavailable');
+  }
+  await checked.fresh();
+}
+
 // Keep this internal switch off until company calls, lifecycle Stop and Ask are connected.
 export function createRoutineSender(options: SenderOptions,
   ...supplied: Arguments) {
@@ -84,8 +120,9 @@ export function createRoutineSender(options: SenderOptions,
           link.assistantId !== run.definition.assistantId) return unknown;
       const bytes = routineTurnBytes(checked, args[4], keys, worker.silo);
       await checked.fresh();
-      // Send immediately after checking company facts; no later wait may use an old check.
-      await confirmCompany?.();
+      if (confirmCompany) {
+        await authoriseRoutineSend(store, checkedWorker, checked, confirmCompany);
+      }
       if (link.socket.readyState !== link.socket.OPEN) return unknown;
       // Consume this live authority before the transport can lose its reply.
       awaitingStart = true;

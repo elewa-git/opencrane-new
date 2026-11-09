@@ -116,8 +116,8 @@ async function updateRun(db: Query, state: RoutineState, saved: Occurrence,
     }
     return true;
   }
-  const runEvents = ['routine.run_activation_admitted', 'routine.run_stop_requested',
-    'routine.run_finished'];
+  const runEvents = ['routine.run_activation_admitted', 'routine.run_send_authorised',
+    'routine.run_stop_requested', 'routine.run_finished'];
   if (!runEvents.includes(event.type)) return false;
   // Check late records against the original run, even after another run has finished.
   const original: RoutineState = { ...state, activeRun: saved.due, lastRun: null,
@@ -127,7 +127,12 @@ async function updateRun(db: Query, state: RoutineState, saved: Occurrence,
       && !isDeepStrictEqual(saved.activation, event.data)) {
     throw new Error('Activation differs from the saved sender attempt');
   }
-  if (saved.terminal) return true;
+  if (saved.terminal) {
+    if (event.type === 'routine.run_send_authorised') {
+      throw new Error('Finished routine cannot authorise a send');
+    }
+    return true;
+  }
   const next = foldRoutine(state, event);
   let terminalReference = saved.terminalReference;
   if (checked.lastRun) terminalReference = { eventId: event.id, position };
