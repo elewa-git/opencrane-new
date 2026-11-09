@@ -282,7 +282,7 @@ async function onlyOneSimultaneousCallerClaimsScan() {
   expect(rows).toHaveLength(2);
   expect(rows[1]!.event.type).toBe('mcp.image_scan_claimed');
   const savedClaim = hostedImageScanClaimedSchema.parse(rows[1]!.event.data);
-  expect(savedClaim.claimToken).toHaveLength(36);
+  expect(savedClaim.claimantId).toHaveLength(36);
 }
 
 it('lets only the worker that saved a simultaneous claim scan',
