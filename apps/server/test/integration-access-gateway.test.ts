@@ -585,12 +585,10 @@ async function raceApprovalCalls(context: Context, approvalId: string, slowHisto
   const restoredReads: number[] = [];
   const trace: { stage: string; requestId?: string; sequence?: number;
     status?: string; remainingMs?: number }[] = [];
-  // Control only the deadline regression; run the load cases on the real clock.
-  const startedAt = now();
   let elapsed = 0;
   function currentTime() {
     if (slowHistory) {
-      return startedAt + elapsed;
+      return now() + elapsed;
     }
     return now();
   }
@@ -778,20 +776,24 @@ async function boundsToolHistory(historyMs: number, accessMs: number, expectedAl
   await context.grant('assistant');
   const store = context.setup.nats.store;
   const originalRead = store.readStream.bind(store);
-  const requestStarted = performance.now();
+  const originalHead = store.head.bind(store);
+  const clockStart = performance.now();
   let elapsed = 0;
   let accessStarted = false;
   const historyAccessStates: boolean[] = [];
-  // Advance decision time only at these reads; keep real service timers running.
+  // Hold the decision clock still except for the delays modelled by this test.
   function currentTime() {
-    return requestStarted + elapsed;
+    return clockStart + elapsed;
   }
-  async function* slowHistory(...parameters: Parameters<typeof originalRead>) {
-    const subject = parameters[0];
+  async function delayedHead(subject?: string, deadline?: number) {
     if (subject === 'member-alice' && !accessStarted) {
       accessStarted = true;
       elapsed += accessMs;
     }
+    return originalHead(subject, deadline);
+  }
+  async function* slowHistory(...parameters: Parameters<typeof originalRead>) {
+    const subject = parameters[0];
     const fullHistory = subject === 'conversation-conversation' && parameters[1] === 1;
     if (fullHistory) {
       historyAccessStates.push(accessStarted);
@@ -803,8 +805,10 @@ async function boundsToolHistory(historyMs: number, accessMs: number, expectedAl
   }
   const clock = vi.spyOn(performance, 'now');
   const read = vi.spyOn(store, 'readStream');
+  const head = vi.spyOn(store, 'head');
   clock.mockImplementation(currentTime);
   read.mockImplementation(slowHistory);
+  head.mockImplementation(delayedHead);
   try {
     if (expectedAllowed) {
       await allowed(context);
@@ -815,6 +819,7 @@ async function boundsToolHistory(historyMs: number, accessMs: number, expectedAl
     expect(historyAccessStates).toEqual([false]);
     expect(context.setup.actor.state.reservations).toHaveLength(0);
   } finally {
+    head.mockRestore();
     read.mockRestore();
     clock.mockRestore();
   }
