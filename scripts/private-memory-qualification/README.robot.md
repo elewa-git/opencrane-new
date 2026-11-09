@@ -215,6 +215,15 @@ observed before the old journey starts. Collection therefore refuses before
 that journey starts. Connecting those live records belongs to the later held
 journey work. No saved result or caller-supplied record can fill a missing group.
 
+Each inventory snapshot has separate launch observations and protection records.
+The validator requires each record to match its launch's PID, Linux start time,
+PID namespace and non-dumpable measurement. It requires exactly the named
+launches as well as exactly the named records. Process identities must be unique,
+apart from the bridge and proxy labels, which refer to the same process. A canary
+helper runs in the server container, so its required image is the server image.
+The other non-server groups run in the computer container. The current deployed
+reader returns empty launch and record arrays. It cannot claim a measured set.
+
 The MCP proxy is part of the packaged bridge process, not a separate child.
 `proveComputerProxy` checks its fixed process command and the root entrypoint's
 bridge launch record. The caller must supply the owner-approved computer image

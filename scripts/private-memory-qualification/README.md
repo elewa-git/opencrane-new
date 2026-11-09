@@ -23,7 +23,7 @@ flowchart LR
   server["apps/server<br/>memory preparation"] -->|reads and rechecks results| collector
   collector -.->|checks memory, Stop and reply loss| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
-  collector -->|measures, joins process records and starts checks| docker["Docker<br/>running image and host"]
+  collector -->|measures launches, joins process records and starts checks| docker["Docker<br/>running image and host"]
   docker -->|checks services, Codex and canary helper| deployment["deployment<br/>services and journey runner"]
   collector -->|checks live bridge, supervisor and held proxy calls| computer["computer container<br/>root and native launch records"]
 ```
@@ -48,7 +48,8 @@ flowchart LR
 - Bind the canary journey helper to the supervisor launch record and check its own
   swap, core dump and dumpability controls before and after work.
 - Require one matching set of live process records before a journey and check the
-  same set again before saving a result. A missing or changed group stops collection.
+  same set again before saving a result. Each record must match a measured launch,
+  process namespace and dumpability result. A missing or changed group stops collection.
 - Hold one private Codex turn while checking its wrapper and native child against
   protected launch records and live kernel settings.
 - Save its own result in a protected file and recheck the deployment whenever it is used.

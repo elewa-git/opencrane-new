@@ -19,18 +19,33 @@ const contextSchema = z.strictObject({
   generationId: digest,
   helperIds: z.array(challenge).min(1),
 });
+const processIdentity = {
+  pid: z.number().int().positive(),
+  startTime: z.string().regex(/^[1-9][0-9]*$/u),
+  pidNamespace: z.string().regex(/^pid:\[[1-9][0-9]*\]$/u),
+};
+const launchSchema = z.strictObject({
+  group: z.enum(inventoryGroups),
+  helperId: challenge.optional(),
+  location: z.enum(['server', 'computer']),
+  ...processIdentity,
+  dumpable: z.literal(false),
+});
 const recordSchema = contextSchema.omit({ helperIds: true }).extend({
   group: z.enum(inventoryGroups),
   helperId: challenge.optional(),
   imageDigest: digest,
-  pid: z.number().int().positive(),
-  startTime: z.string().regex(/^[1-9][0-9]*$/u),
+  ...processIdentity,
+  dumpable: z.literal(false),
   safe: z.literal(true),
 });
 
 export type InventoryContext = z.infer<typeof contextSchema>;
 export type ProtectionRecord = z.input<typeof recordSchema>;
+export type TrustedLaunch = z.input<typeof launchSchema>;
+export type InventorySnapshot = { records: unknown; launches: unknown };
 type CheckedRecord = z.output<typeof recordSchema>;
+type CheckedLaunch = z.output<typeof launchSchema>;
 type JoinResult = { ok: true } | { ok: false; group: InventoryCode };
 
 function failure(group: InventoryCode): JoinResult {
@@ -49,8 +64,17 @@ function recordCode(value: unknown): InventoryCode {
   return 'inventory';
 }
 
-function matchesContext(context: InventoryContext, record: CheckedRecord): boolean {
-  const expectedImage = record.group === 'serverDelivery' ?
+function expectedLocation(group: InventoryGroup): 'server' | 'computer' {
+  // The canary is launched by the journey in the server container.
+  if (group === 'serverDelivery' || group === 'canaryHelper') {
+    return 'server';
+  }
+  return 'computer';
+}
+
+function matchesContext(context: InventoryContext, record: CheckedRecord,
+  launch: CheckedLaunch): boolean {
+  const expectedImage = launch.location === 'server' ?
     context.serverImageDigest : context.computerImageDigest;
   return record.serverInstallationId === context.serverInstallationId &&
     record.computerInstallationId === context.computerInstallationId &&
@@ -61,11 +85,32 @@ function matchesContext(context: InventoryContext, record: CheckedRecord): boole
     record.generationId === context.generationId;
 }
 
-function recordKey(record: CheckedRecord): string {
+function recordKey(record: { group: InventoryGroup; helperId?: string | undefined }): string {
   if (record.group === 'canaryHelper') {
     return `canaryHelper:${record.helperId}`;
   }
   return record.group;
+}
+
+function validHelperId(record: { group: InventoryGroup; helperId?: string | undefined }): boolean {
+  if (record.group === 'canaryHelper') {
+    return record.helperId !== undefined;
+  }
+  return record.helperId === undefined;
+}
+
+function sameLaunch(record: CheckedRecord, launch: CheckedLaunch): boolean {
+  return record.pid === launch.pid && record.startTime === launch.startTime &&
+    record.pidNamespace === launch.pidNamespace && record.dumpable === launch.dumpable;
+}
+
+function processKey(record: CheckedRecord): string {
+  return `${record.pidNamespace}:${record.pid}:${record.startTime}`;
+}
+
+function sharedBridgeProcess(first: InventoryGroup, second: InventoryGroup): boolean {
+  return (first === 'bridge' && second === 'proxy') ||
+    (first === 'proxy' && second === 'bridge');
 }
 
 function expectedKeys(context: InventoryContext): Map<string, InventoryGroup> {
@@ -84,31 +129,52 @@ function expectedKeys(context: InventoryContext): Map<string, InventoryGroup> {
 
 function checkedSnapshot(context: InventoryContext, input: unknown):
   Map<string, CheckedRecord> | JoinResult {
-  if (!Array.isArray(input)) {
+  if (input === null || typeof input !== 'object' || Array.isArray(input) ||
+    !('records' in input) || !('launches' in input) ||
+    Object.keys(input).length !== 2 || !Array.isArray(input.records) ||
+    !Array.isArray(input.launches)) {
     return failure('inventory');
   }
   const expected = expectedKeys(context);
+  const launches = new Map<string, CheckedLaunch>();
+  for (const value of input.launches) {
+    const parsed = launchSchema.safeParse(value);
+    if (!parsed.success) {
+      return failure(recordCode(value));
+    }
+    const launch = parsed.data;
+    const key = recordKey(launch);
+    if (!expected.has(key) || launches.has(key) || !validHelperId(launch) ||
+      launch.location !== expectedLocation(launch.group)) {
+      return failure(launch.group);
+    }
+    launches.set(key, launch);
+  }
   const checked = new Map<string, CheckedRecord>();
-  for (const value of input) {
+  const identities = new Map<string, InventoryGroup>();
+  for (const value of input.records) {
     const parsed = recordSchema.safeParse(value);
     if (!parsed.success) {
       return failure(recordCode(value));
     }
     const record = parsed.data;
     const key = recordKey(record);
-    if (!matchesContext(context, record) || !expected.has(key) || checked.has(key)) {
+    const launch = launches.get(key);
+    if (!launch || !matchesContext(context, record, launch) ||
+      !sameLaunch(record, launch) || !expected.has(key) || checked.has(key) ||
+      !validHelperId(record)) {
       return failure(record.group);
     }
-    if (record.group === 'canaryHelper' && record.helperId === undefined) {
+    const identity = processKey(record);
+    const previous = identities.get(identity);
+    if (previous !== undefined && !sharedBridgeProcess(previous, record.group)) {
       return failure(record.group);
     }
-    if (record.group !== 'canaryHelper' && record.helperId !== undefined) {
-      return failure(record.group);
-    }
+    identities.set(identity, record.group);
     checked.set(key, record);
   }
   for (const [key, group] of expected) {
-    if (!checked.has(key)) {
+    if (!checked.has(key) || !launches.has(key)) {
       return failure(group);
     }
   }
@@ -120,10 +186,11 @@ function isFailure(value: Map<string, CheckedRecord> | JoinResult): value is Joi
 }
 
 function sameProcess(first: CheckedRecord, final: CheckedRecord): boolean {
-  return first.pid === final.pid && first.startTime === final.startTime;
+  return first.pid === final.pid && first.startTime === final.startTime &&
+    first.pidNamespace === final.pidNamespace;
 }
 
-  // Compare every required group twice. A PASS can only follow the second live read.
+// Compare every required group twice. A PASS can only follow the second live read.
 export function joinInventory(contextInput: unknown, firstInput: unknown,
   finalInput: unknown): JoinResult {
   const contextResult = contextSchema.safeParse(contextInput);
@@ -151,8 +218,7 @@ export function joinInventory(contextInput: unknown, firstInput: unknown,
   return { ok: true };
 }
 
-// Existing live checks do not yet supply a simultaneous record for all groups.
-// Keep collection closed until the held journey can provide those records.
-export function readCurrentInventory(_context: InventoryContext): unknown {
-  return [];
+// Refuse until the held journey can measure all launches and protected processes together.
+export function readCurrentInventory(_context: InventoryContext): InventorySnapshot {
+  return { records: [], launches: [] };
 }
