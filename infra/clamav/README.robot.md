@@ -386,7 +386,8 @@ last part, it reads the active attempt again, obtains current deployment scanner
 settings, and calls the walk's validation function. It returns only `clean`,
 `infected` or the fixed unavailable result. Missing or changed attempts, expiry,
 cancellation and changed scanner settings refuse. It holds no portable proof.
-`runAndWriteHostedImageCheck` uses the same scan and takes the original attempt
+`runAndWriteHostedImageCheck` claims the original attempt with one conditional
+`mcp.image_scan_claimed` append before preparing image bytes. It uses the same scan and takes the original attempt
 number and three separate check receipts from its trusted caller. It requires a
 complete clean part scan and all
 three receipts. Immediately before one conditional append, it reads the saved
@@ -394,10 +395,10 @@ attempt and scanner settings again and checks every ordered part's proof. It sen
 the private proof from the authenticated image walk, the current clean verdict,
 exact dated malware summary and separate receipts to the existing
 `mcp.image_checked` writer. Test scanner callbacks cannot issue that proof.
-Concurrent deliveries for the same saved
-attempt share one scan. If an append reply is lost before its commit is visible,
-the worker keeps that attempt unresolved and checks for the original saved result
-on later deliveries. It does not scan again while the write is unresolved.
+Concurrent deliveries through separate store wrappers can scan only after one
+claim succeeds. A second worker sees the claim and refuses to scan. If a result
+append reply is lost before its commit is visible, a restarted worker sees the
+claim and waits for the original saved result. It never scans the same attempt again.
 Infected, missing, changed and expired proof cannot
 write a clean result. A failed separate check records rejection rather than
 admission. No production scheduler, image source or separate-check composition

@@ -3083,13 +3083,19 @@ journey: NOT RUN. Fixtures use the pinned gateway and disposable NATS, with no p
 
 ## Hosted image admission receipts
 
-`writeHostedAdmission` records one `mcp.image_checked` per installation attempt.
+`claimHostedImageScan` records one `mcp.image_scan_claimed` before the image worker
+prepares bytes. Its conditional append binds the saved silo, server, image digest,
+platform and attempt. A saved claim without a result prevents a second scan, even
+through another store wrapper or after restart. A lost claim reply also refuses
+another scan. `writeHostedAdmission` records one `mcp.image_checked` per installation attempt.
 Its caller must supply a private proof issued after the authenticated image walk,
 plus a validation function that returns the current clean verdict and the exact
 malware receipt being saved. The writer refuses an absent or invented proof,
 a different receipt, a non-clean verdict and expired proof. It checks these after
 reading history and before its one conditional append. The proof also names the
-same silo, server, attempt, image digest and platform. The proof issuer is not
+same silo, server, attempt, image digest and platform. Only the authenticated
+image walk adds objects to its private proof set. Its checker cannot add an
+object. The proof issuer is not
 a package export; the server cannot import it through `@opencrane/models`.
 It is absent from the main models export. The private image worker imports only
 `@opencrane/models/image-admission-writer`, which exposes this writer. Server code

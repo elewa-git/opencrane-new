@@ -37,6 +37,7 @@ flowchart LR
   read it. Report a conflict when another change came first. For some changes,
   check the whole log position as well as one item's history.
 - Check that saved memory facts belong to the right person or group before saving them.
+- Accept hosted image scan claims and results only from the models system writer.
 - Stop retrying when the caller cancels or its access time limit runs out.
   Repeat the caller's access check before saving when requested.
 - Distinguish a saved change, a definite refusal and an uncertain reply. Keep earlier

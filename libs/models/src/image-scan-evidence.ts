@@ -1,6 +1,7 @@
-const issuedScans = new WeakSet<object>();
+import { hasAuthenticatedImageEvidence as issuedByImageWalk }
+  from '../../../infra/clamav/image-walk.mjs';
 
-type AuthenticatedImageEvidence = {
+export type AuthenticatedImageEvidence = {
   silo: string;
   serverId: string;
   attemptId: number;
@@ -9,15 +10,7 @@ type AuthenticatedImageEvidence = {
   malware: object;
 };
 
-export function retainAuthenticatedImageEvidence<T extends AuthenticatedImageEvidence>(scan: T): T {
-  // Keep this issuer private to the image walk after its authenticated, complete scan.
-  Object.freeze(scan.malware);
-  Object.freeze(scan);
-  issuedScans.add(scan);
-  return scan;
-}
-
 export function hasAuthenticatedImageEvidence(value: unknown):
   value is AuthenticatedImageEvidence {
-  return typeof value === 'object' && value !== null && issuedScans.has(value);
+  return issuedByImageWalk(value);
 }

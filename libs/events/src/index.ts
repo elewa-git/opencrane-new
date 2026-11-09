@@ -115,7 +115,7 @@ export { gatewayEntrySchema, gatewayConfigurationSchema, gatewayObservationSchem
   mcpConfigurationObservationSchema } from './gateway-configuration.ts';
 export { budgetRootAllowanceSetDataSchema, budgetRootStoppedDataSchema } from './budget-root.ts';
 export { hostedImageInstallationSchema, hostedImageCheckedSchema,
-  hostedImageCheckRequestedSchema } from './hosted-image.ts';
+  hostedImageCheckRequestedSchema, hostedImageScanClaimedSchema } from './hosted-image.ts';
 export { departureCleanupCompletedSchema } from './identity-events.ts';
 export { childRequestedDataSchema, childRequestedEventSchema, type ChildRequest }
   from './child-request.ts';

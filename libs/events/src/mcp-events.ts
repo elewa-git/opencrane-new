@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import * as connections from './connections.ts';
-import { hostedImageCheckedSchema, hostedImageCheckRequestedSchema } from './hosted-image.ts';
+import { hostedImageCheckedSchema, hostedImageCheckRequestedSchema,
+  hostedImageScanClaimedSchema } from './hosted-image.ts';
 import { event } from './definition.ts';
 import * as data from './data.ts';
 const DIGEST_EXAMPLE = '0123456789abcdef'.repeat(4);
@@ -11,6 +12,9 @@ const scanReceipt = { ...receipt, databaseDigest: DIGEST_EXAMPLE,
   databaseUpdatedAt: receipt.checkedAt };
 
 export const mcpEvents = [
+  event('mcp.image_scan_claimed', 'mcp', 'Models claimed one hosted image scan attempt.',
+    hostedImageScanClaimedSchema, { serverId: 'mcp_1', attemptId: 1,
+      imageDigest: DIGEST_EXAMPLE, platform: 'linux/amd64' }),
   event('mcp.image_check_requested', 'mcp', 'An admin requested another image check.',
     hostedImageCheckRequestedSchema, { serverId: 'mcp_1', attemptId: 2,
       imageDigest: DIGEST_EXAMPLE, platform: 'linux/amd64',

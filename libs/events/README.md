@@ -139,6 +139,7 @@ The replacement stays encrypted. Older records still parse for recovery, but can
 supply the ownership and revision needed to read a fact.
 
 Hosted image check requests record the exact image, registration and attempt number.
+An image scan claim records which attempt has started before image bytes are prepared.
 They contain no report bytes or credentials and say nothing about passing checks.
 
 Before sending a published tool call, the models process saves a start record with

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { getEventDefinition, hostedImageCheckedSchema, hostedImageCheckRequestedSchema,
+  hostedImageScanClaimedSchema,
   type EventEnvelope } from '@opencrane/events';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { hostedAdmissionSchema } from '@opencrane/protocol';
@@ -14,6 +15,7 @@ type Result = z.infer<typeof hostedImageCheckedSchema>;
 type Admission = z.infer<typeof hostedAdmissionSchema>;
 type MalwareEvidence = Result['checks']['malware'];
 type ValidatedMalwareEvidence = { verdict: 'clean'; malware: MalwareEvidence };
+type ImageScanClaim = z.infer<typeof hostedImageScanClaimedSchema>;
 const day = 86_400_000;
 
 function validDates(result: Result, at: number) {
@@ -125,7 +127,7 @@ function modelsResult(event: EventEnvelope, silo: string, serverId: string) {
     event.subject === `mcp-${serverId}` && event.source === 'models' &&
     event.principal?.kind === 'system' && event.principal.id === 'models';
 }
-function matches(state: Admission, result: Result) {
+function matches(state: Admission, result: ImageScanClaim) {
   return state.serverId === result.serverId && state.attemptId === result.attemptId &&
     state.imageDigest === result.imageDigest && state.platform === result.platform;
 }
@@ -157,6 +159,52 @@ export async function readHostedImageScanAttempt(store: EventStore, silo: string
   return { silo, serverId: admission.serverId, attemptId: admission.attemptId,
     platform: admission.platform, imageDigest: admission.imageDigest,
     status: 'checking' as const };
+}
+
+function scanClaimMatches(event: EventEnvelope, silo: string, claim: ImageScanClaim) {
+  if (event.type !== 'mcp.image_scan_claimed' || event.silo !== silo ||
+      event.subject !== `mcp-${claim.serverId}` || event.source !== 'models' ||
+      event.principal?.kind !== 'system' || event.principal.id !== 'models') return false;
+  const parsed = hostedImageScanClaimedSchema.safeParse(event.data);
+  return parsed.success && same(parsed.data, claim);
+}
+
+function claimAlreadySaved(event: EventEnvelope, silo: string, claim: ImageScanClaim) {
+  if (event.type !== 'mcp.image_scan_claimed' || event.silo !== silo ||
+      event.subject !== `mcp-${claim.serverId}`) return false;
+  const parsed = hostedImageScanClaimedSchema.safeParse(event.data);
+  return parsed.success && parsed.data.attemptId === claim.attemptId;
+}
+
+export async function claimHostedImageScan(store: EventStore, silo: string,
+  rawClaim: unknown) {
+  const parsed = hostedImageScanClaimedSchema.safeParse(rawClaim);
+  if (!parsed.success) return { status: 'unavailable' as const };
+  const claim = parsed.data;
+  const rows = await rowsFor(store, claim.serverId);
+  const state = foldHostedAdmission(rows, silo, claim.serverId);
+  if (!state || !matches(state, claim)) return { status: 'unavailable' as const };
+  if (state.checks) return { status: 'completed' as const };
+  for (const row of rows) {
+    if (claimAlreadySaved(row.event, silo, claim)) {
+      return { status: 'unavailable' as const };
+    }
+  }
+
+  const subject = `mcp-${claim.serverId}`;
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify([silo, subject, 'mcp.image_scan_claimed', claim.attemptId]));
+  const event = envelope(silo, subject, 'mcp.image_scan_claimed', claim, hash.digest('hex'));
+  try {
+    const appended = await store.append({ event, expectedSequence: rows.at(-1)!.sequence });
+    if (appended.status !== 'appended') return { status: 'unavailable' as const };
+    const saved = await store.readEvent(appended.sequence);
+    if (!scanClaimMatches(saved.event, silo, claim)) return { status: 'unavailable' as const };
+    return { status: 'claimed' as const };
+  } catch {
+    // Treat a lost claim reply as claimed by another worker until history proves otherwise.
+    return { status: 'unavailable' as const };
+  }
 }
 
 function matchesScanEvidence(scanEvidence: unknown, result: Result, silo: string) {

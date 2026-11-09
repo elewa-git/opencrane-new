@@ -46,3 +46,10 @@ export const hostedImageCheckRequestedSchema = z.strictObject({
   platform: hostedImageInstallationSchema.shape.platform,
   registrationRevision: z.int().positive(), expectedSequence: z.int().nonnegative(),
 });
+
+export const hostedImageScanClaimedSchema = z.strictObject({
+  serverId: hostedImageCheckedSchema.shape.serverId,
+  attemptId: hostedImageCheckedSchema.shape.attemptId,
+  imageDigest: hostedImageCheckedSchema.shape.imageDigest,
+  platform: hostedImageCheckedSchema.shape.platform,
+});

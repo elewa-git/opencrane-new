@@ -1,1 +1,1 @@
-export { writeHostedAdmission } from './hosted-admission.ts';
+export { claimHostedImageScan, writeHostedAdmission } from './hosted-admission.ts';

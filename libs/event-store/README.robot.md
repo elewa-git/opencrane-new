@@ -36,7 +36,8 @@ conversation as the subject. New group creations allow at most 97 people, includ
 the creator. New participant ids follow the member-id format; stored events keep
 the earlier parsing rules. `commandId` and `principal` are required for
 appends, including an explicit system principal for system commands.
-For `mcp.image_checked`, `validateCommand` requires principal kind `system` and id
+For `mcp.image_checked` and `mcp.image_scan_claimed`, `validateCommand` requires
+principal kind `system` and id
 `models`. Other principals return `rejected/invalid_event` before publishing.
 This checks the event contract; separate process credentials remain issue #432.
 New `memory.written` appends require version 1. These writes and version-1

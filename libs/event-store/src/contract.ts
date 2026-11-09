@@ -104,7 +104,7 @@ export function validateCommand(
 }
 
 function validEventWrite(event: EventEnvelope): boolean {
-  if (event.type === 'mcp.image_checked' &&
+  if ((event.type === 'mcp.image_checked' || event.type === 'mcp.image_scan_claimed') &&
       (event.principal?.kind !== 'system' || event.principal.id !== 'models')) {
     return false;
   }

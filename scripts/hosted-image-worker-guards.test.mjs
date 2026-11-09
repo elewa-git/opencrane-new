@@ -4,7 +4,7 @@ function mockModels() {
   return { readHostedAdmission: vi.fn(), readHostedImageScanAttempt: vi.fn() };
 }
 function mockWriter() {
-  return { writeHostedAdmission: vi.fn() };
+  return { claimHostedImageScan: vi.fn(), writeHostedAdmission: vi.fn() };
 }
 function mockWalk() {
   return { scanHostedImageAttempt: vi.fn() };
@@ -14,7 +14,8 @@ vi.mock('@opencrane/models/image-admission-writer', mockWriter);
 vi.mock('../infra/clamav/image-walk.mjs', mockWalk);
 
 import { readHostedAdmission, readHostedImageScanAttempt } from '@opencrane/models';
-import { writeHostedAdmission } from '@opencrane/models/image-admission-writer';
+import { claimHostedImageScan, writeHostedAdmission }
+  from '@opencrane/models/image-admission-writer';
 import { scanHostedImageAttempt } from '../infra/clamav/image-walk.mjs';
 import { runAndWriteHostedImageCheck, runHostedImageScan }
   from '../infra/clamav/image-worker.mjs';
@@ -40,6 +41,7 @@ function setup() {
   vi.mocked(readHostedAdmission).mockResolvedValue({ attemptId: 1 });
   vi.mocked(readHostedImageScanAttempt).mockResolvedValue(attempt);
   vi.mocked(scanHostedImageAttempt).mockResolvedValue(scanned);
+  vi.mocked(claimHostedImageScan).mockResolvedValue({ status: 'claimed' });
   vi.mocked(writeHostedAdmission).mockResolvedValue({ status: 'appended' });
 }
 beforeEach(setup);
@@ -148,6 +150,8 @@ async function refusesEachMissingReceipt(kind) {
   delete checks[kind];
   readChecks.mockResolvedValue(checks);
   expect((await write()).status).toBe('unavailable');
+  expect(claimHostedImageScan).toHaveBeenCalledTimes(1);
+  expect(scanHostedImageAttempt).toHaveBeenCalledTimes(1);
   expect(writeHostedAdmission).not.toHaveBeenCalled();
 }
 test.each(['signature', 'licence', 'vulnerability'])(

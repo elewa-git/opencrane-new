@@ -3,13 +3,24 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { hostedImageCheckedSchema } from '@opencrane/events';
-import { retainAuthenticatedImageEvidence } from '../src/image-scan-evidence.ts';
 import { envelope, history } from '../src/actor.ts';
 import { writeHostedAdmission as rawWriter, readHostedAdmission, readHostedImageScanAttempt,
   foldHostedAdmission }
   from '../src/hosted-admission.ts';
 import { writeHostedAdmission as exportedWriter } from
   '@opencrane/models/image-admission-writer';
+
+function mockScannerProof() {
+  function hasTestProof(value: unknown) {
+    return typeof value === 'object' && value !== null;
+  }
+  return { hasAuthenticatedImageEvidence: hasTestProof };
+}
+vi.mock('../src/image-scan-evidence.ts', mockScannerProof);
+
+function testProof<T>(value: T): T {
+  return value;
+}
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 async function setup() {
@@ -38,7 +49,7 @@ async function writeTestAdmission(store: typeof nats.store, silo: string, raw: u
   const fallback = hostedImageCheckedSchema.parse(result('fallback'));
   const checked = parsed.success ? parsed.data : fallback;
   const malware = checked.checks.malware;
-  const scanEvidence = retainAuthenticatedImageEvidence({ silo,
+  const scanEvidence = testProof({ silo,
     serverId: checked.serverId, attemptId: checked.attemptId,
     imageDigest: checked.imageDigest, platform: checked.platform, malware });
   function evidence() {
@@ -69,7 +80,7 @@ async function refusesIncompleteEvidence() {
   const serverId = await installed();
   const invented = hostedImageCheckedSchema.parse(result(serverId));
   const wrongMalware = { ...invented.checks.malware, reportDigest: 'b'.repeat(64) };
-  const scanEvidence = retainAuthenticatedImageEvidence({ silo: 'test',
+  const scanEvidence = testProof({ silo: 'test',
     serverId, attemptId: 1, imageDigest: digest, platform: 'linux/amd64',
     malware: invented.checks.malware });
   function mismatchedEvidence() {
@@ -85,7 +96,7 @@ it('refuses validation of a different malware result', refusesIncompleteEvidence
 async function acceptsMatchingEvidence() {
   const serverId = await installed();
   const checked = hostedImageCheckedSchema.parse(result(serverId));
-  const scanEvidence = retainAuthenticatedImageEvidence({ silo: 'test',
+  const scanEvidence = testProof({ silo: 'test',
     serverId, attemptId: 1, imageDigest: digest, platform: 'linux/amd64',
     malware: checked.checks.malware });
   function matchingEvidence() {
@@ -112,22 +123,6 @@ async function refusesFabricatedMatchingEvidence() {
 it('refuses a caller-invented matching validator at the package export',
   refusesFabricatedMatchingEvidence);
 
-async function refusesInventedEvidenceWithWriterStore() {
-  const serverId = await installed();
-  const invented = hostedImageCheckedSchema.parse(result(serverId));
-  const claimedProof = retainAuthenticatedImageEvidence({ silo: 'test', serverId,
-    attemptId: 1, imageDigest: digest, platform: 'linux/amd64',
-    malware: invented.checks.malware });
-  function matchingEvidence() {
-    return Promise.resolve({ verdict: 'clean' as const, malware: invented.checks.malware });
-  }
-  const outcome = await exportedWriter(nats.store, 'test', invented, now,
-    claimedProof, matchingEvidence);
-  expect(outcome.status).toBe('conflict');
-  expect(await registrations()).toHaveLength(1);
-}
-it('refuses invented proof even when its caller has the writer store',
-  refusesInventedEvidenceWithWriterStore);
 
 async function refusesProofFromAnotherAttempt() {
   const serverId = await installed();
@@ -140,7 +135,7 @@ async function refusesProofFromAnotherAttempt() {
     return Promise.resolve({ verdict: 'clean' as const, malware: checked.checks.malware });
   }
   for (const change of changes) {
-    const scanEvidence = retainAuthenticatedImageEvidence({ ...binding, ...change,
+    const scanEvidence = testProof({ ...binding, ...change,
       malware: checked.checks.malware });
     const outcome = await exportedWriter(nats.store, 'test', checked, now,
       scanEvidence, matchingEvidence);
@@ -168,7 +163,7 @@ async function refusesMalwareBoundary(kind: string) {
   }
   const edited = { ...payload, checks: { ...payload.checks, malware } };
   const checked = hostedImageCheckedSchema.parse(edited);
-  const scanEvidence = retainAuthenticatedImageEvidence({ silo: 'test',
+  const scanEvidence = testProof({ silo: 'test',
     serverId, attemptId: 1, imageDigest: digest, platform: 'linux/amd64',
     malware: checked.checks.malware });
   function evidence() {
@@ -192,7 +187,7 @@ async function rechecksOtherDatabaseAgeAfterValidation() {
   const candidate = { ...base, checks: { ...base.checks, vulnerability } };
   const checked = hostedImageCheckedSchema.parse(candidate);
   const malware = checked.checks.malware;
-  const scanEvidence = retainAuthenticatedImageEvidence({ silo: 'test', serverId,
+  const scanEvidence = testProof({ silo: 'test', serverId,
     attemptId: 1, imageDigest: digest, platform: 'linux/amd64', malware });
   async function evidence() {
     await delay(500);

@@ -1,19 +1,10 @@
 import { readHostedAdmission, readHostedImageScanAttempt } from '@opencrane/models';
-import { writeHostedAdmission } from '@opencrane/models/image-admission-writer';
+import { claimHostedImageScan, writeHostedAdmission }
+  from '@opencrane/models/image-admission-writer';
 import { hostedImageCheckedSchema } from '@opencrane/events';
 import { scanHostedImageAttempt } from './image-walk.mjs';
 
 const unavailable = Object.freeze({ verdict: 'unavailable', reasonCode: 'image_scan_unavailable' });
-const activeAttempts = new WeakMap();
-
-function attemptsFor(store) {
-  let attempts = activeAttempts.get(store);
-  if (!attempts) {
-    attempts = new Map();
-    activeAttempts.set(store, attempts);
-  }
-  return attempts;
-}
 
 async function scanCurrentAttempt(store, silo, serverId, prepareImage, readSettings, signal) {
   signal?.throwIfAborted();
@@ -68,11 +59,18 @@ export async function savedResultMatches(store, silo, result) {
 
 // A caller may supply only the three separate image checks. The scanner supplies malware.
 async function writeCurrentImageCheck(store, silo, serverId, attemptId, prepareImage,
-  readSettings, readIndependentChecks, signal, entry) {
+  readSettings, readIndependentChecks, signal) {
   try {
     const saved = await readHostedAdmission(store, silo, serverId);
     if (!saved || saved.attemptId !== attemptId) return { status: 'unavailable' };
-    if (saved?.checks) return { status: 'appended' };
+    signal?.throwIfAborted();
+    if (saved.checks) return { status: 'appended' };
+    const claim = { serverId, attemptId, imageDigest: saved.imageDigest,
+      platform: saved.platform };
+    const ownership = await claimHostedImageScan(store, silo, claim);
+    signal?.throwIfAborted();
+    if (ownership.status === 'completed') return { status: 'appended' };
+    if (ownership.status !== 'claimed') return { status: 'unavailable' };
     const current = await scanCurrentAttempt(store, silo, serverId,
       prepareImage, readSettings, signal);
     if (!current || current.attempt.attemptId !== attemptId ||
@@ -97,11 +95,9 @@ async function writeCurrentImageCheck(store, silo, serverId, attemptId, prepareI
         undefined, current.scanned, validateEvidence);
       if (written.status === 'appended') return { status: 'appended' };
     } catch {
-      // Keep the original result until its uncertain append is visible.
-      entry.uncertainResult = result;
+      // Read the original event once; a later delivery can read it again after a lost reply.
     }
     if (await savedResultMatches(store, silo, result)) {
-      entry.uncertainResult = undefined;
       return { status: 'appended' };
     }
     return { status: 'unavailable' };
@@ -110,46 +106,9 @@ async function writeCurrentImageCheck(store, silo, serverId, attemptId, prepareI
   }
 }
 
-async function recoverUncertainAttempt(store, silo, entry) {
-  try {
-    const matched = await savedResultMatches(store, silo, entry.uncertainResult);
-    if (matched) {
-      entry.uncertainResult = undefined;
-      return { status: 'appended' };
-    }
-  } catch {
-    // A read failure cannot establish whether the original append committed.
-  }
-  return { status: 'unavailable' };
-}
-
-// Share work by the saved attempt, including a write whose reply was lost.
 export function runAndWriteHostedImageCheck(store, silo, serverId, attemptId, prepareImage,
   readSettings, readIndependentChecks, signal) {
   if (signal?.aborted) return Promise.resolve({ status: 'unavailable' });
-  const attempts = attemptsFor(store);
-  const key = JSON.stringify([silo, serverId, attemptId]);
-  let entry = attempts.get(key);
-  if (entry?.pending) return entry.promise;
-
-  if (!entry) {
-    entry = { pending: false, promise: undefined, uncertainResult: undefined };
-    attempts.set(key, entry);
-  }
-  entry.pending = true;
-  if (entry.uncertainResult) {
-    entry.promise = recoverUncertainAttempt(store, silo, entry);
-  } else {
-    entry.promise = writeCurrentImageCheck(store, silo, serverId, attemptId,
-      prepareImage, readSettings, readIndependentChecks, signal, entry);
-  }
-  async function finish() {
-    try {
-      return await entry.promise;
-    } finally {
-      entry.pending = false;
-      if (!entry.uncertainResult) attempts.delete(key);
-    }
-  }
-  return finish();
+  return writeCurrentImageCheck(store, silo, serverId, attemptId,
+    prepareImage, readSettings, readIndependentChecks, signal);
 }

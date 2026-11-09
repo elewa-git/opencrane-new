@@ -715,6 +715,10 @@ It grants no permission. The Ready read remains unbuilt.
 
 ## Hosted image admission receipts
 
+`mcp.image_scan_claimed` names the original server, attempt, image digest and platform.
+It carries no scanner verdict and grants no image use. The worker saves it before
+preparing image bytes so replay and a restarted worker can refuse a second scan.
+
 Defines strict signature, licence, vulnerability and malware receipts in
 `mcp.image_checked`. Pass and fail require reportDigest; fail also requires short
 reasonCodes. Dated verdicts carry checkedAt, expiresAt and engineVersion; scanner

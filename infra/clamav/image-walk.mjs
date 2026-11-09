@@ -6,8 +6,12 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { scanImagePart } from './image-client.mjs';
-import { retainAuthenticatedImageEvidence }
-  from '../../libs/models/src/image-scan-evidence.ts';
+
+const authenticatedScans = new WeakSet();
+
+export function hasAuthenticatedImageEvidence(value) {
+  return typeof value === 'object' && value !== null && authenticatedScans.has(value);
+}
 
 const execute = promisify(execFile);
 const walker = fileURLToPath(new URL('./image-walk.py', import.meta.url));
@@ -173,7 +177,9 @@ export async function scanHostedImageAttempt(attempt, image, settings,
     const checkedResult = { ...result, silo: attempt.silo, serverId: attempt.serverId,
       attemptId: attempt.attemptId, validate };
     if (scanPart === scanImagePart && result.verdict === 'clean' && result.malware) {
-      return retainAuthenticatedImageEvidence(checkedResult);
+      Object.freeze(checkedResult.malware);
+      Object.freeze(checkedResult);
+      authenticatedScans.add(checkedResult);
     }
     return checkedResult;
   } catch {
