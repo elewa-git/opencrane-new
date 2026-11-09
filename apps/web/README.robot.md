@@ -1540,6 +1540,8 @@ starts with a fresh tail. `Workspace` requests `?before=<position>&limit=50` nea
 the top of the transcript. It keeps the prior scroll height and top offset so
 prepending a page leaves the visible message in place. An older-page failure keeps
 the loaded rows and offers a retry. Access refusal clears protected content.
+Each older read owns its scroll snapshot. A late reply from a previous chat cannot
+clear the snapshot saved for the current chat.
 The page shows a small loading row during an older read. `workspace.spec.ts`
 checks both 1280 px and 390 px.
 `npm run visual:chat-tail-window` saves tail and older-page pictures at both

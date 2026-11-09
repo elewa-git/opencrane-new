@@ -7287,6 +7287,7 @@ append, which samples the global event position before the callback. A settings
 change saved after the callback's last OAuth read therefore conflicts with the
 append. An unfinished change refuses preflight. No production settings editor or
 company sender is registered, so company sending remains disabled.
+
 ## Conversation tail pages
 
 `GET /api/conversations/:id/messages?tail=50` returns the newest 50 posted turns

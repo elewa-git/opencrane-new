@@ -1131,6 +1131,7 @@ the completion worker.
 It does not change its review revision, policy revision, tool modes, published
 state or catalogue expiry. The MCP catalogue projection saves the new policy
 sequence and leaves the displayed lifecycle and tool list intact.
+
 ## Conversation window reads
 
 `readConversationWindow` reads the newest posted turns and all their visible reports
