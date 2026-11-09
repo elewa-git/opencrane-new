@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { execFileSync } from 'node:child_process';
-import type { LiveServiceGroup } from './live-inventory-probe.ts';
 
 export const inventoryGroups = [
   'serverDelivery', 'bridge', 'supervisor', 'proxy', 'nativeWrapper',
@@ -8,6 +7,8 @@ export const inventoryGroups = [
 ] as const;
 
 type InventoryGroup = typeof inventoryGroups[number];
+type LiveServiceGroup = Extract<InventoryGroup,
+  'serverDelivery' | 'supervisor' | 'bridge' | 'proxy'>;
 export type InventoryCode = InventoryGroup | 'inventory';
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
