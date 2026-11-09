@@ -104,7 +104,7 @@ async function fixture(shouldRecordConfiguration = true, useSavedVerified = fals
     ownerKind: 'company', connectionId: 'installed', profileRevision,
     generation: 1, accountDigest,
     configurationDigest: oauthConfigurationDigest(selected.configuration),
-    credentialResourceVersion: '1', accountId, scopes: ['openid', 'read'], expiresAt: Date.now() + 120_000 };
+    custodyRecordVersion: '1', accountId, scopes: ['openid', 'read'], expiresAt: Date.now() + 120_000 };
   function readProfile(_rows: StoredEvent[]) {
     return evidence;
   }
@@ -643,8 +643,8 @@ async function custodyChangedBeforePublication(kind: 'deleted' | 'changed') {
   const command = { event, expectedSequence: 0, checkAccess: checkThenChange };
   const appended = await nats.store.append(command);
   expect(appended.status).toBe('appended');
-  expect(company.credentialResourceVersion).toBe('1');
-  await expect(company.confirmCredentialUse(company.credentialResourceVersion))
+  expect(company.custodyRecordVersion).toBe('1');
+  await expect(company.confirmCredentialUse(company.custodyRecordVersion))
     .rejects.toThrow('Routine company unavailable');
 }
 it.each(['deleted', 'changed'] as const)(

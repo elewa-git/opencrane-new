@@ -42,7 +42,7 @@ async function readsSavedVerifiedAccount() {
   expect(result).toEqual({ status: 'verified', siloId, serverId, profileId,
     ownerKind: 'company', connectionId: 'installed', profileRevision: 1,
     generation: 1, accountId: 'company-bot', accountDigest: accountDigest(),
-    credentialResourceVersion: '1',
+    custodyRecordVersion: '1',
     configurationDigest: activation.configurationDigest,
     scopes: account.scopes, expiresAt: account.expiresAt });
   expect(recover).toHaveBeenCalledTimes(1);

@@ -237,7 +237,7 @@ function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyP
   }
   const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
     computerGeneration, configurationDigest: 'a'.repeat(64),
-    credentialResourceVersion: '1', confirmCurrent, confirmCredentialUse };
+    custodyRecordVersion: '1', confirmCurrent, confirmCredentialUse };
   return Promise.resolve(company);
 }
 function compose(options: Options = { enabled: true }) {
@@ -262,7 +262,7 @@ async function assertCounts(threadId = 'native-1') {
   expect(sendAuthorisations).toHaveLength(1);
   expect(sendAuthorisations[0]!.event.data).toMatchObject({
     configurationDigest: 'a'.repeat(64),
-    credentialResourceVersion: '1',
+    custodyRecordVersion: '1',
   });
   const root = actor.state.roots[0]!;
   expect(root).toMatchObject({ payingGroupId: 'sales', allowanceCents: 1000, threadId });
@@ -322,7 +322,7 @@ async function changedCompanyDuringPreparation(kind: 'profile' | 'opt-in') {
       return Promise.resolve();
     }
     const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, configurationDigest: 'a'.repeat(64), credentialResourceVersion: '1',
+      computerGeneration, configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
       confirmCurrent, confirmCredentialUse: syntheticConfirmCredentialUse };
     return Promise.resolve(company);
   }
@@ -364,7 +364,7 @@ async function refusesCompanyChangeAfterAllowance(kind: 'profile' | 'opt-in') {
       return Promise.resolve();
     }
     const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, configurationDigest: 'a'.repeat(64), credentialResourceVersion: '1',
+      computerGeneration, configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
       confirmCurrent, confirmCredentialUse: syntheticConfirmCredentialUse };
     return Promise.resolve(company);
   }
@@ -414,7 +414,7 @@ async function refusesToolPolicyChangeDuringAdmission() {
       if (position !== initialPosition) throw new Error('Tool policy changed');
     }
     return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, configurationDigest: 'a'.repeat(64), credentialResourceVersion: '1',
+      computerGeneration, configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
       confirmCurrent, confirmCredentialUse: syntheticConfirmCredentialUse });
   }
   const composition = compose({ enabled: true, companyPreflight });
@@ -456,7 +456,7 @@ async function refusesCompanyChangeInsideSendAuthorisation() {
       changed = true;
     }
     return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, configurationDigest: 'a'.repeat(64), credentialResourceVersion: '1',
+      computerGeneration, configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
       confirmCurrent, confirmCredentialUse: syntheticConfirmCredentialUse });
   }
   try {
@@ -501,7 +501,7 @@ async function refusesUnfinishedOAuthEditInsideSendAuthorisation() {
       editStarted = true;
     }
     return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, configurationDigest: 'a'.repeat(64), credentialResourceVersion: '1',
+      computerGeneration, configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
       confirmCurrent, confirmCredentialUse: syntheticConfirmCredentialUse });
   }
   try {
@@ -540,7 +540,7 @@ async function refusesCredentialChangeAfterFinalRead(kind: 'deleted' | 'changed'
     }
     return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
       computerGeneration, configurationDigest: 'a'.repeat(64),
-      credentialResourceVersion: '1', confirmCurrent, confirmCredentialUse });
+      custodyRecordVersion: '1', confirmCurrent, confirmCredentialUse });
   }
   const append = nats.store.append.bind(nats.store);
   async function changeBetweenReadAndPublication(...supplied: Parameters<typeof append>) {
