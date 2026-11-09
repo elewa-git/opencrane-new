@@ -92,8 +92,11 @@ the matching silo before and after the work. The shipped recall journey still re
 threads cannot prove that an answer used a stored fact. Missing native files refuse
 both checks. Cleanup checks process start times before signalling and keeps its first
 result, so another cleanup call leaves reused process IDs alone. Memory tool calls
-and live storage checks are still pending. The joined check currently stops the
-journey because the held proxy and native processes do not yet supply records.
+and live storage checks are still pending. The live inventory reader asks the
+server delivery, computer supervisor, bridge and proxy for process identity and
+protection results in their measured containers. It checks Linux start times
+and PID namespaces. The joined check still stops the journey because the
+canary helper and native processes are not held through both inventory reads.
 The server package image does not contain Codex or its launch helpers, so its native
 check refuses. Tests put the qualification scripts into a disposable copy of the
 packaged computer image. They do not change the deployment image.

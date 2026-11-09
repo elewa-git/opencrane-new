@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { checkBridge, checkProxy } from './bridge-check.ts';
 import { checkSupervisor } from './supervisor-check.ts';
 import { checkLiveService, readProcessIdentity, serverIdentity } from './private-processes.ts';
 import { probeInventoryProcess } from './live-inventory-probe.ts';
-import { readCurrentInventory, type InventoryContext } from './joined-inventory.ts';
+import { joinInventory, readCurrentInventory, type InventoryContext } from './joined-inventory.ts';
 
 vi.mock('node:child_process', { spy: true });
 vi.mock('./bridge-check.ts', { spy: true });
@@ -40,7 +41,10 @@ beforeEach(function resetProbes(): void {
   vi.mocked(checkBridge).mockReturnValue({ result: true, pid: 123, startTime: '456' });
   vi.mocked(checkProxy).mockReturnValue({ result: true, pid: 123, startTime: '456' });
   vi.mocked(checkSupervisor).mockReturnValue({ result: true, pid: 1, startTime: '456' });
-  vi.mocked(readProcessIdentity).mockReturnValue(identity);
+  function readIdentity(pid: number): typeof identity {
+    return { ...identity, pid };
+  }
+  vi.mocked(readProcessIdentity).mockImplementation(readIdentity);
 });
 
 function callsRealProbes(): void {
@@ -66,20 +70,21 @@ it('does not report a process whose live protection probe refused', refusesUnpro
 
 function readsBoundContainers(): void {
   const observed: string[] = [];
-  function docker(_binary: unknown, args: unknown): Buffer {
-    const command = args as string[];
-    observed.push(`${command[6]}:${command.at(-1)}`);
+  function docker(_binary: unknown, args: unknown): string {
+    const command = z.array(z.string()).parse(args);
+    observed.push(`${command[11]}:${command.at(-1)}`);
     const group = command.at(-1);
     const pid = group === 'supervisor' ? 1 : 123;
-    return Buffer.from(JSON.stringify({ pid, startTime: '456',
+    return JSON.stringify({ pid, startTime: '456',
       pidNamespace: group === 'serverDelivery' ? 'pid:[4026531836]' : 'pid:[4026531837]',
-      protected: true }));
+      protected: true });
   }
   vi.mocked(execFileSync).mockImplementation(docker);
   const first = readCurrentInventory(context, { serverId, computerId });
   const final = readCurrentInventory(context, { serverId, computerId });
   expect(first.records).toHaveLength(4);
   expect(final.records).toHaveLength(4);
+  expect(joinInventory(context, first, final)).toEqual({ ok: false, group: 'nativeWrapper' });
   expect(observed).toEqual([
     `${serverId}:serverDelivery`, `${computerId}:supervisor`, `${computerId}:bridge`,
     `${computerId}:proxy`, `${serverId}:serverDelivery`, `${computerId}:supervisor`,
@@ -87,3 +92,14 @@ function readsBoundContainers(): void {
   ]);
 }
 it('reads the four live services twice from the bound installation', readsBoundContainers);
+
+function refusesUnmeasuredOutput(): void {
+  function docker(): string {
+    return JSON.stringify({ pid: 123, startTime: '456',
+      pidNamespace: 'pid:[4026531836]', protected: false });
+  }
+  vi.mocked(execFileSync).mockImplementation(docker);
+  expect(() => readCurrentInventory(context, { serverId, computerId })).toThrow();
+  expect(execFileSync).toHaveBeenCalledOnce();
+}
+it('refuses a process without a measured protection result', refusesUnmeasuredOutput);

@@ -324,13 +324,10 @@ it.each([
   refusesChangedLaunchObservation);
 
 function realReaderRefuses(): void {
-  const current = readCurrentInventory(context);
-  expect(current).toEqual({ records: [], launches: [] });
-  expect(joinObservedInventory(context, current, current)).toEqual({
-    ok: false, group: 'serverDelivery',
-  });
+  const invalid = { serverId: 'untrusted', computerId: 'untrusted' };
+  expect(() => readCurrentInventory(context, invalid)).toThrow();
 }
-it('keeps the production reader closed until it measures a live set', realReaderRefuses);
+it('refuses an untrusted container before reading a live process', realReaderRefuses);
 
 function refusesMalformedLaunch(change: Record<string, unknown>, group: string): void {
   const records = completeInventory();
