@@ -251,6 +251,7 @@ async function assertCounts(threadId = 'native-1') {
   expect(await saved('message.posted', `conversation-${conversationId}`)).toHaveLength(1);
   expect(await saved('budget.root_allowance_set', 'budget-test')).toHaveLength(1);
   expect(await saved('routine.run_activation_admitted', 'routine-orders')).toHaveLength(1);
+  expect(await saved('routine.run_send_authorised', 'routine-orders')).toHaveLength(1);
   const root = actor.state.roots[0]!;
   expect(root).toMatchObject({ payingGroupId: 'sales', allowanceCents: 1000, threadId });
   expect(rootTotals(actor.state, root.rootId)).toEqual({
