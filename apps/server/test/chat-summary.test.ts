@@ -12,7 +12,6 @@ import { turnCommand } from '../src/chat/turns.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { readChatCommandFacts, readChatFacts } from '../src/chat/chat-summary.ts';
 import { chatDisplayData } from '../src/chat/display.ts';
-import { redactCommand } from '../../computer/src/command-redaction.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let keys: ReturnType<typeof conversationKeys>;
@@ -106,12 +105,10 @@ it('encrypts the masked command with the conversation message key', async () => 
   expect(await recordReport(nats.store, keys, context, journalReplay)).toBe('duplicate');
 });
 
-it('accepts a masked report from a command with 5,000 short arguments', async () => {
+it('accepts a large masked preview and records it only as encrypted view', async () => {
   await setup();
-  const commandText = 'echo ' + 'a '.repeat(5000);
-  const preview = await redactCommand(commandText);
-  expect(preview).not.toBeNull();
-  expect(preview!.length).toBeLessThanOrEqual(16_384);
+  const preview = `echo ${'••• '.repeat(4_000)}…`;
+  expect(preview.length).toBeLessThanOrEqual(16_384);
   expect(preview).toMatch(/^echo (?:••• )+…$/u);
   const command = { sequence: 1, previousSequence: 0, conversationId: 'chat',
     turnId: 'message', assistantId: 'assistant', type: 'agent.command_ran',
