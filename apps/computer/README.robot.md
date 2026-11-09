@@ -1050,6 +1050,10 @@ Private turns still refuse tools. Memory-free discovery and calls use the proxy 
 
 The image copies only the dependency-free tool text and command label checks from `libs/events`,
 under the repository's AGPL-3.0-or-later licence. It adds no third-party package.
+Command labels use only reviewed program names and simple argument shapes. A help or
+version flag anywhere in the command gives the neutral label. Python gets the script
+label only when its first argument is a `.py` file target, not an option ending in `.py`.
+`test/command-label.test.ts` covers these uncertain shapes.
 The bridge channel test checks that bad tool fields leave the socket open and
 later reports still arrive in order.
 
