@@ -355,6 +355,99 @@ it.each([
   [{ extra: 'untrusted' }, 'nativeChild'],
 ] as const)('refuses malformed measured launch %j', refusesMalformedLaunch);
 
+function refusesPairedInvalidIdentity(field: 'pid' | 'startTime' | 'pidNamespace',
+  value: number | string): void {
+  const records = completeInventory();
+  const changedRecords = records.map(function changeRecord(item): Record<string, unknown> {
+    if (item.group === 'nativeChild') {
+      return { ...item, [field]: value };
+    }
+    return item;
+  });
+  const launches = records.map(function makeLaunch(item): Record<string, unknown> {
+    const launch = measuredLaunch(item);
+    if (item.group === 'nativeChild') {
+      return { ...launch, [field]: value };
+    }
+    return launch;
+  });
+  const snapshot = { records: changedRecords, launches };
+  expect(joinObservedInventory(context, snapshot, snapshot)).toEqual({
+    ok: false, group: 'nativeChild',
+  });
+}
+it.each([
+  ['pid', -1],
+  ['startTime', '01'],
+  ['pidNamespace', 'pid:[0]'],
+] as const)('refuses paired invalid launch and record %s', refusesPairedInvalidIdentity);
+
+function refusesUndumpableLaunch(): void {
+  const records = completeInventory();
+  const launches = records.map(function makeUndumpableLaunch(item): Record<string, unknown> {
+    const launch = measuredLaunch(item);
+    if (item.group === 'nativeChild') {
+      return { ...launch, dumpable: true };
+    }
+    return launch;
+  });
+  const snapshot = { records, launches };
+  expect(joinObservedInventory(context, snapshot, snapshot)).toEqual({
+    ok: false, group: 'nativeChild',
+  });
+}
+it('refuses a dumpable measured launch independently of its process record',
+  refusesUndumpableLaunch);
+
+function refusesUndumpableRecord(): void {
+  const records = completeInventory().map(function makeUndumpableRecord(item): Record<string, unknown> {
+    if (item.group === 'nativeChild') {
+      return { ...item, dumpable: true };
+    }
+    return item;
+  });
+  const launches = completeInventory().map(measuredLaunch);
+  const snapshot = { records, launches };
+  expect(joinObservedInventory(context, snapshot, snapshot)).toEqual({
+    ok: false, group: 'nativeChild',
+  });
+}
+it('refuses a dumpable process record independently of its measured launch',
+  refusesUndumpableRecord);
+
+function refusesUnrequestedHelperLaunch(): void {
+  const snapshot = snapshotFromRecords(completeInventory());
+  const extraLaunch: TrustedLaunch = {
+    group: 'canaryHelper', helperId: '33333333-3333-4333-8333-333333333333',
+    location: 'server', pid: 999, startTime: '9999', pidNamespace: 'pid:[4026531836]',
+    dumpable: false,
+  };
+  const changed = { ...snapshot, launches: [...snapshot.launches, extraLaunch] };
+  expect(joinObservedInventory(context, changed, changed)).toEqual({
+    ok: false, group: 'canaryHelper',
+  });
+}
+it('refuses an extra launch for a helper outside the challenge set',
+  refusesUnrequestedHelperLaunch);
+
+function refusesComputerGroupLaunchedInServerWithEqualImageDigests(): void {
+  const equalDigestContext = { ...context, computerImageDigest: image };
+  const records = completeInventory();
+  const launches = records.map(function launchComputerGroupInServer(item): TrustedLaunch {
+    const launch = measuredLaunch(item);
+    if (item.group === 'supervisor') {
+      return { ...launch, location: 'server' };
+    }
+    return launch;
+  });
+  const snapshot = { records, launches };
+  expect(joinObservedInventory(equalDigestContext, snapshot, snapshot)).toEqual({
+    ok: false, group: 'supervisor',
+  });
+}
+it('refuses a computer group launched in the server when image digests match',
+  refusesComputerGroupLaunchedInServerWithEqualImageDigests);
+
 function refusesDuplicateMeasuredLaunch(): void {
   const snapshot = snapshotFromRecords(completeInventory());
   const duplicate = snapshot.launches.find(function isChild(item): boolean {
