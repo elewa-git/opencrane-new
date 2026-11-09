@@ -2760,7 +2760,7 @@ async function opensPublishedImageLink() {
   const card = capture.root.querySelector('oc-conversation-file-card');
   expect(card?.querySelector('button img')?.getAttribute('src')).toContain('preview=true');
   const reply = capture.root.querySelector('oc-assistant-markdown');
-  expect(reply?.textContent).toContain('Private — not shared by the agent.');
+  expect(reply?.textContent).toContain('private.svg — not shared by the agent.');
   expect(reply?.querySelectorAll('.workspace-file-link')).toHaveLength(1);
   expect(capture.root.textContent).not.toContain('/workspace/artifacts/');
   reply?.querySelector<HTMLButtonElement>('.workspace-file-link')?.click();
