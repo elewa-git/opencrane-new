@@ -414,6 +414,51 @@ async function refusesToolPolicyChangeDuringAdmission() {
 it('refuses a tool policy blocked while activation admission is saved',
   refusesToolPolicyChangeDuringAdmission);
 
+async function refusesCompanyChangeInsideSendAuthorisation() {
+  const append = nats.store.append.bind(nats.store);
+  let authorisingSend = false;
+  let changed = false;
+  async function trackSendAuthorisation(...supplied: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_send_authorised') authorisingSend = true;
+    try {
+      return await append(...supplied);
+    } finally {
+      authorisingSend = false;
+    }
+  }
+  const spy = vi.spyOn(nats.store, 'append');
+  spy.mockImplementation(trackSendAuthorisation);
+  function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+    computerGeneration: number) {
+    async function confirmCurrent() {
+      if (!authorisingSend || changed) return;
+      const blocked = record('send-policy-blocked', 'mcp-send-policy', 'mcp.tool_mode_set', {
+        serverId: 'send-policy', connectionId: 'installed', toolName: 'read',
+        toolRevision: 'a'.repeat(64), mode: 'block', setBy: 'admin',
+      });
+      await nats.seed([blocked]);
+      changed = true;
+    }
+    return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
+      computerGeneration, confirmCurrent });
+  }
+  try {
+    const composition = compose({ enabled: true, companyPreflight });
+    expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+    expect(changed).toBe(true);
+    expect(await saved('routine.run_send_authorised', 'routine-orders')).toEqual([]);
+    function isTurn(frame: Record<string, unknown>) {
+      return frame['type'] === 'turn';
+    }
+    expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
+  } finally {
+    spy.mockRestore();
+  }
+}
+it('refuses a company change inside the conditional send authorisation',
+  refusesCompanyChangeInsideSendAuthorisation);
+
 async function inert(options: { enabled?: boolean; replay?: boolean }) {
   const before = await nats.store.head();
   const wake = vi.fn(forbidden);
