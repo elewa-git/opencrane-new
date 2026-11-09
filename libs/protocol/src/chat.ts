@@ -81,6 +81,7 @@ export const chatRowSchema = z.object({
     approvalId: z.string().optional(),
     messageId: z.string().optional(),
     authorId: z.string().optional(),
+    attachmentIds: z.array(chatIdSchema).optional(),
     closedBy: z.string().optional(),
     conversationId: z.string().optional(),
     publicationKind: z.enum(['final', 'interim']).optional(),

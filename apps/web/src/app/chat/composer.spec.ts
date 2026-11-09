@@ -65,3 +65,43 @@ it('keeps file selection disabled while a message is queued for retry', async ()
   await fixture.whenStable();
   expect([...root.querySelectorAll('button')].find(button => button.textContent?.includes('Upload from computer'))!.disabled).toBe(true);
 });
+
+it('keeps typing available while an attachment uploads and waits on Enter', async () => {
+  const fixture = TestBed.createComponent(ChatComposer);
+  fixture.componentRef.setInput('draft', 'Read this');
+  fixture.componentRef.setInput('busy', true);
+  fixture.componentRef.setInput('waitingForFiles', 'Uploading attachments…');
+  const sent: string[] = [];
+  fixture.componentInstance.submitted.subscribe(text => sent.push(text));
+  await fixture.whenStable();
+  const value: unknown = fixture.nativeElement;
+  if (!(value instanceof HTMLElement)) throw new Error('No composer');
+  const root = value;
+  const field = root.querySelector('textarea')!;
+  expect(field.readOnly).toBe(false);
+  field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  expect(sent).toEqual([]);
+  expect(root.textContent).toContain('Uploading attachments…');
+});
+
+it('sends a ready file without text and lets a refused file be removed', async () => {
+  const fixture = TestBed.createComponent(ChatComposer);
+  fixture.componentRef.setInput('attachments', [
+    { key: 'ready', name: 'notes.txt', fileId: 'file', progress: 100, state: 'ready' },
+    { key: 'refused', name: 'unsafe.pdf', progress: 100, state: 'failed',
+      error: 'File refused: malware detected.' },
+  ]);
+  const sent: string[] = [];
+  const removed: string[] = [];
+  fixture.componentInstance.submitted.subscribe(text => sent.push(text));
+  fixture.componentInstance.attachmentRemoved.subscribe(key => removed.push(key));
+  await fixture.whenStable();
+  const value: unknown = fixture.nativeElement;
+  if (!(value instanceof HTMLElement)) throw new Error('No composer');
+  const root = value;
+  root.querySelector<HTMLButtonElement>('[aria-label="Send message"]')!.click();
+  expect(sent).toEqual(['']);
+  expect(root.textContent).toContain('File refused: malware detected.');
+  root.querySelector<HTMLButtonElement>('[aria-label="Remove unsafe.pdf"]')!.click();
+  expect(removed).toEqual(['refused']);
+});

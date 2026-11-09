@@ -761,12 +761,12 @@ it('uploads with progress, retries the same bytes and key, and replays attached 
   requests[1]!.dispatchEvent(new Event('load'));
   const composer = root.querySelector('textarea')!; composer.value = 'Read it'; composer.dispatchEvent(new Event('input'));
   await new Promise(resolve => setTimeout(resolve, 0)); await fixture.whenStable();
-  expect(root.querySelector<HTMLButtonElement>('[aria-label="Send message"]')!.disabled).toBe(true);
+  expect(root.querySelector<HTMLButtonElement>('[type="submit"]')!.disabled).toBe(true);
 
   socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'event', version: 1, topic: 'conversation', conversationId: 'chat', generation: 1, position: 2,
     row: { id: 'upload', position: 2, type: 'file.uploaded', time: '2026-10-03T10:00:01Z', data: { conversationId: 'chat', fileId: 'file', uploadedBy: 'me', name: 'project.pdf', size: 1024, mime: 'application/pdf' } } }) }));
   await fixture.whenStable();
-  expect(root.querySelector('.transcript .file-card')?.textContent).toContain('project.pdf');
+  expect(root.querySelector('.transcript .file-card')).toBeNull();
   const drawer = root.querySelector('oc-hinge-drawer dialog');
   if (!drawer) throw new Error('Missing panel drawer');
   Object.defineProperty(drawer, 'showModal', { configurable: true, value: openPanelDialog });
@@ -782,11 +782,14 @@ it('uploads with progress, retries the same bytes and key, and replays attached 
   composer.value = 'a'.repeat(32000); composer.dispatchEvent(new Event('input')); await fixture.whenStable();
   root.querySelector<HTMLButtonElement>('[aria-label="Send message"]')!.click();
   await vi.waitFor(() => expect(postedText).toBe('a'.repeat(32000)));
+  expect(root.querySelector('.message.own .file-card')?.textContent).toContain('project.pdf');
+  expect(root.querySelector('.attachment-chip')).toBeNull();
+  expect(root.textContent).not.toContain('Uploaded · Ready');
   await vi.waitFor(() => expect(root.querySelector('h1')?.textContent).toContain('a'.repeat(24)));
 
 });
 
-it('keeps an upload retry in the same draft conversation after creation catch-up fails and a message is sent', async () => {
+it('clears a failed upload chip after sending another message in the same draft conversation', async () => {
   history.replaceState({}, '', '/workspace');
   const created: string[] = []; let failedList = false, messageConversation = '';
   vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
@@ -819,8 +822,8 @@ it('keeps an upload retry in the same draft conversation after creation catch-up
   await vi.waitFor(() => expect(messageConversation).not.toBe(''));
   expect(messageConversation).toBe(created[0]); expect(new Set(created).size).toBe(1);
   await fixture.whenStable();
-  [...root.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Retry upload')!.click();
-  await vi.waitFor(() => expect(opened).toHaveBeenCalledWith('POST', `/api/conversations/${created[0]}/files`));
+  expect(root.textContent).not.toContain('Retry upload');
+  expect(opened).not.toHaveBeenCalled();
 });
 
 function toolRows(): Record<string, unknown>[] {

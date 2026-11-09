@@ -22,7 +22,7 @@ This folder contains the workspace where people talk to their assistant, exchang
 | File | What it does |
 | --- | --- |
 | `workspace.ts`, `workspace.html`, `composer.*` | Draw the assistant workspace, side panel and message box. |
-| `chat-session*.ts`, `chat-state.ts`, `chat-announcement.ts` | Load history, send messages, derive reply status and announce new activity. |
+| `chat-session*.ts`, `chat-state.ts`, `chat-announcement.ts` | Load history, send messages with files, derive reply status and announce new activity. |
 | `direct-chat*.ts`, `direct-chat.html`, `recipient-picker.*` | Handle colleague chats, recipients, participant changes, archives and drafts. |
 | `close-review*` | Review closing and check a saved close with its original request id. |
 | `conversations.*`, `conversations-data.ts`, `read-marker.ts` | Load conversation lists, find saved links and save the read place. |
@@ -115,7 +115,10 @@ The assistant workspace does not yet offer archiving from its header.
 On desktop screens, dropping files onto the conversation or message box starts the
 same upload as Attach. The message box says “Drop files to add them” during a file
 drag, with a polite screen reader announcement. Files upload in order. A failed file
-keeps Retry upload while later files continue. Phones keep Attach.
+keeps its plain reason and Retry upload on a removable chip while later files continue.
+The message box stays open for typing. Send and Enter wait for clean uploads and
+workspace delivery. One saved message holds its text and files together. It can
+contain files without text. Sending clears the chips. Phones keep Attach.
 
 Uploads stay pending while the server prepares the saved file list. The page checks
 again briefly before showing Ready. Leaving the page cancels those checks.

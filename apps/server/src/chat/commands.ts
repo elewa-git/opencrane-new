@@ -3,6 +3,7 @@ import { readEventAt,
   type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { chatIdSchema, groupConversationCommandSchema,
   conversationCreatedDataSchema, getEventDefinition } from '@opencrane/events';
+import { fileUploadedDataSchema } from '@opencrane/events';
 import { participationClosed } from './participation.ts';
 import { chatWrite } from './write-priority.ts';
 import { readChatCommandFacts } from './chat-summary.ts';
@@ -14,6 +15,10 @@ function isUserConversation(conversationId: string) {
 }
 // Verification uses this prefix to keep model audit separate from user conversations.
 const conversationId = id.refine(isUserConversation, 'Reserved conversation prefix');
+function hasMessageContent(input: { text: string; attachmentIds?: string[] | undefined }): boolean {
+  return Boolean(input.text || input.attachmentIds?.length);
+}
+
 export const chatInput = z.union([
   z.object({
     id, conversationId, assistantId: id,
@@ -23,8 +28,9 @@ export const chatInput = z.union([
   z.object({ id, conversationId, mode: z.literal('group'),
     participantIds: z.array(id).min(2).max(97), groupId: id.optional(),
     groupSnapshotPosition: z.int().nonnegative().optional() }).strict(),
-  z.object({ id, conversationId, text: z.string().trim().min(1).max(32_000),
-    executionMode: z.literal('memory_free').optional() }).strict(),
+  z.object({ id, conversationId, text: z.string().trim().max(32_000),
+    attachmentIds: z.array(id).min(1).max(100).optional(),
+    executionMode: z.literal('memory_free').optional() }).strict().refine(hasMessageContent),
   z.object({ id, conversationId, stopTurnId: id }).strict(),
 ]);
 type Input = z.infer<typeof chatInput>;
@@ -59,10 +65,22 @@ function verifyRetry(
   } else if ('stopTurnId' in input) {
     matches = data['turnId'] === input.stopTurnId;
   } else {
-    matches = keys.decrypt(context.silo, input.conversationId, data) === input.text
-      && data['executionMode'] === input.executionMode;
+    matches = sameMessageRetry(data, input, context, keys);
   }
   if (!matches) throw new ChatConflict('Id reused');
+}
+
+function sameMessageRetry(
+  data: Record<string, unknown>,
+  input: Extract<Input, { text: string }>,
+  context: Context,
+  keys: ReturnType<typeof conversationKeys>,
+): boolean {
+  const savedText = keys.decrypt(context.silo, input.conversationId, data);
+  const savedIds = JSON.stringify(data['attachmentIds'] ?? []);
+  const requestedIds = JSON.stringify(input.attachmentIds ?? []);
+  return savedText === input.text && data['executionMode'] === input.executionMode
+    && savedIds === requestedIds;
 }
 
 function verifyCommandIdentity(previous: StoredEvent, input: Input, context: Context) {
@@ -142,6 +160,7 @@ async function saveChatCommand(
   const closed = await participationClosed(store, context.silo, input.conversationId);
   if (closed) throw new ChatConflict('Conversation state conflict');
   validateConversation(facts, input, context.memberId);
+  await verifyInputAttachments(store, context, input);
   if ('stopTurnId' in input) {
     const turn = await readEventAt(store, subject, facts.turnPosition ?? 0,
       performance.now() + 10_000);
@@ -194,9 +213,31 @@ function commandData(input: Input, context: Context, keys: ReturnType<typeof con
   const encrypted = keys.encrypt(context.silo, conversationId, input.text);
   const data = {
     conversationId, authorId: context.memberId, authorKind: 'human', contentType: 'text', ...encrypted,
+    attachmentIds: input.attachmentIds ?? [],
   };
   if (input.executionMode) return { ...data, executionMode: input.executionMode };
   return data;
+}
+
+async function verifyAttachments(
+  store: Store, context: Context, conversationId: string, attachmentIds: string[],
+): Promise<void> {
+  const requested = new Set(attachmentIds);
+  if (requested.size !== attachmentIds.length) throw new ChatConflict('Duplicate attachment');
+  const rows = await chatHistory(store, context.silo, conversationId);
+  for (const row of rows) {
+    if (row.event.type !== 'file.uploaded') continue;
+    const upload = fileUploadedDataSchema.parse(row.event.data);
+    if (upload.conversationId !== conversationId || upload.uploadedBy !== context.memberId
+      || upload.turnId || upload.screenshot) continue;
+    requested.delete(upload.fileId);
+  }
+  if (requested.size) throw new ChatConflict('Attachment unavailable');
+}
+
+async function verifyInputAttachments(store: Store, context: Context, input: Input): Promise<void> {
+  if (!('text' in input) || !input.attachmentIds) return;
+  await verifyAttachments(store, context, input.conversationId, input.attachmentIds);
 }
 
 function validateConversation(facts: { created: StoredEvent | undefined; closed: boolean;

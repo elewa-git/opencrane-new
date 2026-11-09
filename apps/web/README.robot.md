@@ -1130,6 +1130,13 @@ label “Drop files to add them”. The Attach path remains available to keyboar
 `UploadBatch` sends files in order through the existing `ChatSession.upload` flow.
 A failed file keeps its request key for Retry upload while later files continue.
 Leaving the session discards files held for retry.
+The composer shows an upload chip for each selected file. Typing stays available.
+Send and Enter wait for the upload and workspace delivery; a refused chip does not
+hold other files. The saved message command keeps the ready file ids with its text.
+An uncertain message reply checks the same command id before resending. A confirmed
+send removes every chip and the earlier upload status line no longer appears.
+Composer and sent states were captured at 1280 and 390 px with intercepted
+replies in `docs/process/chat-attachments/`. Fresh-install qualification remains NOT RUN.
 `file-drop.spec.ts` checks workspace drag events at the upload request boundary.
 `composer.spec.ts` checks that chats without Attach have no drop controls.
 `workspace.spec.ts` supplies the dialog methods missing from the test browser and

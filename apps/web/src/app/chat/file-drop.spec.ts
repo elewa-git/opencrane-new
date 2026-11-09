@@ -120,6 +120,8 @@ async function uploadsInOrderWithErrors() {
     expect(requests[0]?.file).toBe(unsupported);
   }
   await vi.waitFor(expectSecondFile);
+  expect(root.querySelectorAll('.attachment-chip')).toHaveLength(3);
+  expect(root.textContent).toContain('Waiting to upload…');
   finishUpload(0, 415);
   function expectThirdFile() {
     expect(requests).toHaveLength(2);
@@ -130,13 +132,20 @@ async function uploadsInOrderWithErrors() {
   await fixture.whenStable();
   expect(root.textContent).toContain('File too large. Maximum size is 20 MiB.');
   expect(root.textContent).toContain('File type is unsupported or does not match its contents.');
-  const retryButtons = root.querySelectorAll<HTMLButtonElement>('.upload-status button');
+  function isRetryButton(button: HTMLButtonElement): boolean {
+    return button.textContent?.trim() === 'Retry upload';
+  }
+  const chipButtons = [...root.querySelectorAll<HTMLButtonElement>('.upload-status button')];
+  const retryButtons = chipButtons.filter(isRetryButton);
   expect(retryButtons).toHaveLength(2);
   function expectRetryAvailable() {
     fixture.detectChanges();
     expect(retryButtons[1]?.disabled).toBe(false);
   }
   await vi.waitFor(expectRetryAvailable);
+  await vi.waitFor(() => expect(fixture.componentInstance['chat'].uploadBatch.uploading())
+    .toBe(false));
+  await fixture.whenStable();
   retryButtons[1]!.click();
   function expectRetry() {
     expect(requests).toHaveLength(3);

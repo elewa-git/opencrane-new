@@ -53,7 +53,8 @@
     </span>
     <div class="chat-drop-area" #fileDrop="ocFileDrop"
       [ocFileDrop]="!isClosedConversation() && !reason() && !teamSession() && !chat.busy() && !chat.queued()
-        && !chat.uploadBatch.uploading() && !chat.uploadPending() && !chat.requestedUnavailable()
+        && !chat.uploadBatch.batchRunning() && !chat.uploadBatch.uploading()
+        && !chat.uploadPending() && !chat.requestedUnavailable()
         && !chat.requestedLookupFailed()" (filesDropped)="chat.uploadBatch.send($event)">
     <section class="transcript" #transcript tabindex="0" aria-label="Conversation messages"
       [attr.aria-busy]="chat.loading()" (scroll)="transcriptScrolled()">
@@ -303,26 +304,6 @@
           </div>
         }
       </div>
-      @for (failure of chat.uploadBatch.failures(); track failure.key) {
-        <div class="upload-status" role="status" aria-live="polite">
-          <span>{{ failure.file.name }} · {{ failure.error }}</span>
-          <button type="button" [disabled]="chat.uploadBatch.uploading() || chat.busy() || chat.queued()"
-            (click)="chat.uploadBatch.retry(failure)">Retry upload</button>
-        </div>
-      }
-      @if (chat.uploadBatch.name() && !chat.uploadBatch.error()) {
-        <div class="upload-status" role="status" aria-live="polite">
-          <span>{{ chat.uploadBatch.name() }} ·
-            @if (chat.uploadBatch.uploading()) {
-              {{ chat.uploadBatch.progress() }}% ·
-              {{ chat.uploadBatch.progress() === 100 ? 'Scanning…' : 'Uploading…' }}
-            } @else {
-              Uploaded · {{ chat.uploadPending() ? 'Preparing in your workspace…' : 'Ready' }}
-            }
-          </span>
-          @if (chat.uploadBatch.uploading()) { <progress max="100" [value]="chat.uploadBatch.progress()" aria-label="Upload progress"></progress> }
-        </div>
-      }
         @if (teamSession() && chat.executionMode() === 'memory_free') {
           <oc-shared-state kind="unknown" message="This turn has no earlier context"
             detail="Memory-free turns use local tools and write to the shared computer disk. This mode applies to your next turn."
@@ -330,11 +311,16 @@
         }
       @if (!chat.denied()) {
       <oc-chat-composer [draft]="draft()" [placeholder]="composerPlaceholder()"
+        [attachments]="chat.uploadBatch.chips()" [waitingForFiles]="chat.uploadWaitReason()"
+        [uploadsInProgress]="chat.uploadBatch.batchRunning() || chat.uploadBatch.uploading()"
         [fileDrag]="fileDrop.active()"
         [working]="!!chat.active()"
         [stopping]="chat.active()?.state === 'stopping'"
-        [busy]="(chat.busy() && !chat.stopNotConfirmedFor()) || chat.uploadBatch.uploading() || chat.uploadPending()"
-        (attached)="chat.upload($event)" [reason]="reason()" [queued]="chat.queued()"
+        [busy]="chat.busy() && !chat.stopNotConfirmedFor()"
+        (attached)="chat.uploadBatch.send($event)"
+        (attachmentRemoved)="chat.uploadBatch.remove($event)"
+        (attachmentRetried)="chat.retryUpload($event)"
+        [reason]="reason()" [queued]="chat.queued()"
         [teamSession]="teamSession()" [memoryFree]="chat.executionMode() === 'memory_free'"
         (memoryFreeSelected)="selectMemoryFree()" (privateSelected)="selectPrivate()"
         (draftChange)="draft.set($event)" (submitted)="send($event)"

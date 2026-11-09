@@ -136,6 +136,8 @@ decision rows check `outcome` as allow/ask/deny. Other rows keep their own strin
 values, including saved/kept_existing for delivered uploads. `durationMs` is a
 non-negative integer. Tests parse all older conversation examples, HTTP feeds
 and live delivery messages.
+Message rows may also contain `attachmentIds`, an array of file ids. A missing
+array keeps older messages readable.
 The browser receives these fields through the existing feed and live messages.
 Tool outcomes accept `evidence: dispatch_refused` for a refusal after a saved start and
 before sending. These rows retain `outcome: not_dispatched`.

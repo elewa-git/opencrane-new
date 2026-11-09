@@ -397,6 +397,43 @@ async function keepsChatCommandsSeparateFromInvalidMemoryEvidence() {
 it('allows chat and Stop commands while strict memory reads still reject late evidence',
   keepsChatCommandsSeparateFromInvalidMemoryEvidence);
 
+async function bindsOnlyCleanOwnUploadsToTheMessage() {
+  await setup();
+  const upload = { conversationId: 'chat', fileId: 'clean-file', uploadedBy: 'admin',
+    name: 'notes.txt', size: 5, mime: 'text/plain', sha256: 'a'.repeat(64),
+    objectKey: 'test/chat/clean-file' };
+  const anotherPerson = { ...upload, fileId: 'foreign-file', uploadedBy: 'alice' };
+  const rejected = { conversationId: 'chat', fileId: 'rejected-file',
+    uploadedBy: 'admin', name: 'notes.txt', size: 5, sha256: 'a'.repeat(64),
+    reason: 'infected' };
+  await nats.seed([event('uploaded', 'file.uploaded', upload),
+    event('foreign-upload', 'file.uploaded', anotherPerson),
+    event('rejected-upload', 'file.rejected', rejected)]);
+  const commandContext = { silo: 'test', memberId: 'admin' };
+  const input = { id: 'files-only', conversationId: 'chat', text: '',
+    attachmentIds: ['clean-file'] };
+  const saved = await chatCommand(nats.store, keys, commandContext, input);
+  expect(saved.status).toBe('appended');
+  const rows = await chatHistory(nats.store, 'test', 'chat');
+  const posted = rows.find(row => row.event.id === input.id);
+  expect(posted?.event.data).toMatchObject({ attachmentIds: ['clean-file'] });
+  expect(await chatCommand(nats.store, keys, commandContext, input)).toEqual(saved);
+  const changed = { ...input, attachmentIds: ['other-file'] };
+  await expect(chatCommand(nats.store, keys, commandContext, changed))
+    .rejects.toThrow('Id reused');
+  await expect(chatCommand(nats.store, keys, commandContext, {
+    id: 'foreign-file', conversationId: 'chat', text: '', attachmentIds: ['missing'],
+  })).rejects.toThrow('Attachment unavailable');
+  for (const fileId of ['foreign-file', 'rejected-file']) {
+    const refused = { id: `refused-${fileId}`, conversationId: 'chat', text: '',
+      attachmentIds: [fileId] };
+    await expect(chatCommand(nats.store, keys, commandContext, refused))
+      .rejects.toThrow('Attachment unavailable');
+  }
+}
+it('saves files-only messages with their clean own upload ids and checks retries',
+  bindsOnlyCleanOwnUploadsToTheMessage);
+
 async function refusesAnOldReportId(operation: 'message' | 'stop', warm: boolean) {
   await setup();
   const oldReport = event('old-report', 'agent.output_lost', {

@@ -5,6 +5,7 @@
 The back end for OpenCrane sign-in, conversations and organisation settings.
 It runs as a Node.js service. The website sends it requests to sign in, chat, upload
 files and manage the organisation.
+It checks that files named by a message were scanned clean and uploaded by its sender.
 In the packaged image, the service disables its own process dumps before it starts
 handling private work. It answers a local live protection check for the qualification
 runner. This check does not enable private memory.
@@ -232,7 +233,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|sign-out, requests, Office uploads, survey, persona and scripted welcome reads, Memory setup reads, own and admin routine lists, approval replies and original call status, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|sign-out, messages with file references, Office uploads, survey, persona and scripted welcome reads, Memory setup reads, own and admin routine lists, approval replies and original call status, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks saved membership, company choices and routine admission; prepares allowances; applies Stop, Pause and Retire; verifies termination and settled cost; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
   server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, writer closure and retries, routine sessions, inputs, send authorisations with OAuth digests, cancellations, confirmed results, checked finishes and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]

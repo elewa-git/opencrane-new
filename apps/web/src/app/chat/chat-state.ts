@@ -182,17 +182,21 @@ export function transcript(
   rows: ChatRow[],
   memberId: string,
   stoppingTurnId = '',
+  pendingAttachmentIds?: string[],
 ): Turn[] {
   const turns: Turn[] = [], agents = new Map<string, Turn>(), messages = new Map<string, Map<string, string>>();
   const seen = new Set<string>();
   const lostOutput = new Set<string>();
+  const { uploads, referenced } = messageAttachments(rows, pendingAttachmentIds);
   for (const row of rows) {
     if (seen.has(row.id)) continue;
     seen.add(row.id);
-    if (addStandaloneTurn(row, memberId, turns)) continue;
+    if (addStandaloneTurn(row, memberId, turns, referenced)) continue;
     const data = row.data;
     if (row.type === 'message.posted') {
-      turns.push({ id: row.id, author: data.authorId === memberId ? 'you' : 'person', text: data.text ?? '', time: row.time, state: 'done', tools: [], files: [] });
+      const files = filesForMessage(data.attachmentIds, uploads);
+      turns.push({ id: row.id, author: data.authorId === memberId ? 'you' : 'person',
+        text: data.text ?? '', time: row.time, state: 'done', tools: [], files });
       const agent: Turn = { id: row.id, author: 'agent', text: '', time: row.time, state: 'working', tools: [], files: [] };
       turns.push(agent); agents.set(row.id, agent); messages.set(row.id, new Map());
       continue;
@@ -212,6 +216,27 @@ export function transcript(
   }
   markStoppingTurn(turns, stoppingTurnId);
   return turns;
+}
+
+function messageAttachments(rows: ChatRow[], pendingIds?: string[]) {
+  const uploads = new Map<string, string>();
+  const referenced = new Set(pendingIds);
+  for (const row of rows) {
+    const file = uploadedFile(row);
+    if (file && !row.data.turnId && !file.screenshot) uploads.set(file.fileId, file.path);
+    if (row.type !== 'message.posted') continue;
+    for (const fileId of row.data.attachmentIds ?? []) referenced.add(fileId);
+  }
+  return { uploads, referenced };
+}
+
+function filesForMessage(ids: string[] | undefined, uploads: Map<string, string>): string[] {
+  const files: string[] = [];
+  for (const fileId of ids ?? []) {
+    const path = uploads.get(fileId);
+    if (path) files.push(path);
+  }
+  return files;
 }
 
 function skipStoppedTurnRow(turn: Turn, row: ChatRow): boolean {
@@ -248,10 +273,12 @@ function setBudgetStopState(turn: Turn, time: string): void {
   turn.endedAt = time;
 }
 
-function addStandaloneTurn(row: ChatRow, memberId: string, turns: Turn[]): boolean {
+function addStandaloneTurn(
+  row: ChatRow, memberId: string, turns: Turn[], referenced: Set<string>,
+): boolean {
   const file = uploadedFile(row);
   if (file) {
-    if (row.data.turnId) return true;
+    if (row.data.turnId || referenced.has(file.fileId)) return true;
     turns.push({ id: row.id, author: file.uploadedBy === memberId ? 'you' : 'person',
       text: '', time: row.time, state: 'done', tools: [], files: [file.path] });
     return true;

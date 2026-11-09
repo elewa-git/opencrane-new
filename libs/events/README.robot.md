@@ -14,6 +14,10 @@ append, project or dispatch events. Its routine fold rebuilds facts in memory.
 Old events without a label remain valid. The event still keeps only the command
 digest and exit code; raw command text and output are rejected.
 
+`message.posted` has optional `attachmentIds` with at most 100 file ids. New human
+commands include the field, even when empty. Older events without it still parse.
+The ids carry no file bytes or message text.
+
 `provider.retired` is strict. It stores the connection revision and category
 position, each reviewed old binding position, and one explicit pause or replacement.
 Duplicate dependants, a source other than the retired connection, and a replacement
