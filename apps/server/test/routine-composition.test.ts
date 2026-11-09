@@ -523,7 +523,8 @@ async function refusesUnfinishedOAuthEditInsideSendAuthorisation() {
 it('refuses an unfinished OAuth edit during the guarded send authorisation',
   refusesUnfinishedOAuthEditInsideSendAuthorisation);
 
-async function refusesCredentialChangeAfterFinalRead(kind: 'deleted' | 'changed') {
+async function refusesCredentialChangeAfterFinalRead(
+  kind: 'deleted' | 'changed' | 'deleted-and-access-lost' | 'access-lost') {
   let resourceVersion: string | undefined = '1';
   let changedAfterRead = false;
   let toolCalls = 0;
@@ -552,7 +553,12 @@ async function refusesCredentialChangeAfterFinalRead(kind: 'deleted' | 'changed'
     const checkAccess = command.checkAccess;
     async function checkThenChange() {
       await checkAccess();
-      resourceVersion = kind === 'deleted' ? undefined : '2';
+      if (kind !== 'access-lost') {
+        resourceVersion = kind === 'changed' ? '2' : undefined;
+      }
+      if (kind === 'deleted-and-access-lost' || kind === 'access-lost') {
+        owned = false;
+      }
       changedAfterRead = true;
     }
     return append({ ...command, checkAccess: checkThenChange });
@@ -565,9 +571,14 @@ async function refusesCredentialChangeAfterFinalRead(kind: 'deleted' | 'changed'
     expect(changedAfterRead).toBe(true);
     expect(await saved('routine.run_send_authorised', 'routine-orders')).toHaveLength(1);
     const stops = await saved('routine.run_stop_requested', 'routine-orders');
-    expect(stops).toHaveLength(1);
-    expect(stops[0]!.event.data).toMatchObject({ reason: 'credential_changed' });
-    expect(toolCalls).toBe(0);
+    if (kind === 'access-lost') {
+      expect(stops).toEqual([]);
+      expect(toolCalls).toBe(1);
+    } else {
+      expect(stops).toHaveLength(1);
+      expect(stops[0]!.event.data).toMatchObject({ reason: 'credential_changed' });
+      expect(toolCalls).toBe(0);
+    }
     function isTurn(frame: Record<string, unknown>) {
       return frame['type'] === 'turn';
     }
@@ -576,7 +587,7 @@ async function refusesCredentialChangeAfterFinalRead(kind: 'deleted' | 'changed'
     spy.mockRestore();
   }
 }
-it.each(['deleted', 'changed'] as const)(
+it.each(['deleted', 'changed', 'deleted-and-access-lost', 'access-lost'] as const)(
   'refuses a credential %s after the final read and before publication',
   refusesCredentialChangeAfterFinalRead);
 

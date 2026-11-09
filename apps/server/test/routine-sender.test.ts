@@ -347,6 +347,22 @@ function sender(enabled = true, replay = false) {
   return createRoutineSender({ enabled, replay }, nats.store, keys, worker(), input,
     selection, 'sender-attempt');
 }
+async function missingCompanyConfirmation() {
+  const authority = createRoutineSender({ enabled: true }, nats.store, keys, worker(),
+    input, selection, 'sender-attempt');
+  expect(await authority.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  function isAuthorisation(row: typeof rows[number]) {
+    return row.event.type === 'routine.run_send_authorised';
+  }
+  function isTurn(frame: Record<string, unknown>) {
+    return frame['type'] === 'turn';
+  }
+  expect(rows.filter(isAuthorisation)).toEqual([]);
+  expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
+}
+it('refuses an enabled direct sender without company confirmation',
+  missingCompanyConfirmation);
 async function recordingComputer(computerId = 'computer') {
   if (computerId === 'computer') return preparedComputer;
   return startComputer(computerId);

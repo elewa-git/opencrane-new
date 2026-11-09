@@ -46,6 +46,10 @@ async function readsSavedVerifiedAccount() {
     configurationDigest: activation.configurationDigest,
     scopes: account.scopes, expiresAt: account.expiresAt });
   expect(recover).toHaveBeenCalledTimes(1);
+  expect(recover).toHaveBeenCalledWith(expect.objectContaining({
+    siloId, serverId, profileId, ownerKind: 'company', connectionId: 'installed',
+    generation: 1, endpointDigest: activation.endpointDigest,
+  }), { reference: 'reference', uid: 'uid', resourceVersion: '1' });
 }
 it('reads one saved verified company account through exact custody without upstream calls',
   readsSavedVerifiedAccount);
@@ -57,6 +61,39 @@ async function refusesChangedCustody() {
 }
 it('refuses a company account whose saved credential is no longer in custody',
   refusesChangedCustody);
+
+async function refusesChangedCustodyIdentity(field: 'reference' | 'uid' | 'resourceVersion') {
+  const identity = { reference: 'reference', uid: 'uid', resourceVersion: '1' };
+  identity[field] = 'changed';
+  const recover = vi.fn().mockResolvedValue({ status: 'recovered', identity });
+  const reader = readCurrentCompanyProfile({ recover });
+  await expect(reader(savedRows())).rejects.toThrow('Company profile unavailable');
+}
+it.each(['reference', 'uid', 'resourceVersion'] as const)(
+  'refuses a recovered identity with another %s', refusesChangedCustodyIdentity);
+
+async function refusesSavedUnverifiedProfile() {
+  const rows = savedRows();
+  rows[0]!.event.data = { ...data, activation: { ...activation,
+    reason: 'bearer_create', account: undefined, configurationDigest: undefined } };
+  const recover = vi.fn();
+  const reader = readCurrentCompanyProfile({ recover });
+  await expect(reader(rows)).rejects.toThrow('Company profile unavailable');
+  expect(recover).not.toHaveBeenCalled();
+}
+it('refuses a saved profile before OAuth confirms its account',
+  refusesSavedUnverifiedProfile);
+
+async function refusesExpiredAccount() {
+  const rows = savedRows();
+  rows[0]!.event.data = { ...data, activation: { ...activation,
+    account: { ...account, expiresAt: Date.now() - 1 } } };
+  const recover = vi.fn();
+  const reader = readCurrentCompanyProfile({ recover });
+  await expect(reader(rows)).rejects.toThrow('Company profile unavailable');
+  expect(recover).not.toHaveBeenCalled();
+}
+it('refuses an expired saved account before reading custody', refusesExpiredAccount);
 
 async function refusesMissingProfile() {
   const recover = vi.fn();

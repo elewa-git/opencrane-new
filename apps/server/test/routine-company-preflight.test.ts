@@ -651,6 +651,38 @@ it.each(['deleted', 'changed'] as const)(
   'refuses credential use after a %s between final read and publication',
   custodyChangedBeforePublication);
 
+async function changedUseEvidenceWithoutError() {
+  const current = await fixture();
+  let changed = false;
+  async function readProfile() {
+    const evidence = { ...current.evidence };
+    if (changed) evidence.accountId = 'another-account';
+    return evidence;
+  }
+  const company = await current.preflight(readProfile);
+  changed = true;
+  await expect(company.confirmCredentialUse(company.custodyRecordVersion))
+    .rejects.toThrow('Routine company unavailable');
+}
+it('refuses changed use-time evidence even when the reader succeeds',
+  changedUseEvidenceWithoutError);
+
+async function wrongUseVersion() {
+  const current = await fixture();
+  const company = await current.preflight();
+  await expect(company.confirmCredentialUse('another-version'))
+    .rejects.toThrow('Routine company unavailable');
+}
+it('refuses a use-time version different from the authorised version', wrongUseVersion);
+
+async function missingCustodyVersion() {
+  const current = await fixture();
+  Object.assign(current.evidence, { custodyRecordVersion: '' });
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+}
+it('requires a non-empty credential version before company preflight succeeds',
+  missingCustodyVersion);
+
 async function staleGrant() {
   const current = await fixture();
   const company = await current.preflight();
