@@ -138,7 +138,7 @@ async function setup() {
   }
   const shared = { silo: 'test', store: nats.store, db, feed, binding: auth.binding };
   const objects = new Client({ endPoint: '127.0.0.1' });
-  app = buildServer(config, { audit: shared, memory: shared,
+  app = buildServer(config, { audit: shared, memory: shared, memberReads: shared,
     files: { ...shared, objects, scan: unusedScan } });
   function captureErrors(request: FastifyRequest) {
     function recordError(...args: unknown[]) {
@@ -670,6 +670,12 @@ it('keeps one row for a pending night and its result, without granting a reader 
   expect(owner.rows[0]?.id).toBe('night-refused');
   expect(owner.rows[0]?.records[0]?.maintenanceAction).toBe('refused');
   expect(owner.rows[0]?.outcome).toBe('not_dispatched');
+  const overviewReply = await app.inject({ url: '/api/org/overview', headers: headers('owner') });
+  expect(overviewReply.statusCode, overviewReply.body).toBe(200);
+  const overview = z.object({ rows: z.array(z.object({ source: z.string(), id: z.string() })) })
+    .parse(overviewReply.json());
+  const memoryTasks = overview.rows.filter(isMemoryTask);
+  expect(memoryTasks.map(task => task.id)).toEqual(['night-refused']);
   const foreign = await list('guest', '?type=memory');
   expect(foreign.statusCode).toBe(403);
   const link = owner.rows[0]?.records[0]?.taskHref;
@@ -683,3 +689,7 @@ it('keeps one row for a pending night and its result, without granting a reader 
   expect((await list('admin', '?type=memory')).statusCode).toBe(403);
   expect((await detail('admin', 'night-refused')).statusCode).toBe(403);
 });
+
+function isMemoryTask(row: { source: string }): boolean {
+  return row.source === 'memory';
+}

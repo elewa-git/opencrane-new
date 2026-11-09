@@ -172,7 +172,7 @@ async function loadOverview(options: ReadOptions, deadline: number): Promise<Ove
       WHERE silo = $1 ORDER BY server_id LIMIT 51`, integrationRow);
   const memory = loadSource('memory', options.db, silo, head, deadline,
     `SELECT event_id, position, recorded_at, metadata FROM audit_entries
-      WHERE silo = $1 AND event_type = 'memory.maintenance_recorded'
+      WHERE silo = $1 AND event_type = 'memory.maintenance_recorded' AND anchor = TRUE
       ORDER BY position DESC LIMIT 51`, memoryRow);
   let spending: Promise<OverviewSource>;
   if (options.modelDb) {
