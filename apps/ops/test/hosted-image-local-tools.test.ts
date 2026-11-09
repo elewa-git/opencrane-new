@@ -189,6 +189,8 @@ async function exerciseLocalTools(badSignature: boolean, staleDatabase = false,
       { ...currentAttempt, imageDigest: 'd'.repeat(64) },
       { ...currentAttempt, platform: 'linux/arm64' },
     ];
+    await expect(canceledInputs.prepareImage(wrongAttempts[1])).rejects.toThrow(
+      'Trusted image inputs unavailable');
     for (const wrongAttempt of wrongAttempts) {
       await expect(canceledInputs.readIndependentChecks(wrongAttempt)).rejects.toThrow(
         'Trusted image inputs unavailable');

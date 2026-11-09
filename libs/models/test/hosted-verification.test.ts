@@ -1,10 +1,10 @@
 import { createHash, generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { beforeAll, expect, it } from 'vitest';
+import { beforeAll, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { hostedImageCheckedSchema } from '@opencrane/events';
 import { verifyHostedImage, currentHostedVerification } from '../src/hosted-verification.ts';
@@ -16,6 +16,22 @@ const keys = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 const publicKey = publicPem(keys.publicKey);
 const otherKeys = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 const execute = promisify(execFile);
+const cosignReplacement = vi.hoisted(() => ({ source: '', replaced: false }));
+vi.mock('node:fs/promises', async function mockCosignRead(importOriginal) {
+  const original = await importOriginal<typeof import('node:fs/promises')>();
+  async function readFileWithReplacement(...args: Parameters<typeof original.readFile>) {
+    const bytes = await original.readFile(...args);
+    const path = args[0];
+    if (typeof path === 'string' && path.endsWith('/cosign') &&
+      !path.includes('hosted-signature-') && path === cosignReplacement.source &&
+      !cosignReplacement.replaced) {
+      cosignReplacement.replaced = true;
+      await original.writeFile(path, '#!/bin/sh\nexit 1\n', { mode: 0o700 });
+    }
+    return bytes;
+  }
+  return { ...original, readFile: readFileWithReplacement };
+});
 
 function publicPem(key: KeyObject) {
   const exported = key.export({ type: 'spki', format: 'pem' });
@@ -151,6 +167,23 @@ async function forgedSuccessCannotVerifySignature() {
   }
 }
 it('does not trust a forged Cosign success string', forgedSuccessCannotVerifySignature);
+
+async function runsCheckedCosignAfterOriginalPathChanges() {
+  const directory = await mkdtemp(join(tmpdir(), 'hosted-cosign-replaced-'));
+  const source = join(directory, 'cosign');
+  try {
+    await copyFile(cosign, source);
+    cosignReplacement.source = source;
+    cosignReplacement.replaced = false;
+    const image = fixture();
+    expect(await image.verify(source)).toMatchObject({ verdict: 'pass' });
+    expect(cosignReplacement.replaced).toBe(true);
+  } finally {
+    cosignReplacement.source = '';
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+it('runs the checked Cosign copy after the supplied path changes', runsCheckedCosignAfterOriginalPathChanges);
 
 const signatureFailures = ['unsigned', 'wrong_key', 'wrong_subject', 'wrong_repository',
   'revoked', 'scope', 'malformed', 'installer_key'];

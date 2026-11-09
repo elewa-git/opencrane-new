@@ -96,6 +96,10 @@ async function inspect<Extra = never>(mode = 'allowed', fault = '',
     scannerReplacement.path = syft;
     scannerReplacement.replaced = false;
   }
+  if (fault === 'forged-scanner') {
+    syft = join(directory, 'forged-syft');
+    await writeFile(syft, `#!/bin/sh\ntouch "${syft}.called"\nexit 1\n`, { mode: 0o700 });
+  }
   if (verificationFailures.includes(fault)) {
     syft = join(directory, 'must-not-scan');
     await writeFile(syft, '#!/bin/sh\ntouch "$0.called"\nexit 1\n', { mode: 0o700 });
@@ -112,6 +116,9 @@ async function inspect<Extra = never>(mode = 'allowed', fault = '',
     }
     if (fault === 'replaced-scanner') {
       expect(scannerReplacement.replaced).toBe(true);
+      expect(existsSync(`${syft}.called`)).toBe(false);
+    }
+    if (fault === 'forged-scanner') {
       expect(existsSync(`${syft}.called`)).toBe(false);
     }
     return result;
@@ -194,6 +201,10 @@ it.each(['allowed', 'debian', 'deleted'])(
 it('runs the verified Syft bytes when its original path changes', async () => {
   const result = await inspect('allowed', 'replaced-scanner');
   expect(result.verdict).toBe('pass');
+});
+it('refuses a forged Syft file that is present before it is read', async () => {
+  const result = await inspect('allowed', 'forged-scanner');
+  expect(result).toEqual({ verdict: 'unavailable', reasonCode: 'scanner_unavailable' });
 });
 async function rejectsLicence(mode: string) {
   expect(await inspect(mode)).toEqual({ verdict: 'fail', reasonCode: 'licence_refused' });
