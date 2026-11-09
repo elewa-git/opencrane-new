@@ -15,7 +15,7 @@ workers, starts and pauses computers in [Kubernetes](../../GLOSSARY.md#kubernete
 
 ```mermaid
 flowchart LR
-  apps["apps<br/>applications"] --> computer["apps/computer<br/>bridge and reviewed command display"]
+  apps["apps<br/>applications"] --> computer["apps/computer<br/>bridge and command preparation"]
   apps --> ops["apps/ops<br/>background workers"]
   apps --> server["apps/server<br/>back end"]
   ops -->|starts and pauses| computer
@@ -47,9 +47,9 @@ The computer saves that confirmation without private reply text.
 - Gives recognised command activity a short plain label before reporting it. Unknown
   or uncertain commands get a neutral label. Arguments and output stay out of activity reports.
 - Can prepare a simple command for a future private view. It shows a reviewed program
-  name, a few reviewed command words and plain file paths under `/workspace`. It hides
-  every other word, including flags, their values and paths after a flag.
-  Commands it cannot read produce no text. This text is not yet sent or shown to members.
+  name and a few reviewed command words. It hides every other word, including flags,
+  their values and all file paths. Commands with unusual whitespace or control
+  characters produce no text. This text is not yet sent or shown to members.
 - Disables bridge process dumps before it receives private work. The bridge answers
   a local protection check inside its computer container. The root entrypoint records
   the bridge process it started so later checks can reject a replacement child.

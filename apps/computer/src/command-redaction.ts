@@ -11,16 +11,27 @@ const reviewedSubcommands = new Map<string, readonly (readonly string[])[]>([
   ['npm', [['install'], ['run'], ['test']]],
   ['pip', [['install']]],
   ['pip3', [['install']]],
-  ['python3', [['-m', 'pip'], ['-m', 'venv'], ['-m', 'pytest'], ['-m', 'unittest']]],
 ]);
 const assignmentName = /^[A-Za-z_][A-Za-z_0-9]*=/u;
-const unsafeShellSyntax = /[;&|<>$`\\\r\n\0]/u;
+const unsafeShellSyntax = /[;&|<>$`\\]/u;
+const whitespace = /\s/u;
 const ruleConfig = {
   rules: [{ id: '@secretlint/secretlint-rule-preset-recommend', rule: recommendedRules }],
 };
 
 function hasUnsupportedSyntax(command: string): boolean {
-  return !command || command.length > 16_384 || unsafeShellSyntax.test(command);
+  if (!command || command.length > 16_384 || unsafeShellSyntax.test(command)) return true;
+
+  // Accept only spaces and tabs as separators. Other whitespace and control
+  // characters may form a single private shell argument or change its meaning.
+  for (const character of command) {
+    if (character === ' ' || character === '\t') continue;
+    if (whitespace.test(character)) return true;
+    const characterCode = character.charCodeAt(0);
+    if (characterCode < 0x20) return true;
+    if (characterCode >= 0x7f && characterCode <= 0x9f) return true;
+  }
+  return false;
 }
 
 function completeWords(
@@ -67,7 +78,7 @@ function parseSimpleWords(command: string): string[] | null {
       started = true;
       continue;
     }
-    if (/\s/u.test(character)) {
+    if (character === ' ' || character === '\t') {
       if (started) words.push(word);
       word = '';
       started = false;
@@ -100,17 +111,6 @@ function matchingSubcommandLength(program: string, argumentsAfterProgram: string
   return longestMatch;
 }
 
-function isPlainWorkspacePath(word: string): boolean {
-  if (!word.startsWith('/workspace/')) return false;
-  if (word.includes('=') || word.includes(':')) return false;
-
-  const pathParts = word.split('/');
-  for (const part of pathParts) {
-    if (part === '.' || part === '..') return false;
-  }
-  return true;
-}
-
 function maskArguments(words: string[]): string | null {
   let programIndex = 0;
   while (programIndex < words.length) {
@@ -130,7 +130,6 @@ function maskArguments(words: string[]): string | null {
   }
   masked.push(program);
 
-  let unreviewedFlagSeen = false;
   for (const [index, word] of argumentsAfterProgram.entries()) {
     if (word.startsWith('#')) return null;
 
@@ -139,12 +138,6 @@ function maskArguments(words: string[]): string | null {
       continue;
     }
 
-    // Hide later paths because an unreviewed flag may use one as its value.
-    if (word.startsWith('-')) unreviewedFlagSeen = true;
-    if (!unreviewedFlagSeen && isPlainWorkspacePath(word)) {
-      masked.push(word);
-      continue;
-    }
     masked.push(hidden);
   }
 
@@ -152,15 +145,11 @@ function maskArguments(words: string[]): string | null {
 }
 
 function hasHighEntropyWord(command: string): boolean {
-  const visibleWords = command.split(/\s+/u);
+  const visibleWords = command.split(' ');
   for (const visibleWord of visibleWords) {
-    // Separate path parts so ordinary folder names do not add up to a false secret.
-    const parts = isPlainWorkspacePath(visibleWord) ? visibleWord.split('/') : [visibleWord];
-    for (const part of parts) {
-      const candidates = part.match(/[A-Za-z0-9_+/=-]{20,}/gu) ?? [];
-      for (const candidate of candidates) {
-        if (hasHighEntropy(candidate)) return true;
-      }
+    const candidates = visibleWord.match(/[A-Za-z0-9_+/=-]{20,}/gu) ?? [];
+    for (const candidate of candidates) {
+      if (hasHighEntropy(candidate)) return true;
     }
   }
   return false;
@@ -188,8 +177,8 @@ async function passesRuleScan(command: string): Promise<boolean> {
   return result.messages.length === 0;
 }
 
-// Show only reviewed command words and plain workspace paths. Scan that small
-// result once more before it can leave the computer.
+// Show only reviewed command words. Scan that small result once more before
+// it can leave the computer.
 export async function redactCommand(command: string): Promise<string | null> {
   const words = parseSimpleWords(command);
   if (!words) return null;

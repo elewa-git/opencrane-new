@@ -1061,15 +1061,16 @@ version flag anywhere in the command gives the neutral label. Python gets the sc
 label only when its first argument is a `.py` file target, not an option ending in `.py`.
 `test/command-label.test.ts` covers these uncertain shapes.
 `src/command-redaction.ts` prepares a private command shape inside the computer.
-It shows a reviewed program name, a reviewed subcommand at the start, and plain
-file paths under `/workspace`. Git shows `clone`, `status` or `log`; npm shows
-`install`, `run` or `test`; pip and pip3 show `install`; Python 3 shows `-m`
-only with a reviewed module name (`pip`, `venv`, `pytest` or `unittest`).
-Every other word, including all other flags and their values, becomes `•••`.
-Workspace paths with `=`, `:`, `.` or `..` path parts are hidden. Paths after an
-unreviewed flag are also hidden because they could be that flag's value.
+It shows a reviewed program name and reviewed subcommand words at the start.
+Git shows `clone`, `status` or `log`; npm shows `install`, `run` or `test`;
+pip and pip3 show `install`. Every other word becomes `•••`, including all
+flags, Python module names and paths under `/workspace`. A path-shaped argument
+may be a search pattern or another private value, so its position alone does
+not make it safe to show.
+Only ASCII spaces and tabs separate words. Other whitespace, a byte order mark
+or a control character anywhere in the command gives no command text.
 The visible text is checked with Secretlint's MIT-licensed recommended rules and
-a high-entropy check on each visible word or path part. Unbalanced quotes, shell operators,
+a high-entropy check on each visible word. Unbalanced quotes, shell operators,
 pipes, parentheses, here-documents and unknown programs give no command text.
 The leak corpus and an OSI licence check cover this preparation. No report, event or
 screen uses its output
