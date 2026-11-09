@@ -124,7 +124,8 @@ async function changedDuringWork(): Promise<void> {
 it('refuses changed protection after awaited work without switching paths', changedDuringWork);
 async function changedBeforeReceipt(): Promise<void> {
   vi.mocked(probeHost).mockReturnValue(false);
-  vi.mocked(probeContainer).mockReturnValueOnce(true).mockReturnValue('helper_unavailable');
+  vi.mocked(probeContainer).mockReturnValueOnce(true);
+  vi.mocked(probeContainer).mockReturnValue('helper_unavailable');
   vi.mocked(probePrivateProcessInventory).mockReturnValue(true);
   expect(await runJourney(JSON.stringify(request))).toEqual({
     result: 'FAIL', reason: 'host_refused', protectionFailure: 'helper_unavailable',
@@ -181,7 +182,8 @@ it('checks the supervised canary helper before and after a journey result',
   checksCanaryHelperAroundResult);
 
 async function refusesCanaryHelperUnsafeAtFinalRead(): Promise<void> {
-  vi.mocked(proveCanaryHelper).mockReturnValueOnce(true).mockReturnValue('process_dumpable');
+  vi.mocked(proveCanaryHelper).mockReturnValueOnce(true);
+  vi.mocked(proveCanaryHelper).mockReturnValue('process_dumpable');
   const result = await runJourney(JSON.stringify({ ...request, name: 'persistence' }));
   expect(result).toEqual({ result: 'FAIL', reason: 'host_refused',
     protectionFailure: 'process_dumpable', complete: false });

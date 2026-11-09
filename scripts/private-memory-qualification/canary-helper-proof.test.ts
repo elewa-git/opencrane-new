@@ -85,6 +85,42 @@ it.each([
   ['commandLine', '/usr/local/bin/node\0/private/other.mjs\0'],
 ] as const)('refuses a wrong helper %s', changedBinding);
 
+function refusesUnsupervisedIdentity(target: 'helper' | 'supervisor',
+  field: string, value: string | number): void {
+  let changedHelper = helper;
+  let changedSupervisor = supervisor;
+  if (target === 'helper') {
+    changedHelper = { ...helper, [field]: value };
+  } else {
+    changedSupervisor = { ...supervisor, [field]: value };
+  }
+  const candidate: CanaryHelperBinding = {
+    ...binding, helper: changedHelper, supervisor: changedSupervisor,
+  };
+  function readCandidate(pid: number): ProcessIdentity {
+    if (pid === changedHelper.pid) {
+      return changedHelper;
+    }
+    return changedSupervisor;
+  }
+  vi.mocked(readProcessIdentity).mockImplementation(readCandidate);
+  expect(proveCanaryHelper(candidate, currentInstallation)).toBe(
+    'private_process_identity_changed');
+}
+it.each([
+  ['helper', 'pid', process.pid + 1000],
+  ['supervisor', 'pid', process.ppid + 1000],
+  ['helper', 'uid', 1000],
+  ['supervisor', 'uid', 1000],
+  ['helper', 'executable', '/other/node'],
+  ['supervisor', 'executable', '/other/node'],
+  ['helper', 'commandLine', '/usr/local/bin/node\0/private/other.mjs\0'],
+  ['supervisor', 'commandLine', '/other/command\0'],
+  ['helper', 'cgroup', '0::/foreign\n'],
+  ['helper', 'containerIdentity', 'pid:[999]'],
+] as const)('checks the preliminary supervised %s %s independently',
+  refusesUnsupervisedIdentity);
+
 function wrongInstallation(): void {
   observed = { imageDigest: `sha256:${'c'.repeat(64)}`, installationId };
   expect(proveCanaryHelper(binding, currentInstallation)).toBe(
@@ -100,12 +136,13 @@ function badProtection(result: 'process_dumpable' | 'core_limit_not_zero' |
   if (result === 'swap_not_disabled') {
     vi.mocked(probeContainer).mockReturnValue(result);
   } else if (result === 'core_limit_not_zero') {
-    vi.mocked(readFileSync).mockImplementation(function nonzero(path): string {
+    function nonzero(path: unknown): string {
       if (path === `/proc/${helper.pid}/limits`) {
         return 'Max core file size        1        1        bytes\n';
       }
       return readProc(path);
-    });
+    }
+    vi.mocked(readFileSync).mockImplementation(nonzero);
   } else {
     vi.mocked(runnerProtected).mockReturnValue(result);
   }
@@ -115,57 +152,79 @@ it.each(['process_dumpable', 'core_limit_not_zero', 'swap_not_disabled'] as cons
   'refuses %s in the helper itself', badProtection);
 
 function unreadableOrGone(): void {
-  vi.mocked(readFileSync).mockImplementation(function denied(): never {
+  function denied(): never {
     throw new Error('private arguments and canary bytes');
-  });
+  }
+  vi.mocked(readFileSync).mockImplementation(denied);
   expect(proveCanaryHelper(binding, currentInstallation)).toBe('private_process_unreadable');
-  vi.mocked(readProcessIdentity).mockImplementation(function gone(): never {
+  function gone(): never {
     throw new Error('private arguments and canary bytes');
-  });
+  }
+  vi.mocked(readProcessIdentity).mockImplementation(gone);
   expect(proveCanaryHelper(binding, currentInstallation)).toBe('private_process_unreadable');
 }
 it('returns a fixed reason for unreadable proc values and a disappearing helper',
   unreadableOrGone);
 
 function replacementAtFinalRead(): void {
-  vi.mocked(readProcessIdentity).mockImplementation(function replaced(pid): ProcessIdentity {
+  function replaced(pid: number): ProcessIdentity {
     if (pid === helper.pid && helperReads++ > 0) {
       return { ...helper, startTime: '999' };
     }
     return pid === helper.pid ? helper : supervisor;
-  });
+  }
+  vi.mocked(readProcessIdentity).mockImplementation(replaced);
   expect(proveCanaryHelper(binding, currentInstallation)).toBe(
     'private_process_identity_changed');
 }
 it('refuses helper replacement after the first snapshot', replacementAtFinalRead);
 
+function supervisorReplacementAfterFirstSnapshot(): void {
+  let supervisorReads = 0;
+  function readWithReplacement(pid: number): ProcessIdentity {
+    if (pid === supervisor.pid && supervisorReads++ > 0) {
+      return { ...supervisor, startTime: '999' };
+    }
+    return pid === helper.pid ? helper : supervisor;
+  }
+  vi.mocked(readProcessIdentity).mockImplementation(readWithReplacement);
+  expect(proveCanaryHelper(binding, currentInstallation)).toBe(
+    'private_process_identity_changed');
+}
+it('refuses supervisor replacement after the first snapshot',
+  supervisorReplacementAfterFirstSnapshot);
+
 function unsafeAtFinalRead(): void {
-  vi.mocked(runnerProtected).mockReturnValueOnce(true).mockReturnValue('process_dumpable');
+  vi.mocked(runnerProtected).mockReturnValueOnce(true);
+  vi.mocked(runnerProtected).mockReturnValue('process_dumpable');
   expect(proveCanaryHelper(binding, currentInstallation)).toBe('process_dumpable');
 }
 it('refuses a helper that becomes dumpable at the final read', unsafeAtFinalRead);
 
 function thrownHelperCall(): void {
-  vi.mocked(runnerProtected).mockImplementation(function throws(): never {
+  function throws(): never {
     throw new Error('private arguments and canary bytes');
-  });
+  }
+  vi.mocked(runnerProtected).mockImplementation(throws);
   expect(proveCanaryHelper(binding, currentInstallation)).toBe('private_process_unreadable');
 }
 it('does not expose a thrown helper call', thrownHelperCall);
 
 function malformedProcValue(): void {
-  vi.mocked(readFileSync).mockImplementation(function malformed(path): string {
+  function malformed(path: unknown): string {
     if (path === `/proc/${helper.pid}/status`) {
       return 'CoreDumping:\tprivate arguments and canary bytes\n';
     }
     return readProc(path);
-  });
+  }
+  vi.mocked(readFileSync).mockImplementation(malformed);
   expect(proveCanaryHelper(binding, currentInstallation)).toBe('process_dumpable');
 }
 it('does not expose an unreadable core-dump value', malformedProcValue);
 
 function changedAtFinalProtection(): void {
-  vi.mocked(probeContainer).mockReturnValueOnce(true).mockReturnValue('swap_not_disabled');
+  vi.mocked(probeContainer).mockReturnValueOnce(true);
+  vi.mocked(probeContainer).mockReturnValue('swap_not_disabled');
   expect(proveCanaryHelper(binding, currentInstallation)).toBe('swap_not_disabled');
 }
 it('refuses swap allowance or use found on the final check', changedAtFinalProtection);
@@ -179,7 +238,7 @@ async function savedLaunchRecord(): Promise<void> {
     `${supervisor.pid} ${supervisor.startTime} ${imageDigest} ${installationId}\n`;
   const request = { challengeId, imageDigest, installationId };
   let unsafeRecord = false;
-  vi.mocked(lstatSync).mockImplementation(function recordStat(path) {
+  function recordStat(path: unknown): ReturnType<typeof lstatSync> {
     const info = actual.lstatSync('/proc/self/stat');
     info.uid = unsafeRecord && path === recordPath ? 1000 : 0;
     info.mode = path === directory ? 0o040700 : 0o100600;
@@ -191,18 +250,21 @@ async function savedLaunchRecord(): Promise<void> {
       return path === recordPath;
     };
     return info;
-  });
-  vi.mocked(statfsSync).mockImplementation(function tmpfs() {
+  }
+  vi.mocked(lstatSync).mockImplementation(recordStat);
+  function tmpfs(): ReturnType<typeof statfsSync> {
     const info = actual.statfsSync('/run');
     info.type = 0x01021994;
     return info;
-  });
-  vi.mocked(readFileSync).mockImplementation(function recordFile(path): string {
+  }
+  vi.mocked(statfsSync).mockImplementation(tmpfs);
+  function recordFile(path: unknown): string {
     if (path === recordPath) {
       return contents;
     }
     return readProc(path);
-  });
+  }
+  vi.mocked(readFileSync).mockImplementation(recordFile);
   expect(readCanaryHelperBinding(request)).toEqual(binding);
   unsafeRecord = true;
   expect(() => readCanaryHelperBinding(request)).toThrow('private_process_unreadable');

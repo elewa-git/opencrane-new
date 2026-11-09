@@ -64,7 +64,9 @@ function processStart(pid) {
   if (end < 0) {
     throw new Error('process_unreadable');
   }
-  const fields = stat.slice(end + 2).trimEnd().split(' ');
+  const processFields = stat.slice(end + 2);
+  const trimmedFields = processFields.trimEnd();
+  const fields = trimmedFields.split(' ');
   const start = fields[19];
   if (!start || !/^[1-9][0-9]*$/u.test(start)) {
     throw new Error('process_unreadable');

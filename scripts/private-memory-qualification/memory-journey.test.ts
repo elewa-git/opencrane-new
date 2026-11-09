@@ -12,16 +12,18 @@ import { memoryAdmission } from '../../apps/server/src/chat/memory-admission.ts'
 vi.mock('../../apps/server/src/chat/private-output.ts', { spy: true });
 vi.mock('./host-probe.ts', { spy: true });
 vi.mock('./canary-helper-proof.ts', { spy: true });
-beforeEach(function protectedHelper(): void {
+function protectedHelper(): void {
   const identity = { pid: process.pid, startTime: '123', executable: '/usr/local/bin/node',
     uid: 0, cgroup: '0::/test\n', containerIdentity: 'pid:[123]',
     commandLine: '/usr/local/bin/node\0journey.mjs\0' };
-  vi.mocked(readCanaryHelperBinding).mockReturnValue({
+  const helperBinding = {
     helper: identity, supervisor: identity,
     imageDigest: request.imageDigest, installationId: request.installationId,
-  });
+  };
+  vi.mocked(readCanaryHelperBinding).mockReturnValue(helperBinding);
   vi.mocked(proveCanaryHelper).mockReturnValue(true);
-});
+}
+beforeEach(protectedHelper);
 vi.mock('../../apps/server/src/memory/stop.ts', { spy: true });
 afterEach(vi.restoreAllMocks);
 afterEach(vi.unstubAllEnvs);
