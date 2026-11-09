@@ -12,6 +12,9 @@ import {
 import type { EventEnvelope } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { Query } from '@opencrane/projections';
+import { createLogger } from '@opencrane/observability';
+
+const logger = createLogger('nightly-memory');
 
 function currentTime(): Date {
   return new Date();
@@ -186,7 +189,13 @@ async function claimNight(store: EventStore, event: EventEnvelope, expectedSeque
 }
 
 export async function scanNightlyMemory(db: Query, store: EventStore, silo: string,
-  occurrence: Date, clock: () => Date = currentTime) {
+  occurrence: Date, clock: () => Date = currentTime,
+  log: { info(message: string): void } = logger) {
+  // Match the memory worker's setting before reading tables it may never have created.
+  if (!process.env['MEMORY_KEY_DIRECTORY']?.trim()) {
+    log.info('Nightly memory is off');
+    return;
+  }
   // Keep the original trigger's night even when delivery resumes on a later date.
   const boundary = new Date(occurrence);
   boundary.setUTCHours(2, 0, 0, 0);

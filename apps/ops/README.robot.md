@@ -87,6 +87,10 @@ The existing key directory needs mode 0700 and its permanent deletion markers.
 As with rebuild, only `decrypt` is passed to the projection. It never creates or deletes keys.
 The runner creates the `memory` checkpoint and tables before consuming saved events.
 An empty installation can therefore serve `/api/memory/scopes` without any facts.
+The nightly memory scan checks the same `MEMORY_KEY_DIRECTORY` setting as this worker.
+Without it, the scan logs `Nightly memory is off` once and finishes without reading
+the memory checkpoint or writing events. With it, a missing or stale checkpoint
+still fails the scan so the job can retry.
 
 When `MEMORY_KEY_DIRECTORY` is absent, the worker logs
 `Memory reads unavailable: MEMORY_KEY_DIRECTORY is not configured` once, then exits successfully.

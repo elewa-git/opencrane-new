@@ -113,6 +113,11 @@ execFixture[promisify.custom] = execute;
 childProcess.execFile = execFixture;
 function spawnFixture(_command, args, options) {
   record(`spawn ${args.join(' ')}`);
+  if (args.includes('dispatcher') || args.includes('memory')) {
+    const role = args.includes('dispatcher') ? 'dispatcher' : 'memory';
+    const memorySetting = options.env.MEMORY_KEY_DIRECTORY ?? 'absent';
+    record(`memory-setting ${role} ${memorySetting}`);
+  }
   if (args.includes('dispatcher')) {
     assert.equal(options.env.CONTENT_DATABASE_URL, 'postgres://fixture.invalid/server');
     assert.equal(options.env.DATABASE_URL, 'postgres://fixture.invalid/dispatcher');

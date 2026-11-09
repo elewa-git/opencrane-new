@@ -19,6 +19,7 @@ type StartOptions = {
   stopAfterStart?: boolean;
   repeat?: boolean;
   previousMemory?: boolean;
+  memoryEnabled?: boolean;
   upgradeReport?: 'unchanged' | 'safe' | 'unsafe';
   upgradeFailure?: boolean;
   applyFailure?: boolean;
@@ -39,6 +40,7 @@ async function ownerStart(start: StartOptions = {}) {
       DEV_STACK_DIR: directory,
       DEV_STACK_ID: 'owner',
       DEV_REAL_PROVIDER_FILE: '/synthetic-key-file',
+      MEMORY_KEY_DIRECTORY: start.memoryEnabled ? `${home}/memory-keys` : '',
       START_FAILURE: start.failure ?? '',
       START_SIGNAL: start.signal ?? '',
       START_WEB_READY_MS: start.webReadyMs?.toString() ?? '',
@@ -94,7 +96,7 @@ async function ownerStart(start: StartOptions = {}) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
     return { status: result.status, output: result.stdout + result.stderr, failure,
-      operations, settings, services, directory };
+      operations, settings, services, directory, memoryKeyDirectory: `${home}/memory-keys` };
   } finally {
     await rm(home, { recursive: true, force: true });
   }
@@ -120,6 +122,29 @@ async function ownerBuildsProductionWebsite() {
 }
 
 test('owner start builds and serves the production website', ownerBuildsProductionWebsite);
+
+async function ownerMemoryReachesDispatcher() {
+  const result = await ownerStart({ memoryEnabled: true });
+  assert.equal(result.status, 0, result.output + result.failure);
+  assert.match(result.operations, /memory-setting memory /u);
+  assert.ok(result.operations.includes(
+    `memory-setting memory ${result.memoryKeyDirectory}\n`));
+  assert.ok(result.operations.includes(
+    `memory-setting dispatcher ${result.memoryKeyDirectory}\n`));
+}
+
+test('owner memory setting reaches both the projection and nightly dispatcher',
+  ownerMemoryReachesDispatcher);
+
+async function memoryOffLeavesDispatcherOff() {
+  const result = await ownerStart();
+  assert.equal(result.status, 0, result.output + result.failure);
+  assert.ok(result.operations.includes('memory-setting dispatcher absent\n'));
+  assert.ok(result.operations.includes('memory-setting memory absent\n'));
+}
+
+test('memory-off owner start leaves the dispatcher memory setting absent',
+  memoryOffLeavesDispatcherOff);
 
 async function repeatStopsOldMemoryWorker() {
   const result = await ownerStart({ repeat: true, previousMemory: true });

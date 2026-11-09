@@ -166,6 +166,7 @@ in Kubernetes. The worker records absence before status becomes Sleeping. It can
 wake a tool or release credentials. Rebuilding read tables does no Kubernetes work.
 
 The dispatcher also uses PostgreSQL's job queue to check enabled memory scopes each night.
+When memory is off for the installation, the nightly check logs that fact and finishes.
 It reads candidate scopes and their progress from the content database using a read-only
 account. If those tables are behind or unavailable, it keeps the trigger for recovery.
 It records why a dirty scope is blocked or missed. Failed triggers keep their original night

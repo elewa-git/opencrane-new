@@ -743,8 +743,10 @@ the operator command to a member.
 Existing stub slots also move their `model-managed-stub` file into `models/` while
 services are stopped. Do not use a reset as an upgrade.
 
-The owner's optional memory wiring remains unchanged: `MEMORY_KEY_DIRECTORY`
-enables its memory worker and HTTP reads; without it reads remain unavailable.
+For the owner, `MEMORY_KEY_DIRECTORY` enables the memory worker and is passed to
+the projection workers, server and dispatcher. The dispatcher uses it to run the
+nightly memory scan. Without it, owner memory reads and scans stay off. Secondary
+slots use the memory directory saved in their own private settings.
 
 Part of #94; survey custody also supports #101. Filesystem/configuration and service
 fixtures cover refusal, membership delivery, human HTTP, restart, deletion and safe

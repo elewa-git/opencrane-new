@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { PgBoss, TestClock, type Db } from 'pg-boss';
 import { scheduleNightly } from '../../../libs/handlers/src/queue.ts';
 import { event } from '@opencrane/event-store/testing';
@@ -13,6 +13,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { scanNightlyMemory } from '../src/nightly-memory.ts';
 
 let services: Awaited<ReturnType<typeof fixture>>;
+beforeEach(function enableMemory() {
+  vi.stubEnv('MEMORY_KEY_DIRECTORY', '/test-memory');
+});
 const scopeId = memoryScopeId('test', 'person', 'alice');
 const custody = { decrypt };
 const projection = memoryProjection(custody);
@@ -21,9 +24,25 @@ function decrypt() {
 }
 async function close() {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
   await services?.close();
 }
 afterEach(close);
+
+it('finishes a night without dispatch when memory is off and never prepared',
+  async function memoryOff() {
+    vi.stubEnv('MEMORY_KEY_DIRECTORY', '');
+    services = await fixture();
+    const log = { info: vi.fn() };
+    const occurrence = new Date('2026-10-12T02:00:00Z');
+    const before = await services.nats.store.head();
+
+    await scanNightlyMemory(services.db, services.nats.store, 'test', occurrence,
+      undefined, log);
+
+    expect(log.info).toHaveBeenCalledExactlyOnceWith('Nightly memory is off');
+    expect(await services.nats.store.head()).toBe(before);
+  });
 async function append(type: string, data: unknown, time = '2026-10-12T01:00:00Z') {
   const position = await services.nats.store.head();
   const eventName = type.replaceAll('.', '-');

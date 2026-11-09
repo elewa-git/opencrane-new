@@ -35,6 +35,9 @@ const exec = promisify(execFile);
 // Keep a claim for 15 minutes because claim.sh exits before stack startup can finish.
 const CLAIM_GRACE_PERIOD_MS = 15 * 60 * 1000;
 const memoryKeyDirectory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
+const ownerMemorySettings = !secondary && memoryKeyDirectory
+  ? { MEMORY_KEY_DIRECTORY: memoryKeyDirectory }
+  : {};
 const publicUpgradeMessages = new Set([
   'Handler upgrade preview failed. Run npm run ops -- upgrade-handlers --dry-run ' +
     'with data services up.',
@@ -53,7 +56,7 @@ function includedProcess(name: string) {
 const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets',
   'audit', 'routines', 'minio-tokens', 'model-stub', 'models', 'dispatcher', 'server',
   'web'].filter(includedProcess);
-if (secondary || memoryKeyDirectory) {
+if (secondary || ownerMemorySettings.MEMORY_KEY_DIRECTORY) {
   names.push('memory');
 }
 type OwnerStartup = {
@@ -610,10 +613,7 @@ async function up(fresh: boolean) {
   const binding = await readEnv('binding');
   for (const name of ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets',
     'audit', 'memory', 'routines']) {
-    const projectionEnv = await readEnv('projection');
-    if (!secondary && memoryKeyDirectory) {
-      projectionEnv['MEMORY_KEY_DIRECTORY'] = memoryKeyDirectory;
-    }
+    const projectionEnv = { ...await readEnv('projection'), ...ownerMemorySettings };
     await start(name, ['--experimental-strip-types', 'apps/ops/src/worker.ts', name], projectionEnv);
   }
   const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${settings['ORIGIN']}/` });
@@ -689,7 +689,7 @@ async function up(fresh: boolean) {
   await startModels();
   await rm(`${directory}/dispatcher-ready`, { force: true });
   await start('dispatcher', ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'dispatcher'],
-    { ...await readEnv('dispatcher'), ...binding,
+    { ...await readEnv('dispatcher'), ...ownerMemorySettings, ...binding,
       DEV_DISPATCHER_READY_FILE: `${directory}/dispatcher-ready`,
       MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`, ...prefixed(await readEnv('command'), 'COMMAND_'),
       CONTENT_DATABASE_URL: (await readEnv('server'))['DATABASE_URL']!,
@@ -735,7 +735,7 @@ async function up(fresh: boolean) {
       ...(tokenBootstrap ? { BOOTSTRAP_TOKEN_FILE: `${directory}/bootstrap-token.json` } : {}),
       MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`,
       MINIO_URL: `http://127.0.0.1:${settings['MINIO_PORT']}`, MINIO_CREDENTIALS_FILE: `${directory}/minio-lease.json`, CLAMD_PORT: settings['CLAMD_PORT'] ?? '43310',
-      ...(!secondary && memoryKeyDirectory ? { MEMORY_KEY_DIRECTORY: memoryKeyDirectory } : {}),
+      ...ownerMemorySettings,
       CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`,
       DEV_DISPATCHER_READY_FILE: `${directory}/dispatcher-ready`,
       PROVIDER_SECRETS_DIR: `${directory}/provider-secrets`,
