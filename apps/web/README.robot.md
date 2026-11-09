@@ -1512,7 +1512,7 @@ with no name uses “A colleague” in its notice.
 `npm run visual:screen-p4-6-close` captures both pages at 1280 and 390 pixels with
 intercepted replies; it does not qualify a fresh installation.
 
-The assistant workspace opens with the newest 50 rows. Later reads start from the
+The assistant workspace opens with the newest 50 posted turns. Later reads start from the
 last applied feed position before it accepts overlapping socket rows. It orders
 those rows by server position. A socket
 `ready` frame says the server has finished replaying rows; the website announces
@@ -1533,7 +1533,8 @@ read failure, reconnect and unavailable-link screens at 1280 and 390 pixels.
 
 ## Assistant chat tail window
 
-`ChatSession` opens an assistant session with `?tail=50` and resumes saved and
+`ChatSession` opens an assistant session with `?tail=50` for whole posted turns.
+It resumes saved and
 socket updates from the returned feed position. A projection replacement also
 starts with a fresh tail. `Workspace` requests `?before=<position>&limit=50` near
 the top of the transcript. It keeps the prior scroll height and top offset so

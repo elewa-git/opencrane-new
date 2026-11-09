@@ -222,6 +222,7 @@ async function collectWindowRows(db: Query, silo: string, conversationId: string
   const rows: ReturnType<typeof displayRow>[] = [];
   let cursor = start;
   let hasOlder = false;
+  let turnCount = 0;
   while (cursor > firstPosition && !hasOlder) {
     const page = await db.query<FeedRow>(
       `SELECT * FROM conversation_feed WHERE silo = $1 AND conversation_id = $2
@@ -232,11 +233,13 @@ async function collectWindowRows(db: Query, silo: string, conversationId: string
     for (const row of page.rows) {
       cursor = Number(row.position);
       if (isHiddenConversationRow(row.type, row.data, cursor, closedPosition)) continue;
-      if (rows.length === limit) {
+      // Stop before the preceding turn, so every report has its starting post.
+      if (turnCount === limit) {
         hasOlder = true;
         break;
       }
       rows.push(displayRow(row));
+      if (row.type === 'message.posted') turnCount += 1;
     }
   }
   rows.reverse();

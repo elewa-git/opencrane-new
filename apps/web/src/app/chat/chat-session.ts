@@ -204,6 +204,7 @@ export class ChatSession implements OnDestroy {
     this.historyFailure.set(false);
     this.needsReplacement = false;
     this.olderBefore.set(null);
+    this.olderLoading.set(false);
     this.olderFailure.set(false);
     this.bufferedRows = [];
     this.stopState.reset();
@@ -247,6 +248,7 @@ export class ChatSession implements OnDestroy {
     this.bufferedRows = [];
     this.needsReplacement = false;
     this.olderBefore.set(null);
+    this.olderLoading.set(false);
     this.olderFailure.set(false);
     this.requestedUnavailable.set(false);
     this.requestedLookupFailed.set(false);
@@ -399,6 +401,7 @@ export class ChatSession implements OnDestroy {
     this.historyLoading = false;
     this.historyFailure.set(false);
     this.olderBefore.set(null);
+    this.olderLoading.set(false);
     this.olderFailure.set(false);
     this.bufferedRows = [];
     this.rows.set([]);
@@ -753,6 +756,7 @@ export class ChatSession implements OnDestroy {
     this.historyLoading = false;
     this.needsReplacement = false;
     this.olderBefore.set(null);
+    this.olderLoading.set(false);
     this.olderFailure.set(false);
     this.bufferedRows = [];
     this.caughtUp.set(false);

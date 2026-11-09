@@ -460,6 +460,8 @@ export class Workspace implements OnInit {
     const element = this.transcriptElement()?.nativeElement;
     if (!element || this.chat.denied()) return;
     if (this.olderScroll?.conversationId === this.chat.selected()) {
+      // Wait for the older page before using its saved scroll position.
+      if (this.chat.olderLoading()) return;
       requestAnimationFrame(this.restoreOlderScroll.bind(this, element));
       return;
     }
@@ -495,10 +497,16 @@ export class Workspace implements OnInit {
     void this.loadOlder(element);
   }
   private async loadOlder(element: HTMLElement): Promise<void> {
+    const oldestTurnId = this.chat.turns()[0]?.id;
     this.olderScroll = { height: element.scrollHeight, top: element.scrollTop,
       conversationId: this.chat.selected() };
     const loaded = await this.chat.loadOlder();
-    if (!loaded) this.olderScroll = undefined;
+    if (!loaded || this.chat.turns()[0]?.id === oldestTurnId) {
+      this.olderScroll = undefined;
+      return;
+    }
+    // Restore after the page has rendered, even if a live update rendered first.
+    requestAnimationFrame(this.restoreOlderScroll.bind(this, element));
   }
   protected retryOlder(): void {
     const element = this.transcriptElement()?.nativeElement;
