@@ -3087,8 +3087,8 @@ journey: NOT RUN. Fixtures use the pinned gateway and disposable NATS, with no p
 prepares bytes. Its conditional append binds the saved silo, server, image digest,
 platform and attempt. A saved claim without a result prevents a second scan, even
 through another store wrapper or after restart. A lost claim reply also refuses
-another scan. Each caller puts a random claim token in its event. Only a fresh
-append with that caller's saved token permits scanning. A duplicate saved reply
+another scan. Each caller puts a random claimant id in its event. Only a fresh
+append with that caller's saved id permits scanning. A duplicate saved reply
 does not. `writeHostedAdmission` records one `mcp.image_checked` per installation attempt.
 Its caller must supply a private proof issued after the authenticated image walk,
 plus a validation function that returns the current clean verdict and the exact

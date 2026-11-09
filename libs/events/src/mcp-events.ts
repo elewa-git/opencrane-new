@@ -15,7 +15,7 @@ export const mcpEvents = [
   event('mcp.image_scan_claimed', 'mcp', 'Models claimed one hosted image scan attempt.',
     hostedImageScanClaimedSchema, { serverId: 'mcp_1', attemptId: 1,
       imageDigest: DIGEST_EXAMPLE, platform: 'linux/amd64',
-      claimToken: '9e734f62-1f2f-442a-b014-ff2373fae62d' }),
+      claimantId: '9e734f62-1f2f-442a-b014-ff2373fae62d' }),
   event('mcp.image_check_requested', 'mcp', 'An admin requested another image check.',
     hostedImageCheckRequestedSchema, { serverId: 'mcp_1', attemptId: 2,
       imageDigest: DIGEST_EXAMPLE, platform: 'linux/amd64',

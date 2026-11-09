@@ -16,7 +16,7 @@ type Admission = z.infer<typeof hostedAdmissionSchema>;
 type MalwareEvidence = Result['checks']['malware'];
 type ValidatedMalwareEvidence = { verdict: 'clean'; malware: MalwareEvidence };
 type ImageScanClaim = z.infer<typeof hostedImageScanClaimedSchema>;
-const imageScanClaimInput = hostedImageScanClaimedSchema.omit({ claimToken: true });
+const imageScanClaimInput = hostedImageScanClaimedSchema.omit({ claimantId: true });
 type ImageScanClaimInput = z.infer<typeof imageScanClaimInput>;
 const day = 86_400_000;
 
@@ -183,7 +183,7 @@ export async function claimHostedImageScan(store: EventStore, silo: string,
   const parsed = imageScanClaimInput.safeParse(rawClaim);
   if (!parsed.success) return { status: 'unavailable' as const };
   // Give each caller its own identity even when it races with the same attempt.
-  const claim = { ...parsed.data, claimToken: randomUUID() };
+  const claim = { ...parsed.data, claimantId: randomUUID() };
   const rows = await rowsFor(store, claim.serverId);
   const state = foldHostedAdmission(rows, silo, claim.serverId);
   if (!state || !matches(state, claim)) return { status: 'unavailable' as const };

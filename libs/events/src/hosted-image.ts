@@ -52,5 +52,5 @@ export const hostedImageScanClaimedSchema = z.strictObject({
   attemptId: hostedImageCheckedSchema.shape.attemptId,
   imageDigest: hostedImageCheckedSchema.shape.imageDigest,
   platform: hostedImageCheckedSchema.shape.platform,
-  claimToken: z.uuid(),
+  claimantId: z.uuid(),
 });
