@@ -92,6 +92,23 @@ it.each(['supervisor', 'bridge', 'proxy'] as const)(
   refusesExecAfterComputerProof,
 );
 
+function refusesExecBetweenProtectedReads(): void {
+  let identityReads = 0;
+  function changeProgramOnFinalRead(pid: number): typeof identity {
+    identityReads += 1;
+    if (identityReads < 2) {
+      return { ...identity, pid };
+    }
+    return { ...identity, pid, executable: '/usr/bin/other',
+      commandLine: '/usr/bin/other\\0' };
+  }
+  vi.mocked(readProcessIdentity).mockImplementation(changeProgramOnFinalRead);
+  expect(probeInventoryProcess('bridge')).toBeUndefined();
+  expect(identityReads).toBe(2);
+}
+it('refuses an exec between the checked identity and final inventory read',
+  refusesExecBetweenProtectedReads);
+
 function readsBoundContainers(): void {
   const observed: string[] = [];
   function docker(_binary: unknown, args: unknown): string {

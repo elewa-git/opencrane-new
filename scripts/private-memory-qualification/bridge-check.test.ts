@@ -30,7 +30,12 @@ beforeEach(reset);
 afterEach(function restoreUid() { uid.mockRestore(); });
 
 function acceptsOnlyLiveBridge(): void {
-  expect(checkBridge()).toEqual({ result: true, pid: 42, startTime: '200' });
+  const delivered: ProcessIdentity[] = [];
+  const result = checkBridge(function observeIdentity(identity): void {
+    delivered.push(identity);
+  });
+  expect(result).toEqual({ result: true, pid: 42, startTime: '200' });
+  expect(delivered).toEqual([bridge]);
   expect(bridgeIdentity).toHaveBeenCalledTimes(3);
   expect(probeContainer).toHaveBeenCalledTimes(2);
   expect(checkLiveService).toHaveBeenCalledWith('bridge', bridge);
