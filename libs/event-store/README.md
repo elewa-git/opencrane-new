@@ -23,7 +23,7 @@ for local NATS services.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> store["libs/event-store<br/>saved event log"]
-  server["apps/server<br/>back end"] -->|saves changes| store
+  server["apps/server<br/>back end"] -->|checks positions and saves changes| store
   models["libs/models<br/>AI access and spending"] <-->|saves changes and checks their outcome| store
   ops["apps/ops<br/>background workers"] -->|saves and reads| store
   projections["libs/projections<br/>read tables"] -.->|reads the log| store
@@ -44,6 +44,8 @@ flowchart LR
   uncertainty when a later attempt is refused.
 - Return the earlier result when the same request is repeated, rather than save it twice.
 - Read one record, one item's history or the whole log in order.
+- Check several item histories against one point in the log. A caller can use
+  that point to make its next saved change conditional.
 - Keep [stream summaries](../../GLOSSARY.md#stream-summary), small sets of facts
   from an item's history, in memory. Read new events before using them and drop
   older summaries when their memory allowance is full.

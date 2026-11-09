@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import { snapshotPositions, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { grantGivenDataSchema, grantRevokedDataSchema } from '@opencrane/events';
 import type { RoutineState } from '@opencrane/events';
@@ -208,21 +208,20 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     const grants = await requireServerGrants(store, binding, silo, run, deadline);
     for (const [subject, position] of grants) positions.set(subject, position);
     async function confirmCurrent() {
-      const currentDeadline = performance.now() + 2_000;
-      if (Date.now() >= facts.expiresAt || !await facts.oauth.configurationCurrent()) {
+      try {
+        const currentDeadline = performance.now() + 2_000;
+        if (Date.now() >= facts.expiresAt || !await facts.oauth.configurationCurrent()) {
+          refuse();
+        }
+        // Check all company streams at one log position. A guarded append also checks
+        // the global position it captured before calling this function.
+        const snapshot = await snapshotPositions(store, positions, currentDeadline);
+        if (!await facts.oauth.configurationCurrent()) refuse();
+        if (Date.now() >= facts.expiresAt) refuse();
+        return snapshot;
+      } catch {
         refuse();
       }
-      for (const [subject, position] of positions) {
-        const currentPosition = await store.head(subject, currentDeadline);
-        if (currentPosition !== position) refuse();
-      }
-      // Read each position again so a change during a later read cannot pass the check.
-      for (const [subject, position] of positions) {
-        const currentPosition = await store.head(subject, currentDeadline);
-        if (currentPosition !== position) refuse();
-      }
-      if (!await facts.oauth.configurationCurrent()) refuse();
-      if (Date.now() >= facts.expiresAt) refuse();
     }
     await confirmCurrent();
     return { occurrenceId: run.occurrenceId, rootId: run.rootId,

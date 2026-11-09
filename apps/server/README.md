@@ -441,6 +441,7 @@ A stopped, changed or expired occurrence cannot prepare a session.
 The server can pass a checked routine claim through private input, a fixed spending
 allowance and one computer turn. It checks access again after waking the computer.
 For a company connection, it checks the owner's and assistant's current server grants.
+It checks the company streams at one point in the saved event log before a guarded write.
 It checks the company choice again after preparing the private thread, before allowing money.
 It checks the same company choice during admission, just before sending the turn,
 and while authorising the computer's start report.

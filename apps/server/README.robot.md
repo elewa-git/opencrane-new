@@ -7165,9 +7165,13 @@ check runs inside the root allowance decision after private thread preparation, 
 again during activation admission, immediately before sending, and during start
 authorisation and acknowledgement. The company check also follows the other awaited
 start and admission checks. Missing evidence refuses with a fixed
-error. The check reads every recorded company stream position twice and refuses
-any change during the first pass. It also checks the OAuth configuration again
-after those reads. There is no credential release, company send or public execution switch.
+error. The check takes one global event position and checks every company stream
+as it stood at that position. The allowance, activation and turn-start appends
+sample the global position before their access callbacks and require it at publish.
+A company change during a stream read therefore conflicts with the guarded append.
+This can also refuse an unrelated concurrent event. The check reads the OAuth
+configuration again after the stream checks. There is no credential release,
+company send or public execution switch.
 Existing records without `serverId` remain readable but cannot pass this check.
 
 `test/routine-company-preflight.test.ts` covers the valid choice, changed or missing
@@ -7176,6 +7180,8 @@ scopes, a stale preflight,
 owner and assistant grant revocations, and changes to account, scopes, custody,
 profile revision, owner choice, opt-in and publication. It also covers a policy
 Block and a team grant revocation saved while a later position read is pending.
+It also checks all 72 combinations of six streams and twelve read points, plus
+changes to each stream between the company check and a conditional append.
 `test/routine-handoff.test.ts` checks post-wake refusal before allowance and no
 preflight during disabled or replayed work. These tests use synthetic account evidence.
 `test/routine-composition.test.ts` supplies a synthetic preflight for its existing

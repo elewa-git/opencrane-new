@@ -260,19 +260,25 @@ it('refuses a tool policy change between preflight and sender', changedToolBefor
 function holdPositionRead(subjectToHold: string) {
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
-  const readHead = nats.store.head.bind(nats.store);
-  async function heldHead(subject?: string, deadline?: number,
-    includeConversationCloses?: boolean) {
-    const position = await readHead(subject, deadline, includeConversationCloses);
+  const readPosition = nats.store.readStream.bind(nats.store);
+  async function* heldPosition(...args: Parameters<typeof nats.store.readStream>) {
+    const [subject] = args;
+    const rows = readPosition(...args);
+    const first = await rows.next();
     if (subject === subjectToHold) {
       entered.resolve();
       await release.promise;
     }
-    return position;
+    if (!first.done) yield first.value;
   }
-  const spy = vi.spyOn(nats.store, 'head');
-  spy.mockImplementation(heldHead);
+  const spy = vi.spyOn(nats.store, 'readStream');
+  spy.mockImplementation(heldPosition);
   return { entered: entered.promise, release: release.resolve, spy };
+}
+
+function independentWrite(current: Awaited<ReturnType<typeof fixture>>) {
+  return envelope('test', `ownership-race${current.serverId}`, 'ownership.seeded',
+    { ownerIds: [current.ownerId] });
 }
 
 async function policyChangedDuringLaterRead() {
@@ -354,25 +360,26 @@ async function changedCompanyStreamDuringRead() {
       const rows = await history(nats.store, changedSubject, 'test');
       const previous = rows.at(-1)!.event;
       const change = envelope('test', changedSubject, previous.type, previous.data);
-      const originalHead = nats.store.head.bind(nats.store);
+      const originalRead = nats.store.readStream.bind(nats.store);
       let reads = 0;
-      async function changedDuringHead(subject?: string, deadline?: number,
-        includeConversationCloses?: boolean) {
-        const position = await originalHead(subject, deadline, includeConversationCloses);
-        if (subject && subjects.includes(subject)) {
-          if (reads === readIndex) await nats.seed([change]);
-          reads += 1;
-        }
-        return position;
+      async function* changedDuringRead(...args: Parameters<typeof nats.store.readStream>) {
+        const currentRead = reads;
+        reads += 1;
+        if (currentRead === readIndex) await nats.seed([change]);
+        const rows = originalRead(...args);
+        const first = await rows.next();
+        if (currentRead + 6 === readIndex) await nats.seed([change]);
+        if (!first.done) yield first.value;
       }
-      const spy = vi.spyOn(nats.store, 'head');
-      spy.mockImplementation(changedDuringHead);
-      let refused = false;
+      const spy = vi.spyOn(nats.store, 'readStream');
+      spy.mockImplementation(changedDuringRead);
+      let refused: boolean;
       try {
         await company.confirmCurrent();
+        refused = false;
       } catch (error) {
-        expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Routine company unavailable');
+        if (!(error instanceof Error)) throw error;
+        expect(error.message).toBe('Routine company unavailable');
         refused = true;
       } finally {
         spy.mockRestore();
@@ -383,6 +390,29 @@ async function changedCompanyStreamDuringRead() {
 }
 it('refuses all 72 company stream changes during position reads',
   changedCompanyStreamDuringRead, 120_000);
+
+async function changedCompanyStreamBeforeWrite() {
+  for (let streamIndex = 0; streamIndex < 6; streamIndex += 1) {
+    const current = await fixture();
+    const team = await addTeamGrant(current);
+    const company = await current.preflight();
+    const subjects = [current.profileSubject, `mcp-${current.serverId}`,
+      current.optInSubject, current.selectionSubject,
+      grantStream('mcp_server', current.serverId), team.teamSubject];
+    const changedSubject = subjects[streamIndex]!;
+    const rows = await history(nats.store, changedSubject, 'test');
+    const previous = rows.at(-1)!.event;
+    const change = envelope('test', changedSubject, previous.type, previous.data);
+    const snapshot = await company.confirmCurrent();
+    await nats.seed([change]);
+    const event = independentWrite(current);
+    const result = await nats.store.append({ event, expectedSequence: 0,
+      expectedGlobalSequence: snapshot });
+    expect(result.status, `stream ${streamIndex}`).toBe('conflict');
+  }
+}
+it('refuses a change to every company stream between check and write',
+  changedCompanyStreamBeforeWrite, 30_000);
 
 async function staleGrant() {
   const current = await fixture();
