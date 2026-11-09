@@ -299,6 +299,26 @@ describe('tool arguments only as a digest', () => {
     expect(rejectedFields('agent.command_ran', { command })).toEqual(['command']);
   });
 
+  it('agent.command_ran rejects arguments, environment, output and tokens', () => {
+    const privateFields = {
+      arguments: ['private-file.pdf'], environment: { API_KEY: 'secret' },
+      output: 'private text', token: 'secret',
+    };
+    expect(rejectedFields('agent.command_ran', privateFields))
+      .toEqual(['arguments', 'environment', 'output', 'token']);
+  });
+
+  it('agent.command_ran accepts only reviewed activity labels and keeps older events readable', () => {
+    const { example, dataSchema } = definitionFor('agent.command_ran');
+    expect(dataSchema.safeParse(example).success).toBe(true);
+    expect(dataSchema.safeParse({ ...asRecord(example), activityLabel: 'Read a PDF' }).success)
+      .toBe(true);
+    expect(dataSchema.safeParse({ ...asRecord(example), activityLabel: 'Read secret.pdf' }).success)
+      .toBe(false);
+    expect(dataSchema.safeParse({ ...asRecord(example), output: 'private output' }).success)
+      .toBe(false);
+  });
+
   it.each([
     ['tool.approval_requested', 'argumentsDigest'],
     ['agent.command_ran', 'commandDigest'],

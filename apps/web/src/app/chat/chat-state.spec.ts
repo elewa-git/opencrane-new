@@ -71,6 +71,35 @@ it('names transcript tool records without adding fields to them', () => {
     time: '2026-10-09T10:00:00Z' })).toBe('Governed tool call');
 });
 
+it('shows safe command labels and explains familiar exit codes', () => {
+  const rows: ChatRow[] = [
+    { id: 'request', position: 1, type: 'message.posted', time: '2026-10-04T10:00:00Z',
+      data: { authorId: 'me', text: 'Work' } },
+    { id: 'old', position: 2, type: 'agent.command_ran', time: '2026-10-04T10:01:00Z',
+      data: { turnId: 'request', exitCode: 0 } },
+    { id: 'missing', position: 3, type: 'agent.command_ran', time: '2026-10-04T10:02:00Z',
+      data: { turnId: 'request', exitCode: 127, activityLabel: 'Ran a Python script' } },
+    { id: 'other', position: 4, type: 'agent.command_ran', time: '2026-10-04T10:03:00Z',
+      data: { turnId: 'request', exitCode: 2, activityLabel: 'Listed files' } },
+    { id: 'cannot-start', position: 5, type: 'agent.command_ran',
+      time: '2026-10-04T10:04:00Z', data: { turnId: 'request', exitCode: 126 } },
+    { id: 'timed-out', position: 6, type: 'agent.command_ran',
+      time: '2026-10-04T10:05:00Z', data: { turnId: 'request', exitCode: 124 } },
+    { id: 'out-of-memory', position: 7, type: 'agent.command_ran',
+      time: '2026-10-04T10:06:00Z', data: { turnId: 'request', exitCode: 137 } },
+  ];
+  const tools = transcript(rows, 'me').find(isAgentTurn)?.tools;
+  expect(tools).toMatchObject([
+    { label: 'Ran a command', detail: 'Completed', failed: false },
+    { label: 'Ran a Python script', detail: 'The program is not installed on the computer',
+      failed: true },
+    { label: 'Listed files', detail: 'Failed (exit code 2)', failed: true },
+    { detail: 'The program could not be started', failed: true },
+    { detail: 'Stopped: took too long or ran out of memory', failed: true },
+    { detail: 'Stopped: took too long or ran out of memory', failed: true },
+  ]);
+});
+
 it('shows recorded native refusal with its request reference and no tool call', () => {
   const rows: ChatRow[] = [
     { id: 'message', position: 1, type: 'message.posted', time: '2026-10-16T10:00:00Z',

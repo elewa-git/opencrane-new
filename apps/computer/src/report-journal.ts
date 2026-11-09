@@ -1,6 +1,8 @@
 import { parseArtifacts, type Artifact } from './artifacts.ts';
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { record } from './http.ts';
+import { isCommandActivityLabel,
+  type CommandActivityLabel } from '@opencrane/events/command-activity-label';
 
 export interface BridgeReport {
   artifacts?: Artifact[];
@@ -22,6 +24,7 @@ export interface BridgeReport {
   durationMs?: number;
   commandDigest?: string;
   exitCode?: number;
+  activityLabel?: CommandActivityLabel;
   threadId?: string;
   messageId?: string;
   rootId?: string;
@@ -106,6 +109,7 @@ function parseStoredReport(line: string): BridgeReport {
   const previousSequence = optionalNumber(value, 'previousSequence');
   const commandDigest = optionalString(value, 'commandDigest');
   const exitCode = optionalNumber(value, 'exitCode');
+  const activityLabel = value['activityLabel'];
   const threadId = optionalString(value, 'threadId');
   const messageId = optionalString(value, 'messageId');
   const text = optionalString(value, 'text');
@@ -118,6 +122,10 @@ function parseStoredReport(line: string): BridgeReport {
   }
   if (exitCode !== undefined) {
     report.exitCode = exitCode;
+  }
+  if (activityLabel !== undefined) {
+    if (!isCommandActivityLabel(activityLabel)) throw new Error('Invalid journal activity label');
+    report.activityLabel = activityLabel;
   }
   if (threadId !== undefined) {
     report.threadId = threadId;

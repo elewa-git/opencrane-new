@@ -44,6 +44,9 @@ requested cancellation alone do not prove that the turn ended.
 A private process exit record confirms that the supervisor saw the process end.
 It carries no reply text and stays out of chat history.
 
+Command activity can carry one of a few fixed plain labels. Older command records
+still read without a label. No command text or output is saved with the label.
+
 Account refresh starts record one attempt for a saved generation. Rebuilding these
 records keeps the account and attempt without contacting its provider.
 A later claim records one live worker and the exact saved credential reference.
@@ -70,7 +73,7 @@ flowchart LR
   projections["libs/projections<br/>read tables and retired choices"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, welcome completion, private tool stops, publication, nightly memory claims and routine permissions| events
   models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks Ask and release bindings, consent starts, callback, refresh and image scan claims, refresh starts, account confirmations and replacement generations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal, company and saved tool choices, company opt-in, company credential replacements, and blocks| events
-  computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
+  computer["apps/computer<br/>personal computers"] -.->|reads event and command label shapes| events
   models -.->|checks OAuth settings change records| events
 ```
 

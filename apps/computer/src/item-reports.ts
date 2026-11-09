@@ -2,6 +2,7 @@ import { nativeRefusal } from './native-requests.ts';
 import { isToolCallText } from '@opencrane/events/tool-call';
 import { createHash } from 'node:crypto';
 import { record } from './http.ts';
+import { commandActivityLabel } from './command-label.ts';
 import type { BridgeReport } from './report-journal.ts';
 import type { Turn } from './turn-frame.ts';
 
@@ -55,7 +56,8 @@ export function itemReport(input: Turn, params: Record<string, unknown>, method:
     const commandHash = createHash('sha256');
     commandHash.update(command);
     const commandDigest = commandHash.digest('hex');
-    return { type: 'agent.command_ran', data: { commandDigest, exitCode } };
+    const activityLabel = commandActivityLabel(command);
+    return { type: 'agent.command_ran', data: { commandDigest, exitCode, activityLabel } };
   }
   if (item['type'] === 'agentMessage' && typeof item['text'] === 'string') {
     return { type: 'agent.message_completed', data: {

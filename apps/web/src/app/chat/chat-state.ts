@@ -121,6 +121,7 @@ export interface ToolActivityRecord {
   label: string;
   detail: string;
   failed: boolean;
+  command?: true;
   time: string;
   callId?: string;
   nativeRequestId?: string;
@@ -159,6 +160,7 @@ export function toolActivityResult(record: ToolActivityRecord): string {
   if (record.nativeRequestId) {
     return 'Unsupported native consent · No gateway permission was granted.';
   }
+  if (record.command && !record.failed) return 'Completed';
   if (record.status === 'running') return 'Running · The call has not finished.';
   if (record.status === 'unconfirmed') {
     return 'No finish report was received before the turn ended.';
@@ -324,6 +326,16 @@ function failureDetail(reason: string | undefined): string {
   return 'Run interrupted';
 }
 
+function commandExitDetail(exitCode: number | undefined): string {
+  if (exitCode === 0) return 'Completed';
+  if (exitCode === 127) return 'The program is not installed on the computer';
+  if (exitCode === 126) return 'The program could not be started';
+  if (exitCode === 124 || exitCode === 137) {
+    return 'Stopped: took too long or ran out of memory';
+  }
+  return `Failed (exit code ${exitCode ?? 'unknown'})`;
+}
+
 function updateTurnTools(turn: Turn, row: ChatRow): void {
   if ((row.type === 'agent.tool_call_started' || row.type === 'agent.tool_call_finished')
     && turn.state !== 'working' && turn.state !== 'stopping') return;
@@ -358,8 +370,9 @@ function updateTurnTools(turn: Turn, row: ChatRow): void {
   }
   if (row.type !== 'agent.command_ran') return;
   const succeeded = row.data.exitCode === 0;
-  const label = succeeded ? 'Command completed' : 'Command failed';
-  turn.tools.push({ id: row.id, label, detail: `Exit code ${row.data.exitCode ?? 'unknown'}`,
+  const label = row.data.activityLabel ?? 'Ran a command';
+  const detail = commandExitDetail(row.data.exitCode);
+  turn.tools.push({ id: row.id, label, detail, command: true,
     failed: !succeeded, time: row.time });
 }
 

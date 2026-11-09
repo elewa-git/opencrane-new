@@ -35,11 +35,14 @@ it('authenticates, overlaps conversations and replays a strict report sequence a
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
   const url = `ws://127.0.0.1:${address.port}/bridge`;
   let socket: WebSocket | undefined;
-  const reports: { sequence: number; conversationId: string; type: string }[] = [];
+  const reports: { sequence: number; conversationId: string; type: string;
+    activityLabel?: string | undefined }[] = [];
   const connect = async (since: number, supported = false) => {
     const ws = new WebSocket(url, { headers: { 'x-bridge-token': 'short-lived-test-capability' } });
     ws.on('message', raw => {
-      const report = z.object({ sequence: z.number(), conversationId: z.string(), type: z.string() }).parse(JSON.parse(Buffer.isBuffer(raw) ? raw.toString() : '') as unknown);
+      const report = z.object({ sequence: z.number(), conversationId: z.string(),
+        type: z.string(), activityLabel: z.string().optional() })
+        .parse(JSON.parse(Buffer.isBuffer(raw) ? raw.toString() : '') as unknown);
       reports.push(report); ws.send(JSON.stringify({ type: 'ack', sequence: report.sequence, token: 'test-turn', expiresAt: Date.now()+120_000 }));
     });
     const opened = once(ws, 'open');
@@ -64,8 +67,11 @@ it('authenticates, overlaps conversations and replays a strict report sequence a
     expect(calls).toBe(2);
     expect(turnModels).toEqual(['gpt-6.1-sol', 'gpt-6.1-sol']);
     channel.notification({ method: 'item/reasoning/summaryTextDelta', params: { threadId: 'thread-1', delta: 'Checking the request.' } });
-    channel.notification({ method: 'item/completed', params: { threadId: 'thread-1', item: { type: 'commandExecution', command: 'echo safe', exitCode: 0 } } });
+    channel.notification({ method: 'item/completed', params: { threadId: 'thread-1',
+      item: { type: 'commandExecution', command: 'ls /workspace', exitCode: 0 } } });
     await until(() => reports.some(r => r.type === 'agent.command_ran'));
+    expect(reports.find(r => r.type === 'agent.command_ran')?.activityLabel)
+      .toBe('Listed files');
     channel.notification({ id: 17, method: 'mcpServer/elicitation/request',
       params: { threadId: 'thread-1', serverName: 'oc_0123456789',
         message: 'Private native consent request' } });

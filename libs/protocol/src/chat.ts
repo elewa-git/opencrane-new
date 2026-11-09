@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { chatIdSchema, conversationCreatedDataSchema, hasDirectParticipants,
-  toolDispatchRecordedDataSchema, agentNativeConsentRefusedDataSchema } from '@opencrane/events';
+  toolDispatchRecordedDataSchema, agentNativeConsentRefusedDataSchema,
+  commandActivityLabelSchema } from '@opencrane/events';
 export const computerStateSchema = z.enum(['ready', 'starting', 'recovering', 'not_applicable']);
 export type ComputerState = z.infer<typeof computerStateSchema>;
 export const chatSubscribeSchema = z.object({ type: z.literal('subscribe'), topic: z.literal('conversation'),
@@ -36,6 +37,8 @@ function validateRowFields(row: { type: string; data: unknown }, context: z.Refi
   let fieldsSchema;
   if (row.type === 'agent.native_consent_refused') {
     fieldsSchema = agentNativeConsentRefusedDataSchema;
+  } else if (row.type === 'agent.command_ran') {
+    fieldsSchema = z.object({ activityLabel: commandActivityLabelSchema.optional() });
   } else if (row.type === 'tool.dispatch_recorded') {
     fieldsSchema = toolDispatchDisplayDataSchema;
   } else if (row.type === 'agent.tool_call_started' || row.type === 'agent.tool_call_finished') {
@@ -83,6 +86,7 @@ export const chatRowSchema = z.object({
     publicationKind: z.enum(['final', 'interim']).optional(),
     path: z.string().optional(),
     exitCode: z.number().optional(),
+    activityLabel: commandActivityLabelSchema.optional(),
     commandDigest: z.string().optional(),
     reason: z.string().optional(),
     contentType: z.string().optional(),

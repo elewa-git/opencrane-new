@@ -47,6 +47,7 @@ export class ToolActivityLine {
     if (record.status === 'completed') return `${record.label} · Completed`;
     if (record.status === 'failed') return `${record.label} · Failed`;
     if (record.status === 'finished') return `${record.label} · Finished`;
+    if (record.command) return `${record.label} · ${record.detail}`;
     return record.label;
   }
 

@@ -57,6 +57,8 @@ export { assistantGrantSchema, assistantCreatedDataSchema,
   conversationCreatedDataSchema, conversationParticipantIds, hasDirectParticipants } from './data.ts';
 
 export { agentOutputLostDataSchema, agentTurnStopRequestedDataSchema } from './data.ts';
+export { agentCommandRanDataSchema, commandActivityLabelSchema } from './command-activity.ts';
+export { type CommandActivityLabel } from './command-activity-label.ts';
 export { agentToolCallStartedDataSchema, agentToolCallFinishedDataSchema } from './data.ts';
 
 export { computerTurnStartedDataSchema, computerTurnClosedDataSchema } from './data.ts';

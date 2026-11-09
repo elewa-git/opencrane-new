@@ -65,6 +65,26 @@ function isToolReport(report: BridgeReport) {
   return report.type === 'agent.tool_call_started' || report.type === 'agent.tool_call_finished';
 }
 
+it('saves only a reviewed label beside the command digest and exit code', async () => {
+  const setup = await fixture();
+  try {
+    const secret = 'PRIVATE_COMMAND_ARGUMENT';
+    const command = `rg ${secret} /workspace`;
+    setup.notify('item/completed', {
+      type: 'commandExecution', command, exitCode: 127,
+      stdout: secret, environment: { TOKEN: secret },
+    });
+    const report = setup.reports.at(-1);
+    expect(report).toMatchObject({
+      type: 'agent.command_ran', activityLabel: 'Searched files', exitCode: 127,
+    });
+    expect(setup.reloadAll().at(-1)).toEqual(report);
+    expect(JSON.stringify(setup.reloadAll())).not.toContain(secret);
+  } finally {
+    setup.close();
+  }
+});
+
 async function reportsToolProgress(status: string) {
   const test = await fixture();
   try {

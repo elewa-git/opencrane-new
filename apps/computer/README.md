@@ -21,7 +21,7 @@ flowchart LR
   ops -->|starts and pauses| computer
   server -->|messages, routine preparation and retry, turns, files and Stops| computer
   server -->|saved Ask retry wake| computer
-  computer -->|preparation replies, retained call status, progress, results and changed publication files| server
+  computer -->|preparation replies, command labels, progress, results and changed publication files| server
   computer -->|results and process reports| server
   server -->|qualified private input and four permitted memory tools| computer
   computer -->|reports private thread and memory discovery| server
@@ -46,6 +46,8 @@ The computer saves that confirmation without private reply text.
 - Builds the computer image with [Codex](../../GLOSSARY.md#codex), the AI agent,
   a browser, a remote desktop and document tools.
 - Runs the [bridge](../../GLOSSARY.md#bridge) that receives messages and reports progress.
+- Gives recognised command activity a short plain label before reporting it. Unknown
+  commands get a neutral label. Arguments and output stay out of activity reports.
 - Disables bridge process dumps before it receives private work. The bridge answers
   a local protection check inside its computer container. The root entrypoint records
   the bridge process it started so later checks can reject a replacement child.

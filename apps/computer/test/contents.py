@@ -5,6 +5,9 @@ for source in Path('/expected/src').glob('*.ts'):
     assert Path('/app/src', source.name).read_bytes() == source.read_bytes(), source.name
 assert Path('/app/libs/models/src/routing.ts').read_bytes() == Path('/expected/routing.ts').read_bytes()
 assert Path('/app/libs/events/src/tool-call.ts').read_bytes() == Path('/expected/tool-call.ts').read_bytes()
+activity_labels = Path('/app/libs/events/src/command-activity-label.ts')
+expected_labels = Path('/expected/command-activity-label.ts')
+assert activity_labels.read_bytes() == expected_labels.read_bytes()
 print('PASS: computer source, model routing and tool report checks match this checkout')
 
 for root in ['/opt', '/usr', '/tmp', '/app', '/spike']:

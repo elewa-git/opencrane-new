@@ -832,6 +832,22 @@ function toolRows(): Record<string, unknown>[] {
   ];
 }
 
+it('shows newest activity first while keeping transcript lines in saved order', async () => {
+  const rows = toolRows();
+  rows.push({ id: 'newer-command', position: 3, type: 'agent.command_ran',
+    time: '2026-10-04T10:02:00Z', data: { turnId: 'message', exitCode: 0,
+      activityLabel: 'Listed files' } });
+  const capture = await createCaptureWorkspace(rows);
+  function recordId(record: { id: string }): string { return record.id; }
+  function lineId(line: Element): string { return line.id; }
+  const activityIds = capture.fixture.componentInstance['activity']().map(recordId);
+  expect(activityIds).toEqual(['newer-command', 'command']);
+  const transcriptLines = [...capture.root.querySelectorAll('.tool-line')];
+  const transcriptIds = transcriptLines.map(lineId);
+  expect(transcriptIds).toEqual(['tool-command', 'tool-newer-command']);
+  capture.fixture.destroy();
+});
+
 it.each(['old first', 'new first'] as const)(
   'ignores an old native detail reply after the same drawer reopens: %s',
   async order => {
@@ -930,9 +946,9 @@ it('expands tool details from the line and focuses the line from Activity', asyn
   const details = capture.root.querySelector('.tool-details');
   expect(toolLine.getAttribute('aria-expanded')).toBe('true');
   expect(details?.id).toBe(toolLine.getAttribute('aria-controls'));
-  expect(details?.textContent).toContain('Failed · Exit code 1');
+  expect(details?.textContent).toContain('Failed · Failed (exit code 1)');
   expect(details?.textContent).toContain('4 Oct 2026, 10:01 UTC');
-  expect(details?.textContent).toContain('Reference');
+  expect(details?.textContent).toContain('Technical reference');
   expect(details?.textContent).toContain('Not available yet');
   expect(details?.textContent).toContain('Sanitised');
   expect(capture.root.querySelector('oc-hinge-drawer[open]')).toBeNull();

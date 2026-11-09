@@ -43,6 +43,10 @@ import { WebSocketService } from '../core/websocket.service';
 import { FoldLoader } from '../ui/fold-loader/fold-loader';
 import { FilePreview } from './file-preview';
 import { LiveView } from '../live-view/live-view';
+
+function turnTools(turn: Turn): ToolActivityRecord[] {
+  return turn.tools;
+}
 import {
   capturedByLine, displayTextParts, fileCreator, fileName, fileScreenshotCreator, fileType,
   fileUrl, hasAttachment, hasScreenshotFile, hasTranscriptScreenshot, imageThumbnailUrl,
@@ -85,7 +89,10 @@ export class Workspace implements OnInit {
   protected readonly rail = signal(false);
   protected readonly panelTab = signal<'files' | 'activity' | 'memory'>('files');
   protected readonly approvalWaiting = signal(false);
-  protected readonly activity = computed(() => this.chat.turns().flatMap(turn => turn.tools));
+  protected readonly activity = computed(() => {
+    const tools = this.chat.turns().flatMap(turnTools);
+    return tools.reverse();
+  });
   protected readonly toolKind = getToolKind;
   protected readonly desktop = signal(globalThis.innerWidth >= 1100);
   protected readonly panel = signal(this.desktop());
