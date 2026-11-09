@@ -1917,6 +1917,8 @@ basenames and digests, never private paths or bytes. Authenticated bridge reques
 32 KiB chunks. Changed or missing bytes cannot pass the server's digest check.
 The journal preserves reports for replay. Restricted and interrupted turns publish no files.
 The assistant is instructed to convert SVG to PNG; SVG remains refused.
+It is also instructed to prefer a Mermaid code block for chat diagrams and to save
+images under `/workspace/artifacts`, then reference them with that full path in chat.
 
 The bridge sends the before-turn snapshot as one JSON line to the file reader.
 The reader accepts at most 65,536 characters and stops at the newline. It does not

@@ -78,7 +78,7 @@ async function captureImageCards(page, width) {
   await page.evaluate(waitForFonts);
   const injectedMarkup = page.locator('oc-assistant-markdown svg, oc-assistant-markdown script');
   assert.equal(await injectedMarkup.count(), 0);
-  assert.equal(await page.getByText('File not available').count(), 1);
+  assert.equal(await page.getByText('private.svg — not shared by the agent.').count(), 1);
   assert.equal(await page.locator('oc-conversation-file-card button img').count(), 2);
   await page.locator('.transcript').evaluate(scrollToStart);
   const screenshotOptions = { path: resolve(output, `images-${width}.png`), fullPage: true };

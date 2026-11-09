@@ -6,7 +6,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { DogEar } from '../ui/paper';
 import { MermaidDiagram } from './mermaid-diagram';
 import { parseMarkdown, type MarkdownBlock } from './markdown-parser';
-import { fileName } from './file-presentation';
+import { fileName, fileUrl } from './file-presentation';
 import { untilAborted } from './until-aborted';
 
 @Component({
@@ -22,6 +22,7 @@ export class AssistantMarkdown implements OnDestroy {
   private readonly lifetime = new AbortController();
   private returnFocus: HTMLElement | null = null;
   readonly text = input.required<string>();
+  readonly conversationId = input('');
   readonly availableFiles = input<string[]>([]);
   readonly volatile = input(false);
   readonly citationOpened = output<string>();
@@ -63,6 +64,24 @@ export class AssistantMarkdown implements OnDestroy {
   protected fileLabel(label: string, path: string): string {
     if (label.includes('/workspace/artifacts/')) return fileName(path);
     return label;
+  }
+
+  protected imageUrl(path: string): string {
+    return fileUrl(this.conversationId(), path, true);
+  }
+
+  protected unsharedFileName(link: string | undefined): string {
+    if (!link) return 'File';
+    const withoutSuffix = link.split(/[?#]/u, 1)[0] ?? '';
+    let decoded = withoutSuffix;
+    try {
+      decoded = decodeURIComponent(withoutSuffix);
+    } catch {
+      // Keep malformed names as text so the reply still explains the missing file.
+    }
+    // Show only the last name, including when the path has encoded separators.
+    const normalised = decoded.replaceAll('\\', '/');
+    return fileName(normalised) || 'File';
   }
 
   ngOnDestroy(): void {

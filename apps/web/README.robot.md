@@ -533,7 +533,7 @@ The earlier live journey is recorded in [sign-in evidence](../../docs/process/si
 
 `assistant-markdown.*` renders assistant text through Angular templates, never HTML injection.
 `markdown-parser.ts` handles headings 1–6, flat ordered and unordered lists, quotes,
-paragraphs, backtick and tilde code fences, inline code, bold, italic and links.
+paragraphs, backtick and tilde code fences, inline code, bold, italic, links and images.
 Only `https:` and `mailto:` links become anchors, with a new tab and
 `rel="noopener noreferrer"`. Other destinations and HTML remain text.
 Closed Mermaid code blocks load the MIT-licensed Mermaid package only when needed.
@@ -1433,10 +1433,15 @@ Refusals reuse the upload reason wording. PNG, JPEG, GIF, WebP and SVG cards loa
 thumbnails through the existing conversation file route. The preview fetches SVG
 through that route and renders it only as an image. Reply links beginning with
 `/workspace/artifacts/` or `file:///workspace/artifacts/` resolve by file name
-against published files this viewer may open. An unmatched or ambiguous name shows
-“File not available”. Other local file paths also show this note without exposing
-the path. Ordinary HTTPS and email links still work.
+against published files this viewer may open. Published PNG, JPEG, WebP and GIF
+image syntax loads inline through the same checked conversation file route as cards.
+Other published image syntax opens a file preview link. An unmatched or ambiguous
+name shows its file name and says the agent has not shared it. Other local file
+paths show the same note without exposing the path. Remote image syntax stays text;
+ordinary HTTPS and email links still work.
 `npm run visual:assistant-files-2` captures both widths with an intercepted API.
+`npm run visual:reply-images` captures inline images and
+unshared paths at 1280 and 390 px with an intercepted API.
 Fresh-install qualification remains NOT RUN.
 
 ## Volatile personal reply state

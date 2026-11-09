@@ -1,5 +1,6 @@
 interface InlinePart {
-  kind: 'text' | 'code' | 'bold' | 'italic' | 'link' | 'workspace-file' | 'citation';
+  kind: 'text' | 'code' | 'bold' | 'italic' | 'link' | 'workspace-file'
+    | 'workspace-image' | 'citation';
   text: string;
   href?: string;
 }
@@ -33,18 +34,33 @@ function localFileLink(value: string): boolean {
   return /\.[a-z0-9]+(?:[?#]|$)/iu.test(value);
 }
 
+function describeImageMatch(label: string, href: string, whole: string): InlinePart {
+  if (!localFileLink(href)) return { kind: 'text', text: whole };
+  if (/\.(?:png|jpe?g|webp|gif)$/iu.test(href)) {
+    return { kind: 'workspace-image', text: label, href };
+  }
+  return { kind: 'workspace-file', text: label, href };
+}
+
+function describeLinkMatch(label: string, href: string, whole: string): InlinePart {
+  if (localFileLink(href)) return { kind: 'workspace-file', text: label, href };
+  if (safeLink(href)) return { kind: 'link', text: label, href };
+  return { kind: 'text', text: whole };
+}
+
 function describeInlineMatch(match: RegExpMatchArray): InlinePart {
-  const [whole, code, bold, starItalic, underscoreItalic, label, href, citation] = match;
+  const [whole, code, bold, starItalic, underscoreItalic,
+    imageLabel, imageHref, label, href, citation] = match;
   if (code !== undefined) return { kind: 'code', text: code };
   if (bold !== undefined) return { kind: 'bold', text: bold };
   if (starItalic !== undefined || underscoreItalic !== undefined) {
     return { kind: 'italic', text: starItalic ?? underscoreItalic ?? '' };
   }
-  if (label !== undefined && href !== undefined && localFileLink(href)) {
-    return { kind: 'workspace-file', text: label, href };
+  if (imageLabel !== undefined && imageHref !== undefined) {
+    return describeImageMatch(imageLabel, imageHref, whole ?? '');
   }
-  if (label !== undefined && href !== undefined && safeLink(href)) {
-    return { kind: 'link', text: label, href };
+  if (label !== undefined && href !== undefined) {
+    return describeLinkMatch(label, href, whole ?? '');
   }
   if (citation !== undefined) return { kind: 'citation', text: citation };
   return { kind: 'text', text: whole ?? '' };
@@ -52,7 +68,7 @@ function describeInlineMatch(match: RegExpMatchArray): InlinePart {
 
 function parseInline(text: string): InlinePart[] {
   // Keep each alternative bounded by its own delimiter, including unmatched input.
-  const pattern = /`([^`\n]+)`|\*\*([^*]+)\*\*|\*([^*\n]+)\*|_([^_\n]+)_|\[([^[\]\n]+)\]\(([^()\s]+)\)|\[(\d+)\]/g;
+  const pattern = /`([^`\n]+)`|\*\*([^*]+)\*\*|\*([^*\n]+)\*|_([^_\n]+)_|!\[([^[\]\n]*)\]\(([^()\s]+)\)|\[([^[\]\n]+)\]\(([^()\s]+)\)|\[(\d+)\]/g;
   const parts: InlinePart[] = [];
   let position = 0;
   for (const match of text.matchAll(pattern)) {

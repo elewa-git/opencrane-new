@@ -72,7 +72,15 @@
             {{ fileLabel(part.text, path) }}
           </button>
         } @else {
-          <span>File not available</span>
+          <span class="workspace-file-note">{{ unsharedFileName(part.href) }} — not shared by the agent.</span>
+        }
+      }
+      @case ('workspace-image') {
+        @if (publishedFile(part.href); as path) {
+          <img class="workspace-image" [src]="imageUrl(path)" [alt]="part.text"
+            loading="lazy" referrerpolicy="no-referrer">
+        } @else {
+          <span class="workspace-file-note">{{ unsharedFileName(part.href) }} — not shared by the agent.</span>
         }
       }
       @case ('citation') {

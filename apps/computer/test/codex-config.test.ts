@@ -3,6 +3,20 @@ import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
 import { record } from '../src/http.ts';
+import { memoryFreeConfig } from '../src/codex-config.ts';
+
+function guidesChatDiagramsAndPublishedImages() {
+  const config = memoryFreeConfig('test-model');
+  expect(config).toContain('Save files to publish under /workspace/artifacts.');
+  expect(config).toContain('Publish at most 16 files and 20 MiB in total per turn.');
+  expect(config).toContain('Convert SVG images to PNG before publishing.');
+  expect(config).toContain('To show a diagram in chat, prefer a mermaid code block.');
+  expect(config).toContain(
+    'To show an image in chat, save it under /workspace/artifacts and reference it with that full path.',
+  );
+}
+
+it('guides diagrams and published images in agent replies', guidesChatDiagramsAndPublishedImages);
 
 async function usesNativePrivateProtocol() {
   const execute = promisify(execFile);

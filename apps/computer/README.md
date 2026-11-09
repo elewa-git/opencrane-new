@@ -26,7 +26,7 @@ flowchart LR
   server -->|qualified private input and four permitted memory tools| computer
   computer -->|reports private thread and memory discovery| server
   computer -->|checks commands and command ownership| executor["socket-denied executor"]
-  computer -->|runs| desktop["Codex, browser and desktop"]
+  computer -->|runs with file sharing guidance| desktop["Codex, browser and desktop"]
   computer -->|checks callers and passes for AI and MCP calls| gateway["agentgateway<br/>AI gateway"]
   computer -->|checks private callers and catalogue loads| models["libs/models<br/>AI access checks"]
   collector["private memory collector<br/>checks processes"] -->|checks live bridge, supervisor and proxy| computer
@@ -57,6 +57,8 @@ The computer saves that confirmation without private reply text.
   protection check can confirm that this process still holds the tool reply. It
   refuses when no private call is open. This check alone does not enable memory.
 - Keeps the assistant's files when its computer pauses and starts again.
+- Tells the assistant to use a Mermaid block for chat diagrams and to save images
+  under `/workspace/artifacts` before linking them in a reply.
 - Runs the assistant, file tools and desktop as separate Linux users to limit their access.
 - Sends AI model calls and reviewed [tool server](../../GLOSSARY.md#mcp-server-tool-server)
   calls through agentgateway. Shell and file tools run locally inside the computer.
