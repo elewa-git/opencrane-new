@@ -196,6 +196,34 @@ See [own checks](../../docs/process/p4-15-pr5r/receipt.md).
 
 ## Private process inventory
 
+The collector now checks a joined set before each journey and after its runner
+returns, before it saves any result. Each record names one of seven fixed
+groups: server delivery, bridge, supervisor, proxy, native wrapper, native
+child or canary helper. It must say that the existing live protection check
+passed. The collector requires exactly one record for each fixed group and
+one for every helper named by the current challenge. A missing, duplicate,
+malformed or unsafe record refuses with `complete: false` and a fixed group
+code. The saved result contains no PID, path, canary or private text.
+
+Every record must match the measured server and computer installations, both
+image digests, the current challenge and computer generation. The second read
+must show the same PID and Linux start time for every group and helper. The
+collector checks both installations around these reads as well. Fixture tests
+supply records to prove acceptance and refusal. The deployed reader currently
+returns no complete set: the held proxy, native pair and helper cannot all be
+observed before the old journey starts. Collection therefore refuses before
+that journey starts. Connecting those live records belongs to the later held
+journey work. No saved result or caller-supplied record can fill a missing group.
+
+Each inventory snapshot has separate launch observations and protection records.
+The validator requires each record to match its launch's PID, Linux start time,
+PID namespace and non-dumpable measurement. It requires exactly the named
+launches as well as exactly the named records. Process identities must be unique,
+apart from the bridge and proxy labels, which refer to the same process. A canary
+helper runs in the server container, so its required image is the server image.
+The other non-server groups run in the computer container. The current deployed
+reader returns empty launch and record arrays. It cannot claim a measured set.
+
 The MCP proxy is part of the packaged bridge process, not a separate child.
 `proveComputerProxy` checks its fixed process command and the root entrypoint's
 bridge launch record. The caller must supply the owner-approved computer image
@@ -704,5 +732,6 @@ swap, crash dumps, core limits, `CoreDumping` and its own dumpability after
 exec. It rechecks both process identities and protection before every result.
 Missing or changed proof returns a fixed reason and `complete: false`.
 The collector checks the installation around each journey. Replay and status
-reads start no helper. The joined inventory and live journey remain unfinished.
+reads start no helper. The joined gate is present, but a complete live set and
+the live journey remain unfinished.
 Admission stays disabled.

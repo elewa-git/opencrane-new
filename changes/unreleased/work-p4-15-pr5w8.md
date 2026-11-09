@@ -1,0 +1,1 @@
+Private memory collection now requires each process record to match a measured launch, namespace, dumpability result and correct container image before work and before saving a result. Missing or copied helper processes refuse collection. The server package includes the scanner files needed to load its image evidence check.

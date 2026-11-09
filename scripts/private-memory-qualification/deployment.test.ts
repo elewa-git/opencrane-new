@@ -7,11 +7,16 @@ import { collectDeployment } from './deployment.ts';
 import { containerIdentity, proveComputerBridge, type ContainerIdentity } from './bridge-proof.ts';
 import { proveComputerSupervisor } from './supervisor-proof.ts';
 import { protectionMessages, type ProtectionFailure } from './protection-failure.ts';
+import {
+  inventoryGroups, readCurrentInventory, type InventoryContext, type InventorySnapshot,
+  type ProtectionRecord, type TrustedLaunch,
+} from './joined-inventory.ts';
 
 vi.mock('node:child_process', { spy: true });
 vi.mock('node:fs', { spy: true });
 vi.mock('./bridge-proof.ts', { spy: true });
 vi.mock('./supervisor-proof.ts', { spy: true });
+vi.mock('./joined-inventory.ts', { spy: true });
 const containerId = 'c'.repeat(64);
 const imageDigest = `sha256:${'b'.repeat(64)}`;
 const sourceSha = 'a'.repeat(40);
@@ -30,6 +35,35 @@ function unchanged(): void {}
 
 function readComputer(): ContainerIdentity {
   return computer;
+}
+
+function matchingInventory(context: InventoryContext): {
+  records: ProtectionRecord[]; launches: TrustedLaunch[];
+} {
+  const records: ProtectionRecord[] = [];
+  const launches: TrustedLaunch[] = [];
+  for (const [index, group] of inventoryGroups.entries()) {
+    const location = group === 'serverDelivery' || group === 'canaryHelper' ?
+      'server' : 'computer';
+    const imageDigest = location === 'server' ? context.serverImageDigest :
+      context.computerImageDigest;
+    const helperIds = group === 'canaryHelper' ? context.helperIds : [undefined];
+    for (const helperId of helperIds) {
+      const pid = 100 + index;
+      const startTime = String(1000 + index);
+      const pidNamespace = location === 'server' ? 'pid:[4026531836]' : 'pid:[4026531837]';
+      records.push({ group, helperId, imageDigest,
+        serverInstallationId: context.serverInstallationId,
+        computerInstallationId: context.computerInstallationId,
+        serverImageDigest: context.serverImageDigest,
+        computerImageDigest: context.computerImageDigest,
+        challengeId: context.challengeId, generationId: context.generationId,
+        pid, startTime, pidNamespace, dumpable: false, safe: true });
+      launches.push({ group, helperId, location, pid, startTime, pidNamespace,
+        dumpable: false });
+    }
+  }
+  return { records, launches };
 }
 
 function replaceComputer(): void {
@@ -71,6 +105,8 @@ function docker(_file: unknown, args: unknown, options: unknown): string {
 }
 
 function prepare(): void {
+  vi.mocked(readCurrentInventory).mockReset();
+  vi.mocked(readCurrentInventory).mockImplementation(matchingInventory);
   vi.mocked(proveComputerBridge).mockResolvedValue(true);
   vi.mocked(proveComputerSupervisor).mockResolvedValue(true);
   computer = { Id: 'a'.repeat(64), Image: `sha256:${'d'.repeat(64)}`,
@@ -119,6 +155,114 @@ function responseName(response: Record<string, unknown>): unknown {
 }
 it('qualifies the fixture deployment only after all eleven observed runs',
   qualifiesObservedDeployment);
+
+async function refusesMissingJoinedGroup(): Promise<void> {
+  function withoutProxy(context: InventoryContext): InventorySnapshot {
+    const snapshot = matchingInventory(context);
+    const remaining = snapshot.records.filter(function keepOther(record): boolean {
+      return record.group !== 'proxy';
+    });
+    return { ...snapshot, records: remaining };
+  }
+  vi.mocked(readCurrentInventory).mockImplementation(withoutProxy);
+  const result = await collectDeployment();
+  expect(result).toMatchObject({ result: 'FAIL', reason: 'host_refused',
+    complete: false, group: 'proxy' });
+  expect(responses).toHaveLength(0);
+}
+it('does not start a journey when the joined inventory lacks a group',
+  refusesMissingJoinedGroup);
+
+async function refusesFinalJoinedFault(): Promise<void> {
+  function unsafeBridge(context: InventoryContext): InventorySnapshot {
+    const snapshot = matchingInventory(context);
+    const changed = snapshot.records.map(function changeBridge(record): Record<string, unknown> {
+      if (record.group === 'bridge') {
+        return { ...record, safe: false };
+      }
+      return record;
+    });
+    return { ...snapshot, records: changed };
+  }
+  vi.mocked(readCurrentInventory).mockImplementationOnce(matchingInventory);
+  vi.mocked(readCurrentInventory).mockImplementationOnce(unsafeBridge);
+  const result = await collectDeployment();
+  expect(result).toMatchObject({ result: 'FAIL', reason: 'host_refused',
+    complete: false, group: 'bridge' });
+  expect(responses).toHaveLength(1);
+  expect(readCurrentInventory).toHaveBeenCalledTimes(2);
+  expect(writeFileSync).toHaveBeenLastCalledWith(expect.any(String), JSON.stringify(result),
+    { flag: 'wx', mode: 0o600 });
+}
+it('does not save a PASS receipt after a final joined protection failure',
+  refusesFinalJoinedFault);
+
+async function bindsInventoryToCurrentLaunch(): Promise<void> {
+  const result = await collectDeployment();
+  expect(result.result).toBe('PASS');
+  const firstRequest = responses[0]!;
+  const firstContext = vi.mocked(readCurrentInventory).mock.calls[0]![0];
+  expect(firstContext.computerInstallationId).toMatch(/^sha256:[a-f0-9]{64}$/u);
+  expect(firstContext).toEqual({
+    serverInstallationId: firstRequest['installationId'],
+    computerInstallationId: firstContext.computerInstallationId,
+    serverImageDigest: imageDigest,
+    computerImageDigest: computer.Image,
+    challengeId: firstRequest['challengeId'],
+    generationId: firstContext.computerInstallationId,
+    helperIds: [firstRequest['challengeId']],
+  });
+}
+it('passes the measured installations, images and challenge to the inventory reader',
+  bindsInventoryToCurrentLaunch);
+
+async function rechecksAfterInitialInventory(kind: string): Promise<void> {
+  function changeAfterRead(context: InventoryContext): InventorySnapshot {
+    const snapshot = matchingInventory(context);
+    if (kind === 'server') {
+      container['Image'] = `sha256:${'d'.repeat(64)}`;
+    }
+    if (kind === 'computer') {
+      replaceComputer();
+    }
+    if (kind === 'target') {
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
+        containerId, computerContainerId: 'e'.repeat(64), siloId: 'fixture-silo',
+      }));
+    }
+    return snapshot;
+  }
+  vi.mocked(readCurrentInventory).mockImplementationOnce(changeAfterRead);
+  const result = await collectDeployment();
+  expect(result.result).toBe('FAIL');
+  expect(responses).toHaveLength(0);
+}
+it.each(['server', 'computer', 'target'])(
+  'rechecks the %s after the first inventory read', rechecksAfterInitialInventory,
+);
+
+async function readsFinalInventoryAfterLostReply(): Promise<void> {
+  function loseReply(): void {
+    throw new Error('private reply lost');
+  }
+  function withoutWrapper(context: InventoryContext): InventorySnapshot {
+    const snapshot = matchingInventory(context);
+    const remaining = snapshot.records.filter(function keepOther(record): boolean {
+      return record.group !== 'nativeWrapper';
+    });
+    return { ...snapshot, records: remaining };
+  }
+  alter = loseReply;
+  vi.mocked(readCurrentInventory).mockImplementationOnce(matchingInventory);
+  vi.mocked(readCurrentInventory).mockImplementationOnce(withoutWrapper);
+  const result = await collectDeployment();
+  expect(result).toMatchObject({ result: 'FAIL', reason: 'host_refused',
+    complete: false, group: 'nativeWrapper' });
+  expect(readCurrentInventory).toHaveBeenCalledTimes(2);
+  expect(responses).toHaveLength(0);
+}
+it('reads final protection even when the private journey loses its reply',
+  readsFinalInventoryAfterLostReply);
 
 async function savesOnlyFixedComputerRefusal(): Promise<void> {
   const computerContainerId = 'a'.repeat(64);

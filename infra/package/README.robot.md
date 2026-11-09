@@ -15,6 +15,7 @@ Debian main or PostgreSQL apt archive review.
 The root `.dockerignore` excludes repository test folders and test files from the
 package build. The runtime cleanup also removes the nested `fast-uri/test` and
 `json-schema-traverse/spec` folders installed with server dependencies.
+It keeps the three image scanner files used by the server's image evidence import.
 `scripts/private-memory-qualification/memory-image.test.ts` builds this Dockerfile,
 checks the packaged source folders for tests, and runs both memory checks against
 disposable NATS. It does not qualify live memory delivery or enable admission.
