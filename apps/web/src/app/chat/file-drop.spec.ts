@@ -108,6 +108,27 @@ async function uploadsAttachedAndDroppedFiles() {
 }
 it('sends attached and dropped files through the same upload request', uploadsAttachedAndDroppedFiles);
 
+async function removesFileWhileConversationCreationWaits() {
+  const { fixture, root } = await renderWorkspace();
+  const chat = fixture.componentInstance['chat'];
+  let finishCreation: (() => void) | undefined;
+  const creation = new Promise<void>(resolve => { finishCreation = resolve; });
+  Object.defineProperty(chat, 'ensureConversation', { value: () => creation });
+  const file = new File(['note'], 'cancelled.txt');
+  const uploading = chat.upload(file);
+  fixture.detectChanges();
+  const remove = root.querySelector<HTMLButtonElement>('[aria-label="Remove cancelled.txt"]');
+  expect(remove).not.toBeNull();
+  remove?.click();
+  finishCreation?.();
+  await uploading;
+  expect(requests).toHaveLength(0);
+  expect(chat.uploadBatch.readyIds()).toEqual([]);
+  expect(root.textContent).not.toContain('cancelled.txt');
+}
+it('does not upload a removed file after conversation creation finishes',
+  removesFileWhileConversationCreationWaits);
+
 async function uploadsInOrderWithErrors() {
   const { fixture, root } = await renderWorkspace();
   const oversized = new File([''], 'large.txt');

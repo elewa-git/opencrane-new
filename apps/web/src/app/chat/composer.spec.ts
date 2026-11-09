@@ -84,6 +84,34 @@ it('keeps typing available while an attachment uploads and waits on Enter', asyn
   expect(root.textContent).toContain('Uploading attachments…');
 });
 
+it('locks a direct-chat draft during a pending send', async () => {
+  const fixture = TestBed.createComponent(ChatComposer);
+  fixture.componentRef.setInput('directMode', true);
+  fixture.componentRef.setInput('draft', 'First message');
+  fixture.componentRef.setInput('busy', true);
+  await fixture.whenStable();
+  const value: unknown = fixture.nativeElement;
+  if (!(value instanceof HTMLElement)) throw new Error('No composer');
+  const field = value.querySelector('textarea');
+  expect(field?.readOnly).toBe(true);
+});
+
+it('waits for files on Enter even when a message is not busy', async () => {
+  const fixture = TestBed.createComponent(ChatComposer);
+  fixture.componentRef.setInput('draft', 'Read this');
+  fixture.componentRef.setInput('waitingForFiles', 'Preparing files…');
+  const sent: string[] = [];
+  function recordSubmission(text: string): void { sent.push(text); }
+  fixture.componentInstance.submitted.subscribe(recordSubmission);
+  await fixture.whenStable();
+  const value: unknown = fixture.nativeElement;
+  if (!(value instanceof HTMLElement)) throw new Error('No composer');
+  const field = value.querySelector('textarea');
+  expect(field?.readOnly).toBe(false);
+  field?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  expect(sent).toEqual([]);
+});
+
 it('sends a ready file without text and lets a refused file be removed', async () => {
   const fixture = TestBed.createComponent(ChatComposer);
   fixture.componentRef.setInput('attachments', [
