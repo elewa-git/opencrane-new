@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { hostedImageCheckedSchema } from '@opencrane/events';
@@ -164,6 +165,29 @@ async function refusesMalwareBoundary(kind: string) {
 it.each(['verdict', 'expiry', 'database age'])(
   'refuses the %s malware boundary even with a matching validator',
   refusesMalwareBoundary);
+
+async function rechecksOtherDatabaseAgeAfterValidation() {
+  const serverId = await installed();
+  const eventTime = new Date();
+  const base = result(serverId);
+  const vulnerability = { ...base.checks.vulnerability,
+    databaseUpdatedAt: new Date(eventTime.getTime() - 86_400_000 + 250).toISOString() };
+  const candidate = { ...base, checks: { ...base.checks, vulnerability } };
+  const checked = hostedImageCheckedSchema.parse(candidate);
+  const malware = checked.checks.malware;
+  const scanEvidence = retainAuthenticatedImageEvidence({ silo: 'test', serverId,
+    attemptId: 1, imageDigest: digest, platform: 'linux/amd64', malware });
+  async function evidence() {
+    await delay(500);
+    return { verdict: 'clean' as const, malware };
+  }
+  const outcome = await exportedWriter(nats.store, 'test', checked, eventTime,
+    scanEvidence, evidence);
+  expect(outcome.status).toBe('conflict');
+  expect(await registrations()).toHaveLength(1);
+}
+it('rechecks the separate scan database age after malware validation',
+  rechecksOtherDatabaseAgeAfterValidation);
 
 async function installed() {
   const serverId = 'hosted-test';
