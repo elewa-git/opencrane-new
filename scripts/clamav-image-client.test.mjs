@@ -403,12 +403,16 @@ async function coordinatesConcurrentDeliveries() {
   await enteredScan.promise;
   await new Promise(resolve => setTimeout(resolve, 50));
   expect(scanCount).toBe(1);
+  const stopped = new AbortController();
+  stopped.abort();
+  const cancelledDelivery = runAndWriteHostedImageCheck(...args, stopped.signal);
   releaseScan.resolve();
   expect(await Promise.all([first, second])).toEqual([
     { status: 'appended' }, { status: 'appended' },
   ]);
   expect(scanCount).toBe(1);
   expect(store.appendCount).toBe(1);
+  expect(await cancelledDelivery).toEqual({ status: 'unavailable' });
 }
 test('concurrent deliveries share one scan for the original attempt',
   coordinatesConcurrentDeliveries);
