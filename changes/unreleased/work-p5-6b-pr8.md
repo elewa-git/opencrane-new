@@ -1,0 +1,1 @@
+Hosted image checks now refuse a Grype receipt whose verdict disagrees with the tool outcome. Queued signature, licence and vulnerability failures save one rejection for the original attempt and return it on redelivery without another scan.

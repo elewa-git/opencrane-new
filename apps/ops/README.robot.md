@@ -34,6 +34,10 @@ Signature, licence and vulnerability checks use their existing independent tools
 Their valid failure results are saved with the clean malware scan as a rejected
 `mcp.image_checked` result. Checks skipped after a failure say `not_run`. Tool outages
 still leave the original scan claim without a result, so retries cannot scan again.
+The Grype receipt must have the same verdict as Grype's outcome. A missing receipt or
+different verdict leaves the claim without a result. The queue test uses a local
+authenticated scanner and the real checked writer to confirm one saved refusal for
+each independent check, and reads that result on delivery of the original event again.
 Missing custody, changed settings, stale databases and tool outages leave the image
 unadmitted. Failed queue jobs remain visible to the operator and are retried at
 dispatcher startup. Hosted execution remains disabled.

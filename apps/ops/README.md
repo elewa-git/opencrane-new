@@ -56,6 +56,7 @@ for checked preparation. It sends no memory text and cannot dispatch a turn.
 - Queues hosted image checks from saved attempts. It checks the original event again,
   then uses operator-owned image files and scanner settings before saving a result.
   A failed signature, licence or vulnerability check saves a refusal for that attempt.
+  A repeated job reads that saved refusal without scanning the image again.
 - Removes the dispatcher's ready marker as soon as event consumption fails, before
   database lock cleanup finishes.
 - Provides internal commands that claim, skip or record missed routine slots without starting work.
