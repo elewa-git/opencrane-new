@@ -1,11 +1,12 @@
 import { z } from 'zod';
+import type { EventStore } from '@opencrane/event-store';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { hostedImageCheckedSchema } from '@opencrane/events';
 import { envelope, history } from '../src/actor.ts';
 import { writeHostedAdmission as rawWriter, readHostedAdmission, readHostedImageScanAttempt,
-  foldHostedAdmission }
+  foldHostedAdmission, claimHostedImageScan }
   from '../src/hosted-admission.ts';
 import { writeHostedAdmission as exportedWriter } from
   '@opencrane/models/image-admission-writer';
@@ -216,6 +217,64 @@ async function installed() {
 async function registrations() {
   return history(nats.store, 'mcp-hosted-test', 'test');
 }
+
+async function onlyOneSimultaneousCallerClaimsScan() {
+  const serverId = await installed();
+  const claim = { serverId, attemptId: 1, imageDigest: digest, platform: 'linux/amd64' };
+  let releaseReads!: () => void;
+  let releaseAppends!: () => void;
+  const bothRead = new Promise<void>(resolve => { releaseReads = resolve; });
+  const bothAppending = new Promise<void>(resolve => { releaseAppends = resolve; });
+  let readCount = 0;
+  let appendCount = 0;
+  const appendKinds: string[] = [];
+
+  function separateStore(): EventStore {
+    async function* readStream(...args: Parameters<EventStore['readStream']>) {
+      for await (const row of nats.store.readStream(...args)) {
+        yield row;
+      }
+      readCount += 1;
+      if (readCount === 2) releaseReads();
+      await bothRead;
+    }
+
+    async function append(...args: Parameters<EventStore['append']>) {
+      appendCount += 1;
+      if (appendCount === 2) releaseAppends();
+      await bothAppending;
+      const outcome = await nats.store.append(...args);
+      appendKinds.push(outcome.outcome?.kind ?? 'missing');
+      return outcome;
+    }
+
+    function get(target: EventStore, property: keyof EventStore) {
+      if (property === 'readStream') return readStream;
+      if (property === 'append') return append;
+      return target[property];
+    }
+
+    return new Proxy(nats.store, { get });
+  }
+
+  const firstStore = separateStore();
+  const secondStore = separateStore();
+  const first = claimHostedImageScan(firstStore, 'test', claim);
+  const second = claimHostedImageScan(secondStore, 'test', claim);
+  const outcomes = await Promise.all([first, second]);
+
+  expect(readCount).toBe(2);
+  expect(appendCount).toBe(2);
+  expect(appendKinds).toContain('duplicate_saved');
+  expect(outcomes.map(outcome => outcome.status).sort()).toEqual(['claimed', 'unavailable']);
+  const rows = await registrations();
+  expect(rows).toHaveLength(2);
+  expect(rows[1]!.event.type).toBe('mcp.image_scan_claimed');
+  expect(rows[1]!.event.data).toMatchObject({ claimToken: expect.any(String) });
+}
+
+it('lets only the worker that saved a simultaneous claim scan',
+  onlyOneSimultaneousCallerClaimsScan);
 
 async function readsOnlyTheCurrentCheckingAttempt() {
   const serverId = await installed();
