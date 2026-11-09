@@ -1,18 +1,21 @@
 import { createHash, generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { beforeAll, expect, it } from 'vitest';
 import { z } from 'zod';
 import { hostedImageCheckedSchema } from '@opencrane/events';
 import { verifyHostedImage, currentHostedVerification } from '../src/hosted-verification.ts';
+import { verifyPublisherSignature } from '../src/hosted-cosign.ts';
 
 const repository = 'registry.example/publisher/tool';
 const cosign = `${process.cwd()}/.tools/cosign`;
 const keys = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 const publicKey = publicPem(keys.publicKey);
 const otherKeys = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+const execute = promisify(execFile);
 
 function publicPem(key: KeyObject) {
   const exported = key.export({ type: 'spki', format: 'pem' });
@@ -103,26 +106,30 @@ async function acceptsExactImage(architecture: string) {
 }
 it.each(['amd64', 'arm64'])('verifies the signed %s subject and all stored bytes', acceptsExactImage);
 
-function shellQuote(value: string) {
-  return "'" + value.replaceAll("'", "'\\''") + "'";
-}
-
 async function verifiesWithoutNetwork() {
   const directory = await mkdtemp(join(tmpdir(), 'hosted-offline-test-'));
   try {
     const tracePath = join(directory, 'network.trace');
-    const wrapperPath = join(directory, 'cosign');
-    // Block socket creation and record attempts across every Cosign thread.
-    const script = '#!/bin/sh\nexec timeout 5s strace -f -e trace=network ' +
-      '-e inject=socket:error=EACCES -o ' + shellQuote(tracePath) + ' ' +
-      shellQuote(cosign) + ' "$@"\n';
-    const executable = { mode: 0o700 };
-    await writeFile(wrapperPath, script, executable);
+    const keyPath = join(directory, 'publisher.pem');
+    const payloadPath = join(directory, 'payload');
+    const signaturePath = join(directory, 'signature');
     const image = fixture();
-    const result = await image.verify(wrapperPath);
-    const trace = await readFile(tracePath, 'utf8');
-    expect(trace).not.toMatch(/socket\(AF_INET6?,/u);
-    expect(trace).toContain('exited with 0');
+    const signed = z.object({ payload: z.string(), signature: z.string() }).parse(
+      JSON.parse(image.blobs.get('signature')!.toString()) as unknown);
+    await writeFile(keyPath, publicKey);
+    await writeFile(payloadPath, signed.payload);
+    await writeFile(signaturePath, signed.signature);
+    // Block socket creation and record attempts across every Cosign thread.
+    const traceArguments = ['5s', 'strace', '-f', '-e', 'trace=network',
+      '-e', 'inject=socket:error=EACCES', '-o', tracePath, cosign,
+      'verify-blob', '--key', keyPath, '--signature', signaturePath,
+      '--offline', '--insecure-ignore-tlog', payloadPath];
+    await execute('timeout', traceArguments, { timeout: 10_000, maxBuffer: 64 * 1024,
+      env: { HOME: directory, PATH: '/usr/bin:/bin', SIGSTORE_REKOR_PUBLIC_KEY: keyPath } });
+    const result = await image.verify();
+    const networkTrace = await readFile(tracePath, 'utf8');
+    expect(networkTrace).not.toMatch(/socket\(AF_INET6?,/u);
+    expect(networkTrace).toContain('exited with 0');
     expect(result.verdict).toBe('pass');
     expect(image.reads).toHaveLength(5);
   } finally {
@@ -130,6 +137,20 @@ async function verifiesWithoutNetwork() {
   }
 }
 it('verifies a valid signature with no outbound network attempts', verifiesWithoutNetwork);
+
+async function forgedSuccessCannotVerifySignature() {
+  const directory = await mkdtemp(join(tmpdir(), 'hosted-forged-cosign-'));
+  try {
+    const binary = join(directory, 'cosign');
+    await writeFile(binary, '#!/bin/sh\nprintf "Verified OK\\n"\n', { mode: 0o700 });
+    const image = fixture();
+    expect(await image.verify(binary)).toEqual({ verdict: 'unavailable',
+      reasonCode: 'verifier_unavailable' });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+it('does not trust a forged Cosign success string', forgedSuccessCannotVerifySignature);
 
 const signatureFailures = ['unsigned', 'wrong_key', 'wrong_subject', 'wrong_repository',
   'revoked', 'scope', 'malformed', 'installer_key'];
@@ -232,33 +253,16 @@ async function unavailableVerifier() {
 }
 it('reports a missing verifier before reading candidate bytes', unavailableVerifier);
 
-async function unavailableScratchFile(filename: string) {
-  const directory = await mkdtemp(join(tmpdir(), 'hosted-file-error-test-'));
-  try {
-    const wrapperPath = join(directory, 'cosign');
-    const statusPath = join(directory, 'exit-code');
-    const errorPath = join(directory, 'stderr');
-    // Replace only this invocation's scratch file before the real verifier opens it.
-    const script = '#!/bin/sh\nset -eu\n' +
-      'rm "$HOME/"' + shellQuote(filename) + '\n' +
-      'mkdir "$HOME/"' + shellQuote(filename) + '\n' +
-      'status=0\n' + shellQuote(cosign) + ' "$@" 2>' + shellQuote(errorPath) +
-      ' || status=$?\ncat ' + shellQuote(errorPath) + ' >&2\n' +
-      'printf "%s" "$status" >' + shellQuote(statusPath) + '\nexit "$status"\n';
-    const executable = { mode: 0o700 };
-    await writeFile(wrapperPath, script, executable);
-    const image = fixture();
-    const result = await image.verify(wrapperPath);
-    expect(await readFile(statusPath, 'utf8')).toBe('1');
-    expect(await readFile(errorPath, 'utf8')).toContain('is a directory');
-    expect(result).toEqual({ verdict: 'unavailable', reasonCode: 'verifier_unavailable' });
-    expect(image.reads).toEqual(['signature']);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
+async function unreadablePublisherKeyIsUnavailable() {
+  const image = fixture();
+  const signed = z.object({ payload: z.string(), signature: z.string() }).parse(
+    JSON.parse(image.blobs.get('signature')!.toString()) as unknown);
+  const verdict = await verifyPublisherSignature(cosign, 'not a public key',
+    signed.payload, signed.signature);
+  expect(verdict).toBe('unavailable');
 }
-it.each(['publisher.pem', 'payload', 'signature'])(
-  'reports an unreadable %s as unavailable when Cosign exits 1', unavailableScratchFile);
+it('keeps a real Cosign key-file error separate from signature failure',
+  unreadablePublisherKeyIsUnavailable);
 
 async function refusesChangedTrustDuringRead() {
   const image = fixture();

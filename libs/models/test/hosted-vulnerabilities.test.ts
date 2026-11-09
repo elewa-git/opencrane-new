@@ -1,14 +1,16 @@
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { promisify } from 'node:util';
 import { hostedImageCheckedSchema } from '@opencrane/events';
 import { beforeAll, expect, it } from 'vitest';
 import { inspectHostedVulnerabilities, scanPinnedHostedSbom }
   from '../src/hosted-vulnerabilities.ts';
 
 const now = Date.parse('2026-11-07T12:00:00.000Z');
+const execute = promisify(execFile);
 const digest = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 const database = Buffer.from('pinned database fixture');
 const imageDigest = 'a'.repeat(64);
@@ -31,7 +33,7 @@ function report(severity = 'Low') {
       built: '2026-11-07T10:00:00.000Z', schemaVersion: '6.0.0' } } };
 }
 
-type Reply = 'normal' | 'lost' | 'duplicate' | 'error' | 'timeout';
+type Reply = 'normal' | 'lost' | 'duplicate' | 'error' | 'timeout' | 'overflow';
 type State = { status: Record<string, unknown>; report: Record<string, unknown>;
   calls: string[]; reply: Reply };
 
@@ -48,7 +50,8 @@ async function fixture(change?: (state: State) => void,
     built: '2026-11-07T10:00:00.000Z' }, report: report(), calls: [] as string[],
     reply: 'normal' };
   change?.(state);
-  function run(_binary: string, args: string[]) {
+  function run(_binary: string, args: string[],
+    options: { cwd: string; env: Record<string, string>; timeout: number; maxBuffer: number }) {
     state.calls.push(args.join(' '));
     if (args[0] === 'db' && args[1] === 'import') {
       return Promise.resolve({ stdout: '' });
@@ -58,6 +61,10 @@ async function fixture(change?: (state: State) => void,
     }
     if (state.reply === 'error') return Promise.reject(new Error('/private/report/bytes'));
     if (state.reply === 'timeout') return Promise.reject(new Error('scan timed out'));
+    if (state.reply === 'overflow') {
+      const oversizedOutput = 'import sys; sys.stdout.write("x" * (17 * 1024 * 1024))';
+      return execute('python3', ['-c', oversizedOutput], options);
+    }
     if (state.reply === 'lost') return Promise.resolve({ stdout: '' });
     duringScan?.(input, settings);
     const output = JSON.stringify(state.report);
@@ -76,6 +83,15 @@ async function fixture(change?: (state: State) => void,
     await rm(directory, { recursive: true, force: true });
   }
 }
+
+it('keeps oversized subprocess output unavailable without saving its text', async () => {
+  function overflow(state: State) {
+    state.reply = 'overflow';
+  }
+  const checked = await fixture(overflow);
+  expect(checked.result).toEqual({ verdict: 'unavailable',
+    reasonCode: 'vulnerability_scan_unavailable' });
+});
 
 it('records a dated digest-bound low-severity result from a fresh actual database', async () => {
   const { result, state } = await fixture();
