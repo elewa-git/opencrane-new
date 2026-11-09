@@ -13,7 +13,8 @@
   }
   <label class="sr-only" for="message">{{ directMode() ? 'Message' : 'Message your agent' }}</label>
   <textarea id="message" rows="1" maxlength="32000" [placeholder]="placeholder()"
-    [value]="draft()" [disabled]="!!reason()" [readOnly]="queued()"
+    [value]="draft()" [disabled]="!!reason()"
+    [readOnly]="queued() || (directMode() && busy())"
     [attr.aria-describedby]="reason() ? 'composer-reason' : null"
     (input)="change($event)" (keydown)="keydown($event)"></textarea>
   @if (attachments().length) {

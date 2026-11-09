@@ -162,7 +162,7 @@ export class UploadBatch {
     this.chips.set([...current, next]);
   }
 
-  private hasChip(key: string): boolean {
+  hasChip(key: string): boolean {
     return this.chips().some(chip => chip.key === key);
   }
 

@@ -477,6 +477,7 @@ export class ChatSession implements OnDestroy {
       }
       await this.ensureConversation(pending.conversation);
       if (revision !== this.revision) return;
+      if (!this.uploadBatch.hasChip(pending.key)) return;
       if (!this.connected()) this.socket.connect();
       const reportProgress = this.uploadBatch.reportProgress.bind(this.uploadBatch);
       this.uploadBatch.transfer = sendUpload(
@@ -484,6 +485,7 @@ export class ChatSession implements OnDestroy {
       );
       const fileId = await this.uploadBatch.transfer.completed;
       if (revision !== this.revision) return;
+      if (!this.uploadBatch.hasChip(pending.key)) return;
       this.uploadBatch.confirmed(fileId);
     } catch (error) {
       if (revision === this.revision) {

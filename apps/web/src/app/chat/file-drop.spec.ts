@@ -111,6 +111,7 @@ it('sends attached and dropped files through the same upload request', uploadsAt
 async function removesFileWhileConversationCreationWaits() {
   const { fixture, root } = await renderWorkspace();
   const chat = fixture.componentInstance['chat'];
+  chat.selected.set('');
   let finishCreation: (() => void) | undefined;
   const creation = new Promise<void>(resolve => { finishCreation = resolve; });
   Object.defineProperty(chat, 'ensureConversation', { value: () => creation });
@@ -122,6 +123,7 @@ async function removesFileWhileConversationCreationWaits() {
   remove?.click();
   finishCreation?.();
   await uploading;
+  fixture.detectChanges();
   expect(requests).toHaveLength(0);
   expect(chat.uploadBatch.readyIds()).toEqual([]);
   expect(root.textContent).not.toContain('cancelled.txt');
