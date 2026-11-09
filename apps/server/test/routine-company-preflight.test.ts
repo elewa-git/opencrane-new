@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { z } from 'zod';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { openfga } from '@opencrane/authz/testing';
@@ -11,9 +12,11 @@ import { oauthConfigurationDigest } from '../../../libs/models/src/oauth-attempt
 import { startOAuthConfigurationChange, finishOAuthConfigurationChange }
   from '../../../libs/models/src/oauth-configuration-change.ts';
 import { toolPolicyFromRows } from '../../../libs/models/src/tool-policy.ts';
+import { readCurrentCompanyProfile } from '../../../libs/models/src/company-profile-reader.ts';
 import * as toolPolicy from '../../../libs/models/src/tool-policy.ts';
 import { oauthSelectionFixture } from '../../../libs/models/test/support/oauth-selection.ts';
-import { checkRoutineCompanyPreflight } from '../src/routine-company-preflight.ts';
+import { checkRoutineCompanyPreflight, routineCompanyPreflightFromCustody }
+  from '../src/routine-company-preflight.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -23,6 +26,8 @@ function noSql(): never {
   throw new Error('Grant projection must not use SQL');
 }
 const database = { query: noSql };
+const oauthChangeEvent = z.object({ type: z.string(),
+  data: z.object({ status: z.string() }) });
 async function startAccess() {
   fga = await openfga();
   binding = await createStore(fga.apiUrl, 'test');
@@ -41,7 +46,7 @@ async function closeStore() {
 beforeEach(startStore);
 afterEach(closeStore);
 
-async function fixture(shouldRecordConfiguration = true) {
+async function fixture(shouldRecordConfiguration = true, useSavedVerified = false) {
   serial += 1;
   const serverId = `installed${serial}`;
   const profileId = 'profile';
@@ -72,12 +77,21 @@ async function fixture(shouldRecordConfiguration = true) {
   await nats.seed([optIn]);
   const profileSubject = `connection-company:${serverId}:${profileId}`;
   const operationId = connectionOperationId('test', profileSubject, 'save');
-  const activation = { connectionId: 'installed', ownerKind: 'company', purpose: 'company',
+  const savedAccount = { issuer: 'https://issuer.test', subject: 'verified-bot',
+    scopes: ['openid', 'read'], expiresAt: Date.now() + 120_000 };
+  const accountHash = createHash('sha256');
+  accountHash.update(JSON.stringify(savedAccount));
+  const verifiedAccountDigest = accountHash.digest('hex');
+  const activationBase = { connectionId: 'installed', ownerKind: 'company', purpose: 'company',
     generation: 1, uid: 'uid', resourceVersion: '1',
     endpointDigest: selected.configuration.endpointDigest, operationId,
     changedBy: 'admin', expectedSequence: 0, appendUntil: Date.now() + 60_000,
-    reason: 'bearer_create', registrationRevision,
+    registrationRevision,
     optInRevision: await nats.store.head(optInSubject) };
+  const activation = useSavedVerified
+    ? { ...activationBase, reason: 'oauth_confirmed', account: savedAccount,
+      configurationDigest: oauthConfigurationDigest(selected.configuration) }
+    : { ...activationBase, reason: 'bearer_create' };
   const profile = envelope('test', profileSubject, 'connection.created', {
     siloId: 'test', custodianId: 'admin', serverId, profile: profileId,
     secretRef: 'secret:synthetic', activation,
@@ -87,16 +101,19 @@ async function fixture(shouldRecordConfiguration = true) {
   profile.principal = { kind: 'human', id: 'admin' };
   await nats.seed([profile]);
   const profileRevision = await nats.store.head(profileSubject);
-  const accountDigest = 'a'.repeat(64);
+  const accountDigest = useSavedVerified ? verifiedAccountDigest : 'a'.repeat(64);
   const accountId = 'verified-bot';
   const evidence = { status: 'verified', siloId: 'test', serverId, profileId,
     ownerKind: 'company', connectionId: 'installed', profileRevision,
     generation: 1, accountDigest,
     configurationDigest: oauthConfigurationDigest(selected.configuration),
-    accountId, scopes: ['openid', 'read'], expiresAt: Date.now() + 120_000 };
+    custodyRecordVersion: '1', accountId, scopes: ['openid', 'read'], expiresAt: Date.now() + 120_000 };
   function readProfile(_rows: StoredEvent[]) {
     return evidence;
   }
+  const recover = vi.fn().mockResolvedValue({ status: 'recovered', identity: {
+    reference: 'synthetic', uid: 'uid', resourceVersion: '1' } });
+  const savedReader = readCurrentCompanyProfile({ recover });
   const selectionSubject = `connection-selection-${ownerId}-${serverId}`;
   const choice = { action: 'select', userId: ownerId, serverId,
     connectionId: 'installed', profileId, profileRevision, expectedSequence: 0,
@@ -131,11 +148,11 @@ async function fixture(shouldRecordConfiguration = true) {
       selected.loadConfiguration);
   }
   if (shouldRecordConfiguration) await recordConfiguration();
-  async function preflight(reader = readProfile) {
+  async function preflight(reader = useSavedVerified ? savedReader : readProfile) {
     return checkRoutineCompanyPreflight(nats.store, binding, 'test', run, 1,
       selected.loadConfiguration, reader);
   }
-  return { preflight, evidence, definition, tool,
+  return { preflight, evidence, definition, tool, recover,
     configuration: selected.configuration, loadConfiguration: selected.loadConfiguration,
     profileSubject, optInSubject, serverId, ownerId, assistantId, selectionSubject };
 }
@@ -153,6 +170,23 @@ async function valid() {
 }
 it('checks one current company binding for the saved occurrence without sending', valid);
 
+async function savedVerifiedProfile() {
+  const current = await fixture(true, true);
+  const append = vi.spyOn(nats.store, 'append');
+  const preflight = routineCompanyPreflightFromCustody(nats.store, binding, 'test',
+    current.loadConfiguration, { recover: current.recover });
+  const company = await preflight({ ...modernRoutineExamples.due,
+    definition: current.definition }, 1);
+  expect(company.configurationDigest).toBe(oauthConfigurationDigest(current.configuration));
+  expect(current.recover).toHaveBeenCalled();
+  expect(append).not.toHaveBeenCalled();
+  current.recover.mockResolvedValue({ status: 'not_found' });
+  await expect(company.confirmCurrent()).rejects.toThrow('Routine company unavailable');
+  append.mockRestore();
+}
+it('checks a saved verified company profile and refuses lost custody before use',
+  savedVerifiedProfile);
+
 async function missingRecordedConfiguration() {
   const current = await fixture(false);
   await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
@@ -167,6 +201,95 @@ async function unfinishedConfigurationEdit() {
 }
 it('refuses company preflight while an OAuth configuration edit is unfinished',
   unfinishedConfigurationEdit);
+
+async function refusesSecondUnfinishedConfigurationEdit() {
+  const current = await fixture();
+  await startOAuthConfigurationChange(nats.store, 'test', current.serverId);
+  const before = await nats.store.head(`mcp-${current.serverId}`);
+  await expect(startOAuthConfigurationChange(nats.store, 'test', current.serverId))
+    .rejects.toThrow('OAuth configuration change unavailable');
+  expect(await nats.store.head(`mcp-${current.serverId}`)).toBe(before);
+}
+it('refuses another OAuth edit while the previous edit is unfinished',
+  refusesSecondUnfinishedConfigurationEdit);
+
+async function refusesChangedOAuthStart(field: 'silo' | 'subject' | 'type' | 'status' |
+  'serverId' | 'changeId') {
+  const current = await fixture();
+  const change = await startOAuthConfigurationChange(nats.store, 'test', current.serverId);
+  const subject = `mcp-${current.serverId}`;
+  const before = await nats.store.head(subject);
+  const readEvent = nats.store.readEvent.bind(nats.store);
+  async function changedStart(...args: Parameters<typeof readEvent>) {
+    const row = await readEvent(...args);
+    const event = { ...row.event };
+    const data: { serverId: string; changeId: string; status: string;
+      configurationDigest?: string } = { serverId: current.serverId,
+      changeId: change.changeId, status: 'changing' };
+    if (field === 'silo') event.silo = 'another-silo';
+    if (field === 'subject') event.subject = 'mcp-another-server';
+    if (field === 'type') event.type = 'mcp.server_unpublished';
+    if (field === 'status') {
+      data.status = 'ready';
+      data.configurationDigest = 'a'.repeat(64);
+    }
+    if (field === 'serverId') data.serverId = 'another-server';
+    if (field === 'changeId') data.changeId = '00000000-0000-4000-8000-000000000001';
+    event.data = data;
+    return { ...row, event };
+  }
+  const spy = vi.spyOn(nats.store, 'readEvent');
+  spy.mockImplementation(changedStart);
+  try {
+    await expect(finishOAuthConfigurationChange(nats.store, 'test', current.serverId,
+      change, current.loadConfiguration))
+      .rejects.toThrow('OAuth configuration change unavailable');
+    expect(await nats.store.head(subject)).toBe(before);
+  } finally {
+    spy.mockRestore();
+  }
+}
+it.each(['silo', 'subject', 'type', 'status', 'serverId', 'changeId'] as const)(
+  'refuses an OAuth finish with changed start %s', refusesChangedOAuthStart);
+
+async function refusesOAuthAppendConflict(stage: 'start' | 'finish') {
+  const current = await fixture();
+  const subject = `mcp-${current.serverId}`;
+  const change = stage === 'finish'
+    ? await startOAuthConfigurationChange(nats.store, 'test', current.serverId) : undefined;
+  const append = nats.store.append.bind(nats.store);
+  let injected = false;
+  async function conflictOnChange(...args: Parameters<typeof append>) {
+    const proposed = oauthChangeEvent.safeParse(args[0].event);
+    const expectedStatus = stage === 'start' ? 'changing' : 'ready';
+    if (!injected && proposed.success &&
+        proposed.data.type === 'mcp.oauth_configuration_recorded' &&
+        proposed.data.data.status === expectedStatus) {
+      injected = true;
+      const competing = envelope('test', subject, 'mcp.server_unpublished', {
+        serverId: current.serverId, unpublishedBy: 'admin' });
+      await nats.seed([competing]);
+    }
+    return append(...args);
+  }
+  const spy = vi.spyOn(nats.store, 'append');
+  spy.mockImplementation(conflictOnChange);
+  try {
+    if (stage === 'start') {
+      await expect(startOAuthConfigurationChange(nats.store, 'test', current.serverId))
+        .rejects.toThrow('OAuth configuration change unavailable');
+    } else {
+      await expect(finishOAuthConfigurationChange(nats.store, 'test', current.serverId,
+        change!, current.loadConfiguration))
+        .rejects.toThrow('OAuth configuration change unavailable');
+    }
+    expect(injected).toBe(true);
+  } finally {
+    spy.mockRestore();
+  }
+}
+it.each(['start', 'finish'] as const)(
+  'refuses an OAuth %s whose conditional save conflicts', refusesOAuthAppendConflict);
 
 async function changedConfigurationDigest() {
   const current = await fixture();
@@ -287,6 +410,15 @@ async function stale() {
   await expect(binding.confirmCurrent()).rejects.toThrow('Routine company unavailable');
 }
 it('refuses a preflight kept across a later connection change', stale);
+
+async function changedAccountAfterPreflight() {
+  const current = await fixture();
+  const company = await current.preflight();
+  current.evidence.accountId = 'different';
+  await expect(company.confirmCurrent()).rejects.toThrow('Routine company unavailable');
+}
+it('refuses a changed account result from the trusted reader after preflight',
+  changedAccountAfterPreflight);
 
 async function changedToolBeforeSender() {
   const current = await fixture();
@@ -533,6 +665,117 @@ async function oauthChangedAfterLastRead(kind: 'scopes' | 'client') {
 it.each(['scopes', 'client'] as const)(
   'refuses an OAuth %s change after the final read and before publication',
   oauthChangedAfterLastRead);
+
+async function custodyChangedAfterRecover(kind: 'deleted' | 'changed') {
+  const current = await fixture(true, true);
+  const recovered = { status: 'recovered' as const, identity: {
+    reference: 'synthetic', uid: 'uid', resourceVersion: '1' } };
+  let custodyResult:
+    Awaited<ReturnType<Parameters<typeof readCurrentCompanyProfile>[0]['recover']>> = recovered;
+  let reads = 0;
+  let preflightComplete = false;
+  let changed = false;
+  function recover() {
+    reads += 1;
+    const result = custodyResult;
+    if (preflightComplete && !changed) {
+      changed = true;
+      queueMicrotask(changeCustody);
+    }
+    return Promise.resolve(result);
+  }
+  function changeCustody() {
+    if (kind === 'deleted') {
+      custodyResult = { status: 'not_found' };
+    } else {
+      custodyResult = { status: 'recovered', identity: {
+        reference: 'synthetic', uid: 'uid', resourceVersion: '2' } };
+    }
+  }
+  const preflight = routineCompanyPreflightFromCustody(nats.store, binding, 'test',
+    current.loadConfiguration, { recover });
+  const company = await preflight({ ...modernRoutineExamples.due,
+    definition: current.definition }, 1);
+  preflightComplete = true;
+  const event = independentWrite(current);
+  const command = { event, expectedSequence: 0, checkAccess: company.confirmCurrent };
+  const result = await nats.store.append(command);
+  expect(result.status).toBe('unavailable');
+  expect(await nats.store.head(event.subject)).toBe(0);
+  expect(changed).toBe(true);
+  expect(reads).toBeGreaterThan(3);
+}
+it.each(['deleted', 'changed'] as const)(
+  'refuses a credential %s after recover returns and before send authorisation',
+  custodyChangedAfterRecover);
+
+async function custodyChangedBeforePublication(kind: 'deleted' | 'changed') {
+  const current = await fixture(true, true);
+  let result: Awaited<ReturnType<Parameters<typeof readCurrentCompanyProfile>[0]['recover']>> = {
+    status: 'recovered', identity: {
+      reference: 'synthetic', uid: 'uid', resourceVersion: '1' },
+  };
+  function recover() {
+    return Promise.resolve(result);
+  }
+  const preflight = routineCompanyPreflightFromCustody(nats.store, binding, 'test',
+    current.loadConfiguration, { recover });
+  const company = await preflight({ ...modernRoutineExamples.due,
+    definition: current.definition }, 1);
+  const event = independentWrite(current);
+  async function checkThenChange() {
+    await company.confirmCurrent();
+    if (kind === 'deleted') {
+      result = { status: 'not_found' };
+    } else {
+      result = { status: 'recovered', identity: {
+        reference: 'synthetic', uid: 'uid', resourceVersion: '2' } };
+    }
+  }
+  const command = { event, expectedSequence: 0, checkAccess: checkThenChange };
+  const appended = await nats.store.append(command);
+  expect(appended.status).toBe('appended');
+  expect(company.custodyRecordVersion).toBe('1');
+  await expect(company.confirmCredentialUse(company.custodyRecordVersion))
+    .rejects.toThrow('Routine company unavailable');
+}
+it.each(['deleted', 'changed'] as const)(
+  'refuses credential use after a %s between final read and publication',
+  custodyChangedBeforePublication);
+
+async function changedUseEvidenceWithoutError() {
+  const current = await fixture();
+  let changed = false;
+  function readProfile(_rows: StoredEvent[]) {
+    const evidence = { ...current.evidence };
+    if (changed) evidence.accountId = 'another-account';
+    const result = { ...evidence, status: 'verified' as const,
+      ownerKind: 'company' as const, generation: 1 as const };
+    return Promise.resolve(result);
+  }
+  const company = await current.preflight(readProfile);
+  changed = true;
+  await expect(company.confirmCredentialUse(company.custodyRecordVersion))
+    .rejects.toThrow('Routine company unavailable');
+}
+it('refuses changed use-time evidence even when the reader succeeds',
+  changedUseEvidenceWithoutError);
+
+async function wrongUseVersion() {
+  const current = await fixture();
+  const company = await current.preflight();
+  await expect(company.confirmCredentialUse('another-version'))
+    .rejects.toThrow('Routine company unavailable');
+}
+it('refuses a use-time version different from the authorised version', wrongUseVersion);
+
+async function missingCustodyVersion() {
+  const current = await fixture();
+  Reflect.deleteProperty(current.evidence, 'custodyRecordVersion');
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+}
+it('requires a credential version after the shared profile reader accepts its absence',
+  missingCustodyVersion);
 
 async function staleGrant() {
   const current = await fixture();

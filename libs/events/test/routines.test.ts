@@ -120,6 +120,21 @@ function readsRunFactsWithoutActivating() {
 }
 it('checks frozen run records without accepting a human firing', readsRunFactsWithoutActivating);
 
+function requiresCustodyVersionForSendAuthorisation() {
+  const data = { ...identity, ...run, senderAttemptId: 'sender',
+    admission: { eventId: 'allowance', position: 1 },
+    configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1' };
+  const event = { ...envelope('routine.run_send_authorised', data),
+    principal: { kind: 'system', id: 'opencrane-server' } };
+  expect(parseEventByType(event).success).toBe(true);
+  for (const custodyRecordVersion of ['', undefined]) {
+    const invalid = { ...event, data: { ...data, custodyRecordVersion } };
+    expect(parseEventByType(invalid).success).toBe(false);
+  }
+}
+it('requires a non-empty credential version in send authorisation',
+  requiresCustodyVersionForSendAuthorisation);
+
 function bindsUnconfirmedDelivery() {
   const data = { ...identity, ...run, actorId: 'opencrane-server', source: 'delivery',
     reason: 'start_unconfirmed', affectedRun: 'occurrence', next: slot,

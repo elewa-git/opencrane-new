@@ -27,7 +27,9 @@ type Start = { conversationId: string; turnId: string; threadId?: string | undef
   messageId?: string | undefined; rootId?: string | undefined;
   senderAttemptId?: string | undefined; executionMode?: string | undefined };
 type SenderOptions = { enabled?: boolean; replay?: boolean;
-  confirmCompany?: () => Promise<void>; configurationDigest?: string };
+  confirmCompany?: () => Promise<void>; configurationDigest?: string;
+  custodyRecordVersion?: string;
+  confirmCredentialUse?: (authorisedVersion: string) => Promise<void> };
 
 function companyCheckedWorker(worker: Arguments[2], confirmCompany?: () => Promise<void>) {
   if (!confirmCompany) return worker;
@@ -59,7 +61,8 @@ function routineTurnBytes(checked: Awaited<ReturnType<typeof readRoutineActivati
 
 async function authoriseRoutineSend(store: Arguments[0], worker: Arguments[2],
   checked: Awaited<ReturnType<typeof readRoutineActivation>>,
-  confirmCompany: () => Promise<void>, configurationDigest: string) {
+  confirmCompany: () => Promise<void>, configurationDigest: string,
+  custodyRecordVersion: string) {
   const run = checked.run;
   const subject = `routine-${run.routineId}`;
   const activation = await store.readEvent(checked.receipt.position, checked.deadline);
@@ -74,7 +77,7 @@ async function authoriseRoutineSend(store: Arguments[0], worker: Arguments[2],
   hash.update(JSON.stringify([worker.silo, run.occurrenceId, checked.senderAttemptId]));
   const id = hash.digest('hex');
   const event = { id, commandId: id, silo: worker.silo, subject,
-    data: { ...data, configurationDigest },
+    data: { ...data, configurationDigest, custodyRecordVersion },
     type: 'routine.run_send_authorised', source: 'opencrane-server',
     principal: { kind: 'system' as const, id: 'opencrane-server' },
     time: new Date().toISOString(), correlation: {} };
@@ -89,7 +92,46 @@ async function authoriseRoutineSend(store: Arguments[0], worker: Arguments[2],
   if (result.status !== 'appended' || result.outcome?.kind !== 'appended') {
     throw new Error('Routine send unavailable');
   }
-  await checked.fresh();
+}
+
+async function checkCompanyCredentialForSend(store: Arguments[0], worker: Arguments[2],
+  checked: Awaited<ReturnType<typeof readRoutineActivation>>,
+  admission: Parameters<typeof stopUnconfirmedRoutine>[2], options: SenderOptions) {
+  const confirmCompany = options.confirmCompany;
+  if (!confirmCompany) {
+    throw new Error('Routine company unavailable');
+  }
+  const configurationDigest = options.configurationDigest;
+  const custodyRecordVersion = options.custodyRecordVersion;
+  const confirmCredentialUse = options.confirmCredentialUse;
+  if (!configurationDigest || !custodyRecordVersion || !confirmCredentialUse) {
+    throw new Error('Routine company unavailable');
+  }
+  await authoriseRoutineSend(store, worker, checked, confirmCompany,
+    configurationDigest, custodyRecordVersion);
+  async function stopChangedCredential() {
+    await stopUnconfirmedRoutine(store, worker.silo, admission, 'credential_changed');
+  }
+  try {
+    await checked.fresh();
+  } catch {
+    // A changed credential can also fail the usual post-save access check.
+    try {
+      await confirmCredentialUse(custodyRecordVersion);
+    } catch {
+      await stopChangedCredential();
+      return false;
+    }
+    throw new Error('Routine send unavailable');
+  }
+  try {
+    // Read custody at use, after all other send checks have finished.
+    await confirmCredentialUse(custodyRecordVersion);
+  } catch {
+    await stopChangedCredential();
+    return false;
+  }
+  return true;
 }
 
 // Keep this internal switch off until company calls, lifecycle Stop and Ask are connected.
@@ -121,11 +163,11 @@ export function createRoutineSender(options: SenderOptions,
           link.assistantId !== run.definition.assistantId) return unknown;
       const bytes = routineTurnBytes(checked, args[4], keys, worker.silo);
       await checked.fresh();
-      if (confirmCompany) {
-        if (!options.configurationDigest) throw new Error('Routine company unavailable');
-        await authoriseRoutineSend(store, checkedWorker, checked, confirmCompany,
-          options.configurationDigest);
-      }
+      const admission = { routineId: admitted.run.routineId,
+        eventId: admitted.receipt.eventId, position: admitted.receipt.position };
+      const credentialReady = await checkCompanyCredentialForSend(store, checkedWorker,
+        checked, admission, options);
+      if (!credentialReady) return unknown;
       if (link.socket.readyState !== link.socket.OPEN) return unknown;
       // Consume this live authority before the transport can lose its reply.
       awaitingStart = true;

@@ -433,7 +433,7 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `grant.given` / `grant.revoked` (a typed revoke removes only that kind; old untyped revokes remove all matching kinds) | admin or owner; initial model grants from reaction or upgrade; departure revocation reaction | grants | OpenFGA tuples |
 | `connection.company_opt_in_set` | explicit admin opt-in/removal command | company control fold binds silo, server, installation and registration revision; defaults to disabled | no grant, credential, selection, release or provider call |
 | `connection.selected` | explicit requester personal/company select/clear command | selection fold binds the requester, server, installation and checked profile revision; company choices also bind silo ownership, generation and a verified account digest; clear chooses nothing | no grant, custody read, release or provider call |
-| `connection.created` | personal or opted-in company bearer create, or internal explicit first OAuth confirmation after private staging | company variant requires siloId, custodianId, company ownership/purpose, generation 1, registrationRevision and optInRevision; exact reference and generation; bearer identity stays unverified; OAuth requires the preceding consent and callback claim, and records verified issuer/subject, actual scopes, expiry and configuration digest | live cleanup retains current references; replay reads no custody and calls no provider; OAuth selection and release stay closed; no automatic reaction |
+| `connection.created` | personal or opted-in company bearer create, or internal explicit first OAuth confirmation after private staging | company variant requires siloId, custodianId, company ownership/purpose, generation 1, registrationRevision and optInRevision; bearer identity stays unverified; a verified company variant records issuer, subject, actual scopes, expiry and configuration digest after private confirmation; personal OAuth requires the preceding consent and callback claim | live cleanup retains current references; replay reads no custody and calls no provider; the live company reader checks the saved credential's exact custody identity; no automatic reaction |
 | `connection.oauth_started` | internal personal consent command after private preparation and current owner checks | exact attempt reference, binding and state digests, UID/version and original expiry only | no activation, selection, custody read, URL return or provider request on replay; no reaction |
 | `connection.oauth_exchange_claimed` | internal callback after exact consent validation and private code staging, or internal refresh claim after saved start and current access and exact generation checks | one conditional claim on the personal profile for its exact live worker; refresh pins current custody, preceding attempt and a fixed 60-second expiry | no provider send, activation, selection, custody read or other effect on replay; no reaction |
 | `connection.refresh_started` | internal start/join command after current owner, configuration, due expiry and exact private refresh availability checks | one attempt binds the current generation, profile position, configuration digest and actual scopes; competitors recover its reference | retains account and generation; no provider send, selection, release or replay effect; no reaction |
@@ -508,10 +508,12 @@ A system `routine.run_stop_requested` with source `approval` requires an exact s
 Verify the original 15-minute request, owner decision or saved expiry time, trusted
 routine preparation, frozen people and allocated turn before cleanup. Clock passage
 alone is not evidence. This records no approval decision and enables no firing.
-A system Stop with source `delivery` and reason `start_unconfirmed` names the original
-activation admission in `cause`. The saved admission must precede the Stop and match
-the occupied occurrence and sender attempt. This records uncertain delivery without
-claiming termination or releasing the occupied run, allowance or uncertain holds.
+A system Stop with source `delivery` and reason `start_unconfirmed` or
+`credential_changed` names the original activation admission in `cause`. The saved
+admission must precede the Stop and match the occupied occurrence and sender attempt.
+The first reason records uncertain delivery. The second records that custody changed
+after send authorisation. Neither claims termination or releases the occupied run,
+allowance or uncertain holds.
 
 An internal admin safety pause saves `routine.paused` with source `admin`, reason
 `admin_requested`, the actual actor and occupied `affectedRun`. Metadata access, current
@@ -768,7 +770,7 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 | `routine.due` | server system | frozen occurrence facts (pure fold only) | none; no input or root is started |
 | `routine.occurrence_skipped` / `routine.occurrences_missed` | server system | saved cursor/next facts | none |
 | `routine.run_activation_admitted` | internal server conditional command | saved exact admission and sender attempt | none; receipt only, execution remains disabled |
-| `routine.run_send_authorised` | internal server conditional command | saved authority for one prepared turn send and the checked OAuth configuration digest | none; receipt alone never proves delivery |
+| `routine.run_send_authorised` | internal server conditional command | saved authority for one prepared turn send, the checked OAuth configuration digest and the authorised Kubernetes custody record version | none; the sender checks the custody record version again before use, and the receipt alone never proves delivery |
 | `routine.run_finished` | server system | saved run facts | none; records grant no authority |
 | `routine.run_stop_requested` | internal server command for the current owner, verified approval termination or unconfirmed delivery | saved Stop intent | none subscribed; the models process applies verified evidence to an existing budget root and checks saved native closure before calling finish; the connected bridge polls verified intent to interrupt the accepted private turn; execution remains disabled |
 | `delegation.started` / `delegation.completed` | server; legacy computer records are replay-only | delegations and computer-root read indexes | no effect reaction; shared native starts retain the admission’s `sharingClass`; native execution remains disabled |

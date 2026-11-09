@@ -7167,8 +7167,10 @@ and the public execution switch remain disabled.
 preparation or root allocation. It requires the frozen routine's `serverId`, owner,
 connection, profile revisions, verified account id and scopes to match one explicit
 company choice. It reuses `companySelectionFacts` for installation, opt-in, OAuth
-configuration, account evidence and available tools. The trusted profile reader must
-confirm credential custody; no production reader is installed. It also reads the
+configuration, account evidence and available tools. The trusted profile reader can
+use `readCurrentCompanyProfile` to confirm the saved verified account and its exact
+credential in custody. No production company profile confirmation writer or routine
+delivery entry is installed. It also reads the
 saved tool name, revision, catalogue digest, destination digest, policy revision and
 zero-cent price. The current published review must still allow that exact tool, with
 the same installation and required scopes. Missing tool or price facts refuse.
@@ -7192,6 +7194,11 @@ company send or public execution switch.
 Before its internal socket send, the sender saves `routine.run_send_authorised` on
 the routine stream. The append checks current routine state and company facts inside
 the event store's conditional publish. It saves the OAuth configuration digest and
+the authorised Kubernetes custody record version, then reads custody again
+before releasing the turn. A missing or changed credential records a delivery Stop
+with reason `credential_changed` and the sender does not release the turn. It cannot
+call a company tool because company execution remains disabled. The authorisation
+check still reads custody before saving the event. It also
 re-reads the configuration inside that same conditional append. A changed digest,
 conflict or uncertain result prevents a
 send. The record is an authorisation point, not proof of delivery. Production
@@ -7303,3 +7310,22 @@ projection generation, computer state and dispatcher state. Limits are 1 to 100.
 The route loads participation and rows before checking current access once. It
 decrypts text only after that check. It never uses a conversation stream in the
 two-second write check.
+
+## Credential custody in routine send authorisation
+
+An enabled direct sender requires `confirmCompany`, `configurationDigest`,
+`custodyRecordVersion` and `confirmCredentialUse`. Missing confirmation refuses the
+send before it reaches the socket; it cannot use the old direct send path.
+
+The custody-backed profile reader includes the Kubernetes custody record version
+in its captured evidence. The conditional append reads custody again after the stream
+and OAuth checks and requires the same evidence. Deletion or a changed version at that
+read refuses the send authorisation. The preflight test changes custody after `recover`
+returns and checks that the append saves nothing. Another test changes custody after
+the final read and before publication. The saved authorisation alone cannot permit use;
+the sender's later read refuses the changed version.
+
+The composition fixture holds its monotonic clock during the unrelated-thread and late
+worker-loss injections and around saved-stage recovery sends. Scheduling delays cannot
+spend the production access period before the intended race or retry. Assertions and
+production deadlines remain unchanged.

@@ -7,9 +7,9 @@ import { history, readRootStopEvidence } from '@opencrane/models';
 
 type Admission = { routineId: string; eventId: string; position: number };
 
-// Record uncertainty without releasing the occupied run or claiming native termination.
+// Stop further delivery without releasing the occupied run or claiming native termination.
 export async function stopUnconfirmedRoutine(store: EventStore, silo: string,
-  admission: Admission) {
+  admission: Admission, reason: 'start_unconfirmed' | 'credential_changed' = 'start_unconfirmed') {
   const subject = `routine-${admission.routineId}`;
   const deadline = performance.now() + 10_000;
   const rows = await history(store, subject, silo, deadline);
@@ -35,7 +35,7 @@ export async function stopUnconfirmedRoutine(store: EventStore, silo: string,
   const { senderAttemptId: _attempt, admission: _allocation, ...run } = activation;
   const cause = { eventId: admission.eventId, position: admission.position };
   const stop = { ...run, actorId: 'opencrane-server', source: 'delivery',
-    reason: 'start_unconfirmed', affectedRun: run.occurrenceId,
+    reason, affectedRun: run.occurrenceId,
     next: state.definition!.next, cause };
   const data = routineStopSchema.parse(stop);
   const id = `routine-delivery-${run.occurrenceId}`;

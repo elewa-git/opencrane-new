@@ -117,6 +117,7 @@ export { changeCompanyOptIn, foldCompanyOptIn, CompanyOptInConflict,
 export { providerRoutinePresence } from './provider-routine-presence.ts';
 export { saveCompanyBearerConnection, foldCompanyConnection } from './company-bearer.ts';
 export { companySelectionFacts, type CompanyProfileReader } from './company-selection.ts';
+export { readCurrentCompanyProfile } from './company-profile-reader.ts';
 export { foldConnectionSelection } from './connection-selection.ts';
 export { type OAuthConfigurationLoader } from './oauth-selection.ts';
 export { startOAuthConfigurationChange,

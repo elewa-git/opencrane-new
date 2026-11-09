@@ -82,6 +82,7 @@ An internal preparation check can recover the original routine admission and sen
 identifiers after checking current access. It saves nothing. Delivery remains unknown;
 the check cannot wake a computer or authorise another send.
 A separate internal sender can hand a newly admitted routine to the computer once.
+It refuses to send unless a company confirmation check is supplied.
 After the computer wakes, routine preparation checks the owner's saved company choice
 against a current verified account and the exact saved profile. A changed account,
 profile or scope stops preparation before it reserves money. The check uses the usual
@@ -237,7 +238,7 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|sign-out, messages with file references, Office uploads, survey, persona and scripted welcome reads, Memory setup reads, own and admin routine lists, approval replies and original call status, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks saved membership, company choices and routine admission; prepares allowances; applies Stop, Pause and Retire; verifies termination and settled cost; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
+  server -.->|checks saved membership, records and rechecks the company custody record version, company choices and routine admission; prepares allowances; applies Stop, Pause and Retire; verifies termination and settled cost; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
   server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, writer closure and retries, routine sessions, inputs, send authorisations with OAuth digests, cancellations, confirmed results, checked finishes and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
@@ -303,7 +304,12 @@ assistant back on does not undo that pause or prevent cleanup of the stopped run
 
 Account choices belong to the signed-in requester. The selection route accepts an
 explicit personal or company owner kind, but company choices remain unavailable until
-verified company profiles have a live reader. An admin cannot choose for another member.
+verified company profiles have a live reader. The internal routine check can use that
+reader, while automatic sending remains closed. An admin cannot choose for another member.
+The internal send check reads the company custody record version during its conditional
+save. It records that version and checks custody again before releasing the turn.
+The sender refuses a missing company confirmation check.
+If it changes after the save, the sender records a delivery Stop.
 
 - Signs people in and keeps their browser session.
 - Checks current membership and permissions before returning private information or saving a change.

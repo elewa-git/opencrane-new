@@ -2,7 +2,8 @@ import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { companyConnectionCreatedDataSchema, companyConnectionRefreshedDataSchema }
+import { companyConnectionCreatedDataSchema, companyConnectionRefreshedDataSchema,
+  companyConnectionVerifiedDataSchema }
   from '@opencrane/events';
 import type { Db } from '@opencrane/projections';
 import { envelope, history } from './actor.ts';
@@ -25,7 +26,7 @@ const rotateSchema = createSchema.extend({ action: z.literal('rotate'),
   expectedSequence: z.int().positive(), expectedGeneration: z.int().positive() });
 const inputSchema = z.union([createSchema, rotateSchema]);
 const savedSchema = z.union([companyConnectionCreatedDataSchema,
-  companyConnectionRefreshedDataSchema]);
+  companyConnectionRefreshedDataSchema, companyConnectionVerifiedDataSchema]);
 type Input = z.infer<typeof inputSchema>;
 type Saved = z.infer<typeof savedSchema>;
 type Custody = Pick<ReturnType<typeof connectionCustody>, 'stage'>;
@@ -36,7 +37,7 @@ function subjectFor(serverId: string, profileId: string) {
 
 /** Rebuild silo ownership and custody metadata without granting account use. */
 export function foldCompanyConnection(rows: StoredEvent[]): {
-  status: 'unavailable' | 'saved_unverified'; sequence: number; data?: Saved;
+  status: 'unavailable' | 'saved_unverified' | 'verified'; sequence: number; data?: Saved;
 } {
   const sequence = rows.at(-1)?.sequence ?? 0;
   let previous: Saved | undefined;
@@ -60,11 +61,14 @@ export function foldCompanyConnection(rows: StoredEvent[]): {
   if (!previous) {
     return { status: 'unavailable', sequence };
   }
-  return { status: 'saved_unverified', sequence, data: previous };
+  const status = previous.activation.reason === 'oauth_confirmed'
+    ? 'verified' : 'saved_unverified';
+  return { status, sequence, data: previous };
 }
 function validReplacement(previous: Saved | undefined, data: Saved) {
   if (!previous) {
-    return data.activation.reason === 'bearer_create';
+    return data.activation.reason === 'bearer_create' ||
+      data.activation.reason === 'oauth_confirmed';
   }
   const old = previous.activation;
   const next = data.activation;
@@ -77,8 +81,8 @@ function validReplacement(previous: Saved | undefined, data: Saved) {
 }
 function validRecord(row: StoredEvent, data: Saved, subject: string, operationId: string) {
   const event = row.event;
-  const expectedType = data.activation.reason === 'bearer_create'
-    ? 'connection.created' : 'connection.refreshed';
+  const expectedType = data.activation.reason === 'bearer_rotation'
+    ? 'connection.refreshed' : 'connection.created';
   return event.type === expectedType && event.silo === data.siloId &&
     event.subject === subject && event.source === 'opencrane-server' &&
     event.principal?.kind === 'human' && event.principal.id === data.custodianId &&

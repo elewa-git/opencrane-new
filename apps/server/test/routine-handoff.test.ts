@@ -425,8 +425,12 @@ function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyP
   function confirmCurrent() {
     return Promise.resolve();
   }
+  function confirmCredentialUse(_authorisedVersion: string) {
+    return Promise.resolve();
+  }
   const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
-    computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent };
+    computerGeneration, configurationDigest: 'a'.repeat(64),
+    custodyRecordVersion: '1', confirmCurrent, confirmCredentialUse };
   return Promise.resolve(company);
 }
 async function dispatch(options: Options = { enabled: true }, continuation = false) {

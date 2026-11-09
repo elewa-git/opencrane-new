@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
+import { z } from 'zod';
 import { snapshotPositions, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { grantGivenDataSchema, grantRevokedDataSchema,
@@ -6,7 +8,8 @@ import { grantGivenDataSchema, grantRevokedDataSchema,
 import type { RoutineState } from '@opencrane/events';
 import { companySelectionFacts, foldCompanyConnection, foldConnectionSelection,
   groupMembership, history, type CompanyProfileReader,
-  toolPolicyFromRows, type OAuthConfigurationLoader } from '@opencrane/models';
+  readCurrentCompanyProfile, toolPolicyFromRows, type OAuthConfigurationLoader }
+  from '@opencrane/models';
 
 type Run = NonNullable<RoutineState['activeRun']>;
 
@@ -91,7 +94,7 @@ function requireSavedProfile(rows: StoredEvent[], run: Run) {
   const profile = foldCompanyConnection(rows);
   const saved = profile.data;
   const definition = run.definition;
-  if (profile.status !== 'saved_unverified' || !saved ||
+  if ((profile.status !== 'saved_unverified' && profile.status !== 'verified') || !saved ||
       profile.sequence !== definition.profileRevision ||
       profile.sequence !== definition.connectionRevision ||
       saved.serverId !== definition.serverId ||
@@ -198,12 +201,21 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     const selectionRows = await history(store, selectionSubject, silo, deadline);
     const selected = requireChoice(selectionRows, run);
     let savedProfile: ReturnType<typeof requireSavedProfile> | undefined;
-    function checkedReader(rows: StoredEvent[]) {
+    let profileRows: StoredEvent[] = [];
+    let profileEvidence: unknown;
+    async function checkedReader(rows: StoredEvent[]) {
       savedProfile = requireSavedProfile(rows, run);
-      return readProfile(rows);
+      profileRows = rows;
+      // Keep the original account separate if a trusted reader reuses a mutable object.
+      profileEvidence = structuredClone(await readProfile(rows));
+      return profileEvidence;
     }
     const facts = await companySelectionFacts(store, silo, selected.choice,
       loadConfiguration, checkedReader);
+    const credential = z.object({ custodyRecordVersion: z.string().min(1) })
+      .safeParse(profileEvidence);
+    if (!credential.success) refuse();
+    const custodyRecordVersion = credential.data.custodyRecordVersion;
     if (!savedProfile || facts.accountId !== definition.companyAccountId ||
         facts.binding.accountDigest !== selected.choice.accountDigest ||
         facts.binding.generation !== savedProfile.activation.generation ||
@@ -224,7 +236,8 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     async function confirmCurrent() {
       try {
         const currentDeadline = performance.now() + 2_000;
-        if (Date.now() >= facts.expiresAt || !await facts.oauth.configurationCurrent()) {
+        if (!isDeepStrictEqual(await readProfile(profileRows), profileEvidence) ||
+            Date.now() >= facts.expiresAt || !await facts.oauth.configurationCurrent()) {
           refuse();
         }
         // Check all company streams at one log position. A guarded append also checks
@@ -232,15 +245,41 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
         const snapshot = await snapshotPositions(store, positions, currentDeadline);
         if (!await facts.oauth.configurationCurrent()) refuse();
         if (Date.now() >= facts.expiresAt) refuse();
+        // Read the credential again inside the conditional append. Its captured resource
+        // version must still match after the other awaited company checks.
+        if (!isDeepStrictEqual(await readProfile(profileRows), profileEvidence)) refuse();
         return snapshot;
+      } catch {
+        refuse();
+      }
+    }
+    async function confirmCredentialUse(authorisedVersion: string) {
+      try {
+        if (authorisedVersion !== custodyRecordVersion) refuse();
+        // Check custody again when the sender is ready to use the credential.
+        const current = await readProfile(profileRows);
+        if (!isDeepStrictEqual(current, profileEvidence)) refuse();
       } catch {
         refuse();
       }
     }
     await confirmCurrent();
     return { occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, configurationDigest: facts.oauth.configurationDigest, confirmCurrent };
+      computerGeneration, configurationDigest: facts.oauth.configurationDigest,
+      custodyRecordVersion, confirmCurrent, confirmCredentialUse };
   } catch {
     refuse();
   }
+}
+
+/** Prepare one internal company check using saved records and private credential custody. */
+export function routineCompanyPreflightFromCustody(store: EventStore, binding: Binding,
+  silo: string, loadConfiguration: OAuthConfigurationLoader,
+  custody: Parameters<typeof readCurrentCompanyProfile>[0]) {
+  const readProfile = readCurrentCompanyProfile(custody);
+  async function preflight(run: Run, computerGeneration: number) {
+    return checkRoutineCompanyPreflight(store, binding, silo, run, computerGeneration,
+      loadConfiguration, readProfile);
+  }
+  return preflight;
 }

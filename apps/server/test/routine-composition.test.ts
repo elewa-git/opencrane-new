@@ -224,13 +224,20 @@ beforeEach(setup);
 afterEach(cleanup);
 
 type Options = Parameters<typeof createRoutineComposition>[0];
+function syntheticConfirmCredentialUse(_authorisedVersion: string) {
+  return Promise.resolve();
+}
 function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
   computerGeneration: number) {
   function confirmCurrent() {
     return Promise.resolve();
   }
+  function confirmCredentialUse(_authorisedVersion: string) {
+    return Promise.resolve();
+  }
   const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
-    computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent };
+    computerGeneration, configurationDigest: 'a'.repeat(64),
+    custodyRecordVersion: '1', confirmCurrent, confirmCredentialUse };
   return Promise.resolve(company);
 }
 function compose(options: Options = { enabled: true }) {
@@ -246,6 +253,25 @@ async function saved(type: string, subject: string) {
   }
   return rows.filter(matches);
 }
+async function wrongCompanyPreflightIdentity(
+  field: 'occurrenceId' | 'rootId' | 'computerGeneration') {
+  async function companyPreflight(
+    run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+    computerGeneration: number) {
+    const company = await syntheticCompanyPreflight(run, computerGeneration);
+    if (field === 'occurrenceId') company.occurrenceId = 'another-occurrence';
+    if (field === 'rootId') company.rootId = 'another-root';
+    if (field === 'computerGeneration') company.computerGeneration += 1;
+    return company;
+  }
+  const composition = compose({ enabled: true, companyPreflight });
+  expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  expect(await saved('budget.root_allowance_set', 'budget-test')).toEqual([]);
+  expect(preparedComputer.executedThreads).toEqual([]);
+}
+it.each(['occurrenceId', 'rootId', 'computerGeneration'] as const)(
+  'refuses a company preflight with another %s before reserving money',
+  wrongCompanyPreflightIdentity);
 async function assertCounts(threadId = 'native-1') {
   expect(await saved('conversation.created', `conversation-${conversationId}`)).toHaveLength(1);
   expect(await saved('message.posted', `conversation-${conversationId}`)).toHaveLength(1);
@@ -255,6 +281,7 @@ async function assertCounts(threadId = 'native-1') {
   expect(sendAuthorisations).toHaveLength(1);
   expect(sendAuthorisations[0]!.event.data).toMatchObject({
     configurationDigest: 'a'.repeat(64),
+    custodyRecordVersion: '1',
   });
   const root = actor.state.roots[0]!;
   expect(root).toMatchObject({ payingGroupId: 'sales', allowanceCents: 1000, threadId });
@@ -314,7 +341,8 @@ async function changedCompanyDuringPreparation(kind: 'profile' | 'opt-in') {
       return Promise.resolve();
     }
     const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent };
+      computerGeneration, configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
+      confirmCurrent, confirmCredentialUse: syntheticConfirmCredentialUse };
     return Promise.resolve(company);
   }
   const composition = compose({ enabled: true, companyPreflight });
@@ -355,7 +383,8 @@ async function refusesCompanyChangeAfterAllowance(kind: 'profile' | 'opt-in') {
       return Promise.resolve();
     }
     const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent };
+      computerGeneration, configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
+      confirmCurrent, confirmCredentialUse: syntheticConfirmCredentialUse };
     return Promise.resolve(company);
   }
   const composition = compose({ enabled: true, companyPreflight });
@@ -404,7 +433,8 @@ async function refusesToolPolicyChangeDuringAdmission() {
       if (position !== initialPosition) throw new Error('Tool policy changed');
     }
     return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent });
+      computerGeneration, configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
+      confirmCurrent, confirmCredentialUse: syntheticConfirmCredentialUse });
   }
   const composition = compose({ enabled: true, companyPreflight });
   expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
@@ -445,7 +475,8 @@ async function refusesCompanyChangeInsideSendAuthorisation() {
       changed = true;
     }
     return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent });
+      computerGeneration, configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
+      confirmCurrent, confirmCredentialUse: syntheticConfirmCredentialUse });
   }
   try {
     const composition = compose({ enabled: true, companyPreflight });
@@ -463,6 +494,122 @@ async function refusesCompanyChangeInsideSendAuthorisation() {
 it('refuses a company change inside the conditional send authorisation',
   refusesCompanyChangeInsideSendAuthorisation);
 
+async function refusesUnfinishedOAuthEditInsideSendAuthorisation() {
+  const append = nats.store.append.bind(nats.store);
+  let authorisingSend = false;
+  let editStarted = false;
+  async function trackSendAuthorisation(...supplied: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_send_authorised') authorisingSend = true;
+    try {
+      return await append(...supplied);
+    } finally {
+      authorisingSend = false;
+    }
+  }
+  const spy = vi.spyOn(nats.store, 'append');
+  spy.mockImplementation(trackSendAuthorisation);
+  function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+    computerGeneration: number) {
+    async function confirmCurrent() {
+      if (!authorisingSend || editStarted) return;
+      const changing = record('oauth-edit-started', 'mcp-company-routine',
+        'mcp.oauth_configuration_recorded', { serverId: 'company-routine',
+          changeId: '00000000-0000-4000-8000-000000000001', status: 'changing' });
+      await nats.seed([changing]);
+      editStarted = true;
+    }
+    return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
+      computerGeneration, configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
+      confirmCurrent, confirmCredentialUse: syntheticConfirmCredentialUse });
+  }
+  try {
+    const composition = compose({ enabled: true, companyPreflight });
+    expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+    expect(editStarted).toBe(true);
+    expect(await saved('routine.run_send_authorised', 'routine-orders')).toEqual([]);
+    function isTurn(frame: Record<string, unknown>) {
+      return frame['type'] === 'turn';
+    }
+    expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
+    const changes = await saved('mcp.oauth_configuration_recorded', 'mcp-company-routine');
+    expect(changes).toHaveLength(1);
+    expect(changes[0]!.event.data).toMatchObject({ status: 'changing' });
+  } finally {
+    spy.mockRestore();
+  }
+}
+it('refuses an unfinished OAuth edit during the guarded send authorisation',
+  refusesUnfinishedOAuthEditInsideSendAuthorisation);
+
+async function refusesCredentialChangeAfterFinalRead(
+  kind: 'deleted' | 'changed' | 'deleted-and-access-lost' | 'access-lost') {
+  let resourceVersion: string | undefined = '1';
+  let changedAfterRead = false;
+  let toolCalls = 0;
+  function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+    computerGeneration: number) {
+    function confirmCurrent() {
+      // Keep the final authorisation read at the old version in this schedule.
+      return Promise.resolve();
+    }
+    function confirmCredentialUse(authorisedVersion: string) {
+      if (resourceVersion !== authorisedVersion) throw new Error('Credential changed');
+      toolCalls += 1;
+      return Promise.resolve();
+    }
+    return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
+      computerGeneration, configurationDigest: 'a'.repeat(64),
+      custodyRecordVersion: '1', confirmCurrent, confirmCredentialUse });
+  }
+  const append = nats.store.append.bind(nats.store);
+  async function changeBetweenReadAndPublication(...supplied: Parameters<typeof append>) {
+    const command = supplied[0];
+    const proposed = proposedEvent.parse(command.event);
+    if (proposed.type !== 'routine.run_send_authorised' || !command.checkAccess) {
+      return append(...supplied);
+    }
+    const checkAccess = command.checkAccess;
+    async function checkThenChange() {
+      await checkAccess();
+      if (kind !== 'access-lost') {
+        resourceVersion = kind === 'changed' ? '2' : undefined;
+      }
+      if (kind === 'deleted-and-access-lost' || kind === 'access-lost') {
+        owned = false;
+      }
+      changedAfterRead = true;
+    }
+    return append({ ...command, checkAccess: checkThenChange });
+  }
+  const spy = vi.spyOn(nats.store, 'append');
+  spy.mockImplementation(changeBetweenReadAndPublication);
+  try {
+    const composition = compose({ enabled: true, companyPreflight });
+    expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+    expect(changedAfterRead).toBe(true);
+    expect(await saved('routine.run_send_authorised', 'routine-orders')).toHaveLength(1);
+    const stops = await saved('routine.run_stop_requested', 'routine-orders');
+    if (kind === 'access-lost') {
+      expect(stops).toEqual([]);
+      expect(toolCalls).toBe(1);
+    } else {
+      expect(stops).toHaveLength(1);
+      expect(stops[0]!.event.data).toMatchObject({ reason: 'credential_changed' });
+      expect(toolCalls).toBe(0);
+    }
+    function isTurn(frame: Record<string, unknown>) {
+      return frame['type'] === 'turn';
+    }
+    expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
+  } finally {
+    spy.mockRestore();
+  }
+}
+it.each(['deleted', 'changed', 'deleted-and-access-lost', 'access-lost'] as const)(
+  'refuses a credential %s after the final read and before publication',
+  refusesCredentialChangeAfterFinalRead);
+
 async function inert(options: { enabled?: boolean; replay?: boolean }) {
   const before = await nats.store.head();
   const wake = vi.fn(forbidden);
@@ -477,6 +624,15 @@ it.each([{}, { enabled: false }, { enabled: true, replay: true }])(
 
 const stages = ['conversation.created', 'message.posted', 'budget.root_allowance_set',
   'routine.run_activation_admitted', 'computer.turn_started'];
+async function sendWithHeldFixtureClock() {
+  // Keep fixture scheduling delays from spending the access period before the fault.
+  const clockSpy = holdFixtureClock();
+  try {
+    return await compose().send(preparedComputer.wake);
+  } finally {
+    clockSpy.mockRestore();
+  }
+}
 async function savedStageFault(stage: string, after: boolean) {
   const append = nats.store.append.bind(nats.store);
   let injected = false;
@@ -497,7 +653,7 @@ async function savedStageFault(stage: string, after: boolean) {
   }
   const fault = vi.spyOn(nats.store, 'append');
   fault.mockImplementation(failStage);
-  await compose().send(preparedComputer.wake);
+  await sendWithHeldFixtureClock();
   function reachedFault() {
     return injected;
   }
@@ -514,18 +670,18 @@ async function savedStageFault(stage: string, after: boolean) {
   if (beforeAllocation) {
     expect(preparedComputer.executedThreads).toEqual([]);
     expect(await saved('routine.run_activation_admitted', 'routine-orders')).toEqual([]);
-    expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'sent' });
+    expect(await sendWithHeldFixtureClock()).toEqual({ status: 'sent' });
     await until(preparedComputer.executed);
     expect(preparedComputer.executedThreads).toEqual(['native-2']);
     expect(preparedComputer.nativeStarts).toBe(2);
     await assertCounts('native-2');
     const recoveredPosition = await nats.store.head();
-    expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+    expect(await sendWithHeldFixtureClock()).toEqual({ status: 'unknown' });
     expect(await nats.store.head()).toBe(recoveredPosition);
     expect(preparedComputer.executedThreads).toEqual(['native-2']);
     expect(preparedComputer.nativeStarts).toBe(2);
   } else {
-    expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+    expect(await sendWithHeldFixtureClock()).toEqual({ status: 'unknown' });
     expect(await nats.store.head()).toBe(before);
     expect(preparedComputer.executedThreads).toEqual([]);
   }
@@ -571,7 +727,17 @@ function advanceWake() {
   const clockSpy = vi.spyOn(performance, 'now');
   clockSpy.mockImplementation(afterWake);
 }
+function holdFixtureClock() {
+  const started = performance.now();
+  function fixedTime() {
+    return started;
+  }
+  const clockSpy = vi.spyOn(performance, 'now');
+  clockSpy.mockImplementation(fixedTime);
+  return clockSpy;
+}
 async function refusesChangedAccess(kind: string, late: boolean) {
+  if (kind === 'worker' && late) holdFixtureClock();
   const append = nats.store.append.bind(nats.store);
   let injected = false;
   async function afterStart(...supplied: Parameters<typeof append>) {
@@ -674,6 +840,7 @@ it.each(['missing', 'computer', 'thread'])('refuses %s preparation without closi
   refusesPreparation);
 
 async function anotherThread() {
+  holdFixtureClock();
   const append = nats.store.append.bind(nats.store);
   let injected = false;
   async function startOther(...supplied: Parameters<typeof append>) {

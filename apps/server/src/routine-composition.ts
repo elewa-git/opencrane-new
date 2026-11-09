@@ -13,7 +13,9 @@ type CheckedDue = { status: 'confirmed'; executionAvailable: false; routineId: s
   occurrenceId: string; turnId: string };
 type Run = Awaited<ReturnType<typeof loadRoutinePreparation>>['run'];
 type CompanyBinding = { occurrenceId: string; rootId: string; computerGeneration: number;
-  configurationDigest: string; confirmCurrent: () => Promise<void> };
+  configurationDigest: string; custodyRecordVersion: string;
+  confirmCurrent: () => Promise<void>;
+  confirmCredentialUse: (authorisedVersion: string) => Promise<void> };
 type CompanyPreflight = (run: Run, generation: number) => Promise<CompanyBinding>;
 type Options = { enabled?: boolean; replay?: boolean; companyPreflight?: CompanyPreflight };
 
@@ -78,7 +80,9 @@ export function createRoutineComposition(options: Options,
       const selection = await prepareRoutineComputer(store, keys, worker, input, actor,
         ready.link, ready.generation, company.confirmCurrent);
       const senderOptions = { ...options, confirmCompany: company.confirmCurrent,
-        configurationDigest: company.configurationDigest };
+        configurationDigest: company.configurationDigest,
+        custodyRecordVersion: company.custodyRecordVersion,
+        confirmCredentialUse: company.confirmCredentialUse };
       const sender = createRoutineSender(senderOptions, store, keys, worker, input,
         selection, senderAttemptId);
       function connected() {

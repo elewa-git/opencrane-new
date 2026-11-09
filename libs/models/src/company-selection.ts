@@ -14,10 +14,11 @@ const evidenceSchema = z.strictObject({
   status: z.literal('verified'), siloId: id, serverId: id, profileId: id,
   ownerKind: z.literal('company'), connectionId: id, profileRevision: z.int().positive(),
   generation: z.int().positive(), accountDigest: digest, configurationDigest: digest,
+  custodyRecordVersion: z.string().min(1).optional(),
   accountId: z.string().min(1).max(300).optional(),
   scopes: z.array(z.string()).max(64), expiresAt: z.int().positive(),
 });
-// Accept only a trusted, pure reader of saved verification evidence. No live reader exists yet.
+// Accept only a trusted reader of saved evidence. Custody may be checked asynchronously.
 export type CompanyProfileReader = (rows: StoredEvent[]) => unknown;
 type Choice = { serverId: string; connectionId: string; profileId: string; profileRevision: number };
 
@@ -26,7 +27,7 @@ export async function companySelectionFacts(store: EventStore, silo: string, cho
   const deadline = performance.now() + 10_000;
   const subject = `connection-company:${choice.serverId}:${choice.profileId}`;
   const rows = await history(store, subject, silo, deadline);
-  const evidence = evidenceSchema.safeParse(readProfile(rows));
+  const evidence = evidenceSchema.safeParse(await readProfile(rows));
   if (!evidence.success || !loadConfiguration) {
     throw new Error('Selection unavailable');
   }
