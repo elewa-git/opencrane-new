@@ -216,6 +216,12 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
         const currentPosition = await store.head(subject, currentDeadline);
         if (currentPosition !== position) refuse();
       }
+      // Read each position again so a change during a later read cannot pass the check.
+      for (const [subject, position] of positions) {
+        const currentPosition = await store.head(subject, currentDeadline);
+        if (currentPosition !== position) refuse();
+      }
+      if (!await facts.oauth.configurationCurrent()) refuse();
       if (Date.now() >= facts.expiresAt) refuse();
     }
     await confirmCurrent();
