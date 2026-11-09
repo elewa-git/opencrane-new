@@ -136,6 +136,38 @@ async function boundary() {
 }
 it('crosses the boundary once, keeps dirty inputs and ignores duplicate or changed delivery',
   boundary, 60_000);
+
+async function publicReferenceForIdenticalNight() {
+  await setup();
+  await scan('2026-10-12T02:00:00Z');
+  const saved = await records();
+  const run = memoryMaintenanceRecordedDataSchema.parse(saved[0]);
+  return run.publicReference;
+}
+
+async function independentPublicReferences() {
+  const firstReference = await publicReferenceForIdenticalNight();
+  await services.close();
+  const secondReference = await publicReferenceForIdenticalNight();
+  const date = '2026-10-12';
+  const silo = 'test';
+  const memberId = 'alice';
+  const predictableNightId = createHash('sha256')
+    .update(JSON.stringify([silo, scopeId, date]))
+    .digest('hex');
+  const predictableOwnerId = createHash('sha256')
+    .update(JSON.stringify([silo, memberId, date]))
+    .digest('hex');
+  const predictableReferences = [predictableNightId.slice(0, 32),
+    predictableOwnerId.slice(0, 32), `${silo}:${memberId}:${date}`];
+
+  expect(predictableReferences).not.toContain(firstReference);
+  expect(predictableReferences).not.toContain(secondReference);
+  expect(firstReference).not.toBe(secondReference);
+}
+it('uses independent references for the same night across separate stores',
+  independentPublicReferences, 60_000);
+
 async function clean() {
   await setup(false);
   await scan('2026-10-12T02:00:00Z');
