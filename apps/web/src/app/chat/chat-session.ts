@@ -14,6 +14,7 @@ import { isActiveTurn, lastConfirmedTurnAt, shouldShowMaintenance,
   from './chat-state';
 import { shortTime } from './file-presentation';
 import { ChatSessionStop, type StopScreen } from './chat-session-stop';
+import { sessionWaitingReason, updateComputerStatus } from './chat-session-status';
 import { ReadFailure, requestChat, savedChatChange } from './chat-session-http';
 import { ReadMarker } from './read-marker';
 import { displayAgentSessions, includeRequestedConversation, isTeamConversation,
@@ -51,7 +52,9 @@ export class ChatSession implements OnDestroy {
   readonly requestedLookupFailed = signal(false);
   readonly retryIn = signal(6);
   readonly waitSeconds = signal(0);
-  readonly waiting = computed(this.waitingReason.bind(this));
+  readonly waiting = computed(() => sessionWaitingReason(
+    this.queued(), Boolean(this.active()), this.computer(), Boolean(this.selected()),
+    this.connected(), this.loading(), this.historyFailure()));
   readonly waitingForMaintenance = computed(() => shouldShowMaintenance(
     this.waiting(), this.waitSeconds(), this.dispatcherReady()));
   readonly busy = signal(false);
@@ -72,7 +75,7 @@ export class ChatSession implements OnDestroy {
       [...this.uploadBatch.readyIds(), ...this.uploadBatch.hiddenIds()]));
   readonly selectedConversation = computed(() =>
     this.conversations().find(row => row.conversationId === this.selected()));
-  readonly teamSession = computed(this.isTeamSession.bind(this));
+  readonly teamSession = computed(() => isTeamConversation(this.selectedConversation()));
   readonly selectedAssistantId = computed(
     selectedSessionAssistant.bind(null, this.selectedConversation, this.assistantId));
   readonly lastConfirmedTurnAt = computed(() => lastConfirmedTurnAt(this.turns()));
@@ -413,22 +416,12 @@ export class ChatSession implements OnDestroy {
     return !this.denied() && this.caughtUp() && document.visibilityState === 'visible'
       && Boolean(this.selected());
   }
-  private waitingReason(): string {
-    if (this.queued()) return 'queued';
-    if (this.active() && this.computer() !== 'ready') return 'starting';
-    if (this.selected() && !this.connected() && !this.loading()
-      && !this.historyFailure()) return 'reconnecting';
-    return '';
-  }
   private async reloadReadRow(): Promise<ChatConversation | undefined> {
     const previousJoin = this.selectedConversation()?.joinEventId;
     await this.list();
     const currentJoin = this.selectedConversation()?.joinEventId;
     if (previousJoin && currentJoin && previousJoin !== currentJoin) await this.refresh();
     return this.selectedConversation();
-  }
-  private isTeamSession(): boolean {
-    return isTeamConversation(this.selectedConversation());
   }
   private socketClosed(): void {
     this.conversationReady = false;
@@ -567,7 +560,7 @@ export class ChatSession implements OnDestroy {
             break;
           }
           this.generation = feed.generation;
-          this.setComputerState(feed.computerState);
+          updateComputerStatus(this.computer, this.announcement, feed.computerState);
           this.dispatcherReady.set(feed.dispatcherReady ?? true);
           this.computerRecovered.set(feed.computerRecovered ?? false);
           this.computerLostAt.set(feed.computerLostAt ?? '');
@@ -597,7 +590,7 @@ export class ChatSession implements OnDestroy {
     this.position = feed.position;
     this.generation = feed.generation;
     this.olderBefore.set(feed.before ?? null);
-    this.setComputerState(feed.computerState);
+    updateComputerStatus(this.computer, this.announcement, feed.computerState);
     this.dispatcherReady.set(feed.dispatcherReady ?? true);
     this.computerRecovered.set(feed.computerRecovered ?? false);
     this.computerLostAt.set(feed.computerLostAt ?? '');
@@ -700,21 +693,13 @@ export class ChatSession implements OnDestroy {
     if (message.dispatcherReady !== undefined) {
       this.dispatcherReady.set(message.dispatcherReady);
     }
-    if (message.computerState) this.setComputerState(message.computerState);
+    if (message.computerState) {
+      updateComputerStatus(this.computer, this.announcement, message.computerState);
+    }
     if (message.computerRecovered !== undefined) {
       this.computerRecovered.set(message.computerRecovered);
     }
     if (message.computerLostAt !== undefined) this.computerLostAt.set(message.computerLostAt);
-  }
-  private setComputerState(state: ComputerState): void {
-    const previous = this.computer();
-    this.computer.set(state);
-    if (state === previous) return;
-    if (state === 'recovering') {
-      this.announcement.set('Your computer is recovering. Sending is paused.');
-    } else if (previous === 'recovering' && state === 'ready') {
-      this.announcement.set('Your computer is ready again. You can send.');
-    }
   }
   queuedReference(): string {
     return this.pending?.id ?? '';
