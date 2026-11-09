@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { Client } from 'minio/dist/esm/minio.mjs';
 import type { FastifyRequest } from 'fastify';
@@ -580,6 +581,10 @@ it('leaves older delegation formats out of modern history', async () => {
 });
 
 const scopeId = memoryScopeId('test', 'person', 'owner');
+const nightReferenceByDate: Record<string, string> = {
+  '2026-10-15': '7f6a9d0e4c329b81',
+  '2026-10-16': '8c2d4a6e5f109b73',
+};
 
 async function maintenance(id: string, action: 'due' | 'prepared' | 'refused' | 'missed',
   date = '2026-10-15') {
@@ -587,6 +592,7 @@ async function maintenance(id: string, action: 'due' | 'prepared' | 'refused' | 
     action === 'missed' ? 'window_missed' : null;
   const data = {
     scopeId, nightId: date === '2026-10-15' ? 'a'.repeat(64) : 'e'.repeat(64),
+    publicReference: nightReferenceByDate[date],
     batchKey: 'b'.repeat(64), inputRevision: 'c'.repeat(64), date, bindingRevision: 1,
     memberId: 'owner', acceptedCapCents: 100,
     intendedAt: `${date}T02:00:00.000Z`, selectedAt: `${date}T02:01:00.000Z`,
@@ -612,7 +618,7 @@ it('shows one safe nightly row and checks the personal task link', async () => {
   expect(admin.body).not.toContain(privateText);
   const ownerRow = auditResponseSchema.parse(owner.json()).rows[0]!;
   const adminRow = auditResponseSchema.parse(admin.json()).rows[0]!;
-  expect(ownerRow.id).toBe('night-one');
+  expect(ownerRow.id).toBe(nightReferenceByDate['2026-10-15']);
   expect(ownerRow.records[0]?.taskHref).toBe(`/api/memory/${scopeId}/maintenance`);
   const ownStatus = await app.inject({ url: ownerRow.records[0]!.taskHref!,
     headers: headers('owner') });
@@ -620,6 +626,14 @@ it('shows one safe nightly row and checks the personal task link', async () => {
   expect(adminRow.records[0]?.taskHref).toBeUndefined();
   expect(admin.body).not.toContain(scopeId);
   expect(admin.body).not.toContain('owner');
+  expect(admin.body).not.toContain('night-one');
+  expect(admin.body).not.toContain('a'.repeat(64));
+  const commandDigest = createHash('sha256').update('night-one').digest('hex');
+  expect(admin.body).not.toContain(commandDigest);
+  const candidateNight = createHash('sha256').update(JSON.stringify([
+    'test', memoryScopeId('test', 'person', 'owner'), '2026-10-15',
+  ])).digest('hex');
+  expect(admin.body).not.toContain(candidateNight);
   expect(ownerRow.outcome).toBe('unknown');
   expect(ownerRow.records[0]?.amountCents).toBeUndefined();
   expect(ownerRow.records[0]?.maintenanceAllowanceCents).toBe(100);
@@ -644,7 +658,8 @@ it('keeps equal-time memory pages in saved order after rebuilding', async () => 
   const second = auditResponseSchema.parse((await list('owner',
     `?type=memory&limit=1&before=${first.nextBefore}`)).json());
   const ids = [first.rows[0]?.id, second.rows[0]?.id];
-  expect(ids).toEqual(['night-new', 'night-old']);
+  expect(ids).toEqual([nightReferenceByDate['2026-10-16'],
+    nightReferenceByDate['2026-10-15']]);
   await rebuildAuditProjection(db, nats.store,
     createLogger('maintenance-page-replay', { level: 'silent' }), { verify: true });
   const rebuilt = auditResponseSchema.parse((await list('owner', '?type=memory&limit=2')).json());
@@ -654,12 +669,47 @@ it('keeps equal-time memory pages in saved order after rebuilding', async () => 
 it('rejects a spoofed nightly actor without logging its private references', async () => {
   await maintenance('valid-night', 'due');
   const saved = (await nats.store.readEvent(await nats.store.head())).event;
-  const spoofed = { ...saved, id: 'spoofed-night',
-    principal: { kind: 'human' as const, id: 'admin' } };
-  await expect(auditTrail.apply(db, spoofed, 999))
+  const spoofedKind = { ...saved, id: 'spoofed-kind',
+    principal: { kind: 'human' as const, id: 'nightly-memory' } };
+  await expect(auditTrail.apply(db, spoofedKind, 999))
+    .rejects.toThrow('Invalid maintenance audit event');
+  const spoofedId = { ...saved, id: 'spoofed-id',
+    principal: { kind: 'system' as const, id: 'admin' } };
+  await expect(auditTrail.apply(db, spoofedId, 1000))
     .rejects.toThrow('Invalid maintenance audit event');
   expect((await list('admin', '?type=memory')).body).not.toContain(privateText);
   expect(JSON.stringify(logArguments)).not.toContain(privateText);
+});
+
+it('skips valid shared memory receipts and continues with later audit history', async () => {
+  await maintenance('personal-intent', 'due');
+  const personal = (await nats.store.readEvent(await nats.store.head())).event;
+  for (const kind of ['group', 'assistant_notes'] as const) {
+    const sharedScope = memoryScopeId('test', kind, `shared-${kind}`);
+    const shared = { ...personal, id: `shared-${kind}`, subject: `scope-${sharedScope}`,
+      data: { ...z.record(z.string(), z.unknown()).parse(personal.data),
+        scopeId: sharedScope, memberId: 'owner' } };
+    const parsed = parseEventByType(shared);
+    expect(parsed.success).toBe(true);
+    const expectedSequence = await nats.store.head(shared.subject);
+    expect((await nats.store.append({ event: shared, expectedSequence })).status)
+      .toBe('appended');
+  }
+  await append('member-late', 'member.invited', {
+    memberId: 'late', role: 'member', invitationId: 'invite-late', invitedBy: 'owner',
+    email: 'late@example.test',
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'late' },
+    expiresAt: '2030-01-01T00:00:00Z',
+  }, 'invite-late');
+  await runner.run(auditTrail);
+  const response = await list('admin');
+  expect(response.statusCode).toBe(200);
+  expect(response.body).toContain('invite-late');
+  expect(response.body).not.toContain('shared-group');
+  expect(response.body).not.toContain('shared-assistant_notes');
+  await rebuildAuditProjection(db, nats.store,
+    createLogger('shared-maintenance-replay', { level: 'silent' }), { verify: true });
+  expect((await list('admin')).json()).toEqual(response.json());
 });
 
 it('keeps one row for a pending night and its result, without granting a reader access', async () => {
@@ -667,7 +717,7 @@ it('keeps one row for a pending night and its result, without granting a reader 
   await maintenance('night-refused', 'refused');
   const owner = auditResponseSchema.parse((await list('owner', '?type=memory')).json());
   expect(owner.rows).toHaveLength(1);
-  expect(owner.rows[0]?.id).toBe('night-refused');
+  expect(owner.rows[0]?.id).toBe(nightReferenceByDate['2026-10-15']);
   expect(owner.rows[0]?.records[0]?.maintenanceAction).toBe('refused');
   expect(owner.rows[0]?.outcome).toBe('not_dispatched');
   const overviewReply = await app.inject({ url: '/api/org/overview', headers: headers('owner') });
@@ -675,7 +725,7 @@ it('keeps one row for a pending night and its result, without granting a reader 
   const overview = z.object({ rows: z.array(z.object({ source: z.string(), id: z.string() })) })
     .parse(overviewReply.json());
   const memoryTasks = overview.rows.filter(isMemoryTask);
-  expect(memoryTasks.map(task => task.id)).toEqual(['night-refused']);
+  expect(memoryTasks.map(task => task.id)).toEqual([nightReferenceByDate['2026-10-15']]);
   const foreign = await list('guest', '?type=memory');
   expect(foreign.statusCode).toBe(403);
   const link = owner.rows[0]?.records[0]?.taskHref;
