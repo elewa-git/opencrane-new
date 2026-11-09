@@ -1,0 +1,102 @@
+<section class="overview" aria-label="Organisation overview">
+  <header class="overview-heading">
+    <div>
+      <h1>Overview</h1>
+      <p>What needs attention across your organisation. Unknown outcomes come first, then
+        needed input, failures and dated Ready evidence.</p>
+      @if (sourceCheckedAt(); as sourceTime) {
+        <small>Sources checked {{ readableTime(sourceTime) }}</small>
+      }
+    </div>
+    @if (state() !== 'access') {
+      <button type="button" (click)="refresh()">Refresh list</button>
+    }
+  </header>
+
+  @if (state() === 'access') {
+    <div class="overview-notice" role="status">
+      <strong>Access changed</strong>
+      <p>Sign in or ask an Owner for access. Organisation tasks have been cleared.</p>
+    </div>
+  } @else {
+    @if (state() === 'loading') {
+      <p role="status">Loading organisation tasks…</p>
+    }
+    @if (state() === 'stale') {
+      <div class="overview-notice stale" role="status">
+        @if (loadedAt()) {
+          <strong>Showing what we loaded at {{ readableTime(loadedAt()) }}</strong>
+          <p>We could not refresh the list. Check again for current tasks.</p>
+        } @else {
+          <strong>Organisation tasks are unavailable</strong>
+          <p>We could not load the list. Check again shortly.</p>
+        }
+      </div>
+    }
+    @if (unavailableSources().length) {
+      <div class="overview-notice" role="status">
+        <strong>Some tasks are unavailable</strong>
+        <p>
+          @for (source of unavailableSources(); track source.name) {
+            {{ sourceLabels[source.name] }}{{ $last ? '.' : ', ' }}
+          }
+          Other tasks are shown below.
+        </p>
+      </div>
+    }
+    @if (allClear()) {
+      <div class="overview-notice clear" role="status">
+        <strong>Nothing needs your attention</strong>
+        <p>Last checked {{ readableTime(checkedAt()) }}.</p>
+      </div>
+    } @else if (rows().length === 0 && state() === 'ready') {
+      <div class="overview-notice" role="status">
+        <strong>Connect a model provider first</strong>
+        <p>Start with Models & providers to make your organisation ready for work.</p>
+        <a href="/org/models">Open Models & providers</a>
+      </div>
+    }
+
+    @if (rows().length) {
+      <div class="overview-list" [class.stale-rows]="state() === 'stale'">
+        <div class="overview-list-head" aria-hidden="true">
+          <span>Task</span><span>Affects</span><span>Status</span><span>Action</span>
+        </div>
+        @for (row of rows(); track row.source + ':' + row.id) {
+          <article class="overview-row" tabindex="0"
+            [attr.aria-label]="rowTitle(row) + ', ' + priorityLabels[row.priority]">
+            <div class="overview-task">
+              <strong>{{ rowTitle(row) }}</strong>
+              <small>{{ sourceLabels[row.source] }}</small>
+            </div>
+            <div class="overview-affects">
+              <span class="mobile-label">Affects</span>
+              <span>{{ row.affectedPeople || sourceLabels[row.source] }}</span>
+            </div>
+            <div class="overview-status">
+              <span class="mobile-label">Status</span>
+              <span class="status-text" [class.ready]="row.priority === 'ready'">
+                <span aria-hidden="true">{{ row.priority === 'unknown' ? '?' :
+                  row.priority === 'ready' ? '✓' : '•' }}</span>
+                {{ priorityLabels[row.priority] }}
+              </span>
+              @if (row.eventAt) {
+                <small>{{ readableTime(row.eventAt) }}</small>
+              }
+            </div>
+            <div class="overview-action">
+              @if (destination(row); as href) {
+                <a [href]="href">{{ actionLabels[row.action] }}</a>
+              } @else {
+                <span>Evidence unavailable</span>
+              }
+            </div>
+          </article>
+        }
+      </div>
+      @if (next()) {
+        <button class="overview-more" type="button" (click)="more()">Load more tasks</button>
+      }
+    }
+  }
+</section>

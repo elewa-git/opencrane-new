@@ -6,6 +6,7 @@
     <div class="organisation">
       <strong>{{ organisationName() }}</strong><small>Organisation settings</small>
     </div>
+    @if (!accessLost()) {
     <nav aria-label="Organisation settings">
       @for (page of pages; track page.id) {
         <a [href]="page.href" [attr.aria-current]="activePage() === page.id ? 'page' : null">
@@ -13,11 +14,12 @@
         </a>
       }
     </nav>
+    }
     <div class="sidebar-footer">
       <a class="back" href="/workspace">‹ Back to workspace</a>
     </div>
   </aside>
-  <header class="mobile-bar">
+  <header class="mobile-bar" [class.access-lost]="accessLost()">
     <button #menuButton type="button" aria-label="Open organisation navigation"
       aria-controls="organisation-menu" [attr.aria-expanded]="menuOpen()"
       (click)="menuOpen.set(true)">☰</button>
@@ -25,6 +27,7 @@
   </header>
   <main ocPaperSurface="main"><ng-content /></main>
 </div>
+@if (!accessLost()) {
 <oc-navigation-menu id="organisation-menu" label="Organisation settings"
   [open]="menuOpen()" [returnFocusTo]="menuButton" (closed)="menuOpen.set(false)">
   <div class="organisation">
@@ -37,3 +40,4 @@
   }
   <a class="back" href="/workspace">‹ Back to workspace</a>
 </oc-navigation-menu>
+}

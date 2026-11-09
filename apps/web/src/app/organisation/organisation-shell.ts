@@ -17,6 +17,7 @@ import { organisationPageLabel, organisationPages, type OrganisationPage } from 
 export class OrganisationShell {
   readonly activePage = input<OrganisationPage>();
   readonly organisationName = input('Your organisation');
+  readonly accessLost = input(false);
   protected readonly pages = organisationPages;
   protected readonly menuOpen = signal(false);
 

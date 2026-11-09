@@ -18,6 +18,7 @@ main { padding: var(--oc-page-padding); }
 small { color: var(--oc-ink-admin-muted); font-size: 11px; }
 .sidebar-footer { margin-top: auto; border-top: 1px solid var(--oc-border-row); }
 .back { display: flex; align-items: center; min-height: 44px; padding: 10px 18px; }
+.mobile-bar.access-lost { display: none; }
 @media (max-width: 700px) {
   .mobile-bar { gap: 12px; padding: 0 12px; }
   .mobile-bar button { width: 44px; height: 44px; font-size: 20px; }

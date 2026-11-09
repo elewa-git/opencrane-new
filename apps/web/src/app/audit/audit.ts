@@ -12,6 +12,8 @@ export class AuditScreen implements OnInit {
   protected decision = '';
   protected requestId = '';
   protected turnId = '';
+  protected readonly reference = /^\/org\/history$/u.test(globalThis.location.pathname)
+    ? new URLSearchParams(globalThis.location.search).get('reference') : null;
   private pending = false;
   ngOnInit() { void this.load(); }
   protected filter(event: Event) { event.preventDefault(); void this.load(); }
@@ -28,6 +30,9 @@ export class AuditScreen implements OnInit {
       if (value.trim()) query.set(key, value.trim());
     }
     if (before !== undefined) query.set('before', String(before));
+    if (this.reference && /^[a-f0-9]{32}$/u.test(this.reference)) {
+      query.set('reference', this.reference);
+    }
     const conversation = this.conversationId();
     const path = conversation ? `/api/conversations/${encodeURIComponent(conversation)}/history` : '/api/org/history';
     try {

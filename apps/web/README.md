@@ -22,7 +22,7 @@ flowchart LR
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
   web -->|saved and private replies| capture["Chat workspace<br/>reply details and isolated diagrams"]
-  web -->|settings and change history| admin["Admin pages<br/>provider, tool, people and memory"]
+  web -->|settings and change history| admin["Admin pages<br/>overview, provider, tool, people and memory"]
 ```
 
 Sign-in goes through the server to [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service).
@@ -56,6 +56,7 @@ For everyone, the website:
   Returning tabs check the session before accepting private frames.
 - Expands saved command and tool details under their activity lines in chat.
 - Lists recent and archived conversations and opens saved chat links.
+- Shows the organisation task list in server order and opens its existing evidence pages.
 - Catches up saved assistant chats before saying they are current. A failed read keeps the
   messages already shown and offers another try. Missing chat links show no chat details.
   Private shared sessions show the checked paying group name without exposing its id.

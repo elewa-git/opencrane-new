@@ -42,7 +42,8 @@
 } @else if (!orgPage) {
   <oc-sign-in />
 } @else {
-  <oc-organisation-shell [activePage]="activePage" [organisationName]="organisation">
+  <oc-organisation-shell [activePage]="activePage" [organisationName]="organisation"
+    [accessLost]="overviewAccessLost()">
     @if (assistantCreateGroupId) {
       <oc-shared-assistant-admin [groupId]="assistantCreateGroupId" />
     } @else if (installPage) {
@@ -57,6 +58,8 @@
       <oc-integration-detail [serverId]="detailServer" />
     } @else if (statesPage) {
       <oc-state-specimen />
+    } @else if (activePage === 'overview') {
+      <oc-overview (accessLost)="overviewAccessLost.set(true)" />
     } @else if (activePage === 'integrations') {
       <oc-integration-register />
     } @else if (activePage === 'models') {

@@ -34,9 +34,8 @@ export function assistantCreateGroupId(pathname: string): string | undefined {
 
 export function organisationPage(pathname: string): OrganisationPage | undefined {
   pathname = normalisePathname(pathname);
-  // Keep /org on a supported page until the overview has real task reads.
   if (pathname === '/org') {
-    return 'integrations';
+    return 'overview';
   }
   for (const page of organisationPages) {
     if (pathname === page.href) {

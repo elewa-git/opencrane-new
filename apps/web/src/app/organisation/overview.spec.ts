@@ -1,6 +1,6 @@
-import { TestBed } from '@angular/core/testing';
+import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { OverviewScreen } from './overview';
+import { OverviewScreen, overviewDestination } from './overview';
 
 const checkedAt = '2026-11-08T09:40:00.000Z';
 const sources = ['people', 'providers', 'integrations', 'spending', 'memory',
@@ -9,15 +9,24 @@ const sources = ['people', 'providers', 'integrations', 'spending', 'memory',
   checkpoint: 1, checkedAt,
 }));
 
-function row(id: string, priority: string, source = 'providers', href = '/org/models') {
-  return { id, sourceId: id, source, priority, eventAt: checkedAt, revision: 1,
-    action: 'view_evidence', href };
+type Row = Parameters<typeof overviewDestination>[0];
+
+function row(id: string, priority: Row['priority'], source: Row['source'] = 'providers',
+  href = '/org/models'): Row {
+  return { id, source, priority, eventAt: checkedAt, action: 'view_evidence', href };
 }
 
-function reply(rows: unknown[], next: string | null = null, status = 200) {
-  const body = { rows, next, allClear: rows.length === 0, sources,
+function reply(rows: unknown[], next: string | null = null, status = 200,
+  sourceList = sources) {
+  const body = { rows, next, allClear: rows.length === 0, sources: sourceList,
     viewer: { role: 'admin' }, capabilities: {} };
   return new Response(JSON.stringify(body), { status });
+}
+
+function root(fixture: ComponentFixture<OverviewScreen>): HTMLElement {
+  const element: unknown = fixture.nativeElement;
+  if (!(element instanceof HTMLElement)) throw new Error('Expected overview element');
+  return element;
 }
 
 async function mount() {
@@ -39,23 +48,26 @@ it('keeps server order and gives each task one safe action', async () => {
   const fixture = await mount();
   await vi.waitFor(() => {
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.overview-row')).toHaveLength(4);
+    expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(4);
   });
-  const actions = [...fixture.nativeElement.querySelectorAll('.overview-row a')];
+  const actions = [...root(fixture).querySelectorAll<HTMLAnchorElement>('.overview-row a')];
   expect(actions).toHaveLength(4);
-  expect(actions.map((action: HTMLAnchorElement) => action.href)).toEqual([
+  expect(actions.map((action) => action.href)).toEqual([
     'http://localhost:3000/org/models', 'http://localhost:3000/org/models',
     'http://localhost:3000/org/models', 'http://localhost:3000/org/models',
   ]);
-  expect(fixture.nativeElement.textContent).not.toContain('opaque-1');
+  expect(root(fixture).textContent).not.toContain('opaque-1');
 });
 
 it('does not call unavailable sources ready or show an undated all-clear', async () => {
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply([]));
   const fixture = await mount();
-  await vi.waitFor(() => fixture.detectChanges());
-  expect(fixture.nativeElement.textContent).not.toContain('Nothing needs your attention');
-  expect(fixture.nativeElement.textContent).toContain('unavailable');
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).textContent).toContain('Some tasks are unavailable');
+  });
+  expect(root(fixture).textContent).not.toContain('Nothing needs your attention');
+  expect(root(fixture).textContent).toContain('unavailable');
 });
 
 it('retains loaded rows after a refresh outage and clears them after access loss', async () => {
@@ -66,20 +78,26 @@ it('retains loaded rows after a refresh outage and clears them after access loss
   const fixture = await mount();
   await vi.waitFor(() => {
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.overview-row')).toHaveLength(1);
+    expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(1);
   });
-  const refresh = fixture.nativeElement.querySelector('button');
+  const refresh = root(fixture).querySelector('button');
+  if (!refresh) throw new Error('Missing refresh button');
+  refresh.focus();
   refresh.click();
   await vi.waitFor(() => {
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Showing what we loaded');
+    expect(root(fixture).textContent).toContain('Showing what we loaded');
   });
-  expect(fixture.nativeElement.querySelectorAll('.overview-row')).toHaveLength(1);
+  expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(1);
+  expect(document.activeElement).toBe(refresh);
   refresh.click();
   await vi.waitFor(() => {
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.overview-row')).toHaveLength(0);
+    expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(0);
   });
+  expect(root(fixture).querySelector('.overview-row a')).toBeNull();
+  refresh.click();
+  expect(fetchSpy).toHaveBeenCalledTimes(3);
 });
 
 it('uses the saved cursor and rejects duplicate rows', async () => {
@@ -89,12 +107,57 @@ it('uses the saved cursor and rejects duplicate rows', async () => {
   const fixture = await mount();
   await vi.waitFor(() => {
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.overview-row')).toHaveLength(1);
+    expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(1);
   });
-  fixture.nativeElement.querySelector('.overview-more').click();
+  const more = root(fixture).querySelector<HTMLButtonElement>('.overview-more');
+  if (!more) throw new Error('Missing load more button');
+  more.click();
   await vi.waitFor(() => {
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.overview-row')).toHaveLength(2);
+    expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(2);
   });
-  expect(String(fetchSpy.mock.calls[1]?.[0])).toContain('cursor=cursor');
+  expect(fetchSpy.mock.calls[1]?.[0]).toBe('/api/org/overview?cursor=cursor');
+});
+
+it('shows a dated all-clear only when every source is current', async () => {
+  const current = sources.map(source => ({ ...source, status: 'current' }));
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply([], null, 200, current));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).textContent).toContain('Nothing needs your attention');
+  });
+  expect(root(fixture).textContent).toContain('8 Nov 2026');
+});
+
+it('maps evidence to browser pages and refuses direct API or unsafe links', () => {
+  expect(overviewDestination(row('memory', 'unknown', 'memory',
+    `/api/org/history/${'a'.repeat(32)}`))).toBe(`/org/history?reference=${'a'.repeat(32)}`);
+  expect(overviewDestination(row('permit', 'unknown', 'spending',
+    '/api/org/effects/permit-one'))).toBe('/org/spending?effect=permit-one');
+  expect(overviewDestination(row('secret', 'unknown', 'memory',
+    '/api/org/history/raw-event-id'))).toBeUndefined();
+  expect(overviewDestination(row('unsafe', 'unknown', 'integrations',
+    '/api/org/integrations/secret'))).toBeUndefined();
+});
+
+it('restarts at page one once when a saved cursor has changed', async () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  fetchSpy.mockResolvedValueOnce(reply([row('one', 'unknown')], 'old'));
+  fetchSpy.mockResolvedValueOnce(reply([], null, 400));
+  fetchSpy.mockResolvedValueOnce(reply([row('new', 'ready')]));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelector('.overview-more')).not.toBeNull();
+  });
+  const more = root(fixture).querySelector<HTMLButtonElement>('.overview-more');
+  more?.click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+  expect(fetchSpy.mock.calls[1]?.[0]).toBe('/api/org/overview?cursor=old');
+  expect(fetchSpy.mock.calls[2]?.[0]).toBe('/api/org/overview');
+  expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(1);
 });
