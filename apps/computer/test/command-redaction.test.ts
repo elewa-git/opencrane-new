@@ -10,6 +10,10 @@ const plantedSecrets = [
   ['curl --api-key=sk-test-planted-value https://example.test', 'sk-test-planted-value'],
   ['curl -p hunter2 https://example.test', 'hunter2'],
   ['curl -p --token https://example.test', '--token'],
+  ['curl --pass --token https://example.test', '--token'],
+  ['curl -s --pass --token https://example.test', '--token'],
+  ['curl -s --user --password https://example.test', '--password'],
+  ['curl --unknown --pass --token https://example.test', '--token'],
   ['curl -phunter2 https://example.test', 'hunter2'],
   ['curl -u alice:hunter2 https://example.test', 'hunter2'],
   ['curl --user=alice:hunter2 https://example.test', 'hunter2'],
@@ -17,7 +21,12 @@ const plantedSecrets = [
   ['curl --header="Cookie: session=cookie-secret" https://example.test', 'cookie-secret'],
   ['curl --header=Authorization:secret-value https://example.test', 'secret-value'],
   ['curl https://alice:hunter2@example.test/path', 'hunter2'],
+  ['git clone https://alice:hunter2@example.test/repo', 'hunter2'],
   ['curl https://example.test/?token=query-secret', 'query-secret'],
+  ['curl --token xoxb-123456789012-123456789012-abcdef https://example.test',
+    'xoxb-123456789012-123456789012-abcdef'],
+  ['curl --token dGhpcy1pcy1hLXBsYW50ZWQtc2VjcmV0 https://example.test',
+    'dGhpcy1pcy1hLXBsYW50ZWQtc2VjcmV0'],
   ['TOKEN=planted-token npm install example', 'planted-token'],
   ['API_KEY=planted-key python3 script.py', 'planted-key'],
   ['CREDENTIAL=planted-credential git status', 'planted-credential'],
@@ -44,8 +53,38 @@ it('keeps a plain command shape with fixed markers', async () => {
     .toBe('curl -H ••• •••');
 });
 
-it('shows only the label when shell syntax cannot be parsed safely', async () => {
-  expect(await redactCommand('curl "unterminated secret')).toBeNull();
-  expect(await redactCommand('echo secret | cat')).toBeNull();
-  expect(await redactCommand('cat <<EOF\nsecret\nEOF')).toBeNull();
+const unsupportedCommands = [
+  'curl "unterminated secret',
+  "curl 'unterminated secret",
+  'echo (',
+  'curl )',
+  'echo foo(bar)',
+  'echo secret | cat',
+  'echo secret; cat',
+  'echo secret & cat',
+  'echo secret < input',
+  'echo secret > output',
+  'echo $secret',
+  'echo `secret`',
+  'echo secret\\ value',
+  'echo secret\rvalue',
+  'echo secret\nvalue',
+  'echo secret\0value',
+  'cat <<EOF\nsecret\nEOF',
+  'mysql -phunter2',
+  'PGPASSWORD=hunter2 psql',
+  'docker login --password hunter2',
+  'ssh-keygen -P hunter2',
+];
+
+async function expectNoCommandText(command: string): Promise<void> {
+  expect(await redactCommand(command)).toBeNull();
+}
+
+it.each(unsupportedCommands)('shows no command text for unsupported command %s',
+  expectNoCommandText);
+
+it('masks every word after an unknown flag', async () => {
+  expect(await redactCommand('curl -s --pass --token https://example.test'))
+    .toBe('curl ••• ••• ••• •••');
 });
