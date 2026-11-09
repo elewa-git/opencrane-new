@@ -31,6 +31,7 @@ The background worker also uses this library to finish a saved welcome after a
 member's final answer. That check starts no assistant work.
 
 The private image worker first claims one hosted image scan in the event log.
+It uses this library's separate signature, licence and vulnerability checks.
 Only the worker that saved a new claim may scan. Another worker reads any saved
 result after losing the claim.
 It can then ask this library to save a hosted image result. It must

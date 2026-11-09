@@ -3,10 +3,8 @@ import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { EventStore } from '@opencrane/event-store';
 import type { EventEnvelope } from '@opencrane/events';
-import { verifyHostedImage } from '../../../libs/models/src/hosted-verification.ts';
-import { inspectHostedLicences } from '../../../libs/models/src/hosted-licences.ts';
-import { inspectHostedVulnerabilities }
-  from '../../../libs/models/src/hosted-vulnerabilities.ts';
+import { verifyHostedImage, inspectHostedLicences, inspectHostedVulnerabilities }
+  from '@opencrane/models';
 import type { Inputs } from './hosted-image-check.ts';
 import { z } from 'zod';
 
