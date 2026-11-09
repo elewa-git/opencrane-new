@@ -10,6 +10,10 @@ const plantedSecrets = [
   ['curl --api-key=sk-test-planted-value https://example.test', 'sk-test-planted-value'],
   ['curl -p hunter2 https://example.test', 'hunter2'],
   ['curl -p --token https://example.test', '--token'],
+  ['curl -p --pass --token https://example.test', '--token'],
+  ['curl -p --user --password https://example.test', '--password'],
+  ['curl -p -u --password https://example.test', '--password'],
+  ['env curl -p --pass --token https://example.test', '--token'],
   ['curl --pass --token https://example.test', '--token'],
   ['curl -s --pass --token https://example.test', '--token'],
   ['curl -s --user --password https://example.test', '--password'],
@@ -48,9 +52,47 @@ async function expectNoLeak(command: string, secret: string): Promise<void> {
 
 it.each(plantedSecrets)('does not leak a planted secret in %s', expectNoLeak);
 
-it('keeps a plain command shape with fixed markers', async () => {
+it('hides every flag, flag value and URL with fixed markers', async () => {
   expect(await redactCommand('curl -H "Authorization: Bearer secret" https://example.test'))
-    .toBe('curl -H ••• •••');
+    .toBe('curl ••• ••• •••');
+});
+
+it('shows only reviewed subcommand words at the start of a command', async () => {
+  expect(await redactCommand('git clone https://example.test/repo'))
+    .toBe('git clone •••');
+  expect(await redactCommand('git status --short'))
+    .toBe('git status •••');
+  expect(await redactCommand('git log --oneline'))
+    .toBe('git log •••');
+  expect(await redactCommand('npm install package'))
+    .toBe('npm install •••');
+  expect(await redactCommand('npm run build'))
+    .toBe('npm run •••');
+  expect(await redactCommand('npm test -- --watch'))
+    .toBe('npm test ••• •••');
+  expect(await redactCommand('pip install package'))
+    .toBe('pip install •••');
+  expect(await redactCommand('python3 -m pip --version'))
+    .toBe('python3 -m pip •••');
+});
+
+it('masks words that only look like subcommands after an argument', async () => {
+  expect(await redactCommand('git --token clone status'))
+    .toBe('git ••• ••• •••');
+  expect(await redactCommand('npm unknown install'))
+    .toBe('npm ••• •••');
+  expect(await redactCommand('python3 -m secret-module'))
+    .toBe('python3 ••• •••');
+});
+
+it('shows only plain paths beneath the workspace', async () => {
+  expect(await redactCommand('cat /workspace/report.txt /workspace/notes/file.md'))
+    .toBe('cat /workspace/report.txt /workspace/notes/file.md');
+  expect(await redactCommand('cat /workspace /workspace/../private /workspace/a=secret '
+    + '/workspace/key:secret /tmp/report.txt'))
+    .toBe('cat ••• ••• ••• ••• •••');
+  expect(await redactCommand('git status /workspace/report.txt --token secret'))
+    .toBe('git status /workspace/report.txt ••• •••');
 });
 
 const unsupportedCommands = [
