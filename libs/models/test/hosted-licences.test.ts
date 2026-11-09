@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
+import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { beforeAll, expect, it } from 'vitest';
+import { beforeAll, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { inspectHostedLicences } from '../src/hosted-licences.ts';
 import { scanPinnedHostedSbom } from '../src/hosted-vulnerabilities.ts';
@@ -17,6 +17,21 @@ const verificationFailures = ['revoked', 'tampered', 'config', 'layer',
   'unsigned', 'wrong-key', 'architecture'];
 const fixtureSchema = z.object({ imageDigest: z.string(),
   blobs: z.record(z.string(), z.string()), review: z.record(z.string(), z.unknown()) });
+const scannerReplacement = vi.hoisted(() => ({ path: '', replaced: false }));
+vi.mock('node:fs/promises', async function mockScannerRead(importOriginal) {
+  const original = await importOriginal<typeof import('node:fs/promises')>();
+  async function readFileWithReplacement(...args: Parameters<typeof original.readFile>) {
+    const bytes = await original.readFile(...args);
+    const path = args[0];
+    if (path === scannerReplacement.path && !scannerReplacement.replaced) {
+      scannerReplacement.replaced = true;
+      const forged = `#!/bin/sh\ntouch "${path}.called"\nexit 1\n`;
+      await original.writeFile(path, forged, { mode: 0o700 });
+    }
+    return bytes;
+  }
+  return { ...original, readFile: readFileWithReplacement };
+});
 function prepareTools() {
   execFileSync('sh', ['scripts/fetch-cosign.sh']);
   execFileSync('sh', ['scripts/fetch-hosted-syft.sh']);
@@ -75,6 +90,12 @@ async function inspect<Extra = never>(mode = 'allowed', fault = '',
   if (fault === 'scanner') {
     syft = '/missing/syft';
   }
+  if (fault === 'replaced-scanner') {
+    syft = join(directory, 'syft');
+    await copyFile(resolve('.tools/syft'), syft);
+    scannerReplacement.path = syft;
+    scannerReplacement.replaced = false;
+  }
   if (verificationFailures.includes(fault)) {
     syft = join(directory, 'must-not-scan');
     await writeFile(syft, '#!/bin/sh\ntouch "$0.called"\nexit 1\n', { mode: 0o700 });
@@ -87,11 +108,15 @@ async function inspect<Extra = never>(mode = 'allowed', fault = '',
     // Each resource is fetched once; inspection cannot replace verified bytes from the registry.
     expect(new Set(reads).size).toBe(reads.length);
     if (verificationFailures.includes(fault)) {
-      const { existsSync } = await import('node:fs');
+      expect(existsSync(`${syft}.called`)).toBe(false);
+    }
+    if (fault === 'replaced-scanner') {
+      expect(scannerReplacement.replaced).toBe(true);
       expect(existsSync(`${syft}.called`)).toBe(false);
     }
     return result;
   } finally {
+    scannerReplacement.path = '';
     await rm(directory, { recursive: true, force: true });
   }
 }
@@ -166,6 +191,10 @@ async function acceptsReviewedImage(mode: string) {
 }
 it.each(['allowed', 'debian', 'deleted'])(
   'accepts complete %s notices with real Syft', acceptsReviewedImage);
+it('runs the verified Syft bytes when its original path changes', async () => {
+  const result = await inspect('allowed', 'replaced-scanner');
+  expect(result.verdict).toBe('pass');
+});
 async function rejectsLicence(mode: string) {
   expect(await inspect(mode)).toEqual({ verdict: 'fail', reasonCode: 'licence_refused' });
 }
