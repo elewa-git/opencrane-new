@@ -433,7 +433,11 @@ function scannerFacts(input: { sha256: string; byteCount: number }, updated: str
     databaseUpdatedAt: updated, checkedAt, expiresAt };
 }
 
-async function queuedRealRefusal(refusedCheck: 'signature' | 'licence' | 'vulnerability') {
+type QueuedOutcome = 'signature' | 'licence' | 'vulnerability' |
+  'signature-outage' | 'licence-outage' | 'vulnerability-outage' |
+  'missing-receipt' | 'forged-receipt';
+
+async function queuedRealRefusal(refusedCheck: QueuedOutcome) {
   const bundle = imageBundle();
   const registration = await saveRegistration(bundle.imageDigest);
   const custody = await realCustody(bundle);
@@ -464,18 +468,41 @@ async function queuedRealRefusal(refusedCheck: 'signature' | 'licence' | 'vulner
   const signature = vi.mocked(verifyHostedImage);
   const licence = vi.mocked(inspectHostedLicences);
   const vulnerability = vi.mocked(inspectHostedVulnerabilities);
-  const signatureOutcome = refusedCheck === 'signature'
-    ? { verdict: 'fail' as const, reasonCode: 'signature_refused' }
-    : toolOutcome(false);
+  let signatureOutcome;
+  if (refusedCheck === 'signature') {
+    signatureOutcome = { verdict: 'fail' as const, reasonCode: 'signature_refused' };
+  } else if (refusedCheck === 'signature-outage') {
+    signatureOutcome = { verdict: 'unavailable' as const,
+      reasonCode: 'signature_unavailable' };
+  } else {
+    signatureOutcome = toolOutcome(false);
+  }
   signature.mockResolvedValue(signatureOutcome);
-  licence.mockResolvedValue(toolOutcome(refusedCheck === 'licence'));
+  if (refusedCheck === 'licence-outage') {
+    licence.mockResolvedValue({ verdict: 'unavailable', reasonCode: 'licence_unavailable' });
+  } else {
+    licence.mockResolvedValue(toolOutcome(refusedCheck === 'licence'));
+  }
   const checkedAt = new Date(Date.now() - 1_000).toISOString();
   const receipt = { verdict: 'fail' as const, checkedAt,
     expiresAt: new Date(Date.now() + 60_000).toISOString(), engineVersion: '0.121.0',
     databaseDigest: digest, databaseUpdatedAt: checkedAt, reportDigest: digest,
     reasonCodes: ['vulnerability_refused'] };
-  vulnerability.mockResolvedValue({ verdict: 'fail',
-    reasonCode: 'vulnerability_refused', receipt });
+  if (refusedCheck === 'vulnerability-outage') {
+    vulnerability.mockResolvedValue({ verdict: 'unavailable',
+      reasonCode: 'vulnerability_unavailable',
+      receipt: { ...receipt, verdict: 'unavailable' } });
+  } else if (refusedCheck === 'missing-receipt') {
+    vulnerability.mockResolvedValue({ verdict: 'fail',
+      reasonCode: 'vulnerability_refused' });
+  } else if (refusedCheck === 'forged-receipt') {
+    vulnerability.mockResolvedValue({ verdict: 'fail',
+      reasonCode: 'vulnerability_refused',
+      receipt: { ...receipt, verdict: 'pass' } });
+  } else {
+    vulnerability.mockResolvedValue({ verdict: 'fail',
+      reasonCode: 'vulnerability_refused', receipt });
+  }
   const storage = await databases();
   function failed() { throw new Error('Fixture database unavailable'); }
   const db = connectProjectionDb(storage.queue.options.connectionString!, failed);
@@ -490,15 +517,34 @@ async function queuedRealRefusal(refusedCheck: 'signature' | 'licence' | 'vulner
   try {
     expect(await recoverHostedImageChecks(runtime, fixture.reader, fixture.store)).toBe(1);
     await runtime.work(1);
-    async function saved() {
-      const admission = await readHostedAdmission(fixture.store, silo, serverId);
-      return admission?.status === 'rejected';
+    const isFailure = refusedCheck === 'signature' || refusedCheck === 'licence' ||
+      refusedCheck === 'vulnerability';
+    if (isFailure) {
+      async function saved() {
+        const admission = await readHostedAdmission(fixture.store, silo, serverId);
+        return admission?.status === 'rejected';
+      }
+      await until(saved);
+    } else {
+      async function attempted() {
+        const jobs = await storage.queue.query<{ state: string }>(
+          "SELECT state FROM pgboss.job WHERE name='check-hosted-image'");
+        return jobs.rows.some(job => job.state === 'retry' || job.state === 'failed');
+      }
+      await until(attempted);
     }
-    await until(saved);
     const admission = await readHostedAdmission(fixture.store, silo, serverId);
-    expect(admission?.status).toBe('rejected');
     expect(admission?.attemptId).toBe(1);
-    expect(admission?.checks?.[refusedCheck].verdict).toBe('fail');
+    if (isFailure) {
+      expect(admission?.status).toBe('rejected');
+      if (refusedCheck === 'signature' || refusedCheck === 'licence' ||
+          refusedCheck === 'vulnerability') {
+        expect(admission?.checks?.[refusedCheck].verdict).toBe('fail');
+      }
+    } else {
+      expect(admission?.status).toBe('checking');
+      expect(admission?.checks).toBeUndefined();
+    }
     if (refusedCheck === 'signature') {
       expect(admission?.checks?.licence).toEqual({ verdict: 'not_run' });
       expect(admission?.checks?.vulnerability).toEqual({ verdict: 'not_run' });
@@ -509,10 +555,10 @@ async function queuedRealRefusal(refusedCheck: 'signature' | 'licence' | 'vulner
     const events = [];
     for await (const row of fixture.store.readStream(`mcp-${serverId}`, 1,
       performance.now() + 10_000)) events.push(row.event);
-    expect(events.map(event => event.type)).toEqual([
-      'mcp.server_registered', 'mcp.image_scan_claimed', 'mcp.image_checked',
-    ]);
-    await handler.handle(registration, transaction);
+    const expectedEvents = ['mcp.server_registered', 'mcp.image_scan_claimed'];
+    if (isFailure) expectedEvents.push('mcp.image_checked');
+    expect(events.map(event => event.type)).toEqual(expectedEvents);
+    if (isFailure) await handler.handle(registration, transaction);
     expect(scanCalls).toBe(1);
     expect(await readHostedAdmission(fixture.store, silo, serverId)).toEqual(admission);
     const afterRedelivery = [];
@@ -533,3 +579,61 @@ async function queuedRealRefusal(refusedCheck: 'signature' | 'licence' | 'vulner
 }
 it.each(['signature', 'licence', 'vulnerability'] as const)(
   'saves one real queued %s refusal and returns it on redelivery', queuedRealRefusal);
+it.each(['signature-outage', 'licence-outage', 'vulnerability-outage',
+  'missing-receipt', 'forged-receipt'] as const)(
+  'keeps a real queued %s without admission or a saved refusal', queuedRealRefusal);
+
+async function privateInputErrorStaysPrivate() {
+  const registration = await saveRegistration();
+  const directory = await mkdtemp(join(tmpdir(), 'image-private-error-'));
+  const canaries = ['credential-canary', 'filesystem-path-canary', 'content-canary'];
+  const previous = process.env['HOSTED_IMAGE_CUSTODY_FILE'];
+  process.env['HOSTED_IMAGE_CUSTODY_FILE'] = join(directory, ...canaries, 'missing.json');
+  const logLines: string[] = [];
+  const destination = { write(line: string) { logLines.push(line); } };
+  const logger = createLogger('image-private-test', { destination });
+  const storage = await databases();
+  function failed() { throw new Error('Fixture database unavailable'); }
+  const db = connectProjectionDb(storage.queue.options.connectionString!, failed);
+  async function readInputs(event: EventEnvelope) {
+    return trustedHostedImageInputs(fixture.store, silo, event);
+  }
+  const handler = hostedImageCheckHandler(fixture.store, silo,
+    runAndWriteHostedImageCheck, readInputs);
+  const runtime = new HandlerRuntime({ db: db.db, logger, silo, handlers: [handler],
+    retryLimit: 0 });
+  await runtime.start();
+  try {
+    expect(await recoverHostedImageChecks(runtime, fixture.reader, fixture.store)).toBe(1);
+    await runtime.work(1);
+    async function failedJob() {
+      const jobs = await storage.queue.query<{ state: string }>(
+        "SELECT state FROM pgboss.job WHERE name='check-hosted-image'");
+      return jobs.rows.some(job => job.state === 'failed');
+    }
+    await until(failedJob);
+    const jobs = await storage.queue.query<{ state: string; output: unknown }>(
+      "SELECT state, output FROM pgboss.job WHERE name='check-hosted-image'");
+    expect(jobs.rows).toHaveLength(1);
+    expect(jobs.rows[0]?.state).toBe('failed');
+    await expect(handler.handle(registration, transaction))
+      .rejects.toThrow('Trusted image inputs unavailable');
+    const admission = await readHostedAdmission(fixture.store, silo, serverId);
+    expect(admission?.status).toBe('checking');
+    const events = [];
+    for await (const row of fixture.store.readStream(`mcp-${serverId}`, 1,
+      performance.now() + 10_000)) events.push(row.event);
+    expect(events.map(event => event.type)).toEqual(['mcp.server_registered']);
+    const publicOutput = JSON.stringify({ logs: logLines, savedErrors: jobs.rows[0]?.output,
+      eventData: events.map(event => event.data) });
+    for (const canary of canaries) expect(publicOutput).not.toContain(canary);
+  } finally {
+    await runtime.stop();
+    await db.close();
+    await storage.close();
+    await rm(directory, { recursive: true, force: true });
+    if (previous) process.env['HOSTED_IMAGE_CUSTODY_FILE'] = previous;
+    else delete process.env['HOSTED_IMAGE_CUSTODY_FILE'];
+  }
+}
+it('keeps a private input error out of the queue and public result', privateInputErrorStaysPrivate);
