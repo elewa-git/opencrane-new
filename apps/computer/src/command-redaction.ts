@@ -104,6 +104,7 @@ function maskArguments(words: string[]): string | null {
       programFound = true;
       continue;
     }
+    if (word.startsWith('#')) return null;
     if (maskRemainingWords) {
       masked.push(hidden);
       continue;
@@ -113,7 +114,6 @@ function maskArguments(words: string[]): string | null {
       maskNextValue = false;
       continue;
     }
-    if (word.startsWith('#')) return null;
     if (assignmentName.test(word)) {
       masked.push(`${hidden}=${hidden}`);
       continue;
