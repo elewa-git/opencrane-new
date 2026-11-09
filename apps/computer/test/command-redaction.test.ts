@@ -70,6 +70,8 @@ const unsupportedCommands = [
   'echo secret\rvalue',
   'echo secret\nvalue',
   'echo secret\0value',
+  'curl -s #planted-secret',
+  'curl --pass #planted-secret',
   'cat <<EOF\nsecret\nEOF',
   'mysql -phunter2',
   'PGPASSWORD=hunter2 psql',
