@@ -192,6 +192,71 @@ it('shows a dated all-clear only when every source is current', async () => {
     expect(root(fixture).textContent).toContain('Nothing needs your attention');
   });
   expect(root(fixture).textContent).toContain('8 Nov 2026');
+  expect(root(fixture).textContent).toContain('Connect a provider');
+  expect(root(fixture).querySelector('.overview-notice.clear a')).not.toBeNull();
+});
+
+it.each(['unavailable', 'applying'])('does not show Ready from an %s source',
+  async (status) => {
+    const changedSources = sources.map(source => ({ ...source,
+      status: source.name === 'providers' ? status : source.status }));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply([
+      row('provider-one', 'ready', 'providers', '/org/providers/provider-one'),
+    ], null, 200, changedSources));
+    const fixture = await mount();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(1);
+    });
+    expect(root(fixture).querySelector('.overview-ready')).toBeNull();
+    expect(root(fixture).textContent).not.toContain('Ready');
+  });
+
+it('separates current Ready evidence from tasks in server order', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply([
+    row('first', 'unknown'), row('second', 'ready'), row('third', 'ready'),
+  ]));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(3);
+  });
+  expect(root(fixture).querySelectorAll('.overview-tasks .overview-row')).toHaveLength(1);
+  expect(root(fixture).querySelectorAll('.overview-ready .overview-row')).toHaveLength(2);
+});
+
+it('distinguishes two providers with the same priority and opens their evidence', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply([
+    row('first', 'needs_input', 'providers', '/org/providers/first'),
+    row('second', 'needs_input', 'providers', '/org/providers/second'),
+  ]));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(2);
+  });
+  const shownRows = [...root(fixture).querySelectorAll<HTMLElement>('.overview-row')];
+  expect(shownRows[0]?.textContent).toContain('first');
+  expect(shownRows[1]?.textContent).toContain('second');
+  expect(shownRows.map(shownRow => shownRow.querySelector('a')?.getAttribute('href'))).toEqual([
+    '/org/models?provider=first', '/org/models?provider=second',
+  ]);
+});
+
+it('places Refresh inside the stale notice', async () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  fetchSpy.mockResolvedValueOnce(reply([row('first', 'unknown')]));
+  fetchSpy.mockResolvedValueOnce(reply([], null, 503));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelector('.overview-row')).not.toBeNull();
+  });
+  root(fixture).querySelector<HTMLButtonElement>('.overview-heading button')?.click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelector('.overview-notice.stale button')).not.toBeNull();
+  });
 });
 
 it('maps evidence to browser pages and refuses direct API or unsafe links', () => {
