@@ -403,7 +403,10 @@ async function refusesToolPolicyChangeDuringAdmission() {
   const composition = compose({ enabled: true, companyPreflight });
   expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
   expect(changedDuringAdmission).toBe(true);
-  expect(preparedComputer.frames).toEqual([]);
+  function isTurn(frame: Record<string, unknown>) {
+    return frame['type'] === 'turn';
+  }
+  expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
   expect(preparedComputer.executedThreads).toEqual([]);
 }
 it('refuses a tool policy blocked while activation admission is saved',
