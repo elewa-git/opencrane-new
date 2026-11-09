@@ -4,6 +4,7 @@ import { PassThrough } from 'node:stream';
 import { vi } from 'vitest';
 import { z } from 'zod';
 import { collectDeployment } from '../../../../scripts/private-memory-qualification/deployment.ts';
+import * as heldInventory from '../../../../scripts/private-memory-qualification/held-inventory.ts';
 import * as bridgeProof from '../../../../scripts/private-memory-qualification/bridge-proof.ts';
 import * as supervisorProof from '../../../../scripts/private-memory-qualification/supervisor-proof.ts';
 import * as joinedInventory from '../../../../scripts/private-memory-qualification/joined-inventory.ts';
@@ -156,6 +157,12 @@ export async function initialQualificationFixture() {
   vi.spyOn(bridgeProof, 'proveComputerBridge').mockResolvedValue(true);
   vi.spyOn(supervisorProof, 'proveComputerSupervisor').mockResolvedValue(true);
   vi.spyOn(joinedInventory, 'readCurrentInventory').mockImplementation(matchingInventory);
+  vi.spyOn(heldInventory, 'collectHeldInventory').mockImplementation(
+    async function fixtureHeld(_context, _containers, runWork, verifyBinding) {
+      await verifyBinding();
+      return runWork(new AbortController().signal);
+    },
+  );
   const result = await collectDeployment();
   function replace(value: unknown) {
     files.set(resultPath, JSON.stringify(value));

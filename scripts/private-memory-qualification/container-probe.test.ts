@@ -66,6 +66,13 @@ async function acceptsOwnGroup(): Promise<void> {
 }
 it('measures the current runner and its own finite no-swap cgroup', acceptsOwnGroup);
 
+async function reusesCanarySocketAfterJourneyEnds(): Promise<void> {
+  const first = await runJourney(request);
+  const second = await runJourney(request);
+  expect(second).toEqual(first);
+}
+it('closes the canary socket after each journey result', reusesCanarySocketAfterJourneyEnds);
+
 const unsafe = [
   ['/proc/self/cgroup', '0::/other\n'], ['/proc/self/cgroup', '0::/../private\n'],
   ['/proc/self/cgroup', '0::/\n0::/\n'], ['/proc/self/cgroup', '2:memory:/\n'],
