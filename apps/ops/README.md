@@ -55,10 +55,13 @@ for checked preparation. It sends no memory text and cannot dispatch a turn.
   it retries unfinished welcome jobs from saved events.
 - Queues hosted image checks from saved attempts. It checks the original event again,
   then uses operator-owned image files and scanner settings before saving a result.
+  Each input callback checks the saved attempt and platform again.
   A failed signature, licence or vulnerability check saves a refusal for that attempt.
   An unavailable check leaves the image waiting, with no saved refusal or admission.
   A repeated job reads any saved refusal without scanning the image again. Private
-  file errors appear in the job record only as a fixed safe message.
+  file errors appear in the job record only as a fixed safe message. A local test
+  runs the pinned signature and licence tools on a small reviewed image. It keeps
+  the image waiting when the vulnerability database is unavailable.
 - Removes the dispatcher's ready marker as soon as event consumption fails, before
   database lock cleanup finishes.
 - Provides internal commands that claim, skip or record missed routine slots without starting work.

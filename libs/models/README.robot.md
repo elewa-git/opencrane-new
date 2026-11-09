@@ -3354,7 +3354,8 @@ forwarding remain later rows. Fresh-install qualification and real model calls: 
 
 ## Hosted publisher verification — P3-6 PR 5, first part
 
-`hosted-verification.ts` is private and has no production caller or event writer.
+`hosted-verification.ts` is private and is called by the hosted image worker.
+It has no event writer.
 It accepts an operator trust snapshot separately from the image request. Trust names
 one exact repository, a positive version, a PEM public key and a revocation flag.
 The signature reader supplies a detached Cosign simple-signing payload and signature.
@@ -3366,13 +3367,17 @@ size and SHA-256 digest. Candidate bytes are never executed or extracted.
 
 The reader receives repository, resource and AbortSignal. It must limit bytes while
 receiving them; this module also checks returned sizes, copies bytes and imposes a
-one-second read deadline even if cancellation is ignored. There is no network reader
-in this part. Reviewed HTTPS destinations, address pinning, credentials and bounded
-streaming remain prerequisites for connecting a real registry.
+one-second read deadline even if cancellation is ignored. The ops worker now reads
+an operator-owned local bundle. It does not fetch candidate bytes from a registry.
+Reviewed HTTPS destinations, address pinning, credentials and bounded streaming
+remain prerequisites for connecting a real registry.
 Limits are deliberately smaller than the design's eventual scan job: 64 KiB signature,
 1 MiB manifest/configuration, 32 MiB per layer, 64 layers and 128 MiB total.
 The subprocess has a ten-second deadline and 64 KiB output limit. Its temporary files
 are private, its environment excludes inherited credentials, and its output is discarded.
+The verifier copies the configured Cosign binary into that private directory, checks
+its pinned SHA-256 and runs only the checked copy. A success string from a replacement
+program is unavailable, even if that program exits successfully.
 `SIGSTORE_REKOR_PUBLIC_KEY` names the local operator key file. In Cosign 2.6.1 this
 prevents the automatic TUF metadata download, including with an empty HOME.
 `--offline` and `--insecure-ignore-tlog` disable transparency-log lookups; `--key`
@@ -3399,8 +3404,11 @@ The offline regression uses `strace` to block socket creation and record network
 across every Cosign thread. It requires a valid signature to pass without any IPv4 or
 IPv6 socket attempts. Install `strace` before running this test; CI installs it too.
 It is test tooling only, licensed under LGPL-2.1-or-later, with no runtime image change.
-File-error regressions replace each scratch file with a directory before real Cosign
-reads it. They require exit code 1 to report unavailable, while a wrong key still fails.
+The forged-success regression uses an executable that prints a success string. The
+pin check refuses it before execution. A missing binary is unavailable, while a
+wrong signing key is a real signature failure. The Grype adapter also has a local
+subprocess test that exceeds its output limit; it remains unavailable without saving
+that output.
 
 The private licence checker below adds Syft and image-specific notice review.
 Private evidence storage and worker wiring remain later work. Malware,

@@ -3,7 +3,8 @@ import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { EventStore } from '@opencrane/event-store';
 import type { EventEnvelope } from '@opencrane/events';
-import { verifyHostedImage, inspectHostedLicences, inspectHostedVulnerabilities }
+import { verifyHostedImage, inspectHostedLicences, inspectHostedVulnerabilities,
+  readHostedImageScanAttempt }
   from '@opencrane/models';
 import type { Inputs } from './hosted-image-check.ts';
 import { z } from 'zod';
@@ -205,6 +206,12 @@ async function readHostedImageInputs(store: EventStore, silo: string,
   requireInput(imageDigest && digest.test(imageDigest));
   const repository = await registeredRepository(store, silo, serverId, imageDigest);
   requireInput(repository === initial.parsed.trust.repository);
+  async function requireCurrentAttempt(attempt: Attempt) {
+    const saved = await readHostedImageScanAttempt(store, silo, serverId);
+    requireInput(saved && attempt.silo === saved.silo &&
+      attempt.serverId === saved.serverId && attempt.attemptId === saved.attemptId &&
+      attempt.imageDigest === saved.imageDigest && attempt.platform === saved.platform);
+  }
   async function unchanged() {
     const current = await configuration(custodyPath, silo);
     requireInput(current.digest === initial.digest);
@@ -215,6 +222,7 @@ async function readHostedImageInputs(store: EventStore, silo: string,
       const attempt = attemptSchema.parse(raw);
       requireInput(attempt.imageDigest === imageDigest && attempt.serverId === serverId &&
         attempt.silo === silo);
+      await requireCurrentAttempt(attempt);
       return await prepareImage(initial.parsed, attempt);
     } catch {
       throw new Error(refusal);
@@ -229,6 +237,7 @@ async function readHostedImageInputs(store: EventStore, silo: string,
       const attempt = attemptSchema.parse(raw);
       requireInput(attempt.imageDigest === imageDigest && attempt.serverId === serverId &&
         attempt.silo === silo);
+      await requireCurrentAttempt(attempt);
       await unchanged();
       return await independentChecks(initial.parsed, attempt, repository);
     } catch {
