@@ -1,3 +1,5 @@
+/* Keep audit field selection beside its readers. */
+/* eslint max-lines: ["error", { max: 510, skipBlankLines: true, skipComments: true }] */
 import { z } from 'zod';
 import { effectResolvedDataSchema, getEventDefinition, type EventEnvelope } from '@opencrane/events';
 import { auditReasons, auditResponseSchema, auditDetailSchema, type AuditRow,
@@ -77,6 +79,11 @@ export function isAuditEventType(type: string): boolean {
 }
 function auditData(event: EventEnvelope): Record<string, unknown> | undefined {
   const dataSchema = z.record(z.string(), z.unknown());
+  if (event.type === 'agent.command_ran') {
+    const data = dataSchema.parse(event.data);
+    const { view: _view, ...safeData } = data;
+    return safeData;
+  }
   if (event.type === 'memory.maintenance_recorded') {
     return maintenanceAuditData(event);
   }

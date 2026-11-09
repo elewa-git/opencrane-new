@@ -66,6 +66,22 @@ it('shows a command label and plain failure reason on the transcript line', () =
   fixture.destroy();
 });
 
+it('shows a masked command only when its transcript line expands', () => {
+  const fixture = TestBed.createComponent(ToolActivityLine);
+  fixture.componentRef.setInput('record', {
+    id: 'masked', label: 'Searched files', detail: 'Completed', command: true,
+    preview: 'rg ••• •••', failed: false, time: '2026-10-04T10:00:00Z',
+  });
+  fixture.detectChanges();
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No tool activity line');
+  expect(root.textContent).not.toContain('rg ••• •••');
+  root.querySelector<HTMLButtonElement>('.tool-line')?.click();
+  fixture.detectChanges();
+  expect(root.querySelector('.tool-details')?.textContent).toContain('rg ••• •••');
+  fixture.destroy();
+});
+
 it('keeps native consent in its own drawer without inline controls', () => {
   const fixture = TestBed.createComponent(ToolActivityLine);
   fixture.componentRef.setInput('record', {

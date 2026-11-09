@@ -38,7 +38,8 @@ function validateRowFields(row: { type: string; data: unknown }, context: z.Refi
   if (row.type === 'agent.native_consent_refused') {
     fieldsSchema = agentNativeConsentRefusedDataSchema;
   } else if (row.type === 'agent.command_ran') {
-    fieldsSchema = z.object({ activityLabel: commandActivityLabelSchema.optional() });
+    fieldsSchema = z.object({ activityLabel: commandActivityLabelSchema.optional(),
+      preview: z.string().max(16_384).optional() });
   } else if (row.type === 'tool.dispatch_recorded') {
     fieldsSchema = toolDispatchDisplayDataSchema;
   } else if (row.type === 'agent.tool_call_started' || row.type === 'agent.tool_call_finished') {
@@ -88,6 +89,7 @@ export const chatRowSchema = z.object({
     path: z.string().optional(),
     exitCode: z.number().optional(),
     activityLabel: commandActivityLabelSchema.optional(),
+    preview: z.string().max(16_384).optional(),
     commandDigest: z.string().optional(),
     reason: z.string().optional(),
     contentType: z.string().optional(),

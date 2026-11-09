@@ -31,7 +31,7 @@ function addActivity(fixture) {
   fixture.add('agent.turn_started', turn);
   const command = {
     turnId: question.id, exitCode: 0, commandDigest: 'a'.repeat(64),
-    activityLabel: 'Read a PDF',
+    activityLabel: 'Read a PDF', preview: 'pdftotext ••• •••',
   };
   fixture.add('agent.command_ran', command);
   const toolStarted = {
@@ -86,6 +86,7 @@ async function capture(browser, width) {
     const details = page.locator('.tool-details');
     const completedResult = details.getByText('Completed', { exact: true });
     await completedResult.waitFor();
+    await details.getByText('pdftotext ••• •••').waitFor();
     assert.equal(await page.locator('oc-hinge-drawer[open]').count(), 0);
     assert(await page.evaluate(pageHasNoOverflow));
     await page.screenshot({ path: resolve(output, `expanded-${width}.png`), fullPage: true });
@@ -113,8 +114,15 @@ async function capture(browser, width) {
     assert.match(rows[0] ?? '', /Ran a Python script/u);
     assert.match(rows[1] ?? '', /read_order/u);
     assert.match(rows[2] ?? '', /Read a PDF/u);
+    assert.equal(await activity.getByText('pdftotext ••• •••').count(), 0);
     assert(await page.evaluate(pageHasNoOverflow));
     await page.screenshot({ path: resolve(output, `activity-${width}.png`), fullPage: true });
+    await activity.locator('.activity-row').nth(2).click();
+    await activity.getByText('pdftotext ••• •••').waitFor();
+    assert.equal(await activity.locator('.activity-preview').count(), 1);
+    assert(await page.evaluate(pageHasNoOverflow));
+    await page.screenshot({ path: resolve(output, `activity-expanded-${width}.png`),
+      fullPage: true });
   } finally {
     await page.close();
   }

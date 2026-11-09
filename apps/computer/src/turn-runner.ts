@@ -11,6 +11,7 @@ import { requiredString, type Turn } from './turn-frame.ts';
 export { parseTurn } from './turn-frame.ts';
 export type { Turn } from './turn-frame.ts';
 import { itemReport } from './item-reports.ts';
+import { redactCommand } from './command-redaction.ts';
 import { turnInput, privateTurnInput } from './turn-input.ts';
 import { threadLoads, unload, ThreadLoadFailed, type ThreadLoadDriver } from './thread-loads.ts';
 import { revokeTurnAccess } from './turn-stop.ts';
@@ -104,6 +105,7 @@ class TurnRunner {
   private readonly recalls = new Map<string, ReturnType<typeof privateRecall>>();
   private readonly artifactStarts = new Map<string, Record<string, string>>();
   private readonly finishing = new Set<string>();
+  private readonly pendingCommandReports = new Map<string, Promise<void>>();
   private preparingCount = 0;
   private readonly stoppedTurns = new Set<string>();
   private readonly routineStopTimers = new Map<string, NodeJS.Timeout>();
@@ -909,6 +911,7 @@ class TurnRunner {
     if (typeof threadId !== 'string') {
       return;
     }
+    if (this.deferUntilCommandReport(threadId, value)) return;
     const input = this.state.running.get(threadId);
     if (event['method'] === 'thread/closed') {
       this.releaseClosedThread(threadId, input);
@@ -918,14 +921,7 @@ class TurnRunner {
       return;
     }
 
-    if (input.executionMode === 'restricted'
-      && ['item/started', 'item/completed'].includes(String(event['method']))) {
-      const item = record(params['item']);
-      if (!this.permitsPrivateItem(input, item)) {
-        this.refuseTool(input, threadId);
-        return;
-      }
-    }
+    if (this.refuseUnpermittedItem(input, threadId, event, params)) return;
     const stopped = this.finishStoppedPrivateTurn(input, threadId, event['method'], params);
     if (stopped) return;
     let itemId = input.id;
@@ -945,6 +941,26 @@ class TurnRunner {
     this.completeTurn(input, threadId, params);
   }
 
+  private deferUntilCommandReport(threadId: string, value: unknown): boolean {
+    const pending = this.pendingCommandReports.get(threadId);
+    if (!pending) return false;
+    // Keep later native events behind command masking so report positions stay ordered.
+    const resume = this.complete.bind(this, value);
+    const failed = this.closeCurrentSocket.bind(this, 1011, 'Command report unavailable');
+    void pending.then(resume, failed);
+    return true;
+  }
+
+  private refuseUnpermittedItem(input: Turn, threadId: string,
+    event: Record<string, unknown>, params: Record<string, unknown>): boolean {
+    if (input.executionMode !== 'restricted'
+      || !['item/started', 'item/completed'].includes(String(event['method']))) return false;
+    const item = record(params['item']);
+    if (this.permitsPrivateItem(input, item)) return false;
+    this.refuseTool(input, threadId);
+    return true;
+  }
+
   private finishStoppedPrivateTurn(input: Turn, threadId: string, method: unknown,
     params: Record<string, unknown>) {
     if (input.executionMode !== 'restricted' || !this.state.cancelled.has(input.id)) {
@@ -959,6 +975,26 @@ class TurnRunner {
   private reportItem(input: Turn, params: Record<string, unknown>,
     event: Record<string, unknown>) {
     if (this.gate.closed && event['id'] !== undefined) return;
+    const item = record(params['item'] ?? {});
+    const command = item['command'];
+    if (event['method'] === 'item/completed' && item['type'] === 'commandExecution'
+      && input.executionMode !== 'restricted' && typeof command === 'string'
+      && typeof item['exitCode'] === 'number') {
+      const threadId = String(params['threadId']);
+      const commandText = command;
+      async function saveReport(this: TurnRunner) {
+        const preview = await redactCommand(commandText);
+        if (!this.isUnfinishedTurn(input)) return;
+        const report = itemReport(input, params, event['method'], event['id'],
+          this.state.codexTurns.get(input.id), preview ?? undefined);
+        if (report) this.appendReport(input, report.type, report.data);
+      }
+      const clear = this.pendingCommandReports.delete.bind(this.pendingCommandReports, threadId);
+      const pending = saveReport.call(this).finally(clear);
+      this.pendingCommandReports.set(threadId, pending);
+      void this.gate.track(pending);
+      return;
+    }
     const report = itemReport(input, params, event['method'], event['id'],
       this.state.codexTurns.get(input.id));
     if (report) this.appendReport(input, report.type, report.data);

@@ -10,7 +10,9 @@ This package is the typed event catalogue used by server validation and the even
 core. It defines envelopes, per-type data schemas and examples; it does not
 append, project or dispatch events. Its routine fold rebuilds facts in memory.
 
-`agent.command_ran` accepts an optional label from seven fixed plain phrases.
+`agent.command_ran` accepts an optional label from seven fixed plain phrases and
+an optional encrypted `view` with `ciphertext` and `keyId`. It refuses a plain
+`preview` and keeps older events without a view readable.
 Old events without a label remain valid. The event still keeps only the command
 digest and exit code; raw command text and output are rejected.
 

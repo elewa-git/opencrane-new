@@ -122,6 +122,7 @@ export interface ToolActivityRecord {
   detail: string;
   failed: boolean;
   command?: true;
+  preview?: string;
   time: string;
   callId?: string;
   nativeRequestId?: string;
@@ -400,7 +401,8 @@ function updateTurnTools(turn: Turn, row: ChatRow): void {
   const label = row.data.activityLabel ?? 'Ran a command';
   const detail = commandExitDetail(row.data.exitCode);
   turn.tools.push({ id: row.id, label, detail, command: true,
-    failed: !succeeded, time: row.time });
+    failed: !succeeded, time: row.time,
+    ...(row.data.preview ? { preview: row.data.preview } : {}) });
 }
 
 function addNativeConsentRefusal(turn: Turn, row: ChatRow): void {

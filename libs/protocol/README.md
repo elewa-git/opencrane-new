@@ -5,6 +5,8 @@
 Shared message shapes for the OpenCrane browser app and back end. Both sides use the same schemas, written rules for what each message must contain, to check messages before using them. The package also defines the shapes for chat, computers, integrations, budgets, held spend, approvals, model access and receipts for saved changes.
 
 Chat replies can name the files attached to a saved message. Older replies still work.
+Command activity replies may carry a masked view for a current chat member.
+Older activity keeps its plain label.
 
 Control refusal history explains when someone was not the requester or their attempt
 conflicted with saved control. It contains no private computer or turn details.
@@ -44,8 +46,8 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.->|chat replies with file ids, service readiness and private clearances| protocol["libs/protocol<br/>shared reply shapes"]
-  server["apps/server<br/>back end"] -.->|chat replies, close permission and call status| protocol
+  web["apps/web<br/>browser app"] -.->|chat replies with masked views, file ids, service readiness and private clearances| protocol["libs/protocol<br/>shared reply shapes"]
+  server["apps/server<br/>back end"] -.->|chat replies with masked views, close permission and call status| protocol
   projections["libs/projections<br/>read tables"] -.->|saved resolution and publication history| protocol
   models["libs/models<br/>AI rules and spending"] -.-> protocol
   protocol -.-> zod["Zod<br/>data checks"]

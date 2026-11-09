@@ -1410,6 +1410,38 @@ async function lateParticipantHistory() {
 it('refuses approvals, file commands and live view on an unapplied participant removal',
   removedParticipantReaders, 120_000);
 
+it('shows masked command text only to a current conversation member', async () => {
+  const context = await fixture();
+  try {
+    await context.agentSession('agent');
+    const preview = 'rg ••• •••';
+    const view = context.keys.encrypt('test', 'agent', preview);
+    await context.append('conversation-agent', 'agent.command_ran', {
+      conversationId: 'agent', turnId: 'agent-turn', commandDigest: 'a'.repeat(64),
+      exitCode: 0, activityLabel: 'Searched files', view,
+    }, false);
+    await context.runner.run(conversations);
+    const url = '/api/conversations/agent/messages';
+    const member = await context.app.inject({ url, headers: context.headers('alice') });
+    expect(member.statusCode, member.body).toBe(200);
+    expect(member.body).toContain(preview);
+    await context.append('member-bob', 'member.role_changed', {
+      memberId: 'bob', previousRole: 'member', newRole: 'owner', changedBy: 'owner',
+    });
+    const outsider = await context.app.inject({ url, headers: context.headers('bob') });
+    expect(outsider.statusCode, outsider.body).toBe(403);
+    expect(outsider.body).not.toContain(preview);
+    await context.append('participation-agent', 'participant.removed', {
+      conversationId: 'agent', participantId: 'alice', removedBy: 'bob',
+    }, false);
+    const removed = await context.app.inject({ url, headers: context.headers('alice') });
+    expect(removed.statusCode, removed.body).toBe(403);
+    expect(removed.body).not.toContain(preview);
+  } finally {
+    await context.close();
+  }
+}, 120_000);
+
 async function removedParticipantReaders() {
   const context = await fixture();
   try {

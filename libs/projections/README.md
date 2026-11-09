@@ -8,6 +8,8 @@ screens can load data quickly. The package keeps tables for members, groups,
 model providers, conversations, files, computers, memory, tool servers and a history of
 who did what. The saved event log
 remains the record of what happened, so these tables can be rebuilt.
+Conversation tables keep encrypted command views. Organisation history keeps
+only the plain activity label and leaves out the view.
 Provider read tables keep a retired connection's safe details and apply its
 reviewed binding choices in one database transaction. Rebuilding them reads only
 saved events and does not contact a model provider.
@@ -54,7 +56,7 @@ PostgreSQL, the database for the read tables.
 ```mermaid
 flowchart LR
   models["libs/models<br/>model choices and replay tests"] -.->|uses database locks and the test helper| projections
-  ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and send authorisations, and checks saved changes| projections["libs/projections<br/>read tables, change history, routines, memory, surveys, personas and completed welcomes"]
+  ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and send authorisations, and checks saved changes| projections["libs/projections<br/>read tables, chat history and safe audit, routines, memory, surveys, personas and completed welcomes"]
   server["apps/server<br/>back end"] -->|reads tables, own and admin routine lists, run pages and spending choices| pg["PostgreSQL<br/>database"]
   projections -->|saves history, child publication, searchable task outcomes and spending; keeps private audits and process exits outside chat feeds| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections

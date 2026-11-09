@@ -5,6 +5,10 @@
 The server checks the bridge's optional command activity label against the event
 catalogue before saving it. Older bridge reports without a label remain valid.
 The conversation feed sends the same fixed label to authorised chat readers.
+When the bridge also supplies a masked preview, the server encrypts it with the
+conversation message key before appending `agent.command_ran`. The event stores
+only the nested `view` ciphertext and key id. Member history and live chat decrypt
+it after their usual participation check. Audit and admin views omit the view.
 
 ## Retained Ask call read
 

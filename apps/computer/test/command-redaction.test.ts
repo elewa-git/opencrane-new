@@ -130,6 +130,14 @@ it('rejects commands over the length limit', async () => {
   expect(await redactCommand(`${maximumLengthCommand}a`)).toBeNull();
 });
 
+it('keeps previews from commands with many arguments within the preview limit', async () => {
+  const command = `echo ${'a '.repeat(5_000)}`;
+  const preview = await redactCommand(command);
+  expect(preview).not.toBeNull();
+  expect(preview!.length).toBeLessThanOrEqual(16_384);
+  expect(preview).toMatch(/^echo (?:••• )+…$/u);
+});
+
 it('hides every path, including paths beneath the workspace', async () => {
   expect(await redactCommand('cat /workspace/report.txt /workspace/notes/file.md'))
     .toBe('cat ••• •••');

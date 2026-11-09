@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { z } from 'zod';
 import { dirname } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { readEventAt, wireSubject, type StoredEvent, type AppendCommand } from '@opencrane/event-store';
@@ -10,6 +11,7 @@ import { recordReport, recordReports, reportPosition } from '../src/chat/reports
 import { turnCommand } from '../src/chat/turns.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { readChatCommandFacts, readChatFacts } from '../src/chat/chat-summary.ts';
+import { chatDisplayData } from '../src/chat/display.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let keys: ReturnType<typeof conversationKeys>;
@@ -84,6 +86,44 @@ async function reportReplayMakesNoAppend() {
   expect(rows).toHaveLength(3);
 }
 it('checks report repeats before an append that opts into historyChecked', reportReplayMakesNoAppend);
+
+it('encrypts the masked command with the conversation message key', async () => {
+  await setup();
+  const preview = 'rg ••• •••';
+  const command = { sequence: 1, previousSequence: 0, conversationId: 'chat',
+    turnId: 'message', assistantId: 'assistant', type: 'agent.command_ran',
+    commandDigest: 'a'.repeat(64), exitCode: 0, activityLabel: 'Searched files', preview };
+  expect(await recordReport(nats.store, keys, context, command)).toBe('recorded');
+  const history = await chatHistory(nats.store, 'test', 'chat');
+  const saved = history.find(row => row.event.type === 'agent.command_ran');
+  expect(saved).toBeDefined();
+  expect(JSON.stringify(saved?.event)).not.toContain(preview);
+  const data = z.record(z.string(), z.unknown()).parse(saved?.event.data);
+  expect(keys.decrypt('test', 'chat', data['view'])).toBe(preview);
+  expect(chatDisplayData('agent.command_ran', data)).not.toHaveProperty('view');
+  const { preview: _preview, ...journalReplay } = command;
+  expect(await recordReport(nats.store, keys, context, journalReplay)).toBe('duplicate');
+});
+
+it('accepts a large masked preview and records it only as encrypted view', async () => {
+  await setup();
+  const preview = `echo ${'••• '.repeat(4_000)}…`;
+  expect(preview.length).toBeLessThanOrEqual(16_384);
+  expect(preview).toMatch(/^echo (?:••• )+…$/u);
+  const command = { sequence: 1, previousSequence: 0, conversationId: 'chat',
+    turnId: 'message', assistantId: 'assistant', type: 'agent.command_ran',
+    commandDigest: 'a'.repeat(64), exitCode: 0, activityLabel: 'Ran a command',
+    preview };
+  expect(await recordReport(nats.store, keys, context, command)).toBe('recorded');
+  expect(await recordReport(nats.store, keys, context, command)).toBe('duplicate');
+});
+
+it('refuses a command preview on a different report kind', async () => {
+  await setup();
+  await expect(recordReport(nats.store, keys, context, {
+    ...report, sequence: 1, previousSequence: 0, preview: 'rg ••• •••',
+  })).rejects.toThrow('Command preview report mismatch');
+});
 
 async function refusesAClaimedSharedClassOnAPrivateSession() {
   await setup();

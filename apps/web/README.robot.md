@@ -2,6 +2,11 @@
 
 For people, read [README.md](README.md) first.
 
+Command activity rows accept optional `preview` only from a member chat reply.
+The transcript and Activity panel show the fixed label first. Expansion shows
+the masked preview when one exists; older rows have no preview. The panel keys
+its open row by conversation and activity id so another chat cannot reuse it.
+
 ## Folder guides
 
 The package README names the browser startup files and test helpers. The top-level

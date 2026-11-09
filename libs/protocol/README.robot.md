@@ -2,6 +2,10 @@
 
 For people, read [README.md](README.md) first.
 
+`agent.command_ran` display rows accept an optional masked `preview` of at most
+16,384 characters. The server sends it only after decrypting a saved view for a
+current conversation member. Older rows omit it.
+
 `memberHeaderSchema` requires literal false role and removal flags.
 `memberDetailSchema` accepts booleans for those flags. The directory accepts a
 boolean `permissions.invite`; it does not give a Member directory access.

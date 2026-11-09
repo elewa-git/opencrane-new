@@ -36,6 +36,10 @@ function rejectedFields(type: string, patch: Record<string, unknown>): string[] 
   // The unpatched example must be valid, so any failure below is the patch's.
   expect(dataSchema.safeParse(example).success).toBe(true);
   let patchedData = { ...asRecord(example), ...patch };
+  if (type === 'agent.command_ran' && ('ciphertext' in patch || 'keyId' in patch)) {
+    const view = { ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', ...patch };
+    patchedData = { ...asRecord(example), view };
+  }
   if (type === 'onboarding.survey_step_saved' && typeof patch['ciphertext'] === 'string') {
     // Keep the digest valid so these tests still isolate the ciphertext format checks.
     const hash = createHash('sha256');
@@ -316,6 +320,18 @@ describe('tool arguments only as a digest', () => {
     expect(dataSchema.safeParse({ ...asRecord(example), activityLabel: 'Read secret.pdf' }).success)
       .toBe(false);
     expect(dataSchema.safeParse({ ...asRecord(example), output: 'private output' }).success)
+      .toBe(false);
+  });
+
+  it('agent.command_ran accepts encrypted view bytes and refuses a plain preview', () => {
+    const { example, dataSchema } = definitionFor('agent.command_ran');
+    const valid = { ...asRecord(example), view: {
+      ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1',
+    } };
+    expect(dataSchema.safeParse(valid).success).toBe(true);
+    expect(rejectedFields('agent.command_ran', { preview: 'curl •••' }))
+      .toEqual(['preview']);
+    expect(dataSchema.safeParse({ ...asRecord(example), view: { preview: 'curl •••' } }).success)
       .toBe(false);
   });
 
