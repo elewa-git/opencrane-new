@@ -771,10 +771,10 @@ it('refuses a use-time version different from the authorised version', wrongUseV
 
 async function missingCustodyVersion() {
   const current = await fixture();
-  Object.assign(current.evidence, { custodyRecordVersion: '' });
+  Reflect.deleteProperty(current.evidence, 'custodyRecordVersion');
   await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
 }
-it('requires a non-empty credential version before company preflight succeeds',
+it('requires a credential version after the shared profile reader accepts its absence',
   missingCustodyVersion);
 
 async function staleGrant() {

@@ -359,13 +359,16 @@ function sender(enabled = true, replay = false) {
 async function missingCompanyConfirmation() {
   const authority = createRoutineSender({ enabled: true }, nats.store, keys, worker(),
     input, selection, 'sender-attempt');
+  const append = vi.spyOn(nats.store, 'append');
   expect(await authority.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  expect(append).not.toHaveBeenCalled();
   const rows = await history(nats.store, 'routine-orders', 'test');
   function isAuthorisation(row: typeof rows[number]) {
     return row.event.type === 'routine.run_send_authorised';
   }
   expect(rows.filter(isAuthorisation)).toEqual([]);
   expect(preparedComputer.sends).toBe(0);
+  append.mockRestore();
 }
 it('refuses an enabled direct sender without company confirmation',
   missingCompanyConfirmation);
