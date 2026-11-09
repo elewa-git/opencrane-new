@@ -24,12 +24,44 @@ type Link = Pick<Awaited<ReturnType<typeof connectBridge>>,
 type Start = { conversationId: string; turnId: string; threadId?: string | undefined;
   messageId?: string | undefined; rootId?: string | undefined;
   senderAttemptId?: string | undefined; executionMode?: string | undefined };
+type SenderOptions = { enabled?: boolean; replay?: boolean;
+  confirmCompany?: () => Promise<void> };
+
+function companyCheckedWorker(worker: Arguments[2], confirmCompany?: () => Promise<void>) {
+  if (!confirmCompany) return worker;
+  const checkCompany: () => Promise<void> = confirmCompany;
+  async function checkCurrent(deadline: number) {
+    const current = await worker.checkCurrent(deadline);
+    if (!current) return false;
+    // Check company access in the same admission callback as the other write checks.
+    await checkCompany();
+    return true;
+  }
+  return { ...worker, checkCurrent };
+}
+
+function routineTurnBytes(checked: Awaited<ReturnType<typeof readRoutineActivation>>,
+  selection: Arguments[4], keys: Arguments[1], silo: string) {
+  const run = checked.run;
+  const instructions = keys.decrypt(silo, `routine-${run.routineId}`,
+    run.definition.instructions);
+  const frame = { type: 'turn', id: checked.turnId, messageId: checked.messageId,
+    threadId: selection.threadId,
+    rootId: checked.rootId, senderAttemptId: checked.senderAttemptId,
+    conversationId: run.conversationId, assistantId: run.definition.assistantId,
+    requesterId: run.definition.ownerId, executionMode: 'restricted',
+    text: `Routine instructions (user data):\n\n${instructions}`,
+    token: 'preparing', expiresAt: Date.now() + 120_000 };
+  return JSON.stringify(frame);
+}
 
 // Keep this internal switch off until company calls, lifecycle Stop and Ask are connected.
-export function createRoutineSender(options: { enabled?: boolean; replay?: boolean },
+export function createRoutineSender(options: SenderOptions,
   ...supplied: Arguments) {
   const [store, keys, worker, raw, selection, senderAttemptId] = supplied;
-  const args: Arguments = [store, keys, { ...worker }, raw,
+  const confirmCompany = options.confirmCompany;
+  const checkedWorker = companyCheckedWorker(worker, confirmCompany);
+  const args: Arguments = [store, keys, checkedWorker, raw,
     { ...selection }, senderAttemptId];
   const enabled = options.enabled === true && options.replay !== true;
   let used = false;
@@ -50,17 +82,10 @@ export function createRoutineSender(options: { enabled?: boolean; replay?: boole
       const run = checked.run;
       if (link.computerId !== args[4].computerId ||
           link.assistantId !== run.definition.assistantId) return unknown;
-      const instructions = keys.decrypt(worker.silo, `routine-${run.routineId}`,
-        run.definition.instructions);
-      const frame = { type: 'turn', id: checked.turnId, messageId: checked.messageId,
-        threadId: args[4].threadId,
-        rootId: checked.rootId, senderAttemptId: checked.senderAttemptId,
-        conversationId: run.conversationId, assistantId: run.definition.assistantId,
-        requesterId: run.definition.ownerId, executionMode: 'restricted',
-        text: `Routine instructions (user data):\n\n${instructions}`,
-        token: 'preparing', expiresAt: Date.now() + 120_000 };
-      const bytes = JSON.stringify(frame);
+      const bytes = routineTurnBytes(checked, args[4], keys, worker.silo);
       await checked.fresh();
+      // Send immediately after checking company facts; no later wait may use an old check.
+      await confirmCompany?.();
       if (link.socket.readyState !== link.socket.OPEN) return unknown;
       // Consume this live authority before the transport can lose its reply.
       awaitingStart = true;
@@ -92,8 +117,17 @@ export function createRoutineSender(options: { enabled?: boolean; replay?: boole
           report.threadId !== args[4].threadId || report.executionMode !== 'restricted') {
         throw new Error('Routine start unavailable');
       }
-      return { payer: checked.run.definition.payingGroupId, fresh: checked.fresh,
-        deadline: checked.deadline, provider: checked.provider, confirmStarted: checked.confirmStarted };
+      await confirmCompany?.();
+      async function fresh() {
+        await checked.fresh();
+        await confirmCompany?.();
+      }
+      async function confirmStarted(started: Parameters<typeof checked.confirmStarted>[0]) {
+        await checked.confirmStarted(started);
+        await confirmCompany?.();
+      }
+      return { payer: checked.run.definition.payingGroupId, fresh,
+        deadline: checked.deadline, provider: checked.provider, confirmStarted };
     } catch {
       throw new Error('Routine start unavailable');
     }

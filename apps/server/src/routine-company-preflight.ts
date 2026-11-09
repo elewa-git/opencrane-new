@@ -209,13 +209,14 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     for (const [subject, position] of grants) positions.set(subject, position);
     async function confirmCurrent() {
       const currentDeadline = performance.now() + 2_000;
+      if (Date.now() >= facts.expiresAt || !await facts.oauth.configurationCurrent()) {
+        refuse();
+      }
       for (const [subject, position] of positions) {
         const currentPosition = await store.head(subject, currentDeadline);
         if (currentPosition !== position) refuse();
       }
-      if (Date.now() >= facts.expiresAt || !await facts.oauth.configurationCurrent()) {
-        refuse();
-      }
+      if (Date.now() >= facts.expiresAt) refuse();
     }
     await confirmCurrent();
     return { occurrenceId: run.occurrenceId, rootId: run.rootId,

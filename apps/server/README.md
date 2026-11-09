@@ -442,6 +442,8 @@ The server can pass a checked routine claim through private input, a fixed spend
 allowance and one computer turn. It checks access again after waking the computer.
 For a company connection, it checks the owner's and assistant's current server grants.
 It checks the company choice again after preparing the private thread, before allowing money.
+It checks the same company choice during admission, just before sending the turn,
+and while authorising the computer's start report.
 The wake uses the computer already recorded for that assistant and its existing
 authenticated bridge. A replacement or cancelled wake cannot prepare the turn.
 The models process now binds this path to the same budget actor that handles ordinary
@@ -688,6 +690,7 @@ tools. Older computers receive Allow tools only, so either update order is safe.
 Before a saved company routine prepares work, the server checks its chosen tool
 against the installed server's current review. A changed tool, destination, price
 or permission stops preparation. Company routine sending is still unavailable.
+The internal sender checks those facts again before sending and accepting a start.
 
 Signing out closes the matching browser connections on the server handling logout.
 This stops private reply delivery before the sign-in service is contacted.

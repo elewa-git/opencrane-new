@@ -378,7 +378,8 @@ async function refusesToolPolicyChangeDuringAdmission() {
   let changedDuringAdmission = false;
   async function changePolicyAfterAdmission(...supplied: Parameters<typeof append>) {
     const result = await append(...supplied);
-    if (supplied[0].event.type === 'routine.run_activation_admitted' &&
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_activation_admitted' &&
         result.status === 'appended') {
       const blocked = record('blocked-policy', serverSubject, 'mcp.tool_mode_set', {
         serverId: 'company-routine', connectionId: 'installed', toolName: 'read',

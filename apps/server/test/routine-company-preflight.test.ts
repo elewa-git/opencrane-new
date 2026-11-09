@@ -179,8 +179,14 @@ async function currentToolMode(mode: 'block' | 'ask') {
   function isWriteTool(tool: (typeof policy.tools)[number]) {
     return tool.name === 'write';
   }
-  expect(policy.tools.find(isWriteTool)?.mode).toBe('allow');
+  const writeTool = policy.tools.find(isWriteTool)!;
+  expect(policy.published).toBe(true);
+  expect(writeTool.mode).toBe('allow');
   await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+  current.tool.name = 'write';
+  current.tool.revision = writeTool.revision;
+  current.definition.scopes = ['write'];
+  await expect(current.preflight()).resolves.toBeDefined();
 }
 it.each(['block', 'ask'] as const)(
   'refuses a currently %s selected tool while another tool is usable', currentToolMode);
@@ -191,6 +197,8 @@ async function missingExactToolScopes() {
   current.configuration.toolScopes.read = ['write'];
   current.evidence.configurationDigest = oauthConfigurationDigest(current.configuration);
   await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+  current.definition.scopes = ['read', 'write'];
+  await expect(current.preflight()).resolves.toBeDefined();
 }
 it('refuses missing frozen scopes for the exact tool while another tool is usable',
   missingExactToolScopes);
@@ -214,6 +222,7 @@ async function unknownCurrentTariff() {
   } finally {
     policySpy.mockRestore();
   }
+  await expect(current.preflight()).resolves.toBeDefined();
 }
 it('refuses an unknown current tariff even when another tool is usable', unknownCurrentTariff);
 
