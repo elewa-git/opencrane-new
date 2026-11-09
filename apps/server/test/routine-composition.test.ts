@@ -366,6 +366,49 @@ it.each(['profile', 'opt-in'] as const)(
   'refuses %s change after allowance and before sending',
   refusesCompanyChangeAfterAllowance);
 
+async function refusesToolPolicyChangeDuringAdmission() {
+  const serverSubject = 'mcp-company-routine';
+  const initial = record('initial-policy', serverSubject, 'mcp.tool_mode_set', {
+    serverId: 'company-routine', connectionId: 'installed', toolName: 'read',
+    toolRevision: 'a'.repeat(64), mode: 'allow', setBy: 'admin',
+  });
+  await nats.seed([initial]);
+  const initialPosition = await nats.store.head(serverSubject);
+  const append = nats.store.append.bind(nats.store);
+  let changedDuringAdmission = false;
+  async function changePolicyAfterAdmission(...supplied: Parameters<typeof append>) {
+    const result = await append(...supplied);
+    if (supplied[0].event.type === 'routine.run_activation_admitted' &&
+        result.status === 'appended') {
+      const blocked = record('blocked-policy', serverSubject, 'mcp.tool_mode_set', {
+        serverId: 'company-routine', connectionId: 'installed', toolName: 'read',
+        toolRevision: 'a'.repeat(64), mode: 'block', setBy: 'admin',
+      });
+      await nats.seed([blocked]);
+      changedDuringAdmission = true;
+    }
+    return result;
+  }
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  appendSpy.mockImplementation(changePolicyAfterAdmission);
+  function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+    computerGeneration: number) {
+    async function confirmCurrent() {
+      const position = await nats.store.head(serverSubject);
+      if (position !== initialPosition) throw new Error('Tool policy changed');
+    }
+    return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
+      computerGeneration, confirmCurrent });
+  }
+  const composition = compose({ enabled: true, companyPreflight });
+  expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  expect(changedDuringAdmission).toBe(true);
+  expect(preparedComputer.frames).toEqual([]);
+  expect(preparedComputer.executedThreads).toEqual([]);
+}
+it('refuses a tool policy blocked while activation admission is saved',
+  refusesToolPolicyChangeDuringAdmission);
+
 async function inert(options: { enabled?: boolean; replay?: boolean }) {
   const before = await nats.store.head();
   const wake = vi.fn(forbidden);

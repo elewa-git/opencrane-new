@@ -9,6 +9,7 @@ import { envelope, history } from '../../../libs/models/src/actor.ts';
 import { connectionOperationId } from '../../../libs/models/src/bearer-connections.ts';
 import { oauthConfigurationDigest } from '../../../libs/models/src/oauth-attempt.ts';
 import { toolPolicyFromRows } from '../../../libs/models/src/tool-policy.ts';
+import * as toolPolicy from '../../../libs/models/src/tool-policy.ts';
 import { oauthSelectionFixture } from '../../../libs/models/test/support/oauth-selection.ts';
 import { checkRoutineCompanyPreflight } from '../src/routine-company-preflight.ts';
 
@@ -46,9 +47,14 @@ async function fixture() {
   const selected = await oauthSelectionFixture(nats, ownerId, serverId, profileId);
   const serverRows = await history(nats.store, `mcp-${serverId}`, 'test');
   const policy = toolPolicyFromRows(serverRows);
-  const reviewedTool = policy.tools.find(tool => tool.name === 'read')!;
+  function isReadTool(tool: (typeof policy.tools)[number]) {
+    return tool.name === 'read';
+  }
+  const reviewedTool = policy.tools.find(isReadTool)!;
   const destination = new URL('https://example.test/mcp').origin;
-  const destinationDigest = createHash('sha256').update(JSON.stringify(destination)).digest('hex');
+  const destinationHash = createHash('sha256');
+  destinationHash.update(JSON.stringify(destination));
+  const destinationDigest = destinationHash.digest('hex');
   const tool = { name: reviewedTool.name, revision: reviewedTool.revision,
     schemaDigest: policy.catalogue!.schemaDigest, destinationDigest,
     policyRevision: policy.policyRevision, costCents: 0 as const };
@@ -121,8 +127,8 @@ async function fixture() {
     return checkRoutineCompanyPreflight(nats.store, binding, 'test', run, 1,
       selected.loadConfiguration, reader);
   }
-  return { preflight, evidence, definition, tool, profileSubject, optInSubject,
-    serverId, ownerId, assistantId, selectionSubject };
+  return { preflight, evidence, definition, tool, configuration: selected.configuration,
+    profileSubject, optInSubject, serverId, ownerId, assistantId, selectionSubject };
 }
 
 async function valid() {
@@ -156,6 +162,60 @@ async function changedSavedTool(field: string) {
 it.each(['name', 'revision', 'schemaDigest', 'destinationDigest',
   'policyRevision', 'costCents', 'missingTariff'])(
   'refuses a changed saved company tool %s without sending', changedSavedTool);
+
+async function currentToolMode(mode: 'block' | 'ask') {
+  const current = await fixture();
+  current.evidence.scopes = ['openid', 'read', 'write'];
+  const changed = envelope('test', `mcp-${current.serverId}`, 'mcp.tool_mode_set', {
+    serverId: current.serverId, connectionId: 'installed', toolName: 'read',
+    toolRevision: current.tool.revision, mode, setBy: 'admin',
+  });
+  await nats.seed([changed]);
+  const rows = await history(nats.store, `mcp-${current.serverId}`, 'test');
+  const policy = toolPolicyFromRows(rows);
+  current.tool.policyRevision = policy.policyRevision;
+  current.configuration.policyRevision = policy.policyRevision;
+  current.evidence.configurationDigest = oauthConfigurationDigest(current.configuration);
+  function isWriteTool(tool: (typeof policy.tools)[number]) {
+    return tool.name === 'write';
+  }
+  expect(policy.tools.find(isWriteTool)?.mode).toBe('allow');
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+}
+it.each(['block', 'ask'] as const)(
+  'refuses a currently %s selected tool while another tool is usable', currentToolMode);
+
+async function missingExactToolScopes() {
+  const current = await fixture();
+  current.evidence.scopes = ['openid', 'read', 'write'];
+  current.configuration.toolScopes.read = ['write'];
+  current.evidence.configurationDigest = oauthConfigurationDigest(current.configuration);
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+}
+it('refuses missing frozen scopes for the exact tool while another tool is usable',
+  missingExactToolScopes);
+
+async function unknownCurrentTariff() {
+  const current = await fixture();
+  current.evidence.scopes = ['openid', 'read', 'write'];
+  const rows = await history(nats.store, `mcp-${current.serverId}`, 'test');
+  const policy = toolPolicyFromRows(rows);
+  function removeReadTariff(tool: (typeof policy.tools)[number]) {
+    if (tool.name !== 'read') return tool;
+    const withoutTariff = { ...tool };
+    Reflect.deleteProperty(withoutTariff, 'costCents');
+    return withoutTariff;
+  }
+  const policyWithoutReadTariff = { ...policy, tools: policy.tools.map(removeReadTariff) };
+  const policySpy = vi.spyOn(toolPolicy, 'toolPolicyFromRows');
+  policySpy.mockReturnValue(policyWithoutReadTariff);
+  try {
+    await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+  } finally {
+    policySpy.mockRestore();
+  }
+}
+it('refuses an unknown current tariff even when another tool is usable', unknownCurrentTariff);
 
 async function missingSavedTool() {
   const current = await fixture();
