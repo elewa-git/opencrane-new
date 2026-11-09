@@ -574,6 +574,49 @@ it.each(['scopes', 'client'] as const)(
   'refuses an OAuth %s change after the final read and before publication',
   oauthChangedAfterLastRead);
 
+async function custodyChangedAfterRecover(kind: 'deleted' | 'changed') {
+  const current = await fixture(true, true);
+  const recovered = { status: 'recovered' as const, identity: {
+    reference: 'synthetic', uid: 'uid', resourceVersion: '1' } };
+  let custodyResult:
+    Awaited<ReturnType<Parameters<typeof readCurrentCompanyProfile>[0]['recover']>> = recovered;
+  let reads = 0;
+  let preflightComplete = false;
+  let changed = false;
+  function recover() {
+    reads += 1;
+    const result = custodyResult;
+    if (preflightComplete && !changed) {
+      changed = true;
+      queueMicrotask(changeCustody);
+    }
+    return Promise.resolve(result);
+  }
+  function changeCustody() {
+    if (kind === 'deleted') {
+      custodyResult = { status: 'not_found' };
+    } else {
+      custodyResult = { status: 'recovered', identity: {
+        reference: 'synthetic', uid: 'uid', resourceVersion: '2' } };
+    }
+  }
+  const preflight = routineCompanyPreflightFromCustody(nats.store, binding, 'test',
+    current.loadConfiguration, { recover });
+  const company = await preflight({ ...modernRoutineExamples.due,
+    definition: current.definition }, 1);
+  preflightComplete = true;
+  const event = independentWrite(current);
+  const command = { event, expectedSequence: 0, checkAccess: company.confirmCurrent };
+  const result = await nats.store.append(command);
+  expect(result.status).toBe('unavailable');
+  expect(await nats.store.head(event.subject)).toBe(0);
+  expect(changed).toBe(true);
+  expect(reads).toBeGreaterThan(3);
+}
+it.each(['deleted', 'changed'] as const)(
+  'refuses a credential %s after recover returns and before send authorisation',
+  custodyChangedAfterRecover);
+
 async function staleGrant() {
   const current = await fixture();
   const company = await current.preflight();
