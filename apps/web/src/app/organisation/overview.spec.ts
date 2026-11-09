@@ -12,7 +12,7 @@ const sources = ['people', 'providers', 'integrations', 'spending', 'memory',
 type Row = Parameters<typeof overviewDestination>[0];
 
 function row(id: string, priority: Row['priority'], source: Row['source'] = 'providers',
-  href = '/org/models'): Row {
+  href = `/org/providers/${id}`): Row {
   return { id, source, priority, eventAt: checkedAt, action: 'view_evidence', href };
 }
 
@@ -53,10 +53,12 @@ it('keeps server order and gives each task one safe action', async () => {
   const actions = [...root(fixture).querySelectorAll<HTMLAnchorElement>('.overview-row a')];
   expect(actions).toHaveLength(4);
   expect(actions.map((action) => action.href)).toEqual([
-    'http://localhost:3000/org/models', 'http://localhost:3000/org/models',
-    'http://localhost:3000/org/models', 'http://localhost:3000/org/models',
+    'http://localhost:3000/org/models?provider=opaque-1',
+    'http://localhost:3000/org/models?provider=opaque-2',
+    'http://localhost:3000/org/models?provider=opaque-3',
+    'http://localhost:3000/org/models?provider=opaque-4',
   ]);
-  expect(root(fixture).textContent).not.toContain('opaque-1');
+  expect(root(fixture).textContent).toContain('Model provider opaque-1 check');
 });
 
 it('does not call unavailable sources ready or show an undated all-clear', async () => {
@@ -115,8 +117,11 @@ it('retains loaded rows after a refresh outage and clears them after access loss
     expect(root(fixture).textContent).toContain('Showing what we loaded');
   });
   expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(1);
-  expect(document.activeElement).toBe(refresh);
-  refresh.click();
+  const staleRefresh = root(fixture).querySelector<HTMLButtonElement>(
+    '.overview-notice.stale button');
+  expect(staleRefresh).not.toBeNull();
+  await vi.waitFor(() => expect(document.activeElement).toBe(staleRefresh));
+  staleRefresh?.click();
   await vi.waitFor(() => {
     fixture.detectChanges();
     expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(0);
@@ -193,7 +198,7 @@ it('shows a dated all-clear only when every source is current', async () => {
   });
   expect(root(fixture).textContent).toContain('8 Nov 2026');
   expect(root(fixture).textContent).toContain('Connect a provider');
-  expect(root(fixture).querySelector('.overview-notice.clear a')).not.toBeNull();
+  expect(root(fixture).querySelector('.overview-notice.setup a')).not.toBeNull();
 });
 
 it.each(['unavailable', 'applying'])('does not show Ready from an %s source',
@@ -206,10 +211,10 @@ it.each(['unavailable', 'applying'])('does not show Ready from an %s source',
     const fixture = await mount();
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(root(fixture).querySelectorAll('.overview-row')).toHaveLength(1);
+      expect(root(fixture).textContent).toContain('Some tasks are unavailable');
     });
     expect(root(fixture).querySelector('.overview-ready')).toBeNull();
-    expect(root(fixture).textContent).not.toContain('Ready');
+    expect(root(fixture).querySelector('.overview-status .ready')).toBeNull();
   });
 
 it('separates current Ready evidence from tasks in server order', async () => {

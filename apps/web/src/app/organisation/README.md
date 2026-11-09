@@ -25,6 +25,8 @@ flowchart LR
 - Shows a sidebar on larger screens and a keyboard-friendly menu on phones.
 - Opens Overview for `/org` and `/org/overview`.
 - Keeps tasks visible after a failed refresh and clears them when access is refused.
+- Lists dated Ready evidence separately. A provider action opens that provider's row
+  on Models & providers.
 
 ## Main files
 

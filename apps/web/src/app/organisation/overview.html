@@ -8,7 +8,7 @@
         <small>Sources checked {{ readableTime(sourceTime) }}</small>
       }
     </div>
-    @if (state() !== 'access') {
+    @if (state() !== 'access' && state() !== 'stale') {
       <button type="button" (click)="refresh()">Refresh list</button>
     }
   </header>
@@ -31,6 +31,7 @@
           <strong>Organisation tasks are unavailable</strong>
           <p>We could not load the list. Check again shortly.</p>
         }
+        <button type="button" (click)="refresh()">Refresh list</button>
       </div>
     }
     @if (unavailableSources().length) {
@@ -44,25 +45,26 @@
         </p>
       </div>
     }
+    @if (needsProvider()) {
+      <div class="overview-notice setup" role="status">
+        <strong>Start by connecting a model provider</strong>
+        <p>Nothing else can run until a provider is verified.</p>
+        <a href="/org/models">Connect a provider</a>
+      </div>
+    }
     @if (allClear()) {
       <div class="overview-notice clear" role="status">
         <strong>Nothing needs your attention</strong>
         <p>Last checked {{ readableTime(checkedAt()) }}.</p>
       </div>
-    } @else if (needsProvider()) {
-      <div class="overview-notice" role="status">
-        <strong>Connect a model provider first</strong>
-        <p>Start with Models & providers to make your organisation ready for work.</p>
-        <a href="/org/models">Open Models & providers</a>
-      </div>
     }
 
-    @if (rows().length) {
-      <div class="overview-list" [class.stale-rows]="state() === 'stale'">
+    @if (taskRows().length) {
+      <div class="overview-list overview-tasks" [class.stale-rows]="state() === 'stale'">
         <div class="overview-list-head" aria-hidden="true">
           <span>Task</span><span>Affects</span><span>Status</span><span>Action</span>
         </div>
-        @for (row of rows(); track row.source + ':' + row.id) {
+        @for (row of taskRows(); track row.source + ':' + row.id) {
           <article class="overview-row" tabindex="0"
             [attr.aria-label]="rowTitle(row) + ', ' + priorityLabels[row.priority]">
             <div class="overview-task">
@@ -94,9 +96,46 @@
           </article>
         }
       </div>
-      @if (next()) {
-        <button class="overview-more" type="button" (click)="more()">Load more tasks</button>
-      }
+    }
+    @if (readyRows().length) {
+      <section class="overview-ready" aria-label="Ready evidence">
+        <h2>Ready</h2>
+        <div class="overview-list" [class.stale-rows]="state() === 'stale'">
+          <div class="overview-list-head" aria-hidden="true">
+            <span>Evidence</span><span>Affects</span><span>Status</span><span>Action</span>
+          </div>
+          @for (row of readyRows(); track row.source + ':' + row.id) {
+            <article class="overview-row" tabindex="0"
+              [attr.aria-label]="rowTitle(row) + ', Ready'">
+              <div class="overview-task">
+                <strong>{{ rowTitle(row) }}</strong>
+                <small>{{ sourceLabels[row.source] }}</small>
+              </div>
+              <div class="overview-affects">
+                <span class="mobile-label">Affects</span>
+                <span>{{ row.affectedPeople || sourceLabels[row.source] }}</span>
+              </div>
+              <div class="overview-status">
+                <span class="mobile-label">Status</span>
+                <span class="status-text ready"><span aria-hidden="true">✓</span> Ready</span>
+                @if (row.eventAt) {
+                  <small>{{ readableTime(row.eventAt) }}</small>
+                }
+              </div>
+              <div class="overview-action">
+                @if (destination(row); as href) {
+                  <a [href]="href">{{ actionLabels[row.action] }}</a>
+                } @else {
+                  <span>Evidence unavailable</span>
+                }
+              </div>
+            </article>
+          }
+        </div>
+      </section>
+    }
+    @if (next()) {
+      <button class="overview-more" type="button" (click)="more()">Load more tasks</button>
     }
   }
 </section>

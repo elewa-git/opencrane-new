@@ -19,8 +19,13 @@ button:focus-visible, a:focus-visible, .overview-row:focus-visible {
 }
 .overview-notice p { margin-top: 5px; }
 .overview-notice a { margin-top: 14px; }
+.overview-notice button { margin-top: 14px; }
 .overview-notice.stale { border-color: #e5b77c; background: #fff7ec; }
 .overview-notice.clear { border-color: #a8cdb5; }
+.overview-notice.setup { padding: 24px; }
+.overview-ready { margin-top: 28px; }
+.overview-ready h2 { margin: 0 0 12px; font-size: 20px; }
+.overview-ready .overview-list { margin-top: 0; }
 .overview-list { margin-top: 24px; border: 1px solid var(--oc-border-row); border-radius: 12px;
   overflow: hidden; background: white; }
 .overview-list-head, .overview-row {
@@ -49,6 +54,7 @@ button:focus-visible, a:focus-visible, .overview-row:focus-visible {
   .overview-status small { grid-column: 2; }
   .mobile-label { display: inline; color: var(--oc-ink-admin-muted); }
   .overview-action a { width: 100%; }
+  .overview-notice.setup a, .overview-notice.stale button { width: 100%; }
   .overview-more { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) {

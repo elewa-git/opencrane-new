@@ -59,7 +59,7 @@
       <div class="list-heading" aria-hidden="true">
         <span>Provider</span><span>Connection</span><span>Models</span><span>Verification</span>
       </div>
-      @for (provider of providers(); track provider.providerId) {
+      @for (provider of visibleProviders(); track provider.providerId) {
         <article class="provider-row" [attr.data-provider-id]="provider.providerId">
           <button #providerButton class="provider-row-main" type="button"
             [disabled]="isActionLocked(provider) || busy() || hasRefreshError()"

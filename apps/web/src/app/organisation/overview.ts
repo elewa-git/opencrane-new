@@ -70,9 +70,17 @@ function safeReference(value: string): boolean {
   return /^[\w-]{1,200}$/u.test(value);
 }
 
+function providerReference(row: OverviewRow): string | undefined {
+  const match = /^\/org\/providers\/([\w-]{1,200})$/u.exec(row.href);
+  return match?.[1];
+}
+
 export function overviewDestination(row: OverviewRow): string | undefined {
   if (row.source === 'people' && row.href === '/org/people') return row.href;
-  if (row.source === 'providers') return '/org/models';
+  if (row.source === 'providers') {
+    const providerId = providerReference(row);
+    if (providerId) return `/org/models?provider=${encodeURIComponent(providerId)}`;
+  }
   if (row.source === 'integrations' &&
       /^\/org\/integrations\/[\w-]{1,200}$/u.test(row.href)) return row.href;
   if (row.source === 'spending' && row.href.startsWith('/api/org/effects/')) {
@@ -102,6 +110,10 @@ function isUnavailable(source: OverviewSource): boolean {
 
 function sourceTime(source: OverviewSource): string {
   return source.checkedAt;
+}
+
+function focusStaleRefresh(): void {
+  document.querySelector<HTMLButtonElement>('.overview-notice.stale button')?.focus();
 }
 
 @Component({
@@ -164,9 +176,39 @@ export class OverviewScreen implements OnInit {
     return this.sources().filter(isUnavailable);
   }
 
+  protected readyRows(): OverviewRow[] {
+    const ready: OverviewRow[] = [];
+    for (const row of this.rows()) {
+      if (row.priority === 'ready' && validDate(row.eventAt) && this.sourceIsCurrent(row)) {
+        ready.push(row);
+      }
+    }
+    return ready;
+  }
+
+  protected taskRows(): OverviewRow[] {
+    const tasks: OverviewRow[] = [];
+    for (const row of this.rows()) {
+      if (row.priority !== 'ready') tasks.push(row);
+    }
+    return tasks;
+  }
+
+  private sourceIsCurrent(row: OverviewRow): boolean {
+    for (const source of this.sources()) {
+      if (source.name === row.source) {
+        return source.status === 'current' && validDate(source.checkedAt);
+      }
+    }
+    return false;
+  }
+
   protected rowTitle(row: OverviewRow): string {
     if (row.source === 'people') return 'Invitation needs attention';
-    if (row.source === 'providers') return 'Model provider check';
+    if (row.source === 'providers') {
+      const providerId = providerReference(row);
+      return providerId ? `Model provider ${providerId} check` : 'Model provider check';
+    }
     if (row.source === 'integrations') return 'Integration tools need review';
     if (row.source === 'spending') return 'Spending effect needs checking';
     if (row.source === 'memory') return 'Memory check needs attention';
@@ -213,10 +255,17 @@ export class OverviewScreen implements OnInit {
     this.state.set('ready');
   }
 
+  private showStale(generation: number, refreshHadFocus: boolean): void {
+    if (this.revoked || generation !== this.generation) return;
+    this.state.set('stale');
+    if (refreshHadFocus) globalThis.setTimeout(focusStaleRefresh, 0);
+  }
+
   private async loadPage(cursor: string | undefined, append: boolean): Promise<void> {
     this.loading = true;
     const generation = ++this.generation;
     const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+    const refreshHadFocus = document.activeElement?.matches('.overview-heading button') === true;
     try {
       const response = await fetch(`/api/org/overview${query}`);
       if (response.status === 401 || response.status === 403) {
@@ -238,7 +287,7 @@ export class OverviewScreen implements OnInit {
       }
       this.acceptPage(page, append);
     } catch {
-      if (!this.revoked && generation === this.generation) this.state.set('stale');
+      this.showStale(generation, refreshHadFocus);
     } finally {
       if (generation === this.generation) this.loading = false;
     }

@@ -106,12 +106,16 @@ async function show(browser, width, name) {
       await page.getByText('Access changed').waitFor();
     } else if (name === 'OVR-02') {
       await page.getByText('Nothing needs your attention').waitFor();
+      assert(await page.locator('.overview-notice.setup a').isVisible(),
+        'OVR-02 shows setup beside the dated clear notice');
     } else if (name === 'OVR-02-fresh') {
-      await page.getByText('Connect a model provider first').waitFor();
+      await page.getByText('Start by connecting a model provider').waitFor();
     } else {
       await page.locator('.overview-row').first().waitFor();
     }
     if (name === 'OVR-01') {
+      assert(await page.locator('.overview-ready .overview-row').count() === 1,
+        'OVR-01 keeps Ready in its own evidence section');
       await page.getByRole('button', { name: 'Refresh list' }).focus();
       await page.keyboard.press('Tab');
       assert(await page.locator('.overview-row').first().evaluate(isFocused),
@@ -119,6 +123,15 @@ async function show(browser, width, name) {
       await page.keyboard.press('Tab');
       assert(await page.locator('.overview-row a').first().evaluate(isFocused),
         'Tab reaches its action');
+    }
+    if (name === 'OVR-05') {
+      assert(await page.locator('.overview-notice.stale button').isVisible(),
+        'OVR-05 keeps Refresh in the stale notice');
+    }
+    if (name === 'OVR-02' && width === 390) {
+      const setupLink = await page.locator('.overview-notice.setup a').boundingBox();
+      assert(setupLink && setupLink.width >= 280,
+        'OVR-02 setup action fills the phone notice');
     }
     await capture(page, name, width);
   } finally {
