@@ -10,6 +10,7 @@ import { scanUpgrade } from "../src/upgrade-scan.ts";
 import { checkHandlers } from "../src/registration.ts";
 import { effect, fixture, until } from "./helpers.ts";
 import { sessionDiagnostics } from "./session-diagnostics.ts";
+import { upgradeFixtureHandlerNames } from './upgrade-fixture-handlers.ts';
 
 const execute = promisify(execFile);
 const oldManifest = JSON.stringify([
@@ -63,17 +64,13 @@ function upgradeTests() {
       id INTEGER PRIMARY KEY, silo TEXT, manifest TEXT, sequence BIGINT)`);
     await current.db.query("INSERT INTO handler_dispatcher VALUES (1, 'test', $1, 4)",
       [oldManifest]);
-    const names: HandlerName[] = ["update-openfga", "seed-ownership", "confirm-ownership",
-      "seed-model-grants", "seed-provider-default", "create-assistant", "claim-computer",
-      "cleanup-departure", "stop-budget-turns", "prepare-gateway-configuration",
-      "settle-budget", "dream-memory", "complete-welcome"];
     function testHandler(name: HandlerName) {
       async function apply(event: Parameters<typeof effect>[0], tx: Parameters<typeof effect>[1]) {
         await effect(event, tx, name);
       }
       return registerHandler(name, apply);
     }
-    const handlers = names.map(testHandler);
+    const handlers = upgradeFixtureHandlerNames.map(testHandler);
     const runtime = await current.runtime(handlers, { retryLimit: 5 });
     await current.db.query("INSERT INTO handler_receipts VALUES ('update-openfga', 'joined')");
     await current.db.query("INSERT INTO handler_receipts VALUES ('create-assistant', 'joined')");
