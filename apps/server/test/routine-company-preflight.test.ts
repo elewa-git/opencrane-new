@@ -349,26 +349,36 @@ it('refuses a team grant revoked during a later team position read',
 
 async function changedCompanyStreamDuringRead() {
   for (let readIndex = 0; readIndex < 12; readIndex += 1) {
-    for (let streamIndex = 0; streamIndex < 6; streamIndex += 1) {
+    for (let streamIndex = 0; streamIndex < 7; streamIndex += 1) {
       const current = await fixture();
       const team = await addTeamGrant(current);
       const company = await current.preflight();
       const subjects = [current.profileSubject, `mcp-${current.serverId}`,
         current.optInSubject, current.selectionSubject,
         grantStream('mcp_server', current.serverId), team.teamSubject];
-      const changedSubject = subjects[streamIndex]!;
-      const rows = await history(nats.store, changedSubject, 'test');
-      const previous = rows.at(-1)!.event;
-      const change = envelope('test', changedSubject, previous.type, previous.data);
+      const changedSubject = subjects[streamIndex];
+      let change: ReturnType<typeof envelope> | undefined;
+      if (changedSubject) {
+        const rows = await history(nats.store, changedSubject, 'test');
+        const previous = rows.at(-1)!.event;
+        change = envelope('test', changedSubject, previous.type, previous.data);
+      }
+      async function changeCompany() {
+        if (change) {
+          await nats.seed([change]);
+        } else {
+          current.configuration.toolScopes.read = ['write'];
+        }
+      }
       const originalRead = nats.store.readStream.bind(nats.store);
       let reads = 0;
       async function* changedDuringRead(...args: Parameters<typeof nats.store.readStream>) {
         const currentRead = reads;
         reads += 1;
-        if (currentRead === readIndex) await nats.seed([change]);
+        if (currentRead === readIndex) await changeCompany();
         const rows = originalRead(...args);
         const first = await rows.next();
-        if (currentRead + 6 === readIndex) await nats.seed([change]);
+        if (currentRead + 6 === readIndex) await changeCompany();
         if (!first.done) yield first.value;
       }
       const spy = vi.spyOn(nats.store, 'readStream');
@@ -388,27 +398,36 @@ async function changedCompanyStreamDuringRead() {
     }
   }
 }
-it('refuses all 72 company stream changes during position reads',
+it('refuses all 84 company and OAuth changes during position reads',
   changedCompanyStreamDuringRead, 120_000);
 
 async function changedCompanyStreamBeforeWrite() {
-  for (let streamIndex = 0; streamIndex < 6; streamIndex += 1) {
+  for (let streamIndex = 0; streamIndex < 7; streamIndex += 1) {
     const current = await fixture();
     const team = await addTeamGrant(current);
     const company = await current.preflight();
     const subjects = [current.profileSubject, `mcp-${current.serverId}`,
       current.optInSubject, current.selectionSubject,
       grantStream('mcp_server', current.serverId), team.teamSubject];
-    const changedSubject = subjects[streamIndex]!;
-    const rows = await history(nats.store, changedSubject, 'test');
-    const previous = rows.at(-1)!.event;
-    const change = envelope('test', changedSubject, previous.type, previous.data);
+    const changedSubject = subjects[streamIndex];
     const snapshot = await company.confirmCurrent();
-    await nats.seed([change]);
+    let change: ReturnType<typeof envelope> | undefined;
+    if (changedSubject) {
+      const rows = await history(nats.store, changedSubject, 'test');
+      const previous = rows.at(-1)!.event;
+      change = envelope('test', changedSubject, previous.type, previous.data);
+      await nats.seed([change]);
+    } else {
+      current.configuration.toolScopes.read = ['write'];
+    }
     const event = independentWrite(current);
     const result = await nats.store.append({ event, expectedSequence: 0,
-      expectedGlobalSequence: snapshot });
-    expect(result.status, `stream ${streamIndex}`).toBe('conflict');
+      expectedGlobalSequence: snapshot, checkAccess: company.confirmCurrent });
+    if (changedSubject) {
+      expect(result.status, `stream ${streamIndex}`).toBe('conflict');
+    } else {
+      expect(result.status, 'OAuth configuration').toBe('unavailable');
+    }
   }
 }
 it('refuses a change to every company stream between check and write',
