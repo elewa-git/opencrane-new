@@ -170,7 +170,11 @@ it('refuses company preflight while an OAuth configuration edit is unfinished',
 
 async function changedConfigurationDigest() {
   const current = await fixture();
-  current.configuration.clientId = 'replacement';
+  const mismatchedRecord = envelope('test', `mcp-${current.serverId}`,
+    'mcp.oauth_configuration_recorded', { serverId: current.serverId,
+      changeId: '00000000-0000-4000-8000-000000000001', status: 'ready',
+      configurationDigest: '0'.repeat(64) });
+  await nats.seed([mismatchedRecord]);
   await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
 }
 it('refuses company preflight when loaded OAuth settings differ from the recorded digest',
