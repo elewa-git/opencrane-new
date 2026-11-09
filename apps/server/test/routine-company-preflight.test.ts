@@ -257,6 +257,90 @@ async function changedToolBeforeSender() {
 }
 it('refuses a tool policy change between preflight and sender', changedToolBeforeSender);
 
+function holdPositionRead(subjectToHold: string) {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const readHead = nats.store.head.bind(nats.store);
+  async function heldHead(subject?: string, deadline?: number,
+    includeConversationCloses?: boolean) {
+    const position = await readHead(subject, deadline, includeConversationCloses);
+    if (subject === subjectToHold) {
+      entered.resolve();
+      await release.promise;
+    }
+    return position;
+  }
+  const spy = vi.spyOn(nats.store, 'head');
+  spy.mockImplementation(heldHead);
+  return { entered: entered.promise, release: release.resolve, spy };
+}
+
+async function policyChangedDuringLaterRead() {
+  const current = await fixture();
+  const company = await current.preflight();
+  const grantSubject = grantStream('mcp_server', current.serverId);
+  const held = holdPositionRead(grantSubject);
+  try {
+    const confirmation = company.confirmCurrent();
+    await held.entered;
+    const block = envelope('test', `mcp-${current.serverId}`, 'mcp.tool_mode_set', {
+      serverId: current.serverId, connectionId: 'installed', toolName: current.tool.name,
+      toolRevision: current.tool.revision, mode: 'block', setBy: 'admin',
+    });
+    await nats.seed([block]);
+    held.release();
+    await expect(confirmation).rejects.toThrow('Routine company unavailable');
+  } finally {
+    held.release();
+    held.spy.mockRestore();
+  }
+}
+it('refuses a policy Block saved during a later grant position read',
+  policyChangedDuringLaterRead);
+
+async function addTeamGrant(current: Awaited<ReturnType<typeof fixture>>) {
+  const teamId = `group-${current.ownerId}`;
+  const teamSubject = `team-${teamId}`;
+  const created = envelope('test', teamSubject, 'team.created', {
+    teamId, name: 'Test group', createdBy: current.ownerId,
+  });
+  const added = envelope('test', teamSubject, 'team.member_added', {
+    teamId, memberId: current.ownerId, addedBy: current.ownerId,
+  });
+  const grant = envelope('test', grantStream('mcp_server', current.serverId), 'grant.given', {
+    resourceType: 'mcp_server', resourceId: current.serverId, granteeKind: 'team',
+    granteeId: teamId, grantedBy: current.ownerId,
+  });
+  const handler = memberAuthorisation(binding, nats.store).handler;
+  for (const event of [created, added, grant]) {
+    await nats.seed([event]);
+    await handler.handle(event, database);
+  }
+  return { teamId, teamSubject };
+}
+
+async function teamGrantRevokedDuringLaterRead() {
+  const current = await fixture();
+  const team = await addTeamGrant(current);
+  const company = await current.preflight();
+  const held = holdPositionRead(team.teamSubject);
+  try {
+    const confirmation = company.confirmCurrent();
+    await held.entered;
+    const revoke = envelope('test', grantStream('mcp_server', current.serverId),
+      'grant.revoked', { resourceType: 'mcp_server', resourceId: current.serverId,
+        granteeKind: 'team', granteeId: team.teamId, revokedBy: current.ownerId });
+    await nats.seed([revoke]);
+    held.release();
+    await expect(confirmation).rejects.toThrow('Routine company unavailable');
+  } finally {
+    held.release();
+    held.spy.mockRestore();
+  }
+}
+it('refuses a team grant revoked during a later team position read',
+  teamGrantRevokedDuringLaterRead);
+
 async function staleGrant() {
   const current = await fixture();
   const company = await current.preflight();
