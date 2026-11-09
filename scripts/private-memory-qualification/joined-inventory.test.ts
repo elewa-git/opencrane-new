@@ -432,7 +432,11 @@ it('refuses an extra launch for a helper outside the challenge set',
 
 function refusesComputerGroupLaunchedInServerWithEqualImageDigests(): void {
   const equalDigestContext = { ...context, computerImageDigest: image };
-  const records = completeInventory();
+  const records = completeInventory().map(function matchEqualImageDigests(item) {
+    const recordImageDigest = item.group === 'serverDelivery' ||
+      item.group === 'canaryHelper' ? item.imageDigest : image;
+    return { ...item, computerImageDigest: image, imageDigest: recordImageDigest };
+  });
   const launches = records.map(function launchComputerGroupInServer(item): TrustedLaunch {
     const launch = measuredLaunch(item);
     if (item.group === 'supervisor') {
