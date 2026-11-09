@@ -53,6 +53,10 @@ not a live stack.
 Angular's disk cache is enabled locally and in CI. The fixture test runner builds
 the development app once before tests start their own Angular servers.
 This keeps cold compilation outside their existing startup deadlines.
+The dev server excludes every `@opencrane/*` workspace package from Vite dependency
+pre-bundling. Angular builds those packages into the application from the current
+source, so an in-place update cannot reuse an old pre-bundled protocol schema.
+`test/dev-server-config.test.ts` checks the list against the workspace manifests.
 
 Personal and shared-assistant sessions derive turn outcomes in `chat-state.ts`.
 The conversation feed keeps `agent.turn_stop_requested` followed by the bridge's
