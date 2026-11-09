@@ -4,12 +4,15 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { tokenIssuer } from '@opencrane/auth';
+import { readHostedAdmission } from '@opencrane/models';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { sharedCertificates } from '../libs/event-store/test/certificates.ts';
 import { createScannerService } from '../infra/clamav/service.mjs';
 import { scanImagePart } from '../infra/clamav/image-client.mjs';
-import { runHostedImageScan } from '../infra/clamav/image-worker.mjs';
+import { runHostedImageScan, runAndWriteHostedImageCheck, savedResultMatches }
+  from '../infra/clamav/image-worker.mjs';
 import { envelope } from '../libs/models/src/actor.ts';
 
 async function filesystem(importOriginal) {
@@ -29,9 +32,9 @@ function hash(content) {
   digest.update(content);
   return digest.digest('hex');
 }
-function imageWithPart(part, identity) {
+function tarEntry(part, index) {
   const header = Buffer.alloc(512);
-  header.write('part', 0, 'utf8');
+  header.write(`part-${index}`, 0, 'utf8');
   header.write('0000644\0', 100, 'ascii');
   header.write('0000000\0', 108, 'ascii');
   header.write('0000000\0', 116, 'ascii');
@@ -44,7 +47,12 @@ function imageWithPart(part, identity) {
   for (const value of header) checksum += value;
   header.write(checksum.toString(8).padStart(6, '0') + '\0 ', 148, 'ascii');
   const padding = Buffer.alloc((512 - part.length % 512) % 512);
-  const layer = Buffer.concat([header, part, padding, Buffer.alloc(1024)]);
+  return Buffer.concat([header, part, padding]);
+}
+function imageWithPart(part, identity) {
+  const parts = Array.isArray(part) ? part : [part];
+  const entries = parts.map(tarEntry);
+  const layer = Buffer.concat([...entries, Buffer.alloc(1024)]);
   const config = Buffer.from(JSON.stringify({ os: 'linux',
     architecture: identity.platform.split('/')[1],
     rootfs: { diff_ids: [`sha256:${hash(layer)}`] } }));
@@ -186,8 +194,8 @@ async function twoSilos() {
   const infected = Buffer.from(eicar);
   const firstImage = imageWithPart(bytes, binding);
   const secondImage = imageWithPart(infected, second);
-  const firstStore = savedImageStore(firstImage.image);
-  const secondStore = savedImageStore(secondImage.image);
+  const firstStore = writableImageStore(firstImage.image);
+  const secondStore = writableImageStore(secondImage.image);
   async function firstImageBytes() { return firstImage.image; }
   async function secondImageBytes() { return secondImage.image; }
   async function firstSettings() { return settings; }
@@ -248,8 +256,577 @@ async function twoSilos() {
   const stopped = await runHostedImageScan(savedImageStore(firstImage.image), 'first',
     'server-one', firstImageBytes, cancelAfterScan, cancelled.signal);
   expect(stopped.verdict).toBe('unavailable');
+  async function readChecks() { return independentChecks(); }
+  const written = await Promise.all([
+    runAndWriteHostedImageCheck(firstStore, 'first', 'server-one', 1,
+      firstImageBytes, firstSettings, readChecks),
+    runAndWriteHostedImageCheck(secondStore, 'second', 'server-two', 1,
+      secondImageBytes, secondSettings, readChecks),
+  ]);
+  expect(written[0].status).toBe('appended');
+  expect(written[1].status).toBe('unavailable');
+  expect(firstStore.rows[2].event.silo).toBe('first');
+  expect(secondStore.rows).toHaveLength(2);
 }
 test('production worker interleaves saved attempts from two trusted silos', twoSilos);
+
+function writableImageStore(image) {
+  const store = savedImageStore(image);
+  store.appendCount = 0;
+  store.loseReply = false;
+  store.append = async function append(input) {
+    if (input.event.type === 'mcp.image_checked') store.appendCount += 1;
+    if (input.expectedSequence !== store.rows.at(-1).sequence) {
+      return { status: 'conflict' };
+    }
+    const sequence = store.rows.length + 1;
+    store.rows.push({ event: input.event, sequence });
+    if (store.loseReply && input.event.type === 'mcp.image_checked') {
+      store.loseReply = false;
+      throw new Error('reply lost');
+    }
+    return { status: 'appended', sequence, outcome: { kind: 'appended' } };
+  };
+  store.readEvent = async function readEvent(sequence) {
+    return store.rows[sequence - 1];
+  };
+  return store;
+}
+
+function independentChecks(verdict = 'pass') {
+  const checkedAt = new Date(Date.now() - 1000).toISOString();
+  const expiresAt = new Date(Date.now() + 60000).toISOString();
+  const common = { verdict, checkedAt, expiresAt, engineVersion: '1',
+    reportDigest: 'e'.repeat(64) };
+  if (verdict === 'fail') common.reasonCodes = ['refused'];
+  const vulnerability = { ...common, databaseDigest: 'f'.repeat(64),
+    databaseUpdatedAt: checkedAt };
+  return { signature: common, licence: common, vulnerability };
+}
+
+async function checkedService(scan) {
+  await close();
+  const scannerIdentity = { service: 'image-worker', silo: settings.silo };
+  const issuer = await tokenIssuer({ ...settings, scannerIdentity });
+  const trust = [{ issuer: settings.issuer, jwks: issuer.jwks,
+    services: { 'image-worker': settings.silo } }];
+  const scanner = { scan, signal: new AbortController().signal,
+    databaseUpdatedAt: new Date(updated).toISOString() };
+  server = createScannerService({ scanner, tls, trust });
+  await listen();
+}
+
+async function writesCleanAndRecoversOriginalEvent() {
+  async function scan(input) {
+    received.push(Buffer.from(input.bytes));
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  store.loseReply = true;
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() { return independentChecks(); }
+  const args = [store, image.silo, image.serverId, 1, prepare, readSettings, readChecks];
+  const firstOutcome = await runAndWriteHostedImageCheck(...args);
+  expect(store.rows).toHaveLength(3);
+  expect(firstOutcome.status).toBe('appended');
+  expect(store.rows).toHaveLength(3);
+  expect(store.rows[1].event.type).toBe('mcp.image_scan_claimed');
+  expect(store.rows[2].event.type).toBe('mcp.image_checked');
+  expect(store.rows[2].event.data.checks.malware.verdict).toBe('pass');
+  const savedResult = store.rows[2].event.data;
+  expect(await savedResultMatches(store, image.silo, savedResult)).toBe(true);
+  const alteredResults = [
+    { ...savedResult, attemptId: 2 },
+    { ...savedResult, imageDigest: 'd'.repeat(64) },
+    { ...savedResult, platform: 'linux/arm64' },
+    { ...savedResult, checks: { ...savedResult.checks,
+      signature: { ...savedResult.checks.signature, engineVersion: 'changed' } } },
+    { ...savedResult, checks: { ...savedResult.checks,
+      malware: { ...savedResult.checks.malware, verdict: 'unknown' } } },
+  ];
+  for (const altered of alteredResults) {
+    expect(await savedResultMatches(store, image.silo, altered)).toBe(false);
+  }
+  const absentStore = savedImageStore(image);
+  absentStore.rows.length = 0;
+  expect(await savedResultMatches(absentStore, image.silo, savedResult)).toBe(false);
+  const originalId = store.rows[2].event.id;
+  expect((await runAndWriteHostedImageCheck(...args)).status).toBe('appended');
+  expect(store.rows[2].event.id).toBe(originalId);
+  expect(store.appendCount).toBe(1);
+  expect(received).toHaveLength(1);
+  const admission = await readHostedAdmission(store, image.silo, image.serverId);
+  expect(admission.status).toBe('admitted');
+  const restarted = { ...store, appendCount: 0 };
+  const restartArgs = [restarted, image.silo, image.serverId, 1,
+    prepare, readSettings, readChecks];
+  expect((await runAndWriteHostedImageCheck(...restartArgs)).status).toBe('appended');
+  expect(restarted.appendCount).toBe(0);
+  expect(received).toHaveLength(1);
+  expect((await runHostedImageScan(restarted, image.silo, image.serverId,
+    prepare, readSettings)).verdict).toBe('unavailable');
+  expect(received).toHaveLength(1);
+  const stale = await runAndWriteHostedImageCheck(store, image.silo, image.serverId, 2,
+    prepare, readSettings, readChecks);
+  expect(stale.status).toBe('unavailable');
+  expect(received).toHaveLength(1);
+}
+test('clean scan writes one event and a lost reply recovers without scanning again',
+  writesCleanAndRecoversOriginalEvent);
+
+function deferred() {
+  let resolve;
+  const promise = new Promise(complete => { resolve = complete; });
+  return { promise, resolve };
+}
+
+async function coordinatesConcurrentDeliveries() {
+  const releaseScan = deferred();
+  const enteredScan = deferred();
+  let scanCount = 0;
+  async function scan(input) {
+    scanCount += 1;
+    enteredScan.resolve();
+    await releaseScan.promise;
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() { return independentChecks(); }
+  const args = [store, image.silo, image.serverId, 1, prepare, readSettings, readChecks];
+  const first = runAndWriteHostedImageCheck(...args);
+  const second = runAndWriteHostedImageCheck(...args);
+  await enteredScan.promise;
+  await delay(50);
+  expect(scanCount).toBe(1);
+  const stopped = new AbortController();
+  stopped.abort();
+  const cancelledDelivery = runAndWriteHostedImageCheck(...args, stopped.signal);
+  releaseScan.resolve();
+  expect(await Promise.all([first, second])).toEqual([
+    { status: 'appended' }, { status: 'unavailable' },
+  ]);
+  expect(scanCount).toBe(1);
+  expect(store.appendCount).toBe(1);
+  expect(await cancelledDelivery).toEqual({ status: 'unavailable' });
+}
+test('concurrent deliveries share one scan for the original attempt',
+  coordinatesConcurrentDeliveries);
+
+async function coordinatesSeparateStoreWrappers() {
+  const releaseScan = deferred();
+  const enteredScan = deferred();
+  let scanCount = 0;
+  async function scan(input) {
+    scanCount += 1;
+    enteredScan.resolve();
+    await releaseScan.promise;
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const firstStore = writableImageStore(image);
+  const secondStore = { ...firstStore };
+  const secondWorker = await import('../infra/clamav/image-worker.mjs?instance=second');
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() { return independentChecks(); }
+  const first = runAndWriteHostedImageCheck(firstStore, image.silo, image.serverId,
+    1, prepare, readSettings, readChecks);
+  await enteredScan.promise;
+  const second = secondWorker.runAndWriteHostedImageCheck(secondStore, image.silo, image.serverId,
+    1, prepare, readSettings, readChecks);
+  await new Promise(resolve => setTimeout(resolve, 50));
+  releaseScan.resolve();
+  const secondOutcome = await second;
+  expect(secondOutcome.status).toBe('unavailable');
+  expect(scanCount).toBe(1);
+  expect((await first).status).toBe('appended');
+  expect(scanCount).toBe(1);
+}
+test('separate worker store wrappers cannot scan the same saved attempt twice',
+  coordinatesSeparateStoreWrappers);
+
+async function restartAfterLostResultReply() {
+  let scanCount = 0;
+  async function scan(input) {
+    scanCount += 1;
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  const originalAppend = store.append;
+  let delayedResult;
+  store.append = async function loseResultReply(input) {
+    if (input.event.type === 'mcp.image_checked') {
+      delayedResult = input;
+      throw new Error('reply lost before result became visible');
+    }
+    return originalAppend(input);
+  };
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() { return independentChecks(); }
+  const args = [store, image.silo, image.serverId, 1, prepare, readSettings, readChecks];
+  expect((await runAndWriteHostedImageCheck(...args)).status).toBe('unavailable');
+  expect(scanCount).toBe(1);
+  const restartedStore = { ...store, append: originalAppend };
+  const restartedWorker = await import('../infra/clamav/image-worker.mjs?instance=restarted');
+  const restartedArgs = [restartedStore, image.silo, image.serverId,
+    1, prepare, readSettings, readChecks];
+  expect((await restartedWorker.runAndWriteHostedImageCheck(...restartedArgs)).status)
+    .toBe('unavailable');
+  expect(scanCount).toBe(1);
+  store.rows.push({ event: delayedResult.event, sequence: store.rows.length + 1 });
+  expect((await restartedWorker.runAndWriteHostedImageCheck(...restartedArgs)).status)
+    .toBe('appended');
+  expect(scanCount).toBe(1);
+}
+test('a restarted worker waits for the original result after a lost reply',
+  restartAfterLostResultReply);
+
+async function restartAfterLostClaimReply() {
+  let scanCount = 0;
+  async function scan(input) {
+    scanCount += 1;
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  const originalAppend = store.append;
+  store.append = async function loseClaimReply(input) {
+    const outcome = await originalAppend(input);
+    if (input.event.type === 'mcp.image_scan_claimed') {
+      throw new Error('claim reply lost');
+    }
+    return outcome;
+  };
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() { return independentChecks(); }
+  const args = [store, image.silo, image.serverId, 1, prepare, readSettings, readChecks];
+  expect((await runAndWriteHostedImageCheck(...args)).status).toBe('unavailable');
+  expect(store.rows[1].event.type).toBe('mcp.image_scan_claimed');
+  expect(scanCount).toBe(0);
+  const restartedStore = { ...store, append: originalAppend };
+  const restartedWorker = await import('../infra/clamav/image-worker.mjs?instance=claim-restart');
+  const restartedArgs = [restartedStore, image.silo, image.serverId,
+    1, prepare, readSettings, readChecks];
+  expect((await restartedWorker.runAndWriteHostedImageCheck(...restartedArgs)).status)
+    .toBe('unavailable');
+  expect(scanCount).toBe(0);
+  expect(store.rows).toHaveLength(2);
+}
+test('a lost claim reply cannot start a scan after restart', restartAfterLostClaimReply);
+
+async function waitsForPendingLostAppend() {
+  let scanCount = 0;
+  async function scan(input) {
+    scanCount += 1;
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  const originalAppend = store.append;
+  let pendingInput;
+  store.append = async function delayedLostReply(input) {
+    if (input.event.type === 'mcp.image_scan_claimed') {
+      return originalAppend(input);
+    }
+    store.appendCount += 1;
+    pendingInput = input;
+    throw new Error('reply lost before commit became visible');
+  };
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() { return independentChecks(); }
+  const args = [store, image.silo, image.serverId, 1, prepare, readSettings, readChecks];
+  expect((await runAndWriteHostedImageCheck(...args)).status).toBe('unavailable');
+  expect(store.rows).toHaveLength(2);
+  expect(scanCount).toBe(1);
+  expect((await runAndWriteHostedImageCheck(...args)).status).toBe('unavailable');
+  expect(scanCount).toBe(1);
+  expect(store.appendCount).toBe(1);
+  store.append = originalAppend;
+  store.rows.push({ event: pendingInput.event, sequence: 3 });
+  expect((await runAndWriteHostedImageCheck(...args)).status).toBe('appended');
+  expect(scanCount).toBe(1);
+}
+test('lost append reply blocks another scan until its pending commit is visible',
+  waitsForPendingLostAppend);
+
+async function retriesAfterValidationFailureBeforeAppend() {
+  let scanCount = 0;
+  async function scan(input) {
+    scanCount += 1;
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  let settingsReads = 0;
+  async function prepare() { return image; }
+  async function readSettings() {
+    settingsReads += 1;
+    if (settingsReads === 2) {
+      return { ...settings, manifestDigest: `sha256:${'c'.repeat(64)}` };
+    }
+    return settings;
+  }
+  async function readChecks() { return independentChecks(); }
+  const args = [store, image.silo, image.serverId, 1, prepare, readSettings, readChecks];
+  expect((await runAndWriteHostedImageCheck(...args)).status).toBe('unavailable');
+  expect(store.appendCount).toBe(0);
+  expect((await runAndWriteHostedImageCheck(...args)).status).toBe('unavailable');
+  expect(scanCount).toBe(1);
+  expect(store.appendCount).toBe(0);
+}
+test('validation failure leaves the original scan claim in place',
+  retriesAfterValidationFailureBeforeAppend);
+
+async function abortsAtWorkerBoundaries(kind) {
+  async function scan(input) {
+    received.push(Buffer.from(input.bytes));
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  const controller = new AbortController();
+  let historyReads = 0;
+  let settingsReads = 0;
+  const originalRead = store.readStream;
+  async function* countHistory(...args) {
+    historyReads += 1;
+    yield* originalRead(...args);
+    if (kind === 'after admission read' && historyReads === 1) controller.abort();
+    if (kind === 'during validation read' && historyReads === 4) controller.abort();
+  }
+  store.readStream = countHistory;
+  async function prepare() {
+    if (kind === 'during preparation') controller.abort();
+    return image;
+  }
+  async function readSettings() {
+    settingsReads += 1;
+    return settings;
+  }
+  async function readChecks() {
+    if (kind === 'after separate checks') controller.abort();
+    return independentChecks();
+  }
+  if (kind === 'before history') controller.abort();
+  const outcome = await runAndWriteHostedImageCheck(store, image.silo, image.serverId, 1,
+    prepare, readSettings, readChecks, controller.signal);
+  expect(outcome.status).toBe('unavailable');
+  expect(store.appendCount).toBe(0);
+  if (kind === 'before history') expect(historyReads).toBe(0);
+  if (kind === 'after admission read') expect(historyReads).toBe(1);
+  if (kind === 'during preparation') expect(settingsReads).toBe(0);
+  if (kind === 'during validation read') expect(settingsReads).toBe(1);
+  if (kind === 'after separate checks') expect(historyReads).toBe(3);
+}
+test.each(['before history', 'after admission read', 'during preparation',
+  'during validation read', 'after separate checks'])(
+  '%s stops worker progress', abortsAtWorkerBoundaries);
+
+async function refusesIncompleteAndIndependentFailures(kind) {
+  async function scan(input) {
+    received.push(Buffer.from(input.bytes));
+    const result = facts({ sha256: input.sha256, byteCount: input.byteCount });
+    if (kind === 'infected') result.verdict = 'infected';
+    return result;
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(kind === 'infected' ? eicar : bytes, binding);
+  const store = writableImageStore(image);
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() {
+    const checks = independentChecks();
+    if (kind === 'signature' || kind === 'licence' || kind === 'vulnerability') {
+      checks[kind] = independentChecks('fail')[kind];
+    }
+    if (kind.startsWith('missing ')) delete checks[kind.slice(8)];
+    return checks;
+  }
+  const outcome = await runAndWriteHostedImageCheck(store, image.silo, image.serverId, 1,
+    prepare, readSettings, readChecks);
+  if (kind.startsWith('missing ') || kind === 'infected') {
+    expect(outcome.status).toBe('unavailable');
+    expect(store.rows).toHaveLength(2);
+  } else {
+    expect(outcome.status).toBe('appended');
+    expect(store.rows[2].event.data.checks[kind].verdict).toBe('fail');
+    const admission = await readHostedAdmission(store, image.silo, image.serverId);
+    expect(admission.status).toBe('rejected');
+  }
+}
+test.each(['infected', 'missing signature', 'missing licence',
+  'missing vulnerability', 'signature', 'licence', 'vulnerability'])(
+  '%s cannot admit an image after a part scan', refusesIncompleteAndIndependentFailures);
+
+async function refusesChangedFactsBeforeAppend(kind) {
+  async function scan(input) {
+    received.push(Buffer.from(input.bytes));
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  const controller = new AbortController();
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() {
+    if (kind === 'bytes') image.layers[0].bytes[512] = 66;
+    if (kind === 'digest') image.imageDigest = 'd'.repeat(64);
+    if (kind === 'platform') image.platform = 'linux/arm64';
+    if (kind === 'attempt') store.rows.length = 0;
+    if (kind === 'part count') image.layers.length = 0;
+    if (kind === 'manifest') settings.manifestDigest = `sha256:${'d'.repeat(64)}`;
+    if (kind === 'cancel') controller.abort();
+    if (kind === 'expiry') {
+      const current = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(current + 12000);
+    }
+    return independentChecks();
+  }
+  const outcome = await runAndWriteHostedImageCheck(store, image.silo, image.serverId, 1,
+    prepare, readSettings, readChecks, controller.signal);
+  expect(outcome.status).toBe('unavailable');
+  expect(store.appendCount).toBe(0);
+  expect(received).toHaveLength(1);
+}
+test.each(['bytes', 'digest', 'platform', 'attempt', 'part count', 'manifest',
+  'cancel', 'expiry'])('%s changing before append refuses the event',
+  refusesChangedFactsBeforeAppend);
+
+async function refusesChangeDuringWriterRead(kind) {
+  async function scan(input) {
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  const originalRead = store.readStream;
+  let reads = 0;
+  async function* changeOnWriterRead(subject, position, deadline) {
+    reads += 1;
+    if (reads === 3) {
+      if (kind === 'expiry') {
+        const current = Date.now();
+        const clock = vi.spyOn(Date, 'now');
+        clock.mockReturnValue(current + 12000);
+      } else {
+        settings.manifestDigest = `sha256:${'d'.repeat(64)}`;
+      }
+    }
+    yield* originalRead(subject, position, deadline);
+  }
+  store.readStream = changeOnWriterRead;
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() { return independentChecks(); }
+  const outcome = await runAndWriteHostedImageCheck(store, image.silo, image.serverId, 1,
+    prepare, readSettings, readChecks);
+  expect(outcome.status).toBe('unavailable');
+  expect(reads).toBeGreaterThanOrEqual(3);
+  expect(store.appendCount).toBe(0);
+}
+test.each(['expiry', 'manifest'])(
+  '%s changing during the writer read refuses append', refusesChangeDuringWriterRead);
+
+async function refusesScannerOutageAtWriter() {
+  async function scan(input) {
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  await close();
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() { return independentChecks(); }
+  const outcome = await runAndWriteHostedImageCheck(store, image.silo, image.serverId, 1,
+    prepare, readSettings, readChecks);
+  expect(outcome.status).toBe('unavailable');
+  expect(store.appendCount).toBe(0);
+}
+test('scanner outage cannot append a clean image event', refusesScannerOutageAtWriter);
+
+async function refusesWrongTransportProof(kind) {
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() { return independentChecks(); }
+  if (kind === 'upload proof') {
+    function swapPurpose(result) { result.purpose = 'upload'; }
+    mode = swapPurpose;
+    server.on('checkContinue', respond);
+  } else {
+    async function scan(input) {
+      return facts({ sha256: input.sha256, byteCount: input.byteCount });
+    }
+    await checkedService(scan);
+    if (kind === 'issuer') settings.issuer = 'https://foreign.invalid';
+    if (kind === 'CA') settings.caFile = join(directory, 'unknown.crt');
+    if (kind === 'silo') settings.silo = 'second';
+  }
+  const outcome = await runAndWriteHostedImageCheck(store, image.silo, image.serverId, 1,
+    prepare, readSettings, readChecks);
+  expect(outcome.status).toBe('unavailable');
+  expect(store.appendCount).toBe(0);
+}
+test.each(['upload proof', 'issuer', 'CA', 'silo'])(
+  '%s cannot supply image event evidence', refusesWrongTransportProof);
+
+async function refusesLaterPartExpiryOrOrder(kind) {
+  let count = 0;
+  async function scan(input) {
+    count += 1;
+    const result = facts({ sha256: input.sha256, byteCount: input.byteCount });
+    if (count === 2) result.expiresAt = new Date(Date.now() + 1000).toISOString();
+    return result;
+  }
+  await checkedService(scan);
+  const later = Buffer.from('later clean part');
+  const { image } = imageWithPart([bytes, later], binding);
+  const store = writableImageStore(image);
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() {
+    if (kind === 'expiry') {
+      const current = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(current + 2000);
+    }
+    return independentChecks();
+  }
+  if (kind === 'order') {
+    const originalRead = readFile.getMockImplementation();
+    async function swappedRead(path, options) {
+      if (String(path).endsWith('/part-0')) return later;
+      if (String(path).endsWith('/part-1')) return bytes;
+      return originalRead(path, options);
+    }
+    readFile.mockImplementation(swappedRead);
+  }
+  const outcome = await runAndWriteHostedImageCheck(store, image.silo, image.serverId, 1,
+    prepare, readSettings, readChecks);
+  expect(outcome.status).toBe('unavailable');
+  expect(store.appendCount).toBe(0);
+}
+test.each(['expiry', 'order'])('later part %s refuses the event',
+  refusesLaterPartExpiryOrOrder);
 
 function respond(request, reply) {
   requests.push(request.headers['x-scan-request-id']);
@@ -449,6 +1026,20 @@ async function useAgain(kind) {
   expect(use).toThrow('Image part scan refused');
 }
 test.each(['wall', 'backwards', 'monotonic', 'bytes'])('checks %s again at use', useAgain);
+async function retainsFrozenAuthenticatedEvidence() {
+  server.on('checkContinue', respond);
+  const validate = await scanImagePart(settings, bytes, binding);
+  expect(validate(bytes, binding)).toBe('clean');
+  expect(Object.isFrozen(validate.evidence)).toBe(true);
+  const originalDigest = validate.evidence.sha256;
+  function alterEvidence() {
+    validate.evidence.sha256 = 'f'.repeat(64);
+  }
+  expect(alterEvidence).toThrow(TypeError);
+  expect(validate.evidence.sha256).toBe(originalDigest);
+}
+test('the authenticated part facts remain frozen after the request',
+  retainsFrozenAuthenticatedEvidence);
 async function cancelled(kind) {
   mode = kind === 'partial' ? 'partial' : 'waiting';
   const controller = new AbortController();

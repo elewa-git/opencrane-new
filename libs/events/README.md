@@ -65,7 +65,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables and retired choices"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, welcome completion, private tool stops, publication, nightly memory claims and routine permissions| events
-  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks Ask and release bindings, consent starts, callback and refresh claims, refresh starts, account confirmations and replacement generations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal, company and saved tool choices, company opt-in, company credential replacements, and blocks| events
+  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks Ask and release bindings, consent starts, callback, refresh and image scan claims, refresh starts, account confirmations and replacement generations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal, company and saved tool choices, company opt-in, company credential replacements, and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
 ```
 
@@ -139,6 +139,8 @@ The replacement stays encrypted. Older records still parse for recovery, but can
 supply the ownership and revision needed to read a fact.
 
 Hosted image check requests record the exact image, registration and attempt number.
+An image scan claim records which attempt has started before image bytes are prepared.
+Its random token identifies the caller that saved the claim.
 They contain no report bytes or credentials and say nothing about passing checks.
 
 Before sending a published tool call, the models process saves a start record with

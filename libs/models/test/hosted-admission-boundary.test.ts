@@ -11,6 +11,8 @@ const serverRequire = createRequire(new URL('../../../apps/server/package.json',
 const privateImports = [
   '@opencrane/models/hosted-admission',
   '@opencrane/models/src/hosted-admission.ts',
+  '@opencrane/models/image-scan-evidence',
+  '@opencrane/models/src/image-scan-evidence.ts',
 ];
 function refusesPrivateImport(specifier: string) {
   function resolveFromServer() {

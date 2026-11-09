@@ -1,6 +1,7 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { getEventDefinition, hostedImageCheckedSchema, hostedImageCheckRequestedSchema,
+  hostedImageScanClaimedSchema,
   type EventEnvelope } from '@opencrane/events';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { hostedAdmissionSchema } from '@opencrane/protocol';
@@ -8,9 +9,15 @@ import { z } from 'zod';
 import { envelope } from './actor.ts';
 import type { Binding } from '@opencrane/authz';
 import { saveToolCommand } from './tool-policy.ts';
+import { hasAuthenticatedImageEvidence } from './image-scan-evidence.ts';
 
 type Result = z.infer<typeof hostedImageCheckedSchema>;
 type Admission = z.infer<typeof hostedAdmissionSchema>;
+type MalwareEvidence = Result['checks']['malware'];
+type ValidatedMalwareEvidence = { verdict: 'clean'; malware: MalwareEvidence };
+type ImageScanClaim = z.infer<typeof hostedImageScanClaimedSchema>;
+const imageScanClaimInput = hostedImageScanClaimedSchema.omit({ claimantId: true });
+type ImageScanClaimInput = z.infer<typeof imageScanClaimInput>;
 const day = 86_400_000;
 
 function validDates(result: Result, at: number) {
@@ -122,7 +129,7 @@ function modelsResult(event: EventEnvelope, silo: string, serverId: string) {
     event.subject === `mcp-${serverId}` && event.source === 'models' &&
     event.principal?.kind === 'system' && event.principal.id === 'models';
 }
-function matches(state: Admission, result: Result) {
+function matches(state: Admission, result: ImageScanClaimInput) {
   return state.serverId === result.serverId && state.attemptId === result.attemptId &&
     state.imageDigest === result.imageDigest && state.platform === result.platform;
 }
@@ -156,11 +163,92 @@ export async function readHostedImageScanAttempt(store: EventStore, silo: string
     status: 'checking' as const };
 }
 
+function scanClaimMatches(event: EventEnvelope, silo: string, claim: ImageScanClaim) {
+  if (event.type !== 'mcp.image_scan_claimed' || event.silo !== silo ||
+      event.subject !== `mcp-${claim.serverId}` || event.source !== 'models' ||
+      event.principal?.kind !== 'system' || event.principal.id !== 'models') return false;
+  const parsed = hostedImageScanClaimedSchema.safeParse(event.data);
+  return parsed.success && same(parsed.data, claim);
+}
+
+function claimAlreadySaved(event: EventEnvelope, silo: string, claim: ImageScanClaim) {
+  if (event.type !== 'mcp.image_scan_claimed' || event.silo !== silo ||
+      event.subject !== `mcp-${claim.serverId}`) return false;
+  const parsed = hostedImageScanClaimedSchema.safeParse(event.data);
+  return parsed.success && parsed.data.attemptId === claim.attemptId;
+}
+
+export async function claimHostedImageScan(store: EventStore, silo: string,
+  rawClaim: unknown) {
+  const parsed = imageScanClaimInput.safeParse(rawClaim);
+  if (!parsed.success) return { status: 'unavailable' as const };
+  // Give each caller its own identity even when it races with the same attempt.
+  const claim = { ...parsed.data, claimantId: randomUUID() };
+  const rows = await rowsFor(store, claim.serverId);
+  const state = foldHostedAdmission(rows, silo, claim.serverId);
+  if (!state || !matches(state, claim)) return { status: 'unavailable' as const };
+  if (state.checks) return { status: 'completed' as const };
+  for (const row of rows) {
+    if (claimAlreadySaved(row.event, silo, claim)) {
+      return { status: 'unavailable' as const };
+    }
+  }
+
+  const subject = `mcp-${claim.serverId}`;
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify([silo, subject, 'mcp.image_scan_claimed', claim.attemptId]));
+  const event = envelope(silo, subject, 'mcp.image_scan_claimed', claim, hash.digest('hex'));
+  try {
+    const appended = await store.append({ event, expectedSequence: rows.at(-1)!.sequence });
+    if (appended.status !== 'appended' || appended.outcome?.kind !== 'appended') {
+      return { status: 'unavailable' as const };
+    }
+    const saved = await store.readEvent(appended.sequence);
+    if (!scanClaimMatches(saved.event, silo, claim)) return { status: 'unavailable' as const };
+    return { status: 'claimed' as const };
+  } catch {
+    // Treat a lost claim reply as claimed by another worker until history proves otherwise.
+    return { status: 'unavailable' as const };
+  }
+}
+
+function matchesScanEvidence(scanEvidence: unknown, result: Result, silo: string) {
+  if (!hasAuthenticatedImageEvidence(scanEvidence)) return false;
+  return scanEvidence.silo === silo && scanEvidence.serverId === result.serverId &&
+    scanEvidence.attemptId === result.attemptId &&
+    scanEvidence.imageDigest === result.imageDigest &&
+    scanEvidence.platform === result.platform &&
+    same(scanEvidence.malware, result.checks.malware);
+}
+
+async function currentMalwareEvidence(result: Result, silo: string, scanEvidence: unknown,
+  validateEvidence: () => Promise<ValidatedMalwareEvidence>) {
+  // Check the private scan after reading history, immediately before this append.
+  if (!matchesScanEvidence(scanEvidence, result, silo)) return;
+  let evidence: ValidatedMalwareEvidence;
+  try {
+    evidence = await validateEvidence();
+    if (!evidence || evidence.verdict !== 'clean' || !evidence.malware ||
+        !same(evidence.malware, result.checks.malware)) return;
+  } catch {
+    // Refuse a failed proof check before append; no event-store reply is uncertain.
+    return;
+  }
+  const now = new Date();
+  const malware = result.checks.malware;
+  if (!validDates(result, now.getTime()) || malware.verdict !== 'pass') return;
+  if (now.getTime() >= Date.parse(malware.expiresAt) ||
+      now.getTime() >= Date.parse(malware.databaseUpdatedAt) + day) return;
+  return now;
+}
+
 export async function writeHostedAdmission(store: EventStore, silo: string, raw: unknown,
-  now?: Date) {
+  now: Date | undefined, scanEvidence: unknown,
+  validateEvidence: () => Promise<ValidatedMalwareEvidence>) {
   const parsed = hostedImageCheckedSchema.safeParse(raw);
   const conflict = { status: 'conflict' as const };
-  if (!parsed.success) return conflict;
+  if (!parsed.success || !hasAuthenticatedImageEvidence(scanEvidence) ||
+      typeof validateEvidence !== 'function') return conflict;
   const result = parsed.data;
   const rows = await rowsFor(store, result.serverId);
   now ??= new Date();
@@ -171,6 +259,8 @@ export async function writeHostedAdmission(store: EventStore, silo: string, raw:
     return conflict;
   }
   if (!validDates(result, now.getTime())) return conflict;
+  const checkedNow = await currentMalwareEvidence(result, silo, scanEvidence, validateEvidence);
+  if (!checkedNow) return conflict;
   const subject = `mcp-${result.serverId}`;
   const hash = createHash('sha256');
   hash.update(JSON.stringify([silo, subject, 'mcp.image_checked', result.attemptId]));

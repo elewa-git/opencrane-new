@@ -360,7 +360,7 @@ digests. Its validation function checks current image bytes and scanner settings
 then each part's fresh result. Errors expose only `image_scan_unavailable`.
 Scratch cleanup errors also return that fixed result, without a private path.
 
-The walk is private and has no event writer or admission effect. A clean local
+The walk is private and has no admission effect. A clean local
 fixture does not authorise hosted execution. Production scanner release,
 fresh-install journey and live scanner qualification remain NOT RUN.
 
@@ -385,8 +385,23 @@ for bytes. It calls the layer walk and authenticated image-part client. After th
 last part, it reads the active attempt again, obtains current deployment scanner
 settings, and calls the walk's validation function. It returns only `clean`,
 `infected` or the fixed unavailable result. Missing or changed attempts, expiry,
-cancellation and changed scanner settings refuse. It holds no portable proof and
-does not write `mcp.image_checked`. There is no production image source, scheduler,
-signature, vulnerability or licence worker composition yet. The production enable
-switch and admission remain closed. Fresh-install two-silo, deployed custody and
-rotation qualification are NOT RUN.
+cancellation and changed scanner settings refuse. It holds no portable proof.
+`runAndWriteHostedImageCheck` claims the original attempt with one conditional
+`mcp.image_scan_claimed` append before preparing image bytes. It uses the same scan and takes the original attempt
+number and three separate check receipts from its trusted caller. It requires a
+complete clean part scan and all
+three receipts. Immediately before one conditional append, it reads the saved
+attempt and scanner settings again and checks every ordered part's proof. It sends
+the private proof from the authenticated image walk, the current clean verdict,
+exact dated malware summary and separate receipts to the existing
+`mcp.image_checked` writer. Test scanner callbacks cannot issue that proof.
+Concurrent deliveries through separate store wrappers can scan only after one
+claim succeeds. A second worker sees the claim and refuses to scan. If a result
+append reply is lost before its commit is visible, a restarted worker sees the
+claim and waits for the original saved result. It never scans the same attempt again.
+Infected, missing, changed and expired proof cannot
+write a clean result. A failed separate check records rejection rather than
+admission. No production scheduler, image source or separate-check composition
+calls this adapter yet. The production enable switch and image promotion remain
+closed. Fresh-install two-silo, deployed custody, signed-release and rotation
+qualification are NOT RUN.

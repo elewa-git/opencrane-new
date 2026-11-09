@@ -8,8 +8,10 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gzipSync } from 'node:zlib';
 import { test, vi } from 'vitest';
-import { scanHostedImage, scanHostedImageAttempt, checkImagePartCoverage }
+import { scanHostedImage, scanHostedImageAttempt, checkImagePartCoverage, malwareReceipt }
   from '../infra/clamav/image-walk.mjs';
+import { hasAuthenticatedImageEvidence }
+  from '../libs/models/src/image-scan-evidence.ts';
 
 function createCleanupState() {
   return { active: false };
@@ -146,6 +148,7 @@ test('one checked attempt cannot authorise another silo or changed image attempt
   const result = await scanHostedImageAttempt(attempt, image, settings,
     recordingScanner(seen, 'clean', settings));
   assert.equal(result.verdict, 'clean');
+  assert.equal(hasAuthenticatedImageEvidence(result), false);
   assert.equal(await result.validate(attempt, image, { ...scanner, silo: image.silo }), 'clean');
   for (const change of [{ silo: 'other' }, { serverId: 'other' }, { attemptId: 2 },
     { platform: 'linux/arm64' }, { imageDigest: 'c'.repeat(64) },
@@ -169,6 +172,67 @@ test('part coverage refuses missing, duplicate, reordered and extra parts', () =
     [parts[1], parts[0]], [parts[0], parts[1], parts[1]]]) {
     assert.throws(() => checkImagePartCoverage(candidate, 2));
   }
+});
+
+test('an empty image has no complete malware receipt', async () => {
+  assert.equal(malwareReceipt([]), undefined);
+  const image = fixture([[{ name: 'directory', type: '5' }]]);
+  const result = await scanHostedImage(image, scanner, recordingScanner([]));
+  assert.equal(result.verdict, 'unavailable');
+  assert.equal('malware' in result, false);
+});
+
+function partEvidence(index, checkedAt, expiresAt, databaseUpdatedAt) {
+  return { sha256: String(index).repeat(64), verdict: 'clean',
+    imageDigest: scanner.imageDigest, manifestDigest: scanner.manifestDigest,
+    checkedAt, expiresAt, databaseUpdatedAt };
+}
+
+async function scanWithEvidence(change) {
+  const image = fixture([[{ name: 'one', bytes: Buffer.from('one') },
+    { name: 'two', bytes: Buffer.from('two') }]]);
+  const now = Date.now();
+  const first = partEvidence(1, new Date(now - 2000).toISOString(),
+    new Date(now + 9000).toISOString(), new Date(now - 4000).toISOString());
+  const second = partEvidence(2, new Date(now - 1000).toISOString(),
+    new Date(now + 5000).toISOString(), new Date(now - 6000).toISOString());
+  const evidence = [first, second];
+  change(evidence);
+  let index = 0;
+  async function scan(_settings, _bytes) {
+    const current = evidence[index];
+    index += 1;
+    function validate() { return 'clean'; }
+    if (current) validate.evidence = current;
+    return validate;
+  }
+  const result = await scanHostedImage(image, scanner, scan);
+  return { result, first, second };
+}
+
+test('the malware summary uses the latest check and earliest limits', async () => {
+  const { result, second } = await scanWithEvidence(function unchanged() {});
+  assert.equal(result.verdict, 'clean');
+  assert.equal(result.malware.checkedAt, second.checkedAt);
+  assert.equal(result.malware.expiresAt, second.expiresAt);
+  assert.equal(result.malware.databaseUpdatedAt, second.databaseUpdatedAt);
+});
+
+const invalidEvidence = [
+  ['first part missing', evidence => { evidence[0] = undefined; }],
+  ['later part missing', evidence => { evidence[1] = undefined; }],
+  ['later part infected', evidence => { evidence[1].verdict = 'infected'; }],
+  ['different scanner image', evidence => { evidence[1].imageDigest =
+    `sha256:${'c'.repeat(64)}`; }],
+  ['different scanner manifest', evidence => { evidence[1].manifestDigest =
+    `sha256:${'c'.repeat(64)}`; }],
+  ['no shared validity interval', evidence => { evidence[1].checkedAt =
+    new Date(Date.parse(evidence[0].expiresAt) + 1).toISOString(); }],
+];
+test.each(invalidEvidence)('%s cannot make a malware receipt', async (_label, change) => {
+  const { result } = await scanWithEvidence(change);
+  assert.equal(result.verdict, 'clean');
+  assert.equal(result.malware, undefined);
 });
 
 test('one clean part, lost reply and changed deployment identity refuse a complete image',
