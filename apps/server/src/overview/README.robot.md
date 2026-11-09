@@ -16,7 +16,9 @@ its own priority even if the other check passed later. Memory rows come from the
 bounded audit table. Due and prepared nights stay unknown; refused and missed nights
 need attention. No changes creates no task row. The audit checkpoint reports a late
 or unavailable source without clearing rows from other sources. The task opens the
-checked audit detail, never a maintenance command. A cursor includes source
+checked audit detail, never a maintenance command. Memory row ids and detail
+links use the saved random public reference. The original event and night ids
+never leave the audit table through this route. A cursor includes source
 checkpoint states and ordered row keys. Changed states or expiry-driven row moves
 require a fresh first page. Publication and routines remain unavailable
 until their owning reads are built.

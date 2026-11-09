@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { createHash } from 'node:crypto';
 import { effectResolvedDataSchema, getEventDefinition, type EventEnvelope } from '@opencrane/events';
 import { auditReasons, auditResponseSchema, auditDetailSchema, type AuditRow,
   type AuditRecord, type AuditFilter, type AuditDetailFilter } from '@opencrane/protocol';
@@ -9,7 +8,7 @@ import { publicationAuditData, publicationMetadata } from './audit-publication.t
 import { createDelegationAuditIndexes, delegationMetadata, delegationPublicId,
   modernDelegationData, saveDelegationStart } from './audit-delegation.ts';
 import { auditIdentifier as identifier, auditLinks, isDispatchEvent,
-  dispatchStatus, safeAuditId as safeId } from './audit-links.ts';
+  dispatchStatus, safeAuditId as safeId, commandRef, visibleEventId } from './audit-links.ts';
 import { maintenanceAuditData, maintenanceAnchor, maintenanceMetadata,
   maintenanceStatus } from './audit-maintenance.ts';
 import { maintenanceOutcome, observedOutcome } from './audit-outcomes.ts';
@@ -148,9 +147,13 @@ function actor(event: EventEnvelope, data: Record<string, unknown>): AuditRecord
   if (principalId && verifiedField === principalId) return { kind: 'person', id: principalId };
   return { kind: 'unverified' };
 }
-function commandRef(event: EventEnvelope): string | undefined {
-  if (!event.commandId) return undefined;
-  return createHash('sha256').update(event.commandId).digest('hex');
+function publicAuditId(event: EventEnvelope, data: Record<string, unknown>,
+  anchor: boolean): string | null {
+  if (event.type === 'delegation.completed') return delegationPublicId(event.id);
+  if (event.type === 'memory.maintenance_recorded' && anchor) {
+    return String(data['publicReference']);
+  }
+  return null;
 }
 function invitationMetadata(event: EventEnvelope, data: Record<string, unknown>) {
   if (!['member.invited', 'member.command_refused'].includes(event.type)) {
@@ -239,7 +242,8 @@ function metadata(event: EventEnvelope, d: Record<string, unknown>, position: nu
     ...(event.type === 'memory.maintenance_recorded' ? maintenanceMetadata(d) : {}),
     // Keep a saved money choice separate from observations and budget settlement.
     savedOutcome,
-    eventId: event.id, type: event.type, position, recordedAt: event.time,
+    eventId: visibleEventId(event, d),
+    type: event.type, position, recordedAt: event.time,
     actor: actor(event, d), ...(digest ? { commandRef: digest } : {}),
     source: auditSource(event),
     status: event.type === 'effect.uncertain' ? 'unknown' : status ?? 'recorded',
@@ -268,10 +272,11 @@ export const auditTrail: Projection = {
     await db.query(`CREATE INDEX IF NOT EXISTS audit_ownership_confirmation
       ON audit_entries (silo, (metadata->>'appointmentId'), (metadata->>'memberId'), position)
       WHERE event_type = 'member.ownership_confirmed'`);
-    await db.query(`CREATE INDEX IF NOT EXISTS audit_maintenance_night
+    await db.query(`CREATE INDEX IF NOT EXISTS audit_maintenance_reference
       ON audit_entries (silo, (metadata->>'maintenanceScopeId'),
-        (metadata->>'maintenanceNightId'), position DESC)
+        (metadata->>'maintenanceReference'), position DESC)
       WHERE event_type = 'memory.maintenance_recorded'`);
+    await db.query('DROP INDEX IF EXISTS audit_maintenance_night');
     for (const key of ['request_id', 'permit_id', 'approval_id', 'conversation_id', 'requester_id', 'turn_id', 'decision']) {
       await db.query(`CREATE INDEX IF NOT EXISTS audit_${key} ON audit_entries (silo, ${key}, position DESC)`);
     }
@@ -291,8 +296,7 @@ export const auditTrail: Projection = {
     const { request, permit, approval } = links;
     const anchor = await selectedAnchor(db, event, d, request, permit, approval);
     const digest = z.string().regex(/^[a-f0-9]{64}$/u).safeParse(d['contextDigest']).data;
-    const publicId = event.type === 'delegation.completed'
-      ? delegationPublicId(event.id) : null;
+    const publicId = publicAuditId(event, d, anchor);
     const record = { ...metadata(event, d, position),
       ...await delegationMetadata(db, event, d),
       ...(publicId ? { eventId: publicId } : {}) };
@@ -401,7 +405,8 @@ export async function readAudit(db: Query, silo: string,
   if (filter.reference) {
     parameters.push(filter.reference);
     const index = parameters.length;
-    where.push(`(event_id = $${index} OR public_id = $${index} OR
+    where.push(`((event_id = $${index} AND event_type <> 'memory.maintenance_recorded')
+      OR public_id = $${index} OR
       request_id = $${index} OR permit_id = $${index})`);
   }
   if (filter.before !== undefined) {
@@ -480,7 +485,9 @@ async function readSignals(db: Query, silo: string, anchor: Entry): Promise<Entr
 export async function readAuditDetail(db: Query, silo: string, auditId: string,
   filter: AuditDetailFilter = { limit: 20 }) {
   const anchor = (await db.query<Entry>(
-    'SELECT * FROM audit_entries WHERE silo = $1 AND (event_id = $2 OR public_id = $2) AND anchor = TRUE',
+    `SELECT * FROM audit_entries WHERE silo = $1 AND
+      ((event_id = $2 AND event_type <> 'memory.maintenance_recorded') OR public_id = $2)
+      AND anchor = TRUE`,
     [silo, auditId])).rows[0];
   if (!anchor) return undefined;
   const page = await readEvidence(db, silo, anchor, filter.before, filter.limit + 1, true);

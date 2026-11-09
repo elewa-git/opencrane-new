@@ -114,20 +114,22 @@ function spendingRow(record: { permit_id: string; position: string;
     `/api/org/effects/${encodeURIComponent(record.permit_id)}`);
 }
 
-export function memoryRow(record: { event_id: string; position: string;
+export function memoryRow(record: { public_id: string | null; position: string;
   recorded_at: string | Date; metadata: unknown }): OverviewRow | null {
-  const metadata = z.object({ maintenanceAction: z.enum([
+  const metadata = z.object({ maintenanceReference: z.string().regex(/^[a-f0-9]{32}$/u),
+    maintenanceAction: z.enum([
     'due', 'prepared', 'refused', 'missed', 'no_changes',
   ]) }).safeParse(record.metadata);
-  if (!metadata.success || metadata.data.maintenanceAction === 'no_changes') return null;
+  if (!metadata.success || record.public_id !== metadata.data.maintenanceReference ||
+      metadata.data.maintenanceAction === 'no_changes') return null;
   const action = metadata.data.maintenanceAction;
   let priority: OverviewPriority = 'unknown';
   if (action === 'refused' || action === 'missed') priority = 'failure';
   const eventAt = record.recorded_at instanceof Date
     ? record.recorded_at.toISOString() : record.recorded_at;
-  return overviewRow('memory', record.event_id, `memory:${record.event_id}`,
+  return overviewRow('memory', record.public_id, `memory:${record.public_id}`,
     priority, eventAt, Number(record.position), 'view_evidence',
-    `/api/org/history/${encodeURIComponent(record.event_id)}`);
+    `/api/org/history/${encodeURIComponent(record.public_id)}`);
 }
 
 export async function loadSource<T extends Record<string, unknown>>(name: AvailableName, db: Query,
@@ -171,7 +173,7 @@ async function loadOverview(options: ReadOptions, deadline: number): Promise<Ove
     `SELECT server_id, lifecycle, changed_at, position, policy FROM mcp_catalogue
       WHERE silo = $1 ORDER BY server_id LIMIT 51`, integrationRow);
   const memory = loadSource('memory', options.db, silo, head, deadline,
-    `SELECT event_id, position, recorded_at, metadata FROM audit_entries
+    `SELECT public_id, position, recorded_at, metadata FROM audit_entries
       WHERE silo = $1 AND event_type = 'memory.maintenance_recorded' AND anchor = TRUE
       ORDER BY position DESC LIMIT 51`, memoryRow);
   let spending: Promise<OverviewSource>;

@@ -589,6 +589,9 @@ Selection reads the current clock after preparing each scope. Reading history
 cannot extend the original fifteen-minute window. An unresolved `due` record,
 `qualification_blocked` intent or prepared root skips a later night as overlap.
 No model, tool, computer or budget port is available to the scan.
+Each new receipt saves a random 128-bit public reference and its scope kind.
+Preflight results retain that reference. The deterministic night and event ids
+remain in the private event stream for idempotency, never in organisation replies.
 
 Tests: `apps/ops/test/nightly-memory.test.ts` uses real PostgreSQL and NATS,
 including two child processes. `test/worker-reactions.test.ts` runs the wired callback

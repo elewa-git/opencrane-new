@@ -33,22 +33,55 @@ function providerWithChecks(reachable?: ReturnType<typeof providerFact>,
 describe('organisation overview rows', () => {
   it('keeps a saved night pending until a result and never calls a root Ready', () => {
     function savedNight(action: string) {
-      return memoryRow({ event_id: 'night-one', position: '5', recorded_at: recent,
-        metadata: { maintenanceAction: action } });
+      return memoryRow({ public_id: '7f6a9d0e4c329b817f6a9d0e4c329b81',
+        position: '5', recorded_at: recent,
+        metadata: { maintenanceReference: '7f6a9d0e4c329b817f6a9d0e4c329b81',
+          maintenanceAction: action } });
     }
     expect(savedNight('due')?.priority).toBe('unknown');
     expect(savedNight('prepared')?.priority).toBe('unknown');
     expect(savedNight('refused')?.priority).toBe('failure');
     expect(savedNight('missed')?.priority).toBe('failure');
     expect(savedNight('no_changes')).toBeNull();
-    expect(memoryRow({ event_id: 'night-two', position: '6',
-      recorded_at: new Date(recent), metadata: { maintenanceAction: 'prepared' } })?.eventAt)
+    expect(memoryRow({ public_id: '8c2d4a6e5f109b738c2d4a6e5f109b73', position: '6',
+      recorded_at: new Date(recent), metadata: {
+        maintenanceReference: '8c2d4a6e5f109b738c2d4a6e5f109b73',
+        maintenanceAction: 'prepared',
+      } })?.eventAt)
       .toBe(recent);
   });
 
+  it('rejects malformed memory metadata and never uses an original night id', () => {
+    const reference = '7f6a9d0e4c329b817f6a9d0e4c329b81';
+    const candidate = { public_id: reference, position: '5', recorded_at: recent,
+      metadata: { maintenanceReference: reference, maintenanceAction: 'prepared' } };
+    expect(memoryRow(candidate)?.id).toBe(reference);
+    expect(memoryRow({ ...candidate, public_id: null })).toBeNull();
+    expect(memoryRow({ ...candidate, public_id: 'night-one' })).toBeNull();
+    expect(memoryRow({ ...candidate, metadata: { ...candidate.metadata,
+      maintenanceAction: 'done' } })).toBeNull();
+    expect(memoryRow({ ...candidate, metadata: { maintenanceAction: 'prepared' } }))
+      .toBeNull();
+  });
+
+  it('limits each memory source to 50 and treats a 51st result as unavailable', async () => {
+    const reference = '7f6a9d0e4c329b817f6a9d0e4c329b81';
+    const saved = { public_id: reference, position: '5', recorded_at: recent,
+      metadata: { maintenanceReference: reference, maintenanceAction: 'prepared' } };
+    const records = Array(51).fill(saved);
+    const query = vi.fn().mockResolvedValueOnce({ rows: [{ sequence: '51' }] })
+      .mockResolvedValueOnce({ rows: records });
+    const source = await loadSource('memory', { query }, 'test', 51, 100,
+      'SELECT saved LIMIT 51', memoryRow);
+    expect(source.status).toBe('unavailable');
+    expect(source.rows).toHaveLength(50);
+  });
+
   it('reports a late or timed-out memory source while keeping other rows', async () => {
-    const saved = { event_id: 'night-one', position: '5', recorded_at: recent,
-      metadata: { maintenanceAction: 'prepared' } };
+    const saved = { public_id: '7f6a9d0e4c329b817f6a9d0e4c329b81',
+      position: '5', recorded_at: recent,
+      metadata: { maintenanceReference: '7f6a9d0e4c329b817f6a9d0e4c329b81',
+        maintenanceAction: 'prepared' } };
     const query = vi.fn().mockResolvedValueOnce({ rows: [{ sequence: '5' }] })
       .mockResolvedValueOnce({ rows: [saved] });
     const db: Query = { query };

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { history, memoryReferences } from '@opencrane/models';
 import { memoryErasureHistory, selectMaintenanceInputs,
   shouldReplaceMemoryRevision } from '@opencrane/projections';
@@ -154,6 +154,7 @@ async function recordScope(store: EventStore, silo: string, scopeId: string,
   }
   const selectionTime = selectedAt.toISOString();
   const data = { scopeId, nightId, batchKey, inputRevision, date,
+    scopeKind: binding.scopeKind, publicReference: randomBytes(16).toString('hex'),
     bindingRevision: binding.revision, memberId: binding.memberId, acceptedCapCents: 100,
     intendedAt, selectedAt: selectionTime, inputRefs: inputs.inputRefs,
     reviewedPosition: action === 'no_changes' ? scope.lastChangePosition : undefined,

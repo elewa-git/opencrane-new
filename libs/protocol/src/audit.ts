@@ -54,7 +54,7 @@ export const auditRecordSchema = z.object({
   maintenanceAction: z.enum(['due', 'prepared', 'refused', 'missed', 'no_changes']).optional(),
   maintenanceScopeKind: z.literal('person').optional(),
   maintenanceScopeId: digest.optional(), maintenanceMemberId: id.optional(),
-  maintenanceNightId: digest.optional(), maintenanceRootId: digest.optional(),
+  maintenanceReference: id.optional(), maintenanceRootId: digest.optional(),
   maintenanceAllowanceCents: z.int().nonnegative().safe().optional(),
   delegationAccess: z.enum(['visible', 'restricted']).optional(),
   delegationId: id.optional(), parentDelegationId: id.optional(), rootId: id.optional(),

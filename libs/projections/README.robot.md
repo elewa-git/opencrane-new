@@ -798,10 +798,12 @@ in the scope event history; rebuilding tables never runs cleanup or calls a mode
 ## Nightly intent history
 
 The audit projection copies `memory.maintenance_recorded` only after validating its
-strict event shape and personal scope identity. It stores the action, original night,
-member, scope, root and 100-cent allowance without input references or text. The
+strict event shape and personal scope identity. It stores the action, random public
+reference, member, scope, root and 100-cent allowance without input references or text. The
 server removes personal identifiers for any other admin. A later result replaces
-the due anchor for the same scope and night. Duplicate delivery keeps one anchor.
+the due anchor for the same scope and public reference. Duplicate delivery keeps one anchor.
+Older receipts without a saved random reference stay out of this table. Group and
+assistant-notes receipts are skipped, so later audit events still apply.
 Due and prepared are unknown, refused and missed are not dispatched, and no changes
 is recorded without claiming work ran. The indexed read stays bounded on pages and
 rebuilds. This projection does not call maintenance.

@@ -119,6 +119,10 @@ async function boundary() {
     const expected = { action: 'refused', reason: 'qualification_blocked',
       intendedAt: '2026-10-12T02:00:00.000Z', acceptedCapCents: 100 };
     expect(first[0]).toMatchObject(expected);
+    const firstNight = memoryMaintenanceRecordedDataSchema.parse(first[0]);
+    expect(firstNight.scopeKind).toBe('person');
+    expect(firstNight.publicReference).toMatch(/^[a-f0-9]{32}$/u);
+    expect(firstNight.publicReference).not.toBe(firstNight.nightId);
     const laterFact = written('later');
     await append('memory.written', laterFact);
     await scan('2026-10-12T02:01:00Z');
@@ -127,6 +131,8 @@ async function boundary() {
     await scan('2026-10-13T02:00:00Z');
     const nextNight = await records();
     expect(nextNight).toHaveLength(2);
+    const secondNight = memoryMaintenanceRecordedDataSchema.parse(nextNight[1]);
+    expect(secondNight.publicReference).not.toBe(firstNight.publicReference);
 }
 it('crosses the boundary once, keeps dirty inputs and ignores duplicate or changed delivery',
   boundary, 60_000);

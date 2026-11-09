@@ -71,6 +71,8 @@ async function append(subject: string, type: string, data: object, id: string) {
     event.source = scheduler ? 'opencrane-nightly' : 'opencrane-server';
     event.principal = scheduler ? { kind: 'system', id: 'nightly-memory' } :
       { kind: 'system', id: 'opencrane-server' };
+    event.correlation = { request: privateText, permit: privateText,
+      approval: privateText, conversation: privateText, turn: privateText };
   }
   if (type === 'member.joined') event.principal = { kind: 'human', id: subject.slice(7) };
   if (type === 'conversation.child_result_published') {
@@ -582,17 +584,23 @@ it('leaves older delegation formats out of modern history', async () => {
 
 const scopeId = memoryScopeId('test', 'person', 'owner');
 const nightReferenceByDate: Record<string, string> = {
-  '2026-10-15': '7f6a9d0e4c329b81',
-  '2026-10-16': '8c2d4a6e5f109b73',
+  '2026-10-15': '7f6a9d0e4c329b817f6a9d0e4c329b81',
+  '2026-10-16': '8c2d4a6e5f109b738c2d4a6e5f109b73',
 };
+
+function deterministicNightId(memberId: string, date: string): string {
+  const memberScope = memoryScopeId('test', 'person', memberId);
+  const fields = JSON.stringify(['test', memberScope, date]);
+  return createHash('sha256').update(fields).digest('hex');
+}
 
 async function maintenance(id: string, action: 'due' | 'prepared' | 'refused' | 'missed',
   date = '2026-10-15') {
   const reason = action === 'refused' ? 'access_denied' :
     action === 'missed' ? 'window_missed' : null;
   const data = {
-    scopeId, nightId: date === '2026-10-15' ? 'a'.repeat(64) : 'e'.repeat(64),
-    publicReference: nightReferenceByDate[date],
+    scopeId, nightId: deterministicNightId('owner', date),
+    scopeKind: 'person', publicReference: nightReferenceByDate[date],
     batchKey: 'b'.repeat(64), inputRevision: 'c'.repeat(64), date, bindingRevision: 1,
     memberId: 'owner', acceptedCapCents: 100,
     intendedAt: `${date}T02:00:00.000Z`, selectedAt: `${date}T02:01:00.000Z`,
@@ -609,11 +617,14 @@ async function maintenance(id: string, action: 'due' | 'prepared' | 'refused' | 
 }
 
 it('shows one safe nightly row and checks the personal task link', async () => {
-  await maintenance('night-one', 'prepared');
+  const originalNightId = deterministicNightId('owner', '2026-10-15');
+  await maintenance(originalNightId, 'prepared');
   const owner = await list('owner', '?type=memory');
   const admin = await list('admin', '?type=memory');
+  const overview = await app.inject({ url: '/api/org/overview', headers: headers('admin') });
   expect(owner.statusCode).toBe(200);
   expect(admin.statusCode).toBe(200);
+  expect(overview.statusCode).toBe(200);
   expect(owner.body).not.toContain(privateText);
   expect(admin.body).not.toContain(privateText);
   const ownerRow = auditResponseSchema.parse(owner.json()).rows[0]!;
@@ -623,21 +634,26 @@ it('shows one safe nightly row and checks the personal task link', async () => {
   const ownStatus = await app.inject({ url: ownerRow.records[0]!.taskHref!,
     headers: headers('owner') });
   expect(ownStatus.statusCode, ownStatus.body).toBe(200);
+  expect(ownStatus.body).toContain('binding');
   expect(adminRow.records[0]?.taskHref).toBeUndefined();
   expect(admin.body).not.toContain(scopeId);
   expect(admin.body).not.toContain('owner');
-  expect(admin.body).not.toContain('night-one');
-  expect(admin.body).not.toContain('a'.repeat(64));
-  const commandDigest = createHash('sha256').update('night-one').digest('hex');
+  expect(admin.body).not.toContain('d'.repeat(64));
+  const knownMembers = ['owner', 'admin', 'reviewer', 'guest', 'child_reader'];
+  for (const knownMember of knownMembers) {
+    const candidateNightId = deterministicNightId(knownMember, '2026-10-15');
+    expect(admin.body).not.toContain(candidateNightId);
+    expect(overview.body).not.toContain(candidateNightId);
+  }
+  const commandDigest = createHash('sha256').update(originalNightId).digest('hex');
   expect(admin.body).not.toContain(commandDigest);
-  const candidateNight = createHash('sha256').update(JSON.stringify([
-    'test', memoryScopeId('test', 'person', 'owner'), '2026-10-15',
-  ])).digest('hex');
-  expect(admin.body).not.toContain(candidateNight);
   expect(ownerRow.outcome).toBe('unknown');
   expect(ownerRow.records[0]?.amountCents).toBeUndefined();
   expect(ownerRow.records[0]?.maintenanceAllowanceCents).toBe(100);
   expect((await detail('admin', ownerRow.id)).body).not.toContain(scopeId);
+  expect((await detail('admin', originalNightId)).statusCode).toBe(404);
+  expect((await list('admin', `?reference=${originalNightId}`)).json())
+    .toMatchObject({ rows: [] });
   expect((await detail('owner', ownerRow.id)).body).not.toContain(privateText);
   const saved = (await nats.store.readEvent(await nats.store.head())).event;
   await auditTrail.apply(db, saved, await nats.store.head());
@@ -688,13 +704,20 @@ it('skips valid shared memory receipts and continues with later audit history', 
     const sharedScope = memoryScopeId('test', kind, `shared-${kind}`);
     const shared = { ...personal, id: `shared-${kind}`, subject: `scope-${sharedScope}`,
       data: { ...z.record(z.string(), z.unknown()).parse(personal.data),
-        scopeId: sharedScope, memberId: 'owner' } };
+        scopeId: sharedScope, scopeKind: kind, memberId: 'owner' } };
     const parsed = parseEventByType(shared);
     expect(parsed.success).toBe(true);
     const expectedSequence = await nats.store.head(shared.subject);
     expect((await nats.store.append({ event: shared, expectedSequence })).status)
       .toBe('appended');
   }
+  const legacyData = z.record(z.string(), z.unknown()).parse(personal.data);
+  delete legacyData['scopeKind'];
+  delete legacyData['publicReference'];
+  const legacy = { ...personal, id: 'legacy-night', data: legacyData };
+  const legacySequence = await nats.store.head(legacy.subject);
+  expect((await nats.store.append({ event: legacy, expectedSequence: legacySequence })).status)
+    .toBe('appended');
   await append('member-late', 'member.invited', {
     memberId: 'late', role: 'member', invitationId: 'invite-late', invitedBy: 'owner',
     email: 'late@example.test',
@@ -702,26 +725,53 @@ it('skips valid shared memory receipts and continues with later audit history', 
     expiresAt: '2030-01-01T00:00:00Z',
   }, 'invite-late');
   await runner.run(auditTrail);
-  const response = await list('admin');
+  const response = await list('admin', '?type=member');
   expect(response.statusCode).toBe(200);
   expect(response.body).toContain('invite-late');
   expect(response.body).not.toContain('shared-group');
   expect(response.body).not.toContain('shared-assistant_notes');
+  expect(response.body).not.toContain('legacy-night');
   await rebuildAuditProjection(db, nats.store,
     createLogger('shared-maintenance-replay', { level: 'silent' }), { verify: true });
-  expect((await list('admin')).json()).toEqual(response.json());
+  expect((await list('admin', '?type=member')).json()).toEqual(response.json());
+});
+
+it('removes a stale task link when the saved scope is missing', async () => {
+  await maintenance('night-without-scope', 'prepared');
+  const injectedLink = `/api/memory/${scopeId}/maintenance`;
+  await db.query(`UPDATE audit_entries SET metadata =
+    (metadata - 'maintenanceScopeId') || jsonb_build_object('taskHref', $1::text)
+    WHERE silo = 'test' AND event_id = 'night-without-scope'`, [injectedLink]);
+  const owner = auditResponseSchema.parse((await list('owner', '?type=memory')).json());
+  const admin = auditResponseSchema.parse((await list('admin', '?type=memory')).json());
+  expect(owner.rows[0]?.records[0]?.taskHref).toBeUndefined();
+  expect(admin.rows[0]?.records[0]?.taskHref).toBeUndefined();
+  expect(admin.rows[0]?.records[0]?.maintenanceRootId).toBeUndefined();
+  expect(admin.rows[0]?.records[0]?.maintenanceMemberId).toBeUndefined();
 });
 
 it('keeps one row for a pending night and its result, without granting a reader access', async () => {
   await maintenance('night-due', 'due');
   await maintenance('night-refused', 'refused');
+  await maintenance('second-result', 'prepared');
+  await maintenance('late-due', 'due');
   const owner = auditResponseSchema.parse((await list('owner', '?type=memory')).json());
   expect(owner.rows).toHaveLength(1);
   expect(owner.rows[0]?.id).toBe(nightReferenceByDate['2026-10-15']);
   expect(owner.rows[0]?.records[0]?.maintenanceAction).toBe('refused');
   expect(owner.rows[0]?.outcome).toBe('not_dispatched');
+  const querySpy = vi.spyOn(db, 'query');
   const overviewReply = await app.inject({ url: '/api/org/overview', headers: headers('owner') });
   expect(overviewReply.statusCode, overviewReply.body).toBe(200);
+  let memoryQueryFound = false;
+  for (const [sql] of querySpy.mock.calls) {
+    if (typeof sql === 'string' &&
+        sql.includes("event_type = 'memory.maintenance_recorded'")) {
+      expect(sql).toContain('LIMIT 51');
+      memoryQueryFound = true;
+    }
+  }
+  expect(memoryQueryFound).toBe(true);
   const overview = z.object({ rows: z.array(z.object({ source: z.string(), id: z.string() })) })
     .parse(overviewReply.json());
   const memoryTasks = overview.rows.filter(isMemoryTask);

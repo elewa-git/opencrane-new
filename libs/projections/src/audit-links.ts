@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { EventEnvelope } from '@opencrane/events';
 import type { AuditRecord } from '@opencrane/protocol';
@@ -6,6 +7,17 @@ export const auditIdentifier = z.string().regex(/^[\w:.-]{1,300}$/u);
 
 export function safeAuditId(value: unknown): string | undefined {
   return auditIdentifier.safeParse(value).data;
+}
+
+export function visibleEventId(event: EventEnvelope,
+  data: Record<string, unknown>): string {
+  if (event.type === 'memory.maintenance_recorded') return String(data['publicReference']);
+  return event.id;
+}
+
+export function commandRef(event: EventEnvelope): string | undefined {
+  if (event.type === 'memory.maintenance_recorded' || !event.commandId) return undefined;
+  return createHash('sha256').update(event.commandId).digest('hex');
 }
 
 function firstId(...values: unknown[]): string | undefined {

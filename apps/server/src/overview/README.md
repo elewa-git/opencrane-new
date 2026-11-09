@@ -12,6 +12,8 @@ The server handles the request. The overview reads saved results from the same
 read tables used by people, providers, integrations, spending and memory. A provider is
 Ready only when both its connection and model checks passed for its current settings.
 An admitted memory root stays unknown until a saved result exists.
+Memory rows use random references so an admin cannot calculate whose personal
+memory produced a status from the member list.
 
 ```mermaid
 graph LR

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EventEnvelope } from '@opencrane/events';
+import { auditRecordSchema } from '@opencrane/protocol';
 import { memoryScopeId } from '../src/memory-keys.ts';
 import { maintenanceAuditData, maintenanceMetadata,
   maintenanceStatus } from '../src/audit-maintenance.ts';
@@ -9,7 +10,8 @@ const silo = 'test';
 const scopeId = memoryScopeId(silo, 'person', 'owner');
 const digest = 'a'.repeat(64);
 const data = {
-  scopeId, nightId: digest, publicReference: '7f6a9d0e4c329b81',
+  scopeId, scopeKind: 'person', nightId: digest,
+  publicReference: '7f6a9d0e4c329b817f6a9d0e4c329b81',
   batchKey: digest, inputRevision: digest, date: '2026-10-15', bindingRevision: 1,
   memberId: 'owner', acceptedCapCents: 100,
   intendedAt: '2026-10-15T02:00:00.000Z', selectedAt: '2026-10-15T02:01:00.000Z',
@@ -64,7 +66,9 @@ describe('nightly audit guards', () => {
     ['no_changes', 'recorded', 'recorded'],
   ] as const)('maps %s to %s status and %s outcome', (action, status, outcome) => {
     expect(maintenanceStatus({ action })).toBe(status);
-    const record = { maintenanceAction: action } as Parameters<typeof maintenanceOutcome>[0];
+    const record = auditRecordSchema.parse({ eventId: data.publicReference,
+      type: event.type, position: 1, source: 'authoritative', status,
+      maintenanceAction: action });
     expect(maintenanceOutcome(record)).toBe(outcome);
   });
 });
