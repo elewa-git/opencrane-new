@@ -52,6 +52,7 @@ let snapshots: FixtureSnapshot[];
 let reads: number;
 let workFinished: boolean;
 let bindingChecks: number;
+let releases: number;
 let failBindingAt: number | undefined;
 let installedContainers: { serverId: string; computerId: string };
 let swapAfterFirstRead: 'server' | 'computer' | undefined;
@@ -93,6 +94,9 @@ function fakeControl(_binary: unknown, argumentsInput: unknown): string {
   if (operation === 'stage') {
     return JSON.stringify(reads === 0 ? 'ready' : 'workDone');
   }
+  if (operation === 'release') {
+    releases += 1;
+  }
   return 'true';
 }
 
@@ -112,6 +116,7 @@ beforeEach(function prepare(): void {
   reads = 0;
   workFinished = false;
   bindingChecks = 0;
+  releases = 0;
   failBindingAt = undefined;
   installedContainers = { ...containers };
   swapAfterFirstRead = undefined;
@@ -133,6 +138,7 @@ async function refusesChangedInstallation(checkNumber: number): Promise<void> {
   await expect(collectHeldInventory(context, containers, work, verifyBinding))
     .rejects.toThrow('collection_failed');
   expect(bindingChecks).toBe(checkNumber);
+  expect(releases).toBe(checkNumber - 1);
 }
 it.each([1, 2])('refuses an installation replaced at recheck %i',
   refusesChangedInstallation);
