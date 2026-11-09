@@ -179,6 +179,7 @@ async function independentChecks(config: Configuration, attempt: Attempt, reposi
   }
   if (vulnerability.verdict !== 'pass' && vulnerability.verdict !== 'fail') return;
   if (!('receipt' in vulnerability) || !vulnerability.receipt) return;
+  if (vulnerability.receipt['verdict'] !== vulnerability.verdict) return;
   return { signature: passedReceipt(signature.evidence, 'cosign-2.6.1'),
     licence: passedReceipt(licence.evidence, 'syft-1.54.0'),
     vulnerability: vulnerability.receipt };

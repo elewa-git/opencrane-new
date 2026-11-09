@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { once } from 'node:events';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { tokenIssuer } from '@opencrane/auth';
 import { event as fixtureEvent, natsFixture } from '@opencrane/event-store/testing';
 import { handlerSubscriptions, hostedImageCheckedSchema, type EventEnvelope }
   from '@opencrane/events';
@@ -14,6 +17,9 @@ import { createLogger } from '@opencrane/observability';
 import { hostedImageCheckHandler, recoverHostedImageChecks }
   from '../src/hosted-image-check.ts';
 import { trustedHostedImageInputs } from '../src/hosted-image-inputs.ts';
+import { sharedCertificates } from '../../../libs/event-store/test/certificates.ts';
+import { createScannerService } from '../../../infra/clamav/service.mjs';
+import { runAndWriteHostedImageCheck } from '../../../infra/clamav/image-worker.mjs';
 
 const digest = 'a'.repeat(64);
 const serverId = 'saved-image';
@@ -44,9 +50,9 @@ async function cleanup() {
 beforeEach(setup);
 afterEach(cleanup);
 
-async function saveRegistration() {
+async function saveRegistration(imageDigest = digest) {
   const data = { serverId, registeredBy: 'alice', kind: 'hosted',
-    locator: `registry.example/team/image@sha256:${digest}`,
+    locator: `registry.example/team/image@sha256:${imageDigest}`,
     installation: { attemptId: 1, platform: 'linux/amd64',
       upstream: { host: 'api.github.com', port: 443 } } };
   const base = fixtureEvent('registration', `mcp-${serverId}`, 'mcp.server_registered');
@@ -327,15 +333,15 @@ async function grypeReceiptCannotChangeOutcome(caseName: 'unavailable' | 'missin
     reportDigest: digest, reasonCodes: ['vulnerability_refused'] };
   if (caseName === 'unavailable') {
     vulnerability.mockResolvedValue({ verdict: 'unavailable',
-      reasonCode: 'vulnerability_unavailable', receipt } as never);
+      reasonCode: 'vulnerability_unavailable', receipt });
   } else if (caseName === 'missing') {
     vulnerability.mockResolvedValue({ verdict: 'fail',
       reasonCode: 'vulnerability_refused' });
   } else if (caseName === 'false-pass') {
     vulnerability.mockResolvedValue({ verdict: 'fail',
-      reasonCode: 'vulnerability_refused', receipt: { ...receipt, verdict: 'pass' } } as never);
+      reasonCode: 'vulnerability_refused', receipt: { ...receipt, verdict: 'pass' } });
   } else {
-    vulnerability.mockResolvedValue({ verdict: 'pass', receipt } as never);
+    vulnerability.mockResolvedValue({ verdict: 'pass', receipt });
   }
   try {
     const adapter = await trustedHostedImageInputs(fixture.store, silo, registration);
@@ -351,3 +357,178 @@ async function grypeReceiptCannotChangeOutcome(caseName: 'unavailable' | 'missin
 }
 it.each(['unavailable', 'missing', 'false-pass', 'false-fail'] as const)(
   'refuses a Grype %s outcome without matching evidence', grypeReceiptCannotChangeOutcome);
+
+function hash(bytes: Buffer) {
+  const value = createHash('sha256');
+  value.update(bytes);
+  return value.digest('hex');
+}
+
+function imageLayer() {
+  const part = Buffer.from('clean part');
+  const header = Buffer.alloc(512);
+  header.write('part-0', 0, 'utf8');
+  header.write('0000644\0', 100, 'ascii');
+  header.write('0000000\0', 108, 'ascii');
+  header.write('0000000\0', 116, 'ascii');
+  header.write(part.length.toString(8).padStart(11, '0') + '\0', 124, 'ascii');
+  header.write('00000000000\0', 136, 'ascii');
+  header.fill(32, 148, 156);
+  header.write('0', 156, 'ascii');
+  header.write('ustar\0', 257, 'ascii');
+  let checksum = 0;
+  for (const value of header) checksum += value;
+  header.write(checksum.toString(8).padStart(6, '0') + '\0 ', 148, 'ascii');
+  const padding = Buffer.alloc(512 - part.length);
+  return Buffer.concat([header, part, padding, Buffer.alloc(1024)]);
+}
+
+function imageBundle() {
+  const layer = imageLayer();
+  const layerDigest = hash(layer);
+  const config = Buffer.from(JSON.stringify({ os: 'linux', architecture: 'amd64',
+    rootfs: { diff_ids: [`sha256:${layerDigest}`] } }));
+  const mediaType = 'application/vnd.oci.image.layer.v1.tar';
+  const manifest = Buffer.from(JSON.stringify({ schemaVersion: 2,
+    mediaType: 'application/vnd.oci.image.manifest.v1+json',
+    config: { digest: `sha256:${hash(config)}`, size: config.length },
+    layers: [{ digest: `sha256:${layerDigest}`, size: layer.length, mediaType }] }));
+  return { layer, layerDigest, config, manifest, imageDigest: hash(manifest) };
+}
+
+async function realCustody(bundle: ReturnType<typeof imageBundle>) {
+  const directory = await mkdtemp(join(tmpdir(), 'hosted-image-real-'));
+  const imageDirectory = join(directory, silo, bundle.imageDigest);
+  const blobsDirectory = join(imageDirectory, 'blobs');
+  await mkdir(blobsDirectory, { recursive: true });
+  await writeFile(join(imageDirectory, 'manifest.json'), bundle.manifest);
+  await writeFile(join(imageDirectory, 'config.json'), bundle.config);
+  await writeFile(join(blobsDirectory, bundle.layerDigest), bundle.layer);
+  await writeFile(join(imageDirectory, 'signature.json'), '{}');
+  await sharedCertificates(directory);
+  const settings = { silo, bundleDirectory: directory,
+    trust: { version: 1, repository: 'registry.example/team/image',
+      publicKey: 'fixture', revoked: false },
+    scanner: { url: '', caFile: join(directory, 'ca.crt'),
+      privateKeyPath: join(directory, 'server.key'), issuer: 'https://issuer.invalid',
+      imageDigest: `sha256:${'a'.repeat(64)}`,
+      manifestDigest: `sha256:${'b'.repeat(64)}` },
+    tools: { cosign: 'cosign', syft: 'syft', osiPath: 'osi', reviewPath: 'review',
+      binaryPath: 'grype', databasePath: 'database', databaseDigest: digest } };
+  const custodyPath = join(directory, 'custody.json');
+  return { directory, custodyPath, settings };
+}
+
+function scannerFacts(input: { sha256: string; byteCount: number }, updated: string) {
+  const now = Date.now();
+  const checkedAt = new Date(now).toISOString();
+  const expiresAt = new Date(now + 10_000).toISOString();
+  function database(file: string) {
+    return { file, sha256: digest, version: 42, builtAt: updated };
+  }
+  const databases = ['main.cvd', 'daily.cld', 'bytecode.cvd'].map(database);
+  return { ...input, verdict: 'clean', imageDigest: `sha256:${'a'.repeat(64)}`,
+    manifestDigest: `sha256:${'b'.repeat(64)}`, databases,
+    databaseUpdatedAt: updated, checkedAt, expiresAt };
+}
+
+async function queuedRealRefusal(refusedCheck: 'signature' | 'licence' | 'vulnerability') {
+  const bundle = imageBundle();
+  const registration = await saveRegistration(bundle.imageDigest);
+  const custody = await realCustody(bundle);
+  const previous = process.env['HOSTED_IMAGE_CUSTODY_FILE'];
+  const scannerIdentity = { service: 'image-worker' as const, silo };
+  const issuer = await tokenIssuer({ ...custody.settings.scanner, scannerIdentity });
+  const trust = [{ issuer: custody.settings.scanner.issuer, jwks: issuer.jwks,
+    services: { 'image-worker': silo } }];
+  const tls = { key: await readFile(join(custody.directory, 'server.key')),
+    cert: await readFile(join(custody.directory, 'server.crt')) };
+  let scanCalls = 0;
+  const updated = new Date(Date.now() - 1_000).toISOString();
+  function scan(input: { sha256: string; byteCount: number }) {
+    scanCalls += 1;
+    const factsInput = { sha256: input.sha256, byteCount: input.byteCount };
+    return Promise.resolve(scannerFacts(factsInput, updated));
+  }
+  const scanner = { scan, signal: new AbortController().signal,
+    databaseUpdatedAt: updated };
+  const service = createScannerService({ scanner, tls, trust });
+  service.listen(0, '127.0.0.1');
+  await once(service, 'listening');
+  const address = service.address();
+  if (!address || typeof address === 'string') throw new Error('Scanner address unavailable');
+  custody.settings.scanner.url = `https://127.0.0.1:${address.port}/scan/image-part`;
+  await writeFile(custody.custodyPath, JSON.stringify(custody.settings));
+  process.env['HOSTED_IMAGE_CUSTODY_FILE'] = custody.custodyPath;
+  const signature = vi.mocked(verifyHostedImage);
+  const licence = vi.mocked(inspectHostedLicences);
+  const vulnerability = vi.mocked(inspectHostedVulnerabilities);
+  const signatureOutcome = refusedCheck === 'signature'
+    ? { verdict: 'fail' as const, reasonCode: 'signature_refused' }
+    : toolOutcome(false);
+  signature.mockResolvedValue(signatureOutcome);
+  licence.mockResolvedValue(toolOutcome(refusedCheck === 'licence'));
+  const checkedAt = new Date(Date.now() - 1_000).toISOString();
+  const receipt = { verdict: 'fail' as const, checkedAt,
+    expiresAt: new Date(Date.now() + 60_000).toISOString(), engineVersion: '0.121.0',
+    databaseDigest: digest, databaseUpdatedAt: checkedAt, reportDigest: digest,
+    reasonCodes: ['vulnerability_refused'] };
+  vulnerability.mockResolvedValue({ verdict: 'fail',
+    reasonCode: 'vulnerability_refused', receipt });
+  const storage = await databases();
+  function failed() { throw new Error('Fixture database unavailable'); }
+  const db = connectProjectionDb(storage.queue.options.connectionString!, failed);
+  const logger = createLogger('image-refusal-test', { level: 'silent' });
+  async function readInputs(event: EventEnvelope) {
+    return trustedHostedImageInputs(fixture.store, silo, event);
+  }
+  const handler = hostedImageCheckHandler(fixture.store, silo,
+    runAndWriteHostedImageCheck, readInputs);
+  const runtime = new HandlerRuntime({ db: db.db, logger, silo, handlers: [handler] });
+  await runtime.start();
+  try {
+    expect(await recoverHostedImageChecks(runtime, fixture.reader, fixture.store)).toBe(1);
+    await runtime.work(1);
+    async function saved() {
+      const admission = await readHostedAdmission(fixture.store, silo, serverId);
+      return admission?.status === 'rejected';
+    }
+    await until(saved);
+    const admission = await readHostedAdmission(fixture.store, silo, serverId);
+    expect(admission?.status).toBe('rejected');
+    expect(admission?.attemptId).toBe(1);
+    expect(admission?.checks?.[refusedCheck].verdict).toBe('fail');
+    if (refusedCheck === 'signature') {
+      expect(admission?.checks?.licence).toEqual({ verdict: 'not_run' });
+      expect(admission?.checks?.vulnerability).toEqual({ verdict: 'not_run' });
+    }
+    if (refusedCheck === 'licence') {
+      expect(admission?.checks?.vulnerability).toEqual({ verdict: 'not_run' });
+    }
+    const events = [];
+    for await (const row of fixture.store.readStream(`mcp-${serverId}`, 1,
+      performance.now() + 10_000)) events.push(row.event);
+    expect(events.map(event => event.type)).toEqual([
+      'mcp.server_registered', 'mcp.image_scan_claimed', 'mcp.image_checked',
+    ]);
+    await handler.handle(registration, transaction);
+    expect(scanCalls).toBe(1);
+    expect(await readHostedAdmission(fixture.store, silo, serverId)).toEqual(admission);
+    const afterRedelivery = [];
+    for await (const row of fixture.store.readStream(`mcp-${serverId}`, 1,
+      performance.now() + 10_000)) afterRedelivery.push(row.event.type);
+    expect(afterRedelivery).toEqual(events.map(event => event.type));
+  } finally {
+    await runtime.stop();
+    await db.close();
+    await storage.close();
+    service.closeAllConnections();
+    service.close();
+    await once(service, 'close');
+    await rm(custody.directory, { recursive: true, force: true });
+    if (previous) process.env['HOSTED_IMAGE_CUSTODY_FILE'] = previous;
+    else delete process.env['HOSTED_IMAGE_CUSTODY_FILE'];
+  }
+}
+it.each(['signature', 'licence', 'vulnerability'] as const)(
+  'saves one real queued %s refusal and returns it on redelivery', queuedRealRefusal);
