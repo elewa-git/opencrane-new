@@ -7194,6 +7194,11 @@ company send or public execution switch.
 Before its internal socket send, the sender saves `routine.run_send_authorised` on
 the routine stream. The append checks current routine state and company facts inside
 the event store's conditional publish. It saves the OAuth configuration digest and
+the authorised Kubernetes credential resource version, then reads custody again
+before releasing the turn. A missing or changed credential records a delivery Stop
+with reason `credential_changed` and the sender does not release the turn. It cannot
+call a company tool because company execution remains disabled. The authorisation
+check still reads custody before saving the event. It also
 re-reads the configuration inside that same conditional append. A changed digest,
 conflict or uncertain result prevents a
 send. The record is an authorisation point, not proof of delivery. Production
@@ -7312,7 +7317,9 @@ The custody-backed profile reader includes the Kubernetes credential resource ve
 in its captured evidence. The conditional append reads custody again after the stream
 and OAuth checks and requires the same evidence. Deletion or a changed version at that
 read refuses the send authorisation. The preflight test changes custody after `recover`
-returns and checks that the append saves nothing.
+returns and checks that the append saves nothing. Another test changes custody after
+the final read and before publication. The saved authorisation alone cannot permit use;
+the sender's later read refuses the changed version.
 
 The composition fixture holds its monotonic clock during the unrelated-thread and late
 worker-loss injections and around saved-stage recovery sends. Scheduling delays cannot

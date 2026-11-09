@@ -932,7 +932,8 @@ record's routine reference, while the allocation contains the actual budget root
 A saved `senderAttemptId` can recover only the same receipt. No reaction or replay sends
 work. See the [catalogue](../../docs/architecture/events.md#routines-and-delegation).
 `routine.run_send_authorised` uses the same strict run and admission fields, plus the
-digest of the checked OAuth configuration. Its fold
+digest of the checked OAuth configuration and the authorised Kubernetes credential
+resource version. Its fold
 requires the active run, matching activation, active status and no saved Stop. The
 record permits one live sender attempt but never proves that bytes reached the computer.
 No handler subscribes to it, and replay never sends the turn.
@@ -1024,7 +1025,9 @@ the saved record and starts no call or budget charge.
 
 `routine.run_stop_requested` accepts source `delivery` only with the server system
 actor and a strict `cause: { eventId, position }`. The writer uses reason
-`start_unconfirmed` and the exact activation admission as cause. The Stop reader
+`start_unconfirmed` for uncertain delivery or `credential_changed` when custody no
+longer matches the send authorisation. It names the exact activation admission as
+cause. The Stop reader
 checks that earlier admission against the occupied occurrence and sender attempt.
 This adds no event type or effect subscription. The existing fold keeps the run
 occupied and sets stopRequested; it does not invent a finished outcome.

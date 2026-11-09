@@ -104,7 +104,7 @@ async function fixture(shouldRecordConfiguration = true, useSavedVerified = fals
     ownerKind: 'company', connectionId: 'installed', profileRevision,
     generation: 1, accountDigest,
     configurationDigest: oauthConfigurationDigest(selected.configuration),
-    accountId, scopes: ['openid', 'read'], expiresAt: Date.now() + 120_000 };
+    credentialResourceVersion: '1', accountId, scopes: ['openid', 'read'], expiresAt: Date.now() + 120_000 };
   function readProfile(_rows: StoredEvent[]) {
     return evidence;
   }
@@ -616,6 +616,40 @@ async function custodyChangedAfterRecover(kind: 'deleted' | 'changed') {
 it.each(['deleted', 'changed'] as const)(
   'refuses a credential %s after recover returns and before send authorisation',
   custodyChangedAfterRecover);
+
+async function custodyChangedBeforePublication(kind: 'deleted' | 'changed') {
+  const current = await fixture(true, true);
+  let result: Awaited<ReturnType<Parameters<typeof readCurrentCompanyProfile>[0]['recover']>> = {
+    status: 'recovered', identity: {
+      reference: 'synthetic', uid: 'uid', resourceVersion: '1' },
+  };
+  function recover() {
+    return Promise.resolve(result);
+  }
+  const preflight = routineCompanyPreflightFromCustody(nats.store, binding, 'test',
+    current.loadConfiguration, { recover });
+  const company = await preflight({ ...modernRoutineExamples.due,
+    definition: current.definition }, 1);
+  const event = independentWrite(current);
+  async function checkThenChange() {
+    await company.confirmCurrent();
+    if (kind === 'deleted') {
+      result = { status: 'not_found' };
+    } else {
+      result = { status: 'recovered', identity: {
+        reference: 'synthetic', uid: 'uid', resourceVersion: '2' } };
+    }
+  }
+  const command = { event, expectedSequence: 0, checkAccess: checkThenChange };
+  const appended = await nats.store.append(command);
+  expect(appended.status).toBe('appended');
+  expect(company.credentialResourceVersion).toBe('1');
+  await expect(company.confirmCredentialUse(company.credentialResourceVersion))
+    .rejects.toThrow('Routine company unavailable');
+}
+it.each(['deleted', 'changed'] as const)(
+  'refuses credential use after a %s between final read and publication',
+  custodyChangedBeforePublication);
 
 async function staleGrant() {
   const current = await fixture();

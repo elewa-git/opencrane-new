@@ -224,6 +224,9 @@ beforeEach(setup);
 afterEach(cleanup);
 
 type Options = Parameters<typeof createRoutineComposition>[0];
+function syntheticConfirmCredentialUse(_authorisedVersion: string) {
+  return Promise.resolve();
+}
 function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
   computerGeneration: number) {
   function confirmCurrent() {
@@ -319,7 +322,8 @@ async function changedCompanyDuringPreparation(kind: 'profile' | 'opt-in') {
       return Promise.resolve();
     }
     const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent };
+      computerGeneration, configurationDigest: 'a'.repeat(64), credentialResourceVersion: '1',
+      confirmCurrent, confirmCredentialUse: syntheticConfirmCredentialUse };
     return Promise.resolve(company);
   }
   const composition = compose({ enabled: true, companyPreflight });
@@ -360,7 +364,8 @@ async function refusesCompanyChangeAfterAllowance(kind: 'profile' | 'opt-in') {
       return Promise.resolve();
     }
     const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent };
+      computerGeneration, configurationDigest: 'a'.repeat(64), credentialResourceVersion: '1',
+      confirmCurrent, confirmCredentialUse: syntheticConfirmCredentialUse };
     return Promise.resolve(company);
   }
   const composition = compose({ enabled: true, companyPreflight });
@@ -409,7 +414,8 @@ async function refusesToolPolicyChangeDuringAdmission() {
       if (position !== initialPosition) throw new Error('Tool policy changed');
     }
     return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent });
+      computerGeneration, configurationDigest: 'a'.repeat(64), credentialResourceVersion: '1',
+      confirmCurrent, confirmCredentialUse: syntheticConfirmCredentialUse });
   }
   const composition = compose({ enabled: true, companyPreflight });
   expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
@@ -450,7 +456,8 @@ async function refusesCompanyChangeInsideSendAuthorisation() {
       changed = true;
     }
     return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent });
+      computerGeneration, configurationDigest: 'a'.repeat(64), credentialResourceVersion: '1',
+      confirmCurrent, confirmCredentialUse: syntheticConfirmCredentialUse });
   }
   try {
     const composition = compose({ enabled: true, companyPreflight });
@@ -494,7 +501,8 @@ async function refusesUnfinishedOAuthEditInsideSendAuthorisation() {
       editStarted = true;
     }
     return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent });
+      computerGeneration, configurationDigest: 'a'.repeat(64), credentialResourceVersion: '1',
+      confirmCurrent, confirmCredentialUse: syntheticConfirmCredentialUse });
   }
   try {
     const composition = compose({ enabled: true, companyPreflight });
@@ -521,12 +529,14 @@ async function refusesCredentialChangeAfterFinalRead(kind: 'deleted' | 'changed'
   let toolCalls = 0;
   function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
     computerGeneration: number) {
-    async function confirmCurrent() {
-      if (resourceVersion !== '1') throw new Error('Credential changed');
+    function confirmCurrent() {
+      // Keep the final authorisation read at the old version in this schedule.
+      return Promise.resolve();
     }
-    async function confirmCredentialUse(authorisedVersion: string) {
+    function confirmCredentialUse(authorisedVersion: string) {
       if (resourceVersion !== authorisedVersion) throw new Error('Credential changed');
       toolCalls += 1;
+      return Promise.resolve();
     }
     return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
       computerGeneration, configurationDigest: 'a'.repeat(64),
@@ -535,7 +545,8 @@ async function refusesCredentialChangeAfterFinalRead(kind: 'deleted' | 'changed'
   const append = nats.store.append.bind(nats.store);
   async function changeBetweenReadAndPublication(...supplied: Parameters<typeof append>) {
     const command = supplied[0];
-    if (command.event.type !== 'routine.run_send_authorised' || !command.checkAccess) {
+    const proposed = proposedEvent.parse(command.event);
+    if (proposed.type !== 'routine.run_send_authorised' || !command.checkAccess) {
       return append(...supplied);
     }
     const checkAccess = command.checkAccess;

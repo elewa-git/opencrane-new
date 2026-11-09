@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
+import { z } from 'zod';
 import { snapshotPositions, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { grantGivenDataSchema, grantRevokedDataSchema,
@@ -211,6 +212,10 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     }
     const facts = await companySelectionFacts(store, silo, selected.choice,
       loadConfiguration, checkedReader);
+    const credential = z.object({ credentialResourceVersion: z.string().min(1) })
+      .safeParse(profileEvidence);
+    if (!credential.success) refuse();
+    const credentialResourceVersion = credential.data.credentialResourceVersion;
     if (!savedProfile || facts.accountId !== definition.companyAccountId ||
         facts.binding.accountDigest !== selected.choice.accountDigest ||
         facts.binding.generation !== savedProfile.activation.generation ||
@@ -248,9 +253,20 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
         refuse();
       }
     }
+    async function confirmCredentialUse(authorisedVersion: string) {
+      try {
+        if (!profileRows || authorisedVersion !== credentialResourceVersion) refuse();
+        // Check custody again when the sender is ready to use the credential.
+        const current = await readProfile(profileRows);
+        if (!isDeepStrictEqual(current, profileEvidence)) refuse();
+      } catch {
+        refuse();
+      }
+    }
     await confirmCurrent();
     return { occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, configurationDigest: facts.oauth.configurationDigest, confirmCurrent };
+      computerGeneration, configurationDigest: facts.oauth.configurationDigest,
+      credentialResourceVersion, confirmCurrent, confirmCredentialUse };
   } catch {
     refuse();
   }
