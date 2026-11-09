@@ -16,7 +16,8 @@ const slot = z.object({ localDate: z.iso.date(), localTime, zone, at: instant,
 const reference = z.object({ eventId: id, position: revision }).strict();
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const companyTool = z.object({ name: id, revision: digest, schemaDigest: digest,
-  destinationDigest: digest, policyRevision: revision, costCents: z.literal(0) }).strict();
+  destinationDigest: digest, policyRevision: revision,
+  costCents: z.int().nonnegative().max(0) }).strict();
 
 export const routineRecordIdentitySchema = z.object({ routineId: z.string().min(1),
   version: z.literal(1).optional() });
