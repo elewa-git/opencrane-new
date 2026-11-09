@@ -23,7 +23,7 @@ flowchart LR
   server["apps/server<br/>memory preparation"] -->|reads and rechecks results| collector
   collector -.->|checks memory, Stop and reply loss| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
-  collector -->|measures, starts checks and checks refusal format| docker["Docker<br/>running image and host"]
+  collector -->|measures, joins process records and starts checks| docker["Docker<br/>running image and host"]
   docker -->|checks services, Codex and canary helper| deployment["deployment<br/>services and journey runner"]
   collector -->|checks live bridge, supervisor and held proxy calls| computer["computer container<br/>root and native launch records"]
 ```
@@ -47,6 +47,8 @@ flowchart LR
 - Check two private Codex processes from the deployment image without a model call.
 - Bind the canary journey helper to the supervisor launch record and check its own
   swap, core dump and dumpability controls before and after work.
+- Require one matching set of live process records before a journey and check the
+  same set again before saving a result. A missing or changed group stops collection.
 - Hold one private Codex turn while checking its wrapper and native child against
   protected launch records and live kernel settings.
 - Save its own result in a protected file and recheck the deployment whenever it is used.
@@ -88,8 +90,9 @@ PARTIAL for private turns. Recall checks require the same native observations an
 the matching silo before and after the work. The shipped recall journey still returns NOT RUN: empty
 threads cannot prove that an answer used a stored fact. Missing native files refuse
 both checks. Cleanup checks process start times before signalling and keeps its first
-result, so another cleanup call leaves reused process IDs alone. Memory tool calls,
-the joined process inventory and live storage checks are still pending.
+result, so another cleanup call leaves reused process IDs alone. Memory tool calls
+and live storage checks are still pending. The joined check currently stops the
+journey because the held proxy and native processes do not yet supply records.
 The server package image does not contain Codex or its launch helpers, so its native
 check refuses. Tests put the qualification scripts into a disposable copy of the
 packaged computer image. They do not change the deployment image.

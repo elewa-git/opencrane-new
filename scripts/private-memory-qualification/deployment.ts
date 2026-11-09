@@ -9,6 +9,9 @@ import { proveComputerSupervisor } from './supervisor-proof.ts';
 import {
   isPrivateProcessFailure, isProtectionFailure, protectionMessages, type ProtectionFailure,
 } from './protection-failure.ts';
+import {
+  joinInventory, readCurrentInventory, type InventoryCode, type InventoryContext,
+} from './joined-inventory.ts';
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const containerSchema = z.object({
@@ -69,7 +72,7 @@ try {
 type Binding = z.infer<typeof bindingSchema>;
 type Status = 'PASS' | 'PARTIAL' | 'NOT RUN';
 type Result = { result: 'FAIL'; reason: 'collection_failed' } |
-  (z.infer<typeof hostRefusalSchema> & { message: string }) | Binding & {
+  (z.infer<typeof hostRefusalSchema> & { message: string; group?: InventoryCode }) | Binding & {
   result: 'PASS' | 'PARTIAL'; checks: Record<string, Status>; qualifications: Record<string, Status>;
   receiptDigests: string[];
 };
@@ -223,8 +226,8 @@ async function assertInstallation(
   }
 }
 
-async function runCheck(containerId: string, binding: Binding, name: string) {
-  const challengeId = randomUUID();
+async function runCheck(containerId: string, binding: Binding, name: string,
+  challengeId: string) {
   const request = { ...binding, name, challengeId };
   const input = JSON.stringify(request);
   const startedAt = Date.now();
@@ -266,9 +269,12 @@ function deploymentTarget() {
   }
 }
 
-function saveProcessRefusal(failure: ProtectionFailure): Result {
+function saveProcessRefusal(failure: ProtectionFailure, group?: InventoryCode): Result {
   const refusal: Result = { result: 'FAIL', reason: 'host_refused',
     protectionFailure: failure, complete: false, message: protectionMessages[failure] };
+  if (group !== undefined) {
+    refusal.group = group;
+  }
   saveResult(refusal);
   return refusal;
 }
@@ -347,9 +353,29 @@ export async function collectDeployment(...unexpectedArguments: unknown[]): Prom
     let status: 'PASS' | 'PARTIAL' = 'PASS';
     for (const name of [...checks, ...qualifications]) {
       await assertInstallation(containerId, before, streamCreated);
+      const challengeId = randomUUID();
+      const inventoryContext: InventoryContext = {
+        serverInstallationId: installationId,
+        computerInstallationId: computerAtStart,
+        serverImageDigest: binding.imageDigest,
+        computerImageDigest: containerIdentity(computerContainerId).Image,
+        challengeId,
+        generationId: computerAtStart,
+        helperIds: [challengeId],
+      };
+      const initialInventory = await readCurrentInventory(inventoryContext);
+      const initialJoin = joinInventory(inventoryContext, initialInventory, initialInventory);
+      if (!initialJoin.ok) {
+        return saveProcessRefusal('private_process_missing', initialJoin.group);
+      }
+      await assertInstallation(containerId, before, streamCreated);
+      assertSame(target, deploymentTarget());
+      if (!computerStillInstalled(computerContainerId, computerAtStart)) {
+        return saveProcessRefusal('private_process_identity_changed');
+      }
       let receipt: Awaited<ReturnType<typeof runCheck>> | undefined;
       try {
-        receipt = await runCheck(containerId, binding, name);
+        receipt = await runCheck(containerId, binding, name, challengeId);
       } catch {
         // Recheck the supervisor even if private work lost its reply.
       }
@@ -362,6 +388,11 @@ export async function collectDeployment(...unexpectedArguments: unknown[]): Prom
       }
       if (supervisorAfterWork !== true) {
         return saveProcessRefusal(supervisorAfterWork);
+      }
+      const finalInventory = await readCurrentInventory(inventoryContext);
+      const finalJoin = joinInventory(inventoryContext, initialInventory, finalInventory);
+      if (!finalJoin.ok) {
+        return saveProcessRefusal('private_process_missing', finalJoin.group);
       }
       if (!receipt) {
         throw new Error('journey_failed');

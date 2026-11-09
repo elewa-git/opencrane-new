@@ -9,8 +9,8 @@ const installation = `sha256:${'c'.repeat(64)}`;
 const otherInstallation = `sha256:${'d'.repeat(64)}`;
 const challenge = '11111111-1111-4111-8111-111111111111';
 const otherChallenge = '22222222-2222-4222-8222-222222222222';
-const generation = '33333333-3333-4333-8333-333333333333';
-const otherGeneration = '44444444-4444-4444-8444-444444444444';
+const generation = `sha256:${'e'.repeat(64)}`;
+const otherGeneration = `sha256:${'f'.repeat(64)}`;
 
 const context: InventoryContext = {
   serverInstallationId: installation,
@@ -48,8 +48,8 @@ function completeInventory(): ProtectionRecord[] {
 }
 
 function replace(records: ProtectionRecord[], group: ProtectionRecord['group'],
-  change: Partial<ProtectionRecord>): ProtectionRecord[] {
-  const replacement = records.map(function changeGroup(item): ProtectionRecord {
+  change: Record<string, unknown>): Record<string, unknown>[] {
+  const replacement = records.map(function changeGroup(item): Record<string, unknown> {
     if (item.group === group) {
       return { ...item, ...change };
     }
@@ -108,7 +108,7 @@ function refusesLostHelper(): void {
 }
 it('refuses a helper lost after the journey', refusesLostHelper);
 
-function refusesFinalFault(fault: Partial<ProtectionRecord>): void {
+function refusesFinalFault(fault: Record<string, unknown>): void {
   const first = completeInventory();
   const final = replace(first, 'bridge', fault);
   expect(joinInventory(context, first, final)).toEqual({ ok: false, group: 'bridge' });

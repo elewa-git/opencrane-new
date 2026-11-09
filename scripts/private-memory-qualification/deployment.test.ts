@@ -43,7 +43,12 @@ function matchingInventory(context: InventoryContext): ProtectionRecord[] {
       context.computerImageDigest;
     const helperIds = group === 'canaryHelper' ? context.helperIds : [undefined];
     for (const helperId of helperIds) {
-      records.push({ ...context, group, helperId, imageDigest,
+      records.push({ group, helperId, imageDigest,
+        serverInstallationId: context.serverInstallationId,
+        computerInstallationId: context.computerInstallationId,
+        serverImageDigest: context.serverImageDigest,
+        computerImageDigest: context.computerImageDigest,
+        challengeId: context.challengeId, generationId: context.generationId,
         pid: 100 + index, startTime: String(1000 + index), safe: true });
     }
   }
@@ -157,9 +162,9 @@ it('does not start a journey when the joined inventory lacks a group',
   refusesMissingJoinedGroup);
 
 async function refusesFinalJoinedFault(): Promise<void> {
-  function unsafeBridge(context: InventoryContext): ProtectionRecord[] {
+  function unsafeBridge(context: InventoryContext): Record<string, unknown>[] {
     const records = matchingInventory(context);
-    return records.map(function changeBridge(record): ProtectionRecord {
+    return records.map(function changeBridge(record): Record<string, unknown> {
       if (record.group === 'bridge') {
         return { ...record, safe: false };
       }
@@ -173,6 +178,8 @@ async function refusesFinalJoinedFault(): Promise<void> {
     complete: false, group: 'bridge' });
   expect(responses).toHaveLength(1);
   expect(readCurrentInventory).toHaveBeenCalledTimes(2);
+  expect(writeFileSync).toHaveBeenLastCalledWith(expect.any(String), JSON.stringify(result),
+    { flag: 'wx', mode: 0o600 });
 }
 it('does not save a PASS receipt after a final joined protection failure',
   refusesFinalJoinedFault);
