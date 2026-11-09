@@ -297,6 +297,27 @@ function cleanup(): void {
 beforeAll(prepare, 970_000);
 afterAll(cleanup, 30_000);
 
+function installedProbe(image: string, group: string, path: string): void {
+  const containerName = startContainer('safe', image);
+  try {
+    const output = docker(['exec', containerName, '/usr/local/bin/node',
+      '--experimental-strip-types', path, group,
+      '11111111-1111-4111-8111-111111111111']);
+    expect(output).toBe('null');
+  } finally {
+    docker(['rm', '-f', '-v', containerName]);
+  }
+}
+
+function runsInstalledInventoryProbes(): void {
+  installedProbe(computerTag, 'nativeWrapper',
+    '/scripts/private-memory-qualification/live-inventory-probe.ts');
+  installedProbe(packageTag, 'canaryHelper',
+    '/app/scripts/private-memory-qualification/live-inventory-probe.ts');
+}
+it('runs the native and helper probes from their pinned image paths',
+  runsInstalledInventoryProbes, 60_000);
+
 function startContainer(caseName: string, image: string): string {
   const containerName = `private-native-${randomUUID()}`;
   const coreLimit = caseName === 'core allowance' ? 'core=1:1' : 'core=0:0';

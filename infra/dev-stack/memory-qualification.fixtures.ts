@@ -18,6 +18,7 @@ vi.mock('../../scripts/private-memory-qualification/bridge-proof.ts', { spy: tru
 vi.mock('../../scripts/private-memory-qualification/supervisor-proof.ts', { spy: true });
 vi.mock('../../scripts/private-memory-qualification/canary-helper-proof.ts', { spy: true });
 vi.mock('../../scripts/private-memory-qualification/joined-inventory.ts', { spy: true });
+vi.mock('../../scripts/private-memory-qualification/held-inventory.ts', { spy: true });
 const root = new URL('../../', import.meta.url).pathname.slice(0, -1);
 const directory = `${homedir()}/.config/opencrane/dev-stack-1`;
 const targetPath = '/etc/opencrane/private-memory-qualification.json';
@@ -64,15 +65,18 @@ function matchingInventory(context: InventoryContext): InventorySnapshot {
       const pid = 100 + index;
       const startTime = String(1000 + index);
       const pidNamespace = location === 'server' ? 'pid:[4026531836]' : 'pid:[4026531837]';
+      const executable = '/usr/local/bin/node';
+      const uid = 1000;
+      const cgroup = '0::/test\n';
       records.push({ group, helperId, imageDigest: image,
         serverInstallationId: context.serverInstallationId,
         computerInstallationId: context.computerInstallationId,
         serverImageDigest: context.serverImageDigest,
         computerImageDigest: context.computerImageDigest,
         challengeId: context.challengeId, generationId: context.generationId,
-        pid, startTime, pidNamespace, dumpable: false, safe: true });
+        pid, startTime, pidNamespace, executable, uid, cgroup, dumpable: false, safe: true });
       launches.push({ group, helperId, location, pid, startTime, pidNamespace,
-        dumpable: false });
+        executable, uid, cgroup, dumpable: false });
     }
   }
   return { records, launches };
@@ -243,6 +247,13 @@ async function launch(signal?: AbortSignal): Promise<void> {
   vi.mocked(bridgeProof.proveComputerBridge).mockResolvedValue(true);
   vi.mocked(supervisorProof.proveComputerSupervisor).mockResolvedValue(true);
   vi.mocked(joinedInventory.readCurrentInventory).mockImplementation(matchingInventory);
+  const heldInventory = await import('../../scripts/private-memory-qualification/held-inventory.ts');
+  vi.mocked(heldInventory.collectHeldInventory).mockImplementation(
+    async function fixtureHeld(_context, _containers, runWork, verifyBinding) {
+      await verifyBinding();
+      return runWork(new AbortController().signal);
+    },
+  );
   const launcher = await import('./memory-qualification.ts');
   await launcher.prepareMemoryQualification(signal);
 }

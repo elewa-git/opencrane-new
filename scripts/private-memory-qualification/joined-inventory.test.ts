@@ -31,7 +31,8 @@ function record(group: ProtectionRecord['group'], index: number,
     computerInstallationId: otherInstallation, serverImageDigest: image,
     computerImageDigest: otherImage, imageDigest, challengeId: challenge,
     generationId: generation, pid: 100 + index, startTime: String(1000 + index),
-    pidNamespace: 'pid:[4026531836]', dumpable: false, safe: true,
+    pidNamespace: 'pid:[4026531836]', executable: '/usr/local/bin/node',
+    uid: 1000, cgroup: '0::/test\n', dumpable: false, safe: true,
   };
 }
 
@@ -40,6 +41,7 @@ function measuredLaunch(item: ProtectionRecord): TrustedLaunch {
     'server' : 'computer';
   return { group: item.group, helperId: item.helperId, location,
     pid: item.pid, startTime: item.startTime, pidNamespace: item.pidNamespace,
+    executable: item.executable, uid: item.uid, cgroup: item.cgroup,
     dumpable: false };
 }
 
@@ -193,6 +195,7 @@ function refusesRecordWithoutMeasuredLaunch(): void {
       'server' : 'computer';
     return { group: item.group, helperId: item.helperId, location,
       pid: item.pid, startTime: item.startTime, pidNamespace: 'pid:[4026531836]',
+      executable: item.executable, uid: item.uid, cgroup: item.cgroup,
       dumpable: false };
   });
   const observedRecords = records.map(function observedRecord(item): Record<string, unknown> {
@@ -300,6 +303,20 @@ function refusesLostFinalGroup(): void {
 }
 it('refuses a missing non-helper group at the final read', refusesLostFinalGroup);
 
+function refusesChangedExecutable(): void {
+  const first = completeInventory();
+  const changed = first.map(function replaceExecutable(item): ProtectionRecord {
+    if (item.group === 'nativeWrapper') {
+      return { ...item, executable: '/usr/bin/other' };
+    }
+    return item;
+  });
+  expect(joinObservedInventory(context, snapshotFromRecords(first),
+    snapshotFromRecords(changed))).toEqual({ ok: false, group: 'nativeWrapper' });
+}
+it('refuses an exec between reads with the same PID and start time',
+  refusesChangedExecutable);
+
 function refusesChangedLaunchObservation(change: Record<string, unknown>): void {
   const records = completeInventory();
   const launches = records.map(measuredLaunch);
@@ -318,10 +335,32 @@ it.each([
   { pid: 999 },
   { startTime: '9999' },
   { pidNamespace: 'pid:[4026531838]' },
+  { executable: '/usr/bin/other' },
+  { uid: 2000 },
+  { cgroup: '0::/other\n' },
   { dumpable: true },
   { location: 'server' },
 ])('refuses a record that differs from its measured launch %j',
   refusesChangedLaunchObservation);
+
+function refusesChangedFinalIdentity(field: 'uid' | 'cgroup', value: number | string): void {
+  const first = snapshotFromRecords(completeInventory());
+  const changedRecords = completeInventory().map(function changeRecord(item): ProtectionRecord {
+    if (item.group === 'nativeChild') {
+      return { ...item, [field]: value };
+    }
+    return item;
+  });
+  const final = snapshotFromRecords(changedRecords);
+  expect(joinObservedInventory(context, first, final)).toEqual({
+    ok: false, group: 'nativeChild',
+  });
+}
+it.each([
+  ['uid', 2000],
+  ['cgroup', '0::/other\n'],
+] as const)('refuses changed final process %s even when launch agrees',
+  refusesChangedFinalIdentity);
 
 function realReaderRefuses(): void {
   const invalid = { serverId: 'untrusted', computerId: 'untrusted' };
@@ -417,6 +456,7 @@ function refusesUnrequestedHelperLaunch(): void {
   const extraLaunch: TrustedLaunch = {
     group: 'canaryHelper', helperId: '33333333-3333-4333-8333-333333333333',
     location: 'server', pid: 999, startTime: '9999', pidNamespace: 'pid:[4026531836]',
+    executable: '/usr/local/bin/node', uid: 1000, cgroup: '0::/test\n',
     dumpable: false,
   };
   const changed = { ...snapshot, launches: [...snapshot.launches, extraLaunch] };

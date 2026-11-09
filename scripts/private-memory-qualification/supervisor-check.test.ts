@@ -48,6 +48,24 @@ function provesRootSupervisor(): void {
 it('checks the launched root supervisor before and after its live protection reply',
   provesRootSupervisor);
 
+function deliversMeasuredSupervisor(): void {
+  let protectedIdentity: ProcessIdentity | undefined;
+  let deliveredIdentity: ProcessIdentity | undefined;
+  function measured(_role: string, identity: ProcessIdentity): true {
+    protectedIdentity = identity;
+    return true;
+  }
+  function delivered(identity: ProcessIdentity): void {
+    deliveredIdentity = identity;
+  }
+  vi.mocked(checkLiveService).mockImplementation(measured);
+  expect(checkSupervisor(delivered).result).toBe(true);
+  expect(protectedIdentity).toEqual(supervisor);
+  expect(deliveredIdentity).toEqual(protectedIdentity);
+}
+it('delivers the supervisor identity measured by its protection check',
+  deliversMeasuredSupervisor);
+
 function refusesMissingSupervisor(): void {
   vi.mocked(supervisorIdentity).mockReturnValue(undefined);
   expect(checkSupervisor()).toEqual({ result: 'private_process_missing' });
