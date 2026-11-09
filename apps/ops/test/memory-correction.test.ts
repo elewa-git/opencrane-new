@@ -27,11 +27,13 @@ beforeEach(async function setup() {
   nats = await natsFixture();
   storage = await database('pg');
   directory = await mkdtemp('/tmp/memory-correction-');
+  vi.stubEnv('MEMORY_KEY_DIRECTORY', directory);
   keys = memoryKeys(directory);
   runner = new ProjectionRunner(storage.db, nats.reader, logger);
   await runner.initialise(memoryProjection(keys));
 });
 afterEach(async function cleanup() {
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   await storage?.close();
   await nats?.close();

@@ -63,7 +63,17 @@ export async function reactionWorker(pauseHandlers = false) {
     return new Date(clock.now());
   }
   async function timedScan(...args: Parameters<typeof scanNightlyMemory>) {
-    await scanNightlyMemory(args[0], args[1], args[2], args[3], selectionTime);
+    const savedDirectory = process.env['MEMORY_KEY_DIRECTORY'];
+    process.env['MEMORY_KEY_DIRECTORY'] = '/synthetic-memory';
+    try {
+      await scanNightlyMemory(args[0], args[1], args[2], args[3], selectionTime);
+    } finally {
+      if (savedDirectory === undefined) {
+        delete process.env['MEMORY_KEY_DIRECTORY'];
+      } else {
+        process.env['MEMORY_KEY_DIRECTORY'] = savedDirectory;
+      }
+    }
   }
   // Replace the wall clock only; keep the real queue, callback and failed-trigger recovery.
   class Runtime extends handlers.HandlerRuntime {
