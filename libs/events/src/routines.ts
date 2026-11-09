@@ -21,7 +21,8 @@ export const routineRecordIdentitySchema = z.object({ routineId: z.string().min(
 export const routineDefinitionSchema = z.object({
   name: z.string().min(1).max(200), ownerId: id, ownerAdmissionId: id,
   assistantId: id, assistantKind: z.literal('team'), payingGroupId: id,
-  assistantPayingGroupId: id, connectionId: id, connectionKind: z.literal('company'),
+  assistantPayingGroupId: id, serverId: id.optional(), connectionId: id,
+  connectionKind: z.literal('company'),
   profileId: id, profileRevision: revision, connectionRevision: revision,
   companyAccountId: id, scopes: z.array(id).max(32),
   instructions: z.object({ ciphertext: ciphertextSchema, keyId: keyIdSchema }).strict(),

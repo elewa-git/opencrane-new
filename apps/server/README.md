@@ -75,6 +75,10 @@ An internal preparation check can recover the original routine admission and sen
 identifiers after checking current access. It saves nothing. Delivery remains unknown;
 the check cannot wake a computer or authorise another send.
 A separate internal sender can hand a newly admitted routine to the computer once.
+After the computer wakes, routine preparation checks the owner's saved company choice
+against a current verified account and the exact saved profile. A changed account,
+profile or scope stops preparation before it reserves money. The check uses the usual
+MCP connection rules. Automatic company calls are still unavailable.
 It checks access after wake, just before sending, and after saving the turn start.
 A lost reply never permits another send. An internal preparation step starts an empty
 private thread first, then records its real id with the routine's spending allowance.
@@ -224,7 +228,7 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|sign-out, requests, Office uploads, survey, persona and scripted welcome reads, Memory setup reads, own and admin routine lists, approval replies and original call status, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
-  server -.->|checks saved membership before personal memory tools and history errors; prepares allowances; checks routine admission and retirement replacements; applies Stop, Pause and Retire; verifies termination, settled model cost and admin authority; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
+  server -.->|checks saved membership, company choices and routine admission; prepares allowances; applies Stop, Pause and Retire; verifies termination and settled cost; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
   server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, writer closure and retries, routine sessions, inputs, cancellations, confirmed results, checked finishes and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
@@ -436,6 +440,8 @@ become a routine session. Public chat routes reserve these session ids for the w
 A stopped, changed or expired occurrence cannot prepare a session.
 The server can pass a checked routine claim through private input, a fixed spending
 allowance and one computer turn. It checks access again after waking the computer.
+For a company connection, it checks the owner's and assistant's current server grants.
+It checks the company choice again after preparing the private thread, before allowing money.
 The wake uses the computer already recorded for that assistant and its existing
 authenticated bridge. A replacement or cancelled wake cannot prepare the turn.
 The models process now binds this path to the same budget actor that handles ordinary

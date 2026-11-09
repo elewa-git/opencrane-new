@@ -44,16 +44,18 @@ async function checkComputerChanges(store: Arguments[0], assistantId: string,
 
 // Accept computer and thread choices only from trusted preparation, never a public request.
 export async function allocateRoutineRoot(store: Arguments[0], keys: Arguments[1],
-  worker: Arguments[2], raw: unknown, actor: BudgetActor, selection: Selection) {
+  worker: Arguments[2], raw: unknown, actor: BudgetActor, selection: Selection,
+  confirmCompany?: () => Promise<void>) {
   try {
-    return await allocate(store, keys, worker, raw, actor, selection);
+    return await allocate(store, keys, worker, raw, actor, selection, confirmCompany);
   } catch {
     throw new Error('Routine root refused');
   }
 }
 
 async function allocate(store: Arguments[0], keys: Arguments[1], worker: Arguments[2],
-  raw: unknown, actor: BudgetActor, selection: Selection) {
+  raw: unknown, actor: BudgetActor, selection: Selection,
+  confirmCompany?: () => Promise<void>) {
   if (actor.store !== store || actor.silo !== worker.silo) {
     throw new Error('Routine root refused');
   }
@@ -61,6 +63,8 @@ async function allocate(store: Arguments[0], keys: Arguments[1], worker: Argumen
   const { binding, firstCallBoundCents, deadline, run } = checked;
   async function confirmAllocation() {
     await checked.confirmPreparation();
+    // Check company access after native preparation and before reserving capacity.
+    await confirmCompany?.();
     // Recover the immutable amount from the actor's serial queue.
     for (const root of actor.state.roots) {
       if (root.conversationId === run.conversationId && root.turnId === run.turnId) {

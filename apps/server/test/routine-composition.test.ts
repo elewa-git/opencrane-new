@@ -223,8 +223,20 @@ async function cleanup() {
 beforeEach(setup);
 afterEach(cleanup);
 
-function compose(options: { enabled?: boolean; replay?: boolean } = { enabled: true }) {
-  return createRoutineComposition(options, nats.store, keys, worker(), input, actor,
+type Options = Parameters<typeof createRoutineComposition>[0];
+function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+  computerGeneration: number) {
+  function confirmCurrent() {
+    return Promise.resolve();
+  }
+  const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
+    computerGeneration, confirmCurrent };
+  return Promise.resolve(company);
+}
+function compose(options: Options = { enabled: true }) {
+  const companyPreflight = options.companyPreflight ?? syntheticCompanyPreflight;
+  const checked = { ...options, companyPreflight };
+  return createRoutineComposition(checked, nats.store, keys, worker(), input, actor,
     'sender-attempt');
 }
 async function saved(type: string, subject: string) {
@@ -277,6 +289,82 @@ async function reachesPreparedThread() {
 }
 it('sends one checked due to its native thread, despite duplicate invocation and restart',
   reachesPreparedThread);
+
+async function changedCompanyDuringPreparation(kind: 'profile' | 'opt-in') {
+  let current = true;
+  let confirmed = 0;
+  const prepare = preparedComputer.link.prepareRoutineThread;
+  async function changeAfterNativeStart(...args: Parameters<typeof prepare>) {
+    const threadId = await prepare(...args);
+    current = false;
+    return threadId;
+  }
+  const prepareSpy = vi.spyOn(preparedComputer.link, 'prepareRoutineThread');
+  prepareSpy.mockImplementation(changeAfterNativeStart);
+  function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+    computerGeneration: number) {
+    function confirmCurrent() {
+      confirmed += 1;
+      if (!current) return Promise.reject(new Error(`${kind} changed`));
+      return Promise.resolve();
+    }
+    const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
+      computerGeneration, confirmCurrent };
+    return Promise.resolve(company);
+  }
+  const composition = compose({ enabled: true, companyPreflight });
+  expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  expect(preparedComputer.nativeStarts).toBe(1);
+  expect(confirmed).toBeGreaterThan(0);
+  expect(await saved('budget.root_allowance_set', 'budget-test')).toEqual([]);
+  expect(actor.state.roots).toEqual([]);
+  expect(preparedComputer.executedThreads).toEqual([]);
+}
+it.each(['profile', 'opt-in'] as const)(
+  'refuses %s change during native preparation before allowance',
+  changedCompanyDuringPreparation);
+
+async function refusesCompanyChangeAfterAllowance(kind: 'profile' | 'opt-in') {
+  let current = true;
+  let confirmed = 0;
+  let rejectedCurrentChecks = 0;
+  let changedAfterAllowance = false;
+  function matchesRoutineRoot(root: typeof actor.state.roots[number]) {
+    return root.conversationId === conversationId && root.turnId === turnId;
+  }
+  function allowanceIsAllocated() {
+    return actor.state.roots.some(matchesRoutineRoot);
+  }
+  function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+    computerGeneration: number) {
+    function confirmCurrent() {
+      confirmed += 1;
+      if (!current) {
+        rejectedCurrentChecks += 1;
+        return Promise.reject(new Error(`${kind} changed`));
+      }
+      if (allowanceIsAllocated()) {
+        current = false;
+        changedAfterAllowance = true;
+      }
+      return Promise.resolve();
+    }
+    const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
+      computerGeneration, confirmCurrent };
+    return Promise.resolve(company);
+  }
+  const composition = compose({ enabled: true, companyPreflight });
+  expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  expect(await saved('budget.root_allowance_set', 'budget-test')).toHaveLength(1);
+  expect(changedAfterAllowance).toBe(true);
+  expect(current).toBe(false);
+  expect(confirmed).toBeGreaterThan(0);
+  expect(rejectedCurrentChecks).toBeGreaterThan(0);
+  expect(preparedComputer.executedThreads).toEqual([]);
+}
+it.each(['profile', 'opt-in'] as const)(
+  'refuses %s change after allowance and before sending',
+  refusesCompanyChangeAfterAllowance);
 
 async function inert(options: { enabled?: boolean; replay?: boolean }) {
   const before = await nats.store.head();

@@ -9,7 +9,8 @@ type Link = Awaited<ReturnType<typeof connectBridge>>;
 
 // Keep this preparation internal. No worker dispatches automatic routines yet.
 export async function prepareRoutineComputer(store: Arguments[0], keys: Arguments[1],
-  worker: Arguments[2], raw: unknown, actor: Arguments[4], link: Link, generation: number) {
+  worker: Arguments[2], raw: unknown, actor: Arguments[4], link: Link, generation: number,
+  confirmCompany?: () => Promise<void>) {
   let turnId: string | undefined;
   let conversationId: string | undefined;
   try {
@@ -31,7 +32,7 @@ export async function prepareRoutineComputer(store: Arguments[0], keys: Argument
     // Record only the returned native identity, with fresh checks after native startup.
     await prepareRoutineSession(store, keys, worker, input);
     await prepareRoutineInput(store, keys, worker, input);
-    await allocateRoutineRoot(store, keys, worker, input, actor, selection);
+    await allocateRoutineRoot(store, keys, worker, input, actor, selection, confirmCompany);
     return selection;
   } catch {
     if (turnId && conversationId) cancelRoutineThread(link.socket, turnId, conversationId);
