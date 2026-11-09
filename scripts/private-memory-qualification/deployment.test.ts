@@ -7,11 +7,15 @@ import { collectDeployment } from './deployment.ts';
 import { containerIdentity, proveComputerBridge, type ContainerIdentity } from './bridge-proof.ts';
 import { proveComputerSupervisor } from './supervisor-proof.ts';
 import { protectionMessages, type ProtectionFailure } from './protection-failure.ts';
+import {
+  inventoryGroups, readCurrentInventory, type InventoryContext, type ProtectionRecord,
+} from './joined-inventory.ts';
 
 vi.mock('node:child_process', { spy: true });
 vi.mock('node:fs', { spy: true });
 vi.mock('./bridge-proof.ts', { spy: true });
 vi.mock('./supervisor-proof.ts', { spy: true });
+vi.mock('./joined-inventory.ts', { spy: true });
 const containerId = 'c'.repeat(64);
 const imageDigest = `sha256:${'b'.repeat(64)}`;
 const sourceSha = 'a'.repeat(40);
@@ -30,6 +34,20 @@ function unchanged(): void {}
 
 function readComputer(): ContainerIdentity {
   return computer;
+}
+
+function matchingInventory(context: InventoryContext): ProtectionRecord[] {
+  const records: ProtectionRecord[] = [];
+  for (const [index, group] of inventoryGroups.entries()) {
+    const imageDigest = group === 'serverDelivery' ? context.serverImageDigest :
+      context.computerImageDigest;
+    const helperIds = group === 'canaryHelper' ? context.helperIds : [undefined];
+    for (const helperId of helperIds) {
+      records.push({ ...context, group, helperId, imageDigest,
+        pid: 100 + index, startTime: String(1000 + index), safe: true });
+    }
+  }
+  return records;
 }
 
 function replaceComputer(): void {
@@ -71,6 +89,8 @@ function docker(_file: unknown, args: unknown, options: unknown): string {
 }
 
 function prepare(): void {
+  vi.mocked(readCurrentInventory).mockReset();
+  vi.mocked(readCurrentInventory).mockImplementation(matchingInventory);
   vi.mocked(proveComputerBridge).mockResolvedValue(true);
   vi.mocked(proveComputerSupervisor).mockResolvedValue(true);
   computer = { Id: 'a'.repeat(64), Image: `sha256:${'d'.repeat(64)}`,
@@ -119,6 +139,43 @@ function responseName(response: Record<string, unknown>): unknown {
 }
 it('qualifies the fixture deployment only after all eleven observed runs',
   qualifiesObservedDeployment);
+
+async function refusesMissingJoinedGroup(): Promise<void> {
+  function withoutProxy(context: InventoryContext): ProtectionRecord[] {
+    const records = matchingInventory(context);
+    return records.filter(function keepOther(record): boolean {
+      return record.group !== 'proxy';
+    });
+  }
+  vi.mocked(readCurrentInventory).mockImplementation(withoutProxy);
+  const result = await collectDeployment();
+  expect(result).toMatchObject({ result: 'FAIL', reason: 'host_refused',
+    complete: false, group: 'proxy' });
+  expect(responses).toHaveLength(0);
+}
+it('does not start a journey when the joined inventory lacks a group',
+  refusesMissingJoinedGroup);
+
+async function refusesFinalJoinedFault(): Promise<void> {
+  function unsafeBridge(context: InventoryContext): ProtectionRecord[] {
+    const records = matchingInventory(context);
+    return records.map(function changeBridge(record): ProtectionRecord {
+      if (record.group === 'bridge') {
+        return { ...record, safe: false };
+      }
+      return record;
+    });
+  }
+  vi.mocked(readCurrentInventory).mockImplementationOnce(matchingInventory);
+  vi.mocked(readCurrentInventory).mockImplementationOnce(unsafeBridge);
+  const result = await collectDeployment();
+  expect(result).toMatchObject({ result: 'FAIL', reason: 'host_refused',
+    complete: false, group: 'bridge' });
+  expect(responses).toHaveLength(1);
+  expect(readCurrentInventory).toHaveBeenCalledTimes(2);
+}
+it('does not save a PASS receipt after a final joined protection failure',
+  refusesFinalJoinedFault);
 
 async function savesOnlyFixedComputerRefusal(): Promise<void> {
   const computerContainerId = 'a'.repeat(64);
