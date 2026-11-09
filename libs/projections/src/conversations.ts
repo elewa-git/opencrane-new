@@ -198,6 +198,54 @@ export async function readConversation(db: Query, silo: string, conversationId: 
   return { generation: Number(metadata.rows[0]?.generation ?? 0), position, rows };
 }
 
+export async function readConversationWindow(db: Query, silo: string, conversationId: string,
+  limit: number, before?: number, firstPosition = 1) {
+  const metadata = await db.query<{ position: string | null; closed_position: string | null;
+    generation: string | null }>(
+    `SELECT (SELECT max(position) FROM conversation_feed
+        WHERE silo=$1 AND conversation_id=$2) AS position,
+      (SELECT closed_position FROM conversations
+        WHERE silo=$1 AND conversation_id=$2) AS closed_position,
+      (SELECT generation FROM projection_generations WHERE name='conversations') AS generation`,
+    [silo, conversationId]);
+  const position = Number(metadata.rows[0]?.position ?? 0);
+  const closedPosition = Number(metadata.rows[0]?.closed_position ?? 0);
+  const window = await collectWindowRows(db, silo, conversationId, limit,
+    Math.min(before ?? position + 1, position + 1), firstPosition, closedPosition);
+  return { generation: Number(metadata.rows[0]?.generation ?? 0), position,
+    rows: window.rows, before: window.before };
+}
+
+async function collectWindowRows(db: Query, silo: string, conversationId: string,
+  limit: number, start: number, firstPosition: number, closedPosition: number) {
+  const deadline = performance.now() + 10_000;
+  const rows: ReturnType<typeof displayRow>[] = [];
+  let cursor = start;
+  let hasOlder = false;
+  let turnCount = 0;
+  while (cursor > firstPosition && !hasOlder) {
+    const page = await db.query<FeedRow>(
+      `SELECT * FROM conversation_feed WHERE silo = $1 AND conversation_id = $2
+        AND position < $3 AND position >= $4 ORDER BY position DESC LIMIT 100`,
+      [silo, conversationId, cursor, firstPosition]);
+    if (performance.now() >= deadline) throw new Error('Conversation history unavailable');
+    if (!page.rows.length) break;
+    for (const row of page.rows) {
+      cursor = Number(row.position);
+      if (isHiddenConversationRow(row.type, row.data, cursor, closedPosition)) continue;
+      // Stop before the preceding turn, so every report has its starting post.
+      if (turnCount === limit) {
+        hasOlder = true;
+        break;
+      }
+      rows.push(displayRow(row));
+      if (row.type === 'message.posted') turnCount += 1;
+    }
+  }
+  rows.reverse();
+  return { rows, before: hasOlder ? rows[0]?.position ?? null : null };
+}
+
 export function isHiddenConversationRow(type: string, data: unknown, position: number,
   closedPosition: number) {
   if (closedPosition === 0 || position <= closedPosition) return false;

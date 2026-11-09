@@ -59,6 +59,14 @@
     <section class="transcript" #transcript tabindex="0" aria-label="Conversation messages"
       [attr.aria-busy]="chat.loading()" (scroll)="transcriptScrolled()">
       <div class="transcript-inner">
+        @if (chat.olderLoading()) {
+          <p class="older-loading" role="status">Loading older messages…</p>
+        }
+        @if (chat.olderFailure()) {
+          <p class="older-loading" role="status">Older messages unavailable.
+            <button type="button" (click)="retryOlder()">Try again</button>
+          </p>
+        }
         @if (isClosedConversation()) {
           <p class="closed-session-notice" role="status">🔒 Closed · Read only.
             @if (closeReview.firstClose(chat.rows()); as close) {

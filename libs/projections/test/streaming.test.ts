@@ -4,7 +4,7 @@ import { PGlite } from '@electric-sql/pglite';
 import type { EventEnvelope } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { createLogger } from '@opencrane/observability';
-import { conversations, ProjectionRunner, readConversation, pgliteDb, type Db,
+import { conversations, ProjectionRunner, readConversation, readConversationWindow, pgliteDb, type Db,
   type EventSource, type Query } from '../src/index.ts';
 import { database } from './database.ts';
 
@@ -47,6 +47,67 @@ function sourceFor(events: StoredEvent[]): EventSource {
   }
   return { head, subscribe };
 }
+
+it('reads the newest conversation rows and pages back without replaying the start', async () => {
+  const engine = new PGlite();
+  const db = pgliteDb(engine);
+  const events = replyEvents().slice(0, 1);
+  for (let index = 0; index < 69; index += 1) {
+    events.push(saved(events.length + 1, 'message.posted', {
+      conversationId: 'chat', authorId: 'alice', authorKind: 'human',
+      ciphertext: Buffer.from('saved message').toString('base64'), keyId: 'key:fixture',
+      contentType: 'text',
+    }));
+  }
+  const runner = new ProjectionRunner(db, sourceFor(events),
+    createLogger('window-test', { level: 'silent' }));
+  try {
+    await runner.initialise(conversations);
+    await runner.run(conversations);
+    const tail = await readConversationWindow(db, 'test', 'chat', 50);
+    expect(tail.rows.map(rowPosition)).toEqual(Array.from(
+      { length: 50 }, (_, index) => index + 21));
+    expect(tail).toMatchObject({ position: 70, before: 21 });
+    const older = await readConversationWindow(db, 'test', 'chat', 50, 21);
+    expect(older.rows.map(rowPosition)).toEqual(Array.from(
+      { length: 20 }, (_, index) => index + 1));
+    expect(older.before).toBeNull();
+  } finally {
+    await engine.close();
+  }
+});
+
+it('keeps the post that starts a long active turn in the newest window', async () => {
+  const engine = new PGlite();
+  const db = pgliteDb(engine);
+  const events = [saved(1, 'conversation.created', {
+    conversationId: 'chat', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session',
+  }), saved(2, 'message.posted', {
+    conversationId: 'chat', authorId: 'alice', authorKind: 'human',
+    ciphertext: Buffer.from('Please help').toString('base64'), keyId: 'key:fixture',
+    contentType: 'text',
+  })];
+  for (let index = 0; index < 55; index += 1) {
+    events.push(saved(events.length + 1, 'agent.message_delta', {
+      conversationId: 'chat', turnId: 'event-2', messageId: 'reply',
+      ciphertext: Buffer.from('a'.repeat(63)).toString('base64'), keyId: 'key:fixture',
+      contentType: 'text',
+    }));
+  }
+  const runner = new ProjectionRunner(db, sourceFor(events),
+    createLogger('long-window-test', { level: 'silent' }));
+  try {
+    await runner.initialise(conversations);
+    await runner.run(conversations);
+    const tail = await readConversationWindow(db, 'test', 'chat', 50);
+    expect(tail.rows[0]?.type).toBe('conversation.created');
+    expect(tail.rows[1]?.type).toBe('message.posted');
+    expect(tail.rows).toHaveLength(57);
+    expect(tail.before).toBeNull();
+  } finally {
+    await engine.close();
+  }
+});
 
 // Model the measured commit wait without a live stack or a provider call.
 function delayedCommits(db: Db): Db {

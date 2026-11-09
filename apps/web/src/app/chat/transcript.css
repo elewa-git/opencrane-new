@@ -91,3 +91,4 @@ time { color: var(--oc-ink-muted); font-size: 11px; }
 }
 .private-notice.restriction { border-color: #a9e7ef; background: #eefafc; }
 .private-notice.disabled { border-color: #d2d8da; background: #f1f4f5; }
+.older-loading { padding: 8px 12px; text-align: center; color: #53616a; font-size: 13px; }

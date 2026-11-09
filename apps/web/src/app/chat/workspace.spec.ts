@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ChatRow } from '@opencrane/protocol';
+import { chatRowSchema, type ChatRow } from '@opencrane/protocol';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { Workspace } from './workspace';
 import { ChatComposer } from './composer';
@@ -137,9 +137,18 @@ async function createCaptureWorkspace(
         return Promise.resolve(new Response('{}', { status: messageStatus }));
       }
       const since = Number(new URL(path, location.origin).searchParams.get('since') ?? 0);
-      const visibleRows = rows.filter(row => Number(row['position']) > since);
+      const query = new URL(path, location.origin).searchParams;
+      const tail = Number(query.get('tail'));
+      const before = Number(query.get('before'));
+      const limit = Number(query.get('limit'));
+      let visibleRows = rows.filter(row => Number(row['position']) > since);
+      if (tail) visibleRows = newestPostedTurns(rows, tail);
+      if (before) visibleRows = rows.filter(row => Number(row['position']) < before).slice(-limit);
+      const oldest = Number(visibleRows[0]?.['position']);
+      const cursor = oldest > 1 ? oldest : null;
       return Promise.resolve(new Response(JSON.stringify({ rows: visibleRows,
-        position: rows.length, generation: 1, computerState, dispatcherReady })));
+        position: rows.length, generation: 1, computerState, dispatcherReady,
+        before: cursor })));
     }
     if (pathname.endsWith('/files/view')) {
       return Promise.resolve(new Response('<svg/>', {
@@ -176,6 +185,19 @@ async function createCaptureWorkspace(
     setMessageStatus(status) { messageStatus = status; },
     setStopResponse(response) { stopResponse = response; },
   };
+}
+
+function newestPostedTurns(rows: Record<string, unknown>[], limit: number): Record<string, unknown>[] {
+  const newest: Record<string, unknown>[] = [];
+  let postCount = 0;
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index]!;
+    if (postCount === limit) break;
+    newest.push(row);
+    if (row['type'] === 'message.posted') postCount += 1;
+  }
+  newest.reverse();
+  return newest;
 }
 
 function isStopRequestBody(body: BodyInit | null | undefined): boolean {
@@ -2555,6 +2577,204 @@ function postedRow(position: number): Record<string, unknown> {
 function savedPosition(row: ChatRow): number {
   return row.position;
 }
+
+it('shows the active reply and Stop when a turn has more than 50 reports', async () => {
+  const rows: Record<string, unknown>[] = [postedRow(1)];
+  for (let index = 0; index < 55; index += 1) {
+    rows.push({ id: `report-${index}`, position: index + 2, type: 'agent.message_delta',
+      time: '2026-10-14T10:00:01Z',
+      data: { turnId: 'message-1', messageId: 'reply', text: 'Working' } });
+  }
+  const capture = await createCaptureWorkspace(rows);
+  expect(capture.fixture.componentInstance['chat'].active()?.id).toBe('message-1');
+  expect(capture.root.textContent).toContain('Working');
+  expect(capture.root.querySelector<HTMLButtonElement>('button.stop')).not.toBeNull();
+  capture.fixture.destroy();
+});
+
+it.each([390, 1280])('opens the newest messages and preserves scroll on older pages at %ipx',
+  async viewportWidth => {
+    vi.stubGlobal('innerWidth', viewportWidth);
+    const rows = Array.from({ length: 60 }, (_, index) => postedRow(index + 1));
+    const capture = await createCaptureWorkspace(rows);
+    const chat = capture.fixture.componentInstance['chat'];
+    const transcript = capture.root.querySelector<HTMLElement>('.transcript');
+    if (!transcript) throw new Error('Transcript is missing');
+    expect(capture.calls).toContain('GET /api/conversations/chat/messages?tail=50');
+    expect(chat.rows().map(savedPosition)).toEqual(Array.from(
+      { length: 50 }, (_, index) => index + 11));
+    let height = 3000;
+    Object.defineProperty(transcript, 'scrollHeight', { get: () => height });
+    transcript.scrollTop = 100;
+    transcript.dispatchEvent(new Event('scroll'));
+    capture.fixture.detectChanges();
+    expect(capture.root.textContent).toContain('Loading older messages');
+    height = 3300;
+    await vi.waitFor(() => expect(chat.rows()).toHaveLength(60));
+    capture.fixture.detectChanges();
+    await vi.waitFor(() => expect(transcript.scrollTop).toBe(400));
+    expect(chat.rows().map(savedPosition)).toEqual(Array.from(
+      { length: 60 }, (_, index) => index + 1));
+    expect(capture.calls).toContain('GET /api/conversations/chat/messages?before=11&limit=50');
+    capture.fixture.destroy();
+  });
+
+it.each(['select', 'new'] as const)(
+  'clears an older-page loader when a %s conversation replaces the pending one',
+  async change => {
+    const rows = Array.from({ length: 60 }, (_, index) => postedRow(index + 1));
+    const capture = await createCaptureWorkspace(rows);
+    const chat = capture.fixture.componentInstance['chat'];
+    const originalFetch = vi.mocked(fetch).getMockImplementation();
+    if (!originalFetch) throw new Error('Missing HTTP fixture');
+    let releasePage: (reply: Response) => void = () => undefined;
+    const delayedPage = new Promise<Response>(resolve => { releasePage = resolve; });
+    function holdOlderPage(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+      const path = input instanceof Request ? input.url : String(input);
+      if (path.includes('/messages?before=')) return delayedPage;
+      return originalFetch!(input, init);
+    }
+    vi.mocked(fetch).mockImplementation(holdOlderPage);
+    const oldRead = chat.loadOlder();
+    expect(chat.olderLoading()).toBe(true);
+    if (change === 'select') await chat.select('next-chat');
+    else chat.newSession();
+    expect(chat.olderLoading()).toBe(false);
+    releasePage(new Response(JSON.stringify({ rows: [postedRow(10)], position: 60,
+      generation: 1, computerState: 'ready', before: null })));
+    await oldRead;
+    expect(chat.olderLoading()).toBe(false);
+    capture.fixture.destroy();
+  });
+
+it('keeps the scroll snapshot through a live row until the older page arrives', async () => {
+  const rows = Array.from({ length: 60 }, (_, index) => postedRow(index + 1));
+  const capture = await createCaptureWorkspace(rows);
+  const chat = capture.fixture.componentInstance['chat'];
+  const workspace = capture.fixture.componentInstance;
+  const transcript = capture.root.querySelector<HTMLElement>('.transcript');
+  if (!transcript) throw new Error('Transcript is missing');
+  const originalFetch = vi.mocked(fetch).getMockImplementation();
+  if (!originalFetch) throw new Error('Missing HTTP fixture');
+  let releasePage: (reply: Response) => void = () => undefined;
+  const delayedPage = new Promise<Response>(resolve => { releasePage = resolve; });
+  function holdOlderPage(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const path = input instanceof Request ? input.url : String(input);
+    if (path.includes('/messages?before=')) return delayedPage;
+    return originalFetch!(input, init);
+  }
+  vi.mocked(fetch).mockImplementation(holdOlderPage);
+  let height = 3000;
+  Object.defineProperty(transcript, 'scrollHeight', { get: () => height });
+  await new Promise(requestAnimationFrame);
+  transcript.scrollTop = 100;
+  const pending = workspace['loadOlder'](transcript);
+  const liveRow = chatRowSchema.parse(postedRow(61));
+  chat.rows.update(current => [...current, liveRow]);
+  capture.fixture.detectChanges();
+  await new Promise(requestAnimationFrame);
+  expect(workspace['olderScroll']).toMatchObject({ top: 100, height: 3000 });
+  height = 3300;
+  releasePage(new Response(JSON.stringify({ rows: [postedRow(10)], position: 61,
+    generation: 1, computerState: 'ready', before: null })));
+  await pending;
+  capture.fixture.detectChanges();
+  expect(chat.olderFailure()).toBe(false);
+  expect(chat.rows().map(savedPosition)).toContain(10);
+  await vi.waitFor(() => expect(transcript.scrollTop).toBe(400));
+  expect(workspace['olderScroll']).toBeUndefined();
+  capture.fixture.destroy();
+});
+
+it('keeps the new chat scroll snapshot when an old chat page finishes first', async () => {
+  const rows = Array.from({ length: 60 }, (_, index) => postedRow(index + 1));
+  const capture = await createCaptureWorkspace(rows);
+  const chat = capture.fixture.componentInstance['chat'];
+  const workspace = capture.fixture.componentInstance;
+  const transcript = capture.root.querySelector<HTMLElement>('.transcript');
+  if (!transcript) throw new Error('Transcript is missing');
+  const originalFetch = vi.mocked(fetch).getMockImplementation();
+  if (!originalFetch) throw new Error('Missing HTTP fixture');
+  let releaseA: (reply: Response) => void = () => undefined;
+  let releaseB: (reply: Response) => void = () => undefined;
+  const pageA = new Promise<Response>(resolve => { releaseA = resolve; });
+  const pageB = new Promise<Response>(resolve => { releaseB = resolve; });
+  function holdOlderPages(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const path = input instanceof Request ? input.url : String(input);
+    if (path.includes('/chat/messages?before=')) return pageA;
+    if (path.includes('/next-chat/messages?before=')) return pageB;
+    return originalFetch!(input, init);
+  }
+  vi.mocked(fetch).mockImplementation(holdOlderPages);
+  let height = 3000;
+  Object.defineProperty(transcript, 'scrollHeight', { get: () => height });
+  await new Promise(requestAnimationFrame);
+  transcript.scrollTop = 100;
+  const olderA = workspace['loadOlder'](transcript);
+  await chat.select('next-chat');
+  capture.fixture.detectChanges();
+  transcript.scrollTop = 80;
+  const olderB = workspace['loadOlder'](transcript);
+  expect(workspace['olderScroll']).toMatchObject({
+    conversationId: 'next-chat', top: 80, height: 3000,
+  });
+  releaseA(new Response(JSON.stringify({ rows: [postedRow(10)], position: 60,
+    generation: 1, computerState: 'ready', before: null })));
+  await olderA;
+  expect(workspace['olderScroll']).toMatchObject({
+    conversationId: 'next-chat', top: 80, height: 3000,
+  });
+  height = 3300;
+  releaseB(new Response(JSON.stringify({ rows: [postedRow(10)], position: 60,
+    generation: 1, computerState: 'ready', before: null })));
+  await olderB;
+  capture.fixture.detectChanges();
+  await vi.waitFor(() => expect(transcript.scrollTop).toBe(380));
+  expect(workspace['olderScroll']).toBeUndefined();
+  capture.fixture.destroy();
+});
+
+it('discards the scroll snapshot when an older page adds no rendered turn', async () => {
+  const rows = Array.from({ length: 60 }, (_, index) => postedRow(index + 1));
+  const capture = await createCaptureWorkspace(rows);
+  const chat = capture.fixture.componentInstance['chat'];
+  const workspace = capture.fixture.componentInstance;
+  const transcript = capture.root.querySelector<HTMLElement>('.transcript');
+  if (!transcript) throw new Error('Transcript is missing');
+  transcript.scrollTop = 100;
+  const originalFetch = vi.mocked(fetch).getMockImplementation();
+  if (!originalFetch) throw new Error('Missing HTTP fixture');
+  function orphanPage(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const path = input instanceof Request ? input.url : String(input);
+    if (!path.includes('/messages?before=')) return originalFetch!(input, init);
+    const orphan = { id: 'orphan', position: 10, type: 'agent.message_delta',
+      time: '2026-10-14T10:00:00Z',
+      data: { turnId: 'missing', messageId: 'reply', text: 'Working' } };
+    return Promise.resolve(new Response(JSON.stringify({ rows: [orphan], position: 60,
+      generation: 1, computerState: 'ready', before: null })));
+  }
+  vi.mocked(fetch).mockImplementation(orphanPage);
+  await workspace['loadOlder'](transcript);
+  capture.fixture.detectChanges();
+  expect(chat.olderFailure()).toBe(false);
+  expect(chat.olderBefore()).toBeNull();
+  expect(chat.rows()).toHaveLength(51);
+  expect(workspace['olderScroll']).toBeUndefined();
+  capture.fixture.destroy();
+});
+
+it('clears a checked conversation when an older-page read loses access', async () => {
+  const rows = Array.from({ length: 60 }, (_, index) => postedRow(index + 1));
+  const capture = await createCaptureWorkspace(rows);
+  const chat = capture.fixture.componentInstance['chat'];
+  capture.denyFeedRead();
+  expect(await chat.loadOlder()).toBe(false);
+  expect(chat.denied()).toBe(true);
+  expect(chat.rows()).toEqual([]);
+  expect(chat.selected()).toBe('');
+  expect(chat.olderLoading()).toBe(false);
+  capture.fixture.destroy();
+});
 
 it('applies three history pages and an overlapping socket row once in order', async () => {
   const capture = await createCaptureWorkspace([postedRow(1)]);

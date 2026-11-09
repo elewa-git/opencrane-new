@@ -1512,8 +1512,9 @@ with no name uses “A colleague” in its notice.
 `npm run visual:screen-p4-6-close` captures both pages at 1280 and 390 pixels with
 intercepted replies; it does not qualify a fresh installation.
 
-The assistant workspace reads every history page from the last applied row before it
-accepts overlapping socket rows. It orders those rows by server position. A socket
+The assistant workspace opens with the newest 50 posted turns. Later reads start from the
+last applied feed position before it accepts overlapping socket rows. It orders
+those rows by server position. A socket
 `ready` frame says the server has finished replaying rows; the website announces
 catch-up only after both the frame and the history pages have been applied. A failed
 history read keeps already loaded messages and files. Its retry reads the same chat;
@@ -1524,8 +1525,24 @@ saved read position. A refused read or socket policy close clears the chat and p
 work. A refused later saved-link page also clears names loaded on earlier pages.
 A missing or foreign saved link shows the same neutral unavailable screen.
 A socket resync keeps the checked transcript through a failed replacement read. Only a
-successful complete replacement changes those rows. A private shared session reads the
+successful tail read replaces those rows. A private shared session reads the
 paying group detail by id and displays its checked name, or a neutral label if it cannot
 be checked. The id is never printed in the session.
 The display receipt under `docs/process/screen-p4-6-catchup` records intercepted
 read failure, reconnect and unavailable-link screens at 1280 and 390 pixels.
+
+## Assistant chat tail window
+
+`ChatSession` opens an assistant session with `?tail=50` for whole posted turns.
+It resumes saved and
+socket updates from the returned feed position. A projection replacement also
+starts with a fresh tail. `Workspace` requests `?before=<position>&limit=50` near
+the top of the transcript. It keeps the prior scroll height and top offset so
+prepending a page leaves the visible message in place. An older-page failure keeps
+the loaded rows and offers a retry. Access refusal clears protected content.
+Each older read owns its scroll snapshot. A late reply from a previous chat cannot
+clear the snapshot saved for the current chat.
+The page shows a small loading row during an older read. `workspace.spec.ts`
+checks both 1280 px and 390 px.
+`npm run visual:chat-tail-window` saves tail and older-page pictures at both
+widths under `docs/process/evidence/chat-tail-window/` using browser fixtures.

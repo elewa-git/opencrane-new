@@ -1131,3 +1131,13 @@ the completion worker.
 It does not change its review revision, policy revision, tool modes, published
 state or catalogue expiry. The MCP catalogue projection saves the new policy
 sequence and leaves the displayed lifecycle and tool list intact.
+
+## Conversation window reads
+
+`readConversationWindow` reads the newest posted turns and all their visible reports
+in descending position order using the conversation feed's primary key. It returns
+them in saved order.
+An exclusive `before` position reads older rows. The function honours the person's
+first visible position and skips output hidden after a close. The reply also carries
+the newest feed position and projection generation. `streaming.test.ts` checks a
+70-row feed with a 50-turn tail and a long reply that has more than 50 feed rows.

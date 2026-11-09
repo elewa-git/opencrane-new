@@ -6,6 +6,7 @@ The back end for OpenCrane sign-in, conversations and organisation settings.
 It runs as a Node.js service. The website sends it requests to sign in, chat, upload
 files and manage the organisation.
 It checks that files named by a message were scanned clean and uploaded by its sender.
+Conversation reads can start with the newest messages and page back through older ones.
 In the packaged image, the service disables its own process dumps before it starts
 handling private work. It answers a local live protection check for the qualification
 runner. This check does not enable private memory.
