@@ -2,6 +2,7 @@
 // and each other event type has its own strict schema there too.
 import { z } from 'zod';
 import { centsSchema, ciphertextSchema, keyIdSchema } from './data.ts';
+import { fileUploadedDataSchema } from './file-events.ts';
 
 // member.joined — an invitation was accepted and someone became a member.
 // docs/architecture/events.md: "OpenFGA `member`; emit `assistant.created`".
@@ -34,6 +35,7 @@ export const messagePostedDataSchema = z
     ciphertext: ciphertextSchema,
     keyId: keyIdSchema,
     contentType: z.enum(['text', 'markdown']),
+    attachmentIds: z.array(fileUploadedDataSchema.shape.fileId).max(100).optional(),
     executionMode: z.literal('memory_free').optional(),
   })
   .strict();

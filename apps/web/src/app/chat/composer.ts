@@ -2,6 +2,7 @@
 // The parent owns the draft and outputs. Native controls handle Enter and Stop instead of PrimeNG.
 import { ChatIcon } from './icon';
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
+import type { UploadChip } from './upload-batch';
 
 @Component({ selector: 'oc-chat-composer', imports: [ChatIcon], templateUrl: './composer.html', styleUrl: './composer.css', changeDetection: ChangeDetectionStrategy.OnPush })
 export class ChatComposer {
@@ -16,10 +17,15 @@ export class ChatComposer {
   readonly directMode = input(false);
   readonly fileDrag = input(false);
   readonly memoryFree = input(false);
+  readonly attachments = input<UploadChip[]>([]);
+  readonly waitingForFiles = input('');
+  readonly uploadsInProgress = input(false);
   readonly draftChange = output<string>();
   readonly submitted = output<string>();
   readonly stopped = output<void>();
-  readonly attached = output<File>();
+  readonly attached = output<File[]>();
+  readonly attachmentRemoved = output<string>();
+  readonly attachmentRetried = output<string>();
   readonly memoryFreeSelected = output<void>();
   readonly privateSelected = output<void>();
   protected readonly attachOpen = signal(false);
@@ -28,8 +34,8 @@ export class ChatComposer {
   protected choose(event: Event): void {
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) return;
-    const file = input.files?.[0];
-    if (file) this.attached.emit(file);
+    const files = Array.from(input.files ?? []);
+    if (files.length) this.attached.emit(files);
     input.value = ''; this.closeAttach();
   }
   protected change(event: Event): void {
@@ -44,6 +50,14 @@ export class ChatComposer {
     event.preventDefault(); this.submit();
   }
   protected submit(): void {
-    if (!this.working() && !this.busy() && !this.reason() && this.draft().trim()) this.submitted.emit(this.draft());
+    if (!this.working() && !this.busy() && !this.reason() && !this.waitingForFiles()
+      && (this.draft().trim() || this.hasReadyFile())) this.submitted.emit(this.draft());
   }
+  protected hasReadyFile(): boolean {
+    return this.attachments().some(isReadyChip);
+  }
+}
+
+function isReadyChip(chip: UploadChip): boolean {
+  return chip.state === 'ready';
 }

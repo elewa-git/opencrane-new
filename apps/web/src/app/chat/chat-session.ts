@@ -1,6 +1,7 @@
-/* eslint max-lines: ["error", { max: 690, skipBlankLines: true, skipComments: true }] */
+/* eslint max-lines: ["error", { max: 710, skipBlankLines: true, skipComments: true }] */
 import { PrivateReplyState } from './private-reply';
 import { sendUpload } from './upload';
+import { canStartUpload, filesAwaitingDelivery, uploadWaitReason } from './chat-session-upload';
 import { UploadBatch } from './upload-batch';
 import { toolTransitionAnnouncement } from './chat-announcement';
 import { Injectable, computed, effect, inject, signal, type OnDestroy } from '@angular/core';
@@ -65,7 +66,8 @@ export class ChatSession implements OnDestroy {
   readonly connected = this.socket.isConnected;
   private readonly stopState: ChatSessionStop = new ChatSessionStop(this.stopScreen());
   readonly turns = computed(() =>
-    transcript(this.rows(), this.memberId(), this.stopState.stoppingTurnId()));
+    transcript(this.rows(), this.memberId(), this.stopState.stoppingTurnId(),
+      [...this.uploadBatch.readyIds(), ...this.uploadBatch.hiddenIds()]));
   readonly selectedConversation = computed(() =>
     this.conversations().find(row => row.conversationId === this.selected()));
   readonly teamSession = computed(this.isTeamSession.bind(this));
@@ -75,8 +77,12 @@ export class ChatSession implements OnDestroy {
   readonly active = computed(() => this.turns().filter(isActiveTurn).at(-1));
   readonly attachments = computed(() => this.rows().flatMap(row => { const file = uploadedFile(row); return file ? [file] : []; }));
   readonly uploadBatch = new UploadBatch(this.upload.bind(this), this.currentRevision.bind(this));
-  readonly uploadPending = computed(() => [...this.attachments().filter(file => !file.screenshot).map(file => file.fileId), this.uploadBatch.pendingDelivery()].filter(Boolean)
-    .some(id => !this.rows().some(row => row.type === 'file.delivered' && row.data['fileId'] === id)));
+  readonly uploadPending = computed(() =>
+    filesAwaitingDelivery(this.rows(), this.uploadBatch.readyIds()));
+  readonly uploadWaitReason = computed(() =>
+    uploadWaitReason(this.uploadBatch.batchRunning() || this.uploadBatch.uploading()
+      || this.uploadBatch.hasQueued(),
+      this.uploadPending()));
   private creationId = '';
   /** Change this when the feed changes; old event positions and transcript then become invalid. */
   private generation = 0;
@@ -95,7 +101,7 @@ export class ChatSession implements OnDestroy {
     this.reloadReadRow.bind(this), this.clearDenied.bind(this));
   private reconnectCount = 0;
   private pending: { id: string; conversationId: string; text: string;
-    executionMode?: 'memory_free' } | undefined;
+    attachmentIds?: string[]; executionMode?: 'memory_free' } | undefined;
   private subscription = this.socket.received.subscribe(message => this.receive(message));
   private readonly accessLossSubscription = this.socket.accessLost.subscribe(this.clearDenied.bind(this));
   private readonly connectionCloseSubscription = this.socket.connectionClosed.subscribe(
@@ -249,7 +255,9 @@ export class ChatSession implements OnDestroy {
     this.reconnectedAt.set('');
     if (!this.pending) {
       const memoryFree = this.teamSession() && this.executionMode() === 'memory_free';
-      const created = createPendingMessage(text, this.selected(), this.creationId, memoryFree);
+      const attachmentIds = this.uploadBatch.readyIds();
+      const created = createPendingMessage(text, this.selected(), this.creationId,
+        memoryFree, attachmentIds);
       this.creationId = created.creationId;
       this.pending = created.pending;
     }
@@ -259,6 +267,7 @@ export class ChatSession implements OnDestroy {
       await this.deliver(revision);
       if (revision !== this.revision) return false;
       this.queued.set(false);
+      this.uploadBatch.sent();
       this.executionMode.set('restricted');
       return true;
     } catch (error) {
@@ -268,8 +277,10 @@ export class ChatSession implements OnDestroy {
     finally { if (revision === this.revision) this.busy.set(false); }
   }
   private canSend(text: string): boolean {
-    return Boolean(text.trim() && !this.busy() && !this.active() && !this.uploadBatch.uploading()
-      && !this.uploadPending() && !this.denied() && this.computer() !== 'recovering'
+    const hasContent = Boolean(text.trim() || this.uploadBatch.readyIds().length);
+    const waitingForFiles = this.uploadWaitReason();
+    return Boolean(hasContent && !this.busy() && !this.active() && !waitingForFiles
+      && !this.denied() && this.computer() !== 'recovering'
       && this.selectedAssistantId()
       && !hasSavedClose(this.selectedConversation(), this.rows()));
   }
@@ -413,11 +424,16 @@ export class ChatSession implements OnDestroy {
     if (!confirmed) {
       await requestChat(`/api/conversations/${command.conversationId}/messages`, {
         id: command.id, text: command.text, executionMode: command.executionMode,
+        attachmentIds: command.attachmentIds,
       });
       if (revision !== this.revision) return;
     }
     // Give the temporary row the saved event's id so the later event replaces it.
-    this.rows.update(rows => rows.some(row => row.id === command.id) ? rows : [...rows, { id: command.id, position: 0, type: 'message.posted', time: new Date().toISOString(), data: { text: command.text, authorId: this.memberId() } }]);
+    this.rows.update(rows => rows.some(row => row.id === command.id) ? rows : [...rows, {
+      id: command.id, position: 0, type: 'message.posted', time: new Date().toISOString(),
+      data: { text: command.text, authorId: this.memberId(),
+        attachmentIds: command.attachmentIds },
+    }]);
     this.pending = undefined;
     this.socket.connect();
   }
@@ -440,10 +456,19 @@ export class ChatSession implements OnDestroy {
       history.replaceState({}, '', `/workspace?conversation=${conversationId}`);
     }
   }
-  async upload(file?: File): Promise<void> {
-    if (!this.canUpload()) return;
+  async upload(file?: File, key?: string): Promise<void> {
+    const status = {
+      pendingMessage: Boolean(this.pending),
+      uploading: this.uploadBatch.uploading(),
+      busy: this.busy(),
+      denied: this.denied(),
+      closed: hasSavedClose(this.selectedConversation(), this.rows()),
+      hasAssistant: Boolean(this.assistantId()),
+    };
+    const allowed = canStartUpload(status);
+    if (!allowed) return;
     const conversation = this.selected() || this.creationId || (this.creationId = crypto.randomUUID());
-    const pending = this.uploadBatch.start(file, conversation);
+    const pending = this.uploadBatch.start(file, conversation, key);
     if (!pending) return;
     const revision = this.revision;
     try {
@@ -452,6 +477,7 @@ export class ChatSession implements OnDestroy {
       }
       await this.ensureConversation(pending.conversation);
       if (revision !== this.revision) return;
+      if (!this.uploadBatch.hasChip(pending.key)) return;
       if (!this.connected()) this.socket.connect();
       const reportProgress = this.uploadBatch.reportProgress.bind(this.uploadBatch);
       this.uploadBatch.transfer = sendUpload(
@@ -459,6 +485,7 @@ export class ChatSession implements OnDestroy {
       );
       const fileId = await this.uploadBatch.transfer.completed;
       if (revision !== this.revision) return;
+      if (!this.uploadBatch.hasChip(pending.key)) return;
       this.uploadBatch.confirmed(fileId);
     } catch (error) {
       if (revision === this.revision) {
@@ -470,10 +497,8 @@ export class ChatSession implements OnDestroy {
       if (revision === this.revision) this.uploadBatch.uploading.set(false);
     }
   }
-  private canUpload(): boolean {
-    return !this.pending && !this.uploadBatch.uploading() && !this.busy()
-      && !this.denied() && !hasSavedClose(this.selectedConversation(), this.rows())
-      && Boolean(this.assistantId());
+  retryUpload(key: string): Promise<void> {
+    return this.uploadBatch.retryKey(key, this.queued());
   }
   private clearUpload(): void {
     this.uploadBatch.clear();

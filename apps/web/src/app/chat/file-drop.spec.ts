@@ -108,6 +108,67 @@ async function uploadsAttachedAndDroppedFiles() {
 }
 it('sends attached and dropped files through the same upload request', uploadsAttachedAndDroppedFiles);
 
+async function removesFileWhileConversationCreationWaits() {
+  const { fixture, root } = await renderWorkspace();
+  const chat = fixture.componentInstance['chat'];
+  chat.selected.set('');
+  let finishCreation: (() => void) | undefined;
+  const creation = new Promise<void>(resolve => { finishCreation = resolve; });
+  Object.defineProperty(chat, 'ensureConversation', { value: () => creation });
+  const file = new File(['note'], 'cancelled.txt');
+  const uploading = chat.upload(file);
+  fixture.detectChanges();
+  const remove = root.querySelector<HTMLButtonElement>('[aria-label="Remove cancelled.txt"]');
+  expect(remove).not.toBeNull();
+  remove?.click();
+  finishCreation?.();
+  await uploading;
+  fixture.detectChanges();
+  expect(requests).toHaveLength(0);
+  expect(chat.uploadBatch.readyIds()).toEqual([]);
+  expect(root.textContent).not.toContain('cancelled.txt');
+}
+it('does not upload a removed file after conversation creation finishes',
+  removesFileWhileConversationCreationWaits);
+
+async function ignoresFailureAfterActiveFileWasRemoved() {
+  const { fixture, root } = await renderWorkspace();
+  const chat = fixture.componentInstance['chat'];
+  const file = new File(['contents'], 'removed-active.txt');
+  const uploading = chat.upload(file);
+  function expectActiveRequest() { expect(requests).toHaveLength(1); }
+  await vi.waitFor(expectActiveRequest);
+  const abort = vi.spyOn(chat.uploadBatch.transfer!, 'abort').mockImplementation(() => {});
+  root.querySelector<HTMLButtonElement>('[aria-label="Remove removed-active.txt"]')?.click();
+  finishUpload(0, 503);
+  await uploading;
+  expect(abort).toHaveBeenCalledOnce();
+  expect(chat.uploadBatch.failures()).toEqual([]);
+  expect(chat.uploadBatch.chips()).toEqual([]);
+}
+it('does not restore a removed file after its active upload fails',
+  ignoresFailureAfterActiveFileWasRemoved);
+
+async function ignoresCompletionAfterActiveFileWasRemoved() {
+  const { fixture, root } = await renderWorkspace();
+  const chat = fixture.componentInstance['chat'];
+  const file = new File(['contents'], 'removed-complete.txt');
+  const confirmed = vi.spyOn(chat.uploadBatch, 'confirmed');
+  const uploading = chat.upload(file);
+  function expectActiveRequest() { expect(requests).toHaveLength(1); }
+  await vi.waitFor(expectActiveRequest);
+  const abort = vi.spyOn(chat.uploadBatch.transfer!, 'abort').mockImplementation(() => {});
+  root.querySelector<HTMLButtonElement>('[aria-label="Remove removed-complete.txt"]')?.click();
+  finishUpload(0);
+  await uploading;
+  expect(abort).toHaveBeenCalledOnce();
+  expect(confirmed).not.toHaveBeenCalled();
+  expect(chat.uploadBatch.pendingDelivery()).toBe('');
+  expect(chat.uploadBatch.readyIds()).toEqual([]);
+}
+it('does not mark a removed file ready after its active upload completes',
+  ignoresCompletionAfterActiveFileWasRemoved);
+
 async function uploadsInOrderWithErrors() {
   const { fixture, root } = await renderWorkspace();
   const oversized = new File([''], 'large.txt');
@@ -120,6 +181,8 @@ async function uploadsInOrderWithErrors() {
     expect(requests[0]?.file).toBe(unsupported);
   }
   await vi.waitFor(expectSecondFile);
+  expect(root.querySelectorAll('.attachment-chip')).toHaveLength(3);
+  expect(root.textContent).toContain('Waiting to upload…');
   finishUpload(0, 415);
   function expectThirdFile() {
     expect(requests).toHaveLength(2);
@@ -130,13 +193,20 @@ async function uploadsInOrderWithErrors() {
   await fixture.whenStable();
   expect(root.textContent).toContain('File too large. Maximum size is 20 MiB.');
   expect(root.textContent).toContain('File type is unsupported or does not match its contents.');
-  const retryButtons = root.querySelectorAll<HTMLButtonElement>('.upload-status button');
+  function isRetryButton(button: HTMLButtonElement): boolean {
+    return button.textContent?.trim() === 'Retry upload';
+  }
+  const chipButtons = [...root.querySelectorAll<HTMLButtonElement>('.upload-status button')];
+  const retryButtons = chipButtons.filter(isRetryButton);
   expect(retryButtons).toHaveLength(2);
   function expectRetryAvailable() {
     fixture.detectChanges();
     expect(retryButtons[1]?.disabled).toBe(false);
   }
   await vi.waitFor(expectRetryAvailable);
+  await vi.waitFor(() => expect(fixture.componentInstance['chat'].uploadBatch.uploading())
+    .toBe(false));
+  await fixture.whenStable();
   retryButtons[1]!.click();
   function expectRetry() {
     expect(requests).toHaveLength(3);

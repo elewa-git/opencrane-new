@@ -7,15 +7,42 @@
       @if (fileDrag()) { Drop files to add them }
     </span>
   }
-  <input #upload type="file" hidden aria-label="Choose a file" (change)="choose($event)">
+  <input #upload type="file" multiple hidden aria-label="Choose files" (change)="choose($event)">
   @if (reason()) {
     <div id="composer-reason" class="disabled-field"><oc-icon name="closed" /><span>{{ reason() }}</span></div>
   }
   <label class="sr-only" for="message">{{ directMode() ? 'Message' : 'Message your agent' }}</label>
   <textarea id="message" rows="1" maxlength="32000" [placeholder]="placeholder()"
-    [value]="draft()" [disabled]="!!reason()" [readOnly]="busy() || queued()"
+    [value]="draft()" [disabled]="!!reason()"
+    [readOnly]="queued() || (directMode() && busy())"
     [attr.aria-describedby]="reason() ? 'composer-reason' : null"
     (input)="change($event)" (keydown)="keydown($event)"></textarea>
+  @if (attachments().length) {
+    <ul class="attachment-chips" aria-label="Attachments">
+      @for (chip of attachments(); track chip.key) {
+        <li class="attachment-chip upload-status" [class.refused]="chip.state === 'failed'">
+          <span class="attachment-name">{{ chip.name }}</span>
+          <span role="status" aria-live="polite">
+            @if (chip.state === 'queued') { Waiting to upload… }
+            @else if (chip.state === 'uploading') { {{ chip.progress }}% · Uploading… }
+            @else if (chip.state === 'scanning') { Scanning… }
+            @else if (chip.state === 'ready') { Ready }
+            @else { {{ chip.error }} }
+          </span>
+          @if (chip.state === 'uploading' || chip.state === 'scanning') {
+            <progress max="100" [value]="chip.progress" [attr.aria-label]="chip.name + ' upload progress'"></progress>
+          }
+          @if (chip.state === 'failed') {
+            <button type="button" [disabled]="queued() || busy() || uploadsInProgress()"
+              (click)="attachmentRetried.emit(chip.key)">Retry upload</button>
+          }
+          <button type="button" [disabled]="queued() || busy()"
+            [attr.aria-label]="'Remove ' + chip.name"
+            (click)="attachmentRemoved.emit(chip.key)">Remove</button>
+        </li>
+      }
+    </ul>
+  }
   @if (!reason()) {
     <div class="toolbar">
       @if (!teamSession() && !directMode()) {
@@ -43,13 +70,20 @@
       } @else if (stopping()) {
         <span class="mode" aria-hidden="true">Stopping…</span>
       } @else {
-        <button type="submit" class="send" [disabled]="!draft().trim() || busy()" [attr.aria-label]="queued() ? 'Retry queued message' : 'Send message'"><oc-icon name="send" /><span class="sr-only">{{ queued() ? 'Retry' : 'Send' }}</span></button>
+        <button type="submit" class="send" [class.waiting]="!!waitingForFiles()"
+          [disabled]="(!draft().trim() && !hasReadyFile()) || busy() || !!waitingForFiles()"
+          [attr.aria-label]="waitingForFiles() || (queued() ? 'Retry queued message' : 'Send message')">
+          <oc-icon name="send" />
+          @if (waitingForFiles()) { <span class="send-wait-label">{{ waitingForFiles() }}</span> }
+          @else { <span class="sr-only">{{ queued() ? 'Retry' : 'Send' }}</span> }
+        </button>
       }
     </div>
   }
   @if (attachOpen() && !reason() && !teamSession() && !directMode()) {
     <div id="attach-menu" class="attach-menu" aria-label="Attach menu" (keydown.escape)="closeAttach()">
-      <button type="button" [disabled]="busy() || queued()" (click)="upload.click()"><oc-icon name="upload" /> Upload from computer</button>
+      <button type="button" [disabled]="busy() || queued() || !!waitingForFiles()"
+        (click)="upload.click()"><oc-icon name="upload" /> Upload from computer</button>
       <button type="button" (click)="notice.set('Workspace file attachments are not available yet.')"><oc-icon name="folder" /> Workspace files <small>Coming soon</small></button>
       <span class="mobile-mode"><oc-icon name="agent" /> Agent session</span>
       <p>Documents, text and images · up to 20 MiB. Scanned before saving.</p>

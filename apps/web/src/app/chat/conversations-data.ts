@@ -6,11 +6,13 @@ export interface PendingChatMessage {
   id: string;
   conversationId: string;
   text: string;
+  attachmentIds?: string[];
   executionMode?: 'memory_free';
 }
 
 export function createPendingMessage(
   text: string, selectedId: string, creationId: string, memoryFree: boolean,
+  attachmentIds: string[] = [],
 ): { pending: PendingChatMessage; creationId: string } {
   let nextCreationId = creationId;
   if (!selectedId && !nextCreationId) {
@@ -19,6 +21,7 @@ export function createPendingMessage(
   const conversationId = selectedId || nextCreationId;
   const pending: PendingChatMessage = { id: crypto.randomUUID(), conversationId,
     text: text.trim() };
+  if (attachmentIds.length) pending.attachmentIds = [...attachmentIds];
   if (memoryFree) {
     pending.executionMode = 'memory_free';
   }

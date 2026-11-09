@@ -13,6 +13,7 @@ const displayData = rowDisplayData.extend({
   uploadedBy: z.string().optional(), screenshot: fileUploadedDataSchema.shape.screenshot,
   changeType: z.string().optional(),
   executionMode: z.enum(['restricted', 'memory_free']).optional(),
+  attachmentIds: z.array(z.string()).optional(),
 });
 const displayTypes = new Set([
   'participant.added', 'participant.removed', 'conversation.closed', 'message.posted',

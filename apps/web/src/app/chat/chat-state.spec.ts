@@ -2,6 +2,21 @@ import type { ChatRow } from '@opencrane/protocol';
 import { isBudgetStop, rejectedScreenshotIds, shouldShowMaintenance, toolKind, transcript, turnOutcome,
   uploadedFile } from './chat-state';
 
+it('keeps message text and referenced files in one turn', () => {
+  const rows = [
+    { id: 'upload', position: 1, type: 'file.uploaded', time: '2026-11-09T10:00:00Z',
+      data: { conversationId: 'chat', fileId: 'file', uploadedBy: 'me',
+        name: 'notes.txt', size: 5, mime: 'text/plain' } },
+    { id: 'message', position: 2, type: 'message.posted', time: '2026-11-09T10:01:00Z',
+      data: { text: 'Read this', authorId: 'me', attachmentIds: ['file'] } },
+  ] as ChatRow[];
+  const turns = transcript(rows, 'me');
+  expect(turns.filter(turn => turn.author === 'you')).toEqual([
+    expect.objectContaining({ id: 'message', text: 'Read this',
+      files: ['uploads/chat/file/notes.txt'] }),
+  ]);
+});
+
 it('shows maintenance only for a starting computer after the usual wait', () => {
   expect(shouldShowMaintenance('starting', 14, false)).toBe(false);
   expect(shouldShowMaintenance('starting', 15, false)).toBe(true);

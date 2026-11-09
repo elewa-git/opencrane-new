@@ -17,8 +17,8 @@ shared rules for checking messages before the website shows them.
 flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages and file drops where Attach is available"] -->|requests and tab sign-out| web
-  web -->|chat, persona and settings requests| server["apps/server<br/>the back end"]
-  server -->|saved chats, command labels, files and live updates| web
+  web -->|messages with file references, persona and settings requests| server["apps/server<br/>the back end"]
+  server -->|saved chats, command labels, persona versions, files and live updates| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
   web -->|saved and private replies| capture["Chat workspace<br/>reply details, shared images and diagrams"]
@@ -42,6 +42,8 @@ For everyone, the website:
   A long computer start explains when the assistant service is waiting for maintenance.
   The saved message runs once the service and computer are ready.
   Assistant replies show headings, lists, quotes, code and safe links.
+  Messages to the assistant can hold text and clean file attachments together. The composer
+  shows each file's progress, scan result and remove control while typing stays open.
   Links to published workspace files open their previews. Published PNG, JPEG,
   WebP and GIF images in assistant replies appear in the text. Local file links
   that cannot be opened show their file name and say the agent has not shared them.

@@ -2242,6 +2242,12 @@ removal during that read, through the real HTTP route and disposable services.
 
 ## Chat summary and report writes
 
+Message commands can save up to 100 ids of clean uploads by the sender in the same
+conversation. A files-only message has empty text. File history is read with its own
+ten-second limit before the short write access check. The saved ids stay with the
+encrypted message event. Retried commands compare text and ids; old events without
+ids remain readable. The bridge passes only that message's files on new turns.
+
 Report reads do not load participation history. Turn starts check the small participation
 closure summary separately, before deciding whether to start or repeat a turn.
 The report summary's position still belongs only to the conversation stream.

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 import { envelope } from '@opencrane/models';
 import type { StoredEvent } from '@opencrane/event-store';
-import { fileUploadedDataSchema } from '@opencrane/events';
+import { fileUploadedDataSchema, messagePostedDataSchema } from '@opencrane/events';
 import { buildTurnTools, mayOfferTurnTools, toolsForMessage,
   type TurnDelivery, type TurnToolServerState } from '../src/chat/turn-tools.ts';
 import { turnMessage, type AgentSession, type WatchOptions } from '../src/chat/bridge-conversation.ts';
@@ -147,6 +147,14 @@ it('fits the largest ordinary turn and attachments below the socket limit', asyn
     assistantKind: 'personal',
   };
   const turn = turnMessage(options, conversation, rows, uploads, message, 'memory_free');
+  expect(turn.attachments).toHaveLength(100);
+  const messageData = messagePostedDataSchema.parse(messageEvent.data);
+  const boundEvent = { ...messageEvent,
+    data: { ...messageData, attachmentIds: ['file-1'] } };
+  const boundMessage: StoredEvent = { sequence: 101, event: boundEvent };
+  const boundTurn = turnMessage(options, conversation, rows, uploads,
+    boundMessage, 'memory_free');
+  expect(boundTurn.attachments.map(file => file.fileId)).toEqual(['file-1']);
   const baseMessageBytes = Buffer.byteLength(JSON.stringify(turn), 'utf8');
   const rowsForTools = Array.from({ length: 21 }, (_, index) => ({
     serverId: `server-${index}`,

@@ -17,6 +17,8 @@ Remember, Correct and Forget. The [chat contracts](README.robot.md) record the l
 stored facts through the gateway after saving their loaded references. Deployment checks remain unfinished.
 
 This folder handles conversations between people and with assistants. It saves messages, sends assistant work to the right computer and returns replies and live updates while checking who may read each chat.
+One message can name clean uploads from its author. The command checks each file before
+saving the message. Older messages still open without file references.
 
 After sending a completed private reply, the server keeps only its identity. It can ask
 the original browser to clear it when loaded memory changes or its computer connection
@@ -139,7 +141,7 @@ If the native turn completes before Stop reaches it, the routine still finishes 
 | [routes.ts](routes.ts), [commands.ts](commands.ts), [groups.ts](groups.ts), [reads.ts](reads.ts) | Handle conversation creation, messages, group choices and saved results. |
 | [access.ts](access.ts), [participation.ts](participation.ts), [participants.ts](participants.ts), [private-session.ts](private-session.ts) | Check current access, latest joins and participant changes. |
 | [history.ts](history.ts), [display.ts](display.ts), [public-id.ts](public-id.ts), [realtime.ts](realtime.ts), [list-summary.ts](list-summary.ts), [list-cursor.ts](list-cursor.ts), [state.ts](state.ts) | Return visible messages, live updates, lists and personal choices. |
-| [bridge.ts](bridge.ts), [bridge-poll.ts](bridge-poll.ts), [bridge-conversation.ts](bridge-conversation.ts), [start.ts](start.ts) | Connect computers and deliver pending work. |
+| [bridge.ts](bridge.ts), [bridge-poll.ts](bridge-poll.ts), [bridge-conversation.ts](bridge-conversation.ts), [start.ts](start.ts) | Connect computers and deliver pending work with the message's files. |
 | [reports.ts](reports.ts), [chat-summary.ts](chat-summary.ts), [turns.ts](turns.ts), [write-priority.ts](write-priority.ts) | Check and save reports and turns, with priority for stop requests. |
 | [turn-tools.ts](turn-tools.ts), [turn-credentials.ts](turn-credentials.ts), [private-context.ts](private-context.ts), [shared-context.ts](shared-context.ts), [memory-admission.ts](memory-admission.ts), [keys.ts](keys.ts) | Prepare tools, passes, permitted earlier messages and encryption. |
 | [approvals.ts](approvals.ts), [bridge-approvals.ts](bridge-approvals.ts), [budget-stops.ts](budget-stops.ts), [budget-refusal.ts](budget-refusal.ts), [bridge-budget-stops.ts](bridge-budget-stops.ts) | Handle approval waits, spending notices and stop delivery. |
@@ -153,7 +155,7 @@ The [server](../../README.md) registers chat requests and live connections for t
 ```mermaid
 flowchart LR
   server[Server] --> chat[Chat]
-  reader[Signed-in member] -->|closes and reads| chat
+  reader[Signed-in member] -->|sends messages with files, closes and reads| chat
   chat -->|saved events| store[Event store]
   chat -->|ends work in closed chats| computer[Assistant computer]
   chat -->|wakes a checked Ask replacement| computer

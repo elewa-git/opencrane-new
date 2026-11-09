@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 520, skipBlankLines: true, skipComments: true }] */
 import type { ArtifactPublication } from '../files/artifacts.ts';
 import type { createRoutineWake } from './routine-wake.ts';
 import { childRequestHeld } from './child-hold.ts';
@@ -5,7 +6,8 @@ import { pendingBudgetStops, sendBudgetStops } from './bridge-budget-stops.ts';
 import { chatMembership } from './participation.ts';
 import { isComputerLifecycle, readComputerControl } from '@opencrane/auth';
 import type { Client } from 'minio/dist/esm/minio.mjs';
-import { agentTurnStopRequestedDataSchema, fileDeliveredDataSchema, fileUploadedDataSchema }
+import { agentTurnStopRequestedDataSchema, fileDeliveredDataSchema, fileUploadedDataSchema,
+  messagePostedDataSchema }
   from '@opencrane/events';
 import type { WebSocket } from 'ws';
 import type { connectMcpCatalogue, listConversations } from '@opencrane/projections';
@@ -100,24 +102,28 @@ function pendingUploads(rows: ChatRows, uploads: Upload[], computerId: string) {
   return uploads.filter(notDelivered);
 }
 
-function attachmentsBefore(rows: ChatRows, uploads: Upload[], sequence: number) {
-  const allowed = new Set<string>();
-  for (const upload of uploads) allowed.add(upload.fileId);
+function attachmentsBefore(
+  rows: ChatRows, uploads: Upload[], sequence: number, attachmentIds?: string[],
+) {
+  const available = new Set<string>();
+  for (const upload of uploads) available.add(upload.fileId);
+  const requested = attachmentIds ? new Set(attachmentIds) : undefined;
   const attachments: { fileId: string; name: string; mime: string }[] = [];
   for (const row of rows) {
     if (row.event.type !== 'file.uploaded' || row.sequence >= sequence) continue;
     const file = fileUploadedDataSchema.parse(row.event.data);
-    if (allowed.has(file.fileId)) {
-      attachments.push({ fileId: file.fileId, name: file.name, mime: file.mime });
-    }
+    if (!available.has(file.fileId)) continue;
+    if (requested && !requested.has(file.fileId)) continue;
+    attachments.push({ fileId: file.fileId, name: file.name, mime: file.mime });
   }
   return attachments;
 }
 
 export function turnMessage(options: WatchOptions, conversation: AgentSession,
   rows: ChatRows, uploads: Upload[], message: ChatRows[number], executionMode: ExecutionMode) {
+  const posted = messagePostedDataSchema.parse(message.event.data);
   const attachments = executionMode === 'restricted'
-    ? [] : attachmentsBefore(rows, uploads, message.sequence);
+    ? [] : attachmentsBefore(rows, uploads, message.sequence, posted.attachmentIds);
   const requester = z.object({ authorId: z.string() }).parse(message.event.data);
   const text = options.keys.decrypt(options.silo, conversation.conversationId, message.event.data);
   const turn = { type: 'turn', id: message.event.id, conversationId: conversation.conversationId,

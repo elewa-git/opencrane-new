@@ -23,6 +23,7 @@ textarea:focus-visible { outline: var(--oc-focus-width) solid var(--oc-focus-rin
 .hint { color: #81888a; font-size: 11px; }
 kbd { font: 11px var(--oc-font-mono); background: #eef1f2; border: 1px solid #dee3e4; border-radius: 4px; padding: 1px 3px; }
 .toolbar .send { background: #0db5cc; color: white; }
+.toolbar .send.waiting { padding: 0 8px; font-size: 11px; }
 .toolbar .send:disabled { background: #c9d1d2; cursor: default; }
 .toolbar .stop { font-size: 12px; border: 1px solid #ecd2cf; padding: 0 10px; }
 .stop oc-icon { color: #c1392b; }
@@ -76,4 +77,14 @@ kbd { font: 11px var(--oc-font-mono); background: #eef1f2; border: 1px solid #de
   font-size: 13px;
   font-weight: 600;
   margin-bottom: 8px;
+}
+.attachment-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0 0 8px; list-style: none; }
+.attachment-chip { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; max-width: 100%; padding: 5px 7px; border: 1px solid #b8dfe5; border-radius: 8px; background: #eef9fa; color: #355056; font-size: 12px; }
+.attachment-chip.refused { border-color: #e9bbb5; background: #fff5f3; }
+.attachment-name { font-weight: 600; overflow-wrap: anywhere; }
+.attachment-chip progress { width: 70px; }
+.attachment-chip button { min-height: 28px; padding: 2px 5px; border: 1px solid #c5d3d5; border-radius: 5px; background: white; }
+@media(max-width: 700px) {
+  .attachment-chips { grid-column: 1 / -1; grid-row: 2; margin: 0 4px; }
+  .toolbar .mode-choice, #attach-toggle, .send, .stop { grid-row: 3; }
 }
