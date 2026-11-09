@@ -53,9 +53,15 @@ let reads: number;
 let workFinished: boolean;
 let bindingChecks: number;
 let failBindingAt: number | undefined;
+let installedContainers: { serverId: string; computerId: string };
+let swapAfterFirstRead: 'server' | 'computer' | undefined;
 
 function verifyBinding(): Promise<void> {
   bindingChecks += 1;
+  if (installedContainers.serverId !== containers.serverId ||
+      installedContainers.computerId !== containers.computerId) {
+    return Promise.reject(new Error('container_replaced'));
+  }
   if (bindingChecks === failBindingAt) {
     return Promise.reject(new Error('installation_replaced'));
   }
@@ -65,6 +71,13 @@ function verifyBinding(): Promise<void> {
 function fakeReader(): InventorySnapshot {
   const snapshot = snapshots[reads];
   reads += 1;
+  if (reads === 2 && swapAfterFirstRead) {
+    if (swapAfterFirstRead === 'server') {
+      installedContainers.serverId = 'f'.repeat(64);
+    } else {
+      installedContainers.computerId = 'f'.repeat(64);
+    }
+  }
   if (!snapshot) {
     throw new Error('unreadable_inventory');
   }
@@ -100,6 +113,8 @@ beforeEach(function prepare(): void {
   workFinished = false;
   bindingChecks = 0;
   failBindingAt = undefined;
+  installedContainers = { ...containers };
+  swapAfterFirstRead = undefined;
   vi.mocked(readCurrentInventory).mockImplementation(fakeReader);
   vi.mocked(execFileSync).mockImplementation(fakeControl);
   vi.mocked(runInContainer).mockImplementation(fakeContainer);
@@ -131,6 +146,17 @@ async function readsBothSnapshotsFromBoundContainers(): Promise<void> {
 }
 it('uses the original server and computer container IDs for the final read',
   readsBothSnapshotsFromBoundContainers);
+
+async function refusesFinalContainerSwap(kind: 'server' | 'computer'): Promise<void> {
+  swapAfterFirstRead = kind;
+  await expect(collectHeldInventory(context, containers, work, verifyBinding))
+    .rejects.toThrow('collection_failed');
+  expect(bindingChecks).toBe(2);
+  expect(vi.mocked(readCurrentInventory).mock.calls[1]?.[1]).toEqual(containers);
+}
+it.each(['server', 'computer'] as const)(
+  'refuses a %s container ID swap after the final read with the real coordinator',
+  refusesFinalContainerSwap);
 
 async function refusesMissing(group: ProtectionRecord['group'], phase: number): Promise<void> {
   const snapshot = snapshots[phase]!;
