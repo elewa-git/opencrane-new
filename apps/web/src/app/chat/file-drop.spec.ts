@@ -131,6 +131,44 @@ async function removesFileWhileConversationCreationWaits() {
 it('does not upload a removed file after conversation creation finishes',
   removesFileWhileConversationCreationWaits);
 
+async function ignoresFailureAfterActiveFileWasRemoved() {
+  const { fixture, root } = await renderWorkspace();
+  const chat = fixture.componentInstance['chat'];
+  const file = new File(['contents'], 'removed-active.txt');
+  const uploading = chat.upload(file);
+  function expectActiveRequest() { expect(requests).toHaveLength(1); }
+  await vi.waitFor(expectActiveRequest);
+  const abort = vi.spyOn(chat.uploadBatch.transfer!, 'abort').mockImplementation(() => {});
+  root.querySelector<HTMLButtonElement>('[aria-label="Remove removed-active.txt"]')?.click();
+  finishUpload(0, 503);
+  await uploading;
+  expect(abort).toHaveBeenCalledOnce();
+  expect(chat.uploadBatch.failures()).toEqual([]);
+  expect(chat.uploadBatch.chips()).toEqual([]);
+}
+it('does not restore a removed file after its active upload fails',
+  ignoresFailureAfterActiveFileWasRemoved);
+
+async function ignoresCompletionAfterActiveFileWasRemoved() {
+  const { fixture, root } = await renderWorkspace();
+  const chat = fixture.componentInstance['chat'];
+  const file = new File(['contents'], 'removed-complete.txt');
+  const confirmed = vi.spyOn(chat.uploadBatch, 'confirmed');
+  const uploading = chat.upload(file);
+  function expectActiveRequest() { expect(requests).toHaveLength(1); }
+  await vi.waitFor(expectActiveRequest);
+  const abort = vi.spyOn(chat.uploadBatch.transfer!, 'abort').mockImplementation(() => {});
+  root.querySelector<HTMLButtonElement>('[aria-label="Remove removed-complete.txt"]')?.click();
+  finishUpload(0);
+  await uploading;
+  expect(abort).toHaveBeenCalledOnce();
+  expect(confirmed).not.toHaveBeenCalled();
+  expect(chat.uploadBatch.pendingDelivery()).toBe('');
+  expect(chat.uploadBatch.readyIds()).toEqual([]);
+}
+it('does not mark a removed file ready after its active upload completes',
+  ignoresCompletionAfterActiveFileWasRemoved);
+
 async function uploadsInOrderWithErrors() {
   const { fixture, root } = await renderWorkspace();
   const oversized = new File([''], 'large.txt');

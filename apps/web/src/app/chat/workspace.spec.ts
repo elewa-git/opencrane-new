@@ -1412,6 +1412,33 @@ it('keeps replacement subscription replay quiet until its ready message', async 
   capture.fixture.destroy();
 });
 
+it('does not send a message while an uploaded file awaits delivery', async () => {
+  const capture = await createCaptureWorkspace();
+  const chat = capture.fixture.componentInstance['chat'];
+  const file = new File(['contents'], 'ready.txt');
+  const pending = chat.uploadBatch.start(file, 'chat', 'ready-key');
+  if (!pending) throw new Error('Missing upload');
+  chat.uploadBatch.confirmed('ready-file');
+
+  const sent = await chat.send('Send with the file');
+
+  expect(sent).toBe(false);
+  expect(capture.postBodies.filter(isMessageBody)).toEqual([]);
+  capture.fixture.destroy();
+});
+
+it('does not send a message between files in an upload batch', async () => {
+  const capture = await createCaptureWorkspace();
+  const chat = capture.fixture.componentInstance['chat'];
+  chat.uploadBatch.batchRunning.set(true);
+
+  const sent = await chat.send('Wait for the whole batch');
+
+  expect(sent).toBe(false);
+  expect(capture.postBodies.filter(isMessageBody)).toEqual([]);
+  capture.fixture.destroy();
+});
+
 it('announces each live tool transition once and stays quiet during history replay', async () => {
   const rows = [
     { id: 'message', position: 1, type: 'message.posted',
