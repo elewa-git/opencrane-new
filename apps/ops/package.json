@@ -20,7 +20,8 @@
     "@opencrane/handlers": "0.1.0",
     "@opencrane/models": "0.1.0",
     "@opencrane/observability": "0.1.0",
-    "@opencrane/projections": "0.1.0"
+    "@opencrane/projections": "0.1.0",
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "pg-boss": "12.35.0"

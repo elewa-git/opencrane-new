@@ -11,6 +11,30 @@ repository root on Node 22.
 The package backup inventory also reuses the Kubernetes client’s existing label,
 home-owner and suspension checks. These exported checks perform no writes.
 
+## Hosted image check jobs
+
+The dispatcher subscribes `check-hosted-image` to saved hosted registrations and
+`mcp.image_check_requested`. It reads the exact saved event and current attempt
+before using private inputs. Its checked writer claims one scan in the MCP stream,
+then scans the image and saves the result in that same stream. A duplicate job or
+lost result reply reads the claim or original result; it cannot start a second
+scan. Replay only rebuilds missing jobs from event history and never scans.
+
+`HOSTED_IMAGE_CUSTODY_FILE` names an operator-owned JSON file. It contains `silo`,
+`bundleDirectory`, `trust` (`version`, `repository`, `publicKey`, `revoked`),
+`scanner` (`url`, `caFile`, `privateKeyPath`, `issuer`, `imageDigest`,
+`manifestDigest`) and `tools` (`cosign`, `syft`, `osiPath`, `reviewPath`,
+`binaryPath`, `databasePath`, `databaseDigest`). Private values live in the
+named files, not in this setting or events. The configured repository must equal
+the saved pinned image repository. The bundle lives at
+`<bundleDirectory>/<silo>/<imageDigest>/`. It holds `manifest.json`,
+`config.json`, `signature.json` and digest-named files in `blobs/`.
+The layer walk checks file lengths and image hashes before any result can be saved.
+Signature, licence and vulnerability checks use their existing independent tools.
+Missing custody, changed settings, stale databases and tool outages leave the image
+unadmitted. Failed queue jobs remain visible to the operator and are retried at
+dispatcher startup. Hosted execution remains disabled.
+
 ## Test dependencies
 
 The test helper exposes the Kubernetes client, lifecycle functions and memory cleanup

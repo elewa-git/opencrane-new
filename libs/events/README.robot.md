@@ -1,5 +1,9 @@
 # Events
 
+`check-hosted-image` subscribes to `mcp.server_registered` and
+`mcp.image_check_requested`. The worker checks the saved event and current attempt
+before running the private scanner. Replay creates only missing queue jobs.
+
 For people, read [README.md](README.md) first.
 
 This package is the typed event catalogue used by server validation and the event

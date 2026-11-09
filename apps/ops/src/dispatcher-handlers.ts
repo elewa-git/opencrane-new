@@ -6,6 +6,7 @@ export function dispatcherHandlerNames(
   connectionCleanupAvailable = Boolean(env["CONNECTION_CUSTODY_FILE"]?.trim()),
 ): HandlerName[] {
   const names: HandlerName[] = ["update-openfga", "seed-ownership", "confirm-ownership", "seed-model-grants",
+    "check-hosted-image",
     "prepare-gateway-configuration", "seed-provider-default", "create-assistant", "claim-computer",
     "cleanup-departure", "stop-budget-turns", "complete-welcome"];
   if (env["PERSONAL_KEY_DIRECTORY"]?.trim()) {
