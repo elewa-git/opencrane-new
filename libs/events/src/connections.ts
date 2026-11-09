@@ -45,6 +45,17 @@ export const companyConnectionCreatedDataSchema = z.strictObject({
   }),
 });
 
+export const companyConnectionVerifiedDataSchema = companyConnectionCreatedDataSchema.extend({
+  activation: companyConnectionCreatedDataSchema.shape.activation.extend({
+    reason: z.literal('oauth_confirmed'), configurationDigest: digestSchema,
+    account: z.strictObject({
+      issuer: z.url().max(2048), subject: z.string().regex(/^[\x21-\x7e]{1,255}$/u),
+      scopes: z.array(z.string().regex(/^[\x21\x23-\x5b\x5d-\x7e]{1,200}$/u)).max(64),
+      expiresAt: z.int().positive(),
+    }),
+  }),
+});
+
 export const companyConnectionRefreshedDataSchema = companyConnectionCreatedDataSchema.extend({
   activation: companyConnectionCreatedDataSchema.shape.activation.extend({
     generation: z.int().min(2), expectedSequence: z.int().positive(),

@@ -25,7 +25,7 @@ function savedRows(): StoredEvent[] {
   event.source = 'opencrane-server';
   event.commandId = 'confirm';
   event.principal = { kind: 'human', id: 'admin' };
-  return [{ sequence: 1, position: 1, event }];
+  return [{ sequence: 1, event }];
 }
 
 function accountDigest() {
@@ -56,3 +56,18 @@ async function refusesChangedCustody() {
 }
 it('refuses a company account whose saved credential is no longer in custody',
   refusesChangedCustody);
+
+async function refusesMissingProfile() {
+  const recover = vi.fn();
+  const reader = readCurrentCompanyProfile({ recover });
+  await expect(reader([])).rejects.toThrow('Company profile unavailable');
+  expect(recover).not.toHaveBeenCalled();
+}
+it('refuses a missing saved company profile before reading custody', refusesMissingProfile);
+
+async function hidesFailedCustodyRead() {
+  const recover = vi.fn().mockRejectedValue(new Error('private-material-canary'));
+  const reader = readCurrentCompanyProfile({ recover });
+  await expect(reader(savedRows())).rejects.toThrow(/^Company profile unavailable$/u);
+}
+it('hides private details from a failed custody read', hidesFailedCustodyRead);

@@ -13,6 +13,8 @@ A new routine definition can name the MCP server separately from its connection.
 Older records without that name remain readable but cannot pass company preparation.
 An OAuth settings change records when editing starts and the digest of the finished
 settings. It contains no OAuth client secret or token.
+A verified company connection record can hold an account name, actual scopes and expiry.
+The credential stays in private custody; reading the record alone grants no call.
 A system routine pause names the exact saved removal of its recorded owner.
 The reference carries only the event id and position; readers verify the history.
 An Ask for a company routine can name its run, account and tool details with digests

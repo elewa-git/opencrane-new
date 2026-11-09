@@ -463,6 +463,53 @@ async function refusesCompanyChangeInsideSendAuthorisation() {
 it('refuses a company change inside the conditional send authorisation',
   refusesCompanyChangeInsideSendAuthorisation);
 
+async function refusesUnfinishedOAuthEditInsideSendAuthorisation() {
+  const append = nats.store.append.bind(nats.store);
+  let authorisingSend = false;
+  let editStarted = false;
+  async function trackSendAuthorisation(...supplied: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_send_authorised') authorisingSend = true;
+    try {
+      return await append(...supplied);
+    } finally {
+      authorisingSend = false;
+    }
+  }
+  const spy = vi.spyOn(nats.store, 'append');
+  spy.mockImplementation(trackSendAuthorisation);
+  function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+    computerGeneration: number) {
+    async function confirmCurrent() {
+      if (!authorisingSend || editStarted) return;
+      const changing = record('oauth-edit-started', 'mcp-company-routine',
+        'mcp.oauth_configuration_recorded', { serverId: 'company-routine',
+          changeId: '00000000-0000-4000-8000-000000000001', status: 'changing' });
+      await nats.seed([changing]);
+      editStarted = true;
+    }
+    return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
+      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent });
+  }
+  try {
+    const composition = compose({ enabled: true, companyPreflight });
+    expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+    expect(editStarted).toBe(true);
+    expect(await saved('routine.run_send_authorised', 'routine-orders')).toEqual([]);
+    function isTurn(frame: Record<string, unknown>) {
+      return frame['type'] === 'turn';
+    }
+    expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
+    const changes = await saved('mcp.oauth_configuration_recorded', 'mcp-company-routine');
+    expect(changes).toHaveLength(1);
+    expect(changes[0]!.event.data).toMatchObject({ status: 'changing' });
+  } finally {
+    spy.mockRestore();
+  }
+}
+it('refuses an unfinished OAuth edit during the guarded send authorisation',
+  refusesUnfinishedOAuthEditInsideSendAuthorisation);
+
 async function inert(options: { enabled?: boolean; replay?: boolean }) {
   const before = await nats.store.head();
   const wake = vi.fn(forbidden);

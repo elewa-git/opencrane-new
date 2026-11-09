@@ -1060,3 +1060,11 @@ change id and either `changing` or `ready`. A ready record from the trusted
 settings editor carries the SHA-256 digest of the strict loaded OAuth settings.
 It carries no credential. The company preflight rejects a missing, changing or
 non-matching latest record. It has no background reaction.
+
+## Verified company profile records
+
+The strict company `connection.created` variant can record an OAuth-confirmed account
+with issuer, subject, actual scopes, expiry and configuration digest. Its existing
+company owner, installation, generation and custody reference fields remain required.
+The reader checks the exact saved credential in custody before using this record.
+No production company confirmation writer is registered in this part.

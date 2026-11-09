@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { snapshotPositions, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { grantGivenDataSchema, grantRevokedDataSchema,
@@ -6,7 +7,8 @@ import { grantGivenDataSchema, grantRevokedDataSchema,
 import type { RoutineState } from '@opencrane/events';
 import { companySelectionFacts, foldCompanyConnection, foldConnectionSelection,
   groupMembership, history, type CompanyProfileReader,
-  toolPolicyFromRows, type OAuthConfigurationLoader } from '@opencrane/models';
+  readCurrentCompanyProfile, toolPolicyFromRows, type OAuthConfigurationLoader }
+  from '@opencrane/models';
 
 type Run = NonNullable<RoutineState['activeRun']>;
 
@@ -91,7 +93,7 @@ function requireSavedProfile(rows: StoredEvent[], run: Run) {
   const profile = foldCompanyConnection(rows);
   const saved = profile.data;
   const definition = run.definition;
-  if (profile.status !== 'saved_unverified' || !saved ||
+  if ((profile.status !== 'saved_unverified' && profile.status !== 'verified') || !saved ||
       profile.sequence !== definition.profileRevision ||
       profile.sequence !== definition.connectionRevision ||
       saved.serverId !== definition.serverId ||
@@ -198,9 +200,14 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     const selectionRows = await history(store, selectionSubject, silo, deadline);
     const selected = requireChoice(selectionRows, run);
     let savedProfile: ReturnType<typeof requireSavedProfile> | undefined;
-    function checkedReader(rows: StoredEvent[]) {
+    let profileRows: StoredEvent[] | undefined;
+    let profileEvidence: unknown;
+    async function checkedReader(rows: StoredEvent[]) {
       savedProfile = requireSavedProfile(rows, run);
-      return readProfile(rows);
+      profileRows = rows;
+      // Keep the original account separate if a trusted reader reuses a mutable object.
+      profileEvidence = structuredClone(await readProfile(rows));
+      return profileEvidence;
     }
     const facts = await companySelectionFacts(store, silo, selected.choice,
       loadConfiguration, checkedReader);
@@ -224,7 +231,8 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     async function confirmCurrent() {
       try {
         const currentDeadline = performance.now() + 2_000;
-        if (Date.now() >= facts.expiresAt || !await facts.oauth.configurationCurrent()) {
+        if (!profileRows || !isDeepStrictEqual(await readProfile(profileRows), profileEvidence) ||
+            Date.now() >= facts.expiresAt || !await facts.oauth.configurationCurrent()) {
           refuse();
         }
         // Check all company streams at one log position. A guarded append also checks
@@ -243,4 +251,16 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
   } catch {
     refuse();
   }
+}
+
+/** Prepare one internal company check using saved records and private credential custody. */
+export function routineCompanyPreflightFromCustody(store: EventStore, binding: Binding,
+  silo: string, loadConfiguration: OAuthConfigurationLoader,
+  custody: Parameters<typeof readCurrentCompanyProfile>[0]) {
+  const readProfile = readCurrentCompanyProfile(custody);
+  async function preflight(run: Run, computerGeneration: number) {
+    return checkRoutineCompanyPreflight(store, binding, silo, run, computerGeneration,
+      loadConfiguration, readProfile);
+  }
+  return preflight;
 }

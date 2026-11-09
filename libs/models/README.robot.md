@@ -5041,7 +5041,8 @@ The server can reuse `companySelectionFacts` with a trusted profile reader for a
 routine's post-wake company check. It reads the exact saved company profile, MCP
 server, opt-in and OAuth configuration. The server also checks the owner's selected
 profile and frozen account and scopes. This exported helper does not release a
-credential or grant a tool call. No production company verification reader is wired.
+credential or grant a tool call. The production reader checks saved account evidence
+and exact custody identity, but no live confirmation writer or execution entry uses it.
 
 `changeConnectionSelection` accepts optional `ownerKind: personal | company`. Omission
 keeps personal behaviour. Company selection requires current requester membership and
@@ -5053,8 +5054,13 @@ one enabled reviewed tool with its required scopes, plus the protocol scopes.
 The append rechecks profile, opt-in and publication positions and configuration.
 Only accountDigest, siloId, generation and ownerKind extend the saved choice.
 
-No production verification reader is installed. The default company fold returns
-`saved_unverified`, which refuses selection. The synthetic reader in
+`readCurrentCompanyProfile` reads only a saved `oauth_confirmed` company record and
+checks its exact credential reference, UID and resource version through connection
+custody. It returns the saved issuer/subject digest, actual scopes, configuration
+digest and expiry. A missing, changed or failed custody read refuses without exposing
+private details. The routine preflight repeats this read in its guarded check.
+No production company OAuth confirmation writer is installed. Bearer saves remain
+`saved_unverified` and cannot use this reader. The synthetic reader in
 `test/company-selection.test.ts` is test evidence only, not live company activation.
 The existing personal dispatch reader refuses company choices, including when a personal
 profile has the same id. No broker, custody, sender or routine behaviour changes.

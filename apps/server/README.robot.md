@@ -7167,8 +7167,10 @@ and the public execution switch remain disabled.
 preparation or root allocation. It requires the frozen routine's `serverId`, owner,
 connection, profile revisions, verified account id and scopes to match one explicit
 company choice. It reuses `companySelectionFacts` for installation, opt-in, OAuth
-configuration, account evidence and available tools. The trusted profile reader must
-confirm credential custody; no production reader is installed. It also reads the
+configuration, account evidence and available tools. The trusted profile reader can
+use `readCurrentCompanyProfile` to confirm the saved verified account and its exact
+credential in custody. No production company profile confirmation writer or routine
+delivery entry is installed. It also reads the
 saved tool name, revision, catalogue digest, destination digest, policy revision and
 zero-cent price. The current published review must still allow that exact tool, with
 the same installation and required scopes. Missing tool or price facts refuse.

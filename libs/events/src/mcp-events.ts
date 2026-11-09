@@ -175,7 +175,9 @@ export const mcpEvents = [
     'connection.created',
     'connection',
     'A person or company saved a staged connection reference; identity may remain unverified.',
-    z.union([connections.connectionCreatedDataSchema, connections.companyConnectionCreatedDataSchema]),
+    z.union([connections.connectionCreatedDataSchema,
+      connections.companyConnectionCreatedDataSchema,
+      connections.companyConnectionVerifiedDataSchema]),
     { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', secretRef: 'secret:1' },
   ),
   event(
