@@ -23,6 +23,12 @@ const unsafeCommands = [
   '/workspace/ls secret',
   'npm run private-task',
   'ls --help',
+  'ls -l --help',
+  'ls -l -h',
+  'npm install --help',
+  'npm install -h',
+  'pip install --help',
+  'python3 -Wignore.py -c "print(1)"',
   'npm install --dry-run',
 ];
 
