@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { hostedImageCheckedSchema } from '@opencrane/events';
+import { retainAuthenticatedImageEvidence } from '../src/image-scan-evidence.ts';
 import { envelope, history } from '../src/actor.ts';
 import { writeHostedAdmission as rawWriter, readHostedAdmission, readHostedImageScanAttempt,
   foldHostedAdmission }
@@ -34,11 +35,12 @@ async function writeTestAdmission(store: typeof nats.store, silo: string, raw: u
   at?: Date) {
   const parsed = hostedImageCheckedSchema.safeParse(raw);
   const fallback = hostedImageCheckedSchema.parse(result('fallback'));
+  const malware = parsed.success ? parsed.data.checks.malware : fallback.checks.malware;
+  const scanEvidence = retainAuthenticatedImageEvidence({ malware });
   function evidence() {
-    return Promise.resolve({ verdict: 'clean' as const,
-      malware: parsed.success ? parsed.data.checks.malware : fallback.checks.malware });
+    return Promise.resolve({ verdict: 'clean' as const, malware });
   }
-  return rawWriter(store, silo, raw, at, evidence);
+  return rawWriter(store, silo, raw, at, scanEvidence, evidence);
 }
 
 async function refusesUnvalidatedExport() {
@@ -52,7 +54,7 @@ async function refusesUnvalidatedExport() {
     return Promise.resolve(false);
   }
   // @ts-expect-error Check runtime rejection of an incomplete validator result.
-  const refused = await exportedWriter(nats.store, 'test', invented, now, invalidEvidence);
+  const refused = await exportedWriter(nats.store, 'test', invented, now, undefined, invalidEvidence);
   expect(refused.status).toBe('conflict');
   expect(await registrations()).toHaveLength(1);
 }
@@ -63,11 +65,12 @@ async function refusesIncompleteEvidence() {
   const serverId = await installed();
   const invented = hostedImageCheckedSchema.parse(result(serverId));
   const wrongMalware = { ...invented.checks.malware, reportDigest: 'b'.repeat(64) };
+  const scanEvidence = retainAuthenticatedImageEvidence({ malware: invented.checks.malware });
   function mismatchedEvidence() {
     return Promise.resolve({ verdict: 'clean' as const, malware: wrongMalware });
   }
   const outcome = await exportedWriter(nats.store, 'test', invented, now,
-    mismatchedEvidence);
+    scanEvidence, mismatchedEvidence);
   expect(outcome.status).toBe('conflict');
   expect(await registrations()).toHaveLength(1);
 }
@@ -76,11 +79,12 @@ it('refuses validation of a different malware result', refusesIncompleteEvidence
 async function acceptsMatchingEvidence() {
   const serverId = await installed();
   const checked = hostedImageCheckedSchema.parse(result(serverId));
+  const scanEvidence = retainAuthenticatedImageEvidence({ malware: checked.checks.malware });
   function matchingEvidence() {
     return Promise.resolve({ verdict: 'clean' as const, malware: checked.checks.malware });
   }
   const outcome = await exportedWriter(nats.store, 'test', checked, now,
-    matchingEvidence);
+    scanEvidence, matchingEvidence);
   expect(outcome.status).toBe('appended');
   expect(await registrations()).toHaveLength(2);
 }
@@ -93,12 +97,34 @@ async function refusesFabricatedMatchingEvidence() {
     return Promise.resolve({ verdict: 'clean' as const, malware: invented.checks.malware });
   }
   const outcome = await exportedWriter(nats.store, 'test', invented, now,
-    inventedEvidence);
+    undefined, inventedEvidence);
   expect(outcome.status).toBe('conflict');
   expect(await registrations()).toHaveLength(1);
 }
 it('refuses a caller-invented matching validator at the package export',
   refusesFabricatedMatchingEvidence);
+
+async function refusesProofFromAnotherAttempt() {
+  const serverId = await installed();
+  const checked = hostedImageCheckedSchema.parse(result(serverId));
+  const binding = { silo: 'test', serverId, attemptId: 1,
+    imageDigest: digest, platform: 'linux/amd64' };
+  const changes = [{ silo: 'other' }, { serverId: 'other' }, { attemptId: 2 },
+    { imageDigest: 'b'.repeat(64) }, { platform: 'linux/arm64' }];
+  function matchingEvidence() {
+    return Promise.resolve({ verdict: 'clean' as const, malware: checked.checks.malware });
+  }
+  for (const change of changes) {
+    const scanEvidence = retainAuthenticatedImageEvidence({ ...binding, ...change,
+      malware: checked.checks.malware });
+    const outcome = await exportedWriter(nats.store, 'test', checked, now,
+      scanEvidence, matchingEvidence);
+    expect(outcome.status).toBe('conflict');
+    expect(await registrations()).toHaveLength(1);
+  }
+}
+it('refuses scanner proof from another silo, server, attempt, image or platform',
+  refusesProofFromAnotherAttempt);
 
 async function refusesMalwareBoundary(kind: string) {
   const serverId = await installed();
@@ -117,10 +143,12 @@ async function refusesMalwareBoundary(kind: string) {
   }
   const edited = { ...payload, checks: { ...payload.checks, malware } };
   const checked = hostedImageCheckedSchema.parse(edited);
+  const scanEvidence = retainAuthenticatedImageEvidence({ malware: checked.checks.malware });
   function evidence() {
     return Promise.resolve({ verdict: 'clean' as const, malware: checked.checks.malware });
   }
-  const written = await exportedWriter(nats.store, 'test', checked, eventTime, evidence);
+  const written = await exportedWriter(nats.store, 'test', checked, eventTime,
+    scanEvidence, evidence);
   expect(written.status).toBe('conflict');
   expect(await registrations()).toHaveLength(1);
 }
