@@ -1,12 +1,14 @@
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync, readlinkSync, statfsSync, statSync } from 'node:fs';
+import { lstatSync, readFileSync, readlinkSync, realpathSync, statfsSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { probeContainer } from './container-probe.ts';
 import { readProcessIdentity, sameProcessIdentity, type ProcessIdentity } from './private-processes.ts';
 import type { ProtectionFailure } from './protection-failure.ts';
 
 const require = createRequire(import.meta.url);
 const wrapperDigest = '61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70';
+const nativeDigest = '1748767b230ebfc3d4ab7e4e254920d0c0ad9691fd8c11f190e7d44511a4a92e';
 const wrapperCommand = '/usr/local/bin/node\0--disable-sigusr1\0' +
   '/usr/local/bin/codex\0app-server\0--stdio\0';
 
@@ -16,7 +18,18 @@ type NativeBinding = {
   childPid: number;
   recordPath: string;
   childBinary: string;
+  runnerPid?: number;
 };
+
+export function pinnedNativeBinary(): string {
+  const wrapper = realpathSync('/usr/local/bin/codex');
+  const binary = realpathSync(join(dirname(wrapper), '../../codex-linux-x64',
+    'vendor/x86_64-unknown-linux-musl/bin/codex'));
+  if (digest(binary) !== nativeDigest) {
+    throw new Error('private_process_identity_changed');
+  }
+  return binary;
+}
 
 function digest(path: string): string {
   const hash = createHash('sha256');
@@ -119,7 +132,7 @@ function sameNativePipes(wrapperPid: number, childPid: number): boolean {
 
 function identitiesMatch(binding: NativeBinding, wrapper: ProcessIdentity,
   child: ProcessIdentity): boolean {
-  const runner = readProcessIdentity(process.pid);
+  const runner = readProcessIdentity(binding.runnerPid ?? process.pid);
   const wrapperNumbers = processNumbers(binding.wrapperPid);
   const childNumbers = processNumbers(binding.childPid);
   const children = readFileSync(
@@ -133,6 +146,12 @@ function identitiesMatch(binding: NativeBinding, wrapper: ProcessIdentity,
       wrapperNumbers.group !== childNumbers.group ||
       wrapperNumbers.group !== processNumbers(runner.pid).group ||
       wrapperNumbers.start !== wrapper.startTime || childNumbers.start !== child.startTime) {
+    return false;
+  }
+  if (binding.runnerPid !== undefined &&
+      (runner.uid !== 0 || runner.executable !== '/usr/local/bin/node' ||
+       runner.commandLine !== '/usr/local/bin/node\0--experimental-strip-types\0' +
+         '/scripts/private-memory-qualification/native-hold.ts\0')) {
     return false;
   }
   if (wrapper.uid !== 1003 || child.uid !== 1003 ||

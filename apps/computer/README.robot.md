@@ -6,6 +6,12 @@ computer container. The probe compares the full identity returned by each succes
 protection check with a new read, including the executable and command line. A changed
 process refuses even when its PID and Linux start time stay the same.
 
+The image installs `native-process-proof.ts` and the Codex launcher at the fixed
+paths used by the live reader. The reader checks a native launch record against the
+running wrapper and child, including their executable, UID, cgroup, PID namespace,
+core limits and dump protection. Missing or changed proof refuses. The collector
+does not yet hold this pair through both inventory reads.
+
 ## Retained Ask call limits
 
 The proxy keeps at most 16 original Ask requests and 8 MiB of their request bytes.

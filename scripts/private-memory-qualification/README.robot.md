@@ -747,8 +747,9 @@ refuses an exec with the same PID and start time. The computer image installs
 the probe under `/scripts/private-memory-qualification/`, where the collector
 executes it. Each read uses the configured container ids, image digests,
 installation ids, challenge and computer generation. The joined validator
-checks the image for the process's actual container. The canary helper belongs
-to the server image because its supervisor launches there.
+checks the image for the process's actual container. The native and canary readers
+also check protected launch records, executable, UID, cgroup and dump protection.
+The canary helper belongs to the server image because its supervisor launches there.
 
 This reader is incomplete by design. The native wrapper, native child and
 canary helper still have no held launch across the first and second reads.

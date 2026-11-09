@@ -59,6 +59,10 @@ COPY --from=project scripts/private-memory-qualification/supervisor-check.ts \
   /scripts/private-memory-qualification/supervisor-check.ts
 COPY --from=project scripts/private-memory-qualification/live-inventory-probe.ts \
   /scripts/private-memory-qualification/live-inventory-probe.ts
+COPY --from=project scripts/private-memory-qualification/native-process-proof.ts \
+  /scripts/private-memory-qualification/native-process-proof.ts
+COPY --from=project apps/computer/src/private-codex.ts \
+  /apps/computer/src/private-codex.ts
 COPY --from=process-protection-build /runner-protection.node \
   /scripts/private-memory-qualification/runner-protection.node
 COPY requirements.lock /tmp/requirements.lock
