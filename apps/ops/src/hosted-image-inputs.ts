@@ -186,7 +186,7 @@ async function independentChecks(config: Configuration, attempt: Attempt, reposi
 }
 
 /** Read only operator-owned files. The saved event selects the exact digest and repository. */
-export async function trustedHostedImageInputs(store: EventStore, silo: string,
+async function readHostedImageInputs(store: EventStore, silo: string,
   trigger: EventEnvelope): Promise<Inputs> {
   const path = process.env['HOSTED_IMAGE_CUSTODY_FILE'];
   requireInput(path);
@@ -236,4 +236,14 @@ export async function trustedHostedImageInputs(store: EventStore, silo: string,
     }
   }
   return { prepareImage: image, readSettings: settings, readIndependentChecks: checks };
+}
+
+export async function trustedHostedImageInputs(store: EventStore, silo: string,
+  trigger: EventEnvelope): Promise<Inputs> {
+  try {
+    return await readHostedImageInputs(store, silo, trigger);
+  } catch {
+    // Hide private file names and configuration values from queue errors and logs.
+    throw new Error(refusal);
+  }
 }

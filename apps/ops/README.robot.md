@@ -38,6 +38,11 @@ The Grype receipt must have the same verdict as Grype's outcome. A missing recei
 different verdict leaves the claim without a result. The queue test uses a local
 authenticated scanner and the real checked writer to confirm one saved refusal for
 each independent check, and reads that result on delivery of the original event again.
+The same test checks unavailable signature, licence and Grype outcomes, a missing or
+different Grype receipt, malformed evidence and a lost scanner reply. None can save
+an image decision. The input adapter replaces file and configuration errors with
+`Trusted image inputs unavailable` before the queue can log or save them. A canary
+test checks the queue log, failed job and public error for private content and paths.
 Missing custody, changed settings, stale databases and tool outages leave the image
 unadmitted. Failed queue jobs remain visible to the operator and are retried at
 dispatcher startup. Hosted execution remains disabled.
