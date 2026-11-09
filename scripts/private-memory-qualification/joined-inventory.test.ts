@@ -331,3 +331,106 @@ function realReaderRefuses(): void {
   });
 }
 it('keeps the production reader closed until it measures a live set', realReaderRefuses);
+
+function refusesMalformedLaunch(change: Record<string, unknown>, group: string): void {
+  const records = completeInventory();
+  const launches = records.map(measuredLaunch);
+  const changed = launches.map(function changeNativeLaunch(item): Record<string, unknown> {
+    if (item.group === 'nativeChild') {
+      return { ...item, ...change };
+    }
+    return item;
+  });
+  const snapshot = { records, launches: changed };
+  expect(joinObservedInventory(context, snapshot, snapshot)).toEqual({ ok: false, group });
+}
+it.each([
+  [{ group: 'unknown' }, 'inventory'],
+  [{ pid: undefined }, 'nativeChild'],
+  [{ pid: 1.5 }, 'nativeChild'],
+  [{ startTime: '01' }, 'nativeChild'],
+  [{ pidNamespace: 'wrong' }, 'nativeChild'],
+  [{ dumpable: true }, 'nativeChild'],
+  [{ helperId: challenge }, 'nativeChild'],
+  [{ extra: 'untrusted' }, 'nativeChild'],
+] as const)('refuses malformed measured launch %j', refusesMalformedLaunch);
+
+function refusesDuplicateMeasuredLaunch(): void {
+  const snapshot = snapshotFromRecords(completeInventory());
+  const duplicate = snapshot.launches.find(function isChild(item): boolean {
+    return item.group === 'nativeChild';
+  })!;
+  const changed = { ...snapshot, launches: [...snapshot.launches, duplicate] };
+  expect(joinObservedInventory(context, changed, changed)).toEqual({
+    ok: false, group: 'nativeChild',
+  });
+}
+it('refuses two launch observations for one required process',
+  refusesDuplicateMeasuredLaunch);
+
+function refusesHelperLaunchWithoutId(): void {
+  const snapshot = snapshotFromRecords(completeInventory());
+  const changedLaunches = snapshot.launches.map(function loseHelperId(item): TrustedLaunch {
+    if (item.helperId === challenge) {
+      return { ...item, helperId: undefined };
+    }
+    return item;
+  });
+  const changed = { ...snapshot, launches: changedLaunches };
+  expect(joinObservedInventory(context, changed, changed)).toEqual({
+    ok: false, group: 'canaryHelper',
+  });
+}
+it('refuses a helper launch without its challenge ID', refusesHelperLaunchWithoutId);
+
+function refusesMalformedSnapshot(change: Record<string, unknown>): void {
+  const snapshot = snapshotFromRecords(completeInventory());
+  const changed = { ...snapshot, ...change };
+  expect(joinObservedInventory(context, changed, snapshot)).toEqual({
+    ok: false, group: 'inventory',
+  });
+}
+it.each([
+  { launches: {} },
+  { launches: undefined },
+  { records: undefined },
+  { extra: 'untrusted' },
+])('refuses a malformed inventory snapshot %j', refusesMalformedSnapshot);
+
+function acceptsBridgeAndProxyInOneProcess(): void {
+  const records = completeInventory();
+  const bridge = records.find(function isBridge(item): boolean {
+    return item.group === 'bridge';
+  })!;
+  const shared = records.map(function shareBridgeIdentity(item): ProtectionRecord {
+    if (item.group === 'proxy') {
+      return { ...item, pid: bridge.pid, startTime: bridge.startTime,
+        pidNamespace: bridge.pidNamespace };
+    }
+    return item;
+  });
+  const snapshot = snapshotFromRecords(shared);
+  expect(joinObservedInventory(context, snapshot, snapshot)).toEqual({ ok: true });
+}
+it('allows bridge and proxy labels for their one measured process',
+  acceptsBridgeAndProxyInOneProcess);
+
+function refusesDifferentGroupsSharingOneProcess(): void {
+  const records = completeInventory();
+  const wrapper = records.find(function isWrapper(item): boolean {
+    return item.group === 'nativeWrapper';
+  })!;
+  const shared = records.map(function shareWrapperIdentity(item): ProtectionRecord {
+    if (item.group === 'nativeChild') {
+      return { ...item, pid: wrapper.pid, startTime: wrapper.startTime,
+        pidNamespace: wrapper.pidNamespace };
+    }
+    return item;
+  });
+  const snapshot = snapshotFromRecords(shared);
+  expect(joinObservedInventory(context, snapshot, snapshot)).toEqual({
+    ok: false, group: 'nativeChild',
+  });
+}
+it('refuses two different private processes with one PID and start time',
+  refusesDifferentGroupsSharingOneProcess);
