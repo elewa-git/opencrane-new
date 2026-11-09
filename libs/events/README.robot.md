@@ -715,7 +715,8 @@ It grants no permission. The Ready read remains unbuilt.
 
 ## Hosted image admission receipts
 
-`mcp.image_scan_claimed` names the original server, attempt, image digest and platform.
+`mcp.image_scan_claimed` names the original server, attempt, image digest, platform and
+a random claim token for the caller that saved it.
 It carries no scanner verdict and grants no image use. The worker saves it before
 preparing image bytes so replay and a restarted worker can refuse a second scan.
 

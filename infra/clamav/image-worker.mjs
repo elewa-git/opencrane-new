@@ -70,7 +70,16 @@ async function writeCurrentImageCheck(store, silo, serverId, attemptId, prepareI
     const ownership = await claimHostedImageScan(store, silo, claim);
     signal?.throwIfAborted();
     if (ownership.status === 'completed') return { status: 'appended' };
-    if (ownership.status !== 'claimed') return { status: 'unavailable' };
+    if (ownership.status !== 'claimed') {
+      // Read a completed result after losing the claim. Never start a second scan.
+      const current = await readHostedAdmission(store, silo, serverId);
+      if (current && current.attemptId === attemptId &&
+          current.imageDigest === saved.imageDigest &&
+          current.platform === saved.platform && current.checks) {
+        return { status: 'appended' };
+      }
+      return { status: 'unavailable' };
+    }
     const current = await scanCurrentAttempt(store, silo, serverId,
       prepareImage, readSettings, signal);
     if (!current || current.attempt.attemptId !== attemptId ||

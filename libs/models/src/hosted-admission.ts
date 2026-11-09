@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { getEventDefinition, hostedImageCheckedSchema, hostedImageCheckRequestedSchema,
   hostedImageScanClaimedSchema,
@@ -16,6 +16,8 @@ type Admission = z.infer<typeof hostedAdmissionSchema>;
 type MalwareEvidence = Result['checks']['malware'];
 type ValidatedMalwareEvidence = { verdict: 'clean'; malware: MalwareEvidence };
 type ImageScanClaim = z.infer<typeof hostedImageScanClaimedSchema>;
+const imageScanClaimInput = hostedImageScanClaimedSchema.omit({ claimToken: true });
+type ImageScanClaimInput = z.infer<typeof imageScanClaimInput>;
 const day = 86_400_000;
 
 function validDates(result: Result, at: number) {
@@ -127,7 +129,7 @@ function modelsResult(event: EventEnvelope, silo: string, serverId: string) {
     event.subject === `mcp-${serverId}` && event.source === 'models' &&
     event.principal?.kind === 'system' && event.principal.id === 'models';
 }
-function matches(state: Admission, result: ImageScanClaim) {
+function matches(state: Admission, result: ImageScanClaimInput) {
   return state.serverId === result.serverId && state.attemptId === result.attemptId &&
     state.imageDigest === result.imageDigest && state.platform === result.platform;
 }
@@ -178,9 +180,10 @@ function claimAlreadySaved(event: EventEnvelope, silo: string, claim: ImageScanC
 
 export async function claimHostedImageScan(store: EventStore, silo: string,
   rawClaim: unknown) {
-  const parsed = hostedImageScanClaimedSchema.safeParse(rawClaim);
+  const parsed = imageScanClaimInput.safeParse(rawClaim);
   if (!parsed.success) return { status: 'unavailable' as const };
-  const claim = parsed.data;
+  // Give each caller its own identity even when it races with the same attempt.
+  const claim = { ...parsed.data, claimToken: randomUUID() };
   const rows = await rowsFor(store, claim.serverId);
   const state = foldHostedAdmission(rows, silo, claim.serverId);
   if (!state || !matches(state, claim)) return { status: 'unavailable' as const };
@@ -197,7 +200,9 @@ export async function claimHostedImageScan(store: EventStore, silo: string,
   const event = envelope(silo, subject, 'mcp.image_scan_claimed', claim, hash.digest('hex'));
   try {
     const appended = await store.append({ event, expectedSequence: rows.at(-1)!.sequence });
-    if (appended.status !== 'appended') return { status: 'unavailable' as const };
+    if (appended.status !== 'appended' || appended.outcome?.kind !== 'appended') {
+      return { status: 'unavailable' as const };
+    }
     const saved = await store.readEvent(appended.sequence);
     if (!scanClaimMatches(saved.event, silo, claim)) return { status: 'unavailable' as const };
     return { status: 'claimed' as const };

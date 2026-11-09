@@ -3,7 +3,7 @@ import type { EventStore } from '@opencrane/event-store';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { hostedImageCheckedSchema } from '@opencrane/events';
+import { hostedImageCheckedSchema, hostedImageScanClaimedSchema } from '@opencrane/events';
 import { envelope, history } from '../src/actor.ts';
 import { writeHostedAdmission as rawWriter, readHostedAdmission, readHostedImageScanAttempt,
   foldHostedAdmission, claimHostedImageScan }
@@ -223,8 +223,14 @@ async function onlyOneSimultaneousCallerClaimsScan() {
   const claim = { serverId, attemptId: 1, imageDigest: digest, platform: 'linux/amd64' };
   let releaseReads!: () => void;
   let releaseAppends!: () => void;
-  const bothRead = new Promise<void>(resolve => { releaseReads = resolve; });
-  const bothAppending = new Promise<void>(resolve => { releaseAppends = resolve; });
+  function captureReadRelease(resolve: () => void) {
+    releaseReads = resolve;
+  }
+  function captureAppendRelease(resolve: () => void) {
+    releaseAppends = resolve;
+  }
+  const bothRead = new Promise<void>(captureReadRelease);
+  const bothAppending = new Promise<void>(captureAppendRelease);
   let readCount = 0;
   let appendCount = 0;
   const appendKinds: string[] = [];
@@ -251,7 +257,7 @@ async function onlyOneSimultaneousCallerClaimsScan() {
     function get(target: EventStore, property: keyof EventStore) {
       if (property === 'readStream') return readStream;
       if (property === 'append') return append;
-      return target[property];
+      return Reflect.get(target, property, target) as unknown;
     }
 
     return new Proxy(nats.store, { get });
@@ -266,11 +272,17 @@ async function onlyOneSimultaneousCallerClaimsScan() {
   expect(readCount).toBe(2);
   expect(appendCount).toBe(2);
   expect(appendKinds).toContain('duplicate_saved');
-  expect(outcomes.map(outcome => outcome.status).sort()).toEqual(['claimed', 'unavailable']);
+  function outcomeStatus(outcome: { status: string }) {
+    return outcome.status;
+  }
+  const statuses = outcomes.map(outcomeStatus);
+  statuses.sort();
+  expect(statuses).toEqual(['claimed', 'unavailable']);
   const rows = await registrations();
   expect(rows).toHaveLength(2);
   expect(rows[1]!.event.type).toBe('mcp.image_scan_claimed');
-  expect(rows[1]!.event.data).toMatchObject({ claimToken: expect.any(String) });
+  const savedClaim = hostedImageScanClaimedSchema.parse(rows[1]!.event.data);
+  expect(savedClaim.claimToken).toHaveLength(36);
 }
 
 it('lets only the worker that saved a simultaneous claim scan',

@@ -285,7 +285,7 @@ function writableImageStore(image) {
       store.loseReply = false;
       throw new Error('reply lost');
     }
-    return { status: 'appended', sequence };
+    return { status: 'appended', sequence, outcome: { kind: 'appended' } };
   };
   store.readEvent = async function readEvent(sequence) {
     return store.rows[sequence - 1];

@@ -137,8 +137,8 @@ test('the original delivery cannot write a newly selected attempt', changedOrigi
 
 async function readsResultAfterAnotherWorkerClaims() {
   const admission = vi.mocked(readHostedAdmission);
-  admission.mockResolvedValueOnce({ attemptId: 1 });
-  admission.mockResolvedValueOnce({ attemptId: 1, checks: {} });
+  admission.mockResolvedValueOnce(attempt);
+  admission.mockResolvedValueOnce({ ...attempt, checks: {} });
   vi.mocked(claimHostedImageScan).mockResolvedValue({ status: 'unavailable' });
 
   expect((await write()).status).toBe('appended');
