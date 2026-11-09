@@ -1,5 +1,6 @@
 import { createHash, generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
 import { execFile, execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,7 +27,8 @@ vi.mock('node:fs/promises', async function mockCosignRead(importOriginal) {
       path.includes('hosted-signature-') && cosignReplacement.source !== '' &&
       !cosignReplacement.replaced) {
       cosignReplacement.replaced = true;
-      await original.writeFile(path, '#!/bin/sh\nexit 1\n', { mode: 0o700 });
+      const replacement = `#!/bin/sh\ntouch "${cosignReplacement.source}.called"\nprintf 'Verified OK\\n'\n`;
+      await original.writeFile(cosignReplacement.source, replacement, { mode: 0o700 });
     }
     return bytes;
   }
@@ -176,8 +178,10 @@ async function runsCheckedCosignAfterOriginalPathChanges() {
     cosignReplacement.source = source;
     cosignReplacement.replaced = false;
     const image = fixture();
-    expect(await image.verify(source)).toMatchObject({ verdict: 'pass' });
+    const result = await image.verify(source);
     expect(cosignReplacement.replaced).toBe(true);
+    expect(result).toMatchObject({ verdict: 'pass' });
+    expect(existsSync(`${source}.called`)).toBe(false);
   } finally {
     cosignReplacement.source = '';
     await rm(directory, { recursive: true, force: true });
