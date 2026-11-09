@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { checkBridge, checkProxy } from './bridge-check.ts';
@@ -38,9 +39,17 @@ beforeEach(function resetProbes(): void {
   vi.mocked(execFileSync).mockReset();
   vi.mocked(serverIdentity).mockReturnValue(identity);
   vi.mocked(checkLiveService).mockReturnValue(true);
-  vi.mocked(checkBridge).mockReturnValue({ result: true, pid: 123, startTime: '456' });
-  vi.mocked(checkProxy).mockReturnValue({ result: true, pid: 123, startTime: '456' });
-  vi.mocked(checkSupervisor).mockReturnValue({ result: true, pid: 1, startTime: '456' });
+  function proveBridge(observeIdentity?: (value: typeof identity) => void) {
+    observeIdentity?.(identity);
+    return { result: true as const, pid: 123, startTime: '456' };
+  }
+  function proveSupervisor(observeIdentity?: (value: typeof identity) => void) {
+    observeIdentity?.({ ...identity, pid: 1 });
+    return { result: true as const, pid: 1, startTime: '456' };
+  }
+  vi.mocked(checkBridge).mockImplementation(proveBridge);
+  vi.mocked(checkProxy).mockImplementation(proveBridge);
+  vi.mocked(checkSupervisor).mockImplementation(proveSupervisor);
   function readIdentity(pid: number): typeof identity {
     return { ...identity, pid };
   }
@@ -68,6 +77,21 @@ function refusesUnprotectedProcess(): void {
 }
 it('does not report a process whose live protection probe refused', refusesUnprotectedProcess);
 
+function refusesExecAfterComputerProof(group: 'supervisor' | 'bridge' | 'proxy'): void {
+  const replacement = { ...identity, executable: '/usr/bin/other', uid: 1001,
+    cgroup: '0::/other\n', containerIdentity: 'pid:[4026531999]',
+    commandLine: '/usr/bin/other\0' };
+  function replacedIdentity(pid: number): typeof identity {
+    return { ...replacement, pid };
+  }
+  vi.mocked(readProcessIdentity).mockImplementation(replacedIdentity);
+  expect(probeInventoryProcess(group)).toBeUndefined();
+}
+it.each(['supervisor', 'bridge', 'proxy'] as const)(
+  'refuses %s when exec changes the image after protection was checked',
+  refusesExecAfterComputerProof,
+);
+
 function readsBoundContainers(): void {
   const observed: string[] = [];
   function docker(_binary: unknown, args: unknown): string {
@@ -92,6 +116,24 @@ function readsBoundContainers(): void {
   ]);
 }
 it('reads the four live services twice from the bound installation', readsBoundContainers);
+
+function runsProbeAtInstalledComputerPath(): void {
+  const dockerfile = readFileSync(new URL('../../apps/computer/Dockerfile', import.meta.url), 'utf8');
+  const source = 'scripts/private-memory-qualification/live-inventory-probe.ts';
+  const installedPath = '/scripts/private-memory-qualification/live-inventory-probe.ts';
+  const copyInstruction = [`COPY --from=project ${source} \\`, `  ${installedPath}`].join('\n');
+  expect(dockerfile).toContain(copyInstruction);
+  function docker(_binary: unknown, args: unknown): string {
+    const command = z.array(z.string()).parse(args);
+    expect(command).toContain(installedPath);
+    return JSON.stringify({ pid: 123, startTime: '456',
+      pidNamespace: 'pid:[4026531836]', protected: true });
+  }
+  vi.mocked(execFileSync).mockImplementation(docker);
+  readCurrentInventory(context, { serverId, computerId });
+}
+it('runs the live probe at the path installed in the computer image',
+  runsProbeAtInstalledComputerPath);
 
 function refusesUnmeasuredOutput(): void {
   function docker(): string {
