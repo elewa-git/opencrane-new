@@ -79,6 +79,8 @@ After the computer wakes, routine preparation checks the owner's saved company c
 against a current verified account and the exact saved profile. A changed account,
 profile or scope stops preparation before it reserves money. The check uses the usual
 MCP connection rules. Automatic company calls are still unavailable.
+It also requires a finished OAuth settings change with a matching digest in the saved
+tool server history. A later change stops the routine send before publication.
 It checks access after wake, just before sending, and after saving the turn start.
 A lost reply never permits another send. An internal preparation step starts an empty
 private thread first, then records its real id with the routine's spending allowance.
@@ -236,6 +238,7 @@ flowchart LR
   server -->|waits briefly for Forget locks| postgres
   server <-->|chat work, checked routine turns, private routine preparation and delivery, retained call status, Stops, checked reports and publication files| computer["apps/computer<br/>assistant computers"]
   server -->|wakes the original held Ask call| computer
+  server -->|checks saved OAuth settings changes before routine sends| nats
   server -->|checks child starts and nightly and child allowances with the shared budget actor| runtime
   computer -.->|records private thread for memory discovery| server
   server -.->|prepares up to four private memory tools| computer

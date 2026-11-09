@@ -9,6 +9,8 @@ An approval records the exact saved version a member chose, without copying its 
 A routine Stop can name the exact saved denial or expiry of its held tool approval.
 A new routine definition can name the MCP server separately from its connection.
 Older records without that name remain readable but cannot pass company preparation.
+An OAuth settings change records when editing starts and the digest of the finished
+settings. It contains no OAuth client secret or token.
 A system routine pause names the exact saved removal of its recorded owner.
 The reference carries only the event id and position; readers verify the history.
 An Ask for a company routine can name its run, account and tool details with digests
@@ -67,6 +69,7 @@ flowchart LR
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, welcome completion, private tool stops, publication, nightly memory claims and routine permissions| events
   models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks Ask and release bindings, consent starts, callback, refresh and image scan claims, refresh starts, account confirmations and replacement generations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal, company and saved tool choices, company opt-in, company credential replacements, and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event shapes| events
+  models -.->|checks OAuth settings change records| events
 ```
 
 ## What it is responsible for

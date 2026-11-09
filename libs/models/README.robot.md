@@ -5070,3 +5070,15 @@ route returns only the admitted binding. Failures return a fixed unavailable res
 they expose no private input or token. Duplicate commands cannot create a second root or
 computer start. The caller may repeat an acknowledgement after a lost reply, while the
 computer journal prevents another native start.
+
+## Recording OAuth settings edits
+
+`startOAuthConfigurationChange` saves `mcp.oauth_configuration_recorded` with
+`changing` on the tool server stream before the trusted settings writer edits
+anything. After that edit, `finishOAuthConfigurationChange` loads the current
+strict OAuth settings and saves a `ready` record with their digest. Each command
+does one conditional append against the expected tool server position. A failed
+start prevents the edit. A failed edit or finish leaves the latest record
+`changing`, so company routine preflight refuses. The event carries no client
+secret or token. Callers must use both commands around every OAuth scope and
+client edit before they install a company sender.

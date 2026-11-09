@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { snapshotPositions, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
-import { grantGivenDataSchema, grantRevokedDataSchema } from '@opencrane/events';
+import { grantGivenDataSchema, grantRevokedDataSchema,
+  mcpOAuthConfigurationDataSchema } from '@opencrane/events';
 import type { RoutineState } from '@opencrane/events';
 import { companySelectionFacts, foldCompanyConnection, foldConnectionSelection,
   groupMembership, history, type CompanyProfileReader,
@@ -56,6 +57,17 @@ function requireExactTool(rows: StoredEvent[], run: Run,
   facts: Awaited<ReturnType<typeof companySelectionFacts>>) {
   if (!matchesExactTool(rows, run)) refuse();
   requireToolScopes(run, facts);
+}
+
+function requireRecordedConfiguration(rows: StoredEvent[], serverId: string, digest: string) {
+  function isConfigurationChange(row: StoredEvent) {
+    return row.event.type === 'mcp.oauth_configuration_recorded';
+  }
+  const latest = rows.findLast(isConfigurationChange);
+  if (!latest) refuse();
+  const change = mcpOAuthConfigurationDataSchema.parse(latest.event.data);
+  if (change.serverId !== serverId || change.status !== 'ready' ||
+      change.configurationDigest !== digest) refuse();
 }
 
 function refuse(): never {
@@ -203,6 +215,8 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     }
     const serverRows = await history(store, `mcp-${definition.serverId}`, silo, deadline);
     requireExactTool(serverRows, run, facts);
+    requireRecordedConfiguration(serverRows, definition.serverId,
+      facts.oauth.configurationDigest);
     const positions = new Map(facts.positions);
     positions.set(selectionSubject, selected.sequence);
     const grants = await requireServerGrants(store, binding, silo, run, deadline);

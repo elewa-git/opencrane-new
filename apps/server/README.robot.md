@@ -7264,3 +7264,14 @@ and cannot reopen its predecessor's lease. RFB client input permits only standar
 pointer messages alongside display setup; clipboard and extensions are refused.
 The production HTTP switch and desktop writer relay remain disabled. Live keyboard,
 hardening and fresh-install qualification are NOT RUN.
+
+## OAuth change position for routine sends
+
+`routine-company-preflight.ts` requires the latest `mcp.oauth_configuration_recorded`
+record on the tool server stream to be `ready`. Its digest must match the current
+loaded OAuth settings. The preflight keeps that stream's position in its company
+check. `routine-sender.ts` calls that check inside the conditional send-authorisation
+append, which samples the global event position before the callback. A settings
+change saved after the callback's last OAuth read therefore conflicts with the
+append. An unfinished change refuses preflight. No production settings editor or
+company sender is registered, so company sending remains disabled.

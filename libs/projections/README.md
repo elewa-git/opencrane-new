@@ -60,11 +60,14 @@ flowchart LR
   server -.->|reads member references, tool readiness, nightly memory inputs and child requests awaiting activation| projections
   projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
   projections -->|checks memory key identities; stores wrapped chat keys; repairs correction keys| keys["Server files<br/>private key store and package Secret"]
+  store -->|OAuth settings change positions| projections
 ```
 
 ## What it is responsible for
 
 Tool checks keep an acknowledged publication while its definitions stay unchanged.
+OAuth settings change records move the saved tool server position. They leave its
+review, tool modes and publication state as they were.
 Failed checks pause calls until fresh evidence arrives. Changed tools still need review.
 A new gateway receipt confirms an unchanged publication after restart. Status still
 requires the current process and exact configuration to match. Rebuilding the tables

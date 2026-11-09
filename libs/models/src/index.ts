@@ -116,5 +116,7 @@ export { saveCompanyBearerConnection, foldCompanyConnection } from './company-be
 export { companySelectionFacts, type CompanyProfileReader } from './company-selection.ts';
 export { foldConnectionSelection } from './connection-selection.ts';
 export { type OAuthConfigurationLoader } from './oauth-selection.ts';
+export { startOAuthConfigurationChange,
+  finishOAuthConfigurationChange } from './oauth-configuration-change.ts';
 
 export { readRoutineApproval } from './routine-approval-evidence.ts';

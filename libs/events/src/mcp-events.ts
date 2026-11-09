@@ -11,7 +11,26 @@ const receipt = { verdict: 'pass' as const, checkedAt: '2026-10-15T00:00:00.000Z
 const scanReceipt = { ...receipt, databaseDigest: DIGEST_EXAMPLE,
   databaseUpdatedAt: receipt.checkedAt };
 
+const oauthChangeFields = {
+  serverId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u),
+  changeId: z.uuid(),
+};
+const changingConfigurationFields = { ...oauthChangeFields,
+  status: z.literal('changing') };
+const readyConfigurationFields = { ...oauthChangeFields,
+  status: z.literal('ready'),
+  configurationDigest: z.string().regex(/^[0-9a-f]{64}$/u) };
+export const mcpOAuthConfigurationDataSchema = z.discriminatedUnion('status', [
+  z.strictObject(changingConfigurationFields),
+  z.strictObject(readyConfigurationFields),
+]);
+
 export const mcpEvents = [
+  event('mcp.oauth_configuration_recorded', 'mcp',
+    'A trusted settings editor started or finished one OAuth configuration change.',
+    mcpOAuthConfigurationDataSchema,
+    { serverId: 'mcp_1', changeId: '9e734f62-1f2f-442a-b014-ff2373fae62d',
+      status: 'ready', configurationDigest: DIGEST_EXAMPLE }),
   event('mcp.image_scan_claimed', 'mcp', 'Models claimed one hosted image scan attempt.',
     hostedImageScanClaimedSchema, { serverId: 'mcp_1', attemptId: 1,
       imageDigest: DIGEST_EXAMPLE, platform: 'linux/amd64',

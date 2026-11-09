@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 const sequenceOnlyEvents = new Set([
   'mcp.dispatch_admitted', 'mcp.image_check_requested', 'mcp.image_checked',
+  'mcp.oauth_configuration_recorded',
 ]);
 
 type Catalogue = ReturnType<typeof mcpServerDiscoveredDataSchema.parse>;

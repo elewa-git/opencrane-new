@@ -1124,3 +1124,10 @@ Replay opens no key, starts no turn and appends no completion event.
 time. A later survey step or restart keeps that completed welcome and its
 encrypted answer. Rebuilding the table repeats the same fold without running
 the completion worker.
+
+## OAuth settings change position
+
+`mcp.oauth_configuration_recorded` advances the saved tool policy sequence only.
+It does not change its review revision, policy revision, tool modes, published
+state or catalogue expiry. The MCP catalogue projection saves the new policy
+sequence and leaves the displayed lifecycle and tool list intact.

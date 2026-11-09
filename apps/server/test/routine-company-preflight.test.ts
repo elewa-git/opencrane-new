@@ -8,6 +8,8 @@ import { modernRoutineExamples } from '../../../libs/events/src/routine-events.t
 import { envelope, history } from '../../../libs/models/src/actor.ts';
 import { connectionOperationId } from '../../../libs/models/src/bearer-connections.ts';
 import { oauthConfigurationDigest } from '../../../libs/models/src/oauth-attempt.ts';
+import { startOAuthConfigurationChange, finishOAuthConfigurationChange }
+  from '../../../libs/models/src/oauth-configuration-change.ts';
 import { toolPolicyFromRows } from '../../../libs/models/src/tool-policy.ts';
 import * as toolPolicy from '../../../libs/models/src/tool-policy.ts';
 import { oauthSelectionFixture } from '../../../libs/models/test/support/oauth-selection.ts';
@@ -123,11 +125,18 @@ async function fixture() {
     await nats.seed([grant]);
     await memberAuthorisation(binding, nats.store).handler.handle(grant, database);
   }
+  async function recordConfiguration() {
+    const change = await startOAuthConfigurationChange(nats.store, 'test', serverId);
+    await finishOAuthConfigurationChange(nats.store, 'test', serverId, change,
+      selected.loadConfiguration);
+  }
+  await recordConfiguration();
   async function preflight(reader = readProfile) {
     return checkRoutineCompanyPreflight(nats.store, binding, 'test', run, 1,
       selected.loadConfiguration, reader);
   }
-  return { preflight, evidence, definition, tool, configuration: selected.configuration,
+  return { preflight, evidence, definition, tool,
+    configuration: selected.configuration, loadConfiguration: selected.loadConfiguration,
     profileSubject, optInSubject, serverId, ownerId, assistantId, selectionSubject };
 }
 
@@ -175,8 +184,11 @@ async function currentToolMode(mode: 'block' | 'ask') {
   const rows = await history(nats.store, `mcp-${current.serverId}`, 'test');
   const policy = toolPolicyFromRows(rows);
   current.tool.policyRevision = policy.policyRevision;
+  const change = await startOAuthConfigurationChange(nats.store, 'test', current.serverId);
   current.configuration.policyRevision = policy.policyRevision;
   current.evidence.configurationDigest = oauthConfigurationDigest(current.configuration);
+  await finishOAuthConfigurationChange(nats.store, 'test', current.serverId, change,
+    current.loadConfiguration);
   function isWriteTool(tool: (typeof policy.tools)[number]) {
     return tool.name === 'write';
   }
@@ -195,8 +207,11 @@ it.each(['block', 'ask'] as const)(
 async function missingExactToolScopes() {
   const current = await fixture();
   current.evidence.scopes = ['openid', 'read', 'write'];
+  const change = await startOAuthConfigurationChange(nats.store, 'test', current.serverId);
   current.configuration.toolScopes.read = ['write'];
   current.evidence.configurationDigest = oauthConfigurationDigest(current.configuration);
+  await finishOAuthConfigurationChange(nats.store, 'test', current.serverId, change,
+    current.loadConfiguration);
   await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
   current.definition.scopes = ['read', 'write'];
   await expect(current.preflight()).resolves.toBeDefined();
@@ -440,17 +455,31 @@ async function oauthChangedAfterLastRead(kind: 'scopes' | 'client') {
   const current = await fixture();
   const company = await current.preflight();
   const event = independentWrite(current);
-  async function checkThenChangeConfiguration() {
-    await company.confirmCurrent();
+  function updateConfiguration() {
     if (kind === 'scopes') {
       current.configuration.toolScopes.read = ['write'];
     } else {
       current.configuration.clientId = 'replacement';
     }
   }
-  const result = await nats.store.append({ event, expectedSequence: 0,
-    checkAccess: checkThenChangeConfiguration });
+  async function checkThenChangeConfiguration() {
+    await company.confirmCurrent();
+    const change = await startOAuthConfigurationChange(nats.store, 'test', current.serverId);
+    updateConfiguration();
+    await finishOAuthConfigurationChange(nats.store, 'test', current.serverId, change,
+      current.loadConfiguration);
+  }
+  const command = { event, expectedSequence: 0,
+    checkAccess: checkThenChangeConfiguration };
+  const result = await nats.store.append(command);
   expect(result.status).toBe('conflict');
+  expect(await nats.store.head(event.subject)).toBe(0);
+  const serverRows = await history(nats.store, `mcp-${current.serverId}`, 'test');
+  const lastConfiguration = serverRows.at(-1)!.event;
+  expect(lastConfiguration.type).toBe('mcp.oauth_configuration_recorded');
+  const expectedConfiguration = { status: 'ready',
+    configurationDigest: oauthConfigurationDigest(current.configuration) };
+  expect(lastConfiguration.data).toMatchObject(expectedConfiguration);
 }
 it.each(['scopes', 'client'] as const)(
   'refuses an OAuth %s change after the final read and before publication',

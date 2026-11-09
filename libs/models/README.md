@@ -160,6 +160,7 @@ flowchart LR
   models -->|checks one held Ask replacement permit| gateway
   gateway -->|usage and tool dispatch records| models
   models -->|saves checked events, including welcome completion; recovers budgets and routine Stops; reads payer, spending limits and member reviews| store["libs/event-store + libs/projections<br/>event log and read tables"]
+  models -->|records OAuth settings edits before and after changing them| store
 ```
 
 apps/ops confirms owner appointments for this package. Its nightly memory scan also
@@ -320,6 +321,9 @@ access. Current company saves remain unverified, so live company selection stays
 Clearing a choice leaves no account; a personal account never fills in for a company choice.
 The same company choice reader can help check a routine after its computer wakes.
 It needs fresh trusted evidence of the account and private credential custody.
+An internal command lets a trusted OAuth settings editor record that a change has
+started before it updates settings. A second command records the new digest after
+the update. An unfinished change keeps company routine preparation closed.
 
 When an AI request is refused, the models process writes a short reason to its
 private log. The request id links that line to the saved decision. The log leaves

@@ -1038,3 +1038,11 @@ receipt id and checked-start eligibility. `takeover.closure_unknown` carries the
 writer binding and requested end reason for identical command retries. It does not
 save an exact end reason when final input delivery is unproved. Neither event
 contains input, clipboard, tokens or screen data.
+
+## OAuth settings change records
+
+`mcp.oauth_configuration_recorded` belongs to `mcp-<serverId>`. It names one
+change id and either `changing` or `ready`. A ready record from the trusted
+settings editor carries the SHA-256 digest of the strict loaded OAuth settings.
+It carries no credential. The company preflight rejects a missing, changing or
+non-matching latest record. It has no background reaction.
