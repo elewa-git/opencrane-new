@@ -7,7 +7,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { proveCanaryHelper, readCanaryHelperBinding } from
   '../../scripts/private-memory-qualification/canary-helper-proof.ts';
 import {
-  inventoryGroups, type InventoryContext, type ProtectionRecord,
+  inventoryGroups, type InventoryContext, type InventorySnapshot, type ProtectionRecord,
+  type TrustedLaunch,
 } from '../../scripts/private-memory-qualification/joined-inventory.ts';
 
 vi.mock('node:fs', { spy: true });
@@ -50,23 +51,31 @@ function freshContainer() {
   };
 }
 function unchanged(): void {}
-function matchingInventory(context: InventoryContext): ProtectionRecord[] {
+function matchingInventory(context: InventoryContext): InventorySnapshot {
   const records: ProtectionRecord[] = [];
+  const launches: TrustedLaunch[] = [];
   for (const [index, group] of inventoryGroups.entries()) {
-    const image = group === 'serverDelivery' ? context.serverImageDigest :
+    const location = group === 'serverDelivery' || group === 'canaryHelper' ?
+      'server' : 'computer';
+    const image = location === 'server' ? context.serverImageDigest :
       context.computerImageDigest;
     const helperIds = group === 'canaryHelper' ? context.helperIds : [undefined];
     for (const helperId of helperIds) {
+      const pid = 100 + index;
+      const startTime = String(1000 + index);
+      const pidNamespace = location === 'server' ? 'pid:[4026531836]' : 'pid:[4026531837]';
       records.push({ group, helperId, imageDigest: image,
         serverInstallationId: context.serverInstallationId,
         computerInstallationId: context.computerInstallationId,
         serverImageDigest: context.serverImageDigest,
         computerImageDigest: context.computerImageDigest,
         challengeId: context.challengeId, generationId: context.generationId,
-        pid: 100 + index, startTime: String(1000 + index), safe: true });
+        pid, startTime, pidNamespace, dumpable: false, safe: true });
+      launches.push({ group, helperId, location, pid, startTime, pidNamespace,
+        dumpable: false });
     }
   }
-  return records;
+  return { records, launches };
 }
 function protectedStat() {
   const prototype = Object.getPrototypeOf(originalStat) as object | null;

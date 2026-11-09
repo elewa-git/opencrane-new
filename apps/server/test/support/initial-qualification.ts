@@ -8,29 +8,37 @@ import * as bridgeProof from '../../../../scripts/private-memory-qualification/b
 import * as supervisorProof from '../../../../scripts/private-memory-qualification/supervisor-proof.ts';
 import * as joinedInventory from '../../../../scripts/private-memory-qualification/joined-inventory.ts';
 import type {
-  InventoryContext, ProtectionRecord,
+  InventoryContext, InventorySnapshot, ProtectionRecord, TrustedLaunch,
 } from '../../../../scripts/private-memory-qualification/joined-inventory.ts';
 
 const targetPath = '/etc/opencrane/private-memory-qualification.json';
 const resultPath = '/etc/opencrane/private-memory-qualification-result.json';
 
-function matchingInventory(context: InventoryContext): ProtectionRecord[] {
+function matchingInventory(context: InventoryContext): InventorySnapshot {
   const records: ProtectionRecord[] = [];
+  const launches: TrustedLaunch[] = [];
   for (const [index, group] of joinedInventory.inventoryGroups.entries()) {
-    const image = group === 'serverDelivery' ? context.serverImageDigest :
+    const location = group === 'serverDelivery' || group === 'canaryHelper' ?
+      'server' : 'computer';
+    const image = location === 'server' ? context.serverImageDigest :
       context.computerImageDigest;
     const helperIds = group === 'canaryHelper' ? context.helperIds : [undefined];
     for (const helperId of helperIds) {
+      const pid = 100 + index;
+      const startTime = String(1000 + index);
+      const pidNamespace = location === 'server' ? 'pid:[4026531836]' : 'pid:[4026531837]';
       records.push({ group, helperId, imageDigest: image,
         serverInstallationId: context.serverInstallationId,
         computerInstallationId: context.computerInstallationId,
         serverImageDigest: context.serverImageDigest,
         computerImageDigest: context.computerImageDigest,
         challengeId: context.challengeId, generationId: context.generationId,
-        pid: 100 + index, startTime: String(1000 + index), safe: true });
+        pid, startTime, pidNamespace, dumpable: false, safe: true });
+      launches.push({ group, helperId, location, pid, startTime, pidNamespace,
+        dumpable: false });
     }
   }
-  return records;
+  return { records, launches };
 }
 
 // Simulate only the deployment's filesystem and Docker boundary. Run the real collector.

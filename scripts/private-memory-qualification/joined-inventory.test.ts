@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import {
-  inventoryGroups, joinInventory, type InventoryContext, type ProtectionRecord,
+  inventoryGroups, joinInventory as joinObservedInventory, readCurrentInventory,
+  type InventoryContext, type ProtectionRecord, type TrustedLaunch,
 } from './joined-inventory.ts';
 
 const image = `sha256:${'a'.repeat(64)}`;
@@ -24,14 +25,37 @@ const context: InventoryContext = {
 
 function record(group: ProtectionRecord['group'], index: number,
   helperId?: string): ProtectionRecord {
-  const imageDigest = group === 'serverDelivery' ? image : otherImage;
+  const imageDigest = group === 'serverDelivery' || group === 'canaryHelper' ? image : otherImage;
   return {
     group, helperId, serverInstallationId: installation,
     computerInstallationId: otherInstallation, serverImageDigest: image,
     computerImageDigest: otherImage, imageDigest, challengeId: challenge,
     generationId: generation, pid: 100 + index, startTime: String(1000 + index),
-    safe: true,
+    pidNamespace: 'pid:[4026531836]', dumpable: false, safe: true,
   };
+}
+
+function measuredLaunch(item: ProtectionRecord): TrustedLaunch {
+  const location = item.group === 'serverDelivery' || item.group === 'canaryHelper' ?
+    'server' : 'computer';
+  return { group: item.group, helperId: item.helperId, location,
+    pid: item.pid, startTime: item.startTime, pidNamespace: item.pidNamespace,
+    dumpable: false };
+}
+
+function snapshotFromRecords(records: ProtectionRecord[]): {
+  records: ProtectionRecord[]; launches: TrustedLaunch[];
+} {
+  const launches = records.map(measuredLaunch);
+  return { records, launches };
+}
+
+function joinInventory(inventoryContext: unknown, first: unknown,
+  final: unknown): ReturnType<typeof joinObservedInventory> {
+  const trustedLaunches = completeInventory().map(measuredLaunch);
+  const firstSnapshot = { records: first, launches: trustedLaunches };
+  const finalSnapshot = { records: final, launches: trustedLaunches };
+  return joinObservedInventory(inventoryContext, firstSnapshot, finalSnapshot);
 }
 
 function completeInventory(): ProtectionRecord[] {
@@ -128,15 +152,15 @@ function refusesCopiedHelperProcess(): void {
     }
     return item;
   });
-  expect(joinInventory(context, duplicateProcess, duplicateProcess)).toEqual({
+  const copiedSnapshot = snapshotFromRecords(duplicateProcess);
+  expect(joinObservedInventory(context, copiedSnapshot, copiedSnapshot)).toEqual({
     ok: false, group: 'canaryHelper',
   });
 }
 it('refuses two helper labels for the same PID and start time', refusesCopiedHelperProcess);
 
 function acceptsCanaryInServerImage(): void {
-  const first = completeInventory();
-  const actual = replace(first, 'canaryHelper', { imageDigest: image });
+  const actual = completeInventory();
   expect(joinInventory(context, actual, actual)).toEqual({ ok: true });
 }
 it('requires the server image for the canary launched inside the server',
@@ -144,7 +168,8 @@ it('requires the server image for the canary launched inside the server',
 
 function refusesRelabelledCanaryImage(): void {
   const first = completeInventory();
-  expect(joinInventory(context, first, first)).toEqual({
+  const relabelled = replace(first, 'canaryHelper', { imageDigest: otherImage });
+  expect(joinInventory(context, relabelled, relabelled)).toEqual({
     ok: false, group: 'canaryHelper',
   });
 }
@@ -177,8 +202,132 @@ function refusesRecordWithoutMeasuredLaunch(): void {
     return item['group'] !== 'nativeChild';
   });
   const snapshot = { records: observedRecords, launches: missingLaunches };
-  expect(joinInventory(context, snapshot, snapshot)).toEqual({
+  expect(joinObservedInventory(context, snapshot, snapshot)).toEqual({
     ok: false, group: 'nativeChild',
   });
 }
 it('refuses a process record without its measured launch', refusesRecordWithoutMeasuredLaunch);
+
+function refusesInvalidContext(change: Record<string, unknown>, group: string): void {
+  const first = completeInventory();
+  const altered = { ...context, ...change };
+  expect(joinInventory(altered, first, first)).toEqual({ ok: false, group });
+}
+it.each([
+  [{ serverInstallationId: undefined }, 'inventory'],
+  [{ computerImageDigest: 'wrong' }, 'inventory'],
+  [{ challengeId: 'wrong' }, 'inventory'],
+  [{ helperIds: [] }, 'inventory'],
+  [{ helperIds: [challenge, challenge] }, 'canaryHelper'],
+  [{ extra: 'untrusted' }, 'inventory'],
+] as const)('refuses invalid inventory context %j', refusesInvalidContext);
+
+function refusesInvalidRecord(change: Record<string, unknown>, group: string): void {
+  const first = completeInventory();
+  const changed = replace(first, 'nativeWrapper', change);
+  expect(joinInventory(context, changed, first)).toEqual({ ok: false, group });
+}
+it.each([
+  [{ imageDigest: image }, 'nativeWrapper'],
+  [{ imageDigest: undefined }, 'nativeWrapper'],
+  [{ imageDigest: 'wrong' }, 'nativeWrapper'],
+  [{ pid: undefined }, 'nativeWrapper'],
+  [{ pid: -1 }, 'nativeWrapper'],
+  [{ pid: 1.5 }, 'nativeWrapper'],
+  [{ startTime: undefined }, 'nativeWrapper'],
+  [{ startTime: '01' }, 'nativeWrapper'],
+  [{ pidNamespace: undefined }, 'nativeWrapper'],
+  [{ pidNamespace: 'pid:[1]' }, 'nativeWrapper'],
+  [{ dumpable: true }, 'nativeWrapper'],
+  [{ safe: undefined }, 'nativeWrapper'],
+  [{ helperId: challenge }, 'nativeWrapper'],
+  [{ extra: 'untrusted' }, 'nativeWrapper'],
+  [{ group: 'unknown' }, 'inventory'],
+] as const)('refuses malformed or foreign process record %j', refusesInvalidRecord);
+
+function refusesMissingHelperId(): void {
+  const first = completeInventory();
+  const changed = replace(first, 'canaryHelper', { helperId: undefined });
+  expect(joinInventory(context, changed, first)).toEqual({ ok: false, group: 'canaryHelper' });
+}
+it('refuses a helper without its challenge ID', refusesMissingHelperId);
+
+function refusesUnexpectedHelperId(): void {
+  const first = completeInventory();
+  const changed = replace(first, 'canaryHelper', { helperId: otherGeneration });
+  expect(joinInventory(context, changed, first)).toEqual({ ok: false, group: 'canaryHelper' });
+}
+it('refuses a helper outside the expected challenge set', refusesUnexpectedHelperId);
+
+function refusesNonArraySnapshot(): void {
+  const first = completeInventory();
+  expect(joinObservedInventory(context, { records: {}, launches: [] }, first)).toEqual({
+    ok: false, group: 'inventory',
+  });
+}
+it('refuses inventory records that are not an array', refusesNonArraySnapshot);
+
+function refusesChangedIdentity(field: 'pid' | 'startTime' | 'pidNamespace',
+  value: number | string): void {
+  const first = completeInventory();
+  const changed = first.map(function changeChild(item): ProtectionRecord {
+    if (item.group === 'nativeChild') {
+      return { ...item, [field]: value };
+    }
+    return item;
+  });
+  const firstSnapshot = snapshotFromRecords(first);
+  const finalSnapshot = snapshotFromRecords(changed);
+  expect(joinObservedInventory(context, firstSnapshot, finalSnapshot)).toEqual({
+    ok: false, group: 'nativeChild',
+  });
+}
+it.each([
+  ['pid', 999],
+  ['startTime', '9999'],
+  ['pidNamespace', 'pid:[4026531838]'],
+] as const)('refuses a process with changed %s even when the final launch agrees',
+  refusesChangedIdentity);
+
+function refusesLostFinalGroup(): void {
+  const first = completeInventory();
+  const final = first.filter(function keepOther(item): boolean {
+    return item.group !== 'nativeWrapper';
+  });
+  expect(joinInventory(context, first, final)).toEqual({
+    ok: false, group: 'nativeWrapper',
+  });
+}
+it('refuses a missing non-helper group at the final read', refusesLostFinalGroup);
+
+function refusesChangedLaunchObservation(change: Record<string, unknown>): void {
+  const records = completeInventory();
+  const launches = records.map(measuredLaunch);
+  const changed = launches.map(function changeLaunch(item): Record<string, unknown> {
+    if (item.group === 'nativeWrapper') {
+      return { ...item, ...change };
+    }
+    return item;
+  });
+  const first = { records, launches: changed };
+  expect(joinObservedInventory(context, first, first)).toEqual({
+    ok: false, group: 'nativeWrapper',
+  });
+}
+it.each([
+  { pid: 999 },
+  { startTime: '9999' },
+  { pidNamespace: 'pid:[4026531838]' },
+  { dumpable: true },
+  { location: 'server' },
+])('refuses a record that differs from its measured launch %j',
+  refusesChangedLaunchObservation);
+
+function realReaderRefuses(): void {
+  const current = readCurrentInventory(context);
+  expect(current).toEqual({ records: [], launches: [] });
+  expect(joinObservedInventory(context, current, current)).toEqual({
+    ok: false, group: 'serverDelivery',
+  });
+}
+it('keeps the production reader closed until it measures a live set', realReaderRefuses);
