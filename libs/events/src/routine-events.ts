@@ -48,7 +48,7 @@ export const routineEvents = [
   event('routine.run_send_authorised', 'routine',
     'The server authorised one attempt to send the prepared routine turn.',
     schemas.routineSendAuthorisationSchema,
-    { ...admitted, configurationDigest: 'a'.repeat(64), credentialResourceVersion: '1' }),
+    { ...admitted, configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1' }),
   event('routine.run_stop_requested', 'routine', 'A person, approval outcome or unconfirmed delivery requested a run stop.',
     schemas.routineStopSchema, stop),
   event('routine.run_finished', 'routine', 'A run ended with recorded evidence.',

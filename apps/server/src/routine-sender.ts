@@ -28,7 +28,7 @@ type Start = { conversationId: string; turnId: string; threadId?: string | undef
   senderAttemptId?: string | undefined; executionMode?: string | undefined };
 type SenderOptions = { enabled?: boolean; replay?: boolean;
   confirmCompany?: () => Promise<void>; configurationDigest?: string;
-  credentialResourceVersion?: string;
+  custodyRecordVersion?: string;
   confirmCredentialUse?: (authorisedVersion: string) => Promise<void> };
 
 function companyCheckedWorker(worker: Arguments[2], confirmCompany?: () => Promise<void>) {
@@ -62,7 +62,7 @@ function routineTurnBytes(checked: Awaited<ReturnType<typeof readRoutineActivati
 async function authoriseRoutineSend(store: Arguments[0], worker: Arguments[2],
   checked: Awaited<ReturnType<typeof readRoutineActivation>>,
   confirmCompany: () => Promise<void>, configurationDigest: string,
-  credentialResourceVersion: string) {
+  custodyRecordVersion: string) {
   const run = checked.run;
   const subject = `routine-${run.routineId}`;
   const activation = await store.readEvent(checked.receipt.position, checked.deadline);
@@ -77,7 +77,7 @@ async function authoriseRoutineSend(store: Arguments[0], worker: Arguments[2],
   hash.update(JSON.stringify([worker.silo, run.occurrenceId, checked.senderAttemptId]));
   const id = hash.digest('hex');
   const event = { id, commandId: id, silo: worker.silo, subject,
-    data: { ...data, configurationDigest, credentialResourceVersion },
+    data: { ...data, configurationDigest, custodyRecordVersion },
     type: 'routine.run_send_authorised', source: 'opencrane-server',
     principal: { kind: 'system' as const, id: 'opencrane-server' },
     time: new Date().toISOString(), correlation: {} };
@@ -100,13 +100,13 @@ async function checkCompanyCredentialForSend(store: Arguments[0], worker: Argume
   const confirmCompany = options.confirmCompany;
   if (!confirmCompany) return true;
   const configurationDigest = options.configurationDigest;
-  const credentialResourceVersion = options.credentialResourceVersion;
+  const custodyRecordVersion = options.custodyRecordVersion;
   const confirmCredentialUse = options.confirmCredentialUse;
-  if (!configurationDigest || !credentialResourceVersion || !confirmCredentialUse) {
+  if (!configurationDigest || !custodyRecordVersion || !confirmCredentialUse) {
     throw new Error('Routine company unavailable');
   }
   await authoriseRoutineSend(store, worker, checked, confirmCompany,
-    configurationDigest, credentialResourceVersion);
+    configurationDigest, custodyRecordVersion);
   async function stopChangedCredential() {
     await stopUnconfirmedRoutine(store, worker.silo, admission, 'credential_changed');
   }
@@ -115,7 +115,7 @@ async function checkCompanyCredentialForSend(store: Arguments[0], worker: Argume
   } catch {
     // A changed credential can also fail the usual post-save access check.
     try {
-      await confirmCredentialUse(credentialResourceVersion);
+      await confirmCredentialUse(custodyRecordVersion);
     } catch {
       await stopChangedCredential();
       return false;
@@ -124,7 +124,7 @@ async function checkCompanyCredentialForSend(store: Arguments[0], worker: Argume
   }
   try {
     // Read custody at use, after all other send checks have finished.
-    await confirmCredentialUse(credentialResourceVersion);
+    await confirmCredentialUse(custodyRecordVersion);
   } catch {
     await stopChangedCredential();
     return false;

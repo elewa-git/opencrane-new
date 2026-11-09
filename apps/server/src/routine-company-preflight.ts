@@ -212,10 +212,10 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     }
     const facts = await companySelectionFacts(store, silo, selected.choice,
       loadConfiguration, checkedReader);
-    const credential = z.object({ credentialResourceVersion: z.string().min(1) })
+    const credential = z.object({ custodyRecordVersion: z.string().min(1) })
       .safeParse(profileEvidence);
     if (!credential.success) refuse();
-    const credentialResourceVersion = credential.data.credentialResourceVersion;
+    const custodyRecordVersion = credential.data.custodyRecordVersion;
     if (!savedProfile || facts.accountId !== definition.companyAccountId ||
         facts.binding.accountDigest !== selected.choice.accountDigest ||
         facts.binding.generation !== savedProfile.activation.generation ||
@@ -255,7 +255,7 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     }
     async function confirmCredentialUse(authorisedVersion: string) {
       try {
-        if (!profileRows || authorisedVersion !== credentialResourceVersion) refuse();
+        if (!profileRows || authorisedVersion !== custodyRecordVersion) refuse();
         // Check custody again when the sender is ready to use the credential.
         const current = await readProfile(profileRows);
         if (!isDeepStrictEqual(current, profileEvidence)) refuse();
@@ -266,7 +266,7 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     await confirmCurrent();
     return { occurrenceId: run.occurrenceId, rootId: run.rootId,
       computerGeneration, configurationDigest: facts.oauth.configurationDigest,
-      credentialResourceVersion, confirmCurrent, confirmCredentialUse };
+      custodyRecordVersion, confirmCurrent, confirmCredentialUse };
   } catch {
     refuse();
   }

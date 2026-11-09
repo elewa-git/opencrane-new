@@ -174,7 +174,7 @@ The server reuses its schema to save owner intent and check an exact retry.
 It does not describe an admin intervention as a requester Stop or start routine work.
 A finished routine can keep a private result reference and the final held and settled
 amounts in euro cents. The record never contains the result itself.
-A routine send authorisation records one checked attempt and its credential version
+A routine send authorisation records one checked attempt and its custody record version
 before the turn is sent.
 It includes the OAuth configuration digest checked for that attempt. It does not
 prove delivery or allow a replay to send the turn again.

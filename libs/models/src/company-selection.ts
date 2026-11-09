@@ -14,7 +14,7 @@ const evidenceSchema = z.strictObject({
   status: z.literal('verified'), siloId: id, serverId: id, profileId: id,
   ownerKind: z.literal('company'), connectionId: id, profileRevision: z.int().positive(),
   generation: z.int().positive(), accountDigest: digest, configurationDigest: digest,
-  credentialResourceVersion: z.string().min(1).optional(),
+  custodyRecordVersion: z.string().min(1).optional(),
   accountId: z.string().min(1).max(300).optional(),
   scopes: z.array(z.string()).max(64), expiresAt: z.int().positive(),
 });
