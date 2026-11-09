@@ -95,6 +95,13 @@ it('shows only plain paths beneath the workspace', async () => {
     .toBe('git status /workspace/report.txt ••• •••');
 });
 
+it('hides workspace paths that could be flag values', async () => {
+  expect(await redactCommand('curl --token /workspace/private.txt'))
+    .toBe('curl ••• •••');
+  expect(await redactCommand('git status --output /workspace/private.txt'))
+    .toBe('git status ••• •••');
+});
+
 const unsupportedCommands = [
   'curl "unterminated secret',
   "curl 'unterminated secret",
