@@ -265,7 +265,8 @@ Other hosted images still need image admission. A private verifier checks a publ
 signature and each image file's hash against operator trust. The signature check uses
 only the operator's local public key and makes no network requests. It checks a
 private copy of the pinned Cosign program before running it. Unreadable files
-make the verifier unavailable. A private licence checker then uses Syft, a tool that lists
+make the verifier unavailable. A private licence checker then runs a checked private
+copy of Syft, a tool that lists
 image packages, on those same verified bytes. It requires a separate review of the image's
 files and licence notices. Debian main exceptions apply only to reviewed OS layers.
 A private vulnerability check uses the packages Syft found with a pinned Grype program

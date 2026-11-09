@@ -3683,6 +3683,8 @@ Owner/Admin access still returns 403. The reply mapping lives in `budget-scope.t
 It retains copies of registry bytes, passes those copies through `verifyHostedImage`, and
 stages them as an OCI directory only after verification passes. It never fetches them again.
 Syft 1.54.0 scans that local directory with `all-layers`; no candidate process runs.
+The checker reads Syft into a private directory, checks that copy's SHA-256 digest and
+runs the copy. Changing the configured path after the read cannot change what runs.
 The scanner binary and SPDX 3.28 data use the existing computer build's checksum pins.
 The test downloader adds neither to a runtime image. Syft's [Apache-2.0 licence](https://github.com/anchore/syft/blob/v1.54.0/LICENSE)
 allows this tooling use; runtime packaging and its bundled dependency review remain unqualified.
@@ -3713,7 +3715,8 @@ Raw SBOM retention in authorised evidence storage remains later work.
 
 Tests use generated signed OCI bytes, a fake registry, real Cosign and real pinned Syft.
 They cover complete application/OS reviews, missing or changed notices, unknown and forbidden
-licences, incomplete inventories, OS misclassification and scanner/registry outages.
+licences, incomplete inventories, OS misclassification, scanner/registry outages and
+replacement of the configured Syft path after its bytes are read.
 Existing verifier tests retain both architectures, wrong signer, substitution and hash checks;
 the admission schema still refuses signature/licence passes with the other checks pending.
 Fresh-install qualification, production scanning, malware/vulnerability checks and startup:
