@@ -27,7 +27,7 @@ type Start = { conversationId: string; turnId: string; threadId?: string | undef
   messageId?: string | undefined; rootId?: string | undefined;
   senderAttemptId?: string | undefined; executionMode?: string | undefined };
 type SenderOptions = { enabled?: boolean; replay?: boolean;
-  confirmCompany?: () => Promise<void> };
+  confirmCompany?: () => Promise<void>; configurationDigest?: string };
 
 function companyCheckedWorker(worker: Arguments[2], confirmCompany?: () => Promise<void>) {
   if (!confirmCompany) return worker;
@@ -59,7 +59,7 @@ function routineTurnBytes(checked: Awaited<ReturnType<typeof readRoutineActivati
 
 async function authoriseRoutineSend(store: Arguments[0], worker: Arguments[2],
   checked: Awaited<ReturnType<typeof readRoutineActivation>>,
-  confirmCompany: () => Promise<void>) {
+  confirmCompany: () => Promise<void>, configurationDigest: string) {
   const run = checked.run;
   const subject = `routine-${run.routineId}`;
   const activation = await store.readEvent(checked.receipt.position, checked.deadline);
@@ -73,7 +73,8 @@ async function authoriseRoutineSend(store: Arguments[0], worker: Arguments[2],
   const hash = createHash('sha256');
   hash.update(JSON.stringify([worker.silo, run.occurrenceId, checked.senderAttemptId]));
   const id = hash.digest('hex');
-  const event = { id, commandId: id, silo: worker.silo, subject, data,
+  const event = { id, commandId: id, silo: worker.silo, subject,
+    data: { ...data, configurationDigest },
     type: 'routine.run_send_authorised', source: 'opencrane-server',
     principal: { kind: 'system' as const, id: 'opencrane-server' },
     time: new Date().toISOString(), correlation: {} };
@@ -121,7 +122,9 @@ export function createRoutineSender(options: SenderOptions,
       const bytes = routineTurnBytes(checked, args[4], keys, worker.silo);
       await checked.fresh();
       if (confirmCompany) {
-        await authoriseRoutineSend(store, checkedWorker, checked, confirmCompany);
+        if (!options.configurationDigest) throw new Error('Routine company unavailable');
+        await authoriseRoutineSend(store, checkedWorker, checked, confirmCompany,
+          options.configurationDigest);
       }
       if (link.socket.readyState !== link.socket.OPEN) return unknown;
       // Consume this live authority before the transport can lose its reply.

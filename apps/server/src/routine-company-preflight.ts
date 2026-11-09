@@ -225,7 +225,7 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     }
     await confirmCurrent();
     return { occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, confirmCurrent };
+      computerGeneration, configurationDigest: facts.oauth.configurationDigest, confirmCurrent };
   } catch {
     refuse();
   }

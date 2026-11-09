@@ -917,7 +917,8 @@ its preparation digest binds the frozen run and prepared input. `rootId` remains
 record's routine reference, while the allocation contains the actual budget root id.
 A saved `senderAttemptId` can recover only the same receipt. No reaction or replay sends
 work. See the [catalogue](../../docs/architecture/events.md#routines-and-delegation).
-`routine.run_send_authorised` uses the same strict run and admission fields. Its fold
+`routine.run_send_authorised` uses the same strict run and admission fields, plus the
+digest of the checked OAuth configuration. Its fold
 requires the active run, matching activation, active status and no saved Stop. The
 record permits one live sender attempt but never proves that bytes reached the computer.
 No handler subscribes to it, and replay never sends the turn.

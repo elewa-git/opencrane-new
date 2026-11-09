@@ -7170,11 +7170,14 @@ as it stood at that position. The allowance, activation and turn-start appends
 sample the global position before their access callbacks and require it at publish.
 A company change during a stream read therefore conflicts with the guarded append.
 This can also refuse an unrelated concurrent event. The check reads the OAuth
-configuration again after the stream checks. There is no credential release,
+configuration again after the stream checks. It returns the digest of the loaded
+configuration. There is no credential release,
 company send or public execution switch.
 Before its internal socket send, the sender saves `routine.run_send_authorised` on
 the routine stream. The append checks current routine state and company facts inside
-the event store's conditional publish. A conflict or uncertain result prevents a
+the event store's conditional publish. It saves the OAuth configuration digest and
+re-reads the configuration inside that same conditional append. A changed digest,
+conflict or uncertain result prevents a
 send. The record is an authorisation point, not proof of delivery. Production
 company sending stays disabled.
 Existing records without `serverId` remain readable but cannot pass this check.
@@ -7185,8 +7188,9 @@ scopes, a stale preflight,
 owner and assistant grant revocations, and changes to account, scopes, custody,
 profile revision, owner choice, opt-in and publication. It also covers a policy
 Block and a team grant revocation saved while a later position read is pending.
-It also checks all 72 combinations of six streams and twelve read points, plus
-changes to each stream between the company check and a conditional append.
+It also checks all 84 combinations of six streams or the OAuth configuration and
+twelve read points, plus changes to each one between the company check and a
+conditional append.
 `test/routine-handoff.test.ts` checks post-wake refusal before allowance and no
 preflight during disabled or replayed work. These tests use synthetic account evidence.
 `test/routine-composition.test.ts` supplies a synthetic preflight for its existing

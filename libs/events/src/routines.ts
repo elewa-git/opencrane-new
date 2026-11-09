@@ -59,6 +59,9 @@ export const routineMissedSchema = identity.extend({ firstLocalDate: z.iso.date(
   cursor: slot.nullable(), next: slot.nullable() });
 export const routineActivationSchema = identity.extend({ ...run, senderAttemptId: id,
   admission: reference });
+export const routineSendAuthorisationSchema = routineActivationSchema.extend({
+  configurationDigest: digest,
+});
 export const routineStopSchema = routineControlSchema.extend({ ...run,
   source: z.enum(['owner', 'admin', 'approval', 'delivery']) });
 export const routineFinishedSchema = identity.extend({ ...run,

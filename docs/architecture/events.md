@@ -753,7 +753,7 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 | `routine.due` | server system | frozen occurrence facts (pure fold only) | none; no input or root is started |
 | `routine.occurrence_skipped` / `routine.occurrences_missed` | server system | saved cursor/next facts | none |
 | `routine.run_activation_admitted` | internal server conditional command | saved exact admission and sender attempt | none; receipt only, execution remains disabled |
-| `routine.run_send_authorised` | internal server conditional command | saved authority for one prepared turn send | none; receipt alone never proves delivery |
+| `routine.run_send_authorised` | internal server conditional command | saved authority for one prepared turn send and the checked OAuth configuration digest | none; receipt alone never proves delivery |
 | `routine.run_finished` | server system | saved run facts | none; records grant no authority |
 | `routine.run_stop_requested` | internal server command for the current owner, verified approval termination or unconfirmed delivery | saved Stop intent | none subscribed; the models process applies verified evidence to an existing budget root and checks saved native closure before calling finish; the connected bridge polls verified intent to interrupt the accepted private turn; execution remains disabled |
 | `delegation.started` / `delegation.completed` | server; legacy computer records are replay-only | delegations and computer-root read indexes | no effect reaction; shared native starts retain the admission’s `sharingClass`; native execution remains disabled |

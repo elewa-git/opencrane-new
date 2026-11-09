@@ -314,7 +314,7 @@ async function changedCompanyDuringPreparation(kind: 'profile' | 'opt-in') {
       return Promise.resolve();
     }
     const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, confirmCurrent };
+      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent };
     return Promise.resolve(company);
   }
   const composition = compose({ enabled: true, companyPreflight });
@@ -355,7 +355,7 @@ async function refusesCompanyChangeAfterAllowance(kind: 'profile' | 'opt-in') {
       return Promise.resolve();
     }
     const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, confirmCurrent };
+      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent };
     return Promise.resolve(company);
   }
   const composition = compose({ enabled: true, companyPreflight });
@@ -404,7 +404,7 @@ async function refusesToolPolicyChangeDuringAdmission() {
       if (position !== initialPosition) throw new Error('Tool policy changed');
     }
     return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, confirmCurrent });
+      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent });
   }
   const composition = compose({ enabled: true, companyPreflight });
   expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
@@ -445,7 +445,7 @@ async function refusesCompanyChangeInsideSendAuthorisation() {
       changed = true;
     }
     return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
-      computerGeneration, confirmCurrent });
+      computerGeneration, configurationDigest: 'a'.repeat(64), confirmCurrent });
   }
   try {
     const composition = compose({ enabled: true, companyPreflight });

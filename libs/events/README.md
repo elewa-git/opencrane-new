@@ -61,7 +61,7 @@ Allow, Ask or Block choice for a tool.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions, including persona and scripted welcome records"]
-  server["apps/server<br/>back end"] -.->|checks assistant files, private exits, routine server and turn identities, settled cents, owner approvals, Stops and admission receipts, sessions, control refusals, child requests, activations, send authorisations, retries and writer closure| events
+  server["apps/server<br/>back end"] -.->|checks assistant files, private exits, routine server and turn identities, settled cents, owner approvals, Stops and admission receipts, sessions, control refusals, child requests, activations, send authorisations with OAuth digests, retries and writer closure| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables and retired choices"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, welcome completion, private tool stops, publication, nightly memory claims and routine permissions| events
@@ -162,7 +162,8 @@ It does not describe an admin intervention as a requester Stop or start routine 
 A finished routine can keep a private result reference and the final held and settled
 amounts in euro cents. The record never contains the result itself.
 A routine send authorisation records one checked attempt before the turn is sent.
-It does not prove delivery or allow a replay to send the turn again.
+It includes the OAuth configuration digest checked for that attempt. It does not
+prove delivery or allow a replay to send the turn again.
 
 Budget turn stops carry only their reason kind and a reference to the saved spending
 stop. Participants can read them without seeing amounts or payer ids. Member stops

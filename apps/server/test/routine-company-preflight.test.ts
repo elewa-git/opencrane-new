@@ -138,6 +138,7 @@ async function valid() {
   expect(result.occurrenceId).toBe(modernRoutineExamples.due.occurrenceId);
   expect(result.rootId).toBe(modernRoutineExamples.due.rootId);
   expect(result.computerGeneration).toBe(1);
+  expect(result.configurationDigest).toBe(oauthConfigurationDigest(current.configuration));
   expect(append).not.toHaveBeenCalled();
   append.mockRestore();
 }
@@ -421,11 +422,13 @@ async function changedCompanyStreamBeforeWrite() {
       current.configuration.toolScopes.read = ['write'];
     }
     const event = independentWrite(current);
-    const result = await nats.store.append({ event, expectedSequence: 0,
-      expectedGlobalSequence: snapshot, checkAccess: company.confirmCurrent });
     if (changedSubject) {
+      const result = await nats.store.append({ event, expectedSequence: 0,
+        expectedGlobalSequence: snapshot });
       expect(result.status, `stream ${streamIndex}`).toBe('conflict');
     } else {
+      const result = await nats.store.append({ event, expectedSequence: 0,
+        expectedGlobalSequence: snapshot, checkAccess: company.confirmCurrent });
       expect(result.status, 'OAuth configuration').toBe('unavailable');
     }
   }
