@@ -11,9 +11,11 @@ import { oauthConfigurationDigest } from '../../../libs/models/src/oauth-attempt
 import { startOAuthConfigurationChange, finishOAuthConfigurationChange }
   from '../../../libs/models/src/oauth-configuration-change.ts';
 import { toolPolicyFromRows } from '../../../libs/models/src/tool-policy.ts';
+import { readCurrentCompanyProfile } from '../../../libs/models/src/company-profile-reader.ts';
 import * as toolPolicy from '../../../libs/models/src/tool-policy.ts';
 import { oauthSelectionFixture } from '../../../libs/models/test/support/oauth-selection.ts';
-import { checkRoutineCompanyPreflight } from '../src/routine-company-preflight.ts';
+import { checkRoutineCompanyPreflight, routineCompanyPreflightFromCustody }
+  from '../src/routine-company-preflight.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -41,7 +43,7 @@ async function closeStore() {
 beforeEach(startStore);
 afterEach(closeStore);
 
-async function fixture(shouldRecordConfiguration = true) {
+async function fixture(shouldRecordConfiguration = true, useSavedVerified = false) {
   serial += 1;
   const serverId = `installed${serial}`;
   const profileId = 'profile';
@@ -72,12 +74,21 @@ async function fixture(shouldRecordConfiguration = true) {
   await nats.seed([optIn]);
   const profileSubject = `connection-company:${serverId}:${profileId}`;
   const operationId = connectionOperationId('test', profileSubject, 'save');
-  const activation = { connectionId: 'installed', ownerKind: 'company', purpose: 'company',
+  const savedAccount = { issuer: 'https://issuer.test', subject: 'verified-bot',
+    scopes: ['openid', 'read'], expiresAt: Date.now() + 120_000 };
+  const accountHash = createHash('sha256');
+  accountHash.update(JSON.stringify(savedAccount));
+  const verifiedAccountDigest = accountHash.digest('hex');
+  const activationBase = { connectionId: 'installed', ownerKind: 'company', purpose: 'company',
     generation: 1, uid: 'uid', resourceVersion: '1',
     endpointDigest: selected.configuration.endpointDigest, operationId,
     changedBy: 'admin', expectedSequence: 0, appendUntil: Date.now() + 60_000,
-    reason: 'bearer_create', registrationRevision,
+    registrationRevision,
     optInRevision: await nats.store.head(optInSubject) };
+  const activation = useSavedVerified
+    ? { ...activationBase, reason: 'oauth_confirmed', account: savedAccount,
+      configurationDigest: oauthConfigurationDigest(selected.configuration) }
+    : { ...activationBase, reason: 'bearer_create' };
   const profile = envelope('test', profileSubject, 'connection.created', {
     siloId: 'test', custodianId: 'admin', serverId, profile: profileId,
     secretRef: 'secret:synthetic', activation,
@@ -87,7 +98,7 @@ async function fixture(shouldRecordConfiguration = true) {
   profile.principal = { kind: 'human', id: 'admin' };
   await nats.seed([profile]);
   const profileRevision = await nats.store.head(profileSubject);
-  const accountDigest = 'a'.repeat(64);
+  const accountDigest = useSavedVerified ? verifiedAccountDigest : 'a'.repeat(64);
   const accountId = 'verified-bot';
   const evidence = { status: 'verified', siloId: 'test', serverId, profileId,
     ownerKind: 'company', connectionId: 'installed', profileRevision,
@@ -97,6 +108,9 @@ async function fixture(shouldRecordConfiguration = true) {
   function readProfile(_rows: StoredEvent[]) {
     return evidence;
   }
+  const recover = vi.fn().mockResolvedValue({ status: 'recovered', identity: {
+    reference: 'synthetic', uid: 'uid', resourceVersion: '1' } });
+  const savedReader = readCurrentCompanyProfile({ recover });
   const selectionSubject = `connection-selection-${ownerId}-${serverId}`;
   const choice = { action: 'select', userId: ownerId, serverId,
     connectionId: 'installed', profileId, profileRevision, expectedSequence: 0,
@@ -131,11 +145,11 @@ async function fixture(shouldRecordConfiguration = true) {
       selected.loadConfiguration);
   }
   if (shouldRecordConfiguration) await recordConfiguration();
-  async function preflight(reader = readProfile) {
+  async function preflight(reader = useSavedVerified ? savedReader : readProfile) {
     return checkRoutineCompanyPreflight(nats.store, binding, 'test', run, 1,
       selected.loadConfiguration, reader);
   }
-  return { preflight, evidence, definition, tool,
+  return { preflight, evidence, definition, tool, recover,
     configuration: selected.configuration, loadConfiguration: selected.loadConfiguration,
     profileSubject, optInSubject, serverId, ownerId, assistantId, selectionSubject };
 }
@@ -152,6 +166,23 @@ async function valid() {
   append.mockRestore();
 }
 it('checks one current company binding for the saved occurrence without sending', valid);
+
+async function savedVerifiedProfile() {
+  const current = await fixture(true, true);
+  const append = vi.spyOn(nats.store, 'append');
+  const preflight = routineCompanyPreflightFromCustody(nats.store, binding, 'test',
+    current.loadConfiguration, { recover: current.recover });
+  const company = await preflight({ ...modernRoutineExamples.due,
+    definition: current.definition }, 1);
+  expect(company.configurationDigest).toBe(oauthConfigurationDigest(current.configuration));
+  expect(current.recover).toHaveBeenCalled();
+  expect(append).not.toHaveBeenCalled();
+  current.recover.mockResolvedValue({ status: 'not_found' });
+  await expect(company.confirmCurrent()).rejects.toThrow('Routine company unavailable');
+  append.mockRestore();
+}
+it('checks a saved verified company profile and refuses lost custody before use',
+  savedVerifiedProfile);
 
 async function missingRecordedConfiguration() {
   const current = await fixture(false);
@@ -287,6 +318,15 @@ async function stale() {
   await expect(binding.confirmCurrent()).rejects.toThrow('Routine company unavailable');
 }
 it('refuses a preflight kept across a later connection change', stale);
+
+async function changedAccountAfterPreflight() {
+  const current = await fixture();
+  const company = await current.preflight();
+  current.evidence.accountId = 'different';
+  await expect(company.confirmCurrent()).rejects.toThrow('Routine company unavailable');
+}
+it('refuses a changed account result from the trusted reader after preflight',
+  changedAccountAfterPreflight);
 
 async function changedToolBeforeSender() {
   const current = await fixture();
