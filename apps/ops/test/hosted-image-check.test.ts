@@ -516,6 +516,8 @@ async function queuedRealRefusal(refusedCheck: QueuedOutcome) {
   const storage = await databases();
   function failed() { throw new Error('Fixture database unavailable'); }
   const db = connectProjectionDb(storage.queue.options.connectionString!, failed);
+  const previousLogLevel = process.env['LOG_LEVEL'];
+  process.env['LOG_LEVEL'] = 'info';
   const logLines: string[] = [];
   const destination = { write(line: string) { logLines.push(line); } };
   const logger = createLogger('image-refusal-test', { destination });
@@ -573,9 +575,14 @@ async function queuedRealRefusal(refusedCheck: QueuedOutcome) {
     if (!isFailure) {
       const jobs = await storage.queue.query<{ output: unknown }>(
         "SELECT output FROM pgboss.job WHERE name='check-hosted-image'");
-      const publicOutput = JSON.stringify({ logs: logLines, savedErrors: jobs.rows[0]?.output,
-        eventData: events.map(event => event.data) });
-      for (const canary of canaries) expect(publicOutput).not.toContain(canary);
+      const parsedLogLines = logLines.map(parseLogLine);
+      const queueFailureLogs = parsedLogLines.filter(hasQueueFailureMessage);
+      expect(queueFailureLogs.length).toBeGreaterThan(0);
+      const publicOutputs = [JSON.stringify(queueFailureLogs),
+        JSON.stringify(jobs.rows[0]?.output), JSON.stringify(events.map(event => event.data))];
+      for (const canary of canaries) {
+        for (const publicOutput of publicOutputs) expect(publicOutput).not.toContain(canary);
+      }
     }
     if (refusedCheck.endsWith('outage') || refusedCheck === 'missing-receipt' ||
         refusedCheck === 'forged-receipt') {
@@ -600,6 +607,8 @@ async function queuedRealRefusal(refusedCheck: QueuedOutcome) {
     service.close();
     await once(service, 'close');
     await rm(custody.directory, { recursive: true, force: true });
+    if (previousLogLevel === undefined) delete process.env['LOG_LEVEL'];
+    else process.env['LOG_LEVEL'] = previousLogLevel;
     if (previous) process.env['HOSTED_IMAGE_CUSTODY_FILE'] = previous;
     else delete process.env['HOSTED_IMAGE_CUSTODY_FILE'];
   }
@@ -616,6 +625,8 @@ async function privateInputErrorStaysPrivate() {
   const canaries = ['credential-canary', 'filesystem-path-canary', 'content-canary'];
   const previous = process.env['HOSTED_IMAGE_CUSTODY_FILE'];
   process.env['HOSTED_IMAGE_CUSTODY_FILE'] = join(directory, ...canaries, 'missing.json');
+  const previousLogLevel = process.env['LOG_LEVEL'];
+  process.env['LOG_LEVEL'] = 'info';
   const logLines: string[] = [];
   const destination = { write(line: string) { logLines.push(line); } };
   const logger = createLogger('image-private-test', { destination });
@@ -659,14 +670,32 @@ async function privateInputErrorStaysPrivate() {
     const publicOutput = JSON.stringify({ logs: logLines, savedErrors: jobs.rows[0]?.output,
       eventData: events.map(event => event.data), publicError });
     expect(publicOutput).toContain('Trusted image inputs unavailable');
+    const parsedLogLines = logLines.map(parseLogLine);
+    const queueFailureLogs = parsedLogLines.filter(hasQueueFailureMessage);
+    expect(queueFailureLogs.length, JSON.stringify(logLines)).toBeGreaterThan(0);
+    const privateOutputs = [JSON.stringify(queueFailureLogs), JSON.stringify(jobs.rows[0]?.output),
+      JSON.stringify(events.map(event => event.data)), JSON.stringify(publicError)];
     for (const canary of canaries) expect(publicOutput).not.toContain(canary);
+    for (const canary of canaries) {
+      for (const output of privateOutputs) expect(output).not.toContain(canary);
+    }
   } finally {
     await runtime.stop();
     await db.close();
     await storage.close();
     await rm(directory, { recursive: true, force: true });
+    if (previousLogLevel === undefined) delete process.env['LOG_LEVEL'];
+    else process.env['LOG_LEVEL'] = previousLogLevel;
     if (previous) process.env['HOSTED_IMAGE_CUSTODY_FILE'] = previous;
     else delete process.env['HOSTED_IMAGE_CUSTODY_FILE'];
   }
+}
+
+function hasQueueFailureMessage(record: { msg?: string }) {
+  return record.msg === 'handler.failed';
+}
+
+function parseLogLine(line: string) {
+  return JSON.parse(line) as { msg?: string };
 }
 it('keeps a private input error out of the queue and public result', privateInputErrorStaysPrivate);
