@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { expect, it, vi } from 'vitest';
 import { reportJournal, wireReport, type BridgeReport } from '../src/report-journal.ts';
@@ -59,7 +59,9 @@ async function fixture(executionMode = 'memory_free') {
     loaded.load();
     return loaded.reports;
   }
-  return { notify, finish, reload, reloadAll, close, reports, transport, runner };
+  function journalBytes() { return readFileSync(driver.journal, 'utf8'); }
+  return { notify, finish, reload, reloadAll, close, reports, transport, runner,
+    journalBytes };
 }
 function isToolReport(report: BridgeReport) {
   return report.type === 'agent.tool_call_started' || report.type === 'agent.tool_call_finished';
@@ -80,10 +82,14 @@ it('sends a masked preview beside the label without saving it in the journal', a
       type: 'agent.command_ran', activityLabel: 'Searched files', exitCode: 127,
       preview: 'rg ••• •••',
     });
+    expect(setup.journalBytes()).not.toContain(secret);
+    expect(setup.journalBytes()).not.toContain('rg ••• •••');
     expect(setup.reloadAll().at(-1)).not.toHaveProperty('preview');
     expect(JSON.stringify(setup.reloadAll())).not.toContain(secret);
     setup.runner.acknowledge(report!.sequence);
     expect(setup.reports.at(-1)).not.toHaveProperty('preview');
+    expect(setup.journalBytes()).not.toContain(secret);
+    expect(setup.journalBytes()).not.toContain('rg ••• •••');
   } finally {
     setup.close();
   }

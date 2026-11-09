@@ -12,6 +12,7 @@ import { turnCommand } from '../src/chat/turns.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { readChatCommandFacts, readChatFacts } from '../src/chat/chat-summary.ts';
 import { chatDisplayData } from '../src/chat/display.ts';
+import { redactCommand } from '../../computer/src/command-redaction.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let keys: ReturnType<typeof conversationKeys>;
@@ -103,6 +104,21 @@ it('encrypts the masked command with the conversation message key', async () => 
   expect(chatDisplayData('agent.command_ran', data)).not.toHaveProperty('view');
   const { preview: _preview, ...journalReplay } = command;
   expect(await recordReport(nats.store, keys, context, journalReplay)).toBe('duplicate');
+});
+
+it('accepts a masked report from a command with 5,000 short arguments', async () => {
+  await setup();
+  const commandText = 'echo ' + 'a '.repeat(5000);
+  const preview = await redactCommand(commandText);
+  expect(preview).not.toBeNull();
+  expect(preview!.length).toBeLessThanOrEqual(16_384);
+  expect(preview).toMatch(/^echo (?:••• )+…$/u);
+  const command = { sequence: 1, previousSequence: 0, conversationId: 'chat',
+    turnId: 'message', assistantId: 'assistant', type: 'agent.command_ran',
+    commandDigest: 'a'.repeat(64), exitCode: 0, activityLabel: 'Ran a command',
+    preview };
+  expect(await recordReport(nats.store, keys, context, command)).toBe('recorded');
+  expect(await recordReport(nats.store, keys, context, command)).toBe('duplicate');
 });
 
 it('refuses a command preview on a different report kind', async () => {
