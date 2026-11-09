@@ -49,7 +49,10 @@ The computer saves that confirmation without private reply text.
 - Can prepare a simple command for a future private view. It shows a reviewed program
   name and a few reviewed command words. It hides every other word, including flags,
   their values and all file paths. Commands with unusual whitespace or control
-  characters produce no text. This text is not yet sent or shown to members.
+  characters produce no text. A shell function can reuse a program name and treat a
+  normally safe command word as a secret. The computer cannot tell this from the
+  command text alone, so that word may remain visible. This text is not yet sent or
+  shown to members.
 - Disables bridge process dumps before it receives private work. The bridge answers
   a local protection check inside its computer container. The root entrypoint records
   the bridge process it started so later checks can reject a replacement child.

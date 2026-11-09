@@ -1072,6 +1072,11 @@ or a control character anywhere in the command gives no command text.
 The visible text is checked with Secretlint's MIT-licensed recommended rules and
 a high-entropy check on each visible word. Unbalanced quotes, shell operators,
 pipes, parentheses, here-documents and unknown programs give no command text.
+The program name alone does not prove what its arguments mean. A shell function
+called `npm`, for example, may treat `test` as a credential. The redactor would
+show `npm test` because it cannot see the function definition. This is an accepted
+residual risk for the future member-only command view; the output is not used by
+any report, event or screen today.
 The leak corpus and an OSI licence check cover this preparation. No report, event or
 screen uses its output
 yet; a later change must encrypt it with the conversation message key before it
