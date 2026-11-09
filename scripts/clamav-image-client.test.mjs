@@ -10,7 +10,8 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { sharedCertificates } from '../libs/event-store/test/certificates.ts';
 import { createScannerService } from '../infra/clamav/service.mjs';
 import { scanImagePart } from '../infra/clamav/image-client.mjs';
-import { runHostedImageScan, runAndWriteHostedImageCheck } from '../infra/clamav/image-worker.mjs';
+import { runHostedImageScan, runAndWriteHostedImageCheck, savedResultMatches }
+  from '../infra/clamav/image-worker.mjs';
 import { envelope } from '../libs/models/src/actor.ts';
 
 async function filesystem(importOriginal) {
@@ -333,6 +334,23 @@ async function writesCleanAndRecoversOriginalEvent() {
   expect(store.rows).toHaveLength(2);
   expect(store.rows[1].event.type).toBe('mcp.image_checked');
   expect(store.rows[1].event.data.checks.malware.verdict).toBe('pass');
+  const savedResult = store.rows[1].event.data;
+  expect(await savedResultMatches(store, image.silo, savedResult)).toBe(true);
+  const alteredResults = [
+    { ...savedResult, attemptId: 2 },
+    { ...savedResult, imageDigest: 'd'.repeat(64) },
+    { ...savedResult, platform: 'linux/arm64' },
+    { ...savedResult, checks: { ...savedResult.checks,
+      signature: { ...savedResult.checks.signature, engineVersion: 'changed' } } },
+    { ...savedResult, checks: { ...savedResult.checks,
+      malware: { ...savedResult.checks.malware, verdict: 'unknown' } } },
+  ];
+  for (const altered of alteredResults) {
+    expect(await savedResultMatches(store, image.silo, altered)).toBe(false);
+  }
+  const absentStore = savedImageStore(image);
+  absentStore.rows.length = 0;
+  expect(await savedResultMatches(absentStore, image.silo, savedResult)).toBe(false);
   const originalId = store.rows[1].event.id;
   expect((await runAndWriteHostedImageCheck(...args)).status).toBe('appended');
   expect(store.rows[1].event.id).toBe(originalId);
@@ -457,6 +475,47 @@ async function retriesAfterValidationFailureBeforeAppend() {
 }
 test('validation failure before append allows a fresh attempt delivery',
   retriesAfterValidationFailureBeforeAppend);
+
+async function abortsAtWorkerBoundaries(kind) {
+  async function scan(input) {
+    received.push(Buffer.from(input.bytes));
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  const controller = new AbortController();
+  let historyReads = 0;
+  let settingsReads = 0;
+  const originalRead = store.readStream;
+  async function* countHistory(...args) {
+    historyReads += 1;
+    yield* originalRead(...args);
+  }
+  store.readStream = countHistory;
+  async function prepare() {
+    if (kind === 'during preparation') controller.abort();
+    return image;
+  }
+  async function readSettings() {
+    settingsReads += 1;
+    return settings;
+  }
+  async function readChecks() {
+    if (kind === 'after separate checks') controller.abort();
+    return independentChecks();
+  }
+  if (kind === 'before history') controller.abort();
+  const outcome = await runAndWriteHostedImageCheck(store, image.silo, image.serverId, 1,
+    prepare, readSettings, readChecks, controller.signal);
+  expect(outcome.status).toBe('unavailable');
+  expect(store.appendCount).toBe(0);
+  if (kind === 'before history') expect(historyReads).toBe(1);
+  if (kind === 'during preparation') expect(settingsReads).toBe(0);
+  if (kind === 'after separate checks') expect(historyReads).toBe(2);
+}
+test.each(['before history', 'during preparation', 'after separate checks'])(
+  '%s stops worker progress', abortsAtWorkerBoundaries);
 
 async function refusesIncompleteAndIndependentFailures(kind) {
   async function scan(input) {
