@@ -9,9 +9,8 @@ import { proveComputerSupervisor } from './supervisor-proof.ts';
 import {
   isPrivateProcessFailure, isProtectionFailure, protectionMessages, type ProtectionFailure,
 } from './protection-failure.ts';
-import {
-  joinInventory, readCurrentInventory, type InventoryCode, type InventoryContext,
-} from './joined-inventory.ts';
+import { type InventoryCode, type InventoryContext } from './joined-inventory.ts';
+import { collectHeldInventory, InventoryRefusal } from './held-inventory.ts';
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const containerSchema = z.object({
@@ -227,13 +226,14 @@ async function assertInstallation(
 }
 
 async function runCheck(containerId: string, binding: Binding, name: string,
-  challengeId: string) {
+  challengeId: string, signal?: AbortSignal) {
   const request = { ...binding, name, challengeId };
   const input = JSON.stringify(request);
   const startedAt = Date.now();
-  const args = ['/usr/local/bin/node', '--experimental-strip-types',
+  const args = ['/usr/bin/env', 'OPENCRANE_INVENTORY_HOLD=1',
+    '/usr/local/bin/node', '--experimental-strip-types',
     '/app/scripts/private-memory-qualification/journey.mjs'];
-  const response = await runInContainer(containerId, args, input);
+  const response = await runInContainer(containerId, args, input, signal);
   const refusal = hostRefusalSchema.safeParse(response);
   if (refusal.success) {
     return refusal.data;
@@ -312,6 +312,7 @@ export async function collectDeployment(...unexpectedArguments: unknown[]): Prom
     if (!computerContainerId) {
       return saveProcessRefusal('private_process_missing');
     }
+    const boundComputerId = computerContainerId;
     let computerAtStart: string;
     try {
       computerAtStart = computerInstallation(containerIdentity(computerContainerId));
@@ -364,20 +365,29 @@ export async function collectDeployment(...unexpectedArguments: unknown[]): Prom
         helperIds: [challengeId],
       };
       const inventoryContainers = { serverId: containerId, computerId: computerContainerId };
-      const initialInventory = readCurrentInventory(inventoryContext, inventoryContainers);
-      const initialJoin = joinInventory(inventoryContext, initialInventory, initialInventory);
-      if (!initialJoin.ok) {
-        return saveProcessRefusal('private_process_missing', initialJoin.group);
-      }
       await assertInstallation(containerId, before, streamCreated);
       assertSame(target, deploymentTarget());
       if (!computerStillInstalled(computerContainerId, computerAtStart)) {
         return saveProcessRefusal('private_process_identity_changed');
       }
       let receipt: Awaited<ReturnType<typeof runCheck>> | undefined;
+      function heldWork(signal: AbortSignal): ReturnType<typeof runCheck> {
+        return runCheck(containerId, binding, name, challengeId, signal);
+      }
+      async function verifyBinding(): Promise<void> {
+        await assertInstallation(containerId, before, streamCreated);
+        assertSame(target, deploymentTarget());
+        if (!computerStillInstalled(boundComputerId, computerAtStart)) {
+          throw new Error('computer_replaced');
+        }
+      }
       try {
-        receipt = await runCheck(containerId, binding, name, challengeId);
-      } catch {
+        receipt = await collectHeldInventory(inventoryContext, inventoryContainers,
+          heldWork, verifyBinding);
+      } catch (error) {
+        if (error instanceof InventoryRefusal) {
+          return saveProcessRefusal('private_process_missing', error.group);
+        }
         // Recheck the supervisor even if private work lost its reply.
       }
       const supervisorAfterWork = await proveComputerSupervisor(computerContainerId,
@@ -389,11 +399,6 @@ export async function collectDeployment(...unexpectedArguments: unknown[]): Prom
       }
       if (supervisorAfterWork !== true) {
         return saveProcessRefusal(supervisorAfterWork);
-      }
-      const finalInventory = readCurrentInventory(inventoryContext, inventoryContainers);
-      const finalJoin = joinInventory(inventoryContext, initialInventory, finalInventory);
-      if (!finalJoin.ok) {
-        return saveProcessRefusal('private_process_missing', finalJoin.group);
       }
       if (!receipt) {
         throw new Error('journey_failed');

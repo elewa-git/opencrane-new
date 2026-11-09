@@ -209,11 +209,10 @@ Every record must match the measured server and computer installations, both
 image digests, the current challenge and computer generation. The second read
 must show the same PID and Linux start time for every group and helper. The
 collector checks both installations around these reads as well. Fixture tests
-supply records to prove acceptance and refusal. The deployed reader currently
-returns no complete set: the held proxy, native pair and helper cannot all be
-observed before the old journey starts. Collection therefore refuses before
-that journey starts. Connecting those live records belongs to the later held
-journey work. No saved result or caller-supplied record can fill a missing group.
+supply records to prove acceptance and refusal. The deployed reader starts the
+native pair and helper before the first read and holds them through the second.
+It still needs a live proxy call to complete a set. No saved result or
+caller-supplied record can fill a missing group.
 
 Each inventory snapshot has separate launch observations and protection records.
 The validator requires each record to match its launch's PID, Linux start time,
@@ -221,8 +220,8 @@ PID namespace and non-dumpable measurement. It requires exactly the named
 launches as well as exactly the named records. Process identities must be unique,
 apart from the bridge and proxy labels, which refer to the same process. A canary
 helper runs in the server container, so its required image is the server image.
-The other non-server groups run in the computer container. The current deployed
-reader returns empty launch and record arrays. It cannot claim a measured set.
+The other non-server groups run in the computer container. The reader takes
+their launches from the measured containers and checks each live protection reply.
 
 The MCP proxy is part of the packaged bridge process, not a separate child.
 `proveComputerProxy` checks its fixed process command and the root entrypoint's
@@ -747,17 +746,26 @@ refuses an exec with the same PID and start time. The computer image installs
 the probe under `/scripts/private-memory-qualification/`, where the collector
 executes it. Each read uses the configured container ids, image digests,
 installation ids, challenge and computer generation. The joined validator
-checks the image for the process's actual container. The native and canary readers
-also check protected launch records, executable, UID, cgroup and dump protection.
-The canary helper belongs to the server image because its supervisor launches there.
+checks the image for the process's actual container. The canary helper belongs
+to the server image because its supervisor launches there.
 
-This reader is incomplete by design. The native wrapper, native child and
-canary helper still have no held launch across the first and second reads.
-The first read therefore refuses before private input. A copied, missing,
-duplicate, foreign, unsafe or replaced record also refuses in the validator.
-The collector's earlier tests cover a lost journey reply and a second read;
-they use fixtures because no live held journey exists yet. No persistence
-attempt or complete qualification can follow from these records. The
+The collector now starts one native pair in the measured computer image and keeps it
+alive through both reads. The server journey helper pauses before its work and again
+before it returns. The collector checks the first set, releases the helper for work,
+checks the final set and only then releases both jobs. The reader takes native PIDs
+from a root-owned tmpfs launch record and the helper PID from its supervisor record.
+Each live probe checks executable, UID, cgroup, PID namespace and dump protection.
+The joined check also compares these values across reads. A copied, missing,
+duplicate, foreign, unsafe or replaced record refuses before a result is saved.
+The reader uses the server image for the server-launched helper and the computer image
+for the native pair. A helper ending during work cannot satisfy the final read.
+The supervisor removes the helper's stage file and launch record after the child stops.
+This clears its lock so a completed or cancelled journey can be retried.
+The helper's local protection listener closes when that journey ends.
+
+This is source and fixture evidence only. A complete live set, including an active
+proxy call, still needs a fresh installation and live qualification. No persistence
+attempt or complete qualification follows from these records. The
 Correct/Forget/revoke, Stop/crash/reconnect and replacement journeys remain
 pending.
 

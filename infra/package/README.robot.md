@@ -30,10 +30,11 @@ and measures real restricted containers; these fixtures do not qualify deploymen
 Knip ignores only the helper's generated `.node` import, which exists in the image
 after compilation. The source and its TypeScript callers remain checked.
 
-The server image includes the canary process reader at
-`/app/scripts/private-memory-qualification/live-inventory-probe.ts`. The reader
-requires the supervisor's protected launch record and a current local protection
-reply before it reports a helper. An absent helper refuses collection.
+The canary journey helper now answers a fresh local protection challenge while it is
+paused for the collector's first and final inventory reads. The server image includes
+the probe at `/app/scripts/private-memory-qualification/live-inventory-probe.ts`.
+The collector binds its reply to the supervisor's current launch record and the
+measured server image before accepting a result.
 
 `chart/.helmignore` excludes `templates/README.md` so Helm does not try to render
 the guide as a Kubernetes resource. `chart-render.test.mjs` renders the real chart

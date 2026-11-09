@@ -6,11 +6,13 @@ computer container. The probe compares the full identity returned by each succes
 protection check with a new read, including the executable and command line. A changed
 process refuses even when its PID and Linux start time stay the same.
 
-The image installs `native-process-proof.ts` and the Codex launcher at the fixed
-paths used by the live reader. The reader checks a native launch record against the
-running wrapper and child, including their executable, UID, cgroup, PID namespace,
-core limits and dump protection. Missing or changed proof refuses. The collector
-does not yet hold this pair through both inventory reads.
+The image also installs `native-hold.ts`, `native-process-proof.ts` and the production
+Codex launcher at the paths used by the collector. The held worker makes one native
+wrapper and child from that launcher and records their challenge, PID and start time
+under tmpfs. The live reader checks that launch against the running processes and
+their executable, UID, cgroup, PID namespace, core limits and dump protection.
+The collector releases the worker only after its second inventory read. The worker's
+supervisor stops its process group and removes its temporary home and record.
 
 ## Retained Ask call limits
 

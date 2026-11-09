@@ -184,9 +184,59 @@ function isGroup(value: string | undefined): value is LiveServiceGroup {
     value === 'nativeChild' || value === 'canaryHelper';
 }
 
+function control(stage: 'stage' | 'release' | 'releaseNative' | 'nativeReady',
+  challengeId: string,
+  imageDigest?: string, installationId?: string): string | boolean | undefined {
+  try {
+    if (!/^[0-9a-f-]{36}$/u.test(challengeId)) {
+      return undefined;
+    }
+    if (stage === 'nativeReady') {
+      return nativeProcess('nativeWrapper', challengeId) !== undefined &&
+        nativeProcess('nativeChild', challengeId) !== undefined;
+    }
+    if (stage === 'releaseNative') {
+      const wrapper = nativeProcess('nativeWrapper', challengeId);
+      if (!wrapper) {
+        return undefined;
+      }
+      const stat = readFileSync(`/proc/${wrapper.pid}/stat`, 'utf8');
+      const parent = Number(stat.slice(stat.lastIndexOf(') ') + 2).split(' ')[1]);
+      process.kill(parent, 'SIGUSR2');
+      return true;
+    }
+    const path = '/run/opencrane-memory-qualification.lock/inventory-stage';
+    const contents = readFileSync(path, 'utf8');
+    if (contents !== `${challengeId} ready\n` &&
+        contents !== `${challengeId} workDone\n`) {
+      return undefined;
+    }
+    if (stage === 'stage') {
+      return contents.slice(challengeId.length + 1).trim();
+    }
+    if (!imageDigest || !installationId) {
+      return undefined;
+    }
+    const helper = canaryProcess(challengeId, imageDigest, installationId);
+    if (!helper) {
+      return undefined;
+    }
+    process.kill(helper.pid, 'SIGUSR2');
+    return true;
+  } catch {
+    return undefined;
+  }
+}
+
 if (process.argv[1]?.endsWith('/live-inventory-probe.ts')) {
   const group = process.argv[2];
-  const result = isGroup(group) ?
-    probeInventoryProcess(group, process.argv[3], process.argv[4], process.argv[5]) : undefined;
+  let result: LiveProcess | string | boolean | undefined;
+  if (isGroup(group)) {
+    result = probeInventoryProcess(group, process.argv[3], process.argv[4], process.argv[5]);
+  } else if (group === 'stage' || group === 'release' || group === 'releaseNative' ||
+      group === 'nativeReady') {
+    result = process.argv[3] ? control(group, process.argv[3], process.argv[4],
+      process.argv[5]) : undefined;
+  }
   process.stdout.write(JSON.stringify(result ?? null));
 }

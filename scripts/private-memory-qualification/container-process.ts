@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { protectionMessages } from './protection-failure.ts';
 
 export async function runInContainer(
-  containerId: string, args: string[], input = '',
+  containerId: string, args: string[], input = '', signal?: AbortSignal,
 ): Promise<unknown> {
   const sourceUrl = new URL('./supervisor.mjs', import.meta.url);
   const source = await readFile(sourceUrl, 'utf8');
@@ -13,11 +13,12 @@ export async function runInContainer(
   const command = ['--host', 'unix:///var/run/docker.sock', 'exec', ...settings, '-i',
     containerId, '/usr/local/bin/node', '--input-type=module', '--eval', source,
     JSON.stringify(failures), JSON.stringify(args)];
-  const output = await attachedProcess(command, input);
+  const output = await attachedProcess(command, input, signal);
   return JSON.parse(output) as unknown;
 }
 
-function attachedProcess(command: string[], input: string): Promise<string> {
+function attachedProcess(command: string[], input: string,
+  signal?: AbortSignal): Promise<string> {
   function execute(resolve: (output: string) => void, reject: (error: Error) => void): void {
     const options = { stdio: 'pipe' as const };
     const child = spawn('/usr/bin/docker', command, options);
@@ -28,6 +29,10 @@ function attachedProcess(command: string[], input: string): Promise<string> {
     function cancel(): void {
       child.stdin.destroy();
       child.kill('SIGKILL');
+    }
+    signal?.addEventListener('abort', cancel, { once: true });
+    if (signal?.aborted) {
+      cancel();
     }
     function failed(): void {
       clearTimeout(deadline);
@@ -49,6 +54,7 @@ function attachedProcess(command: string[], input: string): Promise<string> {
     }
     function closed(code: number | null): void {
       clearTimeout(deadline);
+      signal?.removeEventListener('abort', cancel);
       child.stdin.destroy();
       if (code !== 0 || size > 65_536) {
         failed();
