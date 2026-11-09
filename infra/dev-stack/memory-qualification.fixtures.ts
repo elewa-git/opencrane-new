@@ -6,6 +6,9 @@ import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { proveCanaryHelper, readCanaryHelperBinding } from
   '../../scripts/private-memory-qualification/canary-helper-proof.ts';
+import {
+  inventoryGroups, type InventoryContext, type ProtectionRecord,
+} from '../../scripts/private-memory-qualification/joined-inventory.ts';
 
 vi.mock('node:fs', { spy: true });
 vi.mock('node:fs/promises', { spy: true });
@@ -13,6 +16,7 @@ vi.mock('node:child_process', { spy: true });
 vi.mock('../../scripts/private-memory-qualification/bridge-proof.ts', { spy: true });
 vi.mock('../../scripts/private-memory-qualification/supervisor-proof.ts', { spy: true });
 vi.mock('../../scripts/private-memory-qualification/canary-helper-proof.ts', { spy: true });
+vi.mock('../../scripts/private-memory-qualification/joined-inventory.ts', { spy: true });
 const root = new URL('../../', import.meta.url).pathname.slice(0, -1);
 const directory = `${homedir()}/.config/opencrane/dev-stack-1`;
 const targetPath = '/etc/opencrane/private-memory-qualification.json';
@@ -46,6 +50,24 @@ function freshContainer() {
   };
 }
 function unchanged(): void {}
+function matchingInventory(context: InventoryContext): ProtectionRecord[] {
+  const records: ProtectionRecord[] = [];
+  for (const [index, group] of inventoryGroups.entries()) {
+    const image = group === 'serverDelivery' ? context.serverImageDigest :
+      context.computerImageDigest;
+    const helperIds = group === 'canaryHelper' ? context.helperIds : [undefined];
+    for (const helperId of helperIds) {
+      records.push({ group, helperId, imageDigest: image,
+        serverInstallationId: context.serverInstallationId,
+        computerInstallationId: context.computerInstallationId,
+        serverImageDigest: context.serverImageDigest,
+        computerImageDigest: context.computerImageDigest,
+        challengeId: context.challengeId, generationId: context.generationId,
+        pid: 100 + index, startTime: String(1000 + index), safe: true });
+    }
+  }
+  return records;
+}
 function protectedStat() {
   const prototype = Object.getPrototypeOf(originalStat) as object | null;
   const stat = Object.create(prototype) as files.Stats;
@@ -200,6 +222,8 @@ function restore(): void {
 beforeEach(prepare);
 afterEach(restore);
 async function launch(signal?: AbortSignal): Promise<void> {
+  const joinedInventory = await import(
+    '../../scripts/private-memory-qualification/joined-inventory.ts');
   const bridgeProof = await import('../../scripts/private-memory-qualification/bridge-proof.ts');
   const supervisorProof = await import(
     '../../scripts/private-memory-qualification/supervisor-proof.ts');
@@ -209,6 +233,7 @@ async function launch(signal?: AbortSignal): Promise<void> {
   });
   vi.mocked(bridgeProof.proveComputerBridge).mockResolvedValue(true);
   vi.mocked(supervisorProof.proveComputerSupervisor).mockResolvedValue(true);
+  vi.mocked(joinedInventory.readCurrentInventory).mockImplementation(matchingInventory);
   const launcher = await import('./memory-qualification.ts');
   await launcher.prepareMemoryQualification(signal);
 }
