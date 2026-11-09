@@ -41,7 +41,7 @@ async function closeStore() {
 beforeEach(startStore);
 afterEach(closeStore);
 
-async function fixture() {
+async function fixture(shouldRecordConfiguration = true) {
   serial += 1;
   const serverId = `installed${serial}`;
   const profileId = 'profile';
@@ -130,7 +130,7 @@ async function fixture() {
     await finishOAuthConfigurationChange(nats.store, 'test', serverId, change,
       selected.loadConfiguration);
   }
-  await recordConfiguration();
+  if (shouldRecordConfiguration) await recordConfiguration();
   async function preflight(reader = readProfile) {
     return checkRoutineCompanyPreflight(nats.store, binding, 'test', run, 1,
       selected.loadConfiguration, reader);
@@ -152,6 +152,29 @@ async function valid() {
   append.mockRestore();
 }
 it('checks one current company binding for the saved occurrence without sending', valid);
+
+async function missingRecordedConfiguration() {
+  const current = await fixture(false);
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+}
+it('refuses company preflight when no OAuth configuration has been recorded',
+  missingRecordedConfiguration);
+
+async function unfinishedConfigurationEdit() {
+  const current = await fixture();
+  await startOAuthConfigurationChange(nats.store, 'test', current.serverId);
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+}
+it('refuses company preflight while an OAuth configuration edit is unfinished',
+  unfinishedConfigurationEdit);
+
+async function changedConfigurationDigest() {
+  const current = await fixture();
+  current.configuration.clientId = 'replacement';
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+}
+it('refuses company preflight when loaded OAuth settings differ from the recorded digest',
+  changedConfigurationDigest);
 
 async function changedSavedTool(field: string) {
   const current = await fixture();
