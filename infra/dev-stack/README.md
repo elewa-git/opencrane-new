@@ -19,7 +19,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|starts services; checks listeners; sets up sign-in; can issue short backup credentials| services["Local services<br/>jobs, content and access"]
   stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
-  stack -->|checks subscriptions and shares dispatcher readiness with chat| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
+  stack -->|shares memory settings and dispatcher readiness| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|checks ownership, nodes and backup credentials| package["infra/package<br/>Helm install"]
   stack -->|checks the selected computer and reports refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
@@ -36,6 +36,8 @@ The dispatcher uses the server's read-only content connection to coordinate gate
 configuration changes. Its background jobs keep their own database.
 The routines worker keeps routine read tables current. Provider settings use those
 tables to check whether an existing routine would be affected by a change.
+When the owner enables memory, startup gives the same memory key directory to the
+memory worker, server and dispatcher. This lets the nightly job scan due work.
 Uploads use a separate authenticated scanner service. Each stack starts that service
 with private certificates and the local ClamAV daemon. Startup makes a signed clean
 scan before it starts the server. It also checks that the routines worker is running.

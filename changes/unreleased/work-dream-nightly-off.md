@@ -1,1 +1,1 @@
-- Nightly memory jobs now finish without failure when memory is off, leaving the event log untouched and logging one clear line. Enabled memory still refuses stale metadata, and dreaming dispatch remains off.
+- Nightly memory jobs finish without failure when memory is off, leaving the event log untouched and logging one clear line. When the owner enables memory, the dispatcher now receives the same setting as the memory worker, so due work runs and missing or stale metadata is still refused. Dreaming dispatch remains off.
