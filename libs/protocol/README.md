@@ -11,6 +11,8 @@ Removal, role and ownership history replies identify the affected person and sav
 Publication history replies can name a permitted parent chat, a permitted child chat
 and a saved result reference. A parent link is shown only to a parent reader.
 Detail replies can also say whether read tables and permissions have applied that change.
+Nightly memory history carries a safe action and random reference. Its personal link
+is present only after the server checks the owner. A root allowance is not a charge.
 These receipts do not say whether departure cleanup has finished.
 
 Approval replies can name takeover as their cancellation cause and show the saved

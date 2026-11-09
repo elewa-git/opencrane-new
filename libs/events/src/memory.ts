@@ -198,6 +198,7 @@ const maintenanceReference = z.strictObject({
 });
 const maintenanceRecord = z.strictObject({
   scopeId: digest, nightId: digest, batchKey: digest, inputRevision: digest,
+  scopeKind: scopeKind.optional(), publicReference: z.string().regex(/^[a-f0-9]{32}$/u).optional(),
   date: z.iso.date(), bindingRevision: revision, memberId: identifier,
   acceptedCapCents: acceptedNightlyCap, intendedAt: z.iso.datetime(), selectedAt: z.iso.datetime(),
   inputRefs: z.array(maintenanceReference).max(32),

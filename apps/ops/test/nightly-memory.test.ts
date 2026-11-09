@@ -119,6 +119,10 @@ async function boundary() {
     const expected = { action: 'refused', reason: 'qualification_blocked',
       intendedAt: '2026-10-12T02:00:00.000Z', acceptedCapCents: 100 };
     expect(first[0]).toMatchObject(expected);
+    const firstNight = memoryMaintenanceRecordedDataSchema.parse(first[0]);
+    expect(firstNight.scopeKind).toBe('person');
+    expect(firstNight.publicReference).toMatch(/^[a-f0-9]{32}$/u);
+    expect(firstNight.publicReference).not.toBe(firstNight.nightId);
     const laterFact = written('later');
     await append('memory.written', laterFact);
     await scan('2026-10-12T02:01:00Z');
@@ -127,9 +131,43 @@ async function boundary() {
     await scan('2026-10-13T02:00:00Z');
     const nextNight = await records();
     expect(nextNight).toHaveLength(2);
+    const secondNight = memoryMaintenanceRecordedDataSchema.parse(nextNight[1]);
+    expect(secondNight.publicReference).not.toBe(firstNight.publicReference);
 }
 it('crosses the boundary once, keeps dirty inputs and ignores duplicate or changed delivery',
   boundary, 60_000);
+
+async function publicReferenceForIdenticalNight() {
+  await setup();
+  await scan('2026-10-12T02:00:00Z');
+  const saved = await records();
+  const run = memoryMaintenanceRecordedDataSchema.parse(saved[0]);
+  return run.publicReference;
+}
+
+async function independentPublicReferences() {
+  const firstReference = await publicReferenceForIdenticalNight();
+  await services.close();
+  const secondReference = await publicReferenceForIdenticalNight();
+  const date = '2026-10-12';
+  const silo = 'test';
+  const memberId = 'alice';
+  const predictableNightId = createHash('sha256')
+    .update(JSON.stringify([silo, scopeId, date]))
+    .digest('hex');
+  const predictableOwnerId = createHash('sha256')
+    .update(JSON.stringify([silo, memberId, date]))
+    .digest('hex');
+  const predictableReferences = [predictableNightId.slice(0, 32),
+    predictableOwnerId.slice(0, 32), `${silo}:${memberId}:${date}`];
+
+  expect(predictableReferences).not.toContain(firstReference);
+  expect(predictableReferences).not.toContain(secondReference);
+  expect(firstReference).not.toBe(secondReference);
+}
+it('uses independent references for the same night across separate stores',
+  independentPublicReferences, 60_000);
+
 async function clean() {
   await setup(false);
   await scan('2026-10-12T02:00:00Z');

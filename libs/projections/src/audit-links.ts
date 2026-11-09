@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { EventEnvelope } from '@opencrane/events';
 import type { AuditRecord } from '@opencrane/protocol';
@@ -6,6 +7,17 @@ export const auditIdentifier = z.string().regex(/^[\w:.-]{1,300}$/u);
 
 export function safeAuditId(value: unknown): string | undefined {
   return auditIdentifier.safeParse(value).data;
+}
+
+export function visibleEventId(event: EventEnvelope,
+  data: Record<string, unknown>): string {
+  if (event.type === 'memory.maintenance_recorded') return String(data['publicReference']);
+  return event.id;
+}
+
+export function commandRef(event: EventEnvelope): string | undefined {
+  if (event.type === 'memory.maintenance_recorded' || !event.commandId) return undefined;
+  return createHash('sha256').update(event.commandId).digest('hex');
 }
 
 function firstId(...values: unknown[]): string | undefined {
@@ -28,6 +40,11 @@ export function dispatchStatus(outcome: unknown): AuditRecord['status'] {
 }
 
 export function auditLinks(event: EventEnvelope, data: Record<string, unknown>) {
+  if (event.type === 'memory.maintenance_recorded') {
+    // Keep a private night separate from any caller-supplied chat links.
+    return { request: undefined, permit: undefined, approval: undefined,
+      conversationId: undefined, turnId: undefined, requesterId: undefined };
+  }
   if (event.type.startsWith('delegation.')) {
     // Keep child work separate from every matching chat turn and envelope link.
     return { request: undefined, permit: undefined, approval: undefined,

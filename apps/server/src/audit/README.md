@@ -9,6 +9,9 @@ This folder lets people see why OpenCrane allowed, refused or charged for work. 
 - Checks parent and child chat rights separately before showing publication references.
 - Checks those rights for every publication record returned with another history entry.
 - Checks a child task's own chat rights before showing its outcome, identity or link.
+- Shows saved nightly memory choices with a random reference and no fact text.
+  Only the person who owns the personal memory gets its scope link; opening it
+  checks access again.
 - Checks the exact read-table and permission receipts for admissions, removals, role and ownership changes.
 - Limits conversation history to the reader's own requests in a conversation they may read.
 - Loads the history before checking current access, so a slow read cannot return private information to someone removed during loading.
