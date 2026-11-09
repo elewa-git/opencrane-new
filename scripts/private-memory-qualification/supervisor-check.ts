@@ -38,7 +38,7 @@ function validIdentity(identity: ProcessIdentity, inspector: ProcessIdentity): b
     identity.containerIdentity === inspector.containerIdentity;
 }
 
-export function checkSupervisor(): Result {
+export function checkSupervisor(observeIdentity?: (identity: ProcessIdentity) => void): Result {
   if (process.getuid?.() !== 0) {
     return { result: 'private_process_unreadable' };
   }
@@ -69,6 +69,7 @@ export function checkSupervisor(): Result {
         !sameProcessIdentity(inspector, finalInspector)) {
       return { result: 'private_process_identity_changed' };
     }
+    observeIdentity?.(second);
     return { result: true, pid: second.pid, startTime: second.startTime };
   } catch (error) {
     if (error instanceof Error && error.message === 'private_process_identity_changed') {

@@ -363,7 +363,8 @@ export async function collectDeployment(...unexpectedArguments: unknown[]): Prom
         generationId: computerAtStart,
         helperIds: [challengeId],
       };
-      const initialInventory = readCurrentInventory(inventoryContext);
+      const inventoryContainers = { serverId: containerId, computerId: computerContainerId };
+      const initialInventory = readCurrentInventory(inventoryContext, inventoryContainers);
       const initialJoin = joinInventory(inventoryContext, initialInventory, initialInventory);
       if (!initialJoin.ok) {
         return saveProcessRefusal('private_process_missing', initialJoin.group);
@@ -389,7 +390,7 @@ export async function collectDeployment(...unexpectedArguments: unknown[]): Prom
       if (supervisorAfterWork !== true) {
         return saveProcessRefusal(supervisorAfterWork);
       }
-      const finalInventory = readCurrentInventory(inventoryContext);
+      const finalInventory = readCurrentInventory(inventoryContext, inventoryContainers);
       const finalJoin = joinInventory(inventoryContext, initialInventory, finalInventory);
       if (!finalJoin.ok) {
         return saveProcessRefusal('private_process_missing', finalJoin.group);

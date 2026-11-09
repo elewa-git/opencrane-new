@@ -54,7 +54,8 @@ The computer saves that confirmation without private reply text.
   A protected test runner checks that record and the live process from inside the
   computer container. This does not qualify private memory on its own.
 - Protects the root supervisor before private work and records its Linux start time.
-  The collector checks that live process around each private memory journey.
+  The collector checks that live process around each private memory journey. Its
+  installed probe also rejects a process that changes its executable after protection.
 - Runs the MCP proxy inside the bridge process. During a private tool call, a live
   protection check can confirm that this process still holds the tool reply. It
   refuses when no private call is open. This check alone does not enable memory.

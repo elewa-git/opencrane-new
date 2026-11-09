@@ -735,3 +735,35 @@ The collector checks the installation around each journey. Replay and status
 reads start no helper. The joined gate is present, but a complete live set and
 the live journey remain unfinished.
 Admission stays disabled.
+
+## First live inventory reader
+
+The collector now runs the existing live protection probes for server delivery,
+the computer supervisor, bridge and proxy inside their measured containers.
+It records each process PID, Linux start time and PID namespace only after the
+probe succeeds. The computer probes keep the full identity checked during
+protection and compare it with a new read before returning a result. This
+refuses an exec with the same PID and start time. The computer image installs
+the probe under `/scripts/private-memory-qualification/`, where the collector
+executes it. Each read uses the configured container ids, image digests,
+installation ids, challenge and computer generation. The joined validator
+checks the image for the process's actual container. The canary helper belongs
+to the server image because its supervisor launches there.
+
+This reader is incomplete by design. The native wrapper, native child and
+canary helper still have no held launch across the first and second reads.
+The first read therefore refuses before private input. A copied, missing,
+duplicate, foreign, unsafe or replaced record also refuses in the validator.
+The collector's earlier tests cover a lost journey reply and a second read;
+they use fixtures because no live held journey exists yet. No persistence
+attempt or complete qualification can follow from these records. The
+Correct/Forget/revoke, Stop/crash/reconnect and replacement journeys remain
+pending.
+
+Both complete qualifications still require fresh installs, simultaneous
+requesters and sessions, later requester access, native Remember, recall,
+Correct and Forget, affected work stopping, harmless activity continuity,
+and storage scans during live and fault conditions with pinned Codex and
+gVisor. The persistence row is NOT RUN until a held native turn attempts all
+eight forbidden tool classes and the scanner reads the computer PVC,
+session and reload state, caches, outbox, logs and dumps outside its namespace.

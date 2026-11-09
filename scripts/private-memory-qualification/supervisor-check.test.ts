@@ -35,7 +35,12 @@ function prepare(): void {
 beforeEach(prepare);
 
 function provesRootSupervisor(): void {
-  expect(checkSupervisor()).toEqual({ result: true, pid: 1, startTime: '123' });
+  const delivered: ProcessIdentity[] = [];
+  const result = checkSupervisor(function observeIdentity(identity): void {
+    delivered.push(identity);
+  });
+  expect(result).toEqual({ result: true, pid: 1, startTime: '123' });
+  expect(delivered).toEqual([supervisor]);
   expect(checkLiveService).toHaveBeenCalledWith('supervisor', supervisor);
   expect(supervisorIdentity).toHaveBeenCalledTimes(2);
   expect(probeContainer).toHaveBeenCalledTimes(2);

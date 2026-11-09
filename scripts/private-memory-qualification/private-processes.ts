@@ -174,7 +174,7 @@ function commandArguments(identity: ProcessIdentity): string[] {
   return argumentsText.split('\0');
 }
 
-function serverIdentity(): ProcessIdentity | undefined {
+export function serverIdentity(): ProcessIdentity | undefined {
   const identity = readProcessIdentity(1);
   const args = commandArguments(identity);
   const script = args[2];

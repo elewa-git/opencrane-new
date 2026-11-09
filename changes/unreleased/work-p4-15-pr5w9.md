@@ -1,0 +1,1 @@
+The private memory collector now reads live protection and process identity for server delivery, the computer supervisor, bridge and proxy from the measured containers; incomplete process inventory still refuses qualification.

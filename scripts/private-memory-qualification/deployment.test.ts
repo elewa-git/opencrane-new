@@ -202,6 +202,8 @@ async function bindsInventoryToCurrentLaunch(): Promise<void> {
   expect(result.result).toBe('PASS');
   const firstRequest = responses[0]!;
   const firstContext = vi.mocked(readCurrentInventory).mock.calls[0]![0];
+  const firstContainers = vi.mocked(readCurrentInventory).mock.calls[0]![1];
+  expect(firstContainers).toEqual({ serverId: containerId, computerId: computer.Id });
   expect(firstContext.computerInstallationId).toMatch(/^sha256:[a-f0-9]{64}$/u);
   expect(firstContext).toEqual({
     serverInstallationId: firstRequest['installationId'],

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { execFileSync } from 'node:child_process';
 
 export const inventoryGroups = [
   'serverDelivery', 'bridge', 'supervisor', 'proxy', 'nativeWrapper',
@@ -6,6 +7,8 @@ export const inventoryGroups = [
 ] as const;
 
 type InventoryGroup = typeof inventoryGroups[number];
+type LiveServiceGroup = Extract<InventoryGroup,
+  'serverDelivery' | 'supervisor' | 'bridge' | 'proxy'>;
 export type InventoryCode = InventoryGroup | 'inventory';
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
@@ -218,7 +221,63 @@ export function joinInventory(contextInput: unknown, firstInput: unknown,
   return { ok: true };
 }
 
-// Refuse until the held journey can measure all launches and protected processes together.
-export function readCurrentInventory(_context: InventoryContext): InventorySnapshot {
-  return { records: [], launches: [] };
+type InventoryContainers = { serverId: string; computerId: string };
+const containerId = z.string().regex(/^[a-f0-9]{64}$/u);
+const liveProcessSchema = z.strictObject({
+  pid: processIdentity.pid,
+  startTime: processIdentity.startTime,
+  pidNamespace: processIdentity.pidNamespace,
+  protected: z.literal(true),
+});
+const liveGroups: readonly LiveServiceGroup[] = [
+  'serverDelivery', 'supervisor', 'bridge', 'proxy',
+];
+
+function liveProcess(container: string, group: LiveServiceGroup):
+  z.output<typeof liveProcessSchema> {
+  let probePath: string;
+  if (group === 'serverDelivery') {
+    probePath = '/app/scripts/private-memory-qualification/live-inventory-probe.ts';
+  } else {
+    probePath = '/scripts/private-memory-qualification/live-inventory-probe.ts';
+  }
+  const command = ['--host', 'unix:///var/run/docker.sock', 'exec', '--workdir', '/app',
+    '--env', 'NODE_OPTIONS=', '--env', 'NODE_PATH=', '--env', 'LD_PRELOAD=',
+    container, '/usr/local/bin/node', '--experimental-strip-types',
+    probePath, group];
+  const options = { timeout: 10_000, maxBuffer: 4096, stdio: 'pipe' as const };
+  const output = execFileSync('/usr/bin/docker', command, options);
+  const parsed: unknown = JSON.parse(output.toString('utf8'));
+  return liveProcessSchema.parse(parsed);
+}
+
+// Read each existing live service probe from the measured installation. The native pair
+// and canary require a held journey before this set can pass the joined check.
+export function readCurrentInventory(context: InventoryContext,
+  containers: InventoryContainers): InventorySnapshot {
+  containerId.parse(containers.serverId);
+  containerId.parse(containers.computerId);
+  const records: ProtectionRecord[] = [];
+  const launches: TrustedLaunch[] = [];
+  for (const group of liveGroups) {
+    const location = expectedLocation(group);
+    const currentContainer = location === 'server' ? containers.serverId : containers.computerId;
+    const process = liveProcess(currentContainer, group);
+    const imageDigest = location === 'server' ? context.serverImageDigest :
+      context.computerImageDigest;
+    const identity = { pid: process.pid, startTime: process.startTime,
+      pidNamespace: process.pidNamespace, dumpable: false as const };
+    const record: ProtectionRecord = {
+      serverInstallationId: context.serverInstallationId,
+      computerInstallationId: context.computerInstallationId,
+      serverImageDigest: context.serverImageDigest,
+      computerImageDigest: context.computerImageDigest,
+      challengeId: context.challengeId,
+      generationId: context.generationId,
+      group, imageDigest, ...identity, safe: process.protected,
+    };
+    records.push(record);
+    launches.push({ group, location, ...identity });
+  }
+  return { records, launches };
 }
