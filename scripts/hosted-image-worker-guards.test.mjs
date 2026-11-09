@@ -135,6 +135,20 @@ async function changedOriginalAttempt() {
 }
 test('the original delivery cannot write a newly selected attempt', changedOriginalAttempt);
 
+async function readsResultAfterAnotherWorkerClaims() {
+  const admission = vi.mocked(readHostedAdmission);
+  admission.mockResolvedValueOnce({ attemptId: 1 });
+  admission.mockResolvedValueOnce({ attemptId: 1, checks: {} });
+  vi.mocked(claimHostedImageScan).mockResolvedValue({ status: 'unavailable' });
+
+  expect((await write()).status).toBe('appended');
+  expect(admission).toHaveBeenCalledTimes(2);
+  expect(prepareImage).not.toHaveBeenCalled();
+  expect(scanHostedImageAttempt).not.toHaveBeenCalled();
+}
+test('reads the saved result after another worker claims the scan',
+  readsResultAfterAnotherWorkerClaims);
+
 async function refusesScanWithoutOneRequiredFact(kind) {
   if (kind === 'verdict') scanned.verdict = 'infected';
   if (kind === 'malware') scanned.malware = undefined;
