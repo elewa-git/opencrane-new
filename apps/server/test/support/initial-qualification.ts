@@ -6,9 +6,32 @@ import { z } from 'zod';
 import { collectDeployment } from '../../../../scripts/private-memory-qualification/deployment.ts';
 import * as bridgeProof from '../../../../scripts/private-memory-qualification/bridge-proof.ts';
 import * as supervisorProof from '../../../../scripts/private-memory-qualification/supervisor-proof.ts';
+import * as joinedInventory from '../../../../scripts/private-memory-qualification/joined-inventory.ts';
+import type {
+  InventoryContext, ProtectionRecord,
+} from '../../../../scripts/private-memory-qualification/joined-inventory.ts';
 
 const targetPath = '/etc/opencrane/private-memory-qualification.json';
 const resultPath = '/etc/opencrane/private-memory-qualification-result.json';
+
+function matchingInventory(context: InventoryContext): ProtectionRecord[] {
+  const records: ProtectionRecord[] = [];
+  for (const [index, group] of joinedInventory.inventoryGroups.entries()) {
+    const image = group === 'serverDelivery' ? context.serverImageDigest :
+      context.computerImageDigest;
+    const helperIds = group === 'canaryHelper' ? context.helperIds : [undefined];
+    for (const helperId of helperIds) {
+      records.push({ group, helperId, imageDigest: image,
+        serverInstallationId: context.serverInstallationId,
+        computerInstallationId: context.computerInstallationId,
+        serverImageDigest: context.serverImageDigest,
+        computerImageDigest: context.computerImageDigest,
+        challengeId: context.challengeId, generationId: context.generationId,
+        pid: 100 + index, startTime: String(1000 + index), safe: true });
+    }
+  }
+  return records;
+}
 
 // Simulate only the deployment's filesystem and Docker boundary. Run the real collector.
 export async function initialQualificationFixture() {
@@ -121,6 +144,7 @@ export async function initialQualificationFixture() {
   });
   vi.spyOn(bridgeProof, 'proveComputerBridge').mockResolvedValue(true);
   vi.spyOn(supervisorProof, 'proveComputerSupervisor').mockResolvedValue(true);
+  vi.spyOn(joinedInventory, 'readCurrentInventory').mockImplementation(matchingInventory);
   const result = await collectDeployment();
   function replace(value: unknown) {
     files.set(resultPath, JSON.stringify(value));
