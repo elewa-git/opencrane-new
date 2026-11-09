@@ -324,6 +324,48 @@ it.each(['profile', 'opt-in'] as const)(
   'refuses %s change during native preparation before allowance',
   changedCompanyDuringPreparation);
 
+async function refusesCompanyChangeAfterAllowance(kind: 'profile' | 'opt-in') {
+  let current = true;
+  let confirmed = 0;
+  let rejectedCurrentChecks = 0;
+  let changedAfterAllowance = false;
+  function matchesRoutineRoot(root: typeof actor.state.roots[number]) {
+    return root.conversationId === conversationId && root.turnId === turnId;
+  }
+  function allowanceIsAllocated() {
+    return actor.state.roots.some(matchesRoutineRoot);
+  }
+  function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+    computerGeneration: number) {
+    function confirmCurrent() {
+      confirmed += 1;
+      if (!current) {
+        rejectedCurrentChecks += 1;
+        return Promise.reject(new Error(`${kind} changed`));
+      }
+      if (allowanceIsAllocated()) {
+        current = false;
+        changedAfterAllowance = true;
+      }
+      return Promise.resolve();
+    }
+    const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
+      computerGeneration, confirmCurrent };
+    return Promise.resolve(company);
+  }
+  const composition = compose({ enabled: true, companyPreflight });
+  expect(await composition.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  expect(await saved('budget.root_allowance_set', 'budget-test')).toHaveLength(1);
+  expect(changedAfterAllowance).toBe(true);
+  expect(current).toBe(false);
+  expect(confirmed).toBeGreaterThan(0);
+  expect(rejectedCurrentChecks).toBeGreaterThan(0);
+  expect(preparedComputer.executedThreads).toEqual([]);
+}
+it.each(['profile', 'opt-in'] as const)(
+  'refuses %s change after allowance and before sending',
+  refusesCompanyChangeAfterAllowance);
+
 async function inert(options: { enabled?: boolean; replay?: boolean }) {
   const before = await nats.store.head();
   const wake = vi.fn(forbidden);
