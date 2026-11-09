@@ -125,7 +125,12 @@ function runsProbeAtInstalledComputerPath(): void {
   expect(dockerfile).toContain(copyInstruction);
   function docker(_binary: unknown, args: unknown): string {
     const command = z.array(z.string()).parse(args);
-    expect(command).toContain(installedPath);
+    const group = command.at(-1);
+    if (group === 'serverDelivery') {
+      expect(command).toContain('/app/scripts/private-memory-qualification/live-inventory-probe.ts');
+    } else {
+      expect(command).toContain(installedPath);
+    }
     return JSON.stringify({ pid: 123, startTime: '456',
       pidNamespace: 'pid:[4026531836]', protected: true });
   }
