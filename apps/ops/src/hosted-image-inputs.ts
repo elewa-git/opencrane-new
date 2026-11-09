@@ -116,13 +116,25 @@ async function prepareImage(config: Configuration, attempt: Attempt) {
   return { ...attempt, manifest, config: configBytes, layers };
 }
 
-function receipt(evidence: unknown, engineVersion: string) {
+function datedReceipt(evidence: unknown, engineVersion: string) {
   const checkedAt = new Date();
   const expiresAt = new Date(checkedAt.getTime() + 120_000);
-  return { verdict: 'pass' as const, checkedAt: checkedAt.toISOString(),
+  return { checkedAt: checkedAt.toISOString(),
     expiresAt: expiresAt.toISOString(), engineVersion,
     reportDigest: hash(JSON.stringify(evidence)) };
 }
+
+function passedReceipt(evidence: unknown, engineVersion: string) {
+  const dated = datedReceipt(evidence, engineVersion);
+  return { ...dated, verdict: 'pass' as const };
+}
+
+function failedReceipt(outcome: { reasonCode: string }, engineVersion: string) {
+  const dated = datedReceipt(outcome, engineVersion);
+  return { ...dated, verdict: 'fail' as const, reasonCodes: [outcome.reasonCode] };
+}
+
+const notRun = { verdict: 'not_run' as const };
 
 async function independentChecks(config: Configuration, attempt: Attempt, repository: string) {
   const directory = bundlePath(config, attempt);
@@ -139,14 +151,36 @@ async function independentChecks(config: Configuration, attempt: Attempt, reposi
   }
   const request = { repository, imageDigest: attempt.imageDigest, platform: attempt.platform };
   const signature = await verifyHostedImage(request, config.trust, read, config.tools.cosign);
-  if (signature.verdict !== 'pass') return;
+  if (signature.verdict !== 'pass') {
+    if (signature.verdict !== 'fail') return;
+    return { signature: failedReceipt(signature, 'cosign-2.6.1'),
+      licence: notRun, vulnerability: notRun };
+  }
   const licence = await inspectHostedLicences(request, config.trust, read, config.tools);
-  if (licence.verdict !== 'pass') return;
+  if (licence.verdict !== 'pass') {
+    if (licence.verdict !== 'fail') return;
+    return { signature: passedReceipt(signature.evidence, 'cosign-2.6.1'),
+      licence: failedReceipt(licence, 'syft-1.54.0'), vulnerability: notRun };
+  }
   const vulnerability = await inspectHostedVulnerabilities(request, config.trust, read,
     config.tools);
-  if (vulnerability.verdict !== 'pass' || !('receipt' in vulnerability)) return;
-  return { signature: receipt(signature.evidence, 'cosign-2.6.1'),
-    licence: receipt(licence.evidence, 'syft-1.54.0'),
+  if (vulnerability.verdict === 'fail' && !('receipt' in vulnerability)) {
+    // Keep failures from checks repeated before Grype with the check that refused them.
+    if (vulnerability.reasonCode === 'signature_refused') {
+      const failure = { ...vulnerability, reasonCode: 'signature_refused' };
+      return { signature: failedReceipt(failure, 'cosign-2.6.1'),
+        licence: notRun, vulnerability: notRun };
+    }
+    if (vulnerability.reasonCode === 'licence_refused') {
+      const failure = { ...vulnerability, reasonCode: 'licence_refused' };
+      return { signature: passedReceipt(signature.evidence, 'cosign-2.6.1'),
+        licence: failedReceipt(failure, 'syft-1.54.0'), vulnerability: notRun };
+    }
+  }
+  if (vulnerability.verdict !== 'pass' && vulnerability.verdict !== 'fail') return;
+  if (!('receipt' in vulnerability) || !vulnerability.receipt) return;
+  return { signature: passedReceipt(signature.evidence, 'cosign-2.6.1'),
+    licence: passedReceipt(licence.evidence, 'syft-1.54.0'),
     vulnerability: vulnerability.receipt };
 }
 

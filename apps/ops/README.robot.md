@@ -31,6 +31,9 @@ the saved pinned image repository. The bundle lives at
 `config.json`, `signature.json` and digest-named files in `blobs/`.
 The layer walk checks file lengths and image hashes before any result can be saved.
 Signature, licence and vulnerability checks use their existing independent tools.
+Their valid failure results are saved with the clean malware scan as a rejected
+`mcp.image_checked` result. Checks skipped after a failure say `not_run`. Tool outages
+still leave the original scan claim without a result, so retries cannot scan again.
 Missing custody, changed settings, stale databases and tool outages leave the image
 unadmitted. Failed queue jobs remain visible to the operator and are retried at
 dispatcher startup. Hosted execution remains disabled.
