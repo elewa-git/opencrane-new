@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope, history } from '../src/actor.ts';
-import { writeHostedAdmission, readHostedAdmission, readHostedImageScanAttempt,
+import { writeHostedAdmission as rawWriter, readHostedAdmission, readHostedImageScanAttempt,
   foldHostedAdmission }
   from '../src/hosted-admission.ts';
 import { writeHostedAdmission as exportedWriter } from
@@ -32,11 +32,16 @@ function result(serverId: string) {
 async function checkedEvidence() {
   return true;
 }
+async function writeTestAdmission(store: typeof nats.store, silo: string, raw: unknown,
+  at?: Date) {
+  return rawWriter(store, silo, raw, at, checkedEvidence);
+}
 
 async function refusesUnvalidatedExport() {
   const serverId = await installed();
   const invented = result(serverId);
-  const unchecked = await exportedWriter(nats.store, 'test', invented, now);
+  const unchecked = await exportedWriter(nats.store, 'test', invented, now,
+    undefined as unknown as typeof checkedEvidence);
   expect(unchecked.status).toBe('conflict');
   expect(await registrations()).toHaveLength(1);
   const refused = await exportedWriter(nats.store, 'test', invented, now,
@@ -46,6 +51,33 @@ async function refusesUnvalidatedExport() {
 }
 it('refuses caller-authored malware facts without checked evidence at the package export',
   refusesUnvalidatedExport);
+
+async function refusesIncompleteEvidence() {
+  const serverId = await installed();
+  const invented = result(serverId);
+  const wrongMalware = { ...invented.checks.malware, reportDigest: 'b'.repeat(64) };
+  async function mismatchedEvidence() {
+    return { verdict: 'clean' as const, malware: wrongMalware };
+  }
+  const outcome = await exportedWriter(nats.store, 'test', invented, now,
+    mismatchedEvidence);
+  expect(outcome.status).toBe('conflict');
+  expect(await registrations()).toHaveLength(1);
+}
+it('refuses validation of a different malware result', refusesIncompleteEvidence);
+
+async function acceptsMatchingEvidence() {
+  const serverId = await installed();
+  const checked = result(serverId);
+  async function matchingEvidence() {
+    return { verdict: 'clean' as const, malware: checked.checks.malware };
+  }
+  const outcome = await exportedWriter(nats.store, 'test', checked, now,
+    matchingEvidence);
+  expect(outcome.status).toBe('appended');
+  expect(await registrations()).toHaveLength(2);
+}
+it('requires the validated malware result to match the event', acceptsMatchingEvidence);
 
 async function installed() {
   const serverId = 'hosted-test';
@@ -69,7 +101,7 @@ async function readsOnlyTheCurrentCheckingAttempt() {
   expect(attempt).toEqual({ silo: 'test', serverId, attemptId: 1,
     imageDigest: digest, platform: 'linux/amd64', status: 'checking' });
   expect(await readHostedImageScanAttempt(nats.store, 'other', serverId)).toBeUndefined();
-  const saved = await writeHostedAdmission(nats.store, 'test', result(serverId), now);
+  const saved = await writeTestAdmission(nats.store, 'test', result(serverId), now);
   expect(saved.status).toBe('appended');
   expect(await readHostedImageScanAttempt(nats.store, 'test', serverId)).toBeUndefined();
 }
@@ -84,11 +116,11 @@ async function recoversResult() {
     throw new Error('Lost reply');
   }
   vi.spyOn(nats.store, 'append').mockImplementationOnce(lostReply);
-  await expect(writeHostedAdmission(nats.store, 'test', payload, now)).rejects.toThrow();
-  expect((await writeHostedAdmission(nats.store, 'test', payload, now)).status).toBe('appended');
+  await expect(writeTestAdmission(nats.store, 'test', payload, now)).rejects.toThrow();
+  expect((await writeTestAdmission(nats.store, 'test', payload, now)).status).toBe('appended');
   const changed = { ...payload, checks: { ...payload.checks,
     signature: { ...dated, engineVersion: '2' } } };
-  expect((await writeHostedAdmission(nats.store, 'test', changed, now)).status).toBe('conflict');
+  expect((await writeTestAdmission(nats.store, 'test', changed, now)).status).toBe('conflict');
   const saved = await registrations();
   expect(saved).toHaveLength(2);
   expect(saved[1]?.event).toMatchObject({ type: 'mcp.image_checked', source: 'models',
@@ -120,7 +152,7 @@ async function refusesResult(patch: Record<string, unknown>) {
   const checkPatch = z.record(z.string(), z.unknown()).parse(patch['checks'] ?? {});
   const checks = { ...valid.checks, ...checkPatch };
   const payload = { ...valid, ...patch, checks };
-  expect((await writeHostedAdmission(nats.store, 'test', payload, now)).status).toBe('conflict');
+  expect((await writeTestAdmission(nats.store, 'test', payload, now)).status).toBe('conflict');
   const rows = await history(nats.store, `mcp-${serverId}`, 'test');
   expect(rows).toHaveLength(1);
   const event = { ...rows[0]!.event, type: 'mcp.image_checked', data: payload,
@@ -134,12 +166,13 @@ it.each(invalid)('refuses invalid writer and stored results %j', refusesResult);
 async function expiresOldestDatabaseAndIgnoresSecondResult() {
   const serverId = await installed();
   const valid = result(serverId);
+  const current = new Date();
   const malware = { ...scanned,
-    databaseUpdatedAt: new Date(now.getTime() - 86_399_000).toISOString() };
+    databaseUpdatedAt: new Date(current.getTime() - 86_399_000).toISOString() };
   const payload = { ...valid, checks: { ...valid.checks, malware } };
-  expect((await writeHostedAdmission(nats.store, 'test', payload, now)).status).toBe('appended');
+  expect((await writeTestAdmission(nats.store, 'test', payload, current)).status).toBe('appended');
   const rows = await registrations();
-  const boundary = new Date(now.getTime() + 1_000);
+  const boundary = new Date(current.getTime() + 1_000);
   expect(foldHostedAdmission(rows, 'test', serverId, new Date(boundary.getTime() - 1)))
     .toMatchObject({ status: 'admitted' });
   expect(foldHostedAdmission(rows, 'test', serverId, boundary)).toMatchObject({ status: 'expired' });
@@ -155,8 +188,8 @@ async function serialisesDifferentResults() {
   const first = result(serverId);
   const second = { ...first, checks: { ...first.checks,
     signature: { ...dated, engineVersion: '2' } } };
-  const firstSave = writeHostedAdmission(nats.store, 'test', first, now);
-  const secondSave = writeHostedAdmission(nats.store, 'test', second, now);
+  const firstSave = writeTestAdmission(nats.store, 'test', first, now);
+  const secondSave = writeTestAdmission(nats.store, 'test', second, now);
   const outcomes = await Promise.all([firstSave, secondSave]);
   expect(outcomes).toEqual(expect.arrayContaining([
     { status: 'appended' }, { status: 'conflict' },
@@ -167,7 +200,7 @@ it('records only one result when different writers race', serialisesDifferentRes
 
 async function refusesForeignSilo() {
   const serverId = await installed();
-  const outcome = await writeHostedAdmission(nats.store, 'other', result(serverId), now);
+  const outcome = await writeTestAdmission(nats.store, 'other', result(serverId), now);
   expect(outcome.status).toBe('conflict');
   expect(await registrations()).toHaveLength(1);
 }
@@ -180,7 +213,7 @@ async function refusesRemoteServer() {
   event.principal = { kind: 'human', id: 'alice' };
   const saved = await nats.store.append({ event, expectedSequence: 0 });
   expect(saved.status).toBe('appended');
-  const outcome = await writeHostedAdmission(nats.store, 'test', result(serverId), now);
+  const outcome = await writeTestAdmission(nats.store, 'test', result(serverId), now);
   expect(outcome.status).toBe('conflict');
   expect(await history(nats.store, 'mcp-remote', 'test')).toHaveLength(1);
 }
@@ -192,7 +225,7 @@ async function recordsNonPassingResult(verdict: 'fail' | 'unavailable') {
   const failed = { ...dated, verdict: 'fail', reasonCodes: ['unsigned'] };
   const receipt = verdict === 'fail' ? failed : { ...dated, verdict: 'unavailable' };
   const payload = { ...valid, checks: { ...valid.checks, signature: receipt } };
-  const outcome = await writeHostedAdmission(nats.store, 'test', payload, now);
+  const outcome = await writeTestAdmission(nats.store, 'test', payload, now);
   expect(outcome.status).toBe('appended');
   const expected = verdict === 'fail' ? 'rejected' : 'unavailable';
   const admission = await readHostedAdmission(nats.store, 'test', serverId, now);
@@ -206,7 +239,7 @@ async function writesOnlyCurrentAttempt() {
   const valid = result(serverId);
   const failed = { ...valid, checks: { ...valid.checks,
     signature: { ...dated, verdict: 'fail', reasonCodes: ['unsigned'] } } };
-  expect((await writeHostedAdmission(nats.store, 'test', failed, now)).status).toBe('appended');
+  expect((await writeTestAdmission(nats.store, 'test', failed, now)).status).toBe('appended');
   const rows = await registrations();
   const data = { serverId, attemptId: 2, imageDigest: digest, platform: 'linux/amd64',
     registrationRevision: rows[0]!.sequence, expectedSequence: rows[1]!.sequence };
@@ -215,10 +248,10 @@ async function writesOnlyCurrentAttempt() {
   event.principal = { kind: 'human', id: 'alice' };
   const entry = { event, expectedSequence: rows[1]!.sequence };
   expect((await nats.store.append(entry)).status).toBe('appended');
-  expect((await writeHostedAdmission(nats.store, 'test', valid, now)).status).toBe('conflict');
+  expect((await writeTestAdmission(nats.store, 'test', valid, now)).status).toBe('conflict');
   const next = { ...valid, attemptId: 2 };
-  expect((await writeHostedAdmission(nats.store, 'test', next, now)).status).toBe('appended');
-  expect((await writeHostedAdmission(nats.store, 'test', next, now)).status).toBe('appended');
+  expect((await writeTestAdmission(nats.store, 'test', next, now)).status).toBe('appended');
+  expect((await writeTestAdmission(nats.store, 'test', next, now)).status).toBe('appended');
   expect(await readHostedAdmission(nats.store, 'test', serverId, now))
     .toMatchObject({ status: 'admitted', attemptId: 2 });
   expect(await registrations()).toHaveLength(4);
@@ -230,7 +263,7 @@ async function refusesAlteredRequestHistory() {
   const valid = result(serverId);
   const failed = { ...valid, checks: { ...valid.checks,
     signature: { ...dated, verdict: 'fail', reasonCodes: ['unsigned'] } } };
-  await writeHostedAdmission(nats.store, 'test', failed, now);
+  await writeTestAdmission(nats.store, 'test', failed, now);
   const rows = await registrations();
   const data = { serverId, attemptId: 2, imageDigest: digest, platform: 'linux/amd64',
     registrationRevision: rows[0]!.sequence, expectedSequence: rows[1]!.sequence };
