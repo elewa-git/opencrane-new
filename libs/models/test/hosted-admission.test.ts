@@ -112,6 +112,23 @@ async function refusesFabricatedMatchingEvidence() {
 it('refuses a caller-invented matching validator at the package export',
   refusesFabricatedMatchingEvidence);
 
+async function refusesInventedEvidenceWithWriterStore() {
+  const serverId = await installed();
+  const invented = hostedImageCheckedSchema.parse(result(serverId));
+  const claimedProof = retainAuthenticatedImageEvidence({ silo: 'test', serverId,
+    attemptId: 1, imageDigest: digest, platform: 'linux/amd64',
+    malware: invented.checks.malware });
+  function matchingEvidence() {
+    return Promise.resolve({ verdict: 'clean' as const, malware: invented.checks.malware });
+  }
+  const outcome = await exportedWriter(nats.store, 'test', invented, now,
+    claimedProof, matchingEvidence);
+  expect(outcome.status).toBe('conflict');
+  expect(await registrations()).toHaveLength(1);
+}
+it('refuses invented proof even when its caller has the writer store',
+  refusesInventedEvidenceWithWriterStore);
+
 async function refusesProofFromAnotherAttempt() {
   const serverId = await installed();
   const checked = hostedImageCheckedSchema.parse(result(serverId));

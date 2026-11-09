@@ -417,6 +417,75 @@ async function coordinatesConcurrentDeliveries() {
 test('concurrent deliveries share one scan for the original attempt',
   coordinatesConcurrentDeliveries);
 
+async function coordinatesSeparateStoreWrappers() {
+  const releaseScan = deferred();
+  const enteredScan = deferred();
+  let scanCount = 0;
+  async function scan(input) {
+    scanCount += 1;
+    enteredScan.resolve();
+    await releaseScan.promise;
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const firstStore = writableImageStore(image);
+  const secondStore = { ...firstStore };
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() { return independentChecks(); }
+  const first = runAndWriteHostedImageCheck(firstStore, image.silo, image.serverId,
+    1, prepare, readSettings, readChecks);
+  await enteredScan.promise;
+  const second = runAndWriteHostedImageCheck(secondStore, image.silo, image.serverId,
+    1, prepare, readSettings, readChecks);
+  await new Promise(resolve => setTimeout(resolve, 50));
+  releaseScan.resolve();
+  const secondOutcome = await second;
+  expect(secondOutcome.status).toBe('unavailable');
+  expect(scanCount).toBe(1);
+  expect((await first).status).toBe('appended');
+  expect(scanCount).toBe(1);
+}
+test('separate worker store wrappers cannot scan the same saved attempt twice',
+  coordinatesSeparateStoreWrappers);
+
+async function restartAfterLostResultReply() {
+  let scanCount = 0;
+  async function scan(input) {
+    scanCount += 1;
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const { image } = imageWithPart(bytes, binding);
+  const store = writableImageStore(image);
+  const originalAppend = store.append;
+  let delayedResult;
+  store.append = async function loseResultReply(input) {
+    if (input.event.type === 'mcp.image_checked') {
+      delayedResult = input;
+      throw new Error('reply lost before result became visible');
+    }
+    return originalAppend(input);
+  };
+  async function prepare() { return image; }
+  async function readSettings() { return settings; }
+  async function readChecks() { return independentChecks(); }
+  const args = [store, image.silo, image.serverId, 1, prepare, readSettings, readChecks];
+  expect((await runAndWriteHostedImageCheck(...args)).status).toBe('unavailable');
+  expect(scanCount).toBe(1);
+  const restartedStore = { ...store, append: originalAppend };
+  const restartedArgs = [restartedStore, image.silo, image.serverId,
+    1, prepare, readSettings, readChecks];
+  expect((await runAndWriteHostedImageCheck(...restartedArgs)).status).toBe('unavailable');
+  expect(scanCount).toBe(1);
+  store.rows.push({ event: delayedResult.event, sequence: store.rows.length + 1 });
+  expect((await runAndWriteHostedImageCheck(...restartedArgs)).status).toBe('appended');
+  expect(scanCount).toBe(1);
+}
+test('a restarted worker waits for the original result after a lost reply',
+  restartAfterLostResultReply);
+
 async function waitsForPendingLostAppend() {
   let scanCount = 0;
   async function scan(input) {
