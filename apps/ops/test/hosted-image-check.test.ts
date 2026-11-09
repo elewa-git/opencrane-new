@@ -206,7 +206,7 @@ function toolOutcome(failed: boolean) {
 }
 
 async function failedCheckReachesQueuedWriter(failedCheck: 'signature' | 'licence' |
-  'vulnerability') {
+  'vulnerability' | 'nested-licence' | 'nested-signature') {
   await saveRegistration();
   const custody = await custodyFixture();
   const previous = process.env['HOSTED_IMAGE_CUSTODY_FILE'];
@@ -225,8 +225,14 @@ async function failedCheckReachesQueuedWriter(failedCheck: 'signature' | 'licenc
   const receipt = { verdict: 'fail' as const, checkedAt, expiresAt,
     engineVersion: '0.121.0', databaseDigest: digest, databaseUpdatedAt: checkedAt,
     reportDigest: digest, reasonCodes: ['vulnerability_refused'] };
-  vulnerability.mockResolvedValue({ verdict: 'fail', reasonCode: 'vulnerability_refused',
-    receipt });
+  if (failedCheck === 'nested-licence' || failedCheck === 'nested-signature') {
+    const reasonCode = failedCheck === 'nested-licence'
+      ? 'licence_refused' : 'signature_refused';
+    vulnerability.mockResolvedValue({ verdict: 'fail', reasonCode });
+  } else {
+    vulnerability.mockResolvedValue({ verdict: 'fail', reasonCode: 'vulnerability_refused',
+      receipt });
+  }
   const delivered = vi.fn<(checks: unknown) => void>();
   async function scan(_store: typeof fixture.store, _silo: string, _serverId: string,
     _attemptId: number, _prepareImage: unknown, _readSettings: unknown,
@@ -248,18 +254,20 @@ async function failedCheckReachesQueuedWriter(failedCheck: 'signature' | 'licenc
     await runtime.work(1);
     function wasDelivered() { return Promise.resolve(delivered.mock.calls.length === 1); }
     await until(wasDelivered);
-    const checks = hostedImageCheckedSchema.shape.checks.parse(delivered.mock.calls[0]?.[0]);
-    expect(checks).toMatchObject({
-      [failedCheck]: { verdict: 'fail' },
-    });
+    const checkSchema = hostedImageCheckedSchema.shape.checks.omit({ malware: true });
+    const checks = checkSchema.parse(delivered.mock.calls[0]?.[0]);
+    let refusedCheck = failedCheck;
+    if (failedCheck === 'nested-licence') refusedCheck = 'licence';
+    if (failedCheck === 'nested-signature') refusedCheck = 'signature';
+    expect(checks).toMatchObject({ [refusedCheck]: { verdict: 'fail' } });
     expect(checks.signature).toBeDefined();
     expect(checks.licence).toBeDefined();
     expect(checks.vulnerability).toBeDefined();
-    if (failedCheck === 'signature') {
+    if (refusedCheck === 'signature') {
       expect(checks.licence).toEqual({ verdict: 'not_run' });
       expect(checks.vulnerability).toEqual({ verdict: 'not_run' });
     }
-    if (failedCheck === 'licence') {
+    if (refusedCheck === 'licence') {
       expect(checks.vulnerability).toEqual({ verdict: 'not_run' });
     }
   } finally {
@@ -271,6 +279,6 @@ async function failedCheckReachesQueuedWriter(failedCheck: 'signature' | 'licenc
     else delete process.env['HOSTED_IMAGE_CUSTODY_FILE'];
   }
 }
-it.each(['signature', 'licence', 'vulnerability'] as const)(
+it.each(['signature', 'licence', 'vulnerability', 'nested-licence', 'nested-signature'] as const)(
   'delivers a failed %s receipt from the trusted adapter through the queued job',
   failedCheckReachesQueuedWriter);
