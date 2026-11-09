@@ -282,3 +282,29 @@ async function failedCheckReachesQueuedWriter(failedCheck: 'signature' | 'licenc
 it.each(['signature', 'licence', 'vulnerability', 'nested-licence', 'nested-signature'] as const)(
   'delivers a failed %s receipt from the trusted adapter through the queued job',
   failedCheckReachesQueuedWriter);
+
+async function unavailableIndependentCheck(checkName: 'signature' | 'licence') {
+  const registration = await saveRegistration();
+  const custody = await custodyFixture();
+  const previous = process.env['HOSTED_IMAGE_CUSTODY_FILE'];
+  process.env['HOSTED_IMAGE_CUSTODY_FILE'] = custody.custodyPath;
+  const adapter = await trustedHostedImageInputs(fixture.store, silo, registration);
+  const signature = vi.mocked(verifyHostedImage);
+  const licence = vi.mocked(inspectHostedLicences);
+  signature.mockResolvedValue(checkName === 'signature'
+    ? { verdict: 'unavailable', reasonCode: 'signature_unavailable' }
+    : toolOutcome(false));
+  licence.mockResolvedValue(checkName === 'licence'
+    ? { verdict: 'unavailable', reasonCode: 'licence_unavailable' }
+    : toolOutcome(false));
+  try {
+    await expect(adapter.readIndependentChecks({ silo, serverId, attemptId: 1,
+      imageDigest: digest, platform: 'linux/amd64' })).resolves.toBeUndefined();
+  } finally {
+    await rm(custody.directory, { recursive: true, force: true });
+    if (previous) process.env['HOSTED_IMAGE_CUSTODY_FILE'] = previous;
+    else delete process.env['HOSTED_IMAGE_CUSTODY_FILE'];
+  }
+}
+it.each(['signature', 'licence'] as const)(
+  'does not turn an unavailable %s tool into a failed receipt', unavailableIndependentCheck);
