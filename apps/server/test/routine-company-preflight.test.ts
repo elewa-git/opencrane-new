@@ -8,6 +8,7 @@ import { modernRoutineExamples } from '../../../libs/events/src/routine-events.t
 import { envelope, history } from '../../../libs/models/src/actor.ts';
 import { connectionOperationId } from '../../../libs/models/src/bearer-connections.ts';
 import { oauthConfigurationDigest } from '../../../libs/models/src/oauth-attempt.ts';
+import { toolPolicyFromRows } from '../../../libs/models/src/tool-policy.ts';
 import { oauthSelectionFixture } from '../../../libs/models/test/support/oauth-selection.ts';
 import { checkRoutineCompanyPreflight } from '../src/routine-company-preflight.ts';
 
@@ -44,6 +45,13 @@ async function fixture() {
   const ownerId = `owner${serial}`;
   const selected = await oauthSelectionFixture(nats, ownerId, serverId, profileId);
   const serverRows = await history(nats.store, `mcp-${serverId}`, 'test');
+  const policy = toolPolicyFromRows(serverRows);
+  const reviewedTool = policy.tools.find(tool => tool.name === 'read')!;
+  const destination = new URL('https://example.test/mcp').origin;
+  const destinationDigest = createHash('sha256').update(JSON.stringify(destination)).digest('hex');
+  const tool = { name: reviewedTool.name, revision: reviewedTool.revision,
+    schemaDigest: policy.catalogue!.schemaDigest, destinationDigest,
+    policyRevision: policy.policyRevision, costCents: 0 };
   const registrationRevision = serverRows[0]!.sequence;
   const optInSubject = `connection-company-${serverId}`;
   const optIn = envelope('test', optInSubject, 'connection.company_opt_in_set', {
@@ -96,7 +104,7 @@ async function fixture() {
   const due = modernRoutineExamples.due;
   const definition = { ...due.definition, ownerId, serverId, connectionId: 'installed', profileId,
     profileRevision, connectionRevision: profileRevision, companyAccountId: accountId,
-    scopes: ['read'] };
+    scopes: ['read'], tool };
   const run = { ...due, definition };
   const assistantId = definition.assistantId;
   for (const [granteeKind, granteeId] of [
@@ -113,7 +121,7 @@ async function fixture() {
     return checkRoutineCompanyPreflight(nats.store, binding, 'test', run, 1,
       selected.loadConfiguration, reader);
   }
-  return { preflight, evidence, definition, profileSubject, optInSubject,
+  return { preflight, evidence, definition, tool, profileSubject, optInSubject,
     serverId, ownerId, assistantId, selectionSubject };
 }
 
@@ -128,6 +136,33 @@ async function valid() {
   append.mockRestore();
 }
 it('checks one current company binding for the saved occurrence without sending', valid);
+
+async function changedSavedTool(field: string) {
+  const current = await fixture();
+  const changed = { ...current.tool };
+  if (field === 'name') changed.name = 'write';
+  if (field === 'revision') changed.revision = 'f'.repeat(64);
+  if (field === 'schemaDigest') changed.schemaDigest = 'f'.repeat(64);
+  if (field === 'destinationDigest') changed.destinationDigest = 'f'.repeat(64);
+  if (field === 'policyRevision') changed.policyRevision += 1;
+  if (field === 'costCents') changed.costCents = 1;
+  if (field === 'missingTariff') Object.assign(changed, { costCents: undefined });
+  Object.assign(current.definition, { tool: changed });
+  const append = vi.spyOn(nats.store, 'append');
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+  expect(append).not.toHaveBeenCalled();
+  append.mockRestore();
+}
+it.each(['name', 'revision', 'schemaDigest', 'destinationDigest',
+  'policyRevision', 'costCents', 'missingTariff'])(
+  'refuses a changed saved company tool %s without sending', changedSavedTool);
+
+async function missingSavedTool() {
+  const current = await fixture();
+  Object.assign(current.definition, { tool: undefined });
+  await expect(current.preflight()).rejects.toThrow('Routine company unavailable');
+}
+it('refuses a routine without an exact saved company tool', missingSavedTool);
 
 async function stale() {
   const current = await fixture();
