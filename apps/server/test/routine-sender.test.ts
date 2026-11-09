@@ -357,7 +357,12 @@ function sender(enabled = true, replay = false) {
     'sender-attempt');
 }
 async function missingCompanyConfirmation() {
-  const authority = createRoutineSender({ enabled: true }, nats.store, keys, worker(),
+  function confirmCredentialUse(_authorisedVersion: string) {
+    return Promise.resolve();
+  }
+  const options = { enabled: true, configurationDigest: 'a'.repeat(64),
+    custodyRecordVersion: '1', confirmCredentialUse };
+  const authority = createRoutineSender(options, nats.store, keys, worker(),
     input, selection, 'sender-attempt');
   const append = vi.spyOn(nats.store, 'append');
   expect(await authority.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
