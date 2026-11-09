@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { generateKeyPairSync, type ECKeyPairOptions } from 'node:crypto';
+import { createHash, generateKeyPairSync, type ECKeyPairOptions } from 'node:crypto';
 import { z } from 'zod';
 import { tokenIssuer } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
@@ -15,8 +15,16 @@ import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
 import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
+import { oauthSelectionFixture } from '../../../libs/models/test/support/oauth-selection.ts';
+import { connectionOperationId } from '../../../libs/models/src/bearer-connections.ts';
+import { oauthConfigurationDigest } from '../../../libs/models/src/oauth-attempt.ts';
+import { startOAuthConfigurationChange, finishOAuthConfigurationChange }
+  from '../../../libs/models/src/oauth-configuration-change.ts';
+import { toolPolicyFromRows } from '../../../libs/models/src/tool-policy.ts';
 import * as routineSession from '../src/routine-session.ts';
-import { createRoutineComposition } from '../src/routine-composition.ts';
+import { createRoutineComposition, createRoutineCompanyDelivery }
+  from '../src/routine-composition.ts';
+import { bindRoutineBudgetOwner } from '../src/routine-delivery-owner.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -27,6 +35,7 @@ let directory: string;
 let now: number;
 let owned: boolean;
 let preparedComputer: Awaited<ReturnType<typeof startComputer>>;
+let company: Awaited<ReturnType<typeof prepareCompany>>;
 const input = { routineId: 'orders', occurrenceId: 'occurrence' };
 const conversationId = 'routine-session-occurrence';
 const messageId = 'routine-input-occurrence';
@@ -56,6 +65,60 @@ async function apply(events: EventEnvelope[]) {
     await auth.handler.handle(saved, db);
   }
 }
+async function prepareCompany() {
+  const selected = await oauthSelectionFixture(nats, 'alice', 'odoo', 'orders-bot');
+  const serverRows = await history(nats.store, 'mcp-odoo', 'test');
+  const policy = toolPolicyFromRows(serverRows);
+  function isReadTool(tool: (typeof policy.tools)[number]) {
+    return tool.name === 'read';
+  }
+  const readTool = policy.tools.find(isReadTool)!;
+  const destinationHash = createHash('sha256');
+  destinationHash.update(JSON.stringify('https://example.test'));
+  const tool = { name: readTool.name, revision: readTool.revision,
+    schemaDigest: policy.catalogue!.schemaDigest,
+    destinationDigest: destinationHash.digest('hex'),
+    policyRevision: policy.policyRevision, costCents: 0 as const };
+  const serverId = 'odoo';
+  const profileId = 'orders-bot';
+  const optInSubject = `connection-company-${serverId}`;
+  const optIn = record('company-opt-in', optInSubject, 'connection.company_opt_in_set', {
+    serverId, connectionId: 'installed', registrationRevision: serverRows[0]!.sequence,
+    enabled: true, changedBy: 'alice', expectedSequence: 0 });
+  await nats.seed([optIn]);
+  const profileSubject = `connection-company:${serverId}:${profileId}`;
+  const operationId = connectionOperationId('test', profileSubject, 'save');
+  const account = { issuer: selected.configuration.issuer, subject: 'verified-bot',
+    scopes: ['openid', 'read'], expiresAt: Date.now() + 120_000 };
+  const accountHash = createHash('sha256');
+  accountHash.update(JSON.stringify(account));
+  const activation = { connectionId: 'installed', ownerKind: 'company', purpose: 'company',
+    generation: 1, uid: 'uid', resourceVersion: '1',
+    endpointDigest: selected.configuration.endpointDigest, operationId,
+    changedBy: 'alice', expectedSequence: 0, appendUntil: Date.now() + 60_000,
+    reason: 'oauth_confirmed', registrationRevision: serverRows[0]!.sequence,
+    optInRevision: await nats.store.head(optInSubject), account,
+    configurationDigest: oauthConfigurationDigest(selected.configuration) };
+  const profile = record(operationId, profileSubject, 'connection.created', {
+    siloId: 'test', custodianId: 'alice', serverId, profile: profileId,
+    secretRef: 'secret:synthetic', activation });
+  await nats.seed([profile]);
+  const profileRevision = await nats.store.head(profileSubject);
+  const selectionSubject = `connection-selection-alice-${serverId}`;
+  const selectionHash = createHash('sha256');
+  selectionHash.update(JSON.stringify(['test', selectionSubject, 'choice']));
+  const choice = record(selectionHash.digest('hex'), selectionSubject, 'connection.selected', {
+    action: 'select', userId: 'alice', serverId, connectionId: 'installed', profileId,
+    profileRevision, expectedSequence: 0, ownerKind: 'company', siloId: 'test',
+    generation: 1, accountDigest: accountHash.digest('hex') });
+  await nats.seed([choice]);
+  const change = await startOAuthConfigurationChange(nats.store, 'test', serverId);
+  await finishOAuthConfigurationChange(nats.store, 'test', serverId, change,
+    selected.loadConfiguration);
+  const recover = vi.fn().mockResolvedValue({ status: 'recovered', identity: {
+    reference: 'synthetic', uid: 'uid', resourceVersion: '1' } });
+  return { tool, profileRevision, loadConfiguration: selected.loadConfiguration, recover };
+}
 async function setup() {
   nats = await natsFixture();
   fga = await openfga();
@@ -65,10 +128,13 @@ async function setup() {
   keys.provision('test', 'routine-orders');
   now = Date.parse('2026-10-11T07:00:00Z');
   owned = true;
+  company = await prepareCompany();
   const created = routine('routine.created');
   const original = foldRoutine(undefined, created).definition!;
   const instructions = keys.encrypt('test', 'routine-orders', 'Private routine instructions');
-  const definition = { ...original.definition, instructions };
+  const definition = { ...original.definition, instructions, connectionId: 'installed',
+    profileRevision: company.profileRevision, connectionRevision: company.profileRevision,
+    scopes: ['read'], tool: company.tool };
   const active = { ...created, data: { ...original, definition, status: 'active' } };
   const events = [joinedMember('alice')];
   for (const group of ['sales', 'billing']) {
@@ -86,6 +152,9 @@ async function setup() {
       grantedBy: 'alice' };
     events.push(record(`grant-${granteeKind}`, grantStream('model', 'gpt-6.1-sol'),
       'grant.given', grant));
+    const companyGrant = { ...grant, resourceType: 'mcp_server', resourceId: 'odoo' };
+    events.push(record(`company-grant-${granteeKind}`, grantStream('mcp_server', 'odoo'),
+      'grant.given', companyGrant));
   }
   await apply(events);
   const due = { version: 1, routineId: 'orders', definitionRevision: 1,
@@ -321,6 +390,41 @@ async function reachesPreparedThread() {
 }
 it('sends one checked due to its native thread, despite duplicate invocation and restart',
   reachesPreparedThread);
+
+async function productionCompanyDelivery() {
+  const signal = new AbortController();
+  function requireLeader() {
+    return Promise.resolve();
+  }
+  const owner = bindRoutineBudgetOwner(actor, nats.store, 'test', signal.signal, requireLeader);
+  const identity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
+  const companyOptions = { loadConfiguration: company.loadConfiguration,
+    custody: { recover: company.recover } };
+  const due = { status: 'confirmed' as const, executionAvailable: false as const,
+    routineId: 'orders', occurrenceId: 'occurrence', turnId };
+  const leadership = { signal: signal.signal, checkCurrent };
+  const disabled = createRoutineCompanyDelivery(companyOptions, nats.store, keys,
+    identity, actor, preparedComputer.wake, owner);
+  expect(await disabled(due, leadership)).toEqual({ status: 'unknown' });
+  const replay = createRoutineCompanyDelivery({ ...companyOptions, enabled: true, replay: true },
+    nats.store, keys, identity, actor, preparedComputer.wake, owner);
+  expect(await replay(due, leadership)).toEqual({ status: 'unknown' });
+  expect(preparedComputer.frames).toEqual([]);
+  expect(company.recover).not.toHaveBeenCalled();
+  const enabled = createRoutineCompanyDelivery({ ...companyOptions, enabled: true },
+    nats.store, keys, identity, actor, preparedComputer.wake, owner);
+  expect(await enabled(due, leadership)).toEqual({ status: 'sent' });
+  await until(preparedComputer.executed);
+  expect(await enabled(due, leadership)).toEqual({ status: 'unknown' });
+  expect(preparedComputer.executedThreads).toEqual(['native-1']);
+  expect(company.recover).toHaveBeenCalled();
+  const authorisations = await saved('routine.run_send_authorised', 'routine-orders');
+  expect(authorisations).toHaveLength(1);
+  expect(authorisations[0]!.event.data).toMatchObject({ custodyRecordVersion: '1' });
+  signal.abort();
+}
+it('binds the saved company profile to one enabled automatic native delivery',
+  productionCompanyDelivery);
 
 async function changedCompanyDuringPreparation(kind: 'profile' | 'opt-in') {
   let current = true;
