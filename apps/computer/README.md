@@ -21,7 +21,7 @@ flowchart LR
   ops -->|starts and pauses| computer
   server -->|messages, routine preparation and retry, turns, files and Stops| computer
   server -->|saved Ask retry wake| computer
-  computer -->|preparation replies, safe command labels, progress, results and changed files| server
+  computer -->|preparation replies, command labels and masked views, progress, results and changed files| server
   computer -->|results and process reports| server
   server -->|qualified private input and four permitted memory tools| computer
   computer -->|reports private thread and memory discovery| server

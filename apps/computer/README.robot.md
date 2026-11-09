@@ -1054,8 +1054,10 @@ turn produce no report. Arguments, results and
 error text are excluded. The journal retains these fields across reloads.
 Private turns still refuse tools. Memory-free discovery and calls use the proxy described above. Tests: `test/turn-tools.test.ts`, `test/tool-reports.test.ts`.
 
-The image copies only the dependency-free tool text and command label checks from `libs/events`,
-under the repository's AGPL-3.0-or-later licence. It adds no third-party package.
+The image copies the dependency-free tool text and command label checks from
+`libs/events`, under the repository's AGPL-3.0-or-later licence. Its runtime
+lock also installs Secretlint core and recommended rules (MIT), with their
+MIT and BSD-2-Clause dependencies. A clean runtime `npm ci` checks the lock.
 Command labels use only reviewed program names and simple argument shapes. A help or
 version flag anywhere in the command gives the neutral label. Python gets the script
 label only when its first argument is a `.py` file target, not an option ending in `.py`.
@@ -1075,12 +1077,13 @@ pipes, parentheses, here-documents and unknown programs give no command text.
 The program name alone does not prove what its arguments mean. A shell function
 called `npm`, for example, may treat `test` as a credential. The redactor would
 show `npm test` because it cannot see the function definition. This is an accepted
-residual risk for the future member-only command view; the output is not used by
-any report, event or screen today.
-The leak corpus and an OSI licence check cover this preparation. No report, event or
-screen uses its output
-yet; a later change must encrypt it with the conversation message key before it
-leaves the computer and apply conversation member rights when it is read.
+residual risk for the member-only command view.
+The bridge sends the masked result beside the fixed label in its report. It keeps
+the masked result in memory until the server accepts it; the local journal stores
+only the label and digest. A server acknowledgement clears the in-memory view.
+A restart before delivery leaves the label alone.
+The server encrypts the result with the conversation message key before saving it.
+The leak corpus and an OSI licence check cover the masking step.
 The bridge channel test checks that bad tool fields leave the socket open and
 later reports still arrive in order.
 

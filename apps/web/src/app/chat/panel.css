@@ -83,6 +83,15 @@
   font-size: 11px;
   margin-top: 4px;
 }
+.activity-preview {
+  padding: 0 0 14px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.activity-preview button {
+  display: block;
+  margin-top: 8px;
+}
 .person {
   min-height: 26px;
   gap: 8px;

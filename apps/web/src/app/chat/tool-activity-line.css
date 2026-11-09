@@ -78,6 +78,12 @@
   color: var(--oc-ink-muted);
 }
 
+.command-preview {
+  margin: 0 0 12px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .tool-detail-ledger {
   display: grid;
   grid-template-columns: 100px minmax(0, 1fr);

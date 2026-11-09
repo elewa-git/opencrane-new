@@ -25,6 +25,7 @@ export interface BridgeReport {
   commandDigest?: string;
   exitCode?: number;
   activityLabel?: CommandActivityLabel;
+  preview?: string;
   threadId?: string;
   messageId?: string;
   rootId?: string;
@@ -187,9 +188,16 @@ function loadJournal(driver: JournalDriver, reports: BridgeReport[], executions:
   }
 }
 
+function forgetReportText(reports: BridgeReport[], sequence: number): void {
+  const report = reports[sequence - 1];
+  if (report?.memoryOnly) delete report.text;
+  if (report?.preview) delete report.preview;
+}
+
 export function reportJournal(driver: JournalDriver) {
   const reports: BridgeReport[] = [];
   const executions = new Set<string>();
+  const forgetText = forgetReportText.bind(undefined, reports);
 
   function load() {
     loadJournal(driver, reports, executions);
@@ -244,11 +252,6 @@ export function reportJournal(driver: JournalDriver) {
     return report;
   }
 
-  function forgetText(sequence: number) {
-    const report = reports[sequence - 1];
-    if (report?.memoryOnly) delete report.text;
-  }
-
   function forgetTurnText(conversationId: string, turnId: string) {
     for (const report of reports) {
       if (report.conversationId === conversationId && report.turnId === turnId) {
@@ -279,8 +282,10 @@ export function reportJournal(driver: JournalDriver) {
 
 
 function storedLine(report: BridgeReport) {
-  if (!report.memoryOnly) return JSON.stringify(report);
-  const { text: _text, ...outline } = report;
+  // Keep the masked view in memory only until the server encrypts it.
+  const { preview: _preview, ...withoutPreview } = report;
+  if (!report.memoryOnly) return JSON.stringify(withoutPreview);
+  const { text: _text, ...outline } = withoutPreview;
   return JSON.stringify(outline);
 }
 

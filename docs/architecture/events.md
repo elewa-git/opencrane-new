@@ -314,7 +314,7 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | `agent.message_completed` | bridge (reported) | messages | browser (WebSocket). Encrypted deltas are retained for gap-free replay |
 | `agent.output_lost` | bridge (reported) | activity | browser (WebSocket); never replayed into context |
 | `agent.reasoning_summarised` | bridge (reported) | activity | browser (WebSocket) |
-| `agent.command_ran` | bridge (reported) | command digest, exit code and optional closed plain activity label; older events have no label; no arguments, environment, output or tokens | browser (WebSocket) |
+| `agent.command_ran` | bridge (reported) | command digest, exit code, optional fixed plain label and optional `view` encrypted with the conversation message key; older events have no view; no plain arguments, environment, output or tokens | current conversation members through history and WebSocket; audit and admin views omit `view` |
 | `agent.file_changed` | bridge (reported) | activity | browser (WebSocket) |
 | `agent.tool_call_started` | bridge (reported) | call id, server id and tool name; no arguments | conversation feed; browser (WebSocket) |
 | `agent.native_consent_refused` | bridge (reported) | native request id, named server, bound turn and explicit unsupported refusal; no consent text | conversation feed; browser (WebSocket); grants no permission |
@@ -337,6 +337,12 @@ simple shapes: `ls`, `rg`/`grep`/`find`, `pdfinfo`/`pdftotext`, a
 `npm`/`pip`/`pip3 install`. These produce the fixed labels in
 `libs/events/src/command-activity-label.ts`. Other commands get `Ran a command`.
 Arguments, environment, output, tokens and file names never enter this field.
+The computer may send a masked `preview` beside that label. The bridge keeps it
+in memory only; a restart before delivery leaves the label alone. The server
+encrypts it as `view` with the conversation's message key. It saves only
+`ciphertext` and `keyId` in the event and conversation feed. A current member
+reads the view through the same history and live access checks as message text.
+An administrator without conversation membership and a removed member cannot read it.
 
 Assistant publications carry `turnId` on their file records. After the upload checks,
 `agent.file_changed` names the published upload path. A refused publication instead

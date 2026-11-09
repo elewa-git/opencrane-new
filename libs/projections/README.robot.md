@@ -2,6 +2,10 @@
 
 For people, read [README.md](README.md) first.
 
+The conversation feed retains an encrypted command `view` beside the plain
+activity label. The audit projection drops `view` from `agent.command_ran` so
+organisation readers receive only the safe activity summary.
+
 `@opencrane/projections` turns ordered events into disposable PostgreSQL
 content. It owns the query/transaction port, node-postgres and PGlite
 adapters, the checkpoint runner, the members read model and the MCP catalogue.

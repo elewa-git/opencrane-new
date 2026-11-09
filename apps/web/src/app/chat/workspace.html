@@ -573,10 +573,24 @@
       }
     } @else if (panelTab() === 'activity') {
       <section class="panel-section" role="tabpanel" aria-label="Activity">
-        @for (tool of activity(); track tool.id) { <button type="button" class="activity-row" (click)="jumpToTool(tool.id)"><time>{{ time(tool.time) }}</time><span>{{ tool.label }}<small>{{ tool.detail }}</small></span><oc-icon class="state-mark" [attr.data-state]="tool.failed ? 'failed' : 'done'" [name]="tool.failed ? 'failed' : 'done'" /></button> }
+        @for (tool of activity(); track tool.id) {
+          <button type="button" class="activity-row" (click)="showActivity(tool)"
+            [attr.aria-expanded]="tool.preview ? activityExpanded(expandedActivity(), chat.selected(), tool.id) : null">
+            <time>{{ time(tool.time) }}</time>
+            <span>{{ tool.label }}<small>{{ tool.detail }}</small></span>
+            <oc-icon class="state-mark" [attr.data-state]="tool.failed ? 'failed' : 'done'"
+              [name]="tool.failed ? 'failed' : 'done'" />
+          </button>
+          @if (tool.preview && activityExpanded(expandedActivity(), chat.selected(), tool.id)) {
+            <div class="activity-preview">
+              <code>{{ tool.preview }}</code>
+              <button type="button" (click)="jumpToTool(tool.id)">View in transcript</button>
+            </div>
+          }
+        }
         @if (!activity().length) { <p>No activity yet.</p> }
       </section>
-      <footer class="panel-footnote">An index of the transcript, not a copy — every row jumps to its message.</footer>
+      <footer class="panel-footnote">Select an activity to see its command or find its message.</footer>
     } @else {
       <section class="panel-section memory-panel-section" role="tabpanel" aria-label="Memory">
         <oc-memory-panel [groupId]="chat.selectedPayingGroupId() || undefined"

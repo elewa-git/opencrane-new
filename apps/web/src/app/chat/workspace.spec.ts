@@ -873,6 +873,29 @@ it('shows newest activity first while keeping transcript lines in saved order', 
   capture.fixture.destroy();
 });
 
+it('shows a masked command in Activity only after a member expands its row', async () => {
+  const rows = toolRows();
+  rows.push({ id: 'masked', position: 3, type: 'agent.command_ran',
+    time: '2026-10-04T10:02:00Z', data: { turnId: 'message', exitCode: 0,
+      activityLabel: 'Searched files', preview: 'rg ••• •••' } });
+  const capture = await createCaptureWorkspace(rows);
+  try {
+    const tabs = [...capture.root.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    const activityTab = tabs.find(tab => tab.textContent?.includes('Activity'));
+    activityTab?.click();
+    capture.fixture.detectChanges();
+    const panel = capture.root.querySelector('[aria-label="Activity"]');
+    expect(panel?.textContent).not.toContain('rg ••• •••');
+    const button = panel?.querySelector<HTMLButtonElement>('.activity-row');
+    button?.click();
+    capture.fixture.detectChanges();
+    expect(panel?.querySelector('.activity-preview')?.textContent).toContain('rg ••• •••');
+    expect(panel?.querySelectorAll('.activity-preview')).toHaveLength(1);
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
 it.each(['old first', 'new first'] as const)(
   'ignores an old native detail reply after the same drawer reopens: %s',
   async order => {

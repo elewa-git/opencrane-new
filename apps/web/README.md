@@ -18,7 +18,7 @@ flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages and file drops where Attach is available"] -->|requests and tab sign-out| web
   web -->|messages with file references, persona and settings requests| server["apps/server<br/>the back end"]
-  server -->|saved chats, command labels, persona versions, files and live updates| web
+  server -->|saved chats, command labels and masked views, persona versions, files and live updates| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
   web -->|saved and private replies| capture["Chat workspace<br/>reply details, shared images and diagrams"]

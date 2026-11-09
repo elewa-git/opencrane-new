@@ -56,8 +56,10 @@ The requester can save one retry only while that original call is still held. Th
 bridge wakes that call after the decision is saved, and the computer sends its
 original bytes through the gateway with fresh checks.
 
-The server accepts only fixed plain command labels from computer reports. It keeps
-older reports readable and sends saved labels to people who can read the chat.
+The server accepts fixed plain command labels and optional masked views from
+computer reports. It encrypts a view with the conversation message key before
+saving it. Current conversation members can expand it in chat. Older reports
+still show their labels.
 
 Refused control attempts in enabled test setups save a small audit record. They do not
 change the current controller or interrupt work. Production control stays disabled.
@@ -241,7 +243,7 @@ flowchart LR
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, checked publication and task history, current accounting and exact membership receipts| postgres
   server -->|waits briefly for Forget locks| postgres
-  server <-->|chat work, command labels, checked reports, Stops and publication files| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, command labels and masked views, checked reports, Stops and publication files| computer["apps/computer<br/>assistant computers"]
   server -->|wakes the original held Ask call| computer
   server -->|checks saved OAuth settings changes before routine sends| nats
   server -->|checks child starts and nightly and child allowances with the shared budget actor| runtime

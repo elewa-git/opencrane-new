@@ -13,6 +13,7 @@ import { BudgetStopNotice } from './budget-stop-notice';
 import { ConversationFileCard } from './conversation-file-card';
 import { CaptureStatus } from './capture-status';
 import { ToolActivityLine } from './tool-activity-line';
+import { activityExpanded, nextExpandedActivity } from './activity-panel';
 import { RecoveryNotice } from './recovery-notice';
 import { MemoryFreeNotice } from './memory-free-notice';
 import { MemoryPanel } from '../memory/memory-panel';
@@ -93,6 +94,8 @@ export class Workspace implements OnInit {
     const tools = this.chat.turns().flatMap(turnTools);
     return tools.reverse();
   });
+  protected readonly expandedActivity = signal('');
+  protected readonly activityExpanded = activityExpanded;
   protected readonly toolKind = getToolKind;
   protected readonly desktop = signal(globalThis.innerWidth >= 1100);
   protected readonly panel = signal(this.desktop());
@@ -237,6 +240,14 @@ export class Workspace implements OnInit {
     } else {
       this.focusTool(id);
     }
+  }
+  protected showActivity(tool: ToolActivityRecord): void {
+    if (!tool.preview) {
+      this.jumpToTool(tool.id);
+      return;
+    }
+    const next = nextExpandedActivity(this.expandedActivity(), this.chat.selected(), tool.id);
+    this.expandedActivity.set(next);
   }
   protected sessionPanelClosed(): void {
     this.panelOverlay.set(false);

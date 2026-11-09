@@ -25,6 +25,7 @@ const existingReportSchema = z.object({
   rootId: z.string().optional(), senderAttemptId: z.string().optional(),
   commandDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(), exitCode: z.int().optional(),
   activityLabel: commandActivityLabelSchema.optional(),
+  preview: z.string().min(1).max(16_384).optional(),
   executionMode: z.enum(['restricted', 'memory_free']).optional(),
   sharingClass: z.literal('shared_only').optional(),
   nativeTermination: z.literal('turn_completed').optional(),
@@ -57,9 +58,21 @@ const reportSchema = z.union([
 ]);
 type Report = z.infer<typeof reportSchema>;
 type ReportContext = ArtifactPublication & { silo: string; computerId: string; assistantId: string };
+function requireCommandPreviewShape(report: Report): void {
+  if ('preview' in report && report.preview !== undefined
+    && report.type !== 'agent.command_ran') {
+    throw new ReportRejected('Command preview report mismatch');
+  }
+}
 function reportDigest(report: Report) {
   const hash = createHash('sha256');
-  hash.update(JSON.stringify(report));
+  let stableReport: unknown = report;
+  if ('preview' in report) {
+    // The bridge does not keep a preview after restart; its sequence still identifies this report.
+    const { preview: _preview, ...journalFields } = report;
+    stableReport = journalFields;
+  }
+  hash.update(JSON.stringify(stableReport));
   return hash.digest('hex');
 }
 
@@ -153,6 +166,7 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
   context: ReportContext, value: unknown, batch?: Report[],
   deadline = performance.now() + 10_000): Promise<'duplicate' | 'recorded'> {
   const report = reportSchema.parse(value);
+  requireCommandPreviewShape(report);
   if (report.assistantId !== context.assistantId) throw new ReportRejected('Assistant mismatch');
   const first = batch?.[0] ?? report;
   let facts = await readChatFacts(store, context.silo, report.conversationId,
@@ -405,6 +419,15 @@ function validateReportContextClass(report: z.infer<typeof reportSchema>,
     throw new ReportRejected('Turn context class mismatch');
   }
 }
+function commandReportData(report: z.infer<typeof existingReportSchema>, silo: string,
+  keys: ReturnType<typeof conversationKeys>) {
+  const common = { conversationId: report.conversationId, turnId: report.turnId };
+  const data = { ...common, commandDigest: z.string().parse(report.commandDigest),
+    exitCode: z.number().parse(report.exitCode), activityLabel: report.activityLabel };
+  if (!report.preview) return data;
+  const view = keys.encrypt(silo, report.conversationId, report.preview);
+  return { ...data, view };
+}
 function reportData(report: z.infer<typeof reportSchema>, silo: string, assistantId: string, keys: ReturnType<typeof conversationKeys>) {
   const common = { conversationId: report.conversationId, turnId: report.turnId };
   if (report.type === 'agent.native_request_refused') {
@@ -420,8 +443,7 @@ function reportData(report: z.infer<typeof reportSchema>, silo: string, assistan
     return { ...common, callId: report.callId, serverId: report.serverId,
       toolName: report.toolName, status: report.status, durationMs: report.durationMs };
   } else if (report.type === 'agent.command_ran') {
-    return { ...common, commandDigest: z.string().parse(report.commandDigest),
-      exitCode: z.number().parse(report.exitCode), activityLabel: report.activityLabel };
+    return commandReportData(report, silo, keys);
   } else if (report.type === 'agent.reasoning_summarised') {
     return { ...common, ...keys.encrypt(silo, report.conversationId, z.string().parse(report.text)) };
   } else if (report.type === 'agent.turn_started') {

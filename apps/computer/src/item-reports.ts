@@ -6,6 +6,15 @@ import { commandActivityLabel } from './command-label.ts';
 import type { BridgeReport } from './report-journal.ts';
 import type { Turn } from './turn-frame.ts';
 
+function commandReport(command: string, exitCode: number, preview?: string) {
+  const commandHash = createHash('sha256');
+  commandHash.update(command);
+  const commandDigest = commandHash.digest('hex');
+  const activityLabel = commandActivityLabel(command);
+  return { type: 'agent.command_ran', data: { commandDigest, exitCode, activityLabel,
+    ...(preview ? { preview } : {}) } };
+}
+
 function toolReport(input: Turn, item: Record<string, unknown>, finished: boolean) {
   if (input.executionMode === 'restricted' || item['type'] !== 'mcpToolCall') return;
   function hasServerKey(server: NonNullable<Turn['tools']>[number]) {
@@ -31,7 +40,7 @@ function toolReport(input: Turn, item: Record<string, unknown>, finished: boolea
 }
 
 export function itemReport(input: Turn, params: Record<string, unknown>, method: unknown,
-  requestId?: unknown, codexTurnId?: string) {
+  requestId?: unknown, codexTurnId?: string, preview?: string) {
   if (method === 'mcpServer/elicitation/request') {
     const data = nativeConsentReport(input, params, requestId, codexTurnId);
     if (data) return { type: 'agent.native_consent_refused', data };
@@ -53,11 +62,7 @@ export function itemReport(input: Turn, params: Record<string, unknown>, method:
   const exitCode = item['exitCode'];
   if (input.executionMode !== 'restricted' && item['type'] === 'commandExecution'
     && typeof command === 'string' && typeof exitCode === 'number') {
-    const commandHash = createHash('sha256');
-    commandHash.update(command);
-    const commandDigest = commandHash.digest('hex');
-    const activityLabel = commandActivityLabel(command);
-    return { type: 'agent.command_ran', data: { commandDigest, exitCode, activityLabel } };
+    return commandReport(command, exitCode, preview);
   }
   if (item['type'] === 'agentMessage' && typeof item['text'] === 'string') {
     return { type: 'agent.message_completed', data: {

@@ -44,6 +44,22 @@ function auditAllowListIncludesSafeFamilies(): void {
 it('preserves the audit allow-list and includes safe maintenance history',
   auditAllowListIncludesSafeFamilies);
 
+it('keeps encrypted command views out of audit rows', async () => {
+  const db = await database('pg');
+  try {
+    await auditTrail.create(db.db);
+    const event = fixture('agent.command_ran', 'command-view', {
+      view: { ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:fixture' },
+    });
+    await auditTrail.apply(db.db, event, 1);
+    const result = await db.db.query<{ metadata: Record<string, unknown> }>(
+      'SELECT metadata FROM audit_entries WHERE event_id = $1', ['command-view']);
+    expect(result.rows[0]?.metadata).not.toHaveProperty('view');
+  } finally {
+    await db.close();
+  }
+});
+
 function fixture(type: string, id: string, data: Record<string, unknown> = {}, correlated = true): EventEnvelope {
   const definition = getEventDefinition(type);
   expect(definition, `typed ${type} contract`).toBeDefined();

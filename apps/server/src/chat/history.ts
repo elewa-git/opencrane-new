@@ -46,6 +46,10 @@ async function displayHistory(options: ChatOptions, conversationId: string,
   function decryptRow(row: (typeof result.rows)[number]) {
     const data = chatDisplayData(row.type, row.data);
     const saved = z.record(z.string(), z.unknown()).parse(row.data);
+    if (row.type === 'agent.command_ran' && saved['view']) {
+      const preview = options.keys.decrypt(options.silo, conversationId, saved['view']);
+      return { ...row, data: { ...data, preview } };
+    }
     if (!hasDisplayText(row.type) || !('ciphertext' in saved)) return { ...row, data };
     const text = options.keys.decrypt(options.silo, conversationId, saved);
     return { ...row, data: { ...data, text } };

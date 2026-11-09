@@ -65,7 +65,7 @@ function isToolReport(report: BridgeReport) {
   return report.type === 'agent.tool_call_started' || report.type === 'agent.tool_call_finished';
 }
 
-it('saves only a reviewed label beside the command digest and exit code', async () => {
+it('sends a masked preview beside the label without saving it in the journal', async () => {
   const setup = await fixture();
   try {
     const secret = 'PRIVATE_COMMAND_ARGUMENT';
@@ -74,12 +74,32 @@ it('saves only a reviewed label beside the command digest and exit code', async 
       type: 'commandExecution', command, exitCode: 127,
       stdout: secret, environment: { TOKEN: secret },
     });
+    await vi.waitFor(() => expect(setup.reports.at(-1)?.type).toBe('agent.command_ran'));
     const report = setup.reports.at(-1);
     expect(report).toMatchObject({
       type: 'agent.command_ran', activityLabel: 'Searched files', exitCode: 127,
+      preview: 'rg ••• •••',
     });
-    expect(setup.reloadAll().at(-1)).toEqual(report);
+    expect(setup.reloadAll().at(-1)).not.toHaveProperty('preview');
     expect(JSON.stringify(setup.reloadAll())).not.toContain(secret);
+    setup.runner.acknowledge(report!.sequence);
+    expect(setup.reports.at(-1)).not.toHaveProperty('preview');
+  } finally {
+    setup.close();
+  }
+});
+
+it('keeps a command report before the turn end while masking runs', async () => {
+  const setup = await fixture();
+  try {
+    setup.notify('item/completed', {
+      type: 'commandExecution', command: 'git status --token planted', exitCode: 0,
+    });
+    setup.finish();
+    await vi.waitFor(() => expect(setup.reports.at(-1)?.type).toBe('agent.turn_completed'));
+    const types = setup.reports.map(report => report.type);
+    expect(types.slice(-2)).toEqual(['agent.command_ran', 'agent.turn_completed']);
+    expect(setup.reports.at(-2)?.preview).toBe('git status ••• •••');
   } finally {
     setup.close();
   }

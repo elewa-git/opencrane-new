@@ -1,0 +1,1 @@
+Conversation members can expand computer activity to see a masked command. The plain label stays visible by default, and the masked view is encrypted with the conversation message key before it is saved.

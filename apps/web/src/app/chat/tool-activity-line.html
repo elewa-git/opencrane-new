@@ -11,6 +11,9 @@
   <section class="tool-details" [id]="'tool-details-' + record().id"
     [attr.aria-labelledby]="'tool-' + record().id" [hidden]="!expanded()">
     <p class="tool-kind">{{ record().command ? record().label : toolKind(record()) }}</p>
+    @if (expanded() && record().command && record().preview) {
+      <p class="command-preview"><code>{{ record().preview }}</code></p>
+    }
     <dl class="tool-detail-ledger">
       <dt>{{ toolResultLabel(record()) }}</dt>
       <dd>{{ toolResult(record()) }}</dd>
