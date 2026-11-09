@@ -1,5 +1,11 @@
 # Server
 
+## Command activity reports
+
+The server checks the bridge's optional command activity label against the event
+catalogue before saving it. Older bridge reports without a label remain valid.
+The conversation feed sends the same fixed label to authorised chat readers.
+
 ## Retained Ask call read
 
 The server installs a live reader from its bridge watcher. It queries only an

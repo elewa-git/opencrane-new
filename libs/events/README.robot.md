@@ -10,6 +10,10 @@ This package is the typed event catalogue used by server validation and the even
 core. It defines envelopes, per-type data schemas and examples; it does not
 append, project or dispatch events. Its routine fold rebuilds facts in memory.
 
+`agent.command_ran` accepts an optional label from seven fixed plain phrases.
+Old events without a label remain valid. The event still keeps only the command
+digest and exit code; raw command text and output are rejected.
+
 `provider.retired` is strict. It stores the connection revision and category
 position, each reviewed old binding position, and one explicit pause or replacement.
 Duplicate dependants, a source other than the retired connection, and a replacement

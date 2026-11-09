@@ -314,7 +314,8 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | `agent.message_completed` | bridge (reported) | messages | browser (WebSocket). Encrypted deltas are retained for gap-free replay |
 | `agent.output_lost` | bridge (reported) | activity | browser (WebSocket); never replayed into context |
 | `agent.reasoning_summarised` | bridge (reported) | activity | browser (WebSocket) |
-| `agent.command_ran` / `agent.file_changed` | bridge (reported) | activity | browser (WebSocket) |
+| `agent.command_ran` | bridge (reported) | command digest, exit code and optional closed plain activity label; older events have no label; no arguments, environment, output or tokens | browser (WebSocket) |
+| `agent.file_changed` | bridge (reported) | activity | browser (WebSocket) |
 | `agent.tool_call_started` | bridge (reported) | call id, server id and tool name; no arguments | conversation feed; browser (WebSocket) |
 | `agent.native_consent_refused` | bridge (reported) | native request id, named server, bound turn and explicit unsupported refusal; no consent text | conversation feed; browser (WebSocket); grants no permission |
 | `agent.native_request_refused` | bridge (reported) | conversationId, turnId, nativeRequestId, requestKind (shell/file_change/permissions/user_input/other), outcome (declined/unsupported); no command, path or prompt | audit only; no chat display or permission grant |
@@ -329,6 +330,13 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | `conversation.closed` | saved on `conversation-<id>`; older `participation-<id>` closes remain readable | conversations | queue cancellation, turn Stop and terminal repair through the bridge watcher |
 | `conversation.archive_set` | own state POST: conversationId, memberId, joinEventId, archived; exact human principal and member subject | conversation_list_state in the conversations projection; set this join’s archive choice | none; excludes shared feeds and OpenFGA |
 | `conversation.read_advanced` | own state POST: conversationId, memberId, joinEventId, throughPosition, throughEventId; exact human principal and member subject | conversation_list_state; verify the visible row’s identity and keep the furthest read position within this join | none; excludes shared feeds and OpenFGA |
+
+The computer sets `agent.command_ran.activityLabel` from fixed program names and
+simple shapes: `ls`, `rg`/`grep`/`find`, `pdfinfo`/`pdftotext`, a
+`python`/`python3` script ending in `.py`, `dot`/`mmdc`, or
+`npm`/`pip`/`pip3 install`. These produce the fixed labels in
+`libs/events/src/command-activity-label.ts`. Other commands get `Ran a command`.
+Arguments, environment, output, tokens and file names never enter this field.
 
 Assistant publications carry `turnId` on their file records. After the upload checks,
 `agent.file_changed` names the published upload path. A refused publication instead

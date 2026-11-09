@@ -4,6 +4,7 @@ import { publishArtifacts, type ArtifactPublication } from '../files/artifacts.t
 import {
   conversationCreatedDataSchema, agentToolCallStartedDataSchema, agentToolCallFinishedDataSchema,
   agentNativeConsentRefusedDataSchema, agentNativeRequestRefusedDataSchema,
+  commandActivityLabelSchema,
 } from '@opencrane/events';
 import { computerSummary, type ComputerSummary, type TurnSummary } from '@opencrane/auth';
 import { createHash } from 'node:crypto';
@@ -23,6 +24,7 @@ const existingReportSchema = z.object({
   turnId: z.string(), assistantId: z.string(), requesterId: z.string().optional(), threadId: z.string().optional(), messageId: z.string().optional(), text: z.string().max(128_000).optional(),
   rootId: z.string().optional(), senderAttemptId: z.string().optional(),
   commandDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(), exitCode: z.int().optional(),
+  activityLabel: commandActivityLabelSchema.optional(),
   executionMode: z.enum(['restricted', 'memory_free']).optional(),
   sharingClass: z.literal('shared_only').optional(),
   nativeTermination: z.literal('turn_completed').optional(),
@@ -419,7 +421,7 @@ function reportData(report: z.infer<typeof reportSchema>, silo: string, assistan
       toolName: report.toolName, status: report.status, durationMs: report.durationMs };
   } else if (report.type === 'agent.command_ran') {
     return { ...common, commandDigest: z.string().parse(report.commandDigest),
-      exitCode: z.number().parse(report.exitCode) };
+      exitCode: z.number().parse(report.exitCode), activityLabel: report.activityLabel };
   } else if (report.type === 'agent.reasoning_summarised') {
     return { ...common, ...keys.encrypt(silo, report.conversationId, z.string().parse(report.text)) };
   } else if (report.type === 'agent.turn_started') {

@@ -33,13 +33,16 @@ A saved resolution can stay pending while its hold remains. These states do not 
 
 Saved effect pages keep observations, uncertainty and resolutions separate. Amounts use integer euro cents, and a missing amount differs from zero.
 
+Chat command activity accepts only fixed plain labels. An older row without a label
+still reads, and the browser gives it a neutral one.
+
 ## Where it fits
 
 This shared library is used by the browser app (`apps/web`), the back end (`apps/server`), the [read-table](../../GLOSSARY.md#read-table-projection) library (`libs/projections`) and the models library (`libs/models`). It depends on Zod, a library for checking data. It does not store [events](../../GLOSSARY.md#event) or decide who may act.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.->|chat replies, service readiness and private clearances| protocol["libs/protocol<br/>shared reply shapes"]
+  web["apps/web<br/>browser app"] -.->|chat replies, command labels and private clearances| protocol["libs/protocol<br/>shared reply shapes"]
   server["apps/server<br/>back end"] -.->|chat replies, close permission and call status| protocol
   projections["libs/projections<br/>read tables"] -.->|saved resolution and publication history| protocol
   models["libs/models<br/>AI rules and spending"] -.-> protocol

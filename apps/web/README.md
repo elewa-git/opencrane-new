@@ -18,7 +18,7 @@ flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages and file drops where Attach is available"] -->|requests and tab sign-out| web
   web -->|chat, persona and settings requests| server["apps/server<br/>the back end"]
-  server -->|saved chats, persona versions, files and live updates| web
+  server -->|saved chats, command labels, files and live updates| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
   web -->|saved and private replies| capture["Chat workspace<br/>reply details, shared images and diagrams"]
@@ -55,7 +55,8 @@ For everyone, the website:
   Disconnecting, losing access or signing out
   in another tab discards them. Reload explains that the reply is unavailable.
   Returning tabs check the session before accepting private frames.
-- Expands saved command and tool details under their activity lines in chat.
+- Names recognised computer commands in plain words, explains common failures and lists
+  the newest action first in Activity. Expands saved command and tool details in chat.
 - Lists recent and archived conversations and opens saved chat links.
 - Shows the organisation task list in server order and opens its existing evidence pages.
 - Catches up saved assistant chats before saying they are current. A failed read keeps the

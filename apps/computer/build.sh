@@ -77,6 +77,7 @@ run docker run --rm -i \
   -v "$PWD/src:/expected/src:ro" \
   -v "$PWD/../../libs/models/src/routing.ts:/expected/routing.ts:ro" \
   -v "$PWD/../../libs/events/src/tool-call.ts:/expected/tool-call.ts:ro" \
+  -v "$PWD/../../libs/events/src/command-activity-label.ts:/expected/command-activity-label.ts:ro" \
   --entrypoint /usr/bin/python3 ocn-computer-runtime - < test/contents.py
 run .state/syft scan docker:ocn-computer-runtime -o syft-json=.state/sbom.syft.json -o spdx-json=.state/sbom.spdx.json
 run docker run --rm -i --entrypoint /usr/bin/python3 ocn-computer-runtime - notices < collect-licences.py > .state/licence-evidence.json

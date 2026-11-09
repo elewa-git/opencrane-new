@@ -35,7 +35,7 @@ function assertCommandRecord(record: (typeof commandRecords)[number]): void {
   expect(details?.hidden).toBe(false);
   expect(details?.textContent).toContain(record.detail);
   expect(details?.textContent).toContain('Recorded');
-  expect(details?.textContent).toContain('Reference');
+  expect(details?.textContent).toContain('Technical reference');
   expect(details?.textContent).toContain('Sanitised');
   expect(root.querySelector('oc-hinge-drawer')).toBeNull();
   button?.click();
@@ -45,6 +45,26 @@ function assertCommandRecord(record: (typeof commandRecords)[number]): void {
 }
 
 it.each(commandRecords)('expands and collapses $label inline', assertCommandRecord);
+
+it('shows a command label and plain failure reason on the transcript line', () => {
+  const fixture = TestBed.createComponent(ToolActivityLine);
+  fixture.componentRef.setInput('record', {
+    id: 'command-1', label: 'Ran a Python script', command: true,
+    detail: 'The program is not installed on the computer', failed: true,
+    time: '2026-10-04T10:00:00Z',
+  });
+  fixture.detectChanges();
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No tool activity line');
+  expect(root.querySelector('.tool-line')?.textContent)
+    .toContain('Ran a Python script · The program is not installed on the computer');
+  const button = root.querySelector<HTMLButtonElement>('.tool-line');
+  button?.click();
+  fixture.detectChanges();
+  expect(root.querySelector('.tool-details')?.textContent)
+    .toContain('The program is not installed on the computer');
+  fixture.destroy();
+});
 
 it('keeps native consent in its own drawer without inline controls', () => {
   const fixture = TestBed.createComponent(ToolActivityLine);

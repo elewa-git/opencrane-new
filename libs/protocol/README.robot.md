@@ -23,6 +23,9 @@ through separate declarations. It owns wire shapes, not authentication, persiste
 or event business rules. Both [web](../../apps/web/README.md) and
 [server](../../apps/server/README.md) consume it.
 
+Command activity rows carry an optional label from the closed event list. Older rows
+without it still parse; other label text is refused before the website shows it.
+
 ## Takeover approval cancellation
 
 The fixed `takeover` cancellation cause is shared by event and approval reply

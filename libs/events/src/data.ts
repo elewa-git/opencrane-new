@@ -28,10 +28,10 @@ import { z } from 'zod';
 // specific, rather than a plain string, means a raw argument list or a
 // real secret value almost never accidentally validates as a "digest".
 const HEX64 = /^[0-9a-f]{64}$/;
-const digestSchema = z.string().regex(HEX64, 'expected a sha-256 hex digest, not the raw value');
+export const digestSchema = z.string().regex(HEX64, 'expected a sha-256 hex digest, not the raw value');
 
 // Shared field shapes, reused across schemas that need the same thing.
-const id = z.string().min(1);
+export const id = z.string().min(1);
 const tokenId = z.string().regex(/^token:[A-Za-z0-9_-]+$/, 'tokenId must be a reference, never a token value');
 const roleSchema = z.enum(['owner', 'admin', 'member']);
 
@@ -350,17 +350,6 @@ export const agentMessageCompletedDataSchema = z
 // audit).
 export const agentReasoningSummarisedDataSchema = z
   .object({ conversationId: id, turnId: id, ...encryptedText })
-  .strict();
-
-// Risky type: a command's arguments are never stored raw, only as a
-// digest (events.md: "tool arguments only as a digest").
-export const agentCommandRanDataSchema = z
-  .object({
-    conversationId: id,
-    turnId: id,
-    commandDigest: digestSchema,
-    exitCode: z.int().min(0).max(255),
-  })
   .strict();
 
 export const agentNativeConsentRefusedDataSchema = z.object({

@@ -1,4 +1,5 @@
 import { agentNativeRequestRefusedDataSchema } from './native-request.ts';
+import { agentCommandRanDataSchema } from './command-activity.ts';
 import { approvalCancelledDataSchema } from './approval-cancellation.ts';
 import { childPublicationEvent } from './child-publication.ts';
 import { childRequestEvents } from './child-request.ts';
@@ -265,7 +266,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     'agent.command_ran',
     'conversation',
     'The bridge reported a command the agent ran, with its exit status.',
-    data.agentCommandRanDataSchema,
+    agentCommandRanDataSchema,
     { conversationId: 'conv_1', turnId: 'turn_1', commandDigest: DIGEST_EXAMPLE, exitCode: 0 },
   ),
   event(

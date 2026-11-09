@@ -31,6 +31,7 @@ function addActivity(fixture) {
   fixture.add('agent.turn_started', turn);
   const command = {
     turnId: question.id, exitCode: 0, commandDigest: 'a'.repeat(64),
+    activityLabel: 'Read a PDF',
   };
   fixture.add('agent.command_ran', command);
   const toolStarted = {
@@ -44,6 +45,10 @@ function addActivity(fixture) {
     status: 'completed', durationMs: 240,
   };
   fixture.add('agent.tool_call_finished', toolFinished);
+  fixture.add('agent.command_ran', {
+    turnId: question.id, exitCode: 127, commandDigest: 'b'.repeat(64),
+    activityLabel: 'Ran a Python script',
+  });
   const reply = {
     turnId: question.id, messageId: 'reply',
     text: 'The draft order is ready for review.',
@@ -61,7 +66,7 @@ async function capture(browser, width) {
     const fixture = await chatFixture(page, 'empty-selected');
     addActivity(fixture);
     await page.goto('https://chat.opencrane.test/workspace?conversation=chat');
-    const command = page.getByRole('button', { name: /Command completed/ });
+    const command = page.getByRole('button', { name: /Read a PDF · Completed/ });
     const tool = page.getByRole('button', { name: /read_order/ });
     await command.waitFor();
     await tool.waitFor();
@@ -79,7 +84,7 @@ async function capture(browser, width) {
     await command.click();
     assert.equal(await command.getAttribute('aria-expanded'), 'true');
     const details = page.locator('.tool-details');
-    const completedResult = details.getByText('Completed · Exit code 0');
+    const completedResult = details.getByText('Completed', { exact: true });
     await completedResult.waitFor();
     assert.equal(await page.locator('oc-hinge-drawer[open]').count(), 0);
     assert(await page.evaluate(pageHasNoOverflow));
@@ -100,6 +105,16 @@ async function capture(browser, width) {
     await callResult.waitFor();
     await page.keyboard.press('Space');
     await waitForState(page, tool, 'false');
+
+    if (width === 390) await page.locator('#panel-toggle').click();
+    await page.getByRole('tab', { name: /Activity/ }).click();
+    const activity = page.getByRole('tabpanel', { name: 'Activity' });
+    const rows = await activity.locator('.activity-row').allTextContents();
+    assert.match(rows[0] ?? '', /Ran a Python script/u);
+    assert.match(rows[1] ?? '', /read_order/u);
+    assert.match(rows[2] ?? '', /Read a PDF/u);
+    assert(await page.evaluate(pageHasNoOverflow));
+    await page.screenshot({ path: resolve(output, `activity-${width}.png`), fullPage: true });
   } finally {
     await page.close();
   }

@@ -1048,8 +1048,12 @@ turn produce no report. Arguments, results and
 error text are excluded. The journal retains these fields across reloads.
 Private turns still refuse tools. Memory-free discovery and calls use the proxy described above. Tests: `test/turn-tools.test.ts`, `test/tool-reports.test.ts`.
 
-The image copies only the dependency-free tool text check from `libs/events`,
+The image copies only the dependency-free tool text and command label checks from `libs/events`,
 under the repository's AGPL-3.0-or-later licence. It adds no third-party package.
+Command labels use only reviewed program names and simple argument shapes. A help or
+version flag anywhere in the command gives the neutral label. Python gets the script
+label only when its first argument is a `.py` file target, not an option ending in `.py`.
+`test/command-label.test.ts` covers these uncertain shapes.
 The bridge channel test checks that bad tool fields leave the socket open and
 later reports still arrive in order.
 
@@ -1403,6 +1407,8 @@ flowchart LR
   the turn's pass. Older servers keep the existing task-based choice.
 - Reports when a listed tool call starts or finishes, without its arguments or result.
   Skips invalid names and call ids so later reports can still reach the server.
+- Labels a few reviewed command shapes in plain words. All other commands get a neutral
+  label. The saved report keeps the label, command digest and exit code, never arguments.
 - Keeps files in the person's workspace when the computer pauses and starts again.
 - Lets Codex reach the AI gateway only while the current chat turn holds a valid short-lived pass.
 - Removes a stopped turn's passes and tool lists, ends its approval waits and closes
