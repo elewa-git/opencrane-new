@@ -104,6 +104,32 @@ it('masks words that only look like subcommands after an argument', async () => 
     .toBe('python3 ••• •••');
 });
 
+it('shows a reviewed subcommand only for its own program', async () => {
+  expect(await redactCommand('curl install'))
+    .toBe('curl •••');
+  expect(await redactCommand('git test'))
+    .toBe('git •••');
+  expect(await redactCommand('npm clone'))
+    .toBe('npm •••');
+  expect(await redactCommand('pip status'))
+    .toBe('pip •••');
+});
+
+it('rejects DEL and every C1 control character within a known command', async () => {
+  for (let characterCode = 0x7f; characterCode <= 0x9f; characterCode += 1) {
+    const controlCharacter = String.fromCharCode(characterCode);
+    expect(await redactCommand(`curl ${controlCharacter}secret`)).toBeNull();
+    expect(await redactCommand(`curl secret${controlCharacter}`)).toBeNull();
+  }
+});
+
+it('rejects commands over the length limit', async () => {
+  const maximumLengthCommand = `curl ${'a'.repeat(16_379)}`;
+  expect(maximumLengthCommand).toHaveLength(16_384);
+  expect(await redactCommand(maximumLengthCommand)).toBe('curl •••');
+  expect(await redactCommand(`${maximumLengthCommand}a`)).toBeNull();
+});
+
 it('hides every path, including paths beneath the workspace', async () => {
   expect(await redactCommand('cat /workspace/report.txt /workspace/notes/file.md'))
     .toBe('cat ••• •••');
