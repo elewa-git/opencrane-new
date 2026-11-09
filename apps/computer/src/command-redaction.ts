@@ -21,6 +21,18 @@ function hasUnsupportedSyntax(command: string): boolean {
   return !command || command.length > 16_384 || unsafeShellSyntax.test(command);
 }
 
+function completeWords(
+  words: string[],
+  lastWord: string,
+  lastWordStarted: boolean,
+  quote: 'single' | 'double' | null,
+): string[] | null {
+  if (quote !== null) return null;
+  if (lastWordStarted) words.push(lastWord);
+  if (words.length === 0) return null;
+  return words;
+}
+
 function parseSimpleWords(command: string): string[] | null {
   if (hasUnsupportedSyntax(command)) return null;
 
@@ -42,6 +54,7 @@ function parseSimpleWords(command: string): string[] | null {
       word += character;
       continue;
     }
+    if (character === '(' || character === ')') return null;
     if (character === "'") {
       quote = 'single';
       started = true;
@@ -62,16 +75,23 @@ function parseSimpleWords(command: string): string[] | null {
     started = true;
   }
 
-  if (quote !== null) return null;
-  if (started) words.push(word);
-  if (words.length === 0) return null;
-  return words;
+  return completeWords(words, word, started, quote);
+}
+
+function maskFlagWithEquals(word: string): string | null {
+  const flag = flagWithValue.exec(word);
+  if (!flag) return null;
+
+  const name = flag[1];
+  if (name && safeFlags.has(name)) return `${name}=${hidden}`;
+  return hidden;
 }
 
 function maskArguments(words: string[]): string | null {
   const masked: string[] = [];
   let programFound = false;
   let maskNextValue = false;
+  let maskRemainingWords = false;
 
   for (const word of words) {
     if (!programFound && assignmentName.test(word)) {
@@ -84,6 +104,10 @@ function maskArguments(words: string[]): string | null {
       programFound = true;
       continue;
     }
+    if (maskRemainingWords) {
+      masked.push(hidden);
+      continue;
+    }
     if (maskNextValue) {
       masked.push(hidden);
       maskNextValue = false;
@@ -94,11 +118,9 @@ function maskArguments(words: string[]): string | null {
       masked.push(`${hidden}=${hidden}`);
       continue;
     }
-    const flag = flagWithValue.exec(word);
-    if (flag) {
-      const name = flag[1];
-      if (name && safeFlags.has(name)) masked.push(`${name}=${hidden}`);
-      else masked.push(hidden);
+    const equalsForm = maskFlagWithEquals(word);
+    if (equalsForm !== null) {
+      masked.push(equalsForm);
       continue;
     }
     if (safeFlags.has(word)) {
@@ -107,8 +129,10 @@ function maskArguments(words: string[]): string | null {
       continue;
     }
     if (word.startsWith('-')) {
+      // Mask the rest because an unknown flag may be a switch or take a value.
+      // Its next word could be another flag or private text that looks like one.
       masked.push(hidden);
-      maskNextValue = true;
+      maskRemainingWords = true;
       continue;
     }
     masked.push(hidden);

@@ -1,1 +1,1 @@
-The computer can now mask command arguments and check the remaining text for secrets before a future private command view uses it.
+The computer can now mask command arguments and check the remaining text for secrets before a future private command view uses it. Unclear flags hide all later words, and unsupported shell syntax gives no command text.
