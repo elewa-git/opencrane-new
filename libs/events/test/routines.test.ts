@@ -67,6 +67,21 @@ function readsStrictDefinitions() {
 }
 it('reads modern definitions and exact legacy records', readsStrictDefinitions);
 
+function readsExactCompanyTool() {
+  const digest = 'a'.repeat(64);
+  const tool = { name: 'read', revision: digest, schemaDigest: digest,
+    destinationDigest: digest, policyRevision: 4, costCents: 0 };
+  const withTool = { ...definition, tool };
+  expect(accepted('routine.created', { ...created, definition: withTool })).toBe(true);
+  const missingTariff = { ...tool, costCents: undefined };
+  const changedTariff = { ...tool, costCents: 1 };
+  for (const invalidTool of [missingTariff, changedTariff, { ...tool, revision: 'old' }]) {
+    const changed = { ...definition, tool: invalidTool };
+    expect(accepted('routine.created', { ...created, definition: changed })).toBe(false);
+  }
+}
+it('accepts only an exact zero-cent saved company tool', readsExactCompanyTool);
+
 function refusesMixedAndForgedBindings() {
   const badDefinitions = [
     { ...definition, assistantKind: 'personal' },

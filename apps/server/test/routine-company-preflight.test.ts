@@ -51,7 +51,7 @@ async function fixture() {
   const destinationDigest = createHash('sha256').update(JSON.stringify(destination)).digest('hex');
   const tool = { name: reviewedTool.name, revision: reviewedTool.revision,
     schemaDigest: policy.catalogue!.schemaDigest, destinationDigest,
-    policyRevision: policy.policyRevision, costCents: 0 };
+    policyRevision: policy.policyRevision, costCents: 0 as const };
   const registrationRevision = serverRows[0]!.sequence;
   const optInSubject = `connection-company-${serverId}`;
   const optIn = envelope('test', optInSubject, 'connection.company_opt_in_set', {
@@ -145,7 +145,7 @@ async function changedSavedTool(field: string) {
   if (field === 'schemaDigest') changed.schemaDigest = 'f'.repeat(64);
   if (field === 'destinationDigest') changed.destinationDigest = 'f'.repeat(64);
   if (field === 'policyRevision') changed.policyRevision += 1;
-  if (field === 'costCents') changed.costCents = 1;
+  if (field === 'costCents') Object.assign(changed, { costCents: 1 });
   if (field === 'missingTariff') Object.assign(changed, { costCents: undefined });
   Object.assign(current.definition, { tool: changed });
   const append = vi.spyOn(nats.store, 'append');
@@ -175,6 +175,18 @@ async function stale() {
   await expect(binding.confirmCurrent()).rejects.toThrow('Routine company unavailable');
 }
 it('refuses a preflight kept across a later connection change', stale);
+
+async function changedToolBeforeSender() {
+  const current = await fixture();
+  const company = await current.preflight();
+  const changed = envelope('test', `mcp-${current.serverId}`, 'mcp.tool_mode_set', {
+    serverId: current.serverId, connectionId: 'installed', toolName: current.tool.name,
+    toolRevision: current.tool.revision, mode: 'block', setBy: 'admin',
+  });
+  await nats.seed([changed]);
+  await expect(company.confirmCurrent()).rejects.toThrow('Routine company unavailable');
+}
+it('refuses a tool policy change between preflight and sender', changedToolBeforeSender);
 
 async function staleGrant() {
   const current = await fixture();
@@ -206,6 +218,8 @@ async function changed(kind: string) {
   if (kind === 'revision') current.evidence.profileRevision += 1;
   if (kind === 'generation') current.evidence.generation += 1;
   if (kind === 'missing-server') Object.assign(current.definition, { serverId: undefined });
+  if (kind === 'server') Object.assign(current.definition, { serverId: 'replacement' });
+  if (kind === 'connection') Object.assign(current.definition, { connectionId: 'replacement' });
   if (kind === 'choice') {
     const changed = envelope('test', current.selectionSubject, 'connection.selected', {
       action: 'clear', userId: current.ownerId, serverId: current.serverId,
@@ -235,7 +249,7 @@ async function changed(kind: string) {
   append.mockRestore();
 }
 it.each(['account', 'scopes', 'custody', 'revision', 'generation', 'missing-server',
-  'choice', 'opt-in', 'publication'])(
+  'server', 'connection', 'choice', 'opt-in', 'publication'])(
   'refuses changed company %s before any allowance', changed);
 
 async function revokedGrant(kind: 'member' | 'assistant', applied: boolean) {

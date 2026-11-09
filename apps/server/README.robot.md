@@ -7153,6 +7153,10 @@ connection, profile revisions, verified account id and scopes to match one expli
 company choice. It reuses `companySelectionFacts` for installation, opt-in, OAuth
 configuration, account evidence and available tools. The trusted profile reader must
 confirm credential custody; no production reader is installed. It also reads the
+saved tool name, revision, catalogue digest, destination digest, policy revision and
+zero-cent price. The current published review must still allow that exact tool, with
+the same installation and required scopes. Missing tool or price facts refuse.
+The destination digest covers the remote server origin. It also reads the
 saved MCP-server grants for the owner and assistant, checks their applied receipts
 and current permissions, and watches the grant stream. An owner can use a team grant
 only with current team membership. A returned local
@@ -7162,7 +7166,8 @@ again before the existing sender. Missing evidence refuses with a fixed
 error. There is no credential release, company send or public execution switch.
 Existing records without `serverId` remain readable but cannot pass this check.
 
-`test/routine-company-preflight.test.ts` covers the valid choice, a stale preflight,
+`test/routine-company-preflight.test.ts` covers the valid choice, changed or missing
+tool facts, a stale preflight,
 owner and assistant grant revocations, and changes to account, scopes, custody,
 profile revision, owner choice, opt-in and publication.
 `test/routine-handoff.test.ts` checks post-wake refusal before allowance and no

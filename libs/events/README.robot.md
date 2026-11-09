@@ -895,6 +895,10 @@ installation. No reaction subscribes; replay grants nothing and releases no cred
 Modern routine definitions may include `serverId` for the exact MCP server used by
 their company connection. Older saved definitions omit it and still replay. Company
 preparation refuses them because the connection id alone cannot identify the server.
+They may also include a strict `tool` with name, tool revision, catalogue digest,
+destination digest, policy revision and zero-cent cost. Old records still replay,
+but company preparation refuses a missing tool or changed review. This adds no event
+type or reaction.
 The current example includes both ids. This field carries no credential or account
 label.
 

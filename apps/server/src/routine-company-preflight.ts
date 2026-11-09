@@ -1,12 +1,62 @@
+import { createHash } from 'node:crypto';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { grantGivenDataSchema, grantRevokedDataSchema } from '@opencrane/events';
 import type { RoutineState } from '@opencrane/events';
 import { companySelectionFacts, foldCompanyConnection, foldConnectionSelection,
   groupMembership, history, type CompanyProfileReader,
-  type OAuthConfigurationLoader } from '@opencrane/models';
+  toolPolicyFromRows, type OAuthConfigurationLoader } from '@opencrane/models';
 
 type Run = NonNullable<RoutineState['activeRun']>;
+
+function destinationDigest(rows: StoredEvent[]) {
+  function isRegistration(row: StoredEvent) {
+    return row.event.type === 'mcp.server_registered';
+  }
+  const registration = rows.findLast(isRegistration);
+  const data = registration?.event.data;
+  if (!data || typeof data !== 'object' || !('kind' in data) ||
+      data.kind !== 'remote' || !('locator' in data) ||
+      typeof data.locator !== 'string') refuse();
+  const destination = new URL(data.locator).origin;
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(destination));
+  return hash.digest('hex');
+}
+
+function matchesExactTool(rows: StoredEvent[], run: Run) {
+  const saved = run.definition.tool;
+  if (!saved || saved.costCents !== 0) return false;
+  const policy = toolPolicyFromRows(rows);
+  const savedName = saved.name;
+  function matchesName(tool: (typeof policy.tools)[number]) {
+    return tool.name === savedName;
+  }
+  const current = policy.tools.find(matchesName);
+  return policy.published && policy.connectionId === run.definition.connectionId &&
+    policy.policyRevision === saved.policyRevision &&
+    policy.catalogue?.schemaDigest === saved.schemaDigest &&
+    destinationDigest(rows) === saved.destinationDigest &&
+    current?.reviewed === true && current.mode === 'allow' && current.costCents === 0 &&
+    current.revision === saved.revision;
+}
+
+function requireToolScopes(run: Run,
+  facts: Awaited<ReturnType<typeof companySelectionFacts>>) {
+  const saved = run.definition.tool;
+  if (!saved) refuse();
+  const requiredScopes = facts.toolScopes[saved.name];
+  if (!requiredScopes) refuse();
+  for (const scope of requiredScopes) {
+    if (!facts.scopes.includes(scope) || !run.definition.scopes.includes(scope)) refuse();
+  }
+}
+
+function requireExactTool(rows: StoredEvent[], run: Run,
+  facts: Awaited<ReturnType<typeof companySelectionFacts>>) {
+  if (!matchesExactTool(rows, run)) refuse();
+  requireToolScopes(run, facts);
+}
 
 function refuse(): never {
   throw new Error('Routine company unavailable');
@@ -151,6 +201,8 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     for (const scope of definition.scopes) {
       if (!facts.scopes.includes(scope)) refuse();
     }
+    const serverRows = await history(store, `mcp-${definition.serverId}`, silo, deadline);
+    requireExactTool(serverRows, run, facts);
     const positions = new Map(facts.positions);
     positions.set(selectionSubject, selected.sequence);
     const grants = await requireServerGrants(store, binding, silo, run, deadline);

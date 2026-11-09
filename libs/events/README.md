@@ -208,6 +208,7 @@ The HTTP forget command is not built yet.
    and run facts. It remembers each modern event's id and ignores that event if it
    arrives again, even after later changes. Definitions still match when a database
    returns their fields in a different order. It grants no access and starts no work.
+   A newer definition can name one reviewed company tool and its zero-cent price.
 
 4. **A caller previews a routine schedule.** It supplies the time and the last used
    local date, if there is one. The library returns future dates and clock-change

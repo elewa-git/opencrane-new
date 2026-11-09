@@ -685,6 +685,10 @@ Desktop and Codex processes cannot replace these passes through HTTP.
 The server checks whether each computer can wait for approval before offering Ask
 tools. Older computers receive Allow tools only, so either update order is safe.
 
+Before a saved company routine prepares work, the server checks its chosen tool
+against the installed server's current review. A changed tool, destination, price
+or permission stops preparation. Company routine sending is still unavailable.
+
 Signing out closes the matching browser connections on the server handling logout.
 This stops private reply delivery before the sign-in service is contacted.
 
