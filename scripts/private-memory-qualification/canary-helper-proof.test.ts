@@ -234,40 +234,112 @@ async function savedLaunchRecord(): Promise<void> {
   const directory = '/run/opencrane-memory-qualification.lock';
   const recordPath = `${directory}/helper-identity`;
   const challengeId = '11111111-1111-4111-8111-111111111111';
-  const contents = `${challengeId} ${helper.pid} ${helper.startTime} ` +
-    `${supervisor.pid} ${supervisor.startTime} ${imageDigest} ${installationId}\n`;
+  let recordFault: string | undefined;
   const request = { challengeId, imageDigest, installationId };
-  let unsafeRecord = false;
+  function contents(): string {
+    const fields = [challengeId, String(helper.pid), helper.startTime,
+      String(supervisor.pid), supervisor.startTime, imageDigest, installationId];
+    if (recordFault === 'challenge') {
+      fields[0] = '22222222-2222-4222-8222-222222222222';
+    }
+    if (recordFault === 'helper pid') {
+      fields[1] = String(helper.pid + 1);
+    }
+    if (recordFault === 'helper start') {
+      fields[2] = '124';
+    }
+    if (recordFault === 'supervisor pid') {
+      fields[3] = String(supervisor.pid + 1);
+    }
+    if (recordFault === 'supervisor start') {
+      fields[4] = '101';
+    }
+    if (recordFault === 'image') {
+      fields[5] = `sha256:${'c'.repeat(64)}`;
+    }
+    if (recordFault === 'installation') {
+      fields[6] = `sha256:${'d'.repeat(64)}`;
+    }
+    const record = `${fields.join(' ')}\n`;
+    if (recordFault === 'format') {
+      return `${record}extra`;
+    }
+    return record;
+  }
   function recordStat(path: unknown): ReturnType<typeof lstatSync> {
     const info = actual.lstatSync('/proc/self/stat');
-    info.uid = unsafeRecord && path === recordPath ? 1000 : 0;
+    const badOwner = recordFault === 'owner' && path === recordPath;
+    const badDirectoryOwner = recordFault === 'directory owner' && path === directory;
+    info.uid = badOwner || badDirectoryOwner ? 1000 : 0;
     info.mode = path === directory ? 0o040700 : 0o100600;
-    info.size = contents.length;
-    info.isDirectory = function directoryType(): boolean {
-      return path === directory;
-    };
-    info.isFile = function fileType(): boolean {
-      return path === recordPath;
-    };
+    info.size = contents().length;
+    info.nlink = 1;
+    if (recordFault === 'directory type' && path === directory) {
+      info.isDirectory = function wrongDirectoryType(): boolean {
+        return false;
+      };
+    }
+    if (recordFault === 'directory mode' && path === directory) {
+      info.mode = 0o040755;
+    }
+    if (recordFault === 'record type' && path === recordPath) {
+      info.isFile = function wrongRecordType(): boolean {
+        return false;
+      };
+    }
+    if (recordFault === 'link count' && path === recordPath) {
+      info.nlink = 2;
+    }
+    if (recordFault === 'record mode' && path === recordPath) {
+      info.mode = 0o100644;
+    }
+    if (recordFault === 'empty record' && path === recordPath) {
+      info.size = 0;
+    }
+    if (recordFault === 'large record' && path === recordPath) {
+      info.size = 301;
+    }
+    if (recordFault !== 'directory type') {
+      info.isDirectory = function directoryType(): boolean {
+        return path === directory;
+      };
+    }
+    if (recordFault !== 'record type') {
+      info.isFile = function fileType(): boolean {
+        return path === recordPath;
+      };
+    }
     return info;
   }
   vi.mocked(lstatSync).mockImplementation(recordStat);
   function tmpfs(): ReturnType<typeof statfsSync> {
     const info = actual.statfsSync('/run');
-    info.type = 0x01021994;
+    info.type = recordFault === 'filesystem' ? 0xef53 : 0x01021994;
     return info;
   }
   vi.mocked(statfsSync).mockImplementation(tmpfs);
   function recordFile(path: unknown): string {
     if (path === recordPath) {
-      return contents;
+      return contents();
     }
     return readProc(path);
   }
   vi.mocked(readFileSync).mockImplementation(recordFile);
   expect(readCanaryHelperBinding(request)).toEqual(binding);
-  unsafeRecord = true;
-  expect(() => readCanaryHelperBinding(request)).toThrow('private_process_unreadable');
+  const unreadableFaults = ['filesystem', 'directory type', 'directory owner', 'owner',
+    'directory mode', 'record type', 'link count', 'record mode', 'empty record',
+    'large record'];
+  for (const fault of unreadableFaults) {
+    recordFault = fault;
+    expect(() => readCanaryHelperBinding(request), fault).toThrow('private_process_unreadable');
+  }
+  const identityFaults = ['format', 'challenge', 'helper pid', 'helper start',
+    'supervisor pid', 'supervisor start', 'image', 'installation'];
+  for (const fault of identityFaults) {
+    recordFault = fault;
+    expect(() => readCanaryHelperBinding(request), fault).toThrow(
+      'private_process_identity_changed');
+  }
 }
-it('accepts the saved launch identity and refuses an untrusted record owner',
+it('checks the saved launch record and its process identities',
   savedLaunchRecord);
