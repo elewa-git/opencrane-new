@@ -37,6 +37,7 @@ flowchart LR
   run alongside them.
 - Keep queued jobs safe across restarts, so none are lost.
 - Keep a welcome completion's member identifier out of worker attempt logs.
+- Give a hosted image check time to scan bounded files and run its separate tools.
 - Retry failed work. Keep a job that exhausts its retries on the list and put a
   copy on a separate failure list for operators.
 - Save completion in the same database step as a reaction's table changes,

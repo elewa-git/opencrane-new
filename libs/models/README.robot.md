@@ -3548,6 +3548,9 @@ retry delivery and fresh-install qualification remain outside this change.
 
 ## Hosted image check requests
 
+`@opencrane/models` exports the existing signature,
+licence and vulnerability check functions for the private ops image worker.
+
 `readHostedImageScanAttempt` reads the current `mcp` stream through the existing
 admission fold. It returns the exact silo, server, attempt, platform and image
 digest only while that attempt is checking and has no saved result. It does not

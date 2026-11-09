@@ -5,6 +5,7 @@ import { members, ProjectionRunner, pgDb, type Db, type Query } from "@opencrane
 import { HandlerRuntime, registerHandler, dispatch, upgradeHandlers } from "../src/index.ts";
 import { effect, logger } from "./helpers.ts";
 import { sessionDiagnostics } from "./session-diagnostics.ts";
+import { upgradeFixtureHandlerNames } from './upgrade-fixture-handlers.ts';
 
 const mode = process.env["CRASH_MODE"] ?? "";
 const poolOptions = {
@@ -109,10 +110,6 @@ if (mode.startsWith("upgrade")) {
     yield* subscribe(from, signal);
   }
   const source = { head: store.head.bind(store), subscribe: stopAfterChunk };
-  const names = ['update-openfga', 'seed-ownership', 'confirm-ownership', 'seed-model-grants',
-    'seed-provider-default', 'create-assistant', 'claim-computer', 'cleanup-departure',
-    'stop-budget-turns', 'prepare-gateway-configuration', 'settle-budget',
-    'dream-memory', 'complete-welcome'] as const;
   async function guardedEffect(...args: Parameters<typeof effect>) {
     const effectUrl = process.env['CRASH_EFFECT_URL'];
     if (effectUrl) {
@@ -120,10 +117,10 @@ if (mode.startsWith("upgrade")) {
     }
     await effect(...args);
   }
-  function subscription(name: typeof names[number]) {
+  function subscription(name: typeof upgradeFixtureHandlerNames[number]) {
     return registerHandler(name, guardedEffect);
   }
-  const handlers = names.map(subscription);
+  const handlers = upgradeFixtureHandlerNames.map(subscription);
   const upgradeDb = upgradeCrashDb(base);
   const runtime = new HandlerRuntime({ db: upgradeDb, logger, silo: 'test', handlers });
   await upgradeHandlers(runtime, source);

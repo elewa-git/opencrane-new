@@ -71,7 +71,8 @@ export class HandlerRuntime {
         retryLimit: this.options.retryLimit ?? 5,
         retryDelay: this.options.retryDelay ?? 1,
         retryBackoff: true,
-        expireInSeconds: this.options.expireInSeconds ?? 60,
+        expireInSeconds: this.options.expireInSeconds ??
+          (handler.name === 'check-hosted-image' ? 1_200 : 60),
       });
     }
   }

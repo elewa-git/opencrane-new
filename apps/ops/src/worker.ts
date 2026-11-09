@@ -28,6 +28,10 @@ import { McpKubernetes } from './mcp-kubernetes.ts';
 import { prepareGatewayConfigurationHandler } from './gateway-configuration.ts';
 import { stopMcpInstanceHandler } from './mcp-stop.ts';
 import { dispatcherHandlerNames } from './dispatcher-handlers.ts';
+import { hostedImageCheckHandler, recoverHostedImageChecks }
+  from './hosted-image-check.ts';
+import { trustedHostedImageInputs } from './hosted-image-inputs.ts';
+import { runAndWriteHostedImageCheck } from '../../../infra/clamav/image-worker.mjs';
 import { runRoutineScheduler } from './routine-production.ts';
 import { loadRoutineCustody } from './routine-custody.ts';
 import type { Handler } from '@opencrane/handlers';
@@ -191,7 +195,16 @@ try {
       process.env['COMPUTER_POOL'] ?? 'computer', process.env['COMPUTER_STORAGE'] ?? '10Gi');
     const tokens = await tokenIssuer({ privateKeyPath: required('TOKEN_SIGNING_KEY_FILE'),
       issuer: required('TOKEN_ISSUER') });
+    async function readHostedInputs(event: import('@opencrane/events').EventEnvelope) {
+      try {
+        return await trustedHostedImageInputs(commands!.store, silo, event);
+      } catch {
+        throw new Error('Trusted image inputs unavailable');
+      }
+    }
     const available = [prepareGatewayConfigurationHandler(commands.store, silo, content!.db),
+      hostedImageCheckHandler(commands.store, silo, runAndWriteHostedImageCheck,
+        readHostedInputs),
       authorisation.handler, ownershipSeedHandler(commands.store),
       ownershipConfirmationHandler(commands.store), budgetStopHandler(commands.store),
       providerDefaultHandler(commands.store, binding), modelGrantHandler(commands.store),
@@ -271,6 +284,7 @@ try {
         await recoverMemoryCleanup(dispatcherRuntime, store, checkpoint);
       }
       await recoverWelcomeCompletion(dispatcherRuntime, store);
+      await recoverHostedImageChecks(dispatcherRuntime, store, commandStore);
       await dispatcherRuntime.work();
       async function scanNightly(occurrence: Date) {
         await scanNightlyMemory(content!.db, commandStore, silo, occurrence);

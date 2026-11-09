@@ -14,6 +14,7 @@ import { scanImagePart } from '../infra/clamav/image-client.mjs';
 import { runHostedImageScan, runAndWriteHostedImageCheck, savedResultMatches }
   from '../infra/clamav/image-worker.mjs';
 import { envelope } from '../libs/models/src/actor.ts';
+import { hostedImageCheckHandler } from '../apps/ops/src/hosted-image-check.ts';
 
 async function filesystem(importOriginal) {
   const original = await importOriginal();
@@ -376,6 +377,47 @@ async function writesCleanAndRecoversOriginalEvent() {
 }
 test('clean scan writes one event and a lost reply recovers without scanning again',
   writesCleanAndRecoversOriginalEvent);
+
+async function queuedCheckUsesTheCheckedWriter() {
+  async function scan(input) {
+    received.push(Buffer.from(input.bytes));
+    return facts({ sha256: input.sha256, byteCount: input.byteCount });
+  }
+  await checkedService(scan);
+  const identity = { ...binding, serverId: 'queued-image' };
+  const { image } = imageWithPart(bytes, identity);
+  const store = writableImageStore(image);
+  let preparations = 0;
+  async function prepare() {
+    preparations += 1;
+    return image;
+  }
+  async function readSettings() { return settings; }
+  async function readChecks() { return independentChecks('fail'); }
+  const trigger = store.rows[0].event;
+  const handler = hostedImageCheckHandler(store, image.silo,
+    runAndWriteHostedImageCheck, async function readInputs() {
+      return { prepareImage: prepare, readSettings, readIndependentChecks: readChecks };
+    });
+  const transaction = { query: async () => ({ rows: [] }) };
+  await handler.handle(trigger, transaction);
+  expect(store.rows.map(row => row.event.type)).toEqual([
+    'mcp.server_registered', 'mcp.image_scan_claimed', 'mcp.image_checked',
+  ]);
+  expect(store.rows[1].event.data.attemptId).toBe(1);
+  expect(store.rows[2].event.data.checks.signature.verdict).toBe('fail');
+  expect(store.rows[2].event.data.checks.licence.verdict).toBe('fail');
+  expect(store.rows[2].event.data.checks.vulnerability.verdict).toBe('fail');
+  expect(store.rows[2].event.data.checks.malware.verdict).toBe('pass');
+  const checkedId = store.rows[2].event.id;
+  await handler.handle(trigger, transaction);
+  expect(store.rows[2].event.id).toBe(checkedId);
+  expect(store.appendCount).toBe(1);
+  expect(preparations).toBe(1);
+  expect(received).toHaveLength(1);
+}
+test('queued hosted checks claim and save results through the checked writer',
+  queuedCheckUsesTheCheckedWriter);
 
 function deferred() {
   let resolve;

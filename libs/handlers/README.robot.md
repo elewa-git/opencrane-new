@@ -57,7 +57,9 @@ send fact text or start a turn.
 
 One `key_strict_fifo` queue per handler keys jobs by stream id. Defaults:
 four worker slots, five retries, exponential backoff starting at one second,
-and a 60-second attempt timeout. Different streams can progress together.
+and a 60-second attempt timeout. Hosted image checks have a 20-minute timeout
+because the bounded image walk and three separate tools can take longer.
+Different streams can progress together.
 The worker locks the fetched queue attempt through its SQL transaction;
 handler writes and the event-id receipt commit together. Abort rolls back even
 when a callback never settles; SQL calls are serialised and each statement

@@ -401,7 +401,10 @@ append reply is lost before its commit is visible, a restarted worker sees the
 claim and waits for the original saved result. It never scans the same attempt again.
 Infected, missing, changed and expired proof cannot
 write a clean result. A failed separate check records rejection rather than
-admission. No production scheduler, image source or separate-check composition
-calls this adapter yet. The production enable switch and image promotion remain
+admission. The ops dispatcher calls this adapter for saved hosted attempts. Its
+private custody file points to a digest-named local OCI bundle, scanner settings
+and the independent signature, licence and vulnerability tools. Missing custody
+is checked before the one-scan claim. The production enable switch remains
+closed and image promotion remains
 closed. Fresh-install two-silo, deployed custody, signed-release and rotation
 qualification are NOT RUN.

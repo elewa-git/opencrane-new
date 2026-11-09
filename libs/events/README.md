@@ -3,6 +3,8 @@
 ## What this is
 
 The list of every kind of event OpenCrane records, and the exact data each one carries.
+Saved hosted image attempts now queue a private image check through the worker list.
+Reading or replaying these events does not call the scanner.
 Private persona revisions carry encrypted bytes and a checked digest, never plain text.
 An approval records the exact saved version a member chose, without copying its text.
 

@@ -86,6 +86,9 @@ export { renderGatewayConfiguration, type GatewayRenderSettings } from './gatewa
 export { readRootStopEvidence, readRoutineRemoval, readRoutineDeactivation } from './root-stop-evidence.ts';
 export { RootBudgetRefused, rootTotals, requireRootStartCapacity } from './root-budget.ts';
 export { registerHosted, hostedRegistrationChange } from './hosted-registration.ts';
+export { verifyHostedImage } from './hosted-verification.ts';
+export { inspectHostedLicences } from './hosted-licences.ts';
+export { inspectHostedVulnerabilities } from './hosted-vulnerabilities.ts';
 export { gatewayDelivery } from './gateway-delivery.ts';
 
 export { readHostedAdmission, readHostedImageScanAttempt, foldHostedAdmission, requestHostedCheck }

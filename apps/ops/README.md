@@ -25,10 +25,11 @@ flowchart LR
   ops -->|holds worker locks and keeps jobs separate| pg["PostgreSQL<br/>jobs and content databases"]
   ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
-  ops -->|opens conversation keys and deletes forgotten memory keys| keys["Private key store"]
+  ops -->|checks saved hosted image attempts| scanner["ClamAV<br/>image scanner"]
 ```
 
 The computers run in [Kubernetes](../../GLOSSARY.md#kubernetes).
+The worker also reads private keys and removes forgotten memory keys.
 The server can ask this worker to resume a sleeping computer for a saved routine.
 The request keeps the computer's recorded identity.
 [OpenFGA](../../GLOSSARY.md#openfga-permissions-service) checks who may use what.
@@ -52,6 +53,9 @@ for checked preparation. It sends no memory text and cannot dispatch a turn.
 - Provides [replay](../../GLOSSARY.md#replay), failed-job tools and upgrades for recovery.
 - Confirms one saved final welcome answer after checking current membership. On restart,
   it retries unfinished welcome jobs from saved events.
+- Queues hosted image checks from saved attempts. It checks the original event again,
+  then uses operator-owned image files and scanner settings before saving a result.
+  A failed signature, licence or vulnerability check saves a refusal for that attempt.
 - Removes the dispatcher's ready marker as soon as event consumption fails, before
   database lock cleanup finishes.
 - Provides internal commands that claim, skip or record missed routine slots without starting work.

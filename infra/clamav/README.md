@@ -22,7 +22,7 @@ flowchart LR
   infra --> nats["infra/nats<br/>event log settings"]
   stack -->|builds and starts the Linux amd64 image| clamav
   server["apps/server<br/>file uploads"] -->|sends file bytes over HTTPS| launcher
-  worker["private image worker"] -->|checks bounded files through HTTPS| launcher
+  worker["apps/ops<br/>image worker"] -->|checks bounded files through HTTPS| launcher
   worker -->|claims the scan, then sends proof and checks| models["libs/models<br/>image result writer"]
   launcher["separate HTTPS service"] -->|limits requests and checks caller passes| clamav
 ```
@@ -74,8 +74,8 @@ flowchart LR
    image result. The result also needs separate signature, vulnerability and licence
    checks. A second worker reads the saved claim and cannot scan that attempt.
    After a lost reply, a restarted worker reads the claim or saved result before
-   doing anything else. No scheduled image scan or image use
-   is enabled yet.
+   doing anything else. The background worker schedules checks from saved attempts
+   when trusted image files and scanner settings are available. Image use stays closed.
 
 ## How to run or test it
 
