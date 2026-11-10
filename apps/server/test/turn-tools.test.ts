@@ -7,6 +7,7 @@ import { buildTurnTools, mayOfferTurnTools, toolsForMessage,
   type TurnDelivery, type TurnToolServerState } from '../src/chat/turn-tools.ts';
 import { turnMessage, type AgentSession, type WatchOptions } from '../src/chat/bridge-conversation.ts';
 import { agentSessionData } from '../src/chat/reports.ts';
+import { parseComputerTurn } from '../../computer/test/support/turn-parser.ts';
 
 const toolDefinition = JSON.stringify({ name: 'read', inputSchema: { type: 'object' } });
 
@@ -73,6 +74,31 @@ it('offers only reviewed, zero-cost Allow tools on published credential-free ser
   expect(JSON.stringify(tools)).not.toContain('review text');
   expect(canUse).toHaveBeenCalledWith('allow', 'person', 'person');
   expect(canUse).toHaveBeenCalledWith('allow', 'assistant', 'assistant');
+});
+
+it('offers a personal server only for the requester with a verified explicit choice', async () => {
+  const state = serverState('personal', { accountMode: 'personal' });
+  const input = {
+    rows: [{ serverId: 'personal' }], requesterId: 'alice', assistantId: 'assistant',
+    baseMessageBytes: 100, readServer: () => Promise.resolve(state),
+    canUse: () => Promise.resolve(true),
+    readSelection: (requesterId: string, serverId: string) => Promise.resolve(
+      requesterId === 'alice' && serverId === 'personal'
+        ? { profileId: 'alice-profile', profileRevision: 2, selectionRevision: 1,
+          generation: 1 } : undefined),
+  };
+  const alice = await buildTurnTools(input);
+  const bob = await buildTurnTools({ ...input, requesterId: 'bob' });
+
+  expect(alice).toHaveLength(1);
+  const frame = { id: 'turn', conversationId: 'chat', assistantId: 'assistant',
+    text: 'Use a tool', token: 'signed-turn', expiresAt: Date.now() + 60_000,
+    tools: alice };
+  expect(parseComputerTurn(frame).tools).toEqual(alice);
+  expect(Object.keys(alice[0]!).sort()).toEqual([
+    'key', 'serverId', 'connectionId', 'serverInfo', 'definitions', 'modes',
+  ].sort());
+  expect(bob).toEqual([]);
 });
 
 it('drops whole servers when their definitions exceed the message budget', async () => {

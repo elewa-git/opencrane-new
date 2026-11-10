@@ -1,4 +1,5 @@
 import { dirname } from 'node:path';
+import { setTimeout as pause } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope } from '@opencrane/models';
@@ -69,3 +70,28 @@ async function refusesRetryWithoutInitialDependencies(retrySequence: number) {
 }
 it.each([1, 2])('refuses report %i after initial delivery lacked its dependencies',
   refusesRetryWithoutInitialDependencies);
+
+async function selectsProfilesBeforeStartingTheShortAccessCheck() {
+  const memoryFreeTurn = { ...turn, executionMode: 'memory_free' as const };
+  const report = { conversationId: turn.conversationId, turnId: turn.turnId,
+    threadId: turn.threadId };
+  function loadOAuthConfiguration() {
+    return Promise.resolve(undefined);
+  }
+  const binding = { apiUrl: 'http://127.0.0.1:0', storeId: 'test',
+    authorizationModelId: 'test', silo: 'test' };
+  const options = { silo: 'test', store: nats.store, keys, binding,
+    catalogue: { async rows() {
+      await pause(2_200);
+      return [];
+    } },
+    loadOAuthConfiguration };
+  const acknowledgement: { token?: string; refused?: string } = {};
+  const delivered = vi.fn();
+  await releaseTurnCredentials(options, context, computer.issuer, report,
+    memoryFreeTurn, acknowledgement, delivered);
+  expect(acknowledgement.refused).toBeUndefined();
+  expect(acknowledgement.token).toBeTruthy();
+}
+it('finishes slow account selection before the two-second turn access check',
+  selectsProfilesBeforeStartingTheShortAccessCheck, 30_000);

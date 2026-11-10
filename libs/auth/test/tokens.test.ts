@@ -70,6 +70,12 @@ async function signsProviderChoice() {
   expect(await issuer.verify(token.value, turnTokenAudience)).toMatchObject({
     providerId: 'primary', bindingSequence: 42, model: 'gpt-6-luna', task: 'chat_turn',
   });
+  const personalSelections = [{ serverId: 'fixture', profileId: 'alice-profile',
+    selectionRevision: 7 }];
+  const selectedToken = await issuer.turn({ ...input, personalSelections });
+  expect(await issuer.verify(selectedToken.value, turnTokenAudience)).toMatchObject({
+    requester: 'alice', personalSelections,
+  });
   const incomplete = { ...input, bindingSequence: undefined };
   await expect(issuer.turn(incomplete)).rejects.toThrow();
   const invalid = { ...input, bindingSequence: 0 };

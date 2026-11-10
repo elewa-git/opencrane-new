@@ -3,7 +3,8 @@ import type { IncomingHttpHeaders } from 'node:http';
 import { readStreamSummary, WrongSiloError, type EventStore } from '@opencrane/event-store';
 import { computerSummary, type ComputerSummary } from './computer-summary.ts';
 import { z } from 'zod';
-import { computerTokenAudience, turnTokenAudience, type tokenIssuer, type tokenVerifier } from './tokens.ts';
+import { computerTokenAudience, turnTokenAudience, type tokenIssuer, type tokenVerifier,
+  type PersonalTurnSelection } from './tokens.ts';
 
 type Verifier = ReturnType<typeof tokenVerifier> & Partial<Pick<Awaited<ReturnType<typeof tokenIssuer>>, 'turn'>>;
 const recordedChoiceFields = providerTurnBindingSchema.extend({
@@ -64,6 +65,7 @@ export function computerCredentials(store: Pick<EventStore, 'readStream'>, token
       threadId: string; task: string; model: string;
       sharingClass?: 'shared_only' | undefined;
       providerId?: string | undefined; bindingSequence?: number | undefined;
+      personalSelections?: PersonalTurnSelection[] | undefined;
     }) {
       if (input.task === 'native_descendant') throw new Error('Native delegation is disabled');
       const computer = await active(input.assistantId);

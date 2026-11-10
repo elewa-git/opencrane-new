@@ -246,7 +246,7 @@ flowchart LR
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, checked publication and task history, current accounting and exact membership receipts| postgres
   server -->|waits briefly for Forget locks| postgres
-  server <-->|chat work, command labels and masked views, checked reports, Stops and publication files| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, selected personal tool offers, command labels and masked views, checked reports, Stops and publication files| computer["apps/computer<br/>assistant computers"]
   server -->|wakes the original held Ask call| computer
   server -->|checks saved OAuth settings changes before routine sends| nats
   server -->|checks child starts and nightly and child allowances with the shared budget actor| runtime
@@ -255,7 +255,7 @@ flowchart LR
   computer -->|AI and tool calls| runtime["Private services<br/>models process, AI gateway, tools and virus scanner"]
   server -->|files, service readiness, image types and refusal codes| web
   server -->|checks upload bytes over HTTPS| runtime
-  runtime -->|checks memory reads and requester account choices| server
+  runtime -->|checks memory reads, requester account choices and personal tool offers| server
 ```
 
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) handles sign-in.
@@ -421,6 +421,11 @@ The server checks current admin access after preparing the review, even if prepa
 Members can explicitly save or clear their own personal account choice through the server.
 The reply confirms the saved choice without claiming the account can be used.
 Verified OAuth choices require current operator settings supplied by the server.
+For a chat turn, the server offers a personal tool only when the requester still has
+a verified choice for that server. The signed turn pass holds the chosen profile and
+choice revision. The computer sees the usual tool fields, and the models process checks
+the current choice again before sending a call. Account choices load before the short
+access check for the turn starts.
 Members can recover their own original account selection or clear receipt by its
 change reference. Later choices do not replace it. Reading requires current silo
 membership and changes nothing. Missing evidence stays unknown and never permits a resend.

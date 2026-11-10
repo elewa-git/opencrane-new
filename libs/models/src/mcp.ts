@@ -10,6 +10,7 @@ import { mcpServerDiscoveredDataSchema, memoryTextSchema,
 import { history } from './actor.ts';
 import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import { toolPolicyFromRows } from './tool-policy.ts';
+import type { PersonalToolContext } from './personal-tool-context.ts';
 
 const version = '2026-07-28';
 const boundedText = z.string().max(200);
@@ -49,7 +50,8 @@ const callSchema = z.object({
 export async function mcpPolicy(store: EventStore, silo: string, server: string,
   connection: string, parsed: ReturnType<typeof parseMcpCall>,
   headers: IncomingHttpHeaders, deadline = Infinity,
-  acknowledged?: () => GatewayAcknowledgement | null) {
+  acknowledged?: () => GatewayAcknowledgement | null,
+  personal?: PersonalToolContext) {
   const { call, args } = parsed;
   if (headers['mcp-protocol-version'] !== version ||
       headers['mcp-method'] !== call.method || headers['mcp-name'] !== call.params.name) {
@@ -62,8 +64,9 @@ export async function mcpPolicy(store: EventStore, silo: string, server: string,
   const gatewayBinding = await gatewayAdmission(store, silo, server, connection, rows,
     savedPolicy, headers, deadline, acknowledged);
   const policy = { ...savedPolicy, published: savedPolicy.published || gatewayBinding !== undefined };
+  const personalAvailable = matchesPersonalPolicy(policy, personal, server, connection);
   if (!isToolPolicyAvailable(policy) || policy.connectionId !== connection ||
-      policy.accountMode !== 'none') {
+      (policy.accountMode !== 'none' && !personalAvailable)) {
     throw new Error('MCP context unavailable');
   }
   function hasRequestedName(tool: (typeof policy.tools)[number]) {
@@ -80,8 +83,16 @@ export async function mcpPolicy(store: EventStore, silo: string, server: string,
   const review = reviewMetadata(rows, call.params.name, policy.catalogue);
   const expectedApproval = expectedApprovalId(headers);
   return { ...decision, ...(gatewayBinding ? { gatewayBinding } : {}),
+    ...(personalAvailable ? { personal } : {}),
     waitLimited: offeredMode === 'ask', expectedApproval,
     policy, revision: tool?.revision, name: call.params.name, args, ...review };
+}
+
+function matchesPersonalPolicy(policy: ReturnType<typeof toolPolicyFromRows>,
+  personal: PersonalToolContext | undefined, server: string, connection: string) {
+  if (policy.accountMode !== 'personal' || !personal) return false;
+  return personal.serverId === server && personal.connectionId === connection &&
+    personal.policyRevision === policy.policyRevision && personal.requesterId.length > 0;
 }
 export function toolDecision(
   tool: ReturnType<typeof toolPolicyFromRows>['tools'][number] | undefined,

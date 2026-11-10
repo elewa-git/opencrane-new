@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 import { createLogger, type Logger } from '@opencrane/observability';
 import { prepareRoutineDispatch, RoutineDispatchRefused } from './routine-dispatch.ts';
 import { privateDecisionReason, decisionError, respondDecisionUnavailable } from './decision-refusal.ts';
@@ -31,6 +32,10 @@ import { legacyTurnSchema, parseTurnToken, requireManagedTurnClaims,
   requireModelRoute, knownDecisionRoute }
   from './decision-turn-token.ts';
 import { mcpPolicy, parseMcpCall, requireMcpThread } from './mcp.ts';
+import { personalToolContext, type PersonalToolContext } from './personal-tool-context.ts';
+import { toolPolicyFromRows } from './tool-policy.ts';
+import type { toolCredentialReleaseSchema } from '@opencrane/events';
+import type { z as Zod } from 'zod';
 import { MemoryToolRefused, prepareMemoryContext, prepareMemorySend } from './memory-context.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -165,13 +170,15 @@ export async function startDecision(
     let callId: string | undefined;
     let toolFacts: { logicalRequestId: string; serverId: string; toolName: string } | undefined;
     let correlation: { conversationId: string; turnId: string } | undefined;
-    const audit = async (outcome: 'allow' | 'ask' | 'deny', reason: string, permitId?: string, approvalId?: string) => {
+    const audit = async (outcome: 'allow' | 'ask' | 'deny', reason: string,
+      permitId?: string, approvalId?: string,
+      release?: Zod.infer<typeof toolCredentialReleaseSchema>) => {
       auditAttempted = true;
       const event = envelope(actor.silo, `decision-${requestId}`, 'decision.recorded', {
         requestId, route, outcome, reason, contextDigest, ...correlation, ...toolFacts,
         ...(callId ? { callId } : {}),
         ...(auditedContext ? { requesterId: auditedContext.requesterId, assistantId: auditedContext.assistantId } : {}),
-        ...(permitId ? { permitId } : {}),
+        ...(permitId ? { permitId } : {}), ...(release ? { release } : {}),
       });
       if (approvalId) event.correlation.approval = approvalId;
       const command = { event, expectedSequence: 0, historyChecked: true as const };
@@ -185,6 +192,8 @@ export async function startDecision(
       requestId = originalRequestId;
       return audit('allow', 'model_allowed', reservation);
     }
+    // Keep every decision outcome on the same audit and refusal path.
+    // eslint-disable-next-line complexity
     void (async () => {
       res.setHeader('content-type', 'application/json');
       if (await internalRoutes(req, res, actor, identity, binding, providers,
@@ -228,11 +237,33 @@ export async function startDecision(
       const memory = await prepareLoadedMemory(actor.store, binding, memoryClaims,
         conversation, performance.now() + 10_000);
       const raw = await readBody(req);
+      let preparedPersonal: PersonalToolContext | undefined;
+      if (route === 'mcp' && !memoryRoute) {
+        const match = /^\/authorize\/mcp\/([\w-]+)\/([\w-]+)$/u.exec(req.url ?? '');
+        if (!match) throw new Error('Unknown MCP route');
+        const policyRows = await history(actor.store, `mcp-${match[1]}`, actor.silo,
+          performance.now() + 10_000);
+        const preliminary = toolPolicyFromRows(policyRows);
+        if (preliminary.accountMode === 'personal') {
+          const configuration = dispatchOptions?.credentialDispatch?.loadConfiguration;
+          if (!configuration) throw new Error('Personal tool unavailable');
+          const parsed = parseMcpCall(raw);
+          function matchesServer(selection: NonNullable<typeof turnToken.personalSelections>[number]) {
+            return selection.serverId === match![1];
+          }
+          const boundSelection = turnToken.personalSelections?.find(matchesServer);
+          if (!boundSelection) throw new Error('Personal tool unavailable');
+          preparedPersonal = await personalToolContext(actor.store, binding,
+            turnToken.requester, match[1]!, parsed.call.params.name, configuration,
+            boundSelection);
+        }
+      }
       const preparedMemory = await prepareMemoryDecision(memoryRoute, actor.store, binding,
         memoryClaims, raw, req.headers, requestId, dispatchOptions, identity);
       const { preparation, reads: memoryReads } = preparedMemory;
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
-      const accessStarted = memoryAccessStarted(managedRoute, memory.loaded, started, preparation, routine !== undefined);
+      const accessStarted = preparedPersonal ? performance.now() :
+        memoryAccessStarted(managedRoute, memory.loaded, started, preparation, routine !== undefined);
       stage = 'authority';
       const authority = await decisionAuthorityFence(actor.store, accessStarted,
         subjects, turnToken.requester, computer.assistant, grants);
@@ -296,7 +327,7 @@ export async function startDecision(
         fresh.include(`mcp-${match[1]!}`);
         const reviewedPolicy = await mcpPolicy(
           actor.store, actor.silo, match[1]!, match[2]!, parsed, req.headers, fresh.deadline,
-          mcpSender.acknowledged);
+          mcpSender.acknowledged, preparedPersonal);
         const policy = mcpSender.bindPolicy(reviewedPolicy);
         const logicalRequestId = digestContext([actor.silo, turnToken.conversation,
           turnToken.turn, turnToken.thread, callId, match[1], match[2],
@@ -319,20 +350,61 @@ export async function startDecision(
         const { outcome, reason, approvalId } = await approvalDecision(actor.store, actor.silo,
           approvalBinding, policy, keys, actor.now, fresh, requestId, conversation);
         linkApprovalAttempt(toolFacts, approvalId);
-        const decisionId = await audit(outcome, reason,
-          approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
+        let release: Zod.infer<typeof toolCredentialReleaseSchema> | undefined;
+        if (outcome === 'allow' && policy.personal) {
+          const selected = policy.personal;
+          const issuedAt = Date.now();
+          release = {
+            requestId, permitId: requestId, leaseId: randomUUID(), purpose: 'tool_call',
+            userId: turnToken.requester, ownerId: turnToken.requester, ownerKind: 'personal',
+            assistantId: computer.assistant, computerId: computer.computer,
+            computerGeneration: computer.generation, conversationId: turnToken.conversation,
+            turnId: turnToken.turn, threadId: turnToken.thread, serverId: match[1]!,
+            connectionId: match[2]!, toolName: policy.name,
+            argumentsDigest: digestContext(policy.args.canonical),
+            profileId: selected.profileId, profileRevision: selected.profileRevision,
+            selectionRevision: selected.selectionRevision, generation: selected.generation,
+            policyRevision: selected.policyRevision, accountDigest: selected.accountDigest,
+            scopeDigest: selected.scopeDigest, issuedAt,
+            expiresAt: Math.min(issuedAt + 30_000, selected.expiresAt),
+          };
+        }
+        const permitId = outcome === 'allow' && (approvalId || release)
+          ? requestId : undefined;
+        const decisionId = await audit(outcome, reason, permitId, approvalId, release);
         const budget = { modelCall, decisionId, admittedAt, ...root, confirmRoutine };
         const serverId = match[1]!;
         async function confirmToolAccess() {
           // Reuse the earlier chat history and original deadline. Event positions alone
           // cannot confirm that IAM is still available before the remote send.
+          if (policy.personal) {
+            const subjects = [`member-${turnToken.requester}`,
+              `assistant-${computer.assistant}`];
+            const current = await decisionAuthorityFence(actor.store, performance.now(),
+              subjects, turnToken.requester, computer.assistant);
+            async function checkCurrent() {
+              await current();
+            }
+            const freshCurrent = Object.assign(checkCurrent, {
+              include: current.include, head: current.head, deadline: current.deadline,
+            });
+            const latestReader = authorityHistoryReader(actor.store, freshCurrent);
+            await confirmDecisionAccess(activity, current, needsApproval, true);
+            await currentAuthority(actor.store, binding, turnToken.requester,
+              computer.assistant, turnToken.conversation, 'mcp_server', serverId,
+              freshCurrent, conversation, undefined, undefined, latestReader);
+            await memory.confirm(freshCurrent, true);
+            await confirmDecisionAccess(activity, current, needsApproval, true);
+            return;
+          }
           await currentAuthority(actor.store, binding, turnToken.requester,
             computer.assistant, turnToken.conversation, 'mcp_server', serverId,
             fresh, conversation, undefined, undefined, readAuthorityHistory);
         }
         await fresh();
         mcpSender.setPermit(res, outcome, policy, raw, requestId,
-          confirmToolAccess, fresh.deadline, budget);
+          confirmToolAccess, policy.personal ? Infinity : fresh.deadline,
+          budget, undefined, release);
         res.setHeader('x-request-id', requestId);
         markRefusedDecision(res, outcome === 'allow');
         res.writeHead(outcome === 'allow' ? 200 : 403); res.end(JSON.stringify({ reason, requestId, approvalId })); return;

@@ -64,7 +64,7 @@ function prepareApproval(silo: string, bound: Binding,
     target: targetText,
     data: policy.args.canonical,
     destination: policy.destination,
-    account: 'No account · profile: none (credential-free connection)',
+    account: approvalAccount(policy),
     consequence: review.consequence,
   };
   const details = approvalReviewSchema.parse(reviewDetails);
@@ -74,7 +74,7 @@ function prepareApproval(silo: string, bound: Binding,
     toolRevision: policy.revision,
     schemaDigest: policy.schemaDigest,
     connectionId: bound.connectionId,
-    profile: 'none',
+    profile: policy.personal?.profileId ?? 'none',
     policySequence: policy.policy.policyRevision,
     ...(policy.dispatchBinding ? { dispatchBinding: policy.dispatchBinding } : {}),
     digestVersion: 'lossless-json-v1' as const,
@@ -84,6 +84,13 @@ function prepareApproval(silo: string, bound: Binding,
   const reviewDigest = hash(text);
   const approvalId = hash(JSON.stringify([silo, binding, reviewDigest]));
   return { binding, text, reviewDigest, approvalId, stepUp: review.stepUp, missingFields };
+}
+
+function approvalAccount(policy: Policy) {
+  if (policy.personal) {
+    return `Personal account · ${policy.personal.accountLabel} (profile: ${policy.personal.profileId})`;
+  }
+  return 'No account · profile: none (credential-free connection)';
 }
 
 function reviewTarget(args: Map<string, JsonValue>, targetArgument: string, missingFields: string[]) {

@@ -159,7 +159,7 @@ function invalidMembers(kind: string) {
     first.serverId = 'memory';
     first.connectionId = 'internal';
   }
-  if (kind === 'personal' || kind === 'company') {
+  if (kind === 'company') {
     first.accountMode = kind;
   }
   if (kind === 'duplicate tool') {
@@ -167,8 +167,20 @@ function invalidMembers(kind: string) {
   }
   refuses(record([first, second]));
 }
-it.each(['server', 'path', 'memory', 'personal', 'company', 'duplicate tool'])(
+it.each(['server', 'path', 'memory', 'company', 'duplicate tool'])(
   'refuses an invalid %s before returning any bytes', invalidMembers);
+
+function rendersPersonalWithoutCompany() {
+  const personal = entry('personal');
+  personal.accountMode = 'personal';
+  const rendered = record([personal]);
+  expect(route(rendered, 'mcp-personal-installed')).toBeDefined();
+  const company = entry('company');
+  company.accountMode = 'company';
+  refuses(record([company]));
+}
+it('renders a reviewed personal route and still refuses company routes',
+  rendersPersonalWithoutCompany);
 
 function unsafeName(name: string) {
   const unsafe = entry('alpha');

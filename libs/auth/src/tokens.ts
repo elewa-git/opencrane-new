@@ -6,7 +6,11 @@ import { createLocalJWKSet, exportJWK, importPKCS8, importSPKI, jwtVerify, SignJ
 
 const turnClaimsSchema = optionalProviderTurnBindingSchema.safeExtend({
   sharingClass: z.literal('shared_only').optional(),
+  personalSelections: z.array(z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u),
+    profileId: z.string().regex(/^[\w-]{1,200}$/u),
+    selectionRevision: z.int().positive() })).max(20).optional(),
 });
+export type PersonalTurnSelection = NonNullable<z.infer<typeof turnClaimsSchema>['personalSelections']>[number];
 
 const algorithm = 'ES256';
 export const computerTokenAudience = 'agentgateway';
@@ -233,9 +237,10 @@ export async function tokenIssuer(options: TokenOptions) {
       computerTokenId?: string; delegation?: string[];
       sharingClass?: 'shared_only' | undefined;
       providerId?: string | undefined; bindingSequence?: number | undefined;
+      personalSelections?: PersonalTurnSelection[] | undefined;
     }) {
       const claims = { providerId: input.providerId, bindingSequence: input.bindingSequence,
-        sharingClass: input.sharingClass };
+        sharingClass: input.sharingClass, personalSelections: input.personalSelections };
       const checkedClaims = turnClaimsSchema.parse(claims);
       const payload = {
         ...checkedClaims, typ: 'turn', silo: input.silo,

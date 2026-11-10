@@ -28,6 +28,7 @@ export function connectionServer(rows: StoredEvent[], connectionId: string,
     policy.connectionId === connectionId &&
     (policy.reviewRevision ?? 0) > (catalogue?.sequence ?? 0) && remote.success;
   return { available, endpointDigest, sequence: policy.sequence,
+    policyRevision: policy.policyRevision,
     registrationRevision: registration?.sequence, connectionId: policy.connectionId,
     expiresAt: Date.parse(policy.expiresAt ?? '') };
 }

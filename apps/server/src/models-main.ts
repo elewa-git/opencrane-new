@@ -15,7 +15,7 @@ import { connectEventStore, isEventStoreUnavailable } from '@opencrane/event-sto
 import { connectProjectionDb } from '@opencrane/projections';
 import { providerSecrets, BudgetActor, startDecision, startGateway, startEgress,
   ingestUsage, managedProviderCallsEnabled, mcpDispatchRouteSchema,
-  gatewayConfigurationWorker
+  gatewayConfigurationWorker, connectionCustodyFromFile, oauthConfigurationFromFile
 } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { z } from 'zod';
@@ -42,6 +42,16 @@ function trackEventStoreOutage(error: unknown, unavailableSince: number | undefi
   }
   if (Date.now() - unavailableSince > MAX_EVENT_STORE_OUTAGE_MS) throw error;
   return { unavailableSince, errorName: previousErrorName };
+}
+async function personalDispatchOptions(database: ReturnType<typeof connectProjectionDb>['db']) {
+  const custodyFile = process.env['CONNECTION_CUSTODY_FILE'];
+  const oauthFile = process.env['MCP_OAUTH_CONFIGURATION_FILE'];
+  if (!custodyFile || !oauthFile) return {};
+  const custody = await connectionCustodyFromFile(custodyFile);
+  if (!custody) return {};
+  const credentialDispatch = { db: database, custody,
+    loadConfiguration: oauthConfigurationFromFile(oauthFile) };
+  return { credentialDispatch };
 }
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => stop.abort());
 const db = connectProjectionDb(required('DATABASE_URL'), () => stop.abort());
@@ -149,8 +159,10 @@ try {
         undefined, { actor, secrets: verification?.secrets, managedCalls,
           qualification: readDeploymentQualification });
     }
+    const credentialOptions = await personalDispatchOptions(db.db);
     const dispatchOptions = { acknowledged, routes: mcpRoutes, requireLeader: requireDispatchLeader,
       requireCatalogue: watch.requireCurrent, childStart };
+    Object.assign(dispatchOptions, credentialOptions);
     const maintenanceDispatchOptions = { ...dispatchOptions, maintenancePrepare };
     function egressReceiptRefused() {
       logger.error('egress_receipt_refused');

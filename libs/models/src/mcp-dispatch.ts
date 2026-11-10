@@ -1,15 +1,19 @@
+/* eslint-disable max-lines */
 import { createLogger } from '@opencrane/observability';
 import { privateDecisionReason } from './decision-refusal.ts';
 import { prepareRemote, exchangeRemote, remoteEvidence, type RemoteNetwork } from './remote-https.ts';
 import { recordAdapterObservation, recordToolObservation } from './tool-dispatch.ts';
-import { losslessJson } from '@opencrane/events/lossless-json';
+import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import type { GatewayAcknowledgement } from './gateway-delivery.ts';
 import { requireGatewayAcknowledgement, requireGatewayPosition } from './gateway-admission.ts';
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { request, type IncomingMessage, type ServerResponse } from 'node:http';
 import { z } from 'zod';
 import type { ModelCall } from './state.ts';
-import type { EventStore } from '@opencrane/event-store';
+import { toolCredentialReleaseSchema } from '@opencrane/events';
+import { requireOnlyAdmissions } from './mcp-position.ts';
+import { sendPersonalCredential, type PersonalCredentialDispatch }
+  from './personal-mcp-dispatch.ts';
 import type { MemoryDispatch } from './memory-context.ts';
 import type { mcpPolicy } from './mcp.ts';
 import { envelope, type BudgetActor } from './actor.ts';
@@ -28,6 +32,7 @@ export interface McpDispatchOptions {
   acknowledged?: () => GatewayAcknowledgement | null;
   requireLeader: () => Promise<void>;
   requireCatalogue?: (serverId: string) => void;
+  credentialDispatch?: PersonalCredentialDispatch;
 }
 type Policy = Awaited<ReturnType<typeof mcpPolicy>> & { dispatchBinding?: string };
 interface MemorySend {
@@ -59,17 +64,47 @@ interface Permit {
   expiresAt: number;
   accessDeadline: number;
   confirmAccess: () => Promise<void>;
+  release?: z.infer<typeof toolCredentialReleaseSchema>;
 }
 type RemoteObserver = (outcome: 'responded' | 'outcome_unknown' | 'not_dispatched',
   deadline?: number) => Promise<void>;
 const remoteErrorSchema = z.strictObject({
   code: z.int(), message: z.string(), data: z.unknown().optional(),
 });
+const callerCredentialHeaders = ['authorization', 'proxy-authorization', 'cookie',
+  'x-api-key', 'x-opencrane-profile-id'];
+
+function hasCallerCredentialHeaders(req: IncomingMessage) {
+  for (const name of callerCredentialHeaders) {
+    if (req.headers[name] !== undefined) return true;
+  }
+  return false;
+}
 
 function digest(body: string) {
   const hash = createHash('sha256');
   hash.update(body);
   return hash.digest('hex');
+}
+
+function remoteAccountAvailable(policy: Policy, hasCredentialDispatch: boolean) {
+  if (policy.policy.accountMode === 'none') return true;
+  return policy.policy.accountMode === 'personal' && Boolean(policy.personal) &&
+    hasCredentialDispatch;
+}
+
+function requirePersonalRelease(policy: Policy,
+  release: z.infer<typeof toolCredentialReleaseSchema> | undefined) {
+  if (!policy.personal) return;
+  if (!release || release.profileId !== policy.personal.profileId ||
+      release.generation !== policy.personal.generation ||
+      release.selectionRevision !== policy.personal.selectionRevision) {
+    throw new Error('Personal tool unavailable');
+  }
+}
+
+function isBuiltInMemory(policy: Policy) {
+  return policy.policy.serverId === 'memory' && policy.policy.connectionId === 'server';
 }
 
 export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
@@ -96,8 +131,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
 
   function requireContract(policy: Policy) {
     // Keep built-in memory on this path. Other hosted images still need image admission.
-    const builtInMemory = policy.policy.serverId === 'memory' &&
-      policy.policy.connectionId === 'server';
+    const builtInMemory = isBuiltInMemory(policy);
     if (policy.serverKind === 'hosted' && !builtInMemory) {
       throw new Error('Hosted image admission unavailable');
     }
@@ -105,11 +139,13 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       return route.serverId === policy.policy.serverId &&
         route.connectionId === policy.policy.connectionId;
     }
-    if (options?.routes.some(configured) || builtInMemory) {
+    if (!policy.personal && (options?.routes.some(configured) || builtInMemory)) {
       return routeFor(policy.policy.serverId!, policy.policy.connectionId!);
     }
     if (!policy.gatewayBinding || !policy.locator || policy.serverKind !== 'remote' ||
-        policy.policy.accountMode !== 'none') throw new Error('Remote MCP unavailable');
+        !remoteAccountAvailable(policy, Boolean(options?.credentialDispatch))) {
+      throw new Error('Remote MCP unavailable');
+    }
     if (!options?.requireCatalogue) {
       throw new Error('MCP catalogue watch unavailable');
     }
@@ -122,21 +158,23 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
 
   function bindPolicy(policy: Policy) {
     const route = requireContract(policy);
-    const dispatchBinding = digest(JSON.stringify(route));
+    const dispatchBinding = digest(JSON.stringify([route, policy.personal]));
     return { ...policy, dispatchBinding };
   }
 
   function issue(policy: Policy, body: string, requestId: string,
     confirmAccess: () => Promise<void>, accessDeadline: number, budget: BudgetBinding,
-    memory?: MemorySend) {
+    memory?: MemorySend, release?: z.infer<typeof toolCredentialReleaseSchema>) {
     const route = requireContract(policy);
     if (policy.gatewayBinding) {
       requireGatewayAcknowledgement(policy.gatewayBinding, acknowledged);
     }
-    if (policy.dispatchBinding !== digest(JSON.stringify(route))) {
+    if (policy.dispatchBinding !== digest(JSON.stringify([route, policy.personal]))) {
       throw new Error('MCP backend changed during the decision');
     }
-    const expiresAt = Math.min(Date.now() + 2000, Date.parse(policy.policy.expiresAt!));
+    requirePersonalRelease(policy, release);
+    const lifetime = policy.personal ? 30_000 : 2000;
+    const expiresAt = Math.min(Date.now() + lifetime, Date.parse(policy.policy.expiresAt!));
     for (const [token, permit] of pending) {
       if (permit.expiresAt <= Date.now()) pending.delete(token);
     }
@@ -160,17 +198,20 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     const memoryBinding = { permitDigest: digest(token), backendGeneration: route.generation!,
       schemaDigest: binding.schemaDigest, policyRevision: binding.policyRevision };
     pending.set(token, { ...binding, confirmAccess, accessDeadline, memoryBinding, budget,
+      ...(release ? { release } : {}),
       ...(memory ? { memory } : {}) });
     return token;
   }
 
   function setPermit(res: ServerResponse, outcome: string, policy: Policy, body: string,
     requestId: string, confirmAccess: () => Promise<void>, accessDeadline: number,
-    budget: BudgetBinding, memory?: MemorySend) {
+    budget: BudgetBinding, memory?: MemorySend,
+    release?: z.infer<typeof toolCredentialReleaseSchema>) {
     if (outcome !== 'allow') {
       return;
     }
-    const permit = issue(policy, body, requestId, confirmAccess, accessDeadline, budget, memory);
+    const permit = issue(policy, body, requestId, confirmAccess, accessDeadline,
+      budget, memory, release);
     res.setHeader('x-opencrane-mcp-permit', permit);
   }
 
@@ -182,6 +223,9 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     if (!permit || permit.silo !== silo || permit.expiresAt <= Date.now() ||
         permit.bodyDigest !== digest(body) || req.method !== 'POST') {
       throw new Error('MCP permit refused');
+    }
+    if (permit.release && hasCallerCredentialHeaders(req)) {
+      throw new Error('MCP credential headers refused');
     }
     return permit;
   }
@@ -210,6 +254,32 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       memoryContext = await permit.memory.sign(permit.memoryBinding, permit.expiresAt);
     }
     await options!.requireLeader();
+    const observe = await admitCall(req, res, permit, route, position, deadline, startedAt);
+    if (target && permit.release) {
+      const dispatch = options?.credentialDispatch;
+      if (!dispatch || !observe) throw new Error('Personal tool unavailable');
+      async function sendAccess(material: string) {
+        await forwardRemote(target!, permit, body, res, options?.remoteNetwork ?? {},
+          observe!, material);
+      }
+      try {
+        await sendPersonalCredential(store, silo, dispatch, permit.budget.decisionId,
+          permit.release, deadline, permit.confirmAccess, sendAccess);
+      } catch (error) {
+        await reportRefusal(permit, observe, startedAt, 'credential_release', deadline, error);
+        throw error;
+      }
+      return;
+    }
+    if (target) {
+      await forwardRemote(target, permit, body, res, options?.remoteNetwork ?? {}, observe!);
+      return;
+    }
+    forward(route, permit, body, res, memoryContext);
+  }
+
+  async function admitCall(req: IncomingMessage, res: ServerResponse, permit: Permit,
+    route: Route, position: number, deadline: number, startedAt: number) {
     const dispatch = { callId: permit.requestId, decisionId: permit.budget.decisionId,
       bodyDigest: permit.bodyDigest, modelCall: permit.budget.modelCall,
       ...(permit.budget.rootId === undefined ? {} : { rootId: permit.budget.rootId }) };
@@ -254,11 +324,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       await reportRefusal(permit, observe, startedAt, stage, deadline, error);
       throw error;
     }
-    if (target) {
-      await forwardRemote(target, permit, body, res, options?.remoteNetwork ?? {}, observe!);
-      return;
-    }
-    forward(route, permit, body, res, memoryContext);
+    return observe;
   }
 
   async function reportRefusal(permit: Permit, observe: RemoteObserver | undefined,
@@ -404,22 +470,6 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
   return { handle, bindPolicy, setPermit, acknowledged };
 }
 
-async function requireOnlyAdmissions(store: EventStore, silo: string, subject: string,
-  fromPosition: number, toPosition: number, deadline: number) {
-  if (toPosition === fromPosition) return;
-  if (toPosition < fromPosition) throw new Error('MCP policy changed');
-  let checkedPosition = fromPosition;
-  // Read only the new rows. A policy, freshness or hold change must refuse the pass.
-  for await (const row of store.readStream(subject, fromPosition + 1, deadline)) {
-    if (row.sequence > toPosition) break;
-    if (row.event.silo !== silo || row.event.type !== 'mcp.dispatch_admitted') {
-      throw new Error('MCP policy changed');
-    }
-    checkedPosition = row.sequence;
-  }
-  if (checkedPosition !== toPosition) throw new Error('MCP position unavailable');
-}
-
 function requireFreshDispatch(req: IncomingMessage, res: ServerResponse,
   permit: Permit) {
   if (permit.expiresAt <= Date.now() || performance.now() >= permit.accessDeadline ||
@@ -468,20 +518,25 @@ function forward(route: Route, permit: Permit, body: string, res: ServerResponse
 }
 
 async function forwardRemote(target: Awaited<ReturnType<typeof prepareRemote>>, permit: Permit,
-  raw: string, res: ServerResponse, network: RemoteNetwork, observe: RemoteObserver) {
+  raw: string, res: ServerResponse, network: RemoteNetwork, observe: RemoteObserver,
+  material?: string) {
+  if (material !== undefined && !/^[\x21-\x7e]+$/u.test(material)) {
+    throw new Error('MCP credential refused');
+  }
   const controller = new AbortController();
   function timedOut() { controller.abort(); }
   const timer = setTimeout(timedOut, 30_000);
   const headers = { host: target.endpoint.host, 'content-type': 'application/json',
     accept: 'application/json', 'content-length': String(Buffer.byteLength(raw)),
     'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call',
-    'mcp-name': permit.toolName, 'x-opencrane-mcp-revision': permit.schemaDigest };
+    'mcp-name': permit.toolName, 'x-opencrane-mcp-revision': permit.schemaDigest,
+    ...(material === undefined ? {} : { authorization: `Bearer ${material}` }) };
   let reply: Awaited<ReturnType<typeof exchangeRemote>> | undefined;
   try {
     const received = await exchangeRemote(target, raw, headers, network,
       controller.signal, 1024 * 1024);
-    requireRemoteReply(received.data, raw);
-    reply = received;
+    const safeData = requireRemoteReply(received.data, received.contentType, raw, material);
+    reply = { ...received, data: safeData };
   } catch {
     // Keep every failed exchange unknown, including refusal before confirmed receipt.
   } finally { clearTimeout(timer); }
@@ -493,7 +548,7 @@ async function forwardRemote(target: Awaited<ReturnType<typeof prepareRemote>>, 
     return;
   }
   if (reply) {
-    res.writeHead(200, { 'content-type': reply.contentType });
+    res.writeHead(200, { 'content-type': 'application/json' });
     res.end(reply.data);
     return;
   }
@@ -501,9 +556,147 @@ async function forwardRemote(target: Awaited<ReturnType<typeof prepareRemote>>, 
   res.end();
 }
 
-function requireRemoteReply(data: Buffer, raw: string) {
+function credentialPatterns(material: string | undefined): string[] {
+  if (material === undefined) return [];
+  const patterns = new Set<string>();
+  for (const value of [material, `Bearer ${material}`]) {
+    patterns.add(value);
+    patterns.add(Buffer.from(value).toString('base64'));
+    patterns.add(Buffer.from(value).toString('base64url'));
+  }
+  // Check eight-character pieces because every longer copied part contains one.
+  for (let index = 0; index <= material.length - 8; index += 1) {
+    patterns.add(material.slice(index, index + 8));
+  }
+  return [...patterns];
+}
+
+function containsCredentialPattern(value: string, patterns: string[]): boolean {
+  for (const pattern of patterns) {
+    if (value.includes(pattern)) return true;
+  }
+  return false;
+}
+
+function decodeUrlEscape(match: string): string {
+  try {
+    return decodeURIComponent(match);
+  } catch {
+    return match;
+  }
+}
+
+function decodeUrlEscapes(value: string): string {
+  // Decode valid runs even when another part of the reply has a bad percent escape.
+  return value.replace(/(?:%[0-9a-f]{2})+/giu, decodeUrlEscape);
+}
+
+function containsEncodedCredential(value: string, patterns: string[]): boolean {
+  const encodedRuns = value.match(/[A-Za-z0-9+/_-]{8,}={0,2}/gu);
+  if (encodedRuns === null) return false;
+  for (const encoded of encodedRuns) {
+    const decoded = Buffer.from(encoded, 'base64url').toString('utf8');
+    if (containsCredentialPattern(decoded, patterns)) return true;
+  }
+  return false;
+}
+
+function containsCredentialText(value: string, patterns: string[]): boolean {
+  let candidate = value;
+  while (true) {
+    if (containsCredentialPattern(candidate, patterns) ||
+        containsEncodedCredential(candidate, patterns)) {
+      return true;
+    }
+    const decoded = decodeUrlEscapes(candidate);
+    if (decoded === candidate) return false;
+    candidate = decoded;
+  }
+}
+
+function collectStringValues(value: JsonValue, values: string[]): void {
+  if (value.value instanceof Map) {
+    for (const nested of value.value.values()) collectStringValues(nested, values);
+    return;
+  }
+  if (Array.isArray(value.value)) {
+    for (const nested of value.value) collectStringValues(nested, values);
+    return;
+  }
+  if (value.kind === 'string' && typeof value.value === 'string') {
+    values.push(value.value);
+  }
+}
+
+function collectTextBlocks(value: JsonValue, values: string[]): void {
+  if (value.value instanceof Map) {
+    for (const [key, nested] of value.value) {
+      if (key === 'text' && nested.kind === 'string' &&
+          typeof nested.value === 'string') {
+        values.push(nested.value);
+      } else {
+        collectTextBlocks(nested, values);
+      }
+    }
+    return;
+  }
+  if (Array.isArray(value.value)) {
+    for (const nested of value.value) collectTextBlocks(nested, values);
+  }
+}
+
+function containsCredential(value: JsonValue, patterns: string[]): boolean {
+  if (value.value instanceof Map) {
+    for (const [key, nested] of value.value) {
+      if (containsCredentialText(key, patterns) || containsCredential(nested, patterns)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  if (Array.isArray(value.value)) {
+    for (const nested of value.value) {
+      if (containsCredential(nested, patterns)) return true;
+    }
+    return false;
+  }
+  return typeof value.value === 'string' && containsCredentialText(value.value, patterns);
+}
+
+function safeRemoteError(sent: Map<string, JsonValue>, material: string | undefined): Buffer {
+  const originalId = sent.get('id')!;
+  const patterns = credentialPatterns(material);
+  let requestId: unknown = null;
+  // Keep a credential-bearing request id out of the refusal too.
+  if (!containsCredential(originalId, patterns)) {
+    requestId = JSON.parse(originalId.canonical);
+  }
+  const safeReply = { jsonrpc: '2.0', id: requestId,
+    error: { code: -32603, message: 'Remote tool error' } };
+  return Buffer.from(JSON.stringify(safeReply));
+}
+
+function replyContainsCredential(reply: JsonValue, contentType: string,
+  material: string | undefined): boolean {
+  const patterns = credentialPatterns(material);
+  const values: string[] = [];
+  const textBlocks: string[] = [];
+  collectStringValues(reply, values);
+  collectTextBlocks(reply, textBlocks);
+  return containsCredential(reply, patterns) ||
+    containsCredentialText(values.join(''), patterns) ||
+    containsCredentialText(values.join(' '), patterns) ||
+    containsCredentialText(textBlocks.join(''), patterns) ||
+    containsCredentialText(textBlocks.join(' '), patterns) ||
+    containsCredentialText(reply.canonical, patterns) ||
+    containsCredentialText(contentType, patterns);
+}
+
+function requireRemoteReply(data: Buffer, contentType: string, raw: string,
+  material?: string): Buffer {
   const text = new TextDecoder('utf-8', { fatal: true }).decode(data);
-  const reply = losslessJson(text).value;
+  const parsedReply = losslessJson(text);
+  const reply = parsedReply.value;
   const sent = losslessJson(raw).value;
   if (!(reply instanceof Map) || !(sent instanceof Map) ||
       reply.size !== 3 || reply.get('jsonrpc')?.value !== '2.0' ||
@@ -516,10 +709,17 @@ function requireRemoteReply(data: Buffer, raw: string) {
       (result ?? error)?.kind !== 'object') {
     throw new Error('Remote reply unavailable');
   }
+  // Check decoded JSON values and keys before any upstream text reaches the computer.
+  if (replyContainsCredential(parsedReply, contentType, material)) {
+    return safeRemoteError(sent, material);
+  }
   if (error) {
     const parsedError: unknown = JSON.parse(error.canonical);
     remoteErrorSchema.parse(parsedError);
+    // Return fixed error fields because the remote server may copy our bearer into them.
+    return safeRemoteError(sent, material);
   }
+  return data;
 }
 
 function requireRemoteRevision(saved: string | undefined) {

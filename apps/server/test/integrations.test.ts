@@ -1749,12 +1749,20 @@ async function refusesUnsafeEntry(field: string) {
   if (field === 'cost') delete state.tools[0]!.costCents;
   if (field === 'startup') state.startupReviewRequired = true;
   if (field === 'expiry') state.expiresAt = '2020-01-01T00:00:00Z';
-  if (field === 'personal') state.accountMode = 'personal';
   if (field === 'company') state.accountMode = 'company';
   expect(publicationEntry(state)).toBeNull();
 }
-it.each(['reviewed', 'cost', 'startup', 'expiry', 'personal', 'company'])(
+it.each(['reviewed', 'cost', 'startup', 'expiry', 'company'])(
   'publication entry refuses %s as its sole invalid field', refusesUnsafeEntry);
+
+async function allowsReviewedPersonalEntry() {
+  await publicationRequest();
+  await runner.run(mcpCatalogue);
+  const state = await catalogue.tools('test', 'odoo');
+  state.accountMode = 'personal';
+  expect(publicationEntry(state)).toMatchObject({ accountMode: 'personal' });
+}
+it('publication entry includes a reviewed personal server', allowsReviewedPersonalEntry);
 
 async function preparesHeldEntry() {
   await publicationRequest();

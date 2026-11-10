@@ -34,16 +34,18 @@ function digest(value: unknown) {
   return hash.digest('hex');
 }
 
-async function fixture() {
+async function fixture(settings: { serverId?: string; secrets?: Map<string, string>;
+  material?: string; profileId?: string } = {}) {
   counter += 1;
   const userId = `person${counter}`;
-  const serverId = `server${counter}`;
+  const serverId = settings.serverId ?? `server${counter}`;
+  const profileId = settings.profileId ?? 'oauth';
   const directory = await mkdtemp(`${tmpdir()}/credential-broker-`);
   async function removeDirectory() {
     await rm(directory, { recursive: true, force: true });
   }
   onTestFinished(removeDirectory);
-  const secrets = new Map<string, string>();
+  const secrets = settings.secrets ?? new Map<string, string>();
   const keyring = { currentKeyId: 'test', keys: { test: Buffer.alloc(32, 7) } };
   const custody = connectionCustody('http://127.0.0.1:1', 'custody', keyring, directory);
   function fetchSecret(url: string | URL | Request, options?: RequestInit) {
@@ -67,16 +69,16 @@ async function fixture() {
     return Promise.resolve(response);
   }
   const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(fetchSecret);
-  const contents = JSON.stringify({ access_token: 'synthetic-access',
+  const contents = JSON.stringify({ access_token: settings.material ?? 'synthetic-access',
     refresh_token: 'synthetic-refresh', id_token: 'synthetic-identity' });
   let stage: ConnectionStage;
   async function stageMaterial(input: ConnectionStage) {
     stage = input;
     return custody.stage(input, contents);
   }
-  const saved = await oauthSelectionFixture(nats, userId, serverId, 'oauth', stageMaterial);
+  const saved = await oauthSelectionFixture(nats, userId, serverId, profileId, stageMaterial);
   const selected = { action: 'select', userId, serverId, connectionId: 'installed',
-    profileId: 'oauth', profileRevision: saved.revision, expectedSequence: 0 };
+    profileId, profileRevision: saved.revision, expectedSequence: 0 };
   const selectionSubject = `connection-selection-${userId}-${serverId}`;
   const selection = envelope('test', selectionSubject, 'connection.selected', selected,
     digest(['test', selectionSubject, 'choice']));
@@ -89,10 +91,10 @@ async function fixture() {
     purpose: 'tool_call' as const, assistantId: 'assistant', computerId: 'computer',
     computerGeneration: 1, conversationId: 'conversation', turnId: 'turn', threadId: 'thread',
     toolName: 'read', generation: 1, argumentsDigest: 'a'.repeat(64),
-    requestId: userId, permitId: userId, leaseId: userId, profileId: 'oauth',
+    requestId: userId, permitId: userId, leaseId: userId, profileId,
     connectionId: 'installed', profileRevision: saved.revision,
     selectionRevision: await nats.store.head(selectionSubject),
-    policyRevision: await nats.store.head(`mcp-${serverId}`),
+    policyRevision: saved.configuration.policyRevision,
     accountDigest: digest(saved.saved.activation.account),
     scopeDigest: digest(saved.saved.activation.account.scopes), issuedAt, expiresAt: issuedAt + 30_000 };
   const decision = envelope('test', `decision-${release.requestId}`, 'decision.recorded', {
@@ -126,6 +128,24 @@ async function fixture() {
   return { ...saved, userId, release, decision, context, broker, sends, custody, db,
     stage: stage!, secrets, fetch, fetchSecret, selectionSubject, prepareAccess, send };
 }
+async function keepsConcurrentRequestersSeparate() {
+  const secrets = new Map<string, string>();
+  const alice = await fixture({ serverId: 'shared', secrets, material: 'alice-access' });
+  const bob = await fixture({ serverId: 'shared', secrets, material: 'bob-access',
+    profileId: 'bob-oauth' });
+  expect(secrets.size).toBe(2);
+  const aliceIdentity = { reference: alice.saved.secretRef.slice('secret:'.length),
+    uid: alice.saved.activation.uid, resourceVersion: alice.saved.activation.resourceVersion };
+  expect(await alice.custody.readAccessMaterial(alice.stage, aliceIdentity)).toBe('alice-access');
+  const sends = await Promise.allSettled([alice.broker().send(), bob.broker().send()]);
+  expect(sends.map(result => result.status)).toEqual(['fulfilled', 'fulfilled']);
+  expect(alice.sends).toEqual(['alice-access']);
+  expect(bob.sends).toEqual(['bob-access']);
+  expect(await nats.store.head(`credential-${alice.userId}`)).toBeGreaterThan(0);
+  expect(await nats.store.head(`credential-${bob.userId}`)).toBeGreaterThan(0);
+}
+it('keeps two requesters on one server and their release audits separate',
+  keepsConcurrentRequestersSeparate);
 async function releasesOnlyAccessOnce() {
   const test = await fixture();
   const permission = vi.fn(test.prepareAccess);

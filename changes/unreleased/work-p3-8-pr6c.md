@@ -1,0 +1,4 @@
+- A verified personal account choice can make one reviewed, zero-cost MCP call after a saved credential release; changed access or account details refuse the call.
+- Personal tools reach the computer with accepted turn fields; calls stop after turn or computer changes, and upstream errors cannot echo private credentials.
+- A personal tool call also stops if a fact loaded into its turn is forgotten after its permit was issued.
+- A best-effort reply scan catches full or long continuous copies of a released personal credential; only reviewed, admin-approved tool servers receive personal credentials under a current Allow rule or approved Ask.

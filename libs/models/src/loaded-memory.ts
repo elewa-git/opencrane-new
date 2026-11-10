@@ -86,19 +86,20 @@ export async function prepareLoadedMemory(store: EventStore, binding: Binding | 
         scopes.keys(), [], deadline);
     }
     let rightsChecked = false;
-    async function confirm(fresh: Awaited<ReturnType<typeof authorityFence>>) {
+    async function confirm(fresh: Awaited<ReturnType<typeof authorityFence>>,
+      recheckRights = false) {
       if (references.length === 0) {
         await fresh();
         return;
       }
       try {
         if (!binding || !applied) throw new LoadedMemoryRefused();
-        if (!rightsChecked) {
+        if (!rightsChecked || recheckRights) {
           for (const scope of scopes.values()) {
             await loadedMemoryRights(store, binding, claims, scope.scopeId, fresh,
               conversation, applied, permissions);
           }
-          // Keep these grants on the original authority check for every later confirmation.
+          // Recheck grants when a later credential dispatch starts a new access check.
           rightsChecked = true;
         }
         await readScopeChanges(store, scopes.values(), fresh.deadline);

@@ -5012,7 +5012,30 @@ Release records prove authorisation, not upstream success. The personal broker a
 public API field; the separate company audit has its own strict release variant. Request
 context uses existing audited names and digests. Security rules and
 both authority test files remain unchanged. Tests use real NATS/PostgreSQL and the real
-custody adapter against a synthetic HTTP transport. Gateway/header integration and
+custody adapter against a synthetic HTTP transport. A recording HTTPS fixture now also
+checks the governed personal path. The models process needs both
+`CONNECTION_CUSTODY_FILE` and `MCP_OAUTH_CONFIGURATION_FILE` to enable it. The latter is
+a JSON object keyed by server id, reread on each use. The selected profile, current
+generation, scope, review and access bind the signed turn, approval and permit. A
+confirmed release
+append comes before the allowlisted outbound header. Caller cookies, alternate keys and
+profile headers do not reach the tool server. A missing audit or changed access sends
+nothing. Dispatch checks later turn and computer activity before reading the credential.
+It rechecks loaded memory references and current memory grants during the renewed
+two-second access check. A fact forgotten after permit issue refuses release.
+The gateway's reply scan is best effort. It checks decoded JSON keys and values,
+their joined text, text blocks, serialised JSON and the remote content type. It checks
+the full released access token and long continuous parts, including in base64 and
+URL-encoded text. A match returns a fixed JSON-RPC error with no upstream data. Other
+valid upstream JSON-RPC errors also return that fixed error. The gateway sets its own
+content type.
+
+The scan cannot recognise every copied credential. A remote server can arrange
+fragments so the scan does not see them together as one long piece. Those fragmented
+echoes are an accepted residual risk. The trust boundary is the reviewed,
+admin-approved tool server: only that server receives a personal credential, and
+only for a call with a current Allow rule or approved Ask.
+An uncertain HTTPS result stays unknown and cannot be resent. Company dispatch and
 fresh-install provider qualification remain NOT RUN.
 
 The company path uses `routine-company-release.ts` to check a frozen run, current

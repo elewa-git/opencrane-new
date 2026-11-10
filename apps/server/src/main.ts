@@ -1,4 +1,4 @@
-import { seedOwnership, providerSecrets } from '@opencrane/models';
+import { seedOwnership, providerSecrets, oauthConfigurationFromFile } from '@opencrane/models';
 import { tokenIssuer } from '@opencrane/auth';
 import { desktopConnection } from './computers/desktop.ts';
 import { storageClient } from './files/storage.ts';
@@ -90,9 +90,11 @@ if (chat && process.env['MINIO_CREDENTIALS_FILE']) {
   files = { ...chat, objects, scan };
 }
 const budgetDecisionUrl = process.env['MODEL_DECISION_URL'] ?? (process.env['NODE_ENV'] === 'development' ? 'http://127.0.0.1:43001' : undefined);
+const oauthFile = process.env['MCP_OAUTH_CONFIGURATION_FILE'];
 const bridgeOptions = chat ? Object.assign(chat, {
   ...(files ? { objects: files.objects, files } : {}),
   ...(catalogue ? { catalogue } : {}),
+  ...(oauthFile ? { loadOAuthConfiguration: oauthConfigurationFromFile(oauthFile) } : {}),
   ...(budgetDecisionUrl ? { childStartUrl: budgetDecisionUrl } : {}) }) : undefined;
 const closeBridges = bridgeOptions ? await startBridges(bridgeOptions,
   process.env['KUBECONFIG']!, process.env['KUBE_NAMESPACE']!,
@@ -123,6 +125,7 @@ const app = buildProductionServer(authConfig, {
   ...(realtime && events && modelDb ? { memberReads: {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,
     feed: realtime.feed, binding: realtime.binding,
+    ...(oauthFile ? { loadOAuthConfiguration: oauthConfigurationFromFile(oauthFile) } : {}),
   } } : {}),
   ...(realtime && events && modelDb ? { invitationEmail: {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,

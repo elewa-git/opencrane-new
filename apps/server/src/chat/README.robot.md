@@ -175,6 +175,12 @@ only new scope events. No fact is decrypted. A new load during confirmation refu
 cannot add unchecked references. Both return paths check the local caller after all waits.
 Established MemberAccessRefused takes priority over dependency failures.
 
+## Personal tool preparation
+
+Personal tool choices load before `turnMemoryCheck` starts its two-second access check.
+The signed turn token carries the chosen profile and choice revision. The tool offer
+contains only the fields accepted by the computer's turn parser.
+
 ## Recall dispatch after admission
 
 Qualified personal turns offer Recall, Remember, Correct and Forget from reviewed, free Allow policy

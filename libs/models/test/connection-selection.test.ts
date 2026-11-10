@@ -1071,7 +1071,8 @@ async function releaseFixture() {
     conversationId: test.userId, turnId: test.userId, threadId: 'thread',
     serverId: 'server', toolName: 'read', connectionId: 'installed', profileId: 'personal',
     generation: 1, profileRevision: test.created.sequence, selectionRevision: selection.sequence,
-    policyRevision: await nats.store.head('mcp-server'),
+    policyRevision: toolPolicyFromRows(
+      await history(nats.store, 'mcp-server', 'test')).policyRevision,
     argumentsDigest: 'a'.repeat(64), scopeDigest: releaseDigest([]), accountDigest: releaseDigest(null),
     issuedAt, expiresAt: issuedAt + 30_000 };
   const decision = envelope('test', `decision-${release.requestId}`, 'decision.recorded', {

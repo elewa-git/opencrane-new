@@ -6209,8 +6209,10 @@ receipt after later choices and broker deduplication expiry. No provider, custod
 wake, automatic selection or company fallback is added. HTTP tests use disposable services.
 Verified OAuth selection uses the optional trusted `memberReads.loadOAuthConfiguration`
 loader; without it OAuth selection refuses. Request bodies and receipt fields are unchanged.
-No runtime settings loader is installed by this slice. Credential use, company selection,
-UI and live qualification remain later.
+The runtime reads `MCP_OAUTH_CONFIGURATION_FILE` as a JSON object keyed by server id.
+It rereads the current settings for each choice and personal tool offer. A missing or
+changed record refuses use. No secret enters the offer. Company dispatch and live
+qualification remain NOT RUN.
 
 ## Company opt-in read (Part of #49; P3-8 PR 7e)
 
