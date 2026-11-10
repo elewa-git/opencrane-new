@@ -86,6 +86,11 @@ async function assistantAssignment(options: ChatOptions, memberId: string) {
   return { assistantId, subject, position, assigned, choice };
 }
 
+export async function welcomeAssistantAssigned(options: ChatOptions, memberId: string) {
+  const assignment = await assistantAssignment(options, memberId);
+  return assignment.assigned;
+}
+
 function checkStart(input: z.infer<typeof start>, history: History) {
   if (history.steps.length !== 4 || history.welcome) throw new SurveyConflict();
   if (input.variant === 'assistant' &&

@@ -28,13 +28,21 @@ function progress() {
     steps: [1, 2, 3, 4] }, approval: { revision: 2, revisionId: 'saved-revision' } };
 }
 
-async function serve(state, route) {
+async function serve(fixture, route) {
   const address = new URL(route.request().url());
   if (address.pathname === '/api/onboarding/welcome') {
-    if (state === 'denied') {
+    if (fixture.state === 'denied') {
       await route.fulfill({ status: 403, json: { status: 'refused' } });
+    } else if (route.request().method() === 'POST') {
+      fixture.started = true;
+      const request = route.request().postDataJSON();
+      await route.fulfill({ json: { status: 'confirmed', commandId: request.commandId,
+        operation: 'onboarding.welcome_started' } });
+    } else if (fixture.state === 'ONB-30' && !fixture.started) {
+      await route.fulfill({ json: { status: 'not_started', nextStep: null, answered: 0,
+        assistantAssigned: true } });
     } else {
-      await route.fulfill({ json: saved(state) });
+      await route.fulfill({ json: saved(fixture.state) });
     }
     return;
   }
@@ -66,12 +74,17 @@ function composerBottom(element) {
 }
 
 async function capture(browser, state, width) {
+  const fixture = { state, started: false };
+  const reducedMotion = state === 'ONB-32-RM' ? 'reduce' : 'no-preference';
   const page = await browser.newPage({ viewport: { width, height: width === 390 ? 844 : 900 },
-    reducedMotion: 'reduce' });
-  await page.route('**/*', serve.bind(null, state));
+    reducedMotion });
+  await page.route('**/*', serve.bind(null, fixture));
   try {
     const suffix = state === 'ONB-33' ? '?section=archived' : '';
     await page.goto(`${origin}/welcome${suffix}`);
+    if (state === 'ONB-30') {
+      await page.getByRole('button', { name: 'Continue with your assistant' }).click();
+    }
     const expected = expectedWords(state);
     await page.getByText(expected).waitFor();
     if (state === 'ONB-31') {

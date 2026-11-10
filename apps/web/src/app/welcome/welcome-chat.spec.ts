@@ -200,7 +200,7 @@ describe('saved welcome chat', () => {
     const screen = mount(() => reply(noAssistant));
     await show(screen, 'Start a direct or group chat');
     expect(screen.root.querySelector('a[href="/workspace/direct"]')).not.toBeNull();
-    expect(screen.root.querySelector('a[href="/workspace"]')).toBeNull();
+    expect(screen.root.querySelector('.completed-dock a[href="/workspace"]')).toBeNull();
     expect(screen.root.querySelector('textarea')).toBeNull();
   });
 });

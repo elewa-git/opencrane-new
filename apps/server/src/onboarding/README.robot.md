@@ -26,8 +26,11 @@ Only a later explicit approval changes the approved reference.
 See [apps/server/README.robot.md](../../README.robot.md) for the shared member
 guard, response codes and private key custody rules.
 
-`GET /api/onboarding/welcome` returns the saved variant, frozen references, next
-question, answer count and pending status. It checks membership after loading
+`GET /api/onboarding/welcome` returns `assistantAssigned` before a start. It
+checks the same `assistant.created` event as the start command, so a delayed
+computer projection cannot change the offered choice. Once started, it returns
+the saved variant, frozen references, next question, answer count and pending
+status. It checks membership after loading
 history and before opening an answer. `POST /api/onboarding/welcome` accepts
 `start` or `answer`. Start requires four survey steps. An assigned assistant
 also requires the exact approved persona revision. The server checks the

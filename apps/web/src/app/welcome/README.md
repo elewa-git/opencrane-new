@@ -39,9 +39,10 @@ flowchart LR
    A competing edit makes the screen read the latest version again.
 3. **Approval.** The screen sends one command. If the result is uncertain, it checks
    that same command. Confirmed approval shows the saved time and opens welcome.
-4. **Welcome.** A person chooses an assistant or no-assistant welcome. The screen
-   shows the server's saved question. It checks an uncertain answer by its original
-   command and waits for saved completion before closing the composer.
+4. **Welcome.** A person chooses the start that the server confirms is ready.
+   Returning to a saved question shows a welcome-back notice. The screen checks
+   an uncertain answer by its original command and shows the saved completion time
+   before closing the composer.
 
 ## How to run or test it
 

@@ -1,8 +1,27 @@
+<div class="welcome-shell">
+  <nav class="rail" aria-label="Sessions">
+    <div class="brand">▲ <strong>Open<span>Crane</span></strong></div>
+    <div class="rail-content">
+      <a href="/workspace">＋ New session</a>
+      @if (assistantAvailable()) {
+        <a class="ask-agent" href="/workspace">▲ Ask your agent</a>
+      }
+      <h2>Personal</h2>
+      <a class="current" href="/welcome" aria-current="page"># welcome</a>
+    </div>
+    <footer><a href="/org/integrations">⚙ Settings</a></footer>
+  </nav>
 <main class="welcome-page">
   <header class="topbar">
     <a href="/workspace/conversations" aria-label="Conversations">☰</a>
-    <strong># welcome</strong>
-    <span aria-hidden="true">◫</span>
+    <strong><span class="desktop-title">Welcome to OpenCrane</span>
+      <span class="phone-title"># welcome</span></strong>
+    @if (state() === 'completed') {
+      <span class="header-status">✓ Completed</span>
+      <span class="read-only-label">Read-only</span>
+    } @else if (state() === 'active') {
+      <span class="header-status">▲ Onboarding</span>
+    }
   </header>
   @if (state() === 'loading') {
     <p class="notice" role="status">Loading your saved welcome…</p>
@@ -39,6 +58,9 @@
     @if (welcome.status !== 'not_started') {
       <section class="transcript" aria-label="Saved welcome conversation">
         <h1 class="visually-hidden">Welcome conversation</h1>
+        @if (resumed()) {
+          <p class="resume-notice" role="status">Welcome back. Your saved welcome is ready to continue.</p>
+        }
         <div class="assistant-row">
           <span class="avatar" aria-hidden="true">▲</span>
           <div class="message">
@@ -59,16 +81,24 @@
             <span class="avatar" aria-hidden="true">▲</span>
             <div class="message">
               <strong>{{ welcome.variant === 'assistant' ? 'Your assistant' : 'OpenCrane' }}</strong>
+              <time [attr.datetime]="welcome.completedAt">
+                {{ welcome.completedAt | date:'HH:mm':'UTC' }}
+              </time>
               <p>{{ welcome.variant === 'assistant'
                 ? 'Your preferences are saved. You can start a new chat when you are ready.'
                 : 'Your welcome is saved. You can start a direct or group chat when you are ready.' }}</p>
             </div>
           </div>
-          <p class="crease" role="status">✓ Welcome complete</p>
+          <p class="crease" role="status">✓ Welcome complete ·
+            <time [attr.datetime]="welcome.completedAt">
+              {{ welcome.completedAt | date:'d MMM y, HH:mm':'UTC' }}
+            </time>
+          </p>
         }
       </section>
       @if (state() === 'active') {
         <form class="dock" (submit)="submit($event)">
+          <div class="composer-frame">
           @if (welcome.variant === 'assistant') {
             <label class="visually-hidden" for="welcome-answer">Your answer</label>
             <textarea id="welcome-answer" placeholder="Your answer"
@@ -79,6 +109,7 @@
           <button type="submit" [disabled]="welcome.variant === 'assistant' && !draft().trim()">
             {{ welcome.variant === 'assistant' ? 'Send answer' : 'Continue to workspace' }}
           </button>
+          </div>
         </form>
       } @else if (state() === 'saving') {
         <p class="dock" role="status">Saving your answer…</p>
@@ -107,3 +138,4 @@
     }
   }
 </main>
+</div>

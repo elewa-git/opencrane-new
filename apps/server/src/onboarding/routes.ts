@@ -8,7 +8,7 @@ import { requireMember, MemberRefusal, idSchema } from '../members/guard.ts';
 import { surveyCommand, SurveyConflict, SurveyUnknown } from './commands.ts';
 import { surveyHistory, savedCommand, decryptAnswers, decryptPersona,
   personaEvent, personaReceipt, surveyReceipt } from './history.ts';
-import { welcomeCommand, welcomeReceipt } from './welcome.ts';
+import { welcomeAssistantAssigned, welcomeCommand, welcomeReceipt } from './welcome.ts';
 import { welcomeScripts } from './script.ts';
 import { welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema } from '@opencrane/events';
 
@@ -45,11 +45,13 @@ export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, o
       if (request.routeOptions.url === '/api/onboarding/persona/revisions/:revisionId') {
         return await readRevision(request, reply, configured, memberId, history);
       }
+      const assistantAssigned = await readWelcomeAssignment(request, configured,
+        memberId, history);
       // Check membership again after slow content reads, before returning private text.
       const accessRequest = { memberId };
       await chatAccess(configured, accessRequest);
       if (request.routeOptions.url === '/api/onboarding/welcome') {
-        return readWelcome(configured, memberId, history);
+        return readWelcome(configured, memberId, history, assistantAssigned);
       }
       const special = await readSpecial(request, configured, memberId, history);
       if (special !== undefined) return special;
@@ -87,6 +89,11 @@ export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, o
 }
 
 type History = Awaited<ReturnType<typeof surveyHistory>>;
+async function readWelcomeAssignment(request: FastifyRequest, options: ChatOptions,
+  memberId: string, history: History): Promise<boolean | null> {
+  if (request.routeOptions.url !== '/api/onboarding/welcome' || history.welcome) return null;
+  return welcomeAssistantAssigned(options, memberId);
+}
 async function readSpecial(request: FastifyRequest, options: ChatOptions,
   memberId: string, history: History) {
   const path = request.routeOptions.url;
@@ -109,9 +116,11 @@ async function readSpecial(request: FastifyRequest, options: ChatOptions,
   }
   return undefined;
 }
-function readWelcome(options: ChatOptions, memberId: string, history: History) {
+function readWelcome(options: ChatOptions, memberId: string, history: History,
+  assistantAssigned: boolean | null) {
   const welcome = history.welcome;
-  if (!welcome) return { status: 'not_started', nextStep: null, answered: 0 };
+  if (!welcome) return { status: 'not_started', nextStep: null, answered: 0,
+    assistantAssigned };
   const start = welcomeStartedDataSchema.parse(welcome.start.event.data);
   const question = welcomeScripts[start.scriptVersion][start.variant];
   const answer = welcome.answers[0];

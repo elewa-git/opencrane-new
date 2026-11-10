@@ -32,9 +32,10 @@ Run `npm run visual:screen-p4-19-persona` for intercepted captures at both
 desktop and phone widths.
 
 `/welcome` reads `GET /api/onboarding/welcome`. A `not_started` result offers
-the assistant or no-assistant start according to `GET /api/chat`. Start reads
-`/api/onboarding` for
-the current survey generation, position and approval reference, then posts
+the assistant or no-assistant start from the event-backed `assistantAssigned`
+field on that same read. It does not use the chat projection. Start reads
+`/api/onboarding` for the current survey generation, position and approval
+reference, then posts
 `operation: start`. Active welcome uses the saved script version, question,
 step and position. The welcome read does not include generation, so the page
 reads `/api/onboarding` to obtain it before an answer. One answer POST uses
@@ -43,7 +44,11 @@ reloads saved progress and requires review. An unknown reply keeps the command
 id and only checks `/api/personal/changes/:commandId`. Completion is shown only
 after a saved `completed` read. The composer is absent in pending and completed
 states. A 401/403 clears saved private words and aborts late replies. The
-archived display uses `/welcome?section=archived` and remains read-only; list
+active question shows a welcome-back notice after a fresh page load. A start
+confirmed in the current page opens the question without that notice. Completed
+confirmation and crease show the saved `completedAt` time. The desktop page
+includes the session rail; the phone composer has one frame around the text and
+action. The archived display uses `/welcome?section=archived` and remains read-only; list
 navigation belongs to the next chat-list change. No browser storage is used.
 
 Run `npm run visual:screen-p4-20-welcome` for intercepted desktop and phone

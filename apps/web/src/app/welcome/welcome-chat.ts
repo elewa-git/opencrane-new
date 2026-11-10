@@ -4,7 +4,8 @@ import { DatePipe } from '@angular/common';
 import { z } from 'zod';
 
 const savedWelcomeSchema = z.discriminatedUnion('status', [
-  z.object({ status: z.literal('not_started'), nextStep: z.null(), answered: z.literal(0) }),
+  z.object({ status: z.literal('not_started'), nextStep: z.null(), answered: z.literal(0),
+    assistantAssigned: z.boolean() }),
   z.object({
     status: z.enum(['welcome_active', 'completion_pending', 'completed']),
     welcomeId: z.string(), scriptVersion: z.literal('welcome-v1'),
@@ -42,6 +43,8 @@ export class WelcomeChat implements OnDestroy {
   protected readonly draft = signal('');
   protected readonly archived = new URLSearchParams(location.search).get('section') === 'archived';
   protected readonly assigned = signal<boolean | null>(null);
+  protected readonly resumed = signal(false);
+  private startedHere = false;
   private request = new AbortController();
   private commandId: string | null = null;
   private operation: 'start' | 'answer' | null = null;
@@ -110,7 +113,7 @@ export class WelcomeChat implements OnDestroy {
 
   private async loadExtra(saved: SavedWelcome, request: AbortController): Promise<void> {
     if (saved.status === 'welcome_active') await this.loadGeneration(saved, request);
-    if (saved.status === 'not_started') await this.loadAssignment(request);
+    if (saved.status === 'not_started') this.assigned.set(saved.assistantAssigned);
   }
 
   private async loadGeneration(saved: SavedWelcome,
@@ -127,22 +130,20 @@ export class WelcomeChat implements OnDestroy {
     if (!request.signal.aborted) this.generation = progress.survey.generation;
   }
 
-  private async loadAssignment(request: AbortController): Promise<void> {
-    const response = await fetch('/api/chat', { cache: 'no-store', signal: request.signal });
-    if (this.denied(response.status) || request.signal.aborted) return;
-    if (!response.ok) throw new Error('Assignment unavailable');
-    const assignmentSchema = z.object({ assistantId: z.string().nullable() });
-    const assignment = assignmentSchema.parse(await response.json());
-    if (!request.signal.aborted) this.assigned.set(assignment.assistantId !== null);
-  }
-
   private showSaved(saved: SavedWelcome, changed: boolean): void {
     this.saved.set(saved);
+    this.resumed.set(saved.status === 'welcome_active' && !this.startedHere);
     if (changed) this.state.set('changed');
     else if (saved.status === 'not_started') this.state.set('start');
     else if (saved.status === 'completed') this.state.set('completed');
     else if (saved.status === 'completion_pending') this.state.set('pending');
     else this.state.set('active');
+  }
+
+  protected assistantAvailable(): boolean {
+    const welcome = this.saved();
+    if (welcome?.status === 'not_started') return welcome.assistantAssigned;
+    return welcome?.variant === 'assistant';
   }
 
   protected updateDraft(event: Event): void {
@@ -232,6 +233,7 @@ export class WelcomeChat implements OnDestroy {
       this.state.set('unknown');
       return;
     }
+    if (this.operation === 'start') this.startedHere = true;
     this.commandId = null;
     this.operation = null;
     await this.load();
