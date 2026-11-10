@@ -29,7 +29,8 @@ flowchart LR
 - Link to unfinished survey or persona review before offering a welcome start.
 - Show the saved welcome question and answer, then a read-only completion.
 - Open the completed welcome from Recent or Archived and save its archive choice.
-- Let people without an assistant open an unsent colleague or group draft.
+- Show a centred completion notice when a welcome began without an assistant,
+  then let the person open an unsent colleague or group draft.
 - Clear private text when access ends.
 - Not built yet: persona editing, replacement and survey restart from the review screen.
 
@@ -50,6 +51,7 @@ flowchart LR
    before closing the composer.
 5. **Saved welcome.** Recent and Archived open the same completed page.
    Archive and restore move its list row without changing the saved answer.
+   A welcome completed without an assistant shows its own notice and human chat actions.
 
 ## How to run or test it
 

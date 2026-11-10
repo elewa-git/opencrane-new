@@ -74,6 +74,16 @@
     </section>
   } @else if (saved(); as welcome) {
     @if (welcome.status !== 'not_started') {
+      @if (state() === 'completed' && welcome.variant === 'no_assistant') {
+        <section class="no-assistant-notice" aria-label="Completed welcome">
+          <p>No personal assistant assigned yet. You can chat with colleagues now.</p>
+          <p class="crease" role="status">✓ Welcome complete ·
+            <time [attr.datetime]="welcome.completedAt">
+              {{ welcome.completedAt | date:'d MMM y, HH:mm':'UTC' }}
+            </time>
+          </p>
+        </section>
+      } @else {
       <section class="transcript" aria-label="Saved welcome conversation">
         <h1 class="visually-hidden">Welcome conversation</h1>
         @if (resumed()) {
@@ -114,6 +124,7 @@
           </p>
         }
       </section>
+      }
       @if (state() === 'active') {
         <form class="dock" (submit)="submit($event)">
           <div class="composer-frame">

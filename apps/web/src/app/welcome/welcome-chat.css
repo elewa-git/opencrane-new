@@ -31,6 +31,10 @@
 .notice { width: min(100%, 640px); margin: 48px auto; padding: 24px; }
 .transcript { width: min(100%, 800px); margin: 0 auto; padding: 20px 18px;
   flex: 1; overflow-wrap: anywhere; }
+.no-assistant-notice { box-sizing: border-box; width: min(100%, 800px); margin: auto auto 0;
+  padding: 24px 18px; text-align: center; }
+.no-assistant-notice > p:first-child { margin: 0; color: #425054; }
+.no-assistant-notice .crease { margin: 28px 0 0; }
 .resume-notice { margin: 8px 0 28px; padding: 12px 16px; border: 1px solid #c7eaf0;
   border-radius: 10px; background: #eefafc; color: #315960; }
 .assistant-row { display: flex; gap: 14px; margin: 0 0 30px; }
@@ -64,9 +68,10 @@ button:disabled { opacity: .45; cursor: default; }
 .primary, .notice a { display: flex; align-items: center; justify-content: center;
   text-decoration: none; }
 .completed-dock { width: min(780px, calc(100% - 36px)); margin: auto auto 18px;
-  display: flex; align-items: center; gap: 16px; border: 1px dashed #ced8d9;
+  box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 16px;
+  border: 1px dashed #ced8d9;
   border-radius: 14px; }
-.completed-dock p { flex: 1; margin: 0; overflow-wrap: anywhere; }
+.completed-dock p { flex: 1 1 240px; margin: 0; overflow-wrap: anywhere; }
 .completed-dock .primary { min-width: 180px; }
 .secondary { display: flex; align-items: center; justify-content: center;
   min-height: 44px; padding: 10px 16px; border: 1px solid #879294;

@@ -12,39 +12,42 @@ const answer = 'A concise comparison of our two suppliers.';
 const startedAt = '2026-10-14T09:02:00.000Z';
 const completedAt = '2026-10-14T09:03:00.000Z';
 
-function listRow(archived) {
-  return { kind: 'welcome', welcomeId: 'saved-welcome', route: '/welcome',
-    title: 'Welcome', createdAt: startedAt, activityAt: completedAt, unread: 0,
-    archived, archivePosition: archived ? 12 : 13 };
+function listRow(fixture) {
+  return { kind: 'welcome', welcomeId: fixture.welcome.welcomeId, route: '/welcome',
+    title: 'Welcome', createdAt: fixture.welcome.startedAt,
+    activityAt: fixture.welcome.completedAt, unread: 0,
+    archived: fixture.archived, archivePosition: fixture.archived ? 12 : 13 };
 }
 
-function savedWelcome(noAssistant) {
-  return { status: 'completed', welcomeId: 'saved-welcome', scriptVersion: 'welcome-v1',
-    variant: noAssistant ? 'no_assistant' : 'assistant',
-    revision: noAssistant ? null : 2, revisionId: noAssistant ? null : 'saved-revision',
-    assistantId: noAssistant ? null : 'assistant-one',
-    assignmentStatus: noAssistant ? 'not_requested' : 'assigned',
-    startedAt, completedAt, position: 13, answered: 1, nextStep: null,
-    question: null, answer: noAssistant ? 'Continue to workspace' : answer };
-}
+const assistantWelcome = { status: 'completed', welcomeId: 'assistant-welcome',
+  scriptVersion: 'welcome-v1', variant: 'assistant', revision: 2,
+  revisionId: 'saved-revision', assistantId: 'assistant-one', assignmentStatus: 'assigned',
+  startedAt, completedAt, position: 13, answered: 1, nextStep: null,
+  question: null, answer };
+
+const noAssistantWelcome = { status: 'completed', welcomeId: 'no-assistant-welcome',
+  scriptVersion: 'welcome-v1', variant: 'no_assistant', revision: null,
+  revisionId: null, assistantId: null, assignmentStatus: 'not_requested',
+  startedAt, completedAt, position: 13, answered: 1, nextStep: null,
+  question: null, answer: 'Continue to workspace' };
 
 async function serve(fixture, route) {
   const address = new URL(route.request().url());
   if (address.pathname === '/api/onboarding/welcome') {
-    await route.fulfill({ json: savedWelcome(fixture.noAssistant) });
+    await route.fulfill({ json: fixture.welcome });
     return;
   }
   if (address.pathname === '/api/conversations') {
     const section = address.searchParams.get('section') ?? 'recent';
     const matches = address.searchParams.get('q')?.toLowerCase() ?? '';
     const selected = section === (fixture.archived ? 'archived' : 'recent');
-    const rows = selected && 'welcome'.includes(matches) ? [listRow(fixture.archived)] : [];
+    const rows = selected && 'welcome'.includes(matches) ? [listRow(fixture)] : [];
     await route.fulfill({ json: { rows, nextCursor: null } });
     return;
   }
   if (address.pathname === '/api/onboarding/welcome/archive') {
     const body = route.request().postDataJSON();
-    assert.equal(body.welcomeId, 'saved-welcome');
+    assert.equal(body.welcomeId, fixture.welcome.welcomeId);
     fixture.archived = body.archived;
     await route.fulfill({ json: { status: 'confirmed', commandId: body.commandId,
       operation: 'onboarding.welcome_archive_set', position: 13,
@@ -72,8 +75,19 @@ async function checkPage(page, label, width) {
   await page.screenshot({ path: `${output}/${label}-${width}.png`, fullPage: true });
 }
 
+async function checkNoAssistantLayout(page, width) {
+  const notice = await page.locator('.no-assistant-notice').boundingBox();
+  const dock = await page.locator('.completed-dock').boundingBox();
+  assert(notice && dock, 'No-assistant completion is missing');
+  assert(notice.width >= 300, `No-assistant notice is too narrow at ${width}px`);
+  assert(notice.x >= 0 && notice.x + notice.width <= width,
+    `No-assistant notice passes the viewport at ${width}px`);
+  assert(dock.y + dock.height <= (width === 390 ? 844 : 900),
+    `No-assistant dock passes the viewport at ${width}px`);
+}
+
 async function capture(browser, width) {
-  const fixture = { archived: true, noAssistant: false };
+  const fixture = { archived: true, welcome: assistantWelcome };
   const page = await browser.newPage({ viewport: { width, height: width === 390 ? 844 : 900 },
     reducedMotion: 'reduce' });
   await page.route('**/*', serve.bind(null, fixture));
@@ -96,20 +110,30 @@ async function capture(browser, width) {
     await checkPage(page, 'archived-welcome', width);
     await page.getByRole('button', { name: 'Restore to list' }).click();
     await page.getByRole('button', { name: 'Archive welcome' }).waitFor();
+    await page.getByText(answer).waitFor();
     await checkPage(page, 'restored-welcome', width);
     await page.getByRole('link', { name: 'Back to list' }).first().click();
     await page.getByRole('link', { name: /Completed welcome · Read-only Welcome/ }).waitFor();
     await checkPage(page, 'restored-list', width);
-
-    fixture.noAssistant = true;
-    await page.goto(`${origin}/welcome`);
-    await page.getByRole('link', { name: 'Message a colleague' }).waitFor();
-    await page.getByRole('link', { name: 'Message a group' }).waitFor();
-    assert.equal(await page.getByText(answer).count(), 0);
-    assert.equal(await page.locator('textarea').count(), 0);
-    await checkPage(page, 'no-assistant-welcome', width);
   } finally {
     await page.close();
+  }
+
+  const otherFixture = { archived: false, welcome: noAssistantWelcome };
+  const otherPage = await browser.newPage({ viewport: { width, height: width === 390 ? 844 : 900 },
+    reducedMotion: 'reduce' });
+  await otherPage.route('**/*', serve.bind(null, otherFixture));
+  try {
+    await otherPage.goto(`${origin}/welcome`);
+    await otherPage.getByText('No personal assistant assigned yet').waitFor();
+    await otherPage.getByRole('link', { name: 'Message a colleague' }).waitFor();
+    await otherPage.getByRole('link', { name: 'Message a group' }).waitFor();
+    assert.equal(await otherPage.getByText(answer).count(), 0);
+    assert.equal(await otherPage.locator('textarea').count(), 0);
+    await checkNoAssistantLayout(otherPage, width);
+    await checkPage(otherPage, 'no-assistant-welcome', width);
+  } finally {
+    await otherPage.close();
   }
 }
 

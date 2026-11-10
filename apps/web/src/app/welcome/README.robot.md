@@ -60,7 +60,9 @@ checks `/api/personal/changes/:commandId` with the original id; the POST is neve
 repeated. A confirmed receipt is followed by a list read at or after its saved
 position. A 401 or 403 clears the row and private welcome words. The completed
 no-assistant page links to the existing unsent colleague and group draft picker
-at `/workspace/direct`. No browser storage is used.
+at `/workspace/direct`. It shows a centred notice and saved completion time
+instead of the question and answer transcript. The saved variant controls that
+view even if an assistant is assigned later. No browser storage is used.
 
 Run `npm run visual:screen-p4-20-welcome` for intercepted desktop and phone
 captures. It does not start the development stack.
