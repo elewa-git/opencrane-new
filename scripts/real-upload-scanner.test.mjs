@@ -24,7 +24,28 @@ async function scannerRefused(action) {
   await expect(action).rejects.not.toHaveProperty('cause');
 }
 
-realTest('admits clean bytes once and refuses real EICAR bytes', async () => {
+function scheduleDelay(resolve) {
+  setTimeout(resolve, 1100);
+}
+
+async function waitForClockToAdvance() {
+  await new Promise(scheduleDelay);
+}
+
+async function testCleanUploadAfterScannerStartup() {
+  const fixture = await startRealUploadFixture(inputs);
+  try {
+    await waitForClockToAdvance();
+    const uploaded = await fixture.upload('silo-one', 'after-startup', Buffer.from('Meeting at ten.'));
+    expect(uploaded.status).toBe('appended');
+    expect(fixture.savedFiles('silo-one')).toHaveLength(1);
+    expect(await fixture.savedEvents('silo-one', 'file.uploaded')).toHaveLength(1);
+  } finally {
+    await fixture.stop();
+  }
+}
+
+async function testCleanAndInfectedUploads() {
   const fixture = await startRealUploadFixture(inputs);
   try {
     const clean = await fixture.upload('silo-one', 'clean', Buffer.from('Meeting at ten.'));
@@ -89,46 +110,59 @@ realTest('admits clean bytes once and refuses real EICAR bytes', async () => {
   } finally {
     await fixture.stop();
   }
-}, 900_000);
+}
+
+const longTestOptions = { timeout: 900_000 };
+realTest('accepts a caller pass after scanner startup time advances',
+  testCleanUploadAfterScannerStartup, longTestOptions);
+realTest('admits clean bytes once and refuses real EICAR bytes', testCleanAndInfectedUploads,
+  longTestOptions);
+
+async function testScannerFaultsAndRecovery() {
+  expect(replacement.approvedSha).not.toBe(inputs.approvedSha);
+  const fixture = await startRealUploadFixture(inputs);
+  try {
+    const original = await fixture.upload('silo-one', 'original', Buffer.from('Original'));
+    expect(original.status).toBe('appended');
+    const oldProof = fixture.lastCleanProof();
+    const settings = fixture.settings.get('silo-one');
+    const caFile = settings.caFile;
+    const issuer = settings.issuer;
+
+    settings.caFile = settings.privateKeyPath;
+    await scannerRefused(fixture.upload('silo-one', 'wrong-tls', Buffer.from('TLS')));
+    settings.caFile = caFile;
+
+    settings.issuer = 'https://wrong-issuer.invalid';
+    await scannerRefused(fixture.upload('silo-one', 'bad-token', Buffer.from('Token')));
+    settings.issuer = issuer;
+
+    fixture.expireDatabase();
+    const filesBeforeExpiry = fixture.savedFiles('silo-one').length;
+    const uploadedEventsBeforeExpiry = await fixture.savedEvents('silo-one', 'file.uploaded');
+    await scannerRefused(fixture.upload('silo-one', 'old-db', Buffer.from('Database')));
+    expect(fixture.savedFiles('silo-one')).toHaveLength(filesBeforeExpiry);
+    expect(await fixture.savedEvents('silo-one', 'file.uploaded'))
+      .toHaveLength(uploadedEventsBeforeExpiry.length);
+    await fixture.stopScanner();
+    await scannerRefused(fixture.upload('silo-one', 'outage', Buffer.from('Outage')));
+    expect(fixture.savedFiles('silo-one')).toHaveLength(1);
+    expect(await fixture.savedEvents('silo-one', 'file.uploaded')).toHaveLength(1);
+
+    await fixture.restart(replacement);
+    await scannerRefused(fixture.replayProof(
+      oldProof, 'silo-one', 'old-proof', Buffer.from('Original'),
+    ));
+    const recovered = await fixture.upload('silo-one', 'recovered', Buffer.from('Recovered'));
+    expect(recovered.status).toBe('appended');
+    expect(fixture.lastCleanProof().manifestDigest)
+      .toBe(`sha256:${replacement.approvedSha}`);
+    expect(fixture.savedFiles('silo-one')).toHaveLength(2);
+    expect(await fixture.savedEvents('silo-one', 'file.uploaded')).toHaveLength(2);
+  } finally {
+    await fixture.stop();
+  }
+}
 
 recoveryTest('refuses scanner faults and recovers only with another reviewed database',
-  async () => {
-    expect(replacement.approvedSha).not.toBe(inputs.approvedSha);
-    const fixture = await startRealUploadFixture(inputs);
-    try {
-      const original = await fixture.upload('silo-one', 'original', Buffer.from('Original'));
-      expect(original.status).toBe('appended');
-      const oldProof = fixture.lastCleanProof();
-      const settings = fixture.settings.get('silo-one');
-      const caFile = settings.caFile;
-      const issuer = settings.issuer;
-
-      settings.caFile = settings.privateKeyPath;
-      await scannerRefused(fixture.upload('silo-one', 'wrong-tls', Buffer.from('TLS')));
-      settings.caFile = caFile;
-
-      settings.issuer = 'https://wrong-issuer.invalid';
-      await scannerRefused(fixture.upload('silo-one', 'bad-token', Buffer.from('Token')));
-      settings.issuer = issuer;
-
-      fixture.expireDatabase();
-      await scannerRefused(fixture.upload('silo-one', 'old-db', Buffer.from('Database')));
-      await fixture.stopScanner();
-      await scannerRefused(fixture.upload('silo-one', 'outage', Buffer.from('Outage')));
-      expect(fixture.savedFiles('silo-one')).toHaveLength(1);
-      expect(await fixture.savedEvents('silo-one', 'file.uploaded')).toHaveLength(1);
-
-      await fixture.restart(replacement);
-      await scannerRefused(fixture.replayProof(
-        oldProof, 'silo-one', 'old-proof', Buffer.from('Original'),
-      ));
-      const recovered = await fixture.upload('silo-one', 'recovered', Buffer.from('Recovered'));
-      expect(recovered.status).toBe('appended');
-      expect(fixture.lastCleanProof().manifestDigest)
-        .toBe(`sha256:${replacement.approvedSha}`);
-      expect(fixture.savedFiles('silo-one')).toHaveLength(2);
-      expect(await fixture.savedEvents('silo-one', 'file.uploaded')).toHaveLength(2);
-    } finally {
-      await fixture.stop();
-    }
-  }, 900_000);
+  testScannerFaultsAndRecovery, longTestOptions);
