@@ -18,7 +18,6 @@ function page(rows: unknown[], next: string | null = null) {
 
 function view(): { fixture: ReturnType<typeof TestBed.createComponent<MyTools>>;
   element: HTMLElement } {
-  TestBed.configureTestingModule({ imports: [MyTools] });
   const fixture = TestBed.createComponent(MyTools);
   fixture.componentRef.setInput('serverId', 'odoo');
   fixture.detectChanges();
@@ -29,6 +28,8 @@ function view(): { fixture: ReturnType<typeof TestBed.createComponent<MyTools>>;
 
 describe('My tools', () => {
   beforeEach(() => {
+    TestBed.configureTestingModule({ imports: [MyTools] });
+    sessionStorage.clear();
     Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
       configurable: true,
       value(this: HTMLDialogElement) { this.setAttribute('open', ''); },
@@ -40,6 +41,7 @@ describe('My tools', () => {
   });
 
   afterEach(() => {
+    sessionStorage.clear();
     vi.restoreAllMocks();
     TestBed.resetTestingModule();
   });
@@ -156,6 +158,117 @@ describe('My tools', () => {
     expect(requests.some((request) => request.url.endsWith(`/changes/${changeRef}`)))
       .toBe(true);
     expect(element.querySelector('.danger-outline')).toBeNull();
+  });
+
+  it('keeps the last chosen profile when detail replies arrive in reverse order', async () => {
+    const second = { ...saved, profileId: 'bea', selected: false };
+    let finishAlex!: (value: Response) => void;
+    let finishBea!: (value: Response) => void;
+    let postedUrl = '';
+    function serve(url: string | URL | Request): Promise<Response> {
+      const address = url instanceof Request ? url.url : url.toString();
+      if (address.endsWith('/alex')) {
+        return new Promise<Response>((resolve) => { finishAlex = resolve; });
+      }
+      if (address.endsWith('/bea')) {
+        return new Promise<Response>((resolve) => { finishBea = resolve; });
+      }
+      if (address.endsWith('/revoke')) {
+        postedUrl = address;
+        return response({}, 503);
+      }
+      return response(page([saved, second]));
+    }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(serve);
+    const { fixture, element } = view();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.querySelectorAll('.profile')).toHaveLength(2);
+    });
+    const profiles = element.querySelectorAll<HTMLButtonElement>('.profile');
+    profiles[0]?.click();
+    profiles[1]?.click();
+    finishBea(new Response(JSON.stringify(second)));
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.querySelector('.detail h2')?.textContent).toContain('bea');
+    });
+    finishAlex(new Response(JSON.stringify(saved)));
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+    fixture.detectChanges();
+    expect(element.querySelector('.detail h2')?.textContent).toContain('bea');
+    element.querySelector<HTMLButtonElement>('.danger-outline')?.click();
+    element.querySelector<HTMLButtonElement>('.danger')?.click();
+    expect(postedUrl).toContain('/bea/revoke');
+  });
+
+  it('keeps an unknown revoke reference across navigation for a status check', async () => {
+    const requests: string[] = [];
+    function serve(url: string | URL | Request): Promise<Response> {
+      const address = url instanceof Request ? url.url : url.toString();
+      requests.push(address);
+      if (address.endsWith('/revoke')) return response({}, 503);
+      if (address.includes('/changes/')) return response({}, 404);
+      if (address.endsWith('/alex')) return response(saved);
+      return response(page([saved]));
+    }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(serve);
+    const first = view();
+    await vi.waitFor(() => {
+      first.fixture.detectChanges();
+      expect(first.element.querySelector('.profile')).not.toBeNull();
+    });
+    first.element.querySelector<HTMLButtonElement>('.profile')?.click();
+    await vi.waitFor(() => {
+      first.fixture.detectChanges();
+      expect(first.element.querySelector('.danger-outline')).not.toBeNull();
+    });
+    first.element.querySelector<HTMLButtonElement>('.danger-outline')?.click();
+    first.element.querySelector<HTMLButtonElement>('.danger')?.click();
+    await vi.waitFor(() => {
+      first.fixture.detectChanges();
+      expect(first.element.textContent).toContain('Outcome unknown');
+    });
+    const originalReference = first.element.querySelector('.notice code')?.textContent?.trim();
+    expect(originalReference).toBeTruthy();
+    first.fixture.destroy();
+    const second = view();
+    await vi.waitFor(() => {
+      second.fixture.detectChanges();
+      expect(second.element.querySelector('.profile')).not.toBeNull();
+    });
+    expect(second.element.textContent).toContain(originalReference);
+    second.element.querySelector<HTMLButtonElement>('.notice button')?.click();
+    await vi.waitFor(() => {
+      second.fixture.detectChanges();
+      expect(second.element.textContent).toContain('Still unknown');
+    });
+    expect(requests.some((address) =>
+      address.endsWith(`/alex/changes/${originalReference}`))).toBe(true);
+    expect(requests.filter((address) => address.endsWith('/revoke'))).toHaveLength(1);
+  });
+
+  it('names the safe integration and profile identifiers in the revoke review', async () => {
+    function serve(url: string | URL | Request): Promise<Response> {
+      const address = url instanceof Request ? url.url : url.toString();
+      if (address.endsWith('/alex')) return response(saved);
+      return response(page([saved]));
+    }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(serve);
+    const { fixture, element } = view();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.querySelector('.profile')).not.toBeNull();
+    });
+    element.querySelector<HTMLButtonElement>('.profile')?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.querySelector('.danger-outline')).not.toBeNull();
+    });
+    element.querySelector<HTMLButtonElement>('.danger-outline')?.click();
+    const review = element.querySelector('dialog');
+    expect(review?.textContent).toContain('odoo');
+    expect(review?.textContent).toContain('alex');
   });
 
   it('accepts a matching revoke receipt and refreshes the safe detail', async () => {
