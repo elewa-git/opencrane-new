@@ -11,7 +11,8 @@ import { until } from '@opencrane/authz/testing';
 import { event } from '@opencrane/event-store/testing';
 import { isEventStoreUnavailable } from '@opencrane/event-store';
 import { foldRoutine, getEventDefinition, type EventEnvelope } from '@opencrane/events';
-import { BudgetActor, history, rootTotals, readRootStopEvidence } from '@opencrane/models';
+import { BudgetActor, history, priceTableId, rootTotals, readRootStopEvidence }
+  from '@opencrane/models';
 import { conversationKeys, ProjectionRunner, routines } from '@opencrane/projections';
 import { database } from '@opencrane/projections/testing';
 import { createLogger } from '@opencrane/observability';
@@ -569,8 +570,19 @@ async function resumesOneSavedDueAfterDeliveryWasDisabled() {
 it('resumes the saved checked due once after disabled delivery and a broker restart',
   resumesOneSavedDueAfterDeliveryWasDisabled);
 
-async function changeBeforeFinalRelease(kind: 'ceiling' | 'stop' | 'grant' |
-  'leadership' | 'deadline') {
+type ReleaseChange = 'ceiling' | 'payer_ceiling' | 'assistant_ceiling' |
+  'reserved' | 'settled' | 'exhausted' | 'stop' | 'grant' | 'leadership' | 'deadline';
+function otherBudgetCall() {
+  return { requesterId: 'other', conversationId: 'other-conversation',
+    turnId: 'other-turn', threadId: 'other-thread', assistantId: 'other-assistant',
+    computerId: 'other-computer', payingGroupId: 'other-group', model: 'gpt-6-luna',
+    priceTableId, contextDigest: '0'.repeat(64) };
+}
+async function changeBeforeFinalRelease(kind: ReleaseChange) {
+  let earlierReservation: string | undefined;
+  if (kind === 'settled') {
+    earlierReservation = await actor.reserve(otherBudgetCall(), 1);
+  }
   const fixedTime = performance.now();
   let elapsed = 0;
   const clockSpy = vi.spyOn(performance, 'now');
@@ -585,6 +597,26 @@ async function changeBeforeFinalRelease(kind: 'ceiling' | 'stop' | 'grant' |
         const limit = { scope: 'global' as const, ceilingCents: 0,
           dailyCeilingCents: 0, setBy: 'admin' };
         await actor.configure(limit);
+      } else if (kind === 'payer_ceiling') {
+        const limit = { scope: 'paying_group' as const, scopeId: 'sales',
+          ceilingCents: 0, setBy: 'admin' };
+        await actor.configure(limit);
+      } else if (kind === 'assistant_ceiling') {
+        const limit = { scope: 'assistant' as const, scopeId: 'sales-assistant',
+          ceilingCents: 0, setBy: 'admin' };
+        await actor.configure(limit);
+      } else if (kind === 'reserved') {
+        // Spend the shared capacity after this routine received its allowance.
+        await actor.reserve(otherBudgetCall(), 9001);
+      } else if (kind === 'settled') {
+        const settlement = record('settlement-before-release', 'budget-test',
+          'budget.settled', { reservationId: earlierReservation,
+            permitId: earlierReservation, settledCents: 9001 });
+        await nats.seed([settlement]);
+      } else if (kind === 'exhausted') {
+        const exhausted = record('exhausted-before-release', 'budget-test',
+          'budget.exhausted', { scope: 'assistant', scopeId: 'sales-assistant' });
+        await nats.seed([exhausted]);
       } else if (kind === 'stop') {
         const run = (await runState()).activeRun!;
         const example = getEventDefinition('routine.run_stop_requested')!.example;
@@ -617,8 +649,12 @@ async function changeBeforeFinalRelease(kind: 'ceiling' | 'stop' | 'grant' |
   }
   expect(preparedComputer.frames.some(isTurn)).toBe(false);
   expect(preparedComputer.executedThreads).toEqual([]);
+  const routineRows = await history(nats.store, 'routine-orders', 'test');
+  expect(routineRows.some(row => row.event.type === 'routine.run_send_release_authorised'))
+    .toBe(false);
 }
-it.each(['ceiling', 'stop', 'grant', 'leadership', 'deadline'] as const)(
+it.each(['ceiling', 'payer_ceiling', 'assistant_ceiling', 'reserved', 'settled',
+  'exhausted', 'stop', 'grant', 'leadership', 'deadline'] as const)(
   'refuses %s before the final routine release and keeps the scan pending',
   changeBeforeFinalRelease);
 
@@ -645,6 +681,30 @@ async function unrelatedCeilingDoesNotStopRelease() {
 }
 it('keeps a different group ceiling outside the fixed payer check',
   unrelatedCeilingDoesNotStopRelease);
+
+async function unrelatedAssistantCeilingDoesNotStopRelease() {
+  const fixedTime = performance.now();
+  vi.spyOn(performance, 'now').mockImplementation(() => fixedTime);
+  const append = nats.store.append.bind(nats.store);
+  let changed = false;
+  async function changeOtherAssistant(...supplied: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_send_release_authorised' && !changed) {
+      changed = true;
+      const limit = { scope: 'assistant' as const, scopeId: 'other-assistant',
+        ceilingCents: 0, setBy: 'admin' };
+      await actor.configure(limit);
+    }
+    return append(...supplied);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changeOtherAssistant);
+  expect(await dispatch()).toMatchObject({ examined: 1 });
+  expect(changed).toBe(true);
+  await until(preparedComputer.executed);
+  await assertSingleRun();
+}
+it('keeps a different assistant ceiling outside the fixed assistant check',
+  unrelatedAssistantCeilingDoesNotStopRelease);
 
 async function productionDeliveryUsesCheckedDue() {
   await runner.run(routines);
