@@ -210,6 +210,11 @@ review of an active non-owner. The removal route still checks the review again.
 
 ## Hosted tool policy
 
+`toolPolicySchema.hostedRun` names the image and workload generation that supplied
+the current hosted definitions. A saved start invalidates the old review and
+publication until a matching capture, review and gateway acknowledgement exist.
+`admissionExpiresAt` keeps the earliest image-check deadline in use-time policy.
+
 `toolPolicySchema.startupReviewRequired` is optional for older stored policies and
 browser replies. The event fold derives it from a declared hosted startup contract
 or a saved startup refusal. Startup policies remain unpublished while their runtime

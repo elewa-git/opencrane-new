@@ -43,6 +43,11 @@ export const mcpEvents = [
     hostedImageCheckedSchema, { serverId: 'mcp_1', attemptId: 1, imageDigest: DIGEST_EXAMPLE,
       platform: 'linux/amd64', checks: { signature: receipt, licence: receipt,
         vulnerability: scanReceipt, malware: scanReceipt } }),
+  event('mcp.hosted_start_observed', 'mcp',
+    'Models recorded the exact hosted workload before capturing its tools.',
+    data.mcpHostedStartObservedSchema, { serverId: 'mcp_1', imageDigest: DIGEST_EXAMPLE,
+      platform: 'linux/amd64', podUid: 'pod_1', workloadSpecDigest: DIGEST_EXAMPLE,
+      runGeneration: 1, admissionExpiresAt: '2026-10-10T12:05:00.000Z' }),
   // MCP catalogue, grants and connections
   event(
     'mcp.server_registered',

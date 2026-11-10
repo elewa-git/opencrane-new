@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope, history, toolPolicyFromRows } from '@opencrane/models';
+import { applyToolPolicy, emptyToolPolicy, isToolPolicyAvailable } from '@opencrane/projections';
+import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { discoverInventory } from '../src/integrations/inventory.ts';
-import { captureHostedStart } from '../src/integrations/hosted-capture.ts';
+import { captureHostedStart, type HostedCaptureTransport }
+  from '../src/integrations/hosted-capture.ts';
 
 const serverId = 'hosted-fixture';
 const imageDigest = 'a'.repeat(64);
@@ -15,10 +18,12 @@ const discovery = { resultType: 'complete', ttlMs: 60_000, cacheScope: 'private'
 const tool = { name: 'echo', description: 'Echo text', inputSchema: { type: 'object' },
   outputSchema: { type: 'object' },
   _meta: { 'io.opencrane/costCents': 0,
-    'io.opencrane/review': { stepUp: false, scopes: [], risk: 'low' } } };
+    'io.opencrane/review': { action: 'Echo', consequence: 'Return the input.',
+      targetArgument: 'value', fields: ['value'], stepUp: false } } };
 let fixture: Awaited<ReturnType<typeof natsFixture>>;
 
-function transport(currentRun = run, definition: unknown = tool) {
+function transport(currentRun: Awaited<ReturnType<HostedCaptureTransport['observe']>> = run,
+  definition: unknown = tool) {
   const observe = vi.fn().mockResolvedValue(currentRun);
   const request = vi.fn().mockImplementation((method: string) => {
     const result = method === 'server/discover' ? discovery :
@@ -39,13 +44,13 @@ async function save(type: string, data: unknown, sequence: number) {
   expect(result.status).toBe('appended');
 }
 
-async function admitted() {
+async function admitted(expiryOffsetMs = 60_000, extra: Record<string, unknown> = {}) {
   const registration = { serverId, kind: 'hosted', locator, registeredBy: 'admin',
     installation: { attemptId: 1, platform: 'linux/amd64',
-      upstream: { host: 'api.example.com', port: 443 } } };
+      upstream: { host: 'api.example.com', port: 443 } }, ...extra };
   await save('mcp.server_registered', registration, 0);
   const checkedAt = new Date(Date.now() - 1000).toISOString();
-  const expiresAt = new Date(Date.now() + 60_000).toISOString();
+  const expiresAt = new Date(Date.now() + expiryOffsetMs).toISOString();
   const receipt = { verdict: 'pass', checkedAt, expiresAt, engineVersion: 'fixture',
     reportDigest: 'c'.repeat(64) };
   const database = { ...receipt, databaseDigest: 'd'.repeat(64), databaseUpdatedAt: checkedAt };
@@ -73,6 +78,9 @@ it('keeps a clean signed image closed until this run has captured its definition
   expect(saved.tools[0]?.mode).toBe('block');
   expect(saved.published).toBe(false);
   expect(checked.request).toHaveBeenCalledTimes(2);
+  const admittedForUse = { ...saved, published: true, driftHeld: false };
+  expect(isToolPolicyAvailable(admittedForUse,
+    Date.parse(saved.admissionExpiresAt!))).toBe(false);
 });
 
 it('uses stable field ordering and changes the digest for edited declarations', async () => {
@@ -98,9 +106,162 @@ it('refuses a foreign image or Pod before asking the fixture for tools', async (
   await expect(captureHostedStart(fixture.store, 'test', serverId, run, wrongImage))
     .rejects.toThrow();
   expect(wrongImage.request).not.toHaveBeenCalled();
+  const wrongPlatform = transport({ ...run, platform: 'linux/arm64' });
+  await expect(captureHostedStart(fixture.store, 'test', serverId,
+    { ...run, platform: 'linux/arm64' }, wrongPlatform)).rejects.toThrow();
+  expect(wrongPlatform.request).not.toHaveBeenCalled();
   const wrongPod = transport({ ...run, podUid: 'replacement' });
   await expect(captureHostedStart(fixture.store, 'test', serverId, run, wrongPod))
     .rejects.toThrow();
   expect(wrongPod.request).not.toHaveBeenCalled();
   expect((await policy()).catalogue).toBeNull();
+});
+
+it('refuses expired evidence and a foreign silo', async () => {
+  await admitted(-100);
+  const checked = transport();
+  await expect(captureHostedStart(fixture.store, 'test', serverId, run, checked))
+    .rejects.toThrow();
+  await expect(captureHostedStart(fixture.store, 'foreign', serverId, run, checked))
+    .rejects.toThrow();
+  expect(checked.request).not.toHaveBeenCalled();
+});
+
+it('refuses a hosted registration requiring startup credentials', async () => {
+  const registration = { serverId, kind: 'hosted', locator, registeredBy: 'admin',
+    credentialContract: { credentialMode: 'startup_lasting', materialKind: 'raw_bearer',
+      delivery: 'environment' } };
+  await save('mcp.server_registered', registration, 0);
+  const checked = transport();
+  await expect(captureHostedStart(fixture.store, 'test', serverId, run, checked))
+    .rejects.toThrow();
+  expect(checked.request).not.toHaveBeenCalled();
+});
+
+it('requires a new capture after a changed generation and holds the old review', async () => {
+  await admitted();
+  await captureHostedStart(fixture.store, 'test', serverId, run, transport());
+  const first = await policy();
+  const declaration = first.catalogue!.tools![0]!;
+  const review = { serverId, catalogueDigest: first.catalogue!.schemaDigest,
+    connectionId: first.connectionId!, accountMode: 'none', policyRevision: first.policyRevision,
+    reviewedBy: 'admin', tools: [{ name: declaration.name, revision: declaration.revision,
+      reviewDigest: toolReviewDigest(declaration), mode: 'block' }] };
+  const reviewed = envelope('test', `mcp-${serverId}`, 'mcp.server_reviewed', review);
+  reviewed.principal = { kind: 'human', id: 'admin' };
+  expect((await fixture.store.append({ event: reviewed, expectedSequence: first.sequence })).status)
+    .toBe('appended');
+  expect((await policy()).reviewRevision).toBeDefined();
+  const next = { ...run, podUid: 'pod-two', runGeneration: 2 };
+  const changed = transport(next, { ...tool, description: 'New meaning' });
+  await captureHostedStart(fixture.store, 'test', serverId, next, changed);
+  const current = await policy();
+  expect(current.previousCatalogue?.schemaDigest).toBe(first.catalogue?.schemaDigest);
+  expect(current.catalogue?.schemaDigest).not.toBe(first.catalogue?.schemaDigest);
+  expect(current.reviewRevision).toBeUndefined();
+  expect(current.tools[0]?.mode).toBe('block');
+  expect(current.published).toBe(false);
+  const old = transport();
+  await expect(captureHostedStart(fixture.store, 'test', serverId, run, old)).rejects.toThrow();
+  expect(old.request).not.toHaveBeenCalled();
+});
+
+it('recovers a lost start reply and a worker restart without reusing another run', async () => {
+  await admitted();
+  const append = fixture.store.append.bind(fixture.store);
+  const lost = vi.spyOn(fixture.store, 'append');
+  lost.mockImplementationOnce(async command => {
+    await append(command);
+    throw new Error('reply lost');
+  });
+  const first = transport();
+  await captureHostedStart(fixture.store, 'test', serverId, run, first);
+  lost.mockRestore();
+  const restarted = transport();
+  await captureHostedStart(fixture.store, 'test', serverId, run, restarted);
+  expect(restarted.request).not.toHaveBeenCalled();
+  expect((await policy()).hostedRun).toEqual(run);
+});
+
+it('recovers a lost catalogue reply by reading the original saved snapshot', async () => {
+  await admitted();
+  const append = fixture.store.append.bind(fixture.store);
+  const lost = vi.spyOn(fixture.store, 'append');
+  lost.mockImplementation(async command => {
+    const result = await append(command);
+    const attempted = command.event;
+    if (attempted && typeof attempted === 'object' && 'type' in attempted &&
+        attempted.type === 'mcp.server_discovered') {
+      throw new Error('reply lost');
+    }
+    return result;
+  });
+  const checked = transport();
+  const result = await captureHostedStart(fixture.store, 'test', serverId, run, checked);
+  lost.mockRestore();
+  expect(result.schemaDigest).toBe((await policy()).catalogue?.schemaDigest);
+  const restarted = transport();
+  await captureHostedStart(fixture.store, 'test', serverId, run, restarted);
+  expect(restarted.request).not.toHaveBeenCalled();
+});
+
+it('ends the review after a new Pod even when its definitions are unchanged', async () => {
+  await admitted();
+  await captureHostedStart(fixture.store, 'test', serverId, run, transport());
+  const first = await policy();
+  const next = { ...run, podUid: 'pod-two', runGeneration: 2 };
+  await captureHostedStart(fixture.store, 'test', serverId, next, transport(next));
+  const current = await policy();
+  expect(current.catalogue?.schemaDigest).toBe(first.catalogue?.schemaDigest);
+  expect(current.policyRevision).toBeGreaterThan(first.policyRevision);
+  expect(current.reviewRevision).toBeUndefined();
+  expect(current.published).toBe(false);
+});
+
+it('closes a captured run when a new image check is requested', async () => {
+  await admitted();
+  await captureHostedStart(fixture.store, 'test', serverId, run, transport());
+  const current = await policy();
+  const request = { serverId, attemptId: 2, imageDigest, platform: run.platform,
+    registrationRevision: 1, expectedSequence: current.sequence };
+  const event = envelope('test', `mcp-${serverId}`, 'mcp.image_check_requested', request);
+  const closed = applyToolPolicy(current, event, current.sequence + 1);
+  expect(closed.admissionExpiresAt).toBeUndefined();
+  expect(closed.reviewRevision).toBeUndefined();
+  expect(isToolPolicyAvailable({ ...closed, published: true, driftHeld: false })).toBe(false);
+});
+
+it('keeps the new run closed when the Pod changes during discovery', async () => {
+  await admitted();
+  const checked = transport();
+  checked.observe.mockResolvedValueOnce(run);
+  checked.observe.mockResolvedValueOnce({ ...run, podUid: 'replacement' });
+  await expect(captureHostedStart(fixture.store, 'test', serverId, run, checked))
+    .rejects.toThrow('Hosted catalogue capture unavailable');
+  const current = await policy();
+  expect(current.hostedRun).toEqual(run);
+  expect(current.catalogue).toBeNull();
+  expect(current.published).toBe(false);
+});
+
+it('refuses a catalogue claiming a run that has not been saved; replay starts nothing', async () => {
+  await admitted();
+  const inventory = await discoverInventory(transport().request);
+  const forged = envelope('test', `mcp-${serverId}`, 'mcp.server_discovered',
+    { serverId, ...inventory, hostedRun: run,
+      connectionId: `installed-${serverId}`, accountMode: 'none' });
+  const rows = await history(fixture.store, `mcp-${serverId}`, 'test');
+  let state = emptyToolPolicy();
+  for (const row of rows) state = applyToolPolicy(state, row.event, row.sequence);
+  expect(() => applyToolPolicy(state, forged, state.sequence + 1)).toThrow();
+  const forgedStart = envelope('test', `mcp-${serverId}`, 'mcp.hosted_start_observed',
+    { serverId, ...run, admissionExpiresAt: new Date(Date.now() + 60_000).toISOString() });
+  forgedStart.source = 'untrusted';
+  forgedStart.principal = { kind: 'human', id: 'attacker' };
+  expect(() => applyToolPolicy(state, forgedStart, state.sequence + 1)).toThrow();
+  const checked = transport();
+  const replayed = await policy();
+  expect(replayed.catalogue).toBeNull();
+  expect(checked.observe).not.toHaveBeenCalled();
+  expect(checked.request).not.toHaveBeenCalled();
 });

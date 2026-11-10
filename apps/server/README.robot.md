@@ -1,5 +1,14 @@
 # Server
 
+## Hosted catalogue capture
+
+`integrations/hosted-capture.ts` takes an admitted pinned image and exact observed
+Pod run from a trusted checked discovery transport. It records the start before
+requesting `server/discover` and every `tools/list` page. It rechecks the workload
+and admission before saving the bounded snapshot. A lost append reply is recovered
+only by the original event reference. No production hosted transport calls this
+function yet; hosted dispatch and fresh-install qualification remain NOT RUN.
+
 ## Command activity reports
 
 The server checks the bridge's optional command activity label against the event
