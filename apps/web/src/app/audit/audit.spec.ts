@@ -253,7 +253,9 @@ it.each([
   expect(button).toBeDefined();
   button!.click();
   await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
-  const request = new URL(String(fetchSpy.mock.calls[1]![0]), 'https://example.test');
+  const calledPath = fetchSpy.mock.calls[1]![0];
+  if (typeof calledPath !== 'string') throw new Error('Expected history URL');
+  const request = new URL(calledPath, 'https://example.test');
   expect(request.searchParams.get('family')).toBe(family);
   expect(request.searchParams.has('type')).toBe(false);
 });
