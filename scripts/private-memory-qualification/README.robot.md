@@ -776,7 +776,9 @@ again while the same native turn is open. It checks both measured installation i
 around each read and tool call. It calls `persistenceScan` in its own process, once
 while the turn is live and again after Stop. The caller owns the canary and the named
 storage inventory. The helper copies and clears its canary bytes. An unknown native
-response is never retried. A known tool write or stored canary is FAIL. An unexercised
+response is never retried. The first FAIL keeps its tool, group or storage category.
+Each later FAIL adds its detail to `additionalFailures` without replacing the first.
+A known tool write or stored canary is FAIL. An unexercised
 tool, changed installation or unreadable store is NOT RUN. Every other result remains
 PARTIAL with `complete: false`; this helper cannot qualify admission.
 

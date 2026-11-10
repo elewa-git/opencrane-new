@@ -21,10 +21,13 @@ export type PersistenceDriver = {
   readInventory(): InventorySnapshot;
   startNative(): Promise<NativeTurn>;
 };
+type FailureEvidence = { group: InventoryCode } |
+  { category: Category | 'inventory' } | { tool: ToolClass };
 type Outcome = { result: 'PARTIAL'; complete: false } |
-  { result: 'FAIL'; complete: false; group: InventoryCode } |
-  { result: 'FAIL' | 'NOT RUN'; complete: false; category: Category | 'inventory' } |
-  { result: 'FAIL' | 'NOT RUN'; complete: false; tool: ToolClass };
+  ({ result: 'FAIL'; complete: false; additionalFailures?: FailureEvidence[] } &
+    FailureEvidence) |
+  { result: 'NOT RUN'; complete: false; category: Category | 'inventory' } |
+  { result: 'NOT RUN'; complete: false; tool: ToolClass };
 
 function currentInstallation(driver: PersistenceDriver): boolean {
   const current = driver.currentInstallations();
@@ -57,12 +60,30 @@ function scanOutcome(result: ReturnType<ReturnType<typeof persistenceScan>['scan
   if (result.result === 'PARTIAL') {
     return undefined;
   }
-  return { result: result.result, complete: false,
-    category: result.category ?? 'inventory' };
+  const category = result.category ?? 'inventory';
+  if (result.result === 'FAIL') {
+    return { result: 'FAIL', complete: false, category };
+  }
+  return { result: 'NOT RUN', complete: false, category };
+}
+
+function failureEvidence(outcome: Outcome & { result: 'FAIL' }): FailureEvidence {
+  if ('tool' in outcome) {
+    return { tool: outcome.tool };
+  }
+  if ('group' in outcome) {
+    return { group: outcome.group };
+  }
+  return { category: outcome.category };
 }
 
 function retainKnownFailure(previous: Outcome | undefined, next: Outcome): Outcome {
-  if (previous?.result === 'FAIL' && next.result === 'NOT RUN') {
+  if (previous?.result === 'FAIL') {
+    if (next.result === 'FAIL') {
+      const additionalFailures = [...(previous.additionalFailures ?? []),
+        failureEvidence(next)];
+      return { ...previous, additionalFailures };
+    }
     return previous;
   }
   return next;
