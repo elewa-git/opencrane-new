@@ -865,6 +865,9 @@ async function refusesLateChange(kind: string) {
         stopped.source = 'models';
         stopped.principal = { kind: 'system', id: 'models' };
         await nats.seed([stopped]);
+      } else if (kind === 'budget ceiling') {
+        await actor.configure({ scope: 'global', ceilingCents: 0,
+          dailyCeilingCents: 0, setBy: 'admin' });
       } else if (kind === 'payer') {
         const removed = { teamId: 'sales', memberId: 'alice', removedBy: 'admin' };
         const removal = record('late-payer', 'team-sales', 'team.member_removed', removed);
@@ -891,7 +894,8 @@ async function refusesLateChange(kind: string) {
     await computer.close();
   }
 }
-it.each(['Stop', 'grant', 'payer', 'worker', 'routine.paused', 'member', 'computer'])(
+it.each(['Stop', 'budget ceiling', 'grant', 'payer', 'worker', 'routine.paused', 'member',
+  'computer'])(
   'refuses late %s after saving the start and before releasing credentials', refusesLateChange);
 
 async function acceptsOtherThread() {

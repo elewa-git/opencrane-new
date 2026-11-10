@@ -571,7 +571,33 @@ it('resumes the saved checked due once after disabled delivery and a broker rest
   resumesOneSavedDueAfterDeliveryWasDisabled);
 
 type ReleaseChange = 'ceiling' | 'payer_ceiling' | 'assistant_ceiling' |
-  'reserved' | 'settled' | 'exhausted' | 'stop' | 'grant' | 'leadership' | 'deadline';
+  'reserved' | 'settled' | 'exhausted' | 'exhausted_global_reason' |
+  'exhausted_payer_reason' | 'exhausted_assistant_reason' | 'exhausted_other_reason' |
+  'exhausted_work' | 'exhausted_other_work' | 'stop' | 'grant' | 'leadership' | 'deadline';
+function exhaustedReason(scope: 'global' | 'paying_group' | 'assistant', scopeId?: string) {
+  return { scope, ...(scopeId ? { scopeId } : {}), kind: 'monthly' as const,
+    reason: 'bound_refused' as const,
+    periodStart: '2026-10-01T00:00:00Z', resetAt: '2026-11-01T00:00:00Z',
+    ceilingCents: 1000, settledCents: 1000, reservedCents: 0, attemptedBoundCents: 1,
+    configurationId: 'budget-config' };
+}
+function modernExhaustionData(kind: string) {
+  if (kind.endsWith('_reason')) {
+    let reason;
+    if (kind === 'exhausted_global_reason') reason = exhaustedReason('global');
+    else if (kind === 'exhausted_payer_reason') reason = exhaustedReason('paying_group', 'sales');
+    else if (kind === 'exhausted_assistant_reason') {
+      reason = exhaustedReason('assistant', 'sales-assistant');
+    } else reason = exhaustedReason('assistant', 'other-assistant');
+    return { reasons: [reason] };
+  }
+  if (kind === 'exhausted_work') {
+    return { stopId: 'budget-stop', work: {
+      conversationId: 'routine-session-occurrence', turnId: 'routine-turn-occurrence' } };
+  }
+  return { stopId: 'budget-stop', work: {
+    conversationId: 'another-conversation', turnId: 'another-turn' } };
+}
 function otherBudgetCall() {
   return { requesterId: 'other', conversationId: 'other-conversation',
     turnId: 'other-turn', threadId: 'other-thread', assistantId: 'other-assistant',
@@ -617,6 +643,10 @@ async function changeBeforeFinalRelease(kind: ReleaseChange) {
         const exhausted = record('exhausted-before-release', 'budget-test',
           'budget.exhausted', { scope: 'assistant', scopeId: 'sales-assistant' });
         await nats.seed([exhausted]);
+      } else if (kind.startsWith('exhausted_')) {
+        const data = modernExhaustionData(kind);
+        const exhausted = record(`exhausted-${kind}`, 'budget-test', 'budget.exhausted', data);
+        await nats.seed([exhausted]);
       } else if (kind === 'stop') {
         const run = (await runState()).activeRun!;
         const example = getEventDefinition('routine.run_stop_requested')!.example;
@@ -642,21 +672,28 @@ async function changeBeforeFinalRelease(kind: ReleaseChange) {
     return append(...supplied);
   }
   vi.spyOn(nats.store, 'append').mockImplementation(interruptRelease);
-  await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  const shouldRefuse = kind !== 'exhausted_other_reason' && kind !== 'exhausted_other_work';
+  if (shouldRefuse) {
+    await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  } else {
+    expect(await dispatch()).toMatchObject({ examined: 1 });
+  }
   expect(changed).toBe(true);
   function isTurn(frame: Record<string, unknown>) {
     return frame['type'] === 'turn';
   }
-  expect(preparedComputer.frames.some(isTurn)).toBe(false);
-  expect(preparedComputer.executedThreads).toEqual([]);
+  expect(preparedComputer.frames.some(isTurn)).toBe(!shouldRefuse);
+  expect(preparedComputer.executedThreads.length > 0).toBe(!shouldRefuse);
   if (kind !== 'stop') {
     const routineRows = await history(nats.store, 'routine-orders', 'test');
     expect(routineRows.some(row => row.event.type === 'routine.run_send_release_authorised'))
-      .toBe(false);
+      .toBe(!shouldRefuse);
   }
 }
 it.each(['ceiling', 'payer_ceiling', 'assistant_ceiling', 'reserved', 'settled',
-  'exhausted', 'stop', 'grant', 'leadership', 'deadline'] as const)(
+  'exhausted', 'exhausted_global_reason', 'exhausted_payer_reason',
+  'exhausted_assistant_reason', 'exhausted_other_reason', 'exhausted_work',
+  'exhausted_other_work', 'stop', 'grant', 'leadership', 'deadline'] as const)(
   'refuses %s before the final routine release and keeps the scan pending',
   changeBeforeFinalRelease);
 
