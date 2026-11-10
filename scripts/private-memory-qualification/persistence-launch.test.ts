@@ -1,9 +1,8 @@
-import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test } from 'node:test';
+import { expect, it } from 'vitest';
 
 function checksOwnershipAndCleanup(): void {
   const directory = mkdtempSync(join(tmpdir(), 'persistence-launch-'));
@@ -14,7 +13,13 @@ function checksOwnershipAndCleanup(): void {
   try {
     copyFileSync('scripts/private-memory-qualification/persistence-launch.sh',
       join(scripts, 'persistence-launch.sh'));
-    const claim = '#!/bin/sh\nprintf "%s\\n" "$FIXTURE_CLAIM"\n';
+    const claim = '#!/bin/sh\n' +
+      'if [ "$FIXTURE_CLAIM" = signal ]; then\n' +
+      '  kill -TERM "$DEV_STACK_CLAIM_PID"\n' +
+      '  printf "1\\n"\n' +
+      'else\n' +
+      '  printf "%s\\n" "$FIXTURE_CLAIM"\n' +
+      'fi\n';
     const start = '#!/bin/sh\nprintf "up %s\\n" "$*" >> "$FIXTURE_CALLS"\n' +
       'exit "$FIXTURE_START_STATUS"\n';
     const down = '#!/bin/sh\nprintf "down %s\\n" "$*" >> "$FIXTURE_CALLS"\n';
@@ -36,32 +41,35 @@ function checksOwnershipAndCleanup(): void {
       const result = spawnSync('/bin/sh', [join(scripts, 'persistence-launch.sh')], { env });
       return result.status;
     }
-    assert.equal(run(), 0);
-    assert.equal(readFileSync(calls, 'utf8'),
+    expect(run()).toBe(0);
+    expect(readFileSync(calls, 'utf8')).toBe(
       'up --id 1\nattempt 1 1\ndown --id 1\n');
     writeFileSync(calls, '');
     env.FIXTURE_ATTEMPT_STATUS = 'signal';
-    assert.equal(run(), 1);
-    assert.equal(readFileSync(calls, 'utf8'),
+    expect(run()).toBe(1);
+    expect(readFileSync(calls, 'utf8')).toBe(
       'up --id 1\nattempt 1 1\ndown --id 1\n');
     writeFileSync(calls, '');
     env.FIXTURE_START_STATUS = '1';
-    assert.equal(run(), 1);
-    assert.equal(readFileSync(calls, 'utf8'), 'up --id 1\ndown --id 1\n');
+    expect(run()).toBe(1);
+    expect(readFileSync(calls, 'utf8')).toBe('up --id 1\ndown --id 1\n');
     writeFileSync(calls, '');
     env.FIXTURE_START_STATUS = '0';
     env.FIXTURE_ATTEMPT_STATUS = '1';
-    assert.equal(run(), 1);
-    assert.equal(readFileSync(calls, 'utf8'),
+    expect(run()).toBe(1);
+    expect(readFileSync(calls, 'utf8')).toBe(
       'up --id 1\nattempt 1 1\ndown --id 1\n');
     writeFileSync(calls, '');
     env.FIXTURE_CLAIM = 'owner';
-    assert.equal(run(), 1);
-    assert.equal(readFileSync(calls, 'utf8'), '');
+    expect(run()).toBe(1);
+    expect(readFileSync(calls, 'utf8')).toBe('');
+    env.FIXTURE_CLAIM = 'signal';
+    expect(run()).toBe(1);
+    expect(readFileSync(calls, 'utf8')).toBe('down --id 1\n');
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 }
 
-void test('the owning launcher claims a secondary and releases it on every exit',
+it('the owning launcher claims a secondary and releases it on every exit',
   checksOwnershipAndCleanup);
