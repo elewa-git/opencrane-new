@@ -258,7 +258,8 @@ it('shows readable ownership evidence and uses a native modal', async () => {
   await vi.waitFor(() => expect(showModal).toHaveBeenCalledOnce());
   await vi.waitFor(() => expect(root.textContent).toContain('Owner appointed'));
   expect(document.activeElement).toBe(root.querySelector('.history-detail h2'));
-  expect(root.textContent).toContain('Confirmed observation');
+  expect(root.querySelector('.results div:nth-child(2) span')?.textContent).toBe('Observation');
+  expect(root.textContent).toContain('Owner role current in content and access');
   expect(root.textContent).toContain('Affected scope');
   expect(root.textContent).toContain('Verified actor');
   expect(root.querySelector<HTMLAnchorElement>('a[href="/org/people"]')?.textContent)
