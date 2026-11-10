@@ -21,6 +21,7 @@ function checksOwnershipAndCleanup(): void {
       '  printf "%s\\n" "$FIXTURE_CLAIM"\n' +
       'fi\n';
     const start = '#!/bin/sh\nprintf "up %s\\n" "$*" >> "$FIXTURE_CALLS"\n' +
+      '[ "$DEV_OWNER_BOOTSTRAP" = 0 ] || exit 19\n' +
       'exit "$FIXTURE_START_STATUS"\n';
     const down = '#!/bin/sh\nprintf "down %s\\n" "$*" >> "$FIXTURE_CALLS"\n';
     const node = '#!/bin/sh\nprintf "attempt %s %s\\n" "$DEV_STACK_ID" ' +
