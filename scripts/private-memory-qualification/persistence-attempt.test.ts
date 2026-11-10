@@ -380,6 +380,7 @@ async function firstFailureKeepsToolEvidence(): Promise<void> {
   writeFileSync(join(directory, 'pvc', 'written'), canary);
   expect(await runPersistenceAttempt(driver)).toEqual({
     result: 'FAIL', complete: false, tool: 'shell',
+    additionalFailures: [{ category: 'pvc' }],
   });
 }
 it('keeps the first tool write when live storage also contains the canary',
@@ -394,6 +395,7 @@ async function firstFailureSurvivesStoppedScan(): Promise<void> {
   setStopHook(saveAfterStop);
   expect(await runPersistenceAttempt(driver)).toEqual({
     result: 'FAIL', complete: false, tool: 'shell',
+    additionalFailures: [{ category: 'pvc' }],
   });
 }
 it('keeps the first tool write when stopped storage also fails',
@@ -405,6 +407,7 @@ async function firstFailureSurvivesFinalInventory(): Promise<void> {
   reads[1]!.records[5]!.startTime = '9999';
   expect(await runPersistenceAttempt(driver)).toEqual({
     result: 'FAIL', complete: false, tool: 'shell',
+    additionalFailures: [{ group: 'nativeChild' }],
   });
 }
 it('keeps the first tool write when final inventory also fails',
