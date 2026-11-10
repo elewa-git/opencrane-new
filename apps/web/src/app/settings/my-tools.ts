@@ -79,7 +79,7 @@ export class MyTools implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.generation += 1;
     this.request.abort();
-    this.review?.nativeElement.close();
+    this.closeReview();
   }
 
   protected visibleRows(): Row[] {
@@ -147,7 +147,7 @@ export class MyTools implements OnInit, OnDestroy {
     this.detail.set(null);
     this.pendingReference.set(null);
     this.pendingProfileId = null;
-    this.review?.nativeElement.close();
+    this.closeReview();
     this.loadState.set('access');
     this.announcement.set('Access changed. Connection details were cleared.');
     return true;
@@ -188,8 +188,15 @@ export class MyTools implements OnInit, OnDestroy {
   }
 
   protected cancelReview(): void {
-    this.review?.nativeElement.close();
+    this.closeReview();
     this.reviewOpener?.focus();
+  }
+
+  private closeReview(): void {
+    const dialog = this.review?.nativeElement;
+    if (dialog?.open) {
+      dialog.close();
+    }
   }
 
   protected async revoke(): Promise<void> {
@@ -199,7 +206,7 @@ export class MyTools implements OnInit, OnDestroy {
     this.pendingReference.set(changeRef);
     this.pendingProfileId = profile.profileId;
     this.submitting.set(true);
-    this.review?.nativeElement.close();
+    this.closeReview();
     const current = this.generation;
     try {
       const reply = await fetch(`${this.profileUrl(profile.profileId)}/revoke`, {
