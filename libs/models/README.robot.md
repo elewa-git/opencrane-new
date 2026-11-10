@@ -5023,8 +5023,12 @@ profile headers do not reach the tool server. A missing audit or changed access 
 nothing. Dispatch checks later turn and computer activity before reading the credential.
 It rechecks loaded memory references and current memory grants during the renewed
 two-second access check. A fact forgotten after permit issue refuses release.
-The gateway checks every decoded JSON value and key, plus the remote content type,
-for the released access token or bearer. It also checks base64 and URL-encoded text.
+The gateway checks every decoded JSON value and key, all string values joined in
+document order with and without spaces, the text from content blocks joined in the
+same ways, the serialised JSON and the remote content type. It refuses the full
+released access token or any copied part of at least eight characters. It also checks
+base64 and URL-encoded text, including nested URL encoding and valid escapes beside
+invalid ones.
 A match returns a fixed JSON-RPC error with no upstream data. Other valid upstream
 JSON-RPC errors also return that fixed error. The gateway sets its own content type.
 An uncertain HTTPS result stays unknown and cannot be resent. Company dispatch and

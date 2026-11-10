@@ -564,22 +564,85 @@ function credentialPatterns(material: string | undefined): string[] {
     patterns.add(Buffer.from(value).toString('base64'));
     patterns.add(Buffer.from(value).toString('base64url'));
   }
+  // Check eight-character pieces because every longer copied part contains one.
+  for (let index = 0; index <= material.length - 8; index += 1) {
+    patterns.add(material.slice(index, index + 8));
+  }
   return [...patterns];
 }
 
-function containsCredentialText(value: string, patterns: string[]): boolean {
+function containsCredentialPattern(value: string, patterns: string[]): boolean {
   for (const pattern of patterns) {
     if (value.includes(pattern)) return true;
   }
+  return false;
+}
+
+function decodeUrlEscape(match: string): string {
   try {
-    const decoded = decodeURIComponent(value);
-    for (const pattern of patterns) {
-      if (decoded.includes(pattern)) return true;
-    }
+    return decodeURIComponent(match);
   } catch {
-    // Keep checking the original text when an upstream string has invalid percent escapes.
+    return match;
+  }
+}
+
+function decodeUrlEscapes(value: string): string {
+  // Decode valid runs even when another part of the reply has a bad percent escape.
+  return value.replace(/(?:%[0-9a-f]{2})+/giu, decodeUrlEscape);
+}
+
+function containsEncodedCredential(value: string, patterns: string[]): boolean {
+  const encodedRuns = value.match(/[A-Za-z0-9+/_-]{8,}={0,2}/gu);
+  if (encodedRuns === null) return false;
+  for (const encoded of encodedRuns) {
+    const decoded = Buffer.from(encoded, 'base64url').toString('utf8');
+    if (containsCredentialPattern(decoded, patterns)) return true;
   }
   return false;
+}
+
+function containsCredentialText(value: string, patterns: string[]): boolean {
+  let candidate = value;
+  while (true) {
+    if (containsCredentialPattern(candidate, patterns) ||
+        containsEncodedCredential(candidate, patterns)) {
+      return true;
+    }
+    const decoded = decodeUrlEscapes(candidate);
+    if (decoded === candidate) return false;
+    candidate = decoded;
+  }
+}
+
+function collectStringValues(value: JsonValue, values: string[]): void {
+  if (value.value instanceof Map) {
+    for (const nested of value.value.values()) collectStringValues(nested, values);
+    return;
+  }
+  if (Array.isArray(value.value)) {
+    for (const nested of value.value) collectStringValues(nested, values);
+    return;
+  }
+  if (value.kind === 'string' && typeof value.value === 'string') {
+    values.push(value.value);
+  }
+}
+
+function collectTextBlocks(value: JsonValue, values: string[]): void {
+  if (value.value instanceof Map) {
+    for (const [key, nested] of value.value) {
+      if (key === 'text' && nested.kind === 'string' &&
+          typeof nested.value === 'string') {
+        values.push(nested.value);
+      } else {
+        collectTextBlocks(nested, values);
+      }
+    }
+    return;
+  }
+  if (Array.isArray(value.value)) {
+    for (const nested of value.value) collectTextBlocks(nested, values);
+  }
 }
 
 function containsCredential(value: JsonValue, patterns: string[]): boolean {
@@ -616,7 +679,17 @@ function safeRemoteError(sent: Map<string, JsonValue>, material: string | undefi
 function replyContainsCredential(reply: JsonValue, contentType: string,
   material: string | undefined): boolean {
   const patterns = credentialPatterns(material);
-  return containsCredential(reply, patterns) || containsCredentialText(contentType, patterns);
+  const values: string[] = [];
+  const textBlocks: string[] = [];
+  collectStringValues(reply, values);
+  collectTextBlocks(reply, textBlocks);
+  return containsCredential(reply, patterns) ||
+    containsCredentialText(values.join(''), patterns) ||
+    containsCredentialText(values.join(' '), patterns) ||
+    containsCredentialText(textBlocks.join(''), patterns) ||
+    containsCredentialText(textBlocks.join(' '), patterns) ||
+    containsCredentialText(reply.canonical, patterns) ||
+    containsCredentialText(contentType, patterns);
 }
 
 function requireRemoteReply(data: Buffer, contentType: string, raw: string,
