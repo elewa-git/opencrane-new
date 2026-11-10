@@ -5023,14 +5023,18 @@ profile headers do not reach the tool server. A missing audit or changed access 
 nothing. Dispatch checks later turn and computer activity before reading the credential.
 It rechecks loaded memory references and current memory grants during the renewed
 two-second access check. A fact forgotten after permit issue refuses release.
-The gateway checks every decoded JSON value and key, all string values joined in
-document order with and without spaces, the text from content blocks joined in the
-same ways, the serialised JSON and the remote content type. It refuses the full
-released access token or any copied part of at least eight characters. It also checks
-base64 and URL-encoded text, including nested URL encoding and valid escapes beside
-invalid ones.
-A match returns a fixed JSON-RPC error with no upstream data. Other valid upstream
-JSON-RPC errors also return that fixed error. The gateway sets its own content type.
+The gateway's reply scan is best effort. It checks decoded JSON keys and values,
+their joined text, text blocks, serialised JSON and the remote content type. It checks
+the full released access token and long continuous parts, including in base64 and
+URL-encoded text. A match returns a fixed JSON-RPC error with no upstream data. Other
+valid upstream JSON-RPC errors also return that fixed error. The gateway sets its own
+content type.
+
+The scan cannot recognise every copied credential. A remote server can arrange
+fragments so the scan does not see them together as one long piece. Those fragmented
+echoes are an accepted residual risk. The trust boundary is the reviewed,
+admin-approved tool server: only that server receives a personal credential, and
+only for a call with a current Allow rule or approved Ask.
 An uncertain HTTPS result stays unknown and cannot be resent. Company dispatch and
 fresh-install provider qualification remain NOT RUN.
 

@@ -153,7 +153,7 @@ flowchart LR
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks owner Ask and release bindings and company tool scopes, public tool addresses, reads, hosted image status and check requests, original call status, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, fixed positions before private replies, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal bearer and verified OAuth choices with current access and owner revocation from HTTP, admin company opt-in, explicit company choices after wake, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature, licence and bound vulnerability checks, control, provider choice and spending"]
   server -->|asks for the saved first child start| models
   server -->|private image worker claims once and sends an image check| models
-  models -->|checks private sign-in, refresh, revocation and one selected personal call with current turn and loaded memory checks and refuses split or encoded credential echoes in remote replies; checks remote HTTPS addresses, certificates, current revisions and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains reply withdrawal after expiry or access loss; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
+  models -->|checks private sign-in, refresh, revocation and one selected personal call with current turn and loaded memory checks; best-effort scan for full or long continuous credential echoes; checks remote HTTPS addresses, certificates, current revisions and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains reply withdrawal after expiry or access loss; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models, checks private callers and reports live Ask holds| models
   models -.->|checks receipts, checks each initial memory permission once, and preserves confirmed refusals during permission outages or invalid company saves| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|checks the saved company custody record version; prepares separate company sign-in attempts; stages credentials, callback codes and replies, confirms first accounts, starts, joins, claims and sends refresh attempts, saves replacements, retains old access tokens until expiry and removes revoked tokens even after member removal, recovers replies and checks signed accounts, reads one exact personal access token for a private callback, shares a database lock for personal and company saves and rotations, and personal cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
@@ -772,14 +772,17 @@ callback. It checks permission once and saves the release audit before reading a
 credential material. A permission refusal takes precedence over preparation errors.
 It shares the cleanup lock, checks current access before sending and refuses reuse,
 including after a lost reply or restart.
-Refresh and identity tokens stay private. Published personal tools can now make one
-approved, zero-cost call to a pinned HTTPS address after a saved release audit.
-The models process checks the requester's choice, approval, profile, review, loaded
-memory and access again at dispatch. It also checks whether the computer or turn changed.
-It returns a fixed error if the remote reply contains the credential or a substantial
-part of it. The check also joins text blocks and other reply fields in order, so a
-tool cannot hide a credential by splitting it between them. Encoded text and the
-reply's content type receive the same check.
+Refresh and identity tokens stay private. Only reviewed, admin-approved tool servers
+receive personal credentials. Each call must also have a current Allow rule or an
+approved Ask decision. The gateway releases the selected access token for that call
+after saving its release record.
+
+The reply scan is a best-effort extra check. It looks for the full credential and
+long continuous parts in reply fields, joined text and encoded text. A match returns
+a fixed error without the remote reply. The scan cannot catch every way a remote
+server could copy or split a credential. A trusted server can arrange fragments so
+the scan does not see them together as one long piece. The trust boundary is the
+reviewed, admin-approved tool server that receives the credential.
 Company account calls remain closed.
 
 A member can read their own saved tool profile without using the private credential store.
