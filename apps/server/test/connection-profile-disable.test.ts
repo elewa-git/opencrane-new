@@ -168,12 +168,9 @@ async function recover(actor: string, lost: boolean) {
   app = startApp();
   const position = await nats.store.head();
   const noAppend = vi.spyOn(nats.store, 'append');
-  const retry = await post(fixture.url, command, headers(`session-${actor}`));
-  expect(retry.statusCode).toBe(200);
   const rows = await history(nats.store, `connection-control-alice-${fixture.serverId}`, 'test');
   expect(rows).toHaveLength(1);
   const receipt = { status: 'disabled', sequence: rows[0]!.sequence, changeRef: 'disable' };
-  expect(retry.json()).toEqual(receipt);
   const status = await app.inject({ url: `${fixture.url}/disable/changes/disable`,
     headers: headers(`session-${actor}`) });
   privateOutput(status);
@@ -181,6 +178,13 @@ async function recover(actor: string, lost: boolean) {
   expect(status.json()).toMatchObject({ status: 'confirmed', changeRef: 'disable',
     eventId: rows[0]!.event.id, sequence: rows[0]!.sequence, action: 'disable',
     adminBlocked: true });
+  expect(status.json()).toMatchObject({ eventId: rows[0]!.event.id,
+    sequence: rows[0]!.sequence });
+  expect(await nats.store.head()).toBe(position);
+  expect(noAppend).not.toHaveBeenCalled();
+  const retry = await post(fixture.url, command, headers(`session-${actor}`));
+  expect(retry.statusCode).toBe(200);
+  expect(retry.json()).toEqual(receipt);
   if (!lost) {
     expect(response.json()).toEqual(receipt);
   }
@@ -356,8 +360,13 @@ async function statusHistoryAndAccess(outcome: string) {
   const response = await app.inject({ url: `${fixture.url}/disable/changes/disable`,
     headers: headers() });
   const refused = outcome === 'removed' || outcome === 'demoted';
-  expect(response.statusCode).toBe(refused ? 403 :
-    outcome === 'failed' || outcome === 'iam failed' ? 503 : 200);
+  let expectedStatus = 200;
+  if (refused) {
+    expectedStatus = 403;
+  } else if (outcome === 'failed' || outcome === 'iam failed') {
+    expectedStatus = 503;
+  }
+  expect(response.statusCode).toBe(expectedStatus);
   if (response.statusCode !== 200) {
     expect(response.json()).toEqual({ status: refused ? 'refused' : 'unavailable' });
   }
