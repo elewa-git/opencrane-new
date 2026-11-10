@@ -2463,6 +2463,7 @@ function routineRootTests() {
     it.each([false, true])('waits 14 seconds outside access, then revoked: %s', delayedPreparation);
 
     async function uncertainHold() {
+      const receipt = await prepare();
       const root = actor.state.roots[0]!;
       const call = { requesterId: 'alice', conversationId, turnId: root.turnId,
         assistantId: 'sales-assistant', payingGroupId: 'sales', ...selection,
@@ -2470,7 +2471,6 @@ function routineRootTests() {
       const hold = await actor.reserve(call, 100, undefined, undefined, root.rootId);
       await actor.uncertain(hold, 'settle_timeout');
       expectedHolds = structuredClone(actor.state.reservations);
-      const receipt = await prepare();
       expect(await prepare()).toEqual(receipt);
       expect(rootTotals(actor.state, root.rootId).heldCents).toBe(100);
       await control('routine.run_stop_requested');

@@ -599,12 +599,6 @@ async function savedStarts() {
 async function handsOffOnce() {
   const authority = sender();
   const computer = await recordingComputer();
-  const root = actor.state.roots[0]!;
-  const call = { requesterId: 'alice', conversationId, turnId,
-    assistantId: 'sales-assistant', payingGroupId: 'sales', ...selection,
-    model: 'gpt-6.1-sol', priceTableId, contextDigest: '0'.repeat(64) };
-  const hold = await actor.reserve(call, 100, undefined, undefined, root.rootId);
-  await actor.uncertain(hold, 'settle_timeout');
   const budgetPosition = await nats.store.head('budget-test');
   const head = nats.store.head.bind(nats.store);
   let activity = 0;
@@ -652,8 +646,7 @@ async function handsOffOnce() {
     expect(activity).toBeGreaterThan(2);
     expect(startAppends).toBe(2);
     expect(await nats.store.head('budget-test')).toBe(budgetPosition);
-    expect(rootTotals(actor.state, root.rootId)).toEqual({
-      settledCents: 0, heldCents: 100, availableCents: 900 });
+    expect(actor.state.reservations).toEqual([]);
     const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
     expect(JSON.stringify(rows)).not.toContain('Private routine instructions');
     function isInput(row: typeof rows[number]) {
