@@ -1649,6 +1649,19 @@ else:
         with self.assertRaisesRegex(ValueError, "Unknown or non-OSI"):
             checker.check_declared_licences(item, {"MIT"})
 
+    def test_two_osi_scanned_licences_are_allowed(self):
+        item = {"type": "npm", "name": "dual-library",
+                "licenses": [{"spdxExpression": "(MPL-2.0 OR Apache-2.0)"}]}
+        checker.check_declared_licences(item, {"MPL-2.0", "Apache-2.0"})
+
+    def test_candidate_server_refuses_new_operating_system_parts(self):
+        scan = {"source": {"type": "image"},
+                "artifacts": [{"type": "deb", "name": "foreign", "version": "1"}]}
+        inventory = {"images": {"server": {"artifacts": []}}}
+        with patch.object(checker, "read_json", side_effect=[scan, inventory]):
+            with self.assertRaisesRegex(ValueError, "changed reviewed"):
+                checker.check_candidate_server("scan.json")
+
     def test_unknown_bundled_notice_is_refused(self):
         notice = ["library", ["SSPL-1.0"], "/usr/local/LICENSE", "example"]
         with self.assertRaisesRegex(ValueError, "Unknown or non-free"):

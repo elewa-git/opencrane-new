@@ -29,6 +29,7 @@ flowchart LR
   computer -->|runs with file sharing guidance| desktop["Codex, browser and desktop"]
   computer -->|checks callers and passes for AI and MCP calls| gateway["agentgateway<br/>AI gateway"]
   collector["private memory collector"] -->|checks live processes| computer
+  ops -->|uses a checked local image build| computer
 ```
 
 ## What it is responsible for
@@ -189,6 +190,9 @@ nice -n 10 npm run typecheck -w apps/computer
 
 The image build requires the Linux Codex programs. A missing download stops the build
 before image checks begin.
+
+A local qualification build uses both production Dockerfiles from one commit.
+It saves checked image identities in a spare slot without changing the image setting or publishing.
 
 Repository CI builds a separate test image once for the tests that need it.
 The image build retries short network failures when it downloads Debian packages.

@@ -2,7 +2,8 @@
 
 ## What this is
 
-This developer tool collects private memory test results from a running deployment.
+This developer tool builds checked local images and collects private memory test
+results from a running deployment.
 It reads the deployment identity itself and starts each check inside that image.
 It also checks older evidence files, which cannot qualify a deployment.
 Admission remains off. The runner checks host settings, saved memory invalidation,
@@ -18,7 +19,7 @@ It uses Docker on the deployment host and reads the deployment's event store.
 
 ```mermaid
 flowchart LR
-  scripts["scripts<br/>developer tools"] -.-> collector["private-memory-qualification<br/>checks results and storage"]
+  scripts["scripts<br/>developer tools"] -.-> collector["private-memory-qualification<br/>builds images and checks results"]
   scripts -.-> sibling["check-local-qualification<br/>checks local results"]
   server["apps/server<br/>memory preparation"] -->|reads and rechecks results| collector
   collector -.->|checks memory, Stop and reply loss| server
@@ -30,6 +31,7 @@ flowchart LR
 
 ## What it is responsible for
 
+- Build both images from one clean commit and save their checked identities in a spare slot.
 - Read the permitted container and silo from deployment-owned configuration.
 - Stop each journey and its children when it exceeds a limit or the collector exits.
 - Measure the source revision, image, host, silo and installation before collecting results.
@@ -65,6 +67,9 @@ flowchart LR
 - Keep failures free of private paths and child process output.
 
 ## Processes it handles
+
+The image builder checks licences and imports from both production images before
+saving their identities in the claimed spare slot. A failed build saves no record.
 
 The deployment owner records the permitted container and silo in a protected file.
 The collector reads that file, Docker and the event store, then starts each check with a new random

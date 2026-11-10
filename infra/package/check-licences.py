@@ -310,6 +310,9 @@ def check_declared_licences(item, osi_ids):
         expression = declaration.get("spdxExpression")
         if item["name"] == "type-fest" and expression == "(MIT OR CC0-1.0)":
             continue
+        # Accept either declared choice only when both are approved for applications.
+        if expression == "(MPL-2.0 OR Apache-2.0)" and {"MPL-2.0", "Apache-2.0"} <= osi_ids:
+            continue
         if expression not in osi_ids:
             raise ValueError(f"Unknown or non-OSI scanned licence: {item['name']}")
 
@@ -370,6 +373,31 @@ def check_scan(role, entries, path, osi_ids):
     expected = Counter((entry[0], entry[1], entry[2]) for entry in entries)
     if found != expected:
         raise ValueError(f"{role} scan differs from the reviewed inventory")
+
+
+def check_candidate_server(path):
+    scan = read_json(path)
+    if scan.get("source", {}).get("type") != "image" or not scan.get("artifacts"):
+        raise ValueError("Candidate server needs a real image scan")
+    reviewed = read_json(PACKAGE / "licence-inventory.json")
+    reviewed_items = Counter(tuple(entry[:3]) for entry in reviewed["images"]["server"]["artifacts"])
+    scanned_items = Counter((item["type"], item["name"], item["version"])
+                            for item in scan["artifacts"])
+    reviewed_non_npm = Counter({key: count for key, count in reviewed_items.items()
+                                if key[0] != "npm"})
+    scanned_non_npm = Counter({key: count for key, count in scanned_items.items()
+                               if key[0] != "npm"})
+    if scanned_non_npm != reviewed_non_npm:
+        raise ValueError("Candidate server changed reviewed operating-system or binary parts")
+    osi_ids = set(read_json(PACKAGE / "osi-licences.json"))
+    for item in scan["artifacts"]:
+        if item["type"] != "npm":
+            continue
+        key = (item["type"], item["name"], item["version"])
+        if not item.get("licenses") and key not in reviewed_items:
+            raise ValueError(f"New application has no declared licence: {item['name']}")
+        check_declared_licences(item, osi_ids)
+    print(f"PASS candidate server: {len(scan['artifacts'])} checked components")
 
 
 def check_package_review(reviewed, inventory):
@@ -496,6 +524,12 @@ if __name__ == "__main__":
     try:
         arguments = sys.argv[1:]
         promotion = None
+        if arguments and arguments[0] == "--candidate-server":
+            if len(arguments) != 2:
+                raise ValueError("Pass one candidate server scan")
+            main({})
+            check_candidate_server(arguments[1])
+            sys.exit(0)
         if arguments and arguments[0] == "--promotion":
             if len(arguments) < 3:
                 raise ValueError("Pass source revision and image inspection before ROLE PATH pairs")

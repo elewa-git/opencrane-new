@@ -60,8 +60,9 @@ class ImageLayerTests(unittest.TestCase):
             cls.configuration_digest = "sha256:" + hashlib.sha256(configuration_bytes).hexdigest()
             cls.archive_index = json.load(archive.extractfile("index.json"))
             cls.archive_config_path = image["Config"]
-            saved_index = read_checked_blob(archive, cls.archive_index["manifests"][0]["digest"])
-            for descriptor in saved_index["manifests"]:
+            first_image = read_checked_blob(archive, cls.archive_index["manifests"][0]["digest"])
+            descriptors = first_image.get("manifests", cls.archive_index["manifests"])
+            for descriptor in descriptors:
                 saved_manifest = read_checked_blob(archive, descriptor["digest"])
                 if saved_manifest["config"]["digest"] == cls.configuration_digest:
                     break

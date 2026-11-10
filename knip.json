@@ -8,6 +8,8 @@
       "ignoreUnresolved": ["./runner-protection.node"],
       "entry": [
         "scripts/private-memory-qualification/vitest.config.mjs",
+        "scripts/private-memory-qualification/build-images.mjs",
+        "scripts/private-memory-qualification/build-images.test.mjs",
         "scripts/private-memory-qualification/run.mjs",
         "scripts/private-memory-qualification/persistence-run.mjs",
         "scripts/private-memory-qualification/native-persistence.ts",

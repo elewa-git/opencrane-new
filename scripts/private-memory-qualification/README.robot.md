@@ -2,6 +2,22 @@
 
 For people, read [README.md](README.md) first.
 
+## Local qualification image build
+
+Run `nice -n 10 node scripts/private-memory-qualification/build-images.mjs --id 1
+--revision <full-commit>` from a clean checkout with an owned slot claim.
+The builder archives that commit and uses the production computer and package
+Dockerfiles. It saves local images and their OCI manifest and configuration digests
+in the slot's `qualification-images/attempt-*` directory. It checks each archive's
+manifest, configuration and source label before writing `images.json`.
+
+Pinned Syft 1.54.0 and SPDX list 3.28.0 scan both images. The computer uses its
+full notice checker; the package uses the non-promoting candidate licence gate.
+The build checks Codex, the protection helper, native imports without
+source mounts, and the package layers. It never pushes, moves release tags, changes
+`sandbox-template.json`, starts a stack or approves deployment. Failure or
+cancellation leaves no `images.json`.
+
 ## Deployment collection
 
 P4-15 PR 5e adds `await collectDeployment()` and `run.mjs`. The older file
