@@ -8,6 +8,7 @@ import { withConnectionStage } from './connection-stage-lock.ts';
 import { confirmCredentialRelease, credentialReleaseEvidence } from './credential-release.ts';
 import { MemberAccessRefused } from './member-authority.ts';
 import type { OAuthConfigurationLoader } from './oauth-selection.ts';
+import { requireTrackedPosition } from './mcp-position.ts';
 
 const contextSchema = toolCredentialReleaseSchema.pick({ requestId: true, permitId: true,
   userId: true, assistantId: true, computerId: true, computerGeneration: true,
@@ -173,9 +174,8 @@ async function sendCurrent(store: EventStore, locked: Db, custody: Custody, silo
       refuse();
     }
     for (const [subject, position] of evidence.positions) {
-      if (await store.head(subject, access.deadline) !== position) {
-        refuse();
-      }
+      await requireTrackedPosition(store, silo, subject, position, release.serverId,
+        access.deadline);
     }
     // Check the session that owns the lock, not a different pooled connection.
     const queryOptions = { deadline: access.deadline };

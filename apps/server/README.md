@@ -255,7 +255,7 @@ flowchart LR
   computer -->|AI and tool calls| runtime["Private services<br/>models process, AI gateway, tools and virus scanner"]
   server -->|files, service readiness, image types and refusal codes| web
   server -->|checks upload bytes over HTTPS| runtime
-  runtime -->|checks memory reads and requester account choices| server
+  runtime -->|checks memory reads, requester account choices and personal tool offers| server
 ```
 
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) handles sign-in.
@@ -421,6 +421,10 @@ The server checks current admin access after preparing the review, even if prepa
 Members can explicitly save or clear their own personal account choice through the server.
 The reply confirms the saved choice without claiming the account can be used.
 Verified OAuth choices require current operator settings supplied by the server.
+For a chat turn, the server offers a personal tool only when the requester still has
+a verified choice for that server. The signed turn pass holds the chosen profile and
+choice revision. The offer names its generation, and the models process checks the
+current choice again before sending a call.
 Members can recover their own original account selection or clear receipt by its
 change reference. Later choices do not replace it. Reading requires current silo
 membership and changes nothing. Missing evidence stays unknown and never permits a resend.

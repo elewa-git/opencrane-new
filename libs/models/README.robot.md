@@ -5012,8 +5012,16 @@ Release records prove authorisation, not upstream success. The personal broker a
 public API field; the separate company audit has its own strict release variant. Request
 context uses existing audited names and digests. Security rules and
 both authority test files remain unchanged. Tests use real NATS/PostgreSQL and the real
-custody adapter against a synthetic HTTP transport. Gateway/header integration and
-fresh-install provider qualification remain NOT RUN.
+custody adapter against a synthetic HTTP transport. A recording HTTPS fixture now also
+checks the governed personal path. The models process needs both
+`CONNECTION_CUSTODY_FILE` and `MCP_OAUTH_CONFIGURATION_FILE` to enable it. The latter is
+a JSON object keyed by server id, reread on each use. The selected profile, current
+generation, scope, review and access bind the signed turn, approval and permit. A
+confirmed release
+append comes before the allowlisted outbound header. Caller cookies, alternate keys and
+profile headers do not reach the tool server. A missing audit or changed access sends
+nothing. An uncertain HTTPS result stays unknown and cannot be resent. Company dispatch
+and fresh-install provider qualification remain NOT RUN.
 
 The company path uses `routine-company-release.ts` to check a frozen run, current
 choice, verified account and free published tool before `confirmCredentialRelease`.

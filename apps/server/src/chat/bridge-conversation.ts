@@ -12,7 +12,7 @@ import { agentTurnStopRequestedDataSchema, fileDeliveredDataSchema, fileUploaded
 import type { WebSocket } from 'ws';
 import type { connectMcpCatalogue, listConversations } from '@opencrane/projections';
 import { memberAuthorisation } from '@opencrane/authz';
-import { history as modelHistory } from '@opencrane/models';
+import { history as modelHistory, readConnectionSelection } from '@opencrane/models';
 import { applyToolPolicy, emptyToolPolicy, isToolPolicyAvailable } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { z } from 'zod';
@@ -35,6 +35,7 @@ export type WatchOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'sto
     childStartUrl?: string;
     objects?: Client;
     catalogue?: Pick<ReturnType<typeof connectMcpCatalogue>, 'rows'>;
+    loadOAuthConfiguration?: (serverId: string) => Promise<unknown>;
     installRetainedCall?: (read: NonNullable<ChatOptions['retainedCall']>) => void;
     installRoutineWake?: (wake: ReturnType<typeof createRoutineWake>) => void;
   };
@@ -476,6 +477,14 @@ async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
     const permission = await auth.use(subjectKind, subjectId, 'mcp_server', serverId);
     return permission.allowed;
   }
+  async function readSelection(requesterId: string, serverId: string) {
+    if (!options.binding || !options.loadOAuthConfiguration) return undefined;
+    const selection = await readConnectionSelection(options.store, options.binding,
+      requesterId, serverId, options.loadOAuthConfiguration);
+    if (selection.status !== 'verified') return undefined;
+    return { profileId: selection.profileId, profileRevision: selection.profileRevision,
+      selectionRevision: selection.sequence, generation: selection.generation };
+  }
   const readyRows = catalogueRows.filter(isPublishedServer);
   const serverRows = readyRows.map(serverReference);
   const toolInput = {
@@ -486,6 +495,7 @@ async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
     approvalWaiting,
     readServer,
     canUse: canUseServer,
+    readSelection,
   };
   if (recall) {
     return buildRecallOffer(toolInput);

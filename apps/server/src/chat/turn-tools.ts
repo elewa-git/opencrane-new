@@ -44,6 +44,10 @@ interface TurnToolInput {
   readServer: (serverId: string) => Promise<TurnToolServerState | undefined>;
   canUse: (serverId: string, kind: 'person' | 'assistant', subject: string) =>
     Promise<boolean>;
+  readSelection?: (requesterId: string, serverId: string) => Promise<{
+    profileId: string; profileRevision: number; selectionRevision: number;
+    generation: number;
+  } | undefined>;
 }
 
 interface TurnToolServer {
@@ -53,6 +57,10 @@ interface TurnToolServer {
   serverInfo?: { name: string; version: string };
   definitions: string[];
   modes: Record<string, 'allow' | 'ask'>;
+  profileId?: string;
+  profileRevision?: number;
+  selectionRevision?: number;
+  generation?: number;
 }
 
 export interface TurnDelivery {
@@ -243,30 +251,51 @@ async function assembleTurnTools(input: TurnToolInput, memoryTools?: readonly Me
   const keys = new Set<string>();
   let omittedServers = 0;
   for (const row of input.rows) {
-    // Keep ordinary turns separate from the restricted memory catalogue.
-    if (row.serverId === 'memory' && !memoryTools) continue;
-    let state = await input.readServer(row.serverId);
-    if (state && memoryTools) state = memoryToolsOnly(state, memoryTools);
-    if (!state || !isAvailableServer(state)) continue;
-    if (!hasComputerCompatibleFields(state)) {
-      omittedServers += 1;
-      continue;
+    const prepared = await prepareTurnTool(input, row, memoryTools, tools, keys,
+      availableBytes);
+    if (prepared.omitted) omittedServers += 1;
+    if (prepared.entry) {
+      tools.push(prepared.entry);
+      keys.add(prepared.entry.key);
     }
-    const selected = reviewedDefinitions(state, input.approvalWaiting === true);
-    if (!selected.definitions.length) continue;
-    if (!await canUseServer(input, state.serverId)) continue;
-    const entry = makeTurnToolServer(state, selected);
-    if (keys.has(entry.key) || tools.length >= maximumServers ||
-        !fitsBudget(tools, entry, availableBytes)) {
-      omittedServers += 1;
-      continue;
-    }
-    tools.push(entry);
-    keys.add(entry.key);
   }
 
   logOmittedServers(omittedServers);
   return tools;
+}
+
+async function prepareTurnTool(input: TurnToolInput, row: TurnToolInput['rows'][number],
+  memoryTools: readonly MemoryTool[] | undefined, tools: TurnToolServer[],
+  keys: Set<string>, availableBytes: number) {
+  // Keep ordinary turns separate from the restricted memory catalogue.
+  if (row.serverId === 'memory' && !memoryTools) return { omitted: false };
+  let state = await input.readServer(row.serverId);
+  if (state && memoryTools) state = memoryToolsOnly(state, memoryTools);
+  if (!state || !isAvailableServer(state)) return { omitted: false };
+  let selection: Awaited<ReturnType<NonNullable<TurnToolInput['readSelection']>>>;
+  if (state.accountMode === 'personal') {
+    selection = await input.readSelection?.(input.requesterId, state.serverId);
+    if (!selection) return { omitted: false };
+  }
+  if (!hasComputerCompatibleFields(state)) return { omitted: true };
+  const selected = reviewedDefinitions(state, input.approvalWaiting === true);
+  if (!selected.definitions.length) return { omitted: false };
+  if (!await canUseServer(input, state.serverId)) return { omitted: false };
+  const entry = makeTurnToolServer(state, selected);
+  if (selection) {
+    entry.profileId = selection.profileId;
+    entry.profileRevision = selection.profileRevision;
+    entry.selectionRevision = selection.selectionRevision;
+    entry.generation = selection.generation;
+  }
+  if (!turnToolFits(entry, tools, keys, availableBytes)) return { omitted: true };
+  return { entry, omitted: false };
+}
+
+function turnToolFits(entry: TurnToolServer, tools: TurnToolServer[],
+  keys: Set<string>, availableBytes: number) {
+  return !keys.has(entry.key) && tools.length < maximumServers &&
+    fitsBudget(tools, entry, availableBytes);
 }
 
 function memoryToolsOnly(state: TurnToolServerState, definitions: readonly MemoryTool[]) {
@@ -332,7 +361,8 @@ function logOmittedServers(omittedServers: number) {
 }
 
 function isAvailableServer(state: TurnToolServerState) {
-  return state.published && state.accountMode === 'none' && state.connectionId !== null;
+  return state.published && (state.accountMode === 'none' || state.accountMode === 'personal')
+    && state.connectionId !== null;
 }
 
 function hasComputerCompatibleFields(state: TurnToolServerState) {

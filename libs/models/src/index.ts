@@ -121,6 +121,8 @@ export { saveCompanyBearerConnection, foldCompanyConnection } from './company-be
 export { companySelectionFacts, type CompanyProfileReader } from './company-selection.ts';
 export { readCurrentCompanyProfile } from './company-profile-reader.ts';
 export { foldConnectionSelection } from './connection-selection.ts';
+export { readConnectionSelection } from './connection-selection.ts';
+export { oauthConfigurationFromFile } from './oauth-configuration-file.ts';
 export { type OAuthConfigurationLoader } from './oauth-selection.ts';
 export { startOAuthConfigurationChange,
   finishOAuthConfigurationChange } from './oauth-configuration-change.ts';

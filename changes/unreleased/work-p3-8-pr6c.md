@@ -1,0 +1,1 @@
+- A verified personal account choice can make one reviewed, zero-cost MCP call after a saved credential release; changed access or account details refuse the call.

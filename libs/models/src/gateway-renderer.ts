@@ -130,7 +130,8 @@ export function renderGatewayConfiguration(input: unknown, settings: GatewayRend
   const routes = [];
   for (const member of record.members) {
     const entry = member.entry;
-    if (entry.accountMode !== 'none' || publicationDigest(entry) !== member.fragmentDigest) {
+    if ((entry.accountMode !== 'none' && entry.accountMode !== 'personal') ||
+        publicationDigest(entry) !== member.fragmentDigest) {
       refused();
     }
     reserveRoute(entry, servers, paths, names);

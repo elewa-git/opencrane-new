@@ -4,7 +4,8 @@ import { prepareInitialMemory } from '../memory/initial-delivery.ts';
 import { computerCredentials, type tokenIssuer } from '@opencrane/auth';
 import { approvalActivity, confirmDecisionAccess, decisionAuthorityFence,
   LoadedMemoryRefused, MemberAccessRefused, prepareLoadedMemory,
-  requireActiveConversationTurn } from '@opencrane/models';
+  requireActiveConversationTurn, readConnectionSelection } from '@opencrane/models';
+import type { connectMcpCatalogue } from '@opencrane/projections';
 import { modelForTask } from '@opencrane/models/routing';
 import { z } from 'zod';
 import { chatHistory } from './commands.ts';
@@ -18,7 +19,9 @@ import type { ChatOptions } from './routes.ts';
 
 type BridgeOptions = { recall?: ReturnType<typeof recallBridge> } &
   Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
-  Partial<Pick<ChatOptions, 'binding' | 'db' | 'feed'>> & { keyDirectory?: string };
+  Partial<Pick<ChatOptions, 'binding' | 'db' | 'feed'>> & { keyDirectory?: string;
+    catalogue?: Pick<ReturnType<typeof connectMcpCatalogue>, 'rows'>;
+    loadOAuthConfiguration?: (serverId: string) => Promise<unknown> };
 type Tokens = Awaited<ReturnType<typeof tokenIssuer>>;
 type Report = { conversationId: string; turnId: string; threadId?: string | undefined;
   replay?: boolean; sequence?: number };
@@ -44,8 +47,9 @@ export async function releaseTurnCredentials(options: BridgeOptions,
     await confirmMemory();
     await requireTurnMember(options.store, options.silo, binding.requesterId);
     const credentials = computerCredentials(options.store, tokens, options.silo);
+    const personalSelections = await selectedPersonalProfiles(options, binding.requesterId);
     const turn = { ...binding, assistantId: context.assistantId,
-      model: binding.model ?? modelForTask(binding.task) };
+      model: binding.model ?? modelForTask(binding.task), personalSelections };
     const grant = await credentials.turn(turn);
     // Check only new activity after signing; keep full history outside the access deadline.
     await requireTurnMember(options.store, options.silo, binding.requesterId);
@@ -76,6 +80,28 @@ export async function releaseTurnCredentials(options: BridgeOptions,
     await turnCommand(options.store, context, { ...report, status: 'failed' });
     acknowledgement.refused = error.message;
   }
+}
+
+async function selectedPersonalProfiles(options: BridgeOptions, requesterId: string) {
+  const selected: { serverId: string; profileId: string; selectionRevision: number }[] = [];
+  if (!options.binding || !options.catalogue || !options.loadOAuthConfiguration) {
+    return selected;
+  }
+  const servers = await options.catalogue.rows(options.silo);
+  for (const server of servers) {
+    if (selected.length === 20) break;
+    try {
+      const choice = await readConnectionSelection(options.store, options.binding,
+        requesterId, server.serverId, options.loadOAuthConfiguration);
+      if (choice.status === 'verified') {
+        selected.push({ serverId: server.serverId, profileId: choice.profileId,
+          selectionRevision: choice.sequence });
+      }
+    } catch {
+      // Leave an unavailable account out of the signed turn.
+    }
+  }
+  return selected;
 }
 
 async function prepareRecallForStart(options: BridgeOptions,

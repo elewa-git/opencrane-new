@@ -13,6 +13,7 @@ import { selectedOAuth, type OAuthConfigurationLoader } from './oauth-selection.
 import { routineCompanyAskFacts, routineCompanyReleaseFacts }
   from './routine-company-release.ts';
 import type { CompanyProfileReader } from './company-selection.ts';
+import { requireTrackedPosition } from './mcp-position.ts';
 
 type Release = z.infer<typeof credentialReleaseSchema>;
 type Access = { deadline: number; checkAccess: () => Promise<void> };
@@ -37,9 +38,7 @@ function requireLifetime(release: Release) {
 function requireDecision(rows: StoredEvent[], decisionId: string, release: Release) {
   const event = rows[0]?.event;
   const parsed = decisionRecordedDataSchema.safeParse(event?.data);
-  if (rows.length !== 1 || event?.id !== decisionId || event.type !== 'decision.recorded' ||
-      event.source !== 'models' || event.principal?.kind !== 'system' ||
-      event.principal.id !== 'models' || !parsed.success) {
+  if (!event || !validDecisionEvent(rows, decisionId, release) || !parsed.success) {
     refuse();
   }
   const decision = parsed.data;
@@ -55,6 +54,15 @@ function requireDecision(rows: StoredEvent[], decisionId: string, release: Relea
     refuse();
   }
   return event;
+}
+function validDecisionEvent(rows: StoredEvent[], decisionId: string, release: Release) {
+  const event = rows[0]?.event;
+  const started = rows[1]?.event;
+  const validStart = rows.length === 2 && started?.type === 'tool.dispatch_started' &&
+    started.id === `${release.requestId}:tool-dispatch-started`;
+  return (rows.length === 1 || validStart) && event?.id === decisionId &&
+    event.type === 'decision.recorded' && event.source === 'models' &&
+    event.principal?.kind === 'system' && event.principal.id === 'models';
 }
 function companyDecisionMatches(event: EventEnvelope,
   decision: ReturnType<typeof decisionRecordedDataSchema.parse>,
@@ -137,7 +145,7 @@ function requireProfile(profile: ReturnType<typeof foldConnection>,
       saved.serverId !== release.serverId || saved.profile !== release.profileId ||
       saved.activation.connectionId !== release.connectionId ||
       saved.activation.generation !== release.generation || !server.available ||
-      server.sequence !== release.policyRevision ||
+      server.policyRevision !== release.policyRevision ||
       saved.activation.endpointDigest !== server.endpointDigest) {
     refuse();
   }
@@ -250,9 +258,7 @@ async function confirm(store: EventStore, silo: string, requesterId: string,
       refuse();
     }
     for (const [subject, position] of evidence.positions) {
-      if (await store.head(subject, deadline) !== position) {
-        refuse();
-      }
+      await requireTrackedPosition(store, silo, subject, position, release.serverId, deadline);
     }
     requireLifetime(release);
     if (!Number.isFinite(evidence.expiresAt) || Date.now() >= evidence.expiresAt ||
@@ -273,7 +279,12 @@ async function confirm(store: EventStore, silo: string, requesterId: string,
   }
   const command = { event, expectedSequence: 0, historyChecked: true as const,
     checkAccess, deadline };
-  const result = await store.append(command);
+  let result = await store.append(command);
+  // Another request can move the global position without changing this call's access.
+  // Retry only a proven unpublished conflict; a lost reply remains unknown.
+  for (let attempt = 0; attempt < 2 && result.status === 'conflict'; attempt += 1) {
+    result = await store.append(command);
+  }
   if (result.status === 'unavailable') {
     throw result.cause;
   }

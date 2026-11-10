@@ -10,6 +10,8 @@ export const legacyTurnSchema = z.object({
   task: z.string().min(1), model: z.string().min(1), delegation: z.array(id).min(1).max(3),
   sharingClass: z.literal('shared_only').optional(),
   providerId: id.optional(), bindingSequence: z.int().positive().optional(),
+  personalSelections: z.array(z.object({ serverId: id, profileId: id,
+    selectionRevision: z.int().positive() })).max(20).optional(),
 });
 
 const managedTurnSchema = legacyTurnSchema.extend(providerTurnBindingSchema.shape);

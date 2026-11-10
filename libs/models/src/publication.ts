@@ -9,7 +9,8 @@ export function publicationEntry(state: ToolPolicy) {
   // Prepare the reviewed replacement while calls remain held until its receipt arrives.
   const candidate = { ...state, published: true, driftHeld: false };
   const available = isToolPolicyAvailable(candidate);
-  if (!reviewed || !available || state.accountMode !== 'none') {
+  if (!reviewed || !available ||
+      (state.accountMode !== 'none' && state.accountMode !== 'personal')) {
     return null;
   }
   const tools = [];

@@ -22,13 +22,14 @@ function choice(tool: ReturnType<typeof declaration>) {
 
 export async function oauthSelectionFixture(nats: Awaited<ReturnType<typeof natsFixture>>,
   userId: string, serverId: string, profileId = 'oauth',
-  stageMaterial?: (stage: ConnectionStage) => ReturnType<ReturnType<typeof connectionCustody>['stage']>) {
+  stageMaterial?: (stage: ConnectionStage) => ReturnType<ReturnType<typeof connectionCustody>['stage']>,
+  options: { locator?: string; grantedScopes?: string[] } = {}) {
   const subject = `connection-${userId}-${serverId}-${profileId}`;
   const serverSubject = `mcp-${serverId}`;
   const tools = ['read', 'write'].map(declaration);
   const choices = tools.map(choice);
   const now = Date.now();
-  const locator = 'https://example.test/mcp';
+  const locator = options.locator ?? 'https://example.test/mcp';
   const hash = createHash('sha256');
   hash.update(JSON.stringify(locator));
   const endpointDigest = hash.digest('hex');
@@ -87,7 +88,8 @@ export async function oauthSelectionFixture(nats: Awaited<ReturnType<typeof nats
     generation: 1, uid: 'uid', resourceVersion: '1', endpointDigest, operationId,
     changedBy: userId, expectedSequence: claimed, appendUntil, reason: 'oauth_confirmed',
     configurationDigest: oauthConfigurationDigest(configuration),
-    account: { issuer: configuration.issuer, subject: userId, scopes: ['openid', 'read'],
+    account: { issuer: configuration.issuer, subject: userId,
+      scopes: options.grantedScopes ?? ['openid', 'read'],
       expiresAt: now + 120_000 } };
   const saved = { userId, serverId, profile: profileId, secretRef: 'secret:synthetic', activation };
   if (stageMaterial) {
