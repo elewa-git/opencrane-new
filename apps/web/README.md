@@ -122,7 +122,7 @@ pages explain these limits instead of showing invented data.
 | [models](src/app/models/README.md) | Provider setup, model choices and model permissions. |
 | [organisation](src/app/organisation/README.md) | Shared navigation for organisation settings. |
 | [people](src/app/people/README.md) | Members, groups, invitations, shared assistants and owners. |
-| [settings](src/app/settings/README.md) | Account identity and personal settings navigation. |
+| [settings](src/app/settings/README.md) | Account identity, personal connections and settings navigation. |
 | [shared-state](src/app/shared-state/README.md) | Reusable progress, result and access messages. |
 | [sign-in](src/app/sign-in/README.md) | Company sign-in and its waiting and rejection pages. |
 | [spending](src/app/spending/README.md) | Budgets, charges and review of held amounts. |

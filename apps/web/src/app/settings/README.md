@@ -2,9 +2,9 @@
 
 ## What this is
 
-This folder shows a person's Account page and personal settings menu. People can
-check their signed-in name and continue their welcome survey. The Assistant page
-links to saved persona review.
+This folder shows a person's Account page, saved personal tool connections and
+settings menu. People can check their signed-in name and continue their welcome
+survey. The Assistant page links to saved persona review.
 
 ## Where it fits
 
@@ -14,7 +14,7 @@ server and use the shared menu controls.
 ```mermaid
 flowchart LR
   web["apps/web<br/>personal screens"] -->|opens| settings["settings<br/>account and menu"]
-  settings -->|reads identity| server["apps/server<br/>session and progress"]
+  settings -->|reads identity and connections| server["apps/server<br/>session and progress"]
   settings -->|links to| welcome["welcome<br/>survey and persona"]
   settings -.->|uses| ui["ui<br/>shared controls"]
 ```
@@ -26,7 +26,9 @@ flowchart LR
 - Check survey progress before offering its continuation link.
 - Show desktop navigation and a phone menu for personal settings.
 - Link Assistant to saved persona review.
-- Not built yet: account editing, preferences, Assistant settings and personal tools.
+- List saved personal profiles for a chosen integration and explain their safe status.
+- Review the effects before revoking a saved personal connection.
+- Account editing and preferences are not available yet.
 
 ## Processes it handles
 
@@ -34,6 +36,10 @@ flowchart LR
    It checks welcome progress before offering the survey link.
 2. **Navigation.** The shell keeps Account, Preferences, Assistant and My tools
    in one menu. Assistant offers a link to the separate persona review screen.
+3. **Connections.** My tools reads saved profiles for an integration. It opens
+   safe details for the last chosen profile. Its review names the profile and
+   integration. If a revoke reply is lost, a return visit can check the original
+   request before another attempt.
 
 ## How to run or test it
 

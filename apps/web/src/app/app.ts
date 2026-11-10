@@ -21,6 +21,7 @@ import { assistantCreateGroupId, normalisePathname, organisationPage,
   type OrganisationPage }
   from './organisation/pages';
 import { AccountScreen } from './settings/account-screen';
+import { MyTools } from './settings/my-tools';
 import { PersonalSettingsShell } from './settings/personal-settings-shell';
 import { PeopleScreen } from './people/people-screen';
 import { GroupDetailScreen } from './people/group-detail-screen';
@@ -40,7 +41,7 @@ import { WelcomeChat } from './welcome/welcome-chat';
     ToolPolicyScreen, ToolAccessExplanation,
     ModelsScreen, SpendingScreen, AuditScreen, IntegrationRegister, IntegrationDetail,
     OrganisationShell, OverviewScreen,
-    AccountScreen, PersonalSettingsShell, PeopleScreen, GroupDetailScreen, MemberDetailScreen,
+    AccountScreen, MyTools, PersonalSettingsShell, PeopleScreen, GroupDetailScreen, MemberDetailScreen,
     SharedAssistantAdmin, SharedAssistantPicker, OwnershipScreen, SurveyScreen, PersonaReview,
     WelcomeChat,
   ],
@@ -63,6 +64,8 @@ export class App {
   protected readonly sharedAssistantPickerPage = this.pathname === '/workspace/shared';
   protected readonly orgPage = this.pathname === '/org' || this.pathname.startsWith('/org/');
   protected readonly settingsPage = personalSettingsPage(this.pathname);
+  protected readonly personalToolsServerId = this.pathname === '/account/tools'
+    ? new URLSearchParams(globalThis.location.search).get('serverId') ?? '' : '';
   protected readonly accountPath = this.pathname === '/account'
     || this.pathname.startsWith('/account/');
   protected readonly surveyPage = this.pathname === '/welcome/survey';

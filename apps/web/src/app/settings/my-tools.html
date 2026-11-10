@@ -1,0 +1,120 @@
+<section class="my-tools">
+  <h1>My tools</h1>
+  <p class="intro">Your saved personal connections. A saved account does not grant tool access.</p>
+  <p class="sr-only" aria-live="polite">{{ announcement() }}</p>
+
+  @if (loadState() === 'access') {
+    <div role="status" class="notice">Access changed. Connection details were cleared.</div>
+  } @else if (!validServerId()) {
+    @if (serverId()) {
+      <p class="notice" role="alert">That integration ID is not valid.</p>
+    }
+    <p>Enter an integration ID to see your saved connections for it.</p>
+    <form action="/account/tools" method="get" class="controls">
+      <label for="server-id">Integration ID</label>
+      <input id="server-id" name="serverId" required pattern="[A-Za-z0-9_-]{1,200}"
+        [value]="serverId()"
+        maxlength="200" autocomplete="off" />
+      <button type="submit">Show connections</button>
+    </form>
+  } @else {
+    <p class="server">Integration <code>{{ serverId() }}</code></p>
+    @if (loadState() === 'loading' && rows().length === 0) {
+      <p role="status">Loading your connections…</p>
+    }
+    @if (loadState() === 'failed') {
+      <div class="notice" role="status">
+        @if (rows().length) {
+          We couldn't refresh the list. Showing the last loaded connections.
+        } @else {
+          We couldn't load your connections.
+        }
+      </div>
+    }
+    @if (loadState() !== 'loading' || rows().length) {
+      <div class="controls">
+        <label for="tools-search">Find a profile</label>
+        <input id="tools-search" type="search" [value]="search()"
+          (input)="searchChanged($event)" autocomplete="off" />
+        <button type="button" data-action="refresh" (click)="refresh()"
+          [disabled]="loadState() === 'loading'">Refresh</button>
+      </div>
+    }
+    @if (loadState() === 'ready' && rows().length === 0) {
+      <div class="notice">No saved connections for this integration.</div>
+    } @else if (rows().length && visibleRows().length === 0) {
+      <div class="notice">No matches. Try another profile name.</div>
+    }
+    <ul class="profiles">
+      @for (row of visibleRows(); track row.profileId) {
+        <li>
+          <button type="button" class="profile" (click)="openDetail(row)">
+            <span class="profile-name">Profile {{ row.profileId }}</span>
+            <span>{{ status(row) }}</span>
+            @if (row.selected) {
+              <span>Selected · Selection does not grant access</span>
+            }
+            <span class="open">Open details ›</span>
+          </button>
+        </li>
+      }
+    </ul>
+    @if (next()) {
+      <button type="button" data-action="more" (click)="more()"
+        [disabled]="loadState() === 'loading'">Load more</button>
+    }
+
+    @if (detailLoading()) {
+      <p role="status">Loading profile details…</p>
+    }
+    @if (detail(); as profile) {
+      <section class="detail" aria-labelledby="profile-heading">
+        <h2 id="profile-heading">Profile {{ profile.profileId }}</h2>
+        <dl>
+          <dt>Status</dt><dd>{{ status(profile) }}</dd>
+          <dt>Saved version</dt><dd>{{ profile.profileRevision }}</dd>
+          <dt>Tool calls</dt><dd>Unavailable</dd>
+        </dl>
+        <p>Saved metadata does not confirm an upstream identity or permission to use a tool.</p>
+        @if (profile.status === 'saved_unverified' && !profile.adminBlocked &&
+             !pendingReference()) {
+          <button type="button" class="danger-outline" (click)="reviewRevoke($event)">
+            Revoke this connection
+          </button>
+        }
+      </section>
+    }
+    @if (outcome()) {
+      <p class="notice" role="status">{{ outcome() }}</p>
+    }
+    @if (pendingReference()) {
+      <div class="notice">
+        <p>Original change: <code>{{ pendingReference() }}</code></p>
+        <button type="button" (click)="checkStatus()" [disabled]="submitting()">
+          Check status
+        </button>
+      </div>
+    }
+  }
+</section>
+
+<dialog #review class="review" (cancel)="cancelReview()">
+  <h2 #reviewHeading tabindex="-1">Revoke this connection?</h2>
+  @if (detail(); as profile) {
+    <p>Integration <code>{{ serverId() }}</code>, profile
+      <code>{{ profile.profileId }}</code>.</p>
+  }
+  <ul>
+    <li>Your assistant will stop using this personal connection.</li>
+    <li>Pending approvals for this account will end.</li>
+    <li>No company or other person's account will replace it automatically.</li>
+    <li>The provider's token is not deleted there. Revoke it there too if needed.</li>
+    <li>External work already sent may still finish.</li>
+  </ul>
+  <div class="review-actions">
+    <button type="button" class="danger" (click)="revoke()" [disabled]="submitting()">
+      Revoke my connection
+    </button>
+    <button type="button" (click)="cancelReview()">Cancel</button>
+  </div>
+</dialog>

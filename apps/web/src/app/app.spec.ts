@@ -562,12 +562,12 @@ describe('personal settings shell', () => {
     expect(root(fixture).textContent).not.toContain('Taylor Example');
   });
 
-  it('keeps the unavailable destinations in the settings shell without making reads', async () => {
+  it('opens My tools without reading until an integration is chosen', async () => {
     globalThis.history.replaceState({}, '', '/account/tools');
     const fixture = await create(response({}));
     const element = root(fixture);
     expect(element.querySelector('h1')?.textContent).toBe('My tools');
-    expect(element.textContent).toContain('Your personal tool connections are not available yet.');
+    expect(element.textContent).toContain('Enter an integration ID to see your saved connections');
     expect(element.querySelectorAll('.sidebar nav a')).toHaveLength(4);
     expect(element.querySelector('.sidebar a.back[href="/workspace"]')?.textContent)
       .toContain('Back to workspace');
