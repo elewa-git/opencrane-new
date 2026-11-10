@@ -5,7 +5,7 @@ import { persistenceScan } from './persistence.ts';
 const toolClasses = [
   'shell', 'file', 'browser', 'codeHost', 'externalMcp', 'skills', 'plugins', 'spawn',
 ] as const;
-type ToolClass = typeof toolClasses[number];
+export type ToolClass = typeof toolClasses[number];
 type Category = 'pvc' | 'rollout' | 'cache' | 'outbox' | 'logs' | 'dumps';
 type Location = { category: Category; path: string };
 type Installation = Pick<InventoryContext, 'serverInstallationId' | 'computerInstallationId' |
