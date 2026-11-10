@@ -118,7 +118,7 @@ describe('saved persona review', () => {
     button(screen.root, 'Approve this version').click();
     await show(screen, 'Private saved persona r3');
     expect(screen.root.textContent).toContain('Proposal changed');
-    expect(screen.root.querySelector('a[href="/workspace"]')).toBeNull();
+    expect(screen.root.querySelector('a[href="/welcome"]')).toBeNull();
     expect(screen.fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/persona'))
       .toHaveLength(1);
   });
@@ -153,12 +153,12 @@ describe('saved persona review', () => {
       approval.click();
       approval.click();
       await show(screen, 'Save status unknown');
-      expect(screen.root.querySelector('a[href="/workspace"]')).toBeNull();
+      expect(screen.root.querySelector('a[href="/welcome"]')).toBeNull();
       button(screen.root, 'Check status').click();
       await show(screen, 'Approved revision r2');
       expect(confirmed).toBe(true);
-      expect(screen.root.querySelector('a[href="/workspace"]')?.textContent)
-        .toContain('Continue to workspace');
+      expect(screen.root.querySelector('a[href="/welcome"]')?.textContent)
+        .toContain('Open welcome chat');
       expect(screen.root.querySelector('time')?.dateTime).toBe('2026-10-14T09:35:00.000Z');
       expect(screen.root.textContent).toContain('14 Oct 2026, 09:35 UTC');
       expect(screen.fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/persona'))
@@ -304,7 +304,7 @@ describe('saved persona review', () => {
     await show(screen, 'Approved revision r2');
     expect(screen.root.querySelector('time')?.dateTime).toBe(approved.approval.time);
     expect(screen.root.textContent).toContain('14 Oct 2026, 09:35 UTC');
-    expect(screen.root.querySelector('a[href="/workspace"]')?.textContent)
-      .toContain('Continue to workspace');
+    expect(screen.root.querySelector('a[href="/welcome"]')?.textContent)
+      .toContain('Open welcome chat');
   });
 });

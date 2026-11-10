@@ -19,7 +19,7 @@ The approval POST sends `operation: approve`, a new `commandId`, survey
 `revisionId`. A 409 reloads the saved version. An unknown result keeps the
 original id and reads `/api/personal/changes/:commandId`; it never repeats
 the POST. The approved screen shows the server's saved time and links to
-`/workspace`. It appears after a matching confirmed receipt or an already
+`/welcome`. It appears after a matching confirmed receipt or an already
 approved revision in checked progress. A 401 or 403 clears private
 text and invalidates earlier replies. Reads and writes use `no-store` and
 keep private text out of addresses, storage and error messages.
@@ -30,3 +30,21 @@ belong to the next part. The Assistant settings page remains unavailable.
 
 Run `npm run visual:screen-p4-19-persona` for intercepted captures at both
 desktop and phone widths.
+
+`/welcome` reads `GET /api/onboarding/welcome`. A `not_started` result offers
+the assistant or no-assistant start according to `GET /api/chat`. Start reads
+`/api/onboarding` for
+the current survey generation, position and approval reference, then posts
+`operation: start`. Active welcome uses the saved script version, question,
+step and position. The welcome read does not include generation, so the page
+reads `/api/onboarding` to obtain it before an answer. One answer POST uses
+`operation: answer`; no-assistant sends the scripted acknowledgement. A 409
+reloads saved progress and requires review. An unknown reply keeps the command
+id and only checks `/api/personal/changes/:commandId`. Completion is shown only
+after a saved `completed` read. The composer is absent in pending and completed
+states. A 401/403 clears saved private words and aborts late replies. The
+archived display uses `/welcome?section=archived` and remains read-only; list
+navigation belongs to the next chat-list change. No browser storage is used.
+
+Run `npm run visual:screen-p4-20-welcome` for intercepted desktop and phone
+captures. It does not start the development stack.

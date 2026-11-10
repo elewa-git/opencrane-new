@@ -12,6 +12,8 @@
   <oc-survey-screen />
 } @else if (personaReviewPage) {
   <oc-persona-review />
+} @else if (welcomeChatPage) {
+  <oc-welcome-chat />
 } @else if (accountPath) {
   <oc-personal-settings-shell [activePage]="settingsPage">
     @if (!settingsPage) {

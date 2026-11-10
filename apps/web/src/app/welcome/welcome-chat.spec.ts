@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { z } from 'zod';
 import { WelcomeChat } from './welcome-chat';
 
 const active = { status: 'welcome_active', welcomeId: 'welcome-one',
@@ -20,8 +21,18 @@ function mount(read: (url: string, init?: RequestInit) => Promise<Response>) {
   TestBed.configureTestingModule({ imports: [WelcomeChat] });
   const fixture = TestBed.createComponent(WelcomeChat);
   fixture.detectChanges();
-  const root = fixture.nativeElement as HTMLElement;
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('Missing welcome page');
   return { fixture, root, fetchSpy };
+}
+
+function commandBody(init?: RequestInit) {
+  if (typeof init?.body !== 'string') throw new Error('Missing command body');
+  const body: unknown = JSON.parse(init.body);
+  return z.object({ commandId: z.string(), operation: z.string(),
+    welcomeId: z.string().optional(), scriptVersion: z.string(),
+    stepId: z.string().optional(), stepNumber: z.number().optional(),
+    expectedPosition: z.number() }).parse(body);
 }
 
 async function show(screen: ReturnType<typeof mount>, words: string): Promise<void> {
@@ -42,12 +53,15 @@ describe('saved welcome chat', () => {
     const screen = mount((url, init) => {
       if (url === '/api/onboarding/welcome' && init?.method === 'POST') {
         posts += 1;
-        expect(JSON.parse(String(init.body))).toMatchObject({ operation: 'answer',
+        const body = commandBody(init);
+        expect(body).toMatchObject({ operation: 'answer',
           welcomeId: 'welcome-one', scriptVersion: 'welcome-v1', stepId: 'weekly_help',
           stepNumber: 1, expectedPosition: 8 });
         return reply({ status: 'completion_pending', operation: 'onboarding.welcome_answer_recorded',
-          commandId: JSON.parse(String(init.body)).commandId });
+          commandId: body.commandId });
       }
+      if (posts > 0) return reply({ ...active, status: 'completion_pending', answered: 1,
+        nextStep: null, question: null, answer: 'A concise comparison of our two suppliers.' });
       return reply(active);
     });
     await show(screen, active.question);
@@ -55,7 +69,8 @@ describe('saved welcome chat', () => {
     answer.value = 'A concise comparison of our two suppliers.';
     answer.dispatchEvent(new Event('input'));
     screen.fixture.detectChanges();
-    const send = screen.root.querySelector('button[type="submit"]')! as HTMLButtonElement;
+    const send = screen.root.querySelector('button[type="submit"]');
+    if (!(send instanceof HTMLButtonElement)) throw new Error('Missing send button');
     send.click();
     send.click();
     await show(screen, 'Checking completion');
@@ -78,7 +93,9 @@ describe('saved welcome chat', () => {
     answer.value = 'Help with planning';
     answer.dispatchEvent(new Event('input'));
     screen.fixture.detectChanges();
-    (screen.root.querySelector('button[type="submit"]') as HTMLButtonElement).click();
+    const send = screen.root.querySelector('button[type="submit"]');
+    if (!(send instanceof HTMLButtonElement)) throw new Error('Missing send button');
+    send.click();
     await show(screen, 'Check status');
     expect(screen.root.querySelector('textarea')).toBeNull();
     (Array.from(screen.root.querySelectorAll('button'))
@@ -113,9 +130,48 @@ describe('saved welcome chat', () => {
     answer.value = 'Private words';
     answer.dispatchEvent(new Event('input'));
     screen.fixture.detectChanges();
-    (screen.root.querySelector('button[type="submit"]') as HTMLButtonElement).click();
+    const send = screen.root.querySelector('button[type="submit"]');
+    if (!(send instanceof HTMLButtonElement)) throw new Error('Missing send button');
+    send.click();
     await show(screen, 'access has changed');
     expect(screen.root.textContent).not.toContain('Private words');
     expect(screen.root.textContent).not.toContain(active.question);
+  });
+
+  it('requires fresh review after a competing answer changes saved progress', async () => {
+    let reads = 0;
+    const screen = mount((url, init) => {
+      if (init?.method === 'POST') return reply({ status: 'conflict' }, 409);
+      if (url === '/api/onboarding/welcome') {
+        reads += 1;
+        return reply(reads === 1 ? active : { ...active, status: 'completed',
+          answered: 1, answer: 'A newer saved answer', nextStep: null,
+          question: null, completedAt: '2026-10-14T09:03:00.000Z' });
+      }
+      return reply({}, 404);
+    });
+    await show(screen, active.question);
+    const answer = screen.root.querySelector('textarea')!;
+    answer.value = 'Old draft';
+    answer.dispatchEvent(new Event('input'));
+    screen.fixture.detectChanges();
+    const send = screen.root.querySelector('button[type="submit"]');
+    if (!(send instanceof HTMLButtonElement)) throw new Error('Missing send button');
+    send.click();
+    await show(screen, 'Review saved welcome');
+    expect(screen.root.textContent).not.toContain('Old draft');
+    expect(screen.root.querySelector('textarea')).toBeNull();
+  });
+
+  it('offers direct and group drafts after no-assistant completion', async () => {
+    const noAssistant = { ...active, status: 'completed', variant: 'no_assistant',
+      assignmentStatus: 'not_requested', answered: 1, nextStep: null,
+      question: null, answer: 'Continue to workspace',
+      completedAt: '2026-10-14T09:03:00.000Z' };
+    const screen = mount(() => reply(noAssistant));
+    await show(screen, 'Start a direct or group chat');
+    expect(screen.root.querySelector('a[href="/workspace/direct"]')).not.toBeNull();
+    expect(screen.root.querySelector('a[href="/workspace"]')).toBeNull();
+    expect(screen.root.querySelector('textarea')).toBeNull();
   });
 });
