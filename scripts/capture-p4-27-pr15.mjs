@@ -51,6 +51,7 @@ async function capture(browser, width, name, capabilities) {
     await page.goto(`${origin}/org/overview`);
     await page.locator('.sidebar nav a').filter({ hasText: 'People & groups' })
       .waitFor({ state: 'attached' });
+    await page.locator('.overview-tasks .overview-row').first().waitFor({ state: 'visible' });
     await page.evaluate(waitForFonts);
     if (width === 390) {
       const opener = page.getByRole('button', { name: 'Open organisation navigation' });
