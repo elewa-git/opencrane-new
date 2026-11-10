@@ -1087,6 +1087,63 @@ it.each(['stop', 'grant', 'block'] as const)(
   'refuses saved %s while credential recovery is pending',
   refusesChangeDuringCustodyRecovery);
 
+async function refusesChangeBeforeReleaseAppend(kind: 'stop' | 'grant' | 'block') {
+  holdFixtureClock();
+  const append = nats.store.append.bind(nats.store);
+  let changed = false;
+  let releaseConflict = false;
+  async function changeBeforeRelease(...supplied: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_send_release_authorised') {
+      changed = true;
+      await recordLateCompanyChange(kind);
+    }
+    const result = await append(...supplied);
+    if (proposed.type === 'routine.run_send_release_authorised') {
+      releaseConflict = result.status === 'conflict';
+    }
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changeBeforeRelease);
+  expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  expect(changed).toBe(true);
+  expect(releaseConflict).toBe(true);
+  expect(await saved('routine.run_send_release_authorised', 'routine-orders')).toEqual([]);
+  function isTurn(frame: Record<string, unknown>) {
+    return frame['type'] === 'turn';
+  }
+  expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
+}
+it.each(['stop', 'grant', 'block'] as const)(
+  'conflicts with saved %s before the release append and sends no turn',
+  refusesChangeBeforeReleaseAppend);
+
+async function stopsAfterReleaseAppend() {
+  holdFixtureClock();
+  expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'sent' });
+  await until(preparedComputer.executed);
+  const release = await saved('routine.run_send_release_authorised', 'routine-orders');
+  expect(release).toHaveLength(1);
+  await recordLateCompanyChange('stop');
+  const stop = await saved('routine.run_stop_requested', 'routine-orders');
+  expect(stop).toHaveLength(1);
+  expect(stop[0]!.sequence).toBeGreaterThan(release[0]!.sequence);
+  await preparedComputer.link.routines.poll(conversationId);
+  function hasStopFrame() {
+    function isStop(frame: Record<string, unknown>) {
+      return frame['type'] === 'stop' && frame['turnId'] === turnId;
+    }
+    expect(preparedComputer.frames.some(isStop)).toBe(true);
+  }
+  await vi.waitFor(hasStopFrame, { timeout: 2000 });
+  function stoppedNativeSession() {
+    expect(preparedComputer.closedSessions).toBe(1);
+  }
+  await vi.waitFor(stoppedNativeSession, { timeout: 2000 });
+}
+it('stops and records a running turn when Stop follows the release append',
+  stopsAfterReleaseAppend);
+
 async function inert(options: { enabled?: boolean; replay?: boolean }) {
   const before = await nats.store.head();
   const wake = vi.fn(forbidden);
