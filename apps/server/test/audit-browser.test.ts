@@ -79,23 +79,29 @@ it('shows action and change history states at 1280 and 390px with keyboard filte
           await page.getByText('Loading history…').waitFor();
           await page.screenshot({ path: `/tmp/p3-19-${view}-loading-${width}.png`, fullPage: true });
           release(); await page.unrouteAll({ behavior: 'wait' });
-          await page.getByText('Observed outcome: Outcome unknown', { exact: true }).waitFor();
+          await page.getByText('Observation: Outcome unknown', { exact: false }).waitFor();
           expect(await page.locator('body').innerText()).not.toContain('canary');
           expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
           const controls = page.locator('oc-audit button, oc-audit input, oc-audit select');
           for (let i = 0; i < await controls.count(); i++) expect((await controls.nth(i).boundingBox())?.height).toBeGreaterThanOrEqual(44);
           await page.screenshot({ path: `/tmp/p3-19-${view}-unknown-${width}.png`, fullPage: true });
-          await page.getByLabel('Decision filter').selectOption('deny');
-          await page.getByRole('button', { name: 'Apply filters' }).focus();
-          await page.keyboard.press('Enter');
-          await page.getByText('No history matches', { exact: true }).waitFor();
-          await page.screenshot({ path: `/tmp/p3-19-${view}-empty-${width}.png`, fullPage: true });
-          await page.waitForFunction("document.activeElement?.id === 'apply-audit-filters'");
+          if (view === 'change') {
+            await page.getByRole('searchbox', { name: 'Safe reference' }).fill('missing-reference');
+            await page.getByRole('button', { name: 'Search' }).focus();
+            await page.keyboard.press('Enter');
+            await page.getByText('No entries match missing-reference.', { exact: true }).waitFor();
+            await page.screenshot({ path: `/tmp/p3-19-${view}-empty-${width}.png`, fullPage: true });
+          }
           await page.route('**/api/**/history*', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"private-error-canary"}' }));
-          await page.getByRole('button', { name: 'Refresh history' }).press('Enter');
-          await page.getByText('History unavailable', { exact: true }).waitFor();
+          if (view === 'change') {
+            await page.getByRole('button', { name: 'Search' }).press('Enter');
+          } else {
+            await page.goto(`${base}${path}`);
+          }
+          await page.getByText('History unavailable.', { exact: false }).waitFor();
           expect(await page.locator('body').innerText()).not.toContain('canary');
-          expect(await page.getByText('No history matches', { exact: true }).count()).toBe(0);
+          expect(await page.getByText('No entries match missing-reference.',
+            { exact: true }).count()).toBe(0);
           await page.screenshot({ path: `/tmp/p3-19-${view}-unavailable-${width}.png`, fullPage: true });
           await page.unrouteAll();
         }

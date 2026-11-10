@@ -12,6 +12,7 @@ Control refusal history explains when someone was not the requester or their att
 conflicted with saved control. It contains no private computer or turn details.
 
 Removal, role and ownership history replies identify the affected person and saved operation.
+History requests can select a named family covering related event types.
 Publication history replies can name a permitted parent chat, a permitted child chat
 and a saved result reference. A parent link is shown only to a parent reader.
 Detail replies can also say whether read tables and permissions have applied that change.
@@ -48,7 +49,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 flowchart LR
   web["apps/web<br/>browser app"] -.->|chat replies with masked views, file ids, service readiness and private clearances| protocol["libs/protocol<br/>shared reply shapes"]
   server["apps/server<br/>back end"] -.->|chat replies with masked views, close permission and call status| protocol
-  projections["libs/projections<br/>read tables"] -.->|saved resolution and publication history| protocol
+  projections["libs/projections<br/>read tables"] -.->|safe history and family filters| protocol
   models["libs/models<br/>AI rules and spending"] -.-> protocol
   protocol -.-> zod["Zod<br/>data checks"]
 ```

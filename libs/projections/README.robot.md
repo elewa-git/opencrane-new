@@ -2,6 +2,15 @@
 
 For people, read [README.md](README.md) first.
 
+The audit read accepts one `family` key and expands it to all event prefixes
+before paging. Members includes member, ownership, team, assistant, grant and
+silo events. Tools includes tool, MCP, connection, egress, credential, provider
+and model events. Spending includes budget, effect, decision and gateway events.
+Memory and routines use their respective prefixes. Provider, model, budget and
+routine records retain only the existing safe audit metadata; schedules, keys
+and private inputs do not enter the history table. Rebuild audit after upgrading
+to include earlier records.
+
 The conversation feed retains an encrypted command `view` beside the plain
 activity label. The audit projection drops `view` from `agent.command_ran` so
 organisation readers receive only the safe activity summary.

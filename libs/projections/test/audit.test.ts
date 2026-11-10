@@ -36,13 +36,24 @@ function auditAllowListIncludesSafeFamilies(): void {
     const delegationEvidence = event.type === 'delegation.started' ||
       event.type === 'delegation.completed';
     const maintenanceEvidence = event.type === 'memory.maintenance_recorded';
+    const providerOrRoutine = event.type.startsWith('provider.') ||
+      event.type.startsWith('routine.');
+    const budgetOrModel = event.type.startsWith('budget.') || event.type.startsWith('model.');
     const expected = previouslyAllowed || ownershipEvidence || invitationEvidence ||
-      dispatchEvidence || publicationEvidence || delegationEvidence || maintenanceEvidence;
+      dispatchEvidence || publicationEvidence || delegationEvidence || maintenanceEvidence ||
+      providerOrRoutine || budgetOrModel;
     expect(isAuditEventType(event.type), event.type).toBe(expected);
   }
 }
 it('preserves the audit allow-list and includes safe maintenance history',
   auditAllowListIncludesSafeFamilies);
+
+it('includes every provider and routine event in the safe history', () => {
+  for (const event of eventRegistry) {
+    if (!event.type.startsWith('provider.') && !event.type.startsWith('routine.')) continue;
+    expect(isAuditEventType(event.type), event.type).toBe(true);
+  }
+});
 
 it('keeps encrypted command views out of audit rows', async () => {
   const db = await database('pg');
@@ -68,7 +79,17 @@ function fixture(type: string, id: string, data: Record<string, unknown> = {}, c
   if (definition!.stream === 'mcp') {
     subject = `mcp-${String(eventData['serverId'])}`;
   }
-  const parsed = parseEventByType({ id, commandId: id, principal: { id: 'fixture', kind: 'system' }, type, source: 'fixture', silo: 'test', subject,
+  if (definition!.stream === 'routine') {
+    subject = `routine-${String(eventData['routineId'])}`;
+  }
+  let source = 'fixture';
+  let principal: EventEnvelope['principal'] = { id: 'fixture', kind: 'system' };
+  if (definition!.stream === 'routine') {
+    source = 'opencrane-server';
+    const actorId = z.string().safeParse(eventData['actorId']).data ?? 'opencrane-server';
+    principal = { id: actorId, kind: actorId === 'opencrane-server' ? 'system' : 'human' };
+  }
+  const parsed = parseEventByType({ id, commandId: id, principal, type, source, silo: 'test', subject,
     time: '2026-10-03T00:00:00Z', correlation: correlated ? { request: 'request', permit: 'permit', conversation: 'conversation', turn: 'turn' } : {},
     data: eventData });
   if (!parsed.success) throw new Error(`Invalid fixture ${type}: ${parsed.reason}`);
@@ -403,6 +424,40 @@ const filterCases: FilterCase[] = [
   { name: 'unknown outcome', filter: { outcome: 'unknown' },
     prefixes: ['allowed', 'gateway-unknown'] },
 ];
+
+it('reads every prefix in a history family through one paged query', async () => {
+  const db = await database('pg');
+  try {
+    await auditTrail.create(db.db);
+    const types = ['member.joined', 'ownership.seeded', 'budget.reserved',
+      'effect.observed', 'tool.approval_requested', 'provider.created',
+      'routine.due', 'routine.run_finished'];
+    let position = 0;
+    for (const type of types) {
+      position++;
+      const event = fixture(type, `family-${position}`, {}, false);
+      await auditTrail.apply(db.db, event, position);
+      // Give each saved fact a separate row so this test checks family selection.
+      await db.db.query(`UPDATE audit_entries SET anchor = TRUE,
+        request_id = NULL, permit_id = NULL, approval_id = NULL,
+        conversation_id = NULL, turn_id = NULL WHERE event_id = $1`,
+      [event.id]);
+    }
+    const families = [
+      { family: 'members' as const, types: ['member.joined', 'ownership.seeded'] },
+      { family: 'spending' as const, types: ['budget.reserved', 'effect.observed'] },
+      { family: 'tools' as const, types: ['tool.approval_requested', 'provider.created'] },
+      { family: 'routines' as const, types: ['routine.due', 'routine.run_finished'] },
+    ];
+    for (const selected of families) {
+      const page = await readAudit(db.db, 'test', { family: selected.family });
+      const actualTypes = page.rows.map(row => row.records[0]!.type);
+      expect(actualTypes.sort()).toEqual(selected.types.sort());
+    }
+  } finally {
+    await db.close();
+  }
+});
 
 async function filtersEveryPage(testCase: FilterCase): Promise<void> {
   const db = await database('pg');

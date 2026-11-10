@@ -1,11 +1,32 @@
-import { TestBed } from '@angular/core/testing';
+import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { AuditScreen } from './audit';
+
+function screenRoot(fixture: ComponentFixture<AuditScreen>): HTMLElement {
+  const element: unknown = fixture.nativeElement;
+  if (!(element instanceof HTMLElement)) throw new Error('Expected screen');
+  return element;
+}
 
 const row = { id: 'decision', requestId: 'request', permitId: 'permit', conversationId: 'conversation', turnId: 'turn',
   decision: 'allow', outcome: 'unknown', reservedCents: 25,
   records: [{ eventId: 'decision', type: 'decision.recorded', position: 1, source: 'decision', status: 'allow', reason: 'Model call permitted' }] };
 const reply = (status: number, body: unknown = {}) => new Response(JSON.stringify(body), { status });
+beforeEach(() => {
+  HTMLDialogElement.prototype.showModal = vi.fn();
+});
 afterEach(() => vi.restoreAllMocks());
+
+function reload(fixture: ComponentFixture<AuditScreen>): void {
+  fixture.componentInstance.ngOnInit();
+}
+
+function search(root: HTMLElement, value: string): void {
+  const input = root.querySelector<HTMLInputElement>('#history-reference')!;
+  input.value = value;
+  input.dispatchEvent(new Event('input'));
+  root.querySelector<HTMLFormElement>('.reference-search')!
+    .dispatchEvent(new Event('submit', { cancelable: true }));
+}
 it('renders loading, unknown outcome, filters, empty, unavailable and access loss without retaining protected details', async () => {
   let finish!: (response: Response) => void;
   const fetch = vi.spyOn(globalThis, 'fetch').mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
@@ -15,22 +36,20 @@ it('renders loading, unknown outcome, filters, empty, unavailable and access los
   expect(root.textContent).toContain('Action history'); expect(root.textContent).toContain('Loading');
   finish(reply(200, { rows: [row] }));
   await vi.waitFor(() => expect(root.textContent).toContain('Outcome unknown'));
-  expect(root.textContent).toContain('Decision: allow'); expect(root.textContent).toContain('Observed outcome: Outcome unknown');
+  expect(root.textContent).toContain('Decision: allow'); expect(root.textContent).toContain('Observation: Outcome unknown');
   expect(root.textContent).toContain('Observation missing');
+  expect(root.textContent).not.toContain('Request request');
   fetch.mockResolvedValueOnce(reply(200, { rows: [] }));
-  const filter = root.querySelector<HTMLSelectElement>('select')!; filter.value = 'deny'; filter.dispatchEvent(new Event('change'));
-  root.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
-  await vi.waitFor(() => expect(root.textContent).toContain('No history matches'));
-  expect(root.querySelector('[role=status] [data-state]')?.getAttribute('data-state'))
-    .toBe('ready');
+  reload(fixture);
+  await vi.waitFor(() => expect(root.textContent).toContain('No entries match'));
+  expect(root.querySelector('article')).toBeNull();
   expect(root.textContent).not.toContain('Not configured');
-  expect(fetch.mock.calls.at(-1)?.[0]).toEqual(expect.stringContaining('decision=deny'));
-  fetch.mockResolvedValueOnce(reply(503, { error: 'bearer-private-canary' })); root.querySelector<HTMLButtonElement>('.refresh')!.click();
+  fetch.mockResolvedValueOnce(reply(503, { error: 'bearer-private-canary' })); reload(fixture);
   await vi.waitFor(() => expect(root.textContent).toContain('History unavailable'));
-  expect(root.textContent).not.toContain('canary'); expect(root.textContent).not.toContain('No history matches');
-  fetch.mockResolvedValueOnce(reply(200, { rows: [row] })); root.querySelector<HTMLButtonElement>('.refresh')!.click();
+  expect(root.textContent).not.toContain('canary'); expect(root.textContent).not.toContain('No entries match');
+  fetch.mockResolvedValueOnce(reply(200, { rows: [row] })); reload(fixture);
   await vi.waitFor(() => expect(root.querySelector('article')).not.toBeNull());
-  fetch.mockResolvedValueOnce(reply(403)); root.querySelector<HTMLButtonElement>('.refresh')!.click();
+  fetch.mockResolvedValueOnce(reply(403)); reload(fixture);
   await vi.waitFor(() => expect(root.textContent).toContain('Access changed'));
   expect(root.querySelector('article')).toBeNull();
 });
@@ -59,4 +78,217 @@ it('shows only supplied child publication facts and a permitted parent link', as
   expect(link?.getAttribute('href')).toBe('/workspace?conversation=parent');
   expect(root.textContent).not.toContain('child-result');
   expect(root.textContent).not.toContain('private-report-canary');
+});
+
+it('appends cursor pages once, keeps equal-time rows distinct and filters on the server', async () => {
+  const first = { ...row, id: 'first', records: [{ ...row.records[0], eventId: 'first',
+    recordedAt: '2026-10-04T09:30:00.000Z' }] };
+  const second = { ...row, id: 'second', records: [{ ...row.records[0], eventId: 'second',
+    recordedAt: '2026-10-04T09:30:00.000Z' }] };
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(200, { rows: [first], nextBefore: 8 }))
+    .mockResolvedValueOnce(reply(200, { rows: [first, second] }))
+    .mockResolvedValueOnce(reply(200, { rows: [second] }));
+  const fixture = TestBed.createComponent(AuditScreen); fixture.detectChanges();
+  const root = screenRoot(fixture);
+  await vi.waitFor(() => expect(root.querySelectorAll('article')).toHaveLength(1));
+  root.querySelector<HTMLButtonElement>('.older-history')!.click();
+  await vi.waitFor(() => expect(root.querySelectorAll('article')).toHaveLength(2));
+  expect(fetchSpy.mock.calls[1]?.[0]).toContain('before=8');
+  search(root, 'second');
+  await vi.waitFor(() => expect(root.querySelectorAll('article')).toHaveLength(1));
+  expect(fetchSpy.mock.calls[2]?.[0]).toContain('reference=second');
+});
+
+it('opens only the selected detail, pages evidence and returns keyboard focus', async () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(200, { rows: [row] }))
+    .mockResolvedValueOnce(reply(200, { id: row.id, records: row.records, nextBefore: 7 }))
+    .mockResolvedValueOnce(reply(200, { id: row.id, records: [] }));
+  const fixture = TestBed.createComponent(AuditScreen); fixture.detectChanges();
+  const root = screenRoot(fixture);
+  await vi.waitFor(() => expect(root.querySelector('article button')).not.toBeNull());
+  const opener = root.querySelector<HTMLButtonElement>('article button')!;
+  opener.click();
+  await vi.waitFor(() => expect(root.querySelector('.history-detail')).not.toBeNull());
+  await vi.waitFor(() => expect(document.activeElement?.id).toBe('history-detail-title'));
+  expect(fetchSpy.mock.calls[1]?.[0]).toContain('/api/org/history/decision');
+  root.querySelector<HTMLButtonElement>('.more-evidence')!.click();
+  await vi.waitFor(() => expect(fetchSpy.mock.calls[2]?.[0]).toContain('before=7'));
+  root.querySelector<HTMLButtonElement>('.close-detail')!.click();
+  expect(document.activeElement).toBe(opener);
+});
+
+it('keeps dated stale rows on 503, then clears them on denial despite a late detail reply', async () => {
+  let finishDetail!: (response: Response) => void;
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(200, { rows: [row] }))
+    .mockImplementationOnce(() => new Promise(resolve => { finishDetail = resolve; }))
+    .mockResolvedValueOnce(reply(503))
+    .mockResolvedValueOnce(reply(403));
+  const fixture = TestBed.createComponent(AuditScreen); fixture.detectChanges();
+  const root = screenRoot(fixture);
+  await vi.waitFor(() => expect(root.querySelector('article button')).not.toBeNull());
+  root.querySelector<HTMLButtonElement>('article button')!.click();
+  reload(fixture);
+  await vi.waitFor(() => expect(root.textContent).toContain('last checked'));
+  expect(root.querySelectorAll('article')).toHaveLength(1);
+  reload(fixture);
+  await vi.waitFor(() => expect(root.textContent).toContain('Access changed'));
+  finishDetail(reply(200, { id: row.id, records: row.records }));
+  await vi.waitFor(() => expect(root.querySelector('.history-detail')).toBeNull());
+  expect(root.textContent).not.toContain('Model call permitted');
+  expect(fetchSpy).toHaveBeenCalledTimes(4);
+});
+
+it('shows restricted publication and memory detail without private text or inferred links', async () => {
+  const publication = { eventId: 'published', type: 'conversation.child_result_published',
+    position: 4, source: 'authoritative', status: 'recorded',
+    parentConversationId: 'parent', publicationKind: 'final',
+    taskHref: '/workspace?conversation=parent' };
+  const restricted = { eventId: 'restricted', type: 'delegation.completed',
+    position: 3, source: 'authoritative', status: 'recorded',
+    delegationAccess: 'restricted', joinStatus: 'unavailable' };
+  const memory = { eventId: 'memory', type: 'memory.maintenance_recorded',
+    position: 2, source: 'authoritative', status: 'recorded',
+    maintenanceAction: 'prepared', maintenanceScopeKind: 'person',
+    maintenanceScopeId: 'a'.repeat(64), maintenanceMemberId: 'administrator',
+    taskHref: `/api/memory/${'a'.repeat(64)}/maintenance` };
+  const source = { ...row, id: 'facts', records: [publication, restricted, memory] };
+  vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(200, { rows: [source] }))
+    .mockResolvedValueOnce(reply(200, { id: 'facts',
+      records: [publication, restricted, memory] }));
+  const fixture = TestBed.createComponent(AuditScreen); fixture.detectChanges();
+  const root = screenRoot(fixture);
+  await vi.waitFor(() => expect(root.querySelector('article button')).not.toBeNull());
+  root.querySelector<HTMLButtonElement>('article button')!.click();
+  await vi.waitFor(() => expect(root.textContent).toContain('Related record'));
+  expect(root.querySelectorAll('.history-detail a')).toHaveLength(1);
+  expect(root.querySelector<HTMLAnchorElement>('.history-detail a')?.getAttribute('href'))
+    .toBe('/workspace?conversation=parent');
+  expect(root.textContent).not.toContain('child-private');
+  expect(root.textContent).not.toContain('fact-private');
+  expect(root.textContent).not.toContain('administrator');
+  expect(root.textContent).not.toContain('a'.repeat(64));
+  expect(root.textContent).toContain('Unavailable');
+});
+
+it('ignores a previous filter reply after the current filter result', async () => {
+  let finishOld!: (response: Response) => void;
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(200, { rows: [row] }))
+    .mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }))
+    .mockResolvedValueOnce(reply(200, { rows: [] }));
+  const fixture = TestBed.createComponent(AuditScreen); fixture.detectChanges();
+  const root = screenRoot(fixture);
+  await vi.waitFor(() => expect(root.querySelector('article')).not.toBeNull());
+  search(root, 'first');
+  search(root, 'second');
+  await vi.waitFor(() => expect(root.textContent).toContain('No entries match'));
+  finishOld(reply(200, { rows: [row] }));
+  await vi.waitFor(() => expect(root.querySelector('article')).toBeNull());
+  expect(fetchSpy).toHaveBeenCalledTimes(3);
+});
+
+it('checks an unknown record through its selected GET without resending a command', async () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(200, { rows: [row] }))
+    .mockResolvedValueOnce(reply(200, { id: row.id, records: row.records }));
+  const fixture = TestBed.createComponent(AuditScreen); fixture.detectChanges();
+  const root = screenRoot(fixture);
+  await vi.waitFor(() => expect(root.querySelector('article button')).not.toBeNull());
+  root.querySelector<HTMLButtonElement>('article button + p + button')!.click();
+  await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+  expect(fetchSpy.mock.calls[1]?.[0]).toContain('/api/org/history/decision');
+  expect(fetchSpy.mock.calls[1]?.[1]).toBeUndefined();
+});
+
+it('does not restore a selected detail after the filters change', async () => {
+  let finishDetail!: (response: Response) => void;
+  vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(200, { rows: [row] }))
+    .mockImplementationOnce(() => new Promise(resolve => { finishDetail = resolve; }))
+    .mockResolvedValueOnce(reply(200, { rows: [] }));
+  const fixture = TestBed.createComponent(AuditScreen); fixture.detectChanges();
+  const root = screenRoot(fixture);
+  await vi.waitFor(() => expect(root.querySelector('article button')).not.toBeNull());
+  root.querySelector<HTMLButtonElement>('article button')!.click();
+  search(root, 'second');
+  finishDetail(reply(200, { id: row.id, records: row.records }));
+  await vi.waitFor(() => expect(root.textContent).toContain('No entries match'));
+  expect(root.querySelector('.history-detail')).toBeNull();
+});
+
+it('keeps the frame filters compact and names all history families', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(200, { rows: [row] }));
+  const fixture = TestBed.createComponent(AuditScreen);
+  fixture.detectChanges();
+  const root = screenRoot(fixture);
+  await vi.waitFor(() => expect(root.querySelector('article')).not.toBeNull());
+  expect(root.querySelector('.families-and-search')).not.toBeNull();
+  expect(root.textContent).toContain('Members & owners');
+  expect(root.textContent).toContain('Tools & models');
+  expect(root.textContent).toContain('Spending & effects');
+  expect(root.textContent).toContain('Routines');
+  expect(root.querySelector('.family-icon')).not.toBeNull();
+  expect(root.querySelector('.refresh')).toBeNull();
+  expect(root.querySelector('.advanced')).toBeNull();
+});
+
+it.each([
+  ['Members & owners', 'members'],
+  ['Tools & models', 'tools'],
+  ['Spending & effects', 'spending'],
+  ['Memory', 'memory'],
+  ['Routines', 'routines'],
+])('requests the whole %s family', async (label, family) => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(200, { rows: [] }));
+  const fixture = TestBed.createComponent(AuditScreen);
+  fixture.detectChanges();
+  const root = screenRoot(fixture);
+  await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledOnce());
+  const button = [...root.querySelectorAll<HTMLButtonElement>('.families button')]
+    .find(candidate => candidate.textContent?.trim() === label);
+  expect(button).toBeDefined();
+  button!.click();
+  await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+  const calledPath = fetchSpy.mock.calls[1]![0];
+  if (typeof calledPath !== 'string') throw new Error('Expected history URL');
+  const request = new URL(calledPath, 'https://example.test');
+  expect(request.searchParams.get('family')).toBe(family);
+  expect(request.searchParams.has('type')).toBe(false);
+});
+
+it('shows readable ownership evidence and uses a native modal', async () => {
+  const ownershipRecord = {
+    eventId: 'owner-change', type: 'member.role_changed', position: 2,
+    source: 'authoritative', status: 'recorded',
+    recordedAt: '2026-11-08T10:50:00.000Z', operation: 'appointment',
+    newRole: 'owner', actor: { kind: 'person', id: 'member-Marie' },
+    progress: { readModel: 'current', iam: 'current', checkedAt: '2026-11-08T10:51:00.000Z' },
+  };
+  const ownershipRow = { id: 'owner-change', decision: 'not_recorded',
+    outcome: 'recorded', records: [ownershipRecord] };
+  vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(200, { rows: [ownershipRow] }))
+    .mockResolvedValueOnce(reply(200, { id: 'owner-change', records: [ownershipRecord] }));
+  const showModal = vi.spyOn(HTMLDialogElement.prototype, 'showModal');
+  const fixture = TestBed.createComponent(AuditScreen);
+  fixture.detectChanges();
+  const root = screenRoot(fixture);
+  await vi.waitFor(() => expect(root.querySelector('.row-button')).not.toBeNull());
+  root.querySelector<HTMLButtonElement>('.row-button')!.click();
+  await vi.waitFor(() => expect(showModal).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(root.textContent).toContain('Owner appointed'));
+  expect(document.activeElement).toBe(root.querySelector('.history-detail h2'));
+  expect(root.querySelector('.results div:nth-child(2) span')?.textContent).toBe('Observation');
+  expect(root.textContent).toContain('Owner role current in content and access');
+  expect(root.textContent).toContain('Affected scope');
+  expect(root.textContent).toContain('Verified actor');
+  expect(root.querySelector<HTMLAnchorElement>('a[href="/org/people"]')?.textContent)
+    .toContain('Open People & groups');
+  expect(root.textContent).not.toContain('member.role_changed');
+  expect(root.textContent).not.toContain('member-Marie');
+  expect(root.querySelector('.history-detail')?.textContent).not.toContain('owner-change');
 });

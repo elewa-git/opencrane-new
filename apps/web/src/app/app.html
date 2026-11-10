@@ -75,7 +75,7 @@
         <p>Loading spending…</p>
       }
     } @else if (activePage === 'history') {
-      <oc-audit />
+      <oc-audit (accessLost)="overviewAccessLost.set(true)" />
     } @else if (activePage === 'people') {
       @if (ownershipPage) {
         <oc-ownership-screen [organisationName]="organisation" />

@@ -1,0 +1,1 @@
+Change history now shows complete member, tool, spending, memory and routine families with compact filters and readable details. The phone detail covers the screen with a full-width action, keeps keyboard focus, pages safe evidence and clears protected records when access ends.

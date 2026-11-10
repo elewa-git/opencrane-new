@@ -22,7 +22,7 @@ flowchart LR
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
   web -->|saved and private replies| capture["Chat workspace<br/>reply details, shared images and diagrams"]
-  web -->|settings and change history| admin["Admin pages<br/>overview, provider, tool, people and memory"]
+  web -->|settings and safe history details| admin["Admin pages<br/>overview, provider, tool, people and memory"]
 ```
 
 Sign-in goes through the server to [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service).
@@ -91,7 +91,8 @@ For owners and admins, it:
 - Registers tool servers, reviews tools and publishes their settings, even when other
   changes are saved between review and publication. A paused check is labelled as a
   tool change only when the saved catalogue shows a change.
-- Shows organisation change history.
+- Shows organisation change history with filters and one record's paged evidence.
+  A temporary read failure keeps loaded records; access loss clears them.
 - Shows a reviewed child publication's permitted parent link in change history.
 
 A shared assistant belongs to a group; members can start private sessions with it.
