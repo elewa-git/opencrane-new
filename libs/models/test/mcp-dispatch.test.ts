@@ -2768,10 +2768,17 @@ it('sends one selected personal credential after a real release append',
   selectedPersonalCall, 60_000);
 
 const personalChanges = ['cleared choice', 'revoked profile', 'admin block',
-  'changed review', 'expired permit', 'lost release audit'] as const;
+  'changed review', 'expired permit', 'lost release audit', 'closed turn',
+  'new Ask message'] as const;
 async function refusesChangedPersonalCall(change: typeof personalChanges[number]) {
-  const { setup, remote, headers, saved } = await selectedPersonalFixture();
-  const value = await permit(setup, headers);
+  const mode = change === 'new Ask message' ? 'ask' : 'allow';
+  const { setup, remote, headers, saved } = await selectedPersonalFixture(mode);
+  let permitHeaders = headers;
+  if (mode === 'ask') {
+    const approvalId = await approvalForReviewedTool(setup, headers, true);
+    permitHeaders = { ...headers, 'x-opencrane-approval-id': approvalId };
+  }
+  const value = await permit(setup, permitHeaders);
   const requestId = requestFromPermit(value);
   if (change === 'cleared choice') {
     const previous = await setup.nats.store.head('connection-selection-alice-fixture');
@@ -2797,6 +2804,17 @@ async function refusesChangedPersonalCall(change: typeof personalChanges[number]
   } else if (change === 'expired permit') {
     const current = Date.now();
     vi.spyOn(Date, 'now').mockReturnValue(current + 31_000);
+  } else if (change === 'closed turn') {
+    await setup.append('computer-assistant', 'computer.turn_closed', {
+      assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
+      turnId: 'dispatch', threadId: headers['session-id'], requesterId: 'alice',
+      task: 'chat_turn', status: 'completed',
+    });
+  } else if (change === 'new Ask message') {
+    await setup.append('conversation-conversation', 'message.posted', {
+      conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
+      contentType: 'text', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1',
+    });
   } else {
     const append = setup.nats.store.append.bind(setup.nats.store);
     async function lostAudit(command: AppendCommand) {
@@ -2867,6 +2885,25 @@ async function keepsUnknownPersonalOutcomeUnknown() {
 }
 it('keeps a credentialed transport failure unknown and never resends',
   keepsUnknownPersonalOutcomeUnknown, 60_000);
+
+async function hidesCredentialEchoInRemoteError() {
+  const { setup, remote, headers } = await selectedPersonalFixture();
+  function echoedError() {
+    return '{"jsonrpc":"2.0","id":REQUEST_ID,"error":{"code":-32603,'
+      + '"message":"Bearer alice-access","data":{"credential":"alice-access"}}}';
+  }
+  remote.respond(echoedError);
+  const value = await permit(setup, headers);
+  const response = await send(setup, value);
+  expect(response.status).toBe(200);
+  const returned = await response.text();
+  expect(returned).not.toContain('alice-access');
+  expect(returned).not.toContain('Bearer');
+  expect(remote.received).toHaveLength(1);
+  expect(remote.received[0]!.headers.authorization).toBe('Bearer alice-access');
+}
+it('does not return an upstream error that echoes the injected credential',
+  hidesCredentialEchoInRemoteError, 60_000);
 
 async function refusesScopeMismatchBeforePermit() {
   const { setup, remote, headers, saved } = await selectedPersonalFixture();
