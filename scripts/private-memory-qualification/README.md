@@ -25,7 +25,7 @@ flowchart LR
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
   collector -->|measures launches, joins process records and starts checks| docker["Docker<br/>running image and host"]
   docker -->|checks services, Codex and canary helper| deployment["deployment<br/>services and journey runner"]
-  collector -->|checks live bridge, supervisor and held proxy calls| computer["computer container<br/>root and native launch records"]
+  collector -->|holds and checks native work and live services| computer["computer container<br/>root and native launch records"]
 ```
 
 ## What it is responsible for
@@ -47,9 +47,9 @@ flowchart LR
 - Check two private Codex processes from the deployment image without a model call.
 - Bind the canary journey helper to the supervisor launch record and check its own
   swap, core dump and dumpability controls before and after work.
-- Require one matching set of live process records before a journey and check the
-  same set again before saving a result. Each record must match a measured launch,
-  process namespace and dumpability result. A missing or changed group stops collection.
+- Keep the native pair and journey helper alive while reading the process set twice.
+  The journey runs between those reads. A missing or changed process stops collection
+  before a result is saved.
 - Hold one private Codex turn while checking its wrapper and native child against
   protected launch records and live kernel settings.
 - Save its own result in a protected file and recheck the deployment whenever it is used.
@@ -96,9 +96,8 @@ and live storage checks are still pending. The live inventory reader asks the
 server delivery, computer supervisor, bridge and proxy for process identity and
 protection results in their measured containers. It checks the full process identity
 seen during protection, including the executable, before reporting a protected process.
-The reader also checks the native pair and canary helper against their launch records.
-The joined check still stops the journey because these processes are not held through
-both inventory reads.
+The joined check requires those processes through both reads. An active proxy
+call and full live qualification still remain unproved.
 The server package image does not contain Codex or its launch helpers, so its native
 check refuses. Tests put the qualification scripts into a disposable copy of the
 packaged computer image. They do not change the deployment image.

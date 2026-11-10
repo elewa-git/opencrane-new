@@ -1,4 +1,4 @@
-import { createServer, type Socket } from 'node:net';
+import { createServer, type Server, type Socket } from 'node:net';
 import { runnerProtected } from './runner-protection.ts';
 
 export type ServiceRole = 'serverDelivery' | 'bridge' | 'supervisor' | 'proxy' |
@@ -44,12 +44,26 @@ function serve(socket: Socket, ready: () => boolean): void {
   socket.once('timeout', timedOut);
 }
 
+function closeServer(server: Server): Promise<void> {
+  return new Promise<void>(function waitForClose(resolve, reject): void {
+    server.close(function closed(error): void {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+async function nothingToClose(): Promise<void> {}
+
 export async function startServiceProtection(role: ServiceRole,
-  ready: () => boolean = alwaysReady): Promise<void> {
+  ready: () => boolean = alwaysReady): Promise<() => Promise<void>> {
   const result = runnerProtected();
   if (result !== true) {
     // Development installations without the native helper cannot provide proof.
-    return;
+    return nothingToClose;
   }
   function guardedServe(socket: Socket): void {
     serve(socket, ready);
@@ -63,6 +77,10 @@ export async function startServiceProtection(role: ServiceRole,
       resolve();
     });
   });
+  function closeProtection(): Promise<void> {
+    return closeServer(server);
+  }
+  return closeProtection;
 }
 
 function alwaysReady(): boolean {

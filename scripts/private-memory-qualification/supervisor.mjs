@@ -6,6 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const lock = '/run/opencrane-memory-qualification.lock';
 const helperRecord = `${lock}/helper-identity`;
+const inventoryStage = `${lock}/inventory-stage`;
 const protectionFailures = JSON.parse(process.argv[1]);
 const args = JSON.parse(process.argv[2]);
 let child;
@@ -169,6 +170,7 @@ async function finish(code) {
       clearTransientFiles();
     }
     if (locked) {
+      rmSync(inventoryStage, { force: true });
       rmSync(helperRecord, { force: true });
       rmdirSync(lock);
     }

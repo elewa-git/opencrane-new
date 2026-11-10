@@ -349,6 +349,85 @@ function supervisedCommand(): string[] {
     JSON.stringify(failures), JSON.stringify(nativeCommand())];
   return command;
 }
+
+function stagedSupervisorCommand(script: string): string[] {
+  const source = readFileSync(new URL('./supervisor.mjs', import.meta.url), 'utf8');
+  const failures = Object.keys(protectionMessages);
+  const child = ['/usr/local/bin/node', '-e', script];
+  return ['/usr/local/bin/node', '--input-type=module', '--eval', source,
+    JSON.stringify(failures), JSON.stringify(child)];
+}
+
+function stagedChild(wait: boolean): string {
+  const result = JSON.stringify({ result: 'PARTIAL', complete: false });
+  const ending = wait ? 'setInterval(() => {}, 1000);' : `process.stdout.write(${JSON.stringify(result)});`;
+  return "const fs = require('node:fs'); " +
+    "fs.writeFileSync('/run/opencrane-memory-qualification.lock/inventory-stage', " +
+    "'challenge ready\\n', { flag: 'wx', mode: 0o600 }); " + ending;
+}
+
+function lockRemoved(containerName: string): boolean {
+  const probe = "const fs = require('node:fs'); " +
+    "process.stdout.write(String(!fs.existsSync(" +
+    "'/run/opencrane-memory-qualification.lock')));";
+  return docker(['exec', containerName, 'node', '-e', probe]) === 'true';
+}
+
+async function stagedCompletionAllowsRetry(): Promise<void> {
+  const containerName = startContainer('host', tag);
+  const input = JSON.stringify(request);
+  try {
+    const command = stagedSupervisorCommand(stagedChild(false));
+    expect(JSON.parse(await runSupervised(containerName, command, input, false)))
+      .toEqual({ result: 'PARTIAL', complete: false });
+    expect(lockRemoved(containerName)).toBe(true);
+    expect(JSON.parse(await runSupervised(containerName, command, input, false)))
+      .toEqual({ result: 'PARTIAL', complete: false });
+    expect(lockRemoved(containerName)).toBe(true);
+  } finally {
+    docker(['rm', '-f', '-v', containerName]);
+  }
+}
+it('removes the inventory stage after a successful child so a retry can run',
+  stagedCompletionAllowsRetry, 120_000);
+
+async function waitForInventoryStage(containerName: string): Promise<void> {
+  const probe = "const fs = require('node:fs'); " +
+    "process.stdout.write(String(fs.existsSync(" +
+    "'/run/opencrane-memory-qualification.lock/inventory-stage')));";
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    if (docker(['exec', containerName, 'node', '-e', probe]) === 'true') {
+      return;
+    }
+    await new Promise<void>(function pause(resolve): void { setTimeout(resolve, 25); });
+  }
+  throw new Error('inventory_stage_not_ready');
+}
+
+async function stagedCancellationAllowsRetry(): Promise<void> {
+  const containerName = startContainer('host', tag);
+  try {
+    const command = stagedSupervisorCommand(stagedChild(true));
+    const child = spawn('/usr/bin/docker', ['exec', '-i', containerName, ...command],
+      { stdio: 'pipe' });
+    const stopped = new Promise<number | null>(function waitForClose(resolve): void {
+      child.once('close', resolve);
+    });
+    child.stdin.write(`${JSON.stringify(JSON.stringify(request))}\n`);
+    await waitForInventoryStage(containerName);
+    child.stdin.end();
+    expect(await stopped).toBe(1);
+    expect(lockRemoved(containerName)).toBe(true);
+    const retry = stagedSupervisorCommand(stagedChild(false));
+    expect(JSON.parse(await runSupervised(containerName, retry,
+      JSON.stringify(request), false))).toEqual({ result: 'PARTIAL', complete: false });
+  } finally {
+    docker(['rm', '-f', '-v', containerName]);
+  }
+}
+it('removes the inventory stage after cancellation so a retry can run',
+  stagedCancellationAllowsRetry, 120_000);
 function runSupervised(containerName: string, command: string[], input: string,
   useFixturePreload: boolean): Promise<string> {
   const options = { stdio: 'pipe' as const };

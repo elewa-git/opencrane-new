@@ -4,11 +4,12 @@ import { PassThrough } from 'node:stream';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { collectDeployment } from './deployment.ts';
+import { collectHeldInventory, InventoryRefusal } from './held-inventory.ts';
 import { containerIdentity, proveComputerBridge, type ContainerIdentity } from './bridge-proof.ts';
 import { proveComputerSupervisor } from './supervisor-proof.ts';
 import { protectionMessages, type ProtectionFailure } from './protection-failure.ts';
 import {
-  inventoryGroups, readCurrentInventory, type InventoryContext, type InventorySnapshot,
+  inventoryGroups, joinInventory, readCurrentInventory, type InventoryContext, type InventorySnapshot,
   type ProtectionRecord, type TrustedLaunch,
 } from './joined-inventory.ts';
 
@@ -17,6 +18,7 @@ vi.mock('node:fs', { spy: true });
 vi.mock('./bridge-proof.ts', { spy: true });
 vi.mock('./supervisor-proof.ts', { spy: true });
 vi.mock('./joined-inventory.ts', { spy: true });
+vi.mock('./held-inventory.ts', { spy: true });
 const containerId = 'c'.repeat(64);
 const imageDigest = `sha256:${'b'.repeat(64)}`;
 const sourceSha = 'a'.repeat(40);
@@ -35,6 +37,35 @@ function unchanged(): void {}
 
 function readComputer(): ContainerIdentity {
   return computer;
+}
+
+async function fixtureHeld<Receipt>(context: InventoryContext,
+  containers: { serverId: string; computerId: string },
+  runWork: (signal: AbortSignal) => Promise<Receipt>,
+  verifyBinding: () => Promise<void>): Promise<Receipt> {
+  const first = readCurrentInventory(context, containers);
+  const firstJoin = joinInventory(context, first, first);
+  if (!firstJoin.ok) {
+    throw new InventoryRefusal(firstJoin.group);
+  }
+  await verifyBinding();
+  let receipt: Receipt | undefined;
+  let workError: unknown;
+  try {
+    receipt = await runWork(new AbortController().signal);
+  } catch (error) {
+    workError = error;
+  }
+  const final = readCurrentInventory(context, containers);
+  const finalJoin = joinInventory(context, first, final);
+  if (!finalJoin.ok) {
+    throw new InventoryRefusal(finalJoin.group);
+  }
+  await verifyBinding();
+  if (workError instanceof Error) {
+    throw workError;
+  }
+  return receipt!;
 }
 
 function matchingInventory(context: InventoryContext): {
@@ -108,6 +139,7 @@ function docker(_file: unknown, args: unknown, options: unknown): string {
 }
 
 function prepare(): void {
+  vi.mocked(collectHeldInventory).mockImplementation(fixtureHeld);
   vi.mocked(readCurrentInventory).mockReset();
   vi.mocked(readCurrentInventory).mockImplementation(matchingInventory);
   vi.mocked(proveComputerBridge).mockResolvedValue(true);
@@ -244,6 +276,28 @@ async function rechecksAfterInitialInventory(kind: string): Promise<void> {
 }
 it.each(['server', 'computer', 'target'])(
   'rechecks the %s after the first inventory read', rechecksAfterInitialInventory,
+);
+
+async function rechecksAfterFinalInventory(kind: 'server' | 'computer'): Promise<void> {
+  function swapContainerAfterRead(inventoryContext: InventoryContext): InventorySnapshot {
+    const snapshot = matchingInventory(inventoryContext);
+    if (kind === 'server') {
+      container['Id'] = 'f'.repeat(64);
+    } else {
+      computer = { ...computer, Id: 'f'.repeat(64) };
+    }
+    return snapshot;
+  }
+  vi.mocked(readCurrentInventory).mockImplementationOnce(matchingInventory);
+  vi.mocked(readCurrentInventory).mockImplementationOnce(swapContainerAfterRead);
+  const result = await collectDeployment();
+  expect(result.result).toBe('FAIL');
+  expect(responses).toHaveLength(1);
+  expect(readCurrentInventory).toHaveBeenCalledTimes(2);
+}
+it.each(['server', 'computer'] as const)(
+  'refuses a final %s container ID swap after the second inventory read',
+  rechecksAfterFinalInventory,
 );
 
 async function readsFinalInventoryAfterLostReply(): Promise<void> {

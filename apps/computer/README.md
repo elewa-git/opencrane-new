@@ -28,7 +28,7 @@ flowchart LR
   computer -->|checks commands and command ownership| executor["socket-denied executor"]
   computer -->|runs with file sharing guidance| desktop["Codex, browser and desktop"]
   computer -->|checks callers and passes for AI and MCP calls| gateway["agentgateway<br/>AI gateway"]
-  collector["private memory collector"] -->|checks live processes| computer
+  collector["private memory collector<br/>checks processes"] -->|checks live services and held native pair| computer
 ```
 
 ## What it is responsible for
@@ -62,8 +62,8 @@ The computer saves that confirmation without private reply text.
 - Protects the root supervisor before private work and records its Linux start time.
   The collector checks that live process around each private memory journey. Its
   installed probe also rejects a process that changes its executable after protection.
-- Includes a native process reader that checks protected launch records against
-  running processes. A missing or changed process refuses the memory check.
+- Starts a temporary native pair for the collector's process check. The pair stays
+  alive through the journey's two process reads and is stopped before collection ends.
 - Runs the MCP proxy inside the bridge process. During a private tool call, a live
   protection check can confirm that this process still holds the tool reply. It
   refuses when no private call is open. This check alone does not enable memory.

@@ -134,7 +134,7 @@ function readsBoundContainers(): void {
     `${computerId}:nativeChild`, `${serverId}:canaryHelper`,
   ]);
 }
-it('reads every private process from the bound installation', readsBoundContainers);
+it('reads the four live services twice from the bound installation', readsBoundContainers);
 
 function runsProbeAtInstalledComputerPath(): void {
   const dockerfile = readFileSync(new URL('../../apps/computer/Dockerfile', import.meta.url), 'utf8');
@@ -142,7 +142,7 @@ function runsProbeAtInstalledComputerPath(): void {
   const installedPath = '/scripts/private-memory-qualification/live-inventory-probe.ts';
   const copyInstruction = [`COPY --from=project ${source} \\`, `  ${installedPath}`].join('\n');
   expect(dockerfile).toContain(copyInstruction);
-  for (const filename of ['native-process-proof.ts']) {
+  for (const filename of ['native-process-proof.ts', 'native-hold.ts']) {
     const copied = `COPY --from=project scripts/private-memory-qualification/${filename}`;
     expect(dockerfile).toContain(copied);
   }

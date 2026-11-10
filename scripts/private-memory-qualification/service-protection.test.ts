@@ -75,3 +75,16 @@ async function answersOnlyDuringPrivateWork(): Promise<void> {
 }
 it('answers proxy challenges only while a private tool response is open',
   answersOnlyDuringPrivateWork);
+
+async function closesJourneyListenerBeforeAnotherJourney(): Promise<void> {
+  vi.mocked(runnerProtected).mockReturnValue(true);
+  const actual = await vi.importActual<typeof import('node:net')>('node:net');
+  vi.mocked(createServer).mockImplementation(actual.createServer);
+  const closeFirst = await startServiceProtection('canaryHelper');
+  expect(typeof closeFirst).toBe('function');
+  await closeFirst();
+  const closeSecond = await startServiceProtection('canaryHelper');
+  await closeSecond();
+}
+it('closes a canary listener so the next journey can use its socket',
+  closesJourneyListenerBeforeAnotherJourney);

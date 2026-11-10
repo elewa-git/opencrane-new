@@ -1,7 +1,9 @@
 import { z } from 'zod';
+import { writeFileSync } from 'node:fs';
 import { probeHost } from './host-probe.ts';
 import { probeContainer } from './container-probe.ts';
 import { probePrivateProcessInventory } from './private-processes.ts';
+import { startServiceProtection } from './service-protection.ts';
 import {
   proveCanaryHelper, readCanaryHelperBinding, type CanaryHelperBinding,
 } from './canary-helper-proof.ts';
@@ -44,6 +46,19 @@ function checkCanaryHelper(binding: CanaryHelperBinding,
   return proveCanaryHelper(binding, currentInstallation);
 }
 
+async function holdForInventory(challengeId: string, stage: 'ready' | 'workDone'):
+  Promise<void> {
+  if (process.env['OPENCRANE_INVENTORY_HOLD'] !== '1') {
+    return;
+  }
+  const path = '/run/opencrane-memory-qualification.lock/inventory-stage';
+  const flag = stage === 'ready' ? 'wx' : 'w';
+  await new Promise<void>(function pause(resolve): void {
+    process.once('SIGUSR2', resolve);
+    writeFileSync(path, `${challengeId} ${stage}\n`, { flag, mode: 0o600 });
+  });
+}
+
 export async function runJourney(input: string): Promise<Refusal | Receipt> {
   let request: Request;
   try {
@@ -66,6 +81,17 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
     return { result: 'FAIL', reason: 'host_refused', protectionFailure: helperBefore,
       complete: false };
   }
+  const closeProtection = await startServiceProtection('canaryHelper');
+  try {
+    return await runProtectedJourney(request, helperBinding);
+  } finally {
+    await closeProtection();
+  }
+}
+
+async function runProtectedJourney(request: Request,
+  helperBinding: CanaryHelperBinding): Promise<Refusal | Receipt> {
+  await holdForInventory(request.challengeId, 'ready');
   function finish(result: Refusal | Receipt): Refusal | Receipt {
     const helperAfter = checkCanaryHelper(helperBinding, request);
     if (helperAfter !== true) {
@@ -136,5 +162,6 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
     }
   }
   // These assertions cannot qualify isolation, persistence or private output delivery.
+  await holdForInventory(request.challengeId, 'workDone');
   return finish({ ...request, observedAt: Date.now(), result, complete: false });
 }
