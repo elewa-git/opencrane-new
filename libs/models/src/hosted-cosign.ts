@@ -1,10 +1,32 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { copyFile, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
+const pinnedCosignDigest = '064954c5d8c7e3b28188eee5b1727b31c411550bc5fefd41aa672d3c761d103a';
+
+async function pinnedBinary(source: string, directory: string) {
+  const sourceFile = await stat(source);
+  if (!sourceFile.isFile() || sourceFile.size > 160 * 1024 * 1024) {
+    throw new Error('Verifier unavailable');
+  }
+  const binary = join(directory, 'cosign');
+  // Run the checked copy so a replaced operator file cannot change the verifier.
+  await copyFile(source, binary);
+  const checkedFile = await stat(binary);
+  if (!checkedFile.isFile() || checkedFile.size !== sourceFile.size) {
+    throw new Error('Verifier unavailable');
+  }
+  const bytes = await readFile(binary);
+  const hasher = createHash('sha256');
+  hasher.update(bytes);
+  const digest = hasher.digest('hex');
+  if (digest !== pinnedCosignDigest) throw new Error('Verifier unavailable');
+  return binary;
+}
 
 function signatureWasRejected(error: unknown): boolean {
   if (!(error instanceof Error) || !('code' in error) || error.code !== 1 ||
@@ -32,6 +54,7 @@ export async function verifyPublisherSignature(binary: string, publicKey: string
   let directory: string | undefined;
   try {
     directory = await mkdtemp(join(tmpdir(), 'hosted-signature-'));
+    const checkedBinary = await pinnedBinary(binary, directory);
     const keyPath = join(directory, 'publisher.pem');
     const payloadPath = join(directory, 'payload');
     const signaturePath = join(directory, 'signature');
@@ -45,7 +68,7 @@ export async function verifyPublisherSignature(binary: string, publicKey: string
       '--offline', '--insecure-ignore-tlog', payloadPath];
     const options = { timeout: 10_000, maxBuffer: 64 * 1024,
       env: { HOME: directory, PATH: '/usr/bin:/bin', SIGSTORE_REKOR_PUBLIC_KEY: keyPath } };
-    await execute(binary, argumentsList, options);
+    await execute(checkedBinary, argumentsList, options);
     return 'pass';
   } catch (error) {
     // Keep process output private: return only the fixed verdict.

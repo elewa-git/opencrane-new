@@ -12,6 +12,7 @@ const execute = promisify(execFile);
 const privateFile = { mode: 0o600 };
 const cleanupOptions = { recursive: true, force: true };
 const gatePath = fileURLToPath(new URL('./hosted-licences.py', import.meta.url));
+const pinnedSyftDigest = 'd46a9a61a6ae3d367f0a03748c5e9c59253e586c4388ab26ddcacebc2efa0d92';
 type Options = { cosign: string; syft: string; osiPath: string; reviewPath: string };
 type RegistryRead = Parameters<typeof verifyHostedImage>[2];
 
@@ -56,6 +57,18 @@ async function stageImage(directory: string, blobs: Map<string, Buffer>, imageDi
   await writeFile(join(directory, 'oci-layout'), '{"imageLayoutVersion":"1.0.0"}');
 }
 
+async function stagePinnedScanner(source: string, directory: string) {
+  const scannerBytes = await readFile(source);
+  const scannerPath = join(directory, 'syft');
+  // Run the private copy so a later change to the supplied path cannot replace Syft.
+  await writeFile(scannerPath, scannerBytes, { mode: 0o700 });
+  const stagedScannerBytes = await readFile(scannerPath);
+  if (digest(stagedScannerBytes) !== pinnedSyftDigest) {
+    throw new Error('Scanner unavailable');
+  }
+  return scannerPath;
+}
+
 export async function inspectHostedLicences<Extra = never>(request: unknown, trust: unknown,
   read: RegistryRead, options: Options, onSbom?: (sbom: Buffer, evidence: {
     imageDigest: string; platform: string; sbomDigest: string; packageCount: number;
@@ -97,14 +110,10 @@ export async function inspectHostedLicences<Extra = never>(request: unknown, tru
     if (preflight.stdout.trim() !== 'pass') {
       return { verdict: 'fail', reasonCode: 'licence_refused' } as const;
     }
-    const scannerBytes = await readFile(options.syft);
-    if (digest(scannerBytes) !==
-        'd46a9a61a6ae3d367f0a03748c5e9c59253e586c4388ab26ddcacebc2efa0d92') {
-      return { verdict: 'unavailable', reasonCode: 'scanner_unavailable' } as const;
-    }
+    const scannerPath = await stagePinnedScanner(options.syft, directory);
     const scannerArguments = ['scan', `oci-dir:${imageDirectory}`, '--scope', 'all-layers',
       '--config', scannerConfig, '-o', 'syft-json'];
-    const scanned = await execute(options.syft, scannerArguments, processOptions);
+    const scanned = await execute(scannerPath, scannerArguments, processOptions);
     const sbomPath = join(directory, 'sbom.json');
     await writeFile(sbomPath, scanned.stdout, privateFile);
     const checkedArguments = [...gateArguments, sbomPath];

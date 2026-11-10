@@ -34,7 +34,7 @@ type Evidence = { imageDigest: string; platform: string; trustVersion: number;
   trustDigest: string; signerDigest: string };
 type Verification = { verdict: 'pass'; evidence: Evidence } |
   { verdict: 'fail' | 'unavailable'; reasonCode: string };
-// Keep registry transport outside this private verifier. No production reader is connected yet.
+// Keep registry access outside this verifier. The worker supplies the checked image bytes.
 type RegistryRead = (repository: string, resource: string, signal: AbortSignal) => Promise<Uint8Array>;
 
 function hash(value: string | Uint8Array) {

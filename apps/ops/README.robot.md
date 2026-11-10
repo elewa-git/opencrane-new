@@ -29,6 +29,8 @@ named files, not in this setting or events. The configured repository must equal
 the saved pinned image repository. The bundle lives at
 `<bundleDirectory>/<silo>/<imageDigest>/`. It holds `manifest.json`,
 `config.json`, `signature.json` and digest-named files in `blobs/`.
+Both image preparation and the separate checks read the current saved attempt
+before using the bundle. A different attempt or platform cannot reach the tools.
 The layer walk checks file lengths and image hashes before any result can be saved.
 Signature, licence and vulnerability checks use their existing independent tools.
 Their valid failure results are saved with the clean malware scan as a rejected
@@ -46,6 +48,17 @@ test checks the queue log, failed job and public error for private content and p
 Missing custody, changed settings, stale databases and tool outages leave the image
 unadmitted. Failed queue jobs remain visible to the operator and are retried at
 dispatcher startup. Hosted execution remains disabled.
+
+`test/hosted-image-local-tools.test.ts` builds the inert reviewed image from
+`libs/models/test/support/hosted-licence-fixture.py`. It uses the installed,
+checksum-pinned Cosign and Syft binaries with the real input adapter, local HTTPS
+scanner and checked queue writer. A bad signature saves one rejection, and queue
+restart does not scan again. Wrong silo, attempt, image digest, repository and actor
+inputs are refused. Cancellation before the claim saves nothing. The clean case
+stays `checking` because the fixture has no fresh pinned Grype database. Missing
+tools skip this local journey; that is not image qualification. A replacement
+program that prints a success string also leaves the attempt checking. The scanner verdict
+is a fixture, and hosted execution remains closed.
 
 ## Test dependencies
 
