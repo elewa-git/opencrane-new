@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { checkedImageIdentity } from './build-images.mjs';
+import { checkedImageIdentity, reviewedValidationPaths, writeCompletedRecord } from './build-images.mjs';
 
 const revision = 'a'.repeat(40);
 const digest = `sha256:${'b'.repeat(64)}`;
@@ -126,3 +126,45 @@ test('a failed build leaves no completed record or publication command',
   failedBuildWithholdsRecord);
 test('cancelling a build leaves no completed record or publication command',
   cancelledBuildWithholdsRecord);
+
+function validationUsesArchivedRevision() {
+  const directory = mkdtempSync(join(tmpdir(), 'qualification-source-test-'));
+  const archive = join(directory, 'source');
+  mkdirSync(join(archive, 'apps/computer'), { recursive: true });
+  mkdirSync(join(archive, 'infra/package'), { recursive: true });
+  const collector = join(archive, 'apps/computer/collect-licences.py');
+  writeFileSync(collector, 'archived collector');
+  const paths = reviewedValidationPaths(archive);
+  assert.equal(readFileSync(paths.noticeCollector, 'utf8'), 'archived collector');
+  assert.equal(paths.computerChecker, join(archive, 'apps/computer/check-licences.py'));
+  assert.equal(paths.packageChecker, join(archive, 'infra/package/check-licences.py'));
+  assert.equal(paths.packageLayers, join(archive, 'infra/package/image-layers.test.py'));
+  rmSync(directory, { recursive: true, force: true });
+}
+
+async function cancellationDuringRecordWriteRemovesPublication() {
+  const directory = mkdtempSync(join(tmpdir(), 'qualification-record-test-'));
+  const recordPath = join(directory, 'images.json');
+  const controller = new AbortController();
+  let startWrite;
+  const writing = new Promise((resolveWrite) => { startWrite = resolveWrite; });
+  let finishWrite;
+  const canFinish = new Promise((resolveFinish) => { finishWrite = resolveFinish; });
+  async function delayedWrite(path, contents, options) {
+    await writing;
+    await canFinish;
+    writeFileSync(path, contents, options);
+  }
+  const publication = writeCompletedRecord(recordPath, { sourceRevision: revision },
+    controller.signal, delayedWrite);
+  startWrite();
+  controller.abort();
+  finishWrite();
+  await assert.rejects(publication, /cancelled/u);
+  assert.equal(existsSync(recordPath), false);
+  rmSync(directory, { recursive: true, force: true });
+}
+
+test('validation files come from the archived revision', validationUsesArchivedRevision);
+test('cancellation during the final write leaves no completed record',
+  cancellationDuringRecordWriteRemovesPublication);

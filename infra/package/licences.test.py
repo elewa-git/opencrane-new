@@ -1662,6 +1662,19 @@ else:
             with self.assertRaisesRegex(ValueError, "changed reviewed"):
                 checker.check_candidate_server("scan.json")
 
+    def test_candidate_server_refuses_non_osi_binary_and_go_declarations(self):
+        for package_type in ("binary", "go-module"):
+            with self.subTest(package_type=package_type):
+                item = {"type": package_type, "name": "reviewed", "version": "1",
+                        "licenses": [{"spdxExpression": "BUSL-1.1"}]}
+                scan = {"source": {"type": "image"}, "artifacts": [item]}
+                inventory = {"images": {"server": {
+                    "artifacts": [[package_type, "reviewed", "1", "MIT", "review"]]}}}
+                osi = ["MIT"]
+                with patch.object(checker, "read_json", side_effect=[scan, inventory, osi]):
+                    with self.assertRaisesRegex(ValueError, "Unknown or non-OSI"):
+                        checker.check_candidate_server("scan.json")
+
     def test_unknown_bundled_notice_is_refused(self):
         notice = ["library", ["SSPL-1.0"], "/usr/local/LICENSE", "example"]
         with self.assertRaisesRegex(ValueError, "Unknown or non-free"):
