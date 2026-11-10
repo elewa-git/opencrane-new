@@ -408,3 +408,23 @@ is checked before the one-scan claim. The production enable switch remains
 closed and image promotion remains
 closed. Fresh-install two-silo, deployed custody, signed-release and rotation
 qualification are NOT RUN.
+
+## Real upload consumer fixture
+
+`scripts/real-upload-scanner.test.mjs` uses this package's `launchScanner` and
+`createScannerService` with the server's current HTTPS upload client and file
+command. Its two silo identities have separate issuers and upload bindings. The
+fixture starts a disposable NATS event log, records object keys and sizes, and
+does not save file bytes, passes or scanner error text.
+
+The first reviewed release must be supplied as `P5_SCANNER_MANIFEST`,
+`P5_SCANNER_APPROVED_SHA`, `P5_SCANNER_IMAGE` and `P5_SCANNER_RELEASE`.
+Recovery also requires `P5_SCANNER_NEXT_MANIFEST`,
+`P5_SCANNER_NEXT_APPROVED_SHA`, `P5_SCANNER_NEXT_IMAGE` and
+`P5_SCANNER_NEXT_RELEASE`. Each approved hash must come from the review input,
+not from a hash calculated by the test. The second manifest hash must differ.
+Both releases must pass the launcher's current 24-hour database check.
+
+Run `timeout 20m nice -n 10 npx vitest run scripts/real-upload-scanner.test.mjs
+--maxWorkers=1` after supplying both sets. Without them, Vitest marks the real
+checks skipped; that is NOT RUN evidence, even if other scanner fixture tests pass.

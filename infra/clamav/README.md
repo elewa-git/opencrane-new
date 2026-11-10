@@ -118,6 +118,12 @@ before replying. Upload callers now check this response before storage. They kee
 the same file identity when retrying, with a new request each time. Deployed service
 startup and key rotation still need qualification.
 
+The local upload proof starts this reviewed launcher and HTTPS service with
+fresh approved virus definitions. It sends clean and virus test bytes through
+the server's normal upload consumer. The proof needs a second reviewed set to
+check recovery after an outage. The exact inputs are listed in
+[README.robot.md](README.robot.md#real-upload-consumer-fixture).
+
 If updater cleanup fails, the directory stays locked to prevent another updater
 from changing the same files. An operator must confirm the updater has stopped
 before removing the lock, as described in [README.robot.md](README.robot.md).
