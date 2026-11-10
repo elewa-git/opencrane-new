@@ -10,8 +10,9 @@ import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz'
 import { until } from '@opencrane/authz/testing';
 import { event } from '@opencrane/event-store/testing';
 import { isEventStoreUnavailable } from '@opencrane/event-store';
-import { foldRoutine, type EventEnvelope } from '@opencrane/events';
-import { BudgetActor, history, rootTotals, readRootStopEvidence } from '@opencrane/models';
+import { foldRoutine, getEventDefinition, type EventEnvelope } from '@opencrane/events';
+import { BudgetActor, history, priceTableId, rootTotals, readRootStopEvidence }
+  from '@opencrane/models';
 import { conversationKeys, ProjectionRunner, routines } from '@opencrane/projections';
 import { database } from '@opencrane/projections/testing';
 import { createLogger } from '@opencrane/observability';
@@ -51,6 +52,10 @@ const proposedEvent = z.object({ type: z.string() });
 const frameSchema = z.record(z.string(), z.unknown());
 function clock() {
   return now;
+}
+function holdFixtureClock() {
+  const fixedTime = performance.now();
+  vi.spyOn(performance, 'now').mockImplementation(() => fixedTime);
 }
 function record(id: string, subject: string, type: string, data: unknown): EventEnvelope {
   return { ...event(id, subject, type), source: 'opencrane-server', commandId: id, data };
@@ -433,7 +438,8 @@ function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyP
     custodyRecordVersion: '1', confirmCurrent, confirmCredentialUse };
   return Promise.resolve(company);
 }
-async function dispatch(options: Options = { enabled: true }, continuation = false) {
+async function dispatch(options: Options = { enabled: true }, continuation = false,
+  onHandoff?: () => void) {
   await runner.run(routines);
   let progress;
   const identity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
@@ -441,6 +447,7 @@ async function dispatch(options: Options = { enabled: true }, continuation = fal
   const production = createRoutineDelivery(nats.store, keys, identity, actor, wake,
     budgetOwner, companyPreflight);
   const receive: Handoff = async function receive(due, lease) {
+    onHandoff?.();
     expect(lease.signal).toBe(leaseSignal);
     if (options.enabled === true && options.replay !== true) {
       return production(due, lease);
@@ -515,6 +522,7 @@ async function assertSingleRun() {
   return run;
 }
 async function reachesNativeThread() {
+  holdFixtureClock();
   expect(await dispatch()).toMatchObject({ examined: 1 });
   await until(preparedComputer.executed);
   const original = await assertSingleRun();
@@ -529,6 +537,243 @@ async function reachesNativeThread() {
 }
 it('hands a checked due to its prepared thread once across duplicate delivery and restart',
   reachesNativeThread);
+
+async function resumesOneSavedDueAfterDeliveryWasDisabled() {
+  holdFixtureClock();
+  const observed = vi.fn();
+  const disabledWake = vi.fn(forbidden);
+  wake = disabledWake;
+  await expect(dispatch({}, false, observed)).rejects.toThrow('Routine leadership unavailable');
+  expect(observed).toHaveBeenCalledTimes(1);
+  expect(disabledWake).not.toHaveBeenCalled();
+  const saved = (await runState()).activeRun!;
+  expect(saved.occurrenceId).toMatch(/^[0-9a-f]{64}$/u);
+  expect(saved.startBy).toBe('2026-10-11T07:01:00.000Z');
+  expect(preparedComputer.frames).toEqual([]);
+
+  await waitForDuplicateWindow(nats);
+  await nats.stop();
+  await nats.restart();
+  await until(projectionReaderReady);
+  wake = preparedComputer.wake;
+  expect(await dispatch({ enabled: true }, false, observed)).toMatchObject({ examined: 1 });
+  await until(preparedComputer.executed);
+  expect(await assertSingleRun()).toEqual(saved);
+  expect(observed).toHaveBeenCalledTimes(2);
+  expect(preparedComputer.nativeStarts).toBe(1);
+  expect(preparedComputer.executedThreads).toEqual(['native-1']);
+  await expect(dispatch({ enabled: true }, false, observed))
+    .rejects.toThrow('Routine leadership unavailable');
+  expect(await assertSingleRun()).toEqual(saved);
+  expect(preparedComputer.executedThreads).toEqual(['native-1']);
+}
+it('resumes the saved checked due once after disabled delivery and a broker restart',
+  resumesOneSavedDueAfterDeliveryWasDisabled);
+
+type ReleaseChange = 'ceiling' | 'payer_ceiling' | 'assistant_ceiling' |
+  'reserved' | 'settled' | 'exhausted' | 'exhausted_global_reason' |
+  'exhausted_payer_reason' | 'exhausted_assistant_reason' | 'exhausted_other_reason' |
+  'stop' | 'grant' | 'leadership' | 'deadline';
+function exhaustedReason(scope: 'global' | 'paying_group' | 'assistant', scopeId?: string) {
+  return { scope, ...(scopeId ? { scopeId } : {}), kind: 'monthly' as const,
+    reason: 'bound_refused' as const,
+    periodStart: '2026-10-01T00:00:00Z', resetAt: '2026-11-01T00:00:00Z',
+    ceilingCents: 1000, settledCents: 1000, reservedCents: 0, attemptedBoundCents: 1,
+    configurationId: 'budget-config' };
+}
+function modernExhaustionData(kind: string, assistantId: string) {
+  if (kind.endsWith('_reason')) {
+    let reason;
+    if (kind === 'exhausted_global_reason') reason = exhaustedReason('global');
+    else if (kind === 'exhausted_payer_reason') reason = exhaustedReason('paying_group', 'sales');
+    else if (kind === 'exhausted_assistant_reason') {
+      reason = exhaustedReason('assistant', assistantId);
+    } else reason = exhaustedReason('assistant', 'other-assistant');
+    return { reasons: [reason] };
+  }
+  return { reasons: [exhaustedReason('assistant', 'other-assistant')] };
+}
+function otherBudgetCall() {
+  return { requesterId: 'other', conversationId: 'other-conversation',
+    turnId: 'other-turn', threadId: 'other-thread', assistantId: 'other-assistant',
+    computerId: 'other-computer', payingGroupId: 'other-group', model: 'gpt-6-luna',
+    priceTableId, contextDigest: '0'.repeat(64) };
+}
+async function changeBeforeFinalRelease(kind: ReleaseChange) {
+  let earlierReservation: string | undefined;
+  if (kind === 'settled') {
+    earlierReservation = await actor.reserve(otherBudgetCall(), 1);
+  }
+  const fixedTime = performance.now();
+  let elapsed = 0;
+  const clockSpy = vi.spyOn(performance, 'now');
+  clockSpy.mockImplementation(() => fixedTime + elapsed);
+  const append = nats.store.append.bind(nats.store);
+  let changed = false;
+  async function interruptRelease(...supplied: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_send_release_authorised' && !changed) {
+      changed = true;
+      if (kind === 'ceiling') {
+        const limit = { scope: 'global' as const, ceilingCents: 0,
+          dailyCeilingCents: 0, setBy: 'admin' };
+        await actor.configure(limit);
+      } else if (kind === 'payer_ceiling') {
+        const limit = { scope: 'paying_group' as const, scopeId: 'sales',
+          ceilingCents: 0, setBy: 'admin' };
+        await actor.configure(limit);
+      } else if (kind === 'assistant_ceiling') {
+        const limit = { scope: 'assistant' as const, scopeId: 'sales-assistant',
+          ceilingCents: 0, setBy: 'admin' };
+        await actor.configure(limit);
+      } else if (kind === 'reserved') {
+        // Spend the shared capacity after this routine received its allowance.
+        await actor.reserve(otherBudgetCall(), 9001);
+      } else if (kind === 'settled') {
+        const settlement = record('settlement-before-release', 'budget-test',
+          'budget.settled', { reservationId: earlierReservation,
+            permitId: earlierReservation, settledCents: 9001 });
+        await nats.seed([settlement]);
+      } else if (kind === 'exhausted') {
+        const exhausted = record('exhausted-before-release', 'budget-test',
+          'budget.exhausted', { scope: 'assistant', scopeId: 'sales-assistant' });
+        await nats.seed([exhausted]);
+      } else if (kind.startsWith('exhausted_')) {
+        const run = (await runState()).activeRun!;
+        const data = modernExhaustionData(kind, run.definition.assistantId);
+        const exhausted = record(`exhausted-${kind}`, 'budget-test', 'budget.exhausted', data);
+        await nats.seed([exhausted]);
+      } else if (kind === 'stop') {
+        const run = (await runState()).activeRun!;
+        const example = getEventDefinition('routine.run_stop_requested')!.example;
+        const data = { ...frameSchema.parse(example), routineId: run.routineId,
+          occurrenceId: run.occurrenceId, rootId: run.rootId,
+          conversationId: run.conversationId, messageId: run.messageId,
+          turnId: run.turnId };
+        const stopped = record('stop-before-release', 'routine-orders',
+          'routine.run_stop_requested', data);
+        await nats.seed([stopped]);
+      } else if (kind === 'grant') {
+        const data = { resourceType: 'model', resourceId: 'gpt-6.1-sol',
+          granteeKind: 'member', granteeId: 'alice', revokedBy: 'admin' };
+        const revoked = record('revoked-before-release',
+          grantStream('model', 'gpt-6.1-sol'), 'grant.revoked', data);
+        await nats.seed([revoked]);
+      } else if (kind === 'deadline') {
+        elapsed = 2001;
+      } else {
+        stop.abort();
+      }
+    }
+    return append(...supplied);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(interruptRelease);
+  const shouldRefuse = kind !== 'exhausted_other_reason';
+  if (shouldRefuse) {
+    await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  } else {
+    expect(await dispatch()).toMatchObject({ examined: 1 });
+  }
+  expect(changed).toBe(true);
+  function isTurn(frame: Record<string, unknown>) {
+    return frame['type'] === 'turn';
+  }
+  expect(preparedComputer.frames.some(isTurn)).toBe(!shouldRefuse);
+  expect(preparedComputer.executedThreads.length > 0).toBe(!shouldRefuse);
+  if (kind !== 'stop') {
+    const routineRows = await history(nats.store, 'routine-orders', 'test');
+    expect(routineRows.some(row => row.event.type === 'routine.run_send_release_authorised'))
+      .toBe(!shouldRefuse);
+  }
+}
+it.each(['ceiling', 'payer_ceiling', 'assistant_ceiling', 'reserved', 'settled',
+  'exhausted', 'exhausted_global_reason', 'exhausted_payer_reason',
+  'exhausted_assistant_reason', 'exhausted_other_reason',
+  'stop', 'grant', 'leadership', 'deadline'] as const)(
+  'refuses %s before the final routine release and keeps the scan pending',
+  changeBeforeFinalRelease);
+
+async function unrelatedCeilingDoesNotStopRelease() {
+  const fixedTime = performance.now();
+  vi.spyOn(performance, 'now').mockImplementation(() => fixedTime);
+  const append = nats.store.append.bind(nats.store);
+  let changed = false;
+  async function changeOtherGroup(...supplied: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_send_release_authorised' && !changed) {
+      changed = true;
+      const limit = { scope: 'paying_group' as const, scopeId: 'other',
+        ceilingCents: 0, setBy: 'admin' };
+      await actor.configure(limit);
+    }
+    return append(...supplied);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changeOtherGroup);
+  expect(await dispatch()).toMatchObject({ examined: 1 });
+  expect(changed).toBe(true);
+  await until(preparedComputer.executed);
+  await assertSingleRun();
+}
+it('keeps a different group ceiling outside the fixed payer check',
+  unrelatedCeilingDoesNotStopRelease);
+
+async function unrelatedAssistantCeilingDoesNotStopRelease() {
+  const fixedTime = performance.now();
+  vi.spyOn(performance, 'now').mockImplementation(() => fixedTime);
+  const append = nats.store.append.bind(nats.store);
+  let changed = false;
+  async function changeOtherAssistant(...supplied: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_send_release_authorised' && !changed) {
+      changed = true;
+      const limit = { scope: 'assistant' as const, scopeId: 'other-assistant',
+        ceilingCents: 0, setBy: 'admin' };
+      await actor.configure(limit);
+    }
+    return append(...supplied);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changeOtherAssistant);
+  expect(await dispatch()).toMatchObject({ examined: 1 });
+  expect(changed).toBe(true);
+  await until(preparedComputer.executed);
+  await assertSingleRun();
+}
+it('keeps a different assistant ceiling outside the fixed assistant check',
+  unrelatedAssistantCeilingDoesNotStopRelease);
+
+async function reservationAfterReleaseCheckConflicts() {
+  holdFixtureClock();
+  const append = nats.store.append.bind(nats.store);
+  let changed = false;
+  let releaseStatus: string | undefined;
+  async function interruptAfterCheck(...supplied: Parameters<typeof append>) {
+    const command = supplied[0];
+    const proposed = proposedEvent.parse(command.event);
+    if (proposed.type !== 'routine.run_send_release_authorised' || changed) {
+      return append(...supplied);
+    }
+    if (!command.checkAccess) throw new Error('Release check unavailable');
+    const checkAccess: () => Promise<unknown> = command.checkAccess;
+    async function checkThenReserve() {
+      await checkAccess();
+      changed = true;
+      await actor.reserve(otherBudgetCall(), 9001);
+    }
+    const result = await append({ ...command, checkAccess: checkThenReserve });
+    releaseStatus = result.status;
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(interruptAfterCheck);
+  await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  expect(changed).toBe(true);
+  expect(releaseStatus).toBe('conflict');
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  expect(rows.some(row => row.event.type === 'routine.run_send_release_authorised'))
+    .toBe(false);
+  expect(preparedComputer.executedThreads).toEqual([]);
+}
+it('conflicts when another call reserves shared capacity after the release check',
+  reservationAfterReleaseCheckConflicts);
 
 async function productionDeliveryUsesCheckedDue() {
   await runner.run(routines);
@@ -768,13 +1013,16 @@ async function ignoresNonDue(kind: string) {
     await nats.seed([routine('routine.paused')]);
   }
   wake = vi.fn(forbidden);
-  expect(await dispatch()).toMatchObject({ examined: 1 });
+  const onHandoff = vi.fn();
+  expect(await dispatch({ enabled: true }, false, onHandoff)).toMatchObject({ examined: 1 });
+  expect(onHandoff).not.toHaveBeenCalled();
   expect(wake).not.toHaveBeenCalled();
   expect((await runState()).activeRun).toBeNull();
 }
 it.each(['future', 'missed', 'inactive'])('does not hand off a %s candidate', ignoresNonDue);
 
 async function waitsForStart(stage: string) {
+  holdFixtureClock();
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const start = turns.turnCommand;
@@ -919,6 +1167,8 @@ async function refusesAcknowledgement() {
 it('a saved start with refused credentials cannot complete dispatch', refusesAcknowledgement);
 
 async function uncertainDelivery(kind: string) {
+  // Hold fixture time so slow scheduling cannot expire access before the send fault.
+  holdFixtureClock();
   const send = preparedComputer.send;
   function losesReply(bytes: Parameters<typeof send>[0]) {
     send(bytes);
@@ -948,6 +1198,7 @@ it.each(['turn', 'ack'])(
   'an uncertain %s write cannot complete progress or authorise another delivery', uncertainDelivery);
 
 async function repeatedReport() {
+  holdFixtureClock();
   const report = Promise.withResolvers<Buffer>();
   function received(bytes: Buffer) {
     const value = frameSchema.parse(JSON.parse(bytes.toString()));
@@ -990,9 +1241,11 @@ async function skipsMissingTime() {
   await apply([gap]);
   now = Date.parse('2027-03-28T01:00:00Z');
   wake = vi.fn(forbidden);
-  expect(await dispatch()).toMatchObject({ examined: 2 });
+  const onHandoff = vi.fn();
+  expect(await dispatch({ enabled: true }, false, onHandoff)).toMatchObject({ examined: 2 });
   const rows = await history(nats.store, 'routine-gap', 'test');
   expect(rows.at(-1)!.event.type).toBe('routine.occurrence_skipped');
+  expect(onHandoff).not.toHaveBeenCalled();
   expect(wake).not.toHaveBeenCalled();
   expect(actor.state.roots).toEqual([]);
   expect(preparedComputer.frames).toEqual([]);
@@ -1102,6 +1355,7 @@ it('refuses delivery Stop evidence with a changed or non-admission cause',
   refusesForgedDeliveryEvidence);
 
 async function cancelsDuringOwnershipCheck() {
+  holdFixtureClock();
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const bind = preparedComputer.link.bindRoutineStart;

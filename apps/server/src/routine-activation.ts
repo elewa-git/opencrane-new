@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import type { StoredEvent } from '@opencrane/event-store';
-import { budgetRootAllowanceSetDataSchema, budgetRootStoppedDataSchema,
-  routineActivationSchema } from '@opencrane/events';
+import { budgetCeilingSetDataSchema, budgetExhaustedDataSchema,
+  budgetRootAllowanceSetDataSchema, budgetRootStoppedDataSchema, routineActivationSchema }
+  from '@opencrane/events';
 import { history } from '@opencrane/models';
 import { verifySaved } from './chat/child-requests.ts';
 import { loadRoutineRootPreparation } from './routine-root.ts';
@@ -43,6 +44,49 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
   hash.update(JSON.stringify([worker.silo, run.conversationId, run.turnId]));
   const rootId = hash.digest('hex');
   let allocation: StoredEvent | undefined;
+  let releaseChanged = false;
+  function affectsRootScope(scope: 'global' | 'paying_group' | 'assistant',
+    scopeId?: string) {
+    if (scope === 'global') return true;
+    if (scope === 'paying_group') {
+      return scopeId === run.definition.payingGroupId;
+    }
+    return scopeId === run.definition.assistantId;
+  }
+  function checkExhaustion(row: StoredEvent) {
+    const exhausted = budgetExhaustedDataSchema.parse(row.event.data);
+    if ('scope' in exhausted) {
+      const scopeId = 'scopeId' in exhausted ? exhausted.scopeId : undefined;
+      if (affectsRootScope(exhausted.scope, scopeId)) return true;
+    }
+    if ('reasons' in exhausted) {
+      for (const reason of exhausted.reasons) {
+        const scopeId = 'scopeId' in reason ? reason.scopeId : undefined;
+        if (affectsRootScope(reason.scope, scopeId)) return true;
+      }
+    }
+    if ('work' in exhausted && exhausted.work?.conversationId === run.conversationId &&
+        exhausted.work.turnId === run.turnId) {
+      return true;
+    }
+    return false;
+  }
+  function checkBudgetChange(row: StoredEvent) {
+    if (row.event.type === 'budget.ceiling_set') {
+      const ceiling = budgetCeilingSetDataSchema.parse(row.event.data);
+      const scopeId = 'scopeId' in ceiling ? ceiling.scopeId : undefined;
+      return affectsRootScope(ceiling.scope, scopeId);
+    }
+    // Every reservation and settlement can change the silo's shared ceiling.
+    if (row.event.type === 'budget.reserved' || row.event.type === 'budget.settled') {
+      return true;
+    }
+    if (row.event.type === 'budget.exhausted') return checkExhaustion(row);
+    return false;
+  }
+  function recordBudgetChange(row: StoredEvent) {
+    if (checkBudgetChange(row)) releaseChanged = true;
+  }
   function checkBudget(row: StoredEvent) {
     if (row.event.silo !== worker.silo || row.event.subject !== budgetSubject) {
       throw new Error('Routine activation refused');
@@ -51,6 +95,8 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
       const stopped = budgetRootStoppedDataSchema.parse(row.event.data);
       if (stopped.rootId === rootId) throw new Error('Routine activation refused');
     }
+    // Keep release changes for send checks. A saved receipt needs no new release.
+    if (allocation) recordBudgetChange(row);
     if (row.event.type !== 'budget.root_allowance_set') return;
     const saved = budgetRootAllowanceSetDataSchema.parse(row.event.data);
     if (saved.rootId !== rootId && saved.conversationId !== run.conversationId) return;
@@ -125,6 +171,7 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
   let published = false;
   let confirmed = await confirm();
   while (!saved) {
+    if (releaseChanged) throw new Error('Routine activation refused');
     const before = confirmed;
     async function checkAccess() {
       if (!await worker.checkCurrent(deadline)) {
@@ -132,6 +179,7 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
       }
       await readChanges();
       const after = await receiptState();
+      if (releaseChanged) throw new Error('Routine activation refused');
       preparation.checkTime();
       if (!isDeepStrictEqual(before, after)) throw new Error('Routine activation refused');
     }
@@ -151,10 +199,12 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
     startBy: run.startBy, executionAvailable: false as const };
   async function fresh() {
     await confirm();
+    if (releaseChanged) throw new Error('Routine activation refused');
   }
   async function confirmStarted(started: StoredEvent | undefined) {
     if (!started) throw new Error('Routine activation refused');
     await confirm(started);
+    if (releaseChanged) throw new Error('Routine activation refused');
   }
   return { receipt, messageId: run.messageId, turnId: run.turnId, rootId, senderAttemptId,
     published, run, fresh, confirmStarted, deadline, provider: checked.provider };

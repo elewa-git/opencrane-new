@@ -471,6 +471,10 @@ and while authorising the computer's start report.
 The internal sender saves a checked authorisation, then reads credential custody.
 It saves a second access check before sending the turn. A Stop, revoked grant or
 blocked tool saved during that custody read prevents the turn from being sent.
+If a spending ceiling, shared reservation or settlement changes after the fixed
+allowance, the server refuses the turn. A matching spending stop also refuses it.
+A saved admission receipt can still be read after spending changes. Reading it does
+not allow another send; the sender checks spending again before releasing the turn.
 The sender checks the deadline and credential version before using the live permission.
 These records do not prove that the computer received the turn.
 The wake uses the computer already recorded for that assistant and its existing

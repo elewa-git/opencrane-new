@@ -34,7 +34,7 @@ import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.
 import * as routineSession from '../src/routine-session.ts';
 import * as credentials from '../src/chat/turn-credentials.ts';
 import { prepareRoutineComputer } from '../src/routine-computer.ts';
-import { admitRoutineActivation } from '../src/routine-activation.ts';
+import { admitRoutineActivation, readRoutineActivation } from '../src/routine-activation.ts';
 import { inspectRoutineSender } from '../src/routine-sender.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -190,6 +190,34 @@ function admit() {
 function inspect(senderAttemptId = 'sender-attempt') {
   return inspectRoutineSender(nats.store, keys, worker(), input, selection, senderAttemptId);
 }
+function modernExhaustion(shape: 'reasons' | 'work', stopId?: string) {
+  if (shape === 'reasons') {
+    const reason = { scope: 'global', kind: 'monthly', reason: 'bound_refused',
+      periodStart: '2026-10-01T00:00:00Z', resetAt: '2026-11-01T00:00:00Z',
+      ceilingCents: 1000, settledCents: 1000, reservedCents: 0,
+      attemptedBoundCents: 1, configurationId: 'budget-config' };
+    return { reasons: [reason] };
+  }
+  if (!stopId) throw new Error('A saved budget stop is required for work exhaustion');
+  return { stopId, work: { conversationId, turnId } };
+}
+async function refusesSavedModernExhaustion(shape: 'reasons' | 'work') {
+  let stopId: string | undefined;
+  if (shape === 'work') {
+    await actor.configure({ scope: 'assistant', scopeId: 'other-assistant',
+      ceilingCents: 0, setBy: 'admin' });
+    stopId = actor.state.stops.at(-1)!.id;
+  }
+  await admit();
+  const exhausted = record(`exhausted-${shape}`, 'budget-test', 'budget.exhausted',
+    modernExhaustion(shape, stopId));
+  await nats.seed([exhausted]);
+  const checked = await readRoutineActivation(nats.store, keys, worker(), input, selection,
+    'sender-attempt');
+  await expect(checked.fresh()).rejects.toThrow('Routine activation refused');
+}
+it.each(['reasons', 'work'] as const)(
+  'refuses saved modern budget exhaustion with %s', refusesSavedModernExhaustion);
 async function noAdmission() {
   const before = await nats.store.head();
   await expect(inspect()).rejects.toThrow('Routine sender unavailable');
@@ -301,6 +329,9 @@ async function retainsUncertainHold() {
   await actor.uncertain(hold, 'settle_timeout');
   const before = await nats.store.head();
   expect(await inspect()).toMatchObject({ status: 'unknown', rootId: root.rootId });
+  const checked = await readRoutineActivation(nats.store, keys, worker(), input, selection,
+    'sender-attempt');
+  await expect(checked.fresh()).rejects.toThrow('Routine activation refused');
   expect(rootTotals(actor.state, root.rootId)).toEqual({
     settledCents: 0, heldCents: 100, availableCents: 900 });
   expect(await nats.store.head()).toBe(before);
@@ -600,11 +631,6 @@ async function handsOffOnce() {
   const authority = sender();
   const computer = await recordingComputer();
   const root = actor.state.roots[0]!;
-  const call = { requesterId: 'alice', conversationId, turnId,
-    assistantId: 'sales-assistant', payingGroupId: 'sales', ...selection,
-    model: 'gpt-6.1-sol', priceTableId, contextDigest: '0'.repeat(64) };
-  const hold = await actor.reserve(call, 100, undefined, undefined, root.rootId);
-  await actor.uncertain(hold, 'settle_timeout');
   const budgetPosition = await nats.store.head('budget-test');
   const head = nats.store.head.bind(nats.store);
   let activity = 0;
@@ -629,6 +655,9 @@ async function handsOffOnce() {
   }
   async function wake() {
     advanceWake();
+    // Hold fixture time after the long wake so slow scheduling cannot end the send window.
+    const afterWake = performance.now();
+    vi.spyOn(performance, 'now').mockReturnValue(afterWake);
     vi.spyOn(nats.store, 'head').mockImplementation(unrelated);
     return computer.wake();
   }
@@ -652,8 +681,9 @@ async function handsOffOnce() {
     expect(activity).toBeGreaterThan(2);
     expect(startAppends).toBe(2);
     expect(await nats.store.head('budget-test')).toBe(budgetPosition);
+    expect(actor.state.reservations).toEqual([]);
     expect(rootTotals(actor.state, root.rootId)).toEqual({
-      settledCents: 0, heldCents: 100, availableCents: 900 });
+      settledCents: 0, heldCents: 0, availableCents: 1000 });
     const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
     expect(JSON.stringify(rows)).not.toContain('Private routine instructions');
     function isInput(row: typeof rows[number]) {
@@ -863,6 +893,9 @@ async function refusesLateChange(kind: string) {
         stopped.source = 'models';
         stopped.principal = { kind: 'system', id: 'models' };
         await nats.seed([stopped]);
+      } else if (kind === 'budget ceiling') {
+        await actor.configure({ scope: 'global', ceilingCents: 0,
+          dailyCeilingCents: 0, setBy: 'admin' });
       } else if (kind === 'payer') {
         const removed = { teamId: 'sales', memberId: 'alice', removedBy: 'admin' };
         const removal = record('late-payer', 'team-sales', 'team.member_removed', removed);
@@ -889,7 +922,8 @@ async function refusesLateChange(kind: string) {
     await computer.close();
   }
 }
-it.each(['Stop', 'grant', 'payer', 'worker', 'routine.paused', 'member', 'computer'])(
+it.each(['Stop', 'budget ceiling', 'grant', 'payer', 'worker', 'routine.paused', 'member',
+  'computer'])(
   'refuses late %s after saving the start and before releasing credentials', refusesLateChange);
 
 async function acceptsOtherThread() {

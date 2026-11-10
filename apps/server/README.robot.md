@@ -7379,3 +7379,36 @@ The composition fixture holds its monotonic clock during the unrelated-thread an
 worker-loss injections and around saved-stage recovery sends. Scheduling delays cannot
 spend the production access period before the intended race or retry. Assertions and
 production deadlines remain unchanged.
+
+## Saved routine delivery and ceiling changes
+
+`routine-activation.ts` reads budget events before its short access check. A ceiling
+change saved after this root's allowance refuses the activation or a later send check
+when it applies to the silo, fixed payer or assistant. Changes for another group or
+assistant do not affect this root. The final conditional send release remains the
+commit point; this check does not add a pre-send read after that append.
+Any reservation or settlement after the allowance also refuses release because it can
+change the silo's shared capacity. An exhaustion record refuses release when it names
+the silo, fixed payer or assistant, or this turn. The conditional append conflicts if
+a budget event is saved after its check reads the budget stream.
+A saved activation receipt remains readable after a later reservation or settlement.
+This only recovers the earlier admission. `fresh()` still refuses the changed budget
+before a turn can be sent. The start check refuses it too. A Stop for this root still
+refuses the receipt. `test/routine-session.test.ts` and `test/routine-sender.test.ts` cover
+receipt recovery with an uncertain hold; the hand-off fixture starts without a
+competing reservation. The uncertain-write fixture holds its test clock until the
+send fault, and the sender fixture holds its test clock after a long wake. Slow host
+scheduling therefore cannot expire the access period before either fault is injected.
+
+`test/routine-handoff.test.ts` starts with a saved checked due while delivery is off.
+It restarts NATS, enables the internal test delivery, then checks that one session,
+input, root and native start use the same occurrence. It checks that missed and skipped
+receipts never enter the callback. The final release cases change a ceiling, save Stop,
+revoke a grant or end leadership before the append. Each refuses the turn and leaves
+the scan without completed progress. The existing held-start, uncertain transport and
+fourteen-second wake cases remain in that suite. These are fixture checks, not a
+fresh-install or paid company call qualification. Production delivery stays off.
+The same suite checks a competing call's reservation, a settlement, an assistant
+exhaustion record, matching payer and assistant ceilings, and an unrelated assistant
+ceiling. A reservation saved after the callback's budget read must conflict with the
+release append.
