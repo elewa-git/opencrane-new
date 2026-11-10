@@ -231,6 +231,7 @@ it('keeps the frame filters compact and names all history families', async () =>
   expect(root.textContent).toContain('Tools & models');
   expect(root.textContent).toContain('Spending & effects');
   expect(root.textContent).toContain('Routines');
+  expect(root.querySelector('.family-icon')).not.toBeNull();
   expect(root.querySelector('.refresh')).toBeNull();
   expect(root.querySelector('.advanced')).toBeNull();
 });
