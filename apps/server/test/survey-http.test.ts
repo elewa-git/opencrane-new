@@ -9,7 +9,8 @@ import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { welcomeAnswerRecordedDataSchema } from '@opencrane/events';
-import { conversationKeys, pgDb, personalSettings, readSurvey, ProjectionRunner }
+import { conversationKeys, pgDb, personalSettings, readSurvey, conversations, computers,
+  ProjectionRunner }
   from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { buildServer } from '../src/server.ts';
@@ -1136,6 +1137,82 @@ async function completedWelcomeFromSavedAnswer() {
 }
 it('keeps the final answer pending until its saved intent completes exactly once',
   completedWelcomeFromSavedAnswer, 60_000);
+
+async function completedWelcomeForArchive() {
+  const position = await completeSurvey();
+  const started = (await welcome({ operation: 'start', commandId: 'archive-start',
+    generation: 1, expectedPosition: position, scriptVersion: 'welcome-v1',
+    variant: 'no_assistant' })).json<{ position: number; welcomeId: string }>();
+  await welcome({ operation: 'answer', commandId: 'archive-answer', generation: 1,
+    expectedPosition: started.position, welcomeId: started.welcomeId,
+    scriptVersion: 'welcome-v1', stepId: 'continue_to_workspace', stepNumber: 1,
+    answer: 'Continue to workspace' });
+  const rows = [];
+  for await (const row of nats.store.readStream('personal-alice')) rows.push(row);
+  await welcomeCompletionHandler(nats.store).handle(rows.at(-1)!.event, pgDb(dbs.queue));
+  await runner.run(personalSettings);
+  await runner.initialise(computers);
+  await runner.run(computers);
+  await runner.initialise(conversations);
+  await runner.run(conversations);
+  return started.welcomeId;
+}
+
+function archiveWelcome(payload: object) {
+  return app.inject({ method: 'POST', url: '/api/onboarding/welcome/archive',
+    headers, payload });
+}
+
+function listed(section = 'recent', q = '') {
+  return app.inject({ url: `/api/conversations?section=${section}&q=${q}`, headers });
+}
+
+async function welcomeArchiveAndList() {
+  const welcomeId = await completedWelcomeForArchive();
+  const recent = await listed();
+  expect(recent.statusCode).toBe(200);
+  expect(recent.json<{ rows: unknown[] }>().rows).toMatchObject([
+    { kind: 'welcome', welcomeId, title: 'Welcome', archived: false, unread: 0 },
+  ]);
+  expect((await listed('recent', 'WELCOME')).json<{ rows: unknown[] }>().rows)
+    .toHaveLength(1);
+  expect((await listed('recent', 'absent')).json<{ rows: unknown[] }>().rows)
+    .toHaveLength(0);
+  const first = { commandId: 'archive-welcome', welcomeId, archived: true,
+    expectedArchivePosition: 0 };
+  const saved = await archiveWelcome(first);
+  expect(saved.statusCode).toBe(200);
+  const receipt = saved.json<{ position: number }>();
+  expect((await archiveWelcome(first)).json()).toEqual(saved.json());
+  expect((await archiveWelcome({ ...first, archived: false })).statusCode).toBe(409);
+  const status = await app.inject({ url: '/api/personal/changes/archive-welcome', headers });
+  expect(status.json()).toEqual(saved.json());
+  expect((await app.inject({ url: '/api/personal/changes/missing-welcome', headers })).json())
+    .toEqual({ status: 'unknown' });
+  await runner.run(personalSettings);
+  expect((await listed()).json<{ rows: unknown[] }>().rows).toHaveLength(0);
+  expect((await listed('archived')).json<{ rows: unknown[] }>().rows)
+    .toMatchObject([{ kind: 'welcome', welcomeId, archived: true }]);
+  const stale = { commandId: 'stale-restore', welcomeId, archived: false,
+    expectedArchivePosition: 0 };
+  expect((await archiveWelcome(stale)).statusCode).toBe(409);
+  const restored = await archiveWelcome({ ...stale, expectedArchivePosition: receipt.position });
+  expect(restored.statusCode).toBe(200);
+  await runner.run(personalSettings);
+  expect((await listed()).json<{ rows: unknown[] }>().rows)
+    .toMatchObject([{ kind: 'welcome', welcomeId, archived: false }]);
+  expect((await listed('archived')).json<{ rows: unknown[] }>().rows).toHaveLength(0);
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'completed', welcomeId, answer: 'Continue to workspace',
+      assistantId: null });
+  expect((await archiveWelcome({ ...first, commandId: 'forged',
+    welcomeId: 'foreign-welcome' })).statusCode).toBe(404);
+  await runner.rebuild(personalSettings);
+  expect((await listed()).json<{ rows: unknown[] }>().rows)
+    .toMatchObject([{ kind: 'welcome', welcomeId, archived: false }]);
+}
+it('lists one completed welcome and saves only its own archive choice',
+  welcomeArchiveAndList, 60_000);
 
 async function pendingNoAssistant() {
   const position = await completeSurvey();
