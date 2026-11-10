@@ -1,0 +1,1 @@
+Local backup lease renewal closes the previous credential record and requires a fresh signed token and Secret generation for the same owned storage. A marker check also refuses if renewal or expiry closes that record during its final Kubernetes read.

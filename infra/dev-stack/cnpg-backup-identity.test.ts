@@ -28,6 +28,10 @@ let reorderActions = false;
 let returnedAccessKey = 'leased-access';
 let expirySeconds = 900;
 let alterSignature = false;
+let issuerCalls = 0;
+let issuerFailure = false;
+let reusedToken: string | undefined;
+let afterBucketCheck: (() => void) | undefined;
 
 function signedToken(policy: unknown, accessKey: string, expiry: number) {
   const header = Buffer.from(JSON.stringify({ alg: 'HS512', typ: 'JWT' })).toString('base64url');
@@ -40,6 +44,8 @@ function signedToken(policy: unknown, accessKey: string, expiry: number) {
 }
 
 async function credentials(this: AssumeRoleProvider) {
+  issuerCalls++;
+  if (issuerFailure) throw new Error('private issuer reply');
   const request = this.getRequestConfig();
   const parameters = new URLSearchParams(request.requestData);
   writtenPolicy = parameters.get('Policy')!;
@@ -50,6 +56,7 @@ async function credentials(this: AssumeRoleProvider) {
   const expiry = Math.floor(Date.now() / 1000) + expirySeconds;
   const sessionToken = signedToken(policy, returnedAccessKey, expiry);
   let returnedToken = sessionToken;
+  if (reusedToken) returnedToken = reusedToken;
   if (alterSignature) {
     const parts = sessionToken.split('.');
     const signature = Buffer.from(parts[2]!, 'base64url');
@@ -69,6 +76,7 @@ async function makeBucket(this: Client, name: string) {
 }
 
 async function bucketExists(this: Client, name: string) {
+  afterBucketCheck?.();
   return existingBuckets.has(name);
 }
 
@@ -199,6 +207,146 @@ async function existingPrivateBucketPasses() {
     result.credentials), result.destinationPath);
 }
 test('renewal reuses the owned private bucket', existingPrivateBucketPasses);
+
+async function renewedRecordReplacesOld() {
+  returnedPolicy = undefined;
+  existingBuckets = new Set(['ocn-backup-silo-one']);
+  const first = await identity.provisionCnpgBackupIdentity(binding);
+  const nextBinding = { ...binding, generation: 'new-credential-generation' };
+  returnedAccessKey = 'renewed-access';
+  try {
+    const next = await identity.renewCnpgBackupIdentity(first.evidence, nextBinding);
+    assert.equal(identity.inspectCnpgBackupIdentity(next.evidence, nextBinding,
+      next.credentials), next.destinationPath);
+    function inspectPrior() {
+      identity.inspectCnpgBackupIdentity(first.evidence, binding, first.credentials);
+    }
+    assert.throws(inspectPrior,
+      { message: 'CNPG backup identity is not confined to its destination' });
+    const callsBefore = issuerCalls;
+    const laterBinding = { ...binding, generation: 'third-credential-generation' };
+    await assert.rejects(identity.renewCnpgBackupIdentity(first.evidence, laterBinding),
+      { message: 'CNPG backup identity provisioning refused' });
+    assert.equal(issuerCalls, callsBefore);
+  } finally {
+    returnedAccessKey = 'leased-access';
+  }
+}
+test('a fresh signed lease with a new generation replaces the prior record',
+  renewedRecordReplacesOld);
+
+for (const field of ['silo', 'namespace', 'namespaceUid', 'serviceUid',
+  'endpointURL', 'ca'] as const) {
+  async function changedRenewalTargetRefuses() {
+    returnedPolicy = undefined;
+    existingBuckets = new Set(['ocn-backup-silo-one']);
+    const first = await identity.provisionCnpgBackupIdentity(binding);
+    const changed = { ...binding, generation: 'new-credential-generation' };
+    if (field === 'endpointURL') {
+      changed.endpointURL = `https://backup-store.${namespace}.svc:9001`;
+    } else if (field === 'namespace') {
+      changed.namespace = 'other-namespace';
+      changed.endpointURL = 'https://backup-store.other-namespace.svc:9000';
+    } else {
+      changed[field] = `changed-${field}`;
+    }
+    if (field === 'silo') {
+      await writeFile(`${directory}/settings.env`,
+        'MINIO_PORT=9000\nSILO_ID=changed-silo\n');
+    }
+    try {
+      const callsBefore = issuerCalls;
+      await assert.rejects(identity.renewCnpgBackupIdentity(first.evidence, changed),
+        { message: 'CNPG backup identity provisioning refused' });
+      assert.equal(issuerCalls, callsBefore);
+    } finally {
+      if (field === 'silo') {
+        await writeFile(`${directory}/settings.env`,
+          'MINIO_PORT=9000\nSILO_ID=silo-one\n');
+      }
+    }
+  }
+  test(`renewal rejects changed ${field} before issuance`, changedRenewalTargetRefuses);
+}
+
+async function unchangedGenerationRefuses() {
+  returnedPolicy = undefined;
+  existingBuckets = new Set(['ocn-backup-silo-one']);
+  const first = await identity.provisionCnpgBackupIdentity(binding);
+  returnedAccessKey = 'renewed-access';
+  try {
+    const callsBefore = issuerCalls;
+    await assert.rejects(identity.renewCnpgBackupIdentity(first.evidence, binding),
+      { message: 'CNPG backup identity provisioning refused' });
+    assert.equal(issuerCalls, callsBefore);
+  } finally {
+    returnedAccessKey = 'leased-access';
+  }
+}
+test('renewal rejects an unchanged generation before issuance', unchangedGenerationRefuses);
+
+async function reusedTokenRefuses() {
+  returnedPolicy = undefined;
+  existingBuckets = new Set(['ocn-backup-silo-one']);
+  const first = await identity.provisionCnpgBackupIdentity(binding);
+  reusedToken = first.credentials.sessionToken;
+  const nextBinding = { ...binding, generation: 'new-credential-generation' };
+  try {
+    await assert.rejects(identity.renewCnpgBackupIdentity(first.evidence, nextBinding),
+      { message: 'CNPG backup identity provisioning refused' });
+    function inspectPrior() {
+      identity.inspectCnpgBackupIdentity(first.evidence, binding, first.credentials);
+    }
+    assert.throws(inspectPrior,
+      { message: 'CNPG backup identity is not confined to its destination' });
+  } finally {
+    reusedToken = undefined;
+  }
+}
+test('renewal cannot reuse the first signed token or fall back to its record', reusedTokenRefuses);
+
+for (const fault of ['issuer failure', 'short expiry', 'lost time', 'cancellation']) {
+  async function failedRenewalClosesGate(context: import('node:test').TestContext) {
+    returnedPolicy = undefined;
+    existingBuckets = new Set(['ocn-backup-silo-one']);
+    const first = await identity.provisionCnpgBackupIdentity(binding);
+    const nextBinding = { ...binding, generation: 'new-credential-generation' };
+    returnedAccessKey = 'renewed-access';
+    const controller = new AbortController();
+    if (fault === 'issuer failure') issuerFailure = true;
+    if (fault === 'short expiry') expirySeconds = 20;
+    if (fault === 'lost time' || fault === 'cancellation') {
+      let now = Date.now();
+      function clock() {
+        return now;
+      }
+      context.mock.method(Date, 'now', clock);
+      function endCheck() {
+        if (fault === 'lost time') {
+          now += 901_000;
+        } else {
+          controller.abort();
+        }
+      }
+      afterBucketCheck = endCheck;
+    }
+    try {
+      await assert.rejects(identity.renewCnpgBackupIdentity(first.evidence, nextBinding,
+        controller.signal), { message: 'CNPG backup identity provisioning refused' });
+      function inspectPrior() {
+        identity.inspectCnpgBackupIdentity(first.evidence, binding, first.credentials);
+      }
+      assert.throws(inspectPrior,
+        { message: 'CNPG backup identity is not confined to its destination' });
+    } finally {
+      issuerFailure = false;
+      expirySeconds = 900;
+      afterBucketCheck = undefined;
+      returnedAccessKey = 'leased-access';
+    }
+  }
+  test(`a ${fault} during renewal leaves no usable prior lease`, failedRenewalClosesGate);
+}
 
 async function reorderedPolicyPasses() {
   returnedPolicy = undefined;

@@ -23,11 +23,13 @@ const privateValue = 'private-value-/private/path';
 const rootAccess = 'fixture-root-access';
 const rootSecret = 'fixture-root-secret-long-enough';
 let issuedToken = '';
+let issuedAccessKey = 'fixture-access';
 let directory: string;
 let ca: string;
 let leaf: string;
 let checkCnpgBackupReferences: typeof import('./cnpg-backup.ts').checkCnpgBackupReferences;
 let provisionCnpgBackupIdentity: typeof import('./cnpg-backup-identity.ts').provisionCnpgBackupIdentity;
+let renewCnpgBackupIdentity: typeof import('./cnpg-backup-identity.ts').renewCnpgBackupIdentity;
 async function credentials(this: AssumeRoleProvider) {
   const request = this.getRequestConfig();
   const parameters = new URLSearchParams(request.requestData);
@@ -36,14 +38,14 @@ async function credentials(this: AssumeRoleProvider) {
     const header = Buffer.from(JSON.stringify({ alg: 'HS512', typ: 'JWT' }))
       .toString('base64url');
     const sessionPolicy = Buffer.from(policy).toString('base64');
-    const claims = { accessKey: 'fixture-access', exp: Math.floor(Date.now() / 1000) + 900,
+    const claims = { accessKey: issuedAccessKey, exp: Math.floor(Date.now() / 1000) + 900,
       parent: rootAccess, sessionPolicy };
     const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
     const signed = `${header}.${payload}`;
     const signature = createHmac('sha512', rootSecret).update(signed).digest('base64url');
     issuedToken = `${signed}.${signature}`;
   }
-  return { accessKey: 'fixture-access', secretKey: privateValue, sessionToken: issuedToken };
+  return { accessKey: issuedAccessKey, secretKey: privateValue, sessionToken: issuedToken };
 }
 async function bucketExists(this: Client, _name: string) {
   return true;
@@ -60,6 +62,7 @@ async function prepare() {
   await writeFile(`${directory}/settings.env`, 'MINIO_PORT=9000\nSILO_ID=silo-one\n');
   const provisioner = await import('./cnpg-backup-identity.ts');
   provisionCnpgBackupIdentity = provisioner.provisionCnpgBackupIdentity;
+  renewCnpgBackupIdentity = provisioner.renewCnpgBackupIdentity;
   const checker = await import('./cnpg-backup.ts');
   checkCnpgBackupReferences = checker.checkCnpgBackupReferences;
   mock.method(AssumeRoleProvider.prototype, 'getCredentials', credentials);
@@ -137,7 +140,7 @@ function fixture() {
   }
   return { backup, objects, reads, kubectl };
 }
-async function issueFor(input: ReturnType<typeof fixture>) {
+function bindingFor(input: ReturnType<typeof fixture>) {
   const candidate = input.backup.endpointURL;
   const endpointURL = /^https:\/\/backup-store\.opencrane-package-1\.svc:[0-9]{1,5}$/u
     .test(candidate) ? candidate : `https://backup-store.${namespace}.svc:${matching.port}`;
@@ -152,7 +155,10 @@ async function issueFor(input: ReturnType<typeof fixture>) {
   const binding = { silo: 'silo-one', namespace, namespaceUid: 'namespace-uid',
     serviceUid: 'backup-store-uid', generation,
     endpointURL, ca };
-  return provisionCnpgBackupIdentity(binding);
+  return binding;
+}
+async function issueFor(input: ReturnType<typeof fixture>) {
+  return provisionCnpgBackupIdentity(bindingFor(input));
 }
 async function checkWithIdentity(input: ReturnType<typeof fixture>, kubectl = input.kubectl,
   options: { signal?: AbortSignal; timeoutMs?: number } = {}) {
@@ -668,6 +674,102 @@ async function expiringLeaseRefusesBeforePut(context: import('node:test').TestCo
 }
 test('a lease entering its final 30 seconds during DELETE refuses before PUT',
   expiringLeaseRefusesBeforePut);
+
+async function revokedLeaseRefusesAfterPut() {
+  const input = fixture();
+  const listener = await peer(directory);
+  atPeer(input, listener.port);
+  const issued = await issueFor(input);
+  let namespaceReads = 0;
+  async function renewDuringFinalNamespaceRead(args: string[]) {
+    const kind = args[args.indexOf('get') + 1];
+    if (kind === 'namespace') {
+      namespaceReads += 1;
+      if (namespaceReads === 2) {
+        const changed = { ...bindingFor(input), silo: 'other-silo' };
+        await assert.rejects(renewCnpgBackupIdentity(issued.evidence, changed));
+      }
+    }
+    return input.kubectl(args);
+  }
+  try {
+    await refused(checkCnpgBackupReferences(input.backup, namespace,
+      renewDuringFinalNamespaceRead, { evidence: issued.evidence }), scopeRefusal);
+    assert.deepEqual(listener.storage.requests, checkedRequests);
+    assert.equal(listener.storage.objects.size, 0);
+    assert.equal(namespaceReads, 2);
+  } finally {
+    await listener.close();
+  }
+}
+test('a lease revoked during the final Namespace read refuses after marker cleanup',
+  revokedLeaseRefusesAfterPut);
+
+async function expiringLeaseRefusesAfterPut(context: import('node:test').TestContext) {
+  const input = fixture();
+  const listener = await peer(directory);
+  atPeer(input, listener.port);
+  const issued = await issueFor(input);
+  const tokenParts = issuedToken.split('.');
+  const claims = JSON.parse(Buffer.from(tokenParts[1]!, 'base64url').toString('utf8'));
+  let now = claims.exp * 1000 - 31_000;
+  function clock() {
+    return now;
+  }
+  let namespaceReads = 0;
+  async function advanceDuringFinalNamespaceRead(args: string[]) {
+    const kind = args[args.indexOf('get') + 1];
+    if (kind === 'namespace') {
+      namespaceReads += 1;
+      if (namespaceReads === 2) {
+        now += 2_000;
+      }
+    }
+    return input.kubectl(args);
+  }
+  context.mock.method(Date, 'now', clock);
+  try {
+    await refused(checkCnpgBackupReferences(input.backup, namespace,
+      advanceDuringFinalNamespaceRead, { evidence: issued.evidence }), scopeRefusal);
+    assert.deepEqual(listener.storage.requests, checkedRequests);
+    assert.equal(listener.storage.objects.size, 0);
+    assert.equal(namespaceReads, 2);
+  } finally {
+    await listener.close();
+  }
+}
+test('a lease entering its final 30 seconds during the last read refuses after cleanup',
+  expiringLeaseRefusesAfterPut);
+
+async function renewedLeasePassesLocalMarker() {
+  const input = fixture();
+  const listener = await peer(directory);
+  atPeer(input, listener.port);
+  const first = await issueFor(input);
+  const firstToken = issuedToken;
+  const identity = input.objects['backup-identity'];
+  identity.metadata.resourceVersion = '2';
+  issuedAccessKey = 'fixture-renewed';
+  issuedToken = '';
+  try {
+    const renewed = await renewCnpgBackupIdentity(first.evidence, bindingFor(input));
+    identity.data.ACCESS_KEY_ID = encoded(renewed.credentials.accessKey);
+    identity.data.SESSION_TOKEN = encoded(renewed.credentials.sessionToken);
+    await refused(checkCnpgBackupReferences(input.backup, namespace, input.kubectl,
+      { evidence: first.evidence }), scopeRefusal);
+    assert.deepEqual(listener.storage.requests, []);
+    await checkCnpgBackupReferences(input.backup, namespace, input.kubectl,
+      { evidence: renewed.evidence });
+    assert.deepEqual(listener.storage.requests, checkedRequests);
+    assert.equal(listener.storage.objects.size, 0);
+  } finally {
+    issuedAccessKey = 'fixture-access';
+    issuedToken = firstToken;
+    await listener.close();
+  }
+}
+test('a newly signed generation passes the local marker while its prior record stays closed',
+  renewedLeasePassesLocalMarker);
 
 async function changedDestinationRefusesBeforeStorage() {
   const input = fixture();

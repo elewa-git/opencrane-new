@@ -26,6 +26,7 @@ type IdentityRecord = {
   credentials: Credentials;
   destinationPath: string;
   expiresAt: number;
+  revoked: boolean;
 };
 
 const records = new WeakMap<object, IdentityRecord>();
@@ -157,11 +158,25 @@ async function ownedRootCredentials() {
   return { port, accessKey, secretKey, silo: settings['SILO_ID'] };
 }
 
-/** Issue one local backup lease from the owned store and check the policy signed into its token. */
-export async function provisionCnpgBackupIdentity(input: Binding) {
+function sameOwnedTarget(previous: Binding, next: Binding) {
+  return previous.silo === next.silo &&
+    previous.namespaceUid === next.namespaceUid &&
+    previous.serviceUid === next.serviceUid &&
+    previous.endpointURL === next.endpointURL && previous.ca === next.ca &&
+    previous.generation !== next.generation;
+}
+
+function checkCancellation(signal?: AbortSignal) {
+  valid(!signal?.aborted);
+}
+
+async function issueCnpgBackupIdentity(input: Binding, previous?: IdentityRecord,
+  signal?: AbortSignal) {
   try {
     const binding = checkedBinding(input);
+    checkCancellation(signal);
     const source = await ownedRootCredentials();
+    checkCancellation(signal);
     // Use the owned stack's saved silo before asking MinIO for any credential.
     valid(binding.silo === source.silo);
     const bucket = `ocn-backup-${binding.silo}`;
@@ -175,27 +190,57 @@ export async function provisionCnpgBackupIdentity(input: Binding) {
     const originalConfiguration = provider.getRequestConfig.bind(provider);
     function boundedConfiguration() {
       const request = originalConfiguration();
-      request.requestOptions.signal = AbortSignal.timeout(10_000);
+      const deadlineSignal = AbortSignal.timeout(10_000);
+      request.requestOptions.signal = signal
+        ? AbortSignal.any([deadlineSignal, signal]) : deadlineSignal;
       return request;
     }
     provider.getRequestConfig = boundedConfiguration;
     const issued = await provider.getCredentials();
+    checkCancellation(signal);
     valid(typeof issued.sessionToken === 'string');
     const credentials = { accessKey: issued.accessKey, secretKey: issued.secretKey,
       sessionToken: issued.sessionToken };
     const expiresAt = checkedCredentials(credentials, source.secretKey, source.accessKey, policy);
+    valid(previous === undefined || credentials.sessionToken !== previous.credentials.sessionToken);
     const client = new Client({ endPoint: '127.0.0.1', port: source.port, useSSL: false,
       accessKey: source.accessKey, secretKey: source.secretKey });
     const exists = await client.bucketExists(bucket);
     if (!exists) {
       await client.makeBucket(bucket, 'us-east-1');
     }
+    // A slow or lost issuer/storage reply cannot make an expired lease current again.
+    checkCancellation(signal);
+    valid(expiresAt > Date.now() + 30_000);
     const evidence = Object.freeze({});
     // Keep a separate copy so a caller cannot change the checked generation in place.
-    records.set(evidence, { binding, credentials: { ...credentials }, destinationPath, expiresAt });
+    records.set(evidence, { binding, credentials: { ...credentials }, destinationPath,
+      expiresAt, revoked: false });
     return { destinationPath, credentials, evidence };
   } catch {
     // Keep root credentials, token contents and storage errors out of the refusal.
+    throw new Error(refusal);
+  }
+}
+
+/** Issue one local backup lease from the owned store and check the policy signed into its token. */
+export async function provisionCnpgBackupIdentity(input: Binding) {
+  return issueCnpgBackupIdentity(input);
+}
+
+/** Close the prior lease before attempting a replacement for the same owned target. */
+export async function renewCnpgBackupIdentity(previousEvidence: object, input: Binding,
+  signal?: AbortSignal) {
+  try {
+    const previous = records.get(previousEvidence);
+    valid(previous);
+    valid(!previous.revoked);
+    // Never lend the earlier successful check to a failed or uncertain renewal.
+    previous.revoked = true;
+    const binding = checkedBinding(input);
+    valid(sameOwnedTarget(previous.binding, binding));
+    return await issueCnpgBackupIdentity(binding, previous, signal);
+  } catch {
     throw new Error(refusal);
   }
 }
@@ -204,7 +249,7 @@ export async function provisionCnpgBackupIdentity(input: Binding) {
 export function inspectCnpgBackupIdentity(evidence: object, binding: Binding,
   credentials: Credentials) {
   const record = records.get(evidence);
-  if (!record || record.expiresAt <= Date.now() + 30_000 ||
+  if (!record || record.revoked || record.expiresAt <= Date.now() + 30_000 ||
     !isDeepStrictEqual(record.binding, binding) ||
     !isDeepStrictEqual(record.credentials, credentials)) {
     throw new Error(inspectionRefusal);
