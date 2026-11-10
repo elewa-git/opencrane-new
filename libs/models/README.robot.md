@@ -4657,6 +4657,14 @@ sequence; any valid member/server block covers replacement profiles too. Saved i
 stays unverified and `callsAvailable` stays false. No custody, provider, append, selection
 or release operation runs. Lists, mutations, projections and OAuth are outside this read.
 
+`readAdminDisableChange` checks the original disable reference on the member/server
+control stream. It loads profile and control history under one ten-second deadline,
+then checks current admin membership and OpenFGA once. Only the original actor can
+confirm an exact saved event. A missing or unproved event returns unknown; a failed
+history returns unavailable after the access decision. The reply allows only the
+original id, time and sequence, the current control revision, block and profile status.
+It neither appends nor reads credential material.
+
 ## Connection lock acquisition checks
 
 Part of #576. The 100 ms acquisition budget expired while a loaded test worker

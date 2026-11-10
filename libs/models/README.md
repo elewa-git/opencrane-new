@@ -777,6 +777,8 @@ The reader loads exact history before checking current membership. Disabled prof
 readable; incomplete records stay unavailable. A saved bearer is not a verified identity.
 A separate admin read checks current owner or admin access after loading one member’s
 profile. It returns safe metadata and the admin block revision without using credentials.
+The admin who saved a disable can check its original reference. This read reports the
+original event and current block and profile status, even after a later profile change.
 
 Members can recover the original receipt for a personal account save, rotation or revocation.
 Later changes do not replace that receipt. It confirms a local change; whether the profile

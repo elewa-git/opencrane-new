@@ -262,7 +262,7 @@ async function rejectsChangedOriginal(field: string) {
       if (field === 'actor') {
         event.principal = { kind: 'human', id: 'owner' };
       } else if (field === 'payload') {
-        event.data = { ...event.data, profile: 'other' };
+        event.data = { ...fixture.data, profile: 'other' };
       }
       yield { ...row, event };
     }
@@ -279,18 +279,42 @@ it.each(['actor', 'payload'])(
 
 async function unrelatedProfileChange() {
   const fixture = await saved();
+  expect((await post(fixture.url, input)).statusCode).toBe(200);
   const rotation = envelope('test', fixture.subject, 'connection.refreshed', {
     ...fixture.data, activation: { ...fixture.data.activation, generation: 2,
       operationId: 'unrelated', reason: 'bearer_rotation',
       expectedSequence: fixture.revision } }, 'unrelated');
+  rotation.principal = { kind: 'human', id: 'alice' };
   await nats.seed([rotation]);
   const response = await app.inject({ url: `${fixture.url}/disable/changes/unrelated`,
     headers: headers() });
   expect(response.statusCode).toBe(404);
   expect(response.json()).toEqual({ status: 'unknown' });
   privateOutput(response);
+  const original = await app.inject({ url: `${fixture.url}/disable/changes/disable`,
+    headers: headers() });
+  expect(original.statusCode).toBe(200);
+  expect(original.json()).toMatchObject({ status: 'confirmed', changeRef: 'disable',
+    profileStatus: 'saved_unverified', adminBlocked: true });
 }
 it('does not treat a later profile change as the disable command', unrelatedProfileChange);
+
+async function originalAfterRevoke() {
+  const fixture = await saved();
+  expect((await post(fixture.url, input)).statusCode).toBe(200);
+  const revoked = envelope('test', fixture.subject, 'connection.revoked', {
+    userId: 'alice', serverId: fixture.serverId, profile: fixture.profileId,
+    revokedBy: 'alice', reason: 'owner_requested', expectedSequence: fixture.revision,
+  });
+  await nats.seed([revoked]);
+  const response = await app.inject({ url: `${fixture.url}/disable/changes/disable`,
+    headers: headers() });
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'confirmed', changeRef: 'disable',
+    profileStatus: 'unavailable', adminBlocked: true });
+  privateOutput(response);
+}
+it('keeps the original disable when the profile is later revoked', originalAfterRevoke);
 
 async function statusHistoryAndAccess(outcome: string) {
   const fixture = await saved();
@@ -318,10 +342,22 @@ async function statusHistoryAndAccess(outcome: string) {
     yield* read(subject, from, deadline);
   }
   vi.spyOn(nats.store, 'readStream').mockImplementation(load);
+  if (outcome === 'iam failed') {
+    const client = new OpenFgaClient(binding);
+    const check = client.check.bind(client);
+    async function unavailable(...args: Parameters<typeof check>) {
+      if (args[0].relation === 'admin') {
+        throw new Error(privateCanary);
+      }
+      return check(...args);
+    }
+    vi.spyOn(OpenFgaClient.prototype, 'check').mockImplementation(unavailable);
+  }
   const response = await app.inject({ url: `${fixture.url}/disable/changes/disable`,
     headers: headers() });
   const refused = outcome === 'removed' || outcome === 'demoted';
-  expect(response.statusCode).toBe(refused ? 403 : outcome === 'failed' ? 503 : 200);
+  expect(response.statusCode).toBe(refused ? 403 :
+    outcome === 'failed' || outcome === 'iam failed' ? 503 : 200);
   if (response.statusCode !== 200) {
     expect(response.json()).toEqual({ status: refused ? 'refused' : 'unavailable' });
   }
@@ -332,7 +368,7 @@ async function statusHistoryAndAccess(outcome: string) {
     await join('admin');
   }
 }
-it.each(['failed', 'slow', 'removed', 'demoted'])(
+it.each(['failed', 'iam failed', 'slow', 'removed', 'demoted'])(
   'checks current admin access after %s status history', statusHistoryAndAccess);
 
 async function refusedActor(actor: string, outcome: string) {

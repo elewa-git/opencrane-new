@@ -351,6 +351,7 @@ The reply separates the saved revision, admin block and server availability. Sav
 credentials does not verify an upstream identity or enable calls.
 Current owners and admins can inspect one member’s personal profile metadata.
 They also see the saved admin block revision, without reading credentials.
+The admin who disabled a profile can check its original saved result after a lost reply.
 
 Members can revoke their own saved personal account. This stops its local use; it does
 not prove that the provider revoked its token. Retrying the same change returns the

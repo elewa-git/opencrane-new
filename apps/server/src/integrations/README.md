@@ -43,6 +43,7 @@ Members can explicitly select or clear their own account choice. The receipt con
 the saved choice. Connecting never selects an account, and no company account replaces it.
 
 **Saved personal profiles.** Members can read their own profiles, including disabled ones. Current owners and admins can inspect one member’s personal profile metadata and its admin block revision. The reply says whether it was saved, its revision and generation, and whether an admin block or unavailable server prevents use. It never claims a verified identity or enables calls.
+The admin who disabled a profile can check the original change reference. The reply shows the saved disable and current block and profile status without repeating the change.
 
 **Hosted images and instances.** An admin can register a hosted image and recover the result by its original request id. It stays Checking until a valid image-check result is saved. All four image checks must pass before admission. Registration does not fetch an image, discover tools or start a process; admission grants no tool access. Startup credential requirements are checked before a connection is offered. Compatible declarations remain reviewable, but startup processes cannot run yet. Existing memory calls keep their own access checks.
 
@@ -63,7 +64,7 @@ A lost spending-limit reply can be checked by its original request id. Current o
 | [remote-catalogue-watch.ts](remote-catalogue-watch.ts) | Keeps the models process's remote checks current. |
 | [access-reads.ts](access-reads.ts), [access-changes.ts](access-changes.ts) | List tool grants and suitable recipients, and save access changes. |
 | [access-explanation.ts](access-explanation.ts), [explanation-routes.ts](explanation-routes.ts) | Explain saved tool rights without starting calls. |
-| [profile-routes.ts](profile-routes.ts) | Returns own profile metadata and checks admin access to another member’s profile metadata. |
+| [profile-routes.ts](profile-routes.ts) | Returns own profile metadata and checks admin access to another member’s profile metadata and original disable status. |
 | [instance-routes.ts](instance-routes.ts), [instance-worker.ts](instance-worker.ts), [startup-credentials.ts](startup-credentials.ts) | Check instance requests, worker reports and hosted startup requirements. |
 
 ## How it connects

@@ -6311,7 +6311,17 @@ No custody details or dependency errors enter replies or logs.
 The admin reader's contract is in the [models notes](../../libs/models/README.robot.md#admin-personal-profile-metadata).
 `test/connection-profile-admin-read.test.ts` checks access races, exact output, failed
 loads, slow history, unrelated activity, lifecycle sequences and replay after server restart.
-Own reads keep their existing behaviour. Admin disable HTTP/status and live use are NOT RUN.
+Own reads keep their existing behaviour. Live credential use remains NOT RUN.
+
+## Original administrator disable status
+
+`GET /api/integrations/:serverId/members/:userId/profiles/:profileId/disable/changes/:changeRef`
+uses the same session, path, empty query and GET body checks as admin profile detail.
+The models reader loads the exact profile and member/server control histories before
+checking current admin access. An unproved result is 404 unknown, including after a
+lost append reply. A failed dependency is fixed 503 unavailable for an active admin;
+a removed or demoted admin gets 403 refused. The original actor sees the saved event
+time and sequence with current block and profile status. No second command runs.
 
 ## Authenticated upload scans
 
