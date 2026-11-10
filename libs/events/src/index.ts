@@ -108,6 +108,7 @@ export { memoryMaintenanceRecordedDataSchema } from './memory.ts';
 export { companyConnectionRefreshedDataSchema, companyConnectionCreatedDataSchema,
   companyConnectionVerifiedDataSchema,
   connectionCreatedDataSchema, connectionRefreshedDataSchema, connectionRevokedDataSchema,
+  connectionDisabledDataSchema,
   connectionOperationClosedDataSchema, connectionSelectedDataSchema,
   companyOptInSetDataSchema, connectionOAuthStartedDataSchema, connectionRefreshStartedDataSchema,
   connectionOAuthExchangeClaimedDataSchema } from './connections.ts';

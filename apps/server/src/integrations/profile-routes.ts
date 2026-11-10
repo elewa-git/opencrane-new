@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { MemberAccessRefused, readOwnConnectionProfile, readOwnConnectionChange,
-  readOwnSelectionChange, readAdminConnectionProfile }
+  readOwnSelectionChange, readAdminConnectionProfile, readAdminDisableChange }
   from '@opencrane/models';
 import { z } from 'zod';
 import type { GroupOptions } from '../members/group-routes.ts';
@@ -13,6 +13,7 @@ const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const parameters = z.strictObject({ serverId: id, profileId: id });
 const adminParameters = parameters.extend({ userId: id });
 const changeParameters = parameters.extend({ changeRef: id });
+const adminChangeParameters = adminParameters.extend({ changeRef: id });
 const selectionParameters = z.strictObject({ serverId: id, changeRef: id });
 const emptyQuery = z.strictObject({});
 
@@ -21,11 +22,16 @@ export function registerConnectionProfileRead(app: FastifyInstance, config: Auth
   registerConnectionSelection(app, config, options);
   registerConnectionProfileRevoke(app, config, options);
   app.get('/api/integrations/:serverId/members/:userId/profiles/:profileId', adminHandler);
+  app.get('/api/integrations/:serverId/members/:userId/profiles/:profileId/disable/changes/:changeRef',
+    adminChangeHandler);
   app.get('/api/my/tools/:serverId/profiles/:profileId', handler);
   app.get('/api/my/tools/:serverId/profiles/:profileId/changes/:changeRef', changeHandler);
   app.get('/api/my/tools/:serverId/selection/changes/:changeRef', selectionHandler);
   async function adminHandler(request: FastifyRequest, reply: FastifyReply) {
     return read(request, reply, adminParameters, readAdminConnectionProfile);
+  }
+  async function adminChangeHandler(request: FastifyRequest, reply: FastifyReply) {
+    return read(request, reply, adminChangeParameters, readAdminDisableChange);
   }
   async function selectionHandler(request: FastifyRequest, reply: FastifyReply) {
     return read(request, reply, selectionParameters, readOwnSelectionChange);
@@ -38,9 +44,11 @@ export function registerConnectionProfileRead(app: FastifyInstance, config: Auth
   }
   async function read(request: FastifyRequest, reply: FastifyReply,
     schema: typeof parameters | typeof adminParameters | typeof changeParameters |
+      typeof adminChangeParameters |
       typeof selectionParameters,
     reader: typeof readOwnConnectionProfile | typeof readOwnConnectionChange |
-      typeof readOwnSelectionChange | typeof readAdminConnectionProfile) {
+      typeof readOwnSelectionChange | typeof readAdminConnectionProfile |
+      typeof readAdminDisableChange) {
     reply.header('cache-control', 'no-store');
     const session = sessionFor(request, config, new Date());
     if (!session) {

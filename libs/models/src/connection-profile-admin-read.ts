@@ -63,7 +63,7 @@ async function loadMetadata(store: EventStore, silo: string, reference: Referenc
   return adminMetadataSchema.parse(metadata);
 }
 
-function isPersonalProfile(rows: StoredEvent[], subject: string, reference: Reference) {
+export function isPersonalProfile(rows: StoredEvent[], subject: string, reference: Reference) {
   // Require an original personal activation before exposing any binding, even after revocation.
   const first = rows.slice(0, 1);
   if (!foldConnection(first).data) {

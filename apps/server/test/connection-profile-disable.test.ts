@@ -168,11 +168,22 @@ async function recover(actor: string, lost: boolean) {
   app = startApp();
   const position = await nats.store.head();
   const noAppend = vi.spyOn(nats.store, 'append');
-  const retry = await post(fixture.url, command, headers(`session-${actor}`));
-  expect(retry.statusCode).toBe(200);
   const rows = await history(nats.store, `connection-control-alice-${fixture.serverId}`, 'test');
   expect(rows).toHaveLength(1);
   const receipt = { status: 'disabled', sequence: rows[0]!.sequence, changeRef: 'disable' };
+  const status = await app.inject({ url: `${fixture.url}/disable/changes/disable`,
+    headers: headers(`session-${actor}`) });
+  privateOutput(status);
+  expect(status.statusCode).toBe(200);
+  expect(status.json()).toMatchObject({ status: 'confirmed', changeRef: 'disable',
+    eventId: rows[0]!.event.id, sequence: rows[0]!.sequence, action: 'disable',
+    adminBlocked: true });
+  expect(status.json()).toMatchObject({ eventId: rows[0]!.event.id,
+    sequence: rows[0]!.sequence });
+  expect(await nats.store.head()).toBe(position);
+  expect(noAppend).not.toHaveBeenCalled();
+  const retry = await post(fixture.url, command, headers(`session-${actor}`));
+  expect(retry.statusCode).toBe(200);
   expect(retry.json()).toEqual(receipt);
   if (!lost) {
     expect(response.json()).toEqual(receipt);
@@ -193,6 +204,11 @@ async function recover(actor: string, lost: boolean) {
   const read = await app.inject({ url: replacement.url, headers: headers() });
   expect(read.json()).toMatchObject({ controlRevision: receipt.sequence,
     adminBlocked: true, status: 'saved_unverified', callsAvailable: false });
+  const original = await app.inject({ url: `${fixture.url}/disable/changes/disable`,
+    headers: headers(`session-${actor}`) });
+  expect(original.statusCode).toBe(200);
+  expect(original.json()).toMatchObject({ eventId: rows[0]!.event.id,
+    sequence: receipt.sequence, adminBlocked: true });
   expect(await nats.store.head(fixture.subject)).toBe(fixture.revision);
   expect(noAppend).not.toHaveBeenCalled();
   expect(noCustody).not.toHaveBeenCalled();
@@ -205,6 +221,164 @@ async function recover(actor: string, lost: boolean) {
 }
 it.each([['admin', false], ['owner', false], ['admin', true]] as const)(
   'saves once for %s and recovers after deduplication expiry (lost: %s)', recover);
+
+async function statusRefusals() {
+  const fixture = await saved();
+  expect((await post(fixture.url, input)).statusCode).toBe(200);
+  const base = `${fixture.url}/disable/changes/`;
+  const writes = vi.spyOn(nats.store, 'append');
+  const noCustody = vi.spyOn(custody, 'connectionCustody');
+  for (const actor of ['alice', 'bob', 'unmapped']) {
+    for (const changeRef of ['disable', 'missing']) {
+      const response = await app.inject({ url: `${base}${changeRef}`, headers: headers(actor) });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toEqual({ status: 'refused' });
+      privateOutput(response);
+    }
+  }
+  const foreign = await app.inject({ url: `${base}disable`,
+    headers: headers('admin', 'foreign') });
+  expect(foreign.statusCode).toBe(403);
+  for (const changeRef of ['missing', 'disable-other']) {
+    const response = await app.inject({ url: `${base}${changeRef}`, headers: headers() });
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ status: 'unknown' });
+  }
+  const otherAdmin = await app.inject({ url: `${base}disable`, headers: headers('owner') });
+  expect(otherAdmin.statusCode).toBe(404);
+  expect(writes).not.toHaveBeenCalled();
+  expect(noCustody).not.toHaveBeenCalled();
+}
+it('keeps bindings private and confirms only the original actor and reference', statusRefusals);
+
+async function rejectsChangedOriginal(field: string) {
+  const fixture = await saved();
+  expect((await post(fixture.url, input)).statusCode).toBe(200);
+  const controlSubject = `connection-control-alice-${fixture.serverId}`;
+  const read = nats.store.readStream.bind(nats.store);
+  async function* changed(subject: string, from?: number, deadline?: number) {
+    for await (const row of read(subject, from, deadline)) {
+      if (subject !== controlSubject) {
+        yield row;
+        continue;
+      }
+      const event = structuredClone(row.event);
+      if (field === 'actor') {
+        event.principal = { kind: 'human', id: 'owner' };
+      } else if (field === 'payload') {
+        event.data = { ...fixture.data, profile: 'other' };
+      }
+      yield { ...row, event };
+    }
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(changed);
+  const response = await app.inject({ url: `${fixture.url}/disable/changes/disable`,
+    headers: headers() });
+  expect(response.statusCode).toBe(404);
+  expect(response.json()).toEqual({ status: 'unknown' });
+  privateOutput(response);
+}
+it.each(['actor', 'payload'])(
+  'does not confirm a changed original %s', rejectsChangedOriginal);
+
+async function unrelatedProfileChange() {
+  const fixture = await saved();
+  expect((await post(fixture.url, input)).statusCode).toBe(200);
+  const rotation = envelope('test', fixture.subject, 'connection.refreshed', {
+    ...fixture.data, activation: { ...fixture.data.activation, generation: 2,
+      operationId: 'unrelated', reason: 'bearer_rotation',
+      expectedSequence: fixture.revision } }, 'unrelated');
+  rotation.principal = { kind: 'human', id: 'alice' };
+  await nats.seed([rotation]);
+  const response = await app.inject({ url: `${fixture.url}/disable/changes/unrelated`,
+    headers: headers() });
+  expect(response.statusCode).toBe(404);
+  expect(response.json()).toEqual({ status: 'unknown' });
+  privateOutput(response);
+  const original = await app.inject({ url: `${fixture.url}/disable/changes/disable`,
+    headers: headers() });
+  expect(original.statusCode).toBe(200);
+  expect(original.json()).toMatchObject({ status: 'confirmed', changeRef: 'disable',
+    profileStatus: 'saved_unverified', adminBlocked: true });
+}
+it('does not treat a later profile change as the disable command', unrelatedProfileChange);
+
+async function originalAfterRevoke() {
+  const fixture = await saved();
+  expect((await post(fixture.url, input)).statusCode).toBe(200);
+  const revoked = envelope('test', fixture.subject, 'connection.revoked', {
+    userId: 'alice', serverId: fixture.serverId, profile: fixture.profileId,
+    revokedBy: 'alice', reason: 'owner_requested', expectedSequence: fixture.revision,
+  });
+  await nats.seed([revoked]);
+  const response = await app.inject({ url: `${fixture.url}/disable/changes/disable`,
+    headers: headers() });
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'confirmed', changeRef: 'disable',
+    profileStatus: 'unavailable', adminBlocked: true });
+  privateOutput(response);
+}
+it('keeps the original disable when the profile is later revoked', originalAfterRevoke);
+
+async function statusHistoryAndAccess(outcome: string) {
+  const fixture = await saved();
+  expect((await post(fixture.url, input)).statusCode).toBe(200);
+  const read = nats.store.readStream.bind(nats.store);
+  let changed: ReturnType<typeof envelope> | undefined;
+  async function* load(subject: string, from?: number, deadline?: number) {
+    if (subject === fixture.subject) {
+      expect(deadline! - performance.now()).toBeGreaterThan(2_000);
+      if (outcome === 'removed' || outcome === 'demoted') {
+        const type = outcome === 'removed' ? 'member.removed' : 'member.role_changed';
+        const data = outcome === 'removed'
+          ? { memberId: 'admin', removedBy: 'owner' }
+          : { memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner' };
+        changed = envelope('test', 'member-admin', type, data);
+        await nats.seed([changed]);
+      }
+      if (outcome === 'failed' || outcome === 'removed') {
+        throw new Error(privateCanary);
+      }
+      if (outcome === 'slow' || outcome === 'demoted') {
+        await delay(2_100);
+      }
+    }
+    yield* read(subject, from, deadline);
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(load);
+  if (outcome === 'iam failed') {
+    const client = new OpenFgaClient(binding);
+    const check = client.check.bind(client);
+    async function unavailable(...args: Parameters<typeof check>) {
+      if (args[0].relation === 'admin') {
+        throw new Error(privateCanary);
+      }
+      return check(...args);
+    }
+    vi.spyOn(OpenFgaClient.prototype, 'check').mockImplementation(unavailable);
+  }
+  const response = await app.inject({ url: `${fixture.url}/disable/changes/disable`,
+    headers: headers() });
+  const refused = outcome === 'removed' || outcome === 'demoted';
+  let expectedStatus = 200;
+  if (refused) {
+    expectedStatus = 403;
+  } else if (outcome === 'failed' || outcome === 'iam failed') {
+    expectedStatus = 503;
+  }
+  expect(response.statusCode).toBe(expectedStatus);
+  if (response.statusCode !== 200) {
+    expect(response.json()).toEqual({ status: refused ? 'refused' : 'unavailable' });
+  }
+  privateOutput(response);
+  vi.restoreAllMocks();
+  if (changed) {
+    await memberAuthorisation(binding).handler.handle(changed, pgDb(storage.queue));
+    await join('admin');
+  }
+}
+it.each(['failed', 'iam failed', 'slow', 'removed', 'demoted'])(
+  'checks current admin access after %s status history', statusHistoryAndAccess);
 
 async function refusedActor(actor: string, outcome: string) {
   const fixture = await saved();
