@@ -10,7 +10,7 @@ import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz'
 import { until } from '@opencrane/authz/testing';
 import { event } from '@opencrane/event-store/testing';
 import { isEventStoreUnavailable } from '@opencrane/event-store';
-import { foldRoutine, type EventEnvelope } from '@opencrane/events';
+import { foldRoutine, getEventDefinition, type EventEnvelope } from '@opencrane/events';
 import { BudgetActor, history, rootTotals, readRootStopEvidence } from '@opencrane/models';
 import { conversationKeys, ProjectionRunner, routines } from '@opencrane/projections';
 import { database } from '@opencrane/projections/testing';
@@ -562,6 +562,55 @@ async function resumesOneSavedDueAfterDeliveryWasDisabled() {
 }
 it('resumes the saved checked due once after disabled delivery and a broker restart',
   resumesOneSavedDueAfterDeliveryWasDisabled);
+
+async function changeBeforeFinalRelease(kind: 'ceiling' | 'stop' | 'grant' | 'leadership') {
+  const fixedTime = performance.now();
+  const clockSpy = vi.spyOn(performance, 'now');
+  clockSpy.mockImplementation(() => fixedTime);
+  const append = nats.store.append.bind(nats.store);
+  let changed = false;
+  async function interruptRelease(...supplied: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_send_release_authorised' && !changed) {
+      changed = true;
+      if (kind === 'ceiling') {
+        const limit = { scope: 'global' as const, ceilingCents: 0,
+          dailyCeilingCents: 0, setBy: 'admin' };
+        await actor.configure(limit);
+      } else if (kind === 'stop') {
+        const run = (await runState()).activeRun!;
+        const example = getEventDefinition('routine.run_stop_requested')!.example;
+        const data = { ...frameSchema.parse(example), routineId: run.routineId,
+          occurrenceId: run.occurrenceId, rootId: run.rootId,
+          conversationId: run.conversationId, messageId: run.messageId,
+          turnId: run.turnId };
+        const stopped = record('stop-before-release', 'routine-orders',
+          'routine.run_stop_requested', data);
+        await nats.seed([stopped]);
+      } else if (kind === 'grant') {
+        const data = { resourceType: 'model', resourceId: 'gpt-6.1-sol',
+          granteeKind: 'member', granteeId: 'alice', revokedBy: 'admin' };
+        const revoked = record('revoked-before-release',
+          grantStream('model', 'gpt-6.1-sol'), 'grant.revoked', data);
+        await nats.seed([revoked]);
+      } else {
+        stop.abort();
+      }
+    }
+    return append(...supplied);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(interruptRelease);
+  await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  expect(changed).toBe(true);
+  function isTurn(frame: Record<string, unknown>) {
+    return frame['type'] === 'turn';
+  }
+  expect(preparedComputer.frames.some(isTurn)).toBe(false);
+  expect(preparedComputer.executedThreads).toEqual([]);
+}
+it.each(['ceiling', 'stop', 'grant', 'leadership'] as const)(
+  'refuses %s before the final routine release and keeps the scan pending',
+  changeBeforeFinalRelease);
 
 async function productionDeliveryUsesCheckedDue() {
   await runner.run(routines);
