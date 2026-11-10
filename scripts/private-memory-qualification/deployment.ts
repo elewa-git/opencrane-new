@@ -135,7 +135,7 @@ export async function readDeploymentQualification(silo: string) {
   return { runId: result.runId, confirm, catalogue: { runtime, qualification } };
 }
 
-function hash(value: string): string {
+export function hash(value: string): string {
   const hasher = createHash('sha256');
   hasher.update(value);
   return `sha256:${hasher.digest('hex')}`;
@@ -153,7 +153,7 @@ function docker(args: string[], input = ''): unknown {
 }
 
 
-function measure(containerId: string) {
+export function measure(containerId: string) {
   const containers = docker(['inspect', '--type', 'container', containerId]);
   const container = z.array(containerSchema).length(1).parse(containers)[0]!;
   if (container.Id !== containerId) {
@@ -202,7 +202,7 @@ async function readEventState(containerId: string) {
   return freshSchema.parse(await runInContainer(containerId, args));
 }
 
-async function assertFresh(containerId: string, containerCreated: string): Promise<string> {
+export async function assertFresh(containerId: string, containerCreated: string): Promise<string> {
   const observation = await readEventState(containerId);
   if (observation.lastSequence !== 0 || observation.eventCount !== 0) {
     throw new Error('installation_used');
@@ -217,7 +217,7 @@ async function assertFresh(containerId: string, containerCreated: string): Promi
   return observation.created;
 }
 
-async function assertInstallation(
+export async function assertInstallation(
   containerId: string, before: ReturnType<typeof measure>, streamCreated: string,
 ): Promise<void> {
   assertSame(before, measure(containerId));
@@ -226,7 +226,7 @@ async function assertInstallation(
   }
 }
 
-async function runCheck(containerId: string, binding: Binding, name: string,
+export async function runCheck(containerId: string, binding: Binding, name: string,
   challengeId: string) {
   const request = { ...binding, name, challengeId };
   const input = JSON.stringify(request);
@@ -249,7 +249,7 @@ async function runCheck(containerId: string, binding: Binding, name: string,
   return { result: receipt.result, digest: hash(JSON.stringify(receipt)) };
 }
 
-function deploymentTarget() {
+export function deploymentTarget() {
   const path = '/etc/opencrane/private-memory-qualification.json';
   const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {

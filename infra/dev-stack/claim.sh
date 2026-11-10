@@ -3,7 +3,8 @@ set -eu
 
 script_directory=$(CDPATH='' cd "$(dirname "$0")" && pwd -P)
 worktree=$(CDPATH='' cd "$script_directory/../.." && pwd -P)
-export DEV_STACK_CLAIM_PID=$$
+DEV_STACK_CLAIM_PID=${DEV_STACK_CLAIM_PID:-$$}
+export DEV_STACK_CLAIM_PID
 
 for stack_id in 1 2; do
   owner_file="$HOME/.config/opencrane/dev-stack-$stack_id/stack-owner"

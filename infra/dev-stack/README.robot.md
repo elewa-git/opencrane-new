@@ -30,6 +30,9 @@ target file. The collector requires it and checks that computer's live bridge
 and root supervisor. A missing id receives a fixed refusal before a journey.
 The fixture supplies this owner-selected id and mocks only the Docker proof
 boundary; it still runs the real collector and local launcher.
+The persistence target check also requires the computer's Compose project or
+Kubernetes namespace to match the claimed secondary id. It refuses the owner
+computer even when the server belongs to the secondary slot.
 
 Part of #94 and #95. `memory-personal-live.ts` uses an empty secondary installation,
 real SSO and the free model stub. Start with `DEV_OWNER_BOOTSTRAP=0` and `--fresh`.
@@ -2322,6 +2325,9 @@ bootstrap or native journey work. It runs once per process and never bootstraps.
 The image-owned collector runner may populate the installation itself.
 
 `DEV_STACK_ID` and `MEMORY_CLAIMED_ID` must name the same existing secondary claim.
+The persistence attempt caller reuses `checkLocalTarget` with those same ids. It
+refuses the owner stack, a foreign claim, a changed silo, an image from another
+source revision or a changed protected target before it sends a private canary.
 The launcher reuses `requireStageBStack`, checks the slot's silo setting and requires
 the protected collector target to match that silo and the full container id.
 The Compose project label must match the slot; its working-directory label must

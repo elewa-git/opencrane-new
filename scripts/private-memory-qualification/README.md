@@ -25,7 +25,7 @@ flowchart LR
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
   collector -->|measures launches, joins process records and starts checks| docker["Docker<br/>running image and host"]
   docker -->|checks services, Codex and canary helper| deployment["deployment<br/>services and journey runner"]
-  collector -->|checks live bridge, supervisor and held proxy calls| computer["computer container<br/>root and native launch records"]
+  collector -->|checks held native calls and storage outside the container| computer["computer container<br/>root and native launch records"]
 ```
 
 ## What it is responsible for
@@ -55,6 +55,10 @@ flowchart LR
 - Provide a helper for two process reads and two storage scans during one proposed
   persistence attempt. It keeps the first failure and records later failures too.
   An unknown tool reply or unreadable folder stays unfinished.
+- Prepare an attempt only for a claimed secondary installation whose images,
+  processes and writable storage can be measured.
+- Claim and start the secondary stack through the owning launcher, then release it
+  even when startup, the attempt or cancellation fails.
 - Save its own result in a protected file and recheck the deployment whenever it is used.
 - Refuse copied, edited, stale or foreign receipts.
 - Keep failures free of private paths and child process output.
@@ -120,12 +124,11 @@ It reports private text found in storage separately from an inspection that coul
 Missing folders, unreadable files and redirected paths keep the inspection unfinished.
 It checks once during simulated work and again after it stops, without printing file names
 or private text.
-An attempt helper keeps the native turn open while it checks the processes and the first scan.
-It tries each forbidden tool at most once and checks storage again after Stop. The deployment collector
-does not call this helper yet, so no live persistence attempt has run. If a tool writes
-private text, later failed checks add evidence without hiding that tool write.
-These folder tests do not establish which storage a deployment uses or prove native tool refusal.
-The runner still leaves the persistence journey unfinished.
+The persistence caller uses the protected target for one claimed secondary stack.
+It checks both containers and their images before any native launch. It measures
+the computer's writable storage from outside its container. The native adapter is
+still unavailable, so this caller reports an unfinished result. The full
+fresh-install journeys remain separate.
 Other tests use simulated observations and disposable containers to check refusal and cleanup.
 They do not qualify a deployment or enable memory.
 
@@ -154,6 +157,7 @@ From the repository root, on the deployment host:
 
 ```sh
 nice -n 10 node --experimental-strip-types scripts/private-memory-qualification/run.mjs
+nice -n 10 node --experimental-strip-types scripts/private-memory-qualification/persistence-run.mjs
 nice -n 10 npx vitest run --config scripts/private-memory-qualification/vitest.config.mjs
 nice -n 10 npx tsc -p scripts/private-memory-qualification/tsconfig.json
 ```

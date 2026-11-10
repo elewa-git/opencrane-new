@@ -772,19 +772,38 @@ session and reload state, caches, outbox, logs and dumps outside its namespace.
 ## Held persistence attempt helper
 
 `runPersistenceAttempt` joins the existing process inventory before private input and
-again while the same native turn is open. It checks both measured installation ids
+again while the same native turn is open. It checks both measured installation ids,
+both image digests and the computer generation
 around each read and tool call. It calls `persistenceScan` in its own process, once
 while the turn is live and again after Stop. The caller owns the canary and the named
-storage inventory. The helper copies and clears its canary bytes. An unknown native
+storage inventory. The scanner checks every named storage root before native launch
+and binds its identity across both scans. The helper copies and clears its canary bytes.
+An unknown native
 response is never retried. The first FAIL keeps its tool, group or storage category.
 Each later FAIL adds its detail to `additionalFailures` without replacing the first.
 A known tool write or stored canary is FAIL. An unexercised
 tool, changed installation or unreadable store is NOT RUN. Every other result remains
 PARTIAL with `complete: false`; this helper cannot qualify admission.
 
-The collector has no deployment caller for this helper yet. The native memory tool
-catalogue and reviewed image must be present before a live attempt. The caller must
-derive all writable storage directories from the measured computer and read them from
-outside its namespace. It must hold the pinned wrapper, child, canary helper and all
-other private-text groups until both process reads finish. The existing tests supply
-recorded process observations and temporary folders. They do not prove a live scan.
+`persistence-run.mjs` is the deployment caller. It uses the protected target only
+after `checkLocalTarget` confirms the claimed secondary slot and image source.
+`persistence-launch.sh` claims a secondary slot, starts or reuses it, runs the caller
+and takes the stack down on every exit path. The claim uses the launcher's PID.
+The target check binds both server and computer container ids to that slot before
+native launch. It checks the current computer installation once more immediately
+before starting the native process.
+It reads the server image and fresh event stream, the computer image and generation,
+the computer's writable mounts, writable layer and log location. It scans those
+host paths, the computer's saved outbox and the host dump directories from outside
+the computer namespace. An absent or replaced path is NOT RUN before private input.
+Other writable non-memory mounts are added to the PVC scan. The caller starts a
+server canary helper and prepares the joined process and storage checks. Its
+native client currently refuses launch, before any tool class is attempted.
+The native client currently refuses launch, so this caller reports NOT RUN. The
+stacked adapter adds the held native process and remote Stop proof. The caller
+prints only fixed result fields and cannot enable admission.
+
+Until a reviewed immutable image supplies the native runner and the protected
+target names a secure secondary installation, the live attempt is NOT RUN.
+Fixture tests exercise the
+caller and helper but do not prove a live native refusal or clean deployment storage.

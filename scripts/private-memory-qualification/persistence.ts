@@ -198,6 +198,7 @@ export function persistenceScan(
   let patterns: Buffer[] = [];
   let phase: 'live' | 'stopped' | 'closed' = 'live';
   let failed: Failure | undefined;
+  let prepared = false;
   try {
     if (!/^sha256:[a-f0-9]{64}$/u.test(installationId)) {
       throw new Error('inventory');
@@ -216,10 +217,48 @@ export function persistenceScan(
     patterns = [];
   }
 
+  function prepare(): Failure | undefined {
+    if (failed) {
+      return failed;
+    }
+    if (prepared || phase !== 'live') {
+      return { result: 'NOT RUN', category: 'inventory', reason: inspectionIncomplete };
+    }
+    let category: Category | 'inventory' = 'inventory';
+    try {
+      for (const entry of entries) {
+        category = entry.category;
+        const descriptor = openDirectory(entry.path);
+        try {
+          const information = fstatSync(descriptor);
+          if ((information.mode & 0o444) === 0 ||
+              (information.mode & 0o111) === 0) {
+            throw new Error('inventory');
+          }
+          entry.identity = identity(descriptor);
+        } finally {
+          closeSync(descriptor);
+        }
+      }
+      prepared = true;
+      return undefined;
+    } catch {
+      failed = { result: 'NOT RUN', category, reason: inspectionIncomplete };
+      close();
+      return failed;
+    }
+  }
+
   function scan(requested: 'live' | 'stopped', currentInstallation: string): Result {
     const counts: Result = { result: 'PARTIAL', complete: false, files: 0, bytes: 0 };
     let category: Category | 'inventory' = 'inventory';
     try {
+      if (!prepared) {
+        const preparationFailure = prepare();
+        if (preparationFailure) {
+          throw new Error('inventory');
+        }
+      }
       if (failed || phase === 'closed' || requested !== phase ||
           currentInstallation !== installationId) {
         throw new Error('inventory');
@@ -267,5 +306,5 @@ export function persistenceScan(
       return { ...counts, ...failed };
     }
   }
-  return { scan, close };
+  return { prepare, scan, close };
 }

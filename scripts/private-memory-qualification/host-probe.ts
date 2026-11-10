@@ -1,5 +1,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
 
+export function hostDumpLocations(): string[] {
+  return ['/var/crash', '/var/lib/systemd/coredump'];
+}
+
 function coreLimitDisabled(path: string): boolean {
   const content = readFileSync(path, 'utf8');
   const lines = content.split('\n');
