@@ -29,7 +29,7 @@ type Start = { conversationId: string; turnId: string; threadId?: string | undef
 type SenderOptions = { enabled?: boolean; replay?: boolean;
   confirmCompany?: () => Promise<void>; configurationDigest?: string;
   custodyRecordVersion?: string;
-  confirmCredentialUse?: (authorisedVersion: string) => Promise<void> };
+  confirmCredentialUse?: (authorisedVersion: string) => Promise<string> };
 
 function companyCheckedWorker(worker: Arguments[2], confirmCompany?: () => Promise<void>) {
   if (!confirmCompany) return worker;
@@ -59,10 +59,11 @@ function routineTurnBytes(checked: Awaited<ReturnType<typeof readRoutineActivati
   return JSON.stringify(frame);
 }
 
-async function authoriseRoutineSend(store: Arguments[0], worker: Arguments[2],
+async function appendRoutineSendCheck(store: Arguments[0], worker: Arguments[2],
   checked: Awaited<ReturnType<typeof readRoutineActivation>>,
   confirmCompany: () => Promise<void>, configurationDigest: string,
-  custodyRecordVersion: string) {
+  custodyRecordVersion: string,
+  type: 'routine.run_send_authorised' | 'routine.run_send_release_authorised') {
   const run = checked.run;
   const subject = `routine-${run.routineId}`;
   const activation = await store.readEvent(checked.receipt.position, checked.deadline);
@@ -75,17 +76,23 @@ async function authoriseRoutineSend(store: Arguments[0], worker: Arguments[2],
   const expectedSequence = await store.head(subject, checked.deadline);
   const hash = createHash('sha256');
   hash.update(JSON.stringify([worker.silo, run.occurrenceId, checked.senderAttemptId]));
-  const id = hash.digest('hex');
+  const authorisationId = hash.digest('hex');
+  const id = type === 'routine.run_send_authorised'
+    ? authorisationId : `${authorisationId}-release`;
   const event = { id, commandId: id, silo: worker.silo, subject,
     data: { ...data, configurationDigest, custodyRecordVersion },
-    type: 'routine.run_send_authorised', source: 'opencrane-server',
+    type, source: 'opencrane-server',
     principal: { kind: 'system' as const, id: 'opencrane-server' },
     time: new Date().toISOString(), correlation: {} };
   async function checkAccess() {
     await checked.fresh();
     await confirmCompany();
+    if (type === 'routine.run_send_release_authorised') {
+      // Check a saved Stop once more after the company and credential reads.
+      await checked.fresh();
+    }
   }
-  // Make the saved authorisation depend on the same company facts as the send.
+  // Make both saved checks depend on the current company and access facts.
   const command = { event, expectedSequence, historyChecked: true as const,
     deadline: checked.deadline, checkAccess };
   const result = await store.append(command);
@@ -107,12 +114,16 @@ async function checkCompanyCredentialForSend(store: Arguments[0], worker: Argume
   if (!configurationDigest || !custodyRecordVersion || !confirmCredentialUse) {
     throw new Error('Routine company unavailable');
   }
-  await authoriseRoutineSend(store, worker, checked, confirmCompany,
-    configurationDigest, custodyRecordVersion);
+  await appendRoutineSendCheck(store, worker, checked, confirmCompany,
+    configurationDigest, custodyRecordVersion, 'routine.run_send_authorised');
   async function stopChangedCredential() {
     await stopUnconfirmedRoutine(store, worker.silo, admission, 'credential_changed');
   }
   try {
+    await checked.fresh();
+    // Repeat the company check after the saved authorisation. Its account, tool,
+    // grants or OAuth settings may have changed before the turn is released.
+    await confirmCompany();
     await checked.fresh();
   } catch {
     // A changed credential can also fail the usual post-save access check.
@@ -124,14 +135,22 @@ async function checkCompanyCredentialForSend(store: Arguments[0], worker: Argume
     }
     throw new Error('Routine send unavailable');
   }
+  let usedVersion: string;
   try {
-    // Read custody at use, after all other send checks have finished.
-    await confirmCredentialUse(custodyRecordVersion);
+    // Read custody after authorisation, then check access again before sending.
+    usedVersion = await confirmCredentialUse(custodyRecordVersion);
+    if (usedVersion !== custodyRecordVersion) {
+      throw new Error('Routine credential changed');
+    }
   } catch {
     await stopChangedCredential();
     return false;
   }
-  return true;
+  // Authorise the send at this conditional append's event-log position.
+  // A later Stop is handled by the bridge for a turn that is already running.
+  await appendRoutineSendCheck(store, worker, checked, confirmCompany,
+    configurationDigest, custodyRecordVersion, 'routine.run_send_release_authorised');
+  return usedVersion;
 }
 
 // Keep this internal switch off until company calls, lifecycle Stop and Ask are connected.
@@ -165,9 +184,11 @@ export function createRoutineSender(options: SenderOptions,
       await checked.fresh();
       const admission = { routineId: admitted.run.routineId,
         eventId: admitted.receipt.eventId, position: admitted.receipt.position };
-      const credentialReady = await checkCompanyCredentialForSend(store, checkedWorker,
+      const releasedVersion = await checkCompanyCredentialForSend(store, checkedWorker,
         checked, admission, options);
-      if (!credentialReady) return unknown;
+      // Use the version checked before the release append authorised this send.
+      if (!releasedVersion || releasedVersion !== options.custodyRecordVersion ||
+          performance.now() >= checked.deadline) return unknown;
       if (link.socket.readyState !== link.socket.OPEN) return unknown;
       // Consume this live authority before the transport can lose its reply.
       awaitingStart = true;

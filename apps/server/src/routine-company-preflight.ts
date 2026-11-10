@@ -212,8 +212,8 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
     }
     const facts = await companySelectionFacts(store, silo, selected.choice,
       loadConfiguration, checkedReader);
-    const credential = z.object({ custodyRecordVersion: z.string().min(1) })
-      .safeParse(profileEvidence);
+    const custodyVersionSchema = z.object({ custodyRecordVersion: z.string().min(1) });
+    const credential = custodyVersionSchema.safeParse(profileEvidence);
     if (!credential.success) refuse();
     const custodyRecordVersion = credential.data.custodyRecordVersion;
     if (!savedProfile || facts.accountId !== definition.companyAccountId ||
@@ -259,6 +259,8 @@ export async function checkRoutineCompanyPreflight(store: EventStore, binding: B
         // Check custody again when the sender is ready to use the credential.
         const current = await readProfile(profileRows);
         if (!isDeepStrictEqual(current, profileEvidence)) refuse();
+        const checked = custodyVersionSchema.parse(current);
+        return checked.custodyRecordVersion;
       } catch {
         refuse();
       }

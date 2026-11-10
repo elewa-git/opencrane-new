@@ -86,7 +86,9 @@ It refuses to send unless a company confirmation check is supplied.
 After the computer wakes, routine preparation checks the owner's saved company choice
 against a current verified account and the exact saved profile. A changed account,
 profile or scope stops preparation before it reserves money. The check uses the usual
-MCP connection rules. Automatic company calls are still unavailable.
+MCP connection rules. The internal delivery entry can now use the saved company
+profile and its current private credential for one checked turn. Its production
+switch is off, so scheduled company calls are still unavailable.
 It also requires a finished OAuth settings change with a matching digest in the saved
 tool server history. A later change stops the routine send before publication.
 It checks access after wake, just before sending, and after saving the turn start.
@@ -239,7 +241,7 @@ event log remains the permanent record of what happened.
 flowchart LR
   web["apps/web<br/>the website"] -->|sign-out, messages with file references, Office uploads, survey, persona and scripted welcome reads, Memory setup reads, own and admin routine lists, approval replies and original call status, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
   server -.->|checks saved membership, records and rechecks the company custody record version, company choices and routine admission; prepares allowances; applies Stop, Pause and Retire; verifies termination and settled cost; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
-  server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, writer closure and retries, routine sessions, inputs, send authorisations with OAuth digests, cancellations, confirmed results, checked finishes and hand-offs| nats["NATS<br/>the event log"]
+  server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, writer closure and retries, routine sessions, inputs, send and final access checks with OAuth digests, cancellations, confirmed results, checked finishes and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, checked publication and task history, current accounting and exact membership receipts| postgres
@@ -462,10 +464,11 @@ It checks the company streams at one point in the saved event log before a guard
 It checks the company choice again after preparing the private thread, before allowing money.
 It checks the same company choice during admission, just before sending the turn,
 and while authorising the computer's start report.
-The internal sender saves one conditional authorisation before it sends the turn.
-That record includes the checked OAuth configuration digest. The sender reads the
-configuration again during the conditional save. The record does not prove the
-computer received the turn.
+The internal sender saves a checked authorisation, then reads credential custody.
+It saves a second access check before sending the turn. A Stop, revoked grant or
+blocked tool saved during that custody read prevents the turn from being sent.
+The sender checks the deadline and credential version before using the live permission.
+These records do not prove that the computer received the turn.
 The wake uses the computer already recorded for that assistant and its existing
 authenticated bridge. A replacement or cancelled wake cannot prepare the turn.
 The models process now binds this path to the same budget actor that handles ordinary
@@ -713,6 +716,9 @@ Before a saved company routine prepares work, the server checks its chosen tool
 against the installed server's current review. A changed tool, destination, price
 or permission stops preparation. Company routine sending is still unavailable.
 The internal sender checks those facts again before sending and accepting a start.
+Its final saved release check is the point when a turn is authorised to be sent.
+A Stop, removed grant or blocked tool saved before that check prevents the send.
+A Stop saved afterward interrupts a turn that is already running.
 
 Signing out closes the matching browser connections on the server handling logout.
 This stops private reply delivery before the sign-in service is contacted.

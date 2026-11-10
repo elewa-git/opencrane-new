@@ -131,6 +131,10 @@ function requiresCustodyVersionForSendAuthorisation() {
     const invalid = { ...event, data: { ...data, custodyRecordVersion } };
     expect(parseEventByType(invalid).success).toBe(false);
   }
+  const released = { ...event, type: 'routine.run_send_release_authorised' };
+  expect(parseEventByType(released).success).toBe(true);
+  expect(parseEventByType({ ...released, data: { ...data, custodyRecordVersion: '' } })
+    .success).toBe(false);
 }
 it('requires a non-empty credential version in send authorisation',
   requiresCustodyVersionForSendAuthorisation);

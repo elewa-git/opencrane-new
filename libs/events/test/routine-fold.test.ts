@@ -41,7 +41,9 @@ function pureReplayKeepsSavedFacts() {
   const state = foldRoutine(foldRoutine(foldRoutine(undefined, created), resumed), due);
   const admitted = foldRoutine(state, saved('routine.run_activation_admitted'));
   const authorised = foldRoutine(admitted, saved('routine.run_send_authorised'));
+  const released = foldRoutine(authorised, saved('routine.run_send_release_authorised'));
   expect(authorised.activation).toEqual(admitted.activation);
+  expect(released.activation).toEqual(admitted.activation);
   expect(authorised.executionAvailable).toBe(false);
   const changedSend = record('routine.run_send_authorised', {
     ...example('routine.run_send_authorised'), senderAttemptId: 'other-attempt',
@@ -53,6 +55,8 @@ function pureReplayKeepsSavedFacts() {
     activeRun: { occurrenceId: 'occurrence' }, executionAvailable: false });
   expect(() => foldRoutine(foldRoutine(admitted, stopped),
     saved('routine.run_send_authorised'))).toThrow('active admission');
+  expect(() => foldRoutine(foldRoutine(admitted, stopped),
+    saved('routine.run_send_release_authorised'))).toThrow('active admission');
   const forged = record('routine.run_finished', { ...example('routine.run_finished'),
     definitionRevision: 2 });
   expect(() => foldRoutine(state, forged)).toThrow('saved active run');

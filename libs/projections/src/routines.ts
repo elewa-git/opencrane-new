@@ -117,7 +117,7 @@ async function updateRun(db: Query, state: RoutineState, saved: Occurrence,
     return true;
   }
   const runEvents = ['routine.run_activation_admitted', 'routine.run_send_authorised',
-    'routine.run_stop_requested', 'routine.run_finished'];
+    'routine.run_send_release_authorised', 'routine.run_stop_requested', 'routine.run_finished'];
   if (!runEvents.includes(event.type)) return false;
   // Check late records against the original run, even after another run has finished.
   const original: RoutineState = { ...state, activeRun: saved.due, lastRun: null,
@@ -128,7 +128,8 @@ async function updateRun(db: Query, state: RoutineState, saved: Occurrence,
     throw new Error('Activation differs from the saved sender attempt');
   }
   if (saved.terminal) {
-    if (event.type === 'routine.run_send_authorised') {
+    if (event.type === 'routine.run_send_authorised' ||
+        event.type === 'routine.run_send_release_authorised') {
       throw new Error('Finished routine cannot authorise a send');
     }
     return true;

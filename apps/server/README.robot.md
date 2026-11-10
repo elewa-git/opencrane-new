@@ -5704,8 +5704,9 @@ There is no production caller for the inspector.
 
 ### Internal routine hand-off
 
-`createRoutineSender({ enabled, replay }, ...admissionArguments)` is internal and
-has no production caller. Omitted `enabled`, false, or replay refuses before wake.
+`createRoutineSender({ enabled, replay }, ...admissionArguments)` is internal. The
+checked company delivery binding calls it when explicitly enabled. The deployed
+scheduler does not call that binding. Omitted `enabled`, false, or replay refuses before wake.
 Only `AppendOutcome.kind=appended` creates one live sender. Duplicate receipts,
 missing publication replies and restart return unknown. The sender is consumed before
 waiting for wake; it cannot repeat. The wake callback returns the existing connected
@@ -7182,8 +7183,8 @@ connection, profile revisions, verified account id and scopes to match one expli
 company choice. It reuses `companySelectionFacts` for installation, opt-in, OAuth
 configuration, account evidence and available tools. The trusted profile reader can
 use `readCurrentCompanyProfile` to confirm the saved verified account and its exact
-credential in custody. No production company profile confirmation writer or routine
-delivery entry is installed. It also reads the
+credential in custody. The checked delivery binding supplies this reader, but no
+deployed scheduler installs the binding. It also reads the
 saved tool name, revision, catalogue digest, destination digest, policy revision and
 zero-cent price. The current published review must still allow that exact tool, with
 the same installation and required scopes. Missing tool or price facts refuse.
@@ -7208,14 +7209,20 @@ Before its internal socket send, the sender saves `routine.run_send_authorised` 
 the routine stream. The append checks current routine state and company facts inside
 the event store's conditional publish. It saves the OAuth configuration digest and
 the authorised Kubernetes custody record version, then reads custody again
-before releasing the turn. A missing or changed credential records a delivery Stop
+before releasing the turn. It saves `routine.run_send_release_authorised` through a second
+conditional append. This checks the routine, company grants, tool rule and deadline
+after the custody read. A missing or changed credential records a delivery Stop
 with reason `credential_changed` and the sender does not release the turn. It cannot
 call a company tool because company execution remains disabled. The authorisation
-check still reads custody before saving the event. It also
-re-reads the configuration inside that same conditional append. A changed digest,
-conflict or uncertain result prevents a
-send. The record is an authorisation point, not proof of delivery. Production
-company sending stays disabled.
+to send takes effect at the position of the second conditional append. A Stop,
+grant revocation or tool Block saved before it conflicts with that append and no turn
+frame is sent. Changes saved after it follow the authorised send in event-log order.
+The bridge polls saved Stop requests and interrupts an already running turn.
+There is no further company or routine read between that append and the socket send.
+The first authorisation check still reads custody before saving its event. It also
+reads the configuration again inside the conditional append. A changed digest,
+conflict or uncertain result prevents a send. Neither record proves delivery.
+Production company sending stays disabled.
 Existing records without `serverId` remain readable but cannot pass this check.
 
 `test/routine-company-preflight.test.ts` covers the valid choice, changed or missing
@@ -7310,7 +7317,7 @@ check. `routine-sender.ts` calls that check inside the conditional send-authoris
 append, which samples the global event position before the callback. A settings
 change saved after the callback's last OAuth read therefore conflicts with the
 append. An unfinished change refuses preflight. No production settings editor or
-company sender is registered, so company sending remains disabled.
+deployed scheduler caller is registered, so company sending remains disabled.
 
 ## Conversation tail pages
 
@@ -7323,6 +7330,23 @@ projection generation, computer state and dispatcher state. Limits are 1 to 100.
 The route loads participation and rows before checking current access once. It
 decrypts text only after that check. It never uses a conversation stream in the
 two-second write check.
+
+## Checked company delivery binding
+
+`createRoutineCompanyDelivery` supplies the saved-profile reader and credential
+custody to the existing checked due hand-off. It uses the existing routine sender,
+budget owner and authenticated computer wake. Its `enabled` option defaults to
+false, and replay cannot send. The tick worker has no caller for this binding.
+The public `executionAvailable` fields remain false. The recording native peer
+test enables this binding explicitly, sends the original turn once and checks the
+saved authorisation and custody version. The sender repeats company and access
+checks after authorisation, then reads credential custody and saves one final
+conditional access check before the turn goes to the computer. Company result and
+settlement work remain separate. The source was based on main at
+`b077fddde5bccb8ed8d9e7d5471bdfaffac7759f`,
+which contains the saved-profile reader and credential use-time check.
+`test/routine-composition.test.ts` holds the custody recovery reply while it saves
+Stop, grant revocation or Block. Each case requires no turn frame.
 
 ## Credential custody in routine send authorisation
 

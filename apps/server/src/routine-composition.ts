@@ -1,6 +1,7 @@
 import { loadRoutinePreparation } from './routine-session.ts';
 import { prepareRoutineComputer } from './routine-computer.ts';
 import { createRoutineSender } from './routine-sender.ts';
+import { routineCompanyPreflightFromCustody } from './routine-company-preflight.ts';
 import { bindRoutineBudgetOwner, routineBudgetOwnerMatches }
   from './routine-delivery-owner.ts';
 
@@ -15,9 +16,38 @@ type Run = Awaited<ReturnType<typeof loadRoutinePreparation>>['run'];
 type CompanyBinding = { occurrenceId: string; rootId: string; computerGeneration: number;
   configurationDigest: string; custodyRecordVersion: string;
   confirmCurrent: () => Promise<void>;
-  confirmCredentialUse: (authorisedVersion: string) => Promise<void> };
+  confirmCredentialUse: (authorisedVersion: string) => Promise<string> };
 type CompanyPreflight = (run: Run, generation: number) => Promise<CompanyBinding>;
 type Options = { enabled?: boolean; replay?: boolean; companyPreflight?: CompanyPreflight };
+type CompanyDeliveryOptions = {
+  enabled?: boolean;
+  replay?: boolean;
+  loadConfiguration: Parameters<typeof routineCompanyPreflightFromCustody>[3];
+  custody: Parameters<typeof routineCompanyPreflightFromCustody>[4];
+};
+
+/** Bind the saved company account and credential to the existing routine hand-off. */
+export function createRoutineCompanyDelivery(options: CompanyDeliveryOptions,
+  store: Preparation[0], keys: Preparation[1], identity: DeliveryWorker,
+  actor: Preparation[4], wake: Wake,
+  owner: ReturnType<typeof bindRoutineBudgetOwner>) {
+  const enabled = options.enabled === true && options.replay !== true;
+  const preflightFromCustody = routineCompanyPreflightFromCustody(store, identity.binding,
+    identity.silo, options.loadConfiguration, options.custody);
+  async function preflight(run: Run, generation: number): Promise<CompanyBinding> {
+    const checked = await preflightFromCustody(run, generation);
+    async function confirmCurrent() {
+      await checked.confirmCurrent();
+    }
+    return { ...checked, confirmCurrent };
+  }
+  const deliver = createRoutineDelivery(store, keys, identity, actor, wake, owner, preflight);
+  async function receive(due: CheckedDue, leadership: Leadership) {
+    if (!enabled) return { status: 'unknown' as const };
+    return deliver(due, leadership);
+  }
+  return receive;
+}
 
 /** Carry the claimed occurrence into the saved preparation and one sender attempt. */
 export function createRoutineDelivery(store: Preparation[0], keys: Preparation[1],

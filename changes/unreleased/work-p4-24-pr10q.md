@@ -1,0 +1,1 @@
+A company routine now refuses to send if Stop, a grant revocation or a blocked tool is saved while credential custody replies. The internal sender saves a final conditional access check after that reply and checks the credential version and deadline before releasing the turn. Automatic company execution remains disabled.
