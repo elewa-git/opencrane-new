@@ -7214,11 +7214,15 @@ conditional append. This checks the routine, company grants, tool rule and deadl
 after the custody read. A missing or changed credential records a delivery Stop
 with reason `credential_changed` and the sender does not release the turn. It cannot
 call a company tool because company execution remains disabled. The authorisation
-check still reads custody before saving the event. It also
-re-reads the configuration inside that same conditional append. A changed digest,
-conflict or uncertain result prevents a
-send. Neither record is proof of delivery. Production
-company sending stays disabled.
+to send takes effect at the position of the second conditional append. A Stop,
+grant revocation or tool Block saved before it conflicts with that append and no turn
+frame is sent. Changes saved after it follow the authorised send in event-log order.
+The bridge polls saved Stop requests and interrupts an already running turn.
+There is no further company or routine read between that append and the socket send.
+The first authorisation check still reads custody before saving its event. It also
+reads the configuration again inside the conditional append. A changed digest,
+conflict or uncertain result prevents a send. Neither record proves delivery.
+Production company sending stays disabled.
 Existing records without `serverId` remain readable but cannot pass this check.
 
 `test/routine-company-preflight.test.ts` covers the valid choice, changed or missing

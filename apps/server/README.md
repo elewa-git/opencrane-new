@@ -716,6 +716,9 @@ Before a saved company routine prepares work, the server checks its chosen tool
 against the installed server's current review. A changed tool, destination, price
 or permission stops preparation. Company routine sending is still unavailable.
 The internal sender checks those facts again before sending and accepting a start.
+Its final saved release check is the point when a turn is authorised to be sent.
+A Stop, removed grant or blocked tool saved before that check prevents the send.
+A Stop saved afterward interrupts a turn that is already running.
 
 Signing out closes the matching browser connections on the server handling logout.
 This stops private reply delivery before the sign-in service is contacted.

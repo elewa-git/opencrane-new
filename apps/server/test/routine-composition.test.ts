@@ -208,6 +208,7 @@ async function setup() {
 async function startComputer() {
   const server = createServer();
   const executedThreads: string[] = [];
+  const interruptedThreads: string[] = [];
   const frames: Record<string, unknown>[] = [];
   let nativeStarts = 0;
   let closedSessions = 0;
@@ -234,6 +235,9 @@ async function startComputer() {
         expect(params['threadId']).toBe(threadId);
         expect(JSON.stringify(params)).toContain('Private routine instructions');
         executedThreads.push(String(threadId));
+      }
+      if (method === 'turn/interrupt') {
+        interruptedThreads.push(String(params['threadId']));
       }
       const response = { thread: { id: threadId, ephemeral: true, path: null },
         turn: { id: 'native-turn' } };
@@ -286,7 +290,7 @@ async function startComputer() {
   function executed() {
     return executedThreads.length === 1;
   }
-  return { link, wake, close, executed, executedThreads, frames, send: track,
+  return { link, wake, close, executed, executedThreads, interruptedThreads, frames, send: track,
     get nativeStarts() {
       return nativeStarts;
     },
@@ -1093,15 +1097,19 @@ async function refusesChangeBeforeReleaseAppend(kind: 'stop' | 'grant' | 'block'
   let changed = false;
   let releaseConflict = false;
   async function changeBeforeRelease(...supplied: Parameters<typeof append>) {
-    const proposed = proposedEvent.parse(supplied[0].event);
-    if (proposed.type === 'routine.run_send_release_authorised') {
+    const command = supplied[0];
+    const proposed = proposedEvent.parse(command.event);
+    if (proposed.type !== 'routine.run_send_release_authorised' || !command.checkAccess) {
+      return append(...supplied);
+    }
+    const originalCheck = command.checkAccess;
+    async function changeAfterAccessCheck() {
+      await originalCheck();
       changed = true;
       await recordLateCompanyChange(kind);
     }
-    const result = await append(...supplied);
-    if (proposed.type === 'routine.run_send_release_authorised') {
-      releaseConflict = result.status === 'conflict';
-    }
+    const result = await append({ ...command, checkAccess: changeAfterAccessCheck });
+    releaseConflict = result.status === 'conflict';
     return result;
   }
   vi.spyOn(nats.store, 'append').mockImplementation(changeBeforeRelease);
@@ -1136,10 +1144,10 @@ async function stopsAfterReleaseAppend() {
     expect(preparedComputer.frames.some(isStop)).toBe(true);
   }
   await vi.waitFor(hasStopFrame, { timeout: 2000 });
-  function stoppedNativeSession() {
-    expect(preparedComputer.closedSessions).toBe(1);
+  function interruptedNativeTurn() {
+    expect(preparedComputer.interruptedThreads).toEqual(['native-1']);
   }
-  await vi.waitFor(stoppedNativeSession, { timeout: 2000 });
+  await vi.waitFor(interruptedNativeTurn, { timeout: 2000 });
 }
 it('stops and records a running turn when Stop follows the release append',
   stopsAfterReleaseAppend);

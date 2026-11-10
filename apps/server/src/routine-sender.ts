@@ -146,6 +146,8 @@ async function checkCompanyCredentialForSend(store: Arguments[0], worker: Argume
     await stopChangedCredential();
     return false;
   }
+  // Authorise the send at this conditional append's event-log position.
+  // A later Stop is handled by the bridge for a turn that is already running.
   await appendRoutineSendCheck(store, worker, checked, confirmCompany,
     configurationDigest, custodyRecordVersion, 'routine.run_send_release_authorised');
   return usedVersion;
@@ -184,7 +186,7 @@ export function createRoutineSender(options: SenderOptions,
         eventId: admitted.receipt.eventId, position: admitted.receipt.position };
       const releasedVersion = await checkCompanyCredentialForSend(store, checkedWorker,
         checked, admission, options);
-      // Use only the version checked after custody returned and the final saved access check.
+      // Use the version checked before the release append authorised this send.
       if (!releasedVersion || releasedVersion !== options.custodyRecordVersion ||
           performance.now() >= checked.deadline) return unknown;
       if (link.socket.readyState !== link.socket.OPEN) return unknown;
