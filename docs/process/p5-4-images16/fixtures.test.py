@@ -53,8 +53,9 @@ class TypanionTests(unittest.TestCase):
         original = inspect.getsource(function)
         self.assertIn(guard, original)
         changed = original.replace(guard, replacement, 1)
-        namespace = vars(self.checker).copy()
-        namespace["trusted_review"] = self.checker.trusted_review
+        namespace = function.__globals__.copy()
+        if function.__module__ == self.checker.__name__:
+            namespace.update(vars(self.checker))
         exec(changed, namespace)
         with self.assertRaises(AssertionError):
             call(namespace[function.__name__])
@@ -242,6 +243,72 @@ class TypanionTests(unittest.TestCase):
         self.assertTrue(self.checker.run_git(repository, "HEAD", "README.md"))
         with self.assertRaises(subprocess.CalledProcessError):
             self.checker.run_git(repository, "HEAD", "missing-file")
+
+    def test_candidate_record_and_archive_checks_fail_when_removed(self):
+        guards = {
+            "candidate record": (
+                'corepack.candidate.checked_bytes(corepack.candidate.RECORD, '
+                'review["candidateSha256"])',
+                "candidate-record"),
+            "candidate archive": (
+                'corepack.candidate.checked_bytes(\n'
+                '        directory / "candidate.tar", candidate_record["files"]["candidate.tar"])',
+                "candidate.tar"),
+            "source archive": (
+                'corepack.candidate.checked_bytes(\n'
+                '        directory / "source.tar", candidate_record["files"]["source.tar"])',
+                "source.tar"),
+        }
+        for label, (guard, changed_file) in guards.items():
+            with self.subTest(guard=label):
+                with tempfile.TemporaryDirectory() as temporary:
+                    directory = Path(temporary)
+                    self.assert_evidence_guard_refuses(guard, changed_file, directory)
+
+    def assert_evidence_guard_refuses(self, guard, changed_file, directory):
+        checker = self.checker
+        candidate = checker.corepack.candidate
+        candidate_path = directory / "candidate.tar"
+        source_path = directory / "source.tar"
+        candidate_path.write_bytes(b"candidate archive")
+        source_path.write_bytes(b"source archive")
+        original_hashes = {
+            "candidate.tar": hashlib.sha256(candidate_path.read_bytes()).hexdigest(),
+            "source.tar": hashlib.sha256(source_path.read_bytes()).hexdigest(),
+        }
+        with tempfile.TemporaryDirectory() as record_directory:
+            record_path = Path(record_directory) / "candidate.json"
+            record_path.write_bytes(candidate.RECORD.read_bytes())
+            if changed_file == "candidate-record":
+                record_path.write_bytes(record_path.read_bytes() + b" ")
+            if changed_file == "candidate.tar":
+                candidate_path.write_bytes(b"changed candidate archive")
+            if changed_file == "source.tar":
+                source_path.write_bytes(b"changed source archive")
+
+            with patch.object(candidate, "RECORD", record_path):
+                with patch.object(checker, "trusted_review", return_value=self.review):
+                    with patch.object(checker.corepack, "check_evidence"):
+                        with patch.object(checker, "run_git", return_value=b"source"):
+                            with patch.object(checker, "check_source_fixture"):
+                                with patch.object(checker, "read_saved",
+                                                  return_value=(self.bundle, self.regions)):
+                                    with patch.object(checker, "check_review",
+                                                      return_value="BLOCKED"):
+                                        with patch.object(
+                                                candidate.checker, "read_json",
+                                                return_value={"files": original_hashes}):
+                                            with self.assertRaises(ValueError):
+                                                checker.check_evidence(directory, directory)
+
+                                            self.assert_removed_guard_fails(
+                                                checker.check_evidence,
+                                                guard,
+                                                lambda check: self.assertRaises(
+                                                    ValueError,
+                                                    check,
+                                                    directory,
+                                                    directory))
 
     def test_saved_inventory_and_region_helpers_refuse_changed_inputs(self):
         corepack = self.checker.corepack
